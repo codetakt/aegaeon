@@ -1,0 +1,53 @@
+theory IssuerMixup
+begin
+
+builtins: hashing, asymmetric-encryption, signing
+
+restriction Once:
+  "All x #i #j. Once(x)@i & Once(x)@j ==> #i = #j"
+
+restriction Equality:
+  "All x y #i. Eq(x,y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* Issuer mix-up attack prevention */
+
+// Multiple authorization servers
+rule AS_Setup:
+  [ Fr(~sk_as) ]
+  --[ ASRegistered($AS, pk(~sk_as)) ]->
+  [ !AS($AS, ~sk_as), !ASPubKey($AS, pk(~sk_as)), Out(pk(~sk_as)) ]
+
+// Client registers with AS (only one AS per client)
+rule Client_Register:
+  [ !ASPubKey($AS, pk_as), Fr(~client_id) ]
+  --[ ClientRegisteredWith($Client, $AS), Once($Client) ]->
+  [ !ClientAS($Client, $AS, pk_as) ]
+
+// AS issues authorization response with issuer
+rule AS_Authorize:
+  [ Fr(~code), !AS($AS, sk_as), !ClientAS($Client, $AS, pk(sk_as)) ]
+  --[ AuthorizedBy($AS, $Client), CodeIssued($AS, $Client, ~code), Unique(<'code', ~code>) ]->
+  [ Out(<~code, $AS, sign(<~code, $AS>, sk_as)>), !IssuedCode(~code, $AS, $Client) ]
+
+// Client validates issuer
+rule Client_Validate_Issuer:
+  [ !ClientAS($Client, $AS, pk_as), In(<code, issuer, sig>), !IssuedCode(code, $AS, $Client) ]
+  --[ Eq(issuer, $AS), Eq(verify(sig, <code, issuer>, pk_as), true),
+      IssuerValidated($Client, $AS, code) ]->
+  [ ValidCode($Client, $AS, code) ]
+
+// Security properties
+lemma no_issuer_mixup:
+  "All C AS1 AS2 code #i #j.
+    ClientRegisteredWith(C, AS1) @ i &
+    IssuerValidated(C, AS2, code) @ j ==>
+    AS1 = AS2"
+
+lemma issuer_binding:
+  "All C AS code #i. IssuerValidated(C, AS, code) @ i ==>
+    Ex #j. CodeIssued(AS, C, code) @ j & j < i"
+
+end

@@ -1,0 +1,144 @@
+{
+  "profile": "current-sandbox",
+  "required_secret_sets": [
+    {
+      "name": "verified_core_public_key",
+      "one_of": [
+        [
+          "AEGAEON_VERIFIED_CORE_PUBKEY"
+        ],
+        [
+          "AEGAEON_VERIFIED_CORE_PUBKEY_OP_REF",
+          "AEGAEON_OP_SERVICE_ACCOUNT_TOKEN"
+        ]
+      ]
+    },
+    {
+      "name": "npm_publish",
+      "all_of": [
+        "AEGAEON_NPM_TOKEN"
+      ]
+    }
+  ],
+  "required_variables": [
+    {
+      "name": "AEGAEON_CORE_RELEASE_REPO",
+      "pattern": "^[^/]+/[^/]+$"
+    }
+  ],
+  "optional_variables": [
+    {
+      "name": "AEGAEON_NPM_DIST_TAG",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_ENABLED",
+      "pattern": "^(0|1|true|false|TRUE|FALSE)$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_CONFIG_JSON",
+      "pattern": "^.+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_REPOSITORY",
+      "pattern": "^[^/]+/[^/]+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_REF",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_WORKFLOW",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_ARTIFACT",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    {
+      "name": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_JSON",
+      "pattern": "^.+$"
+    },
+    {
+      "name": "AEGAEON_ADMIN_SDK_EVIDENCE_JSON",
+      "pattern": "^.+$"
+    },
+    {
+      "name": "AEGAEON_ADMIN_CONSOLE_REPOSITORY",
+      "pattern": "^[^/]+/[^/]+$"
+    },
+    {
+      "name": "AEGAEON_ADMIN_CONSOLE_REF",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    },
+    {
+      "name": "AEGAEON_ADMIN_CONSOLE_STACK_WORKFLOW",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    },
+    {
+      "name": "AEGAEON_ADMIN_SDK_EVIDENCE_ARTIFACT",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    {
+      "name": "AEGAEON_PUBLICATION_ORG_OWNER",
+      "pattern": "^[A-Za-z0-9_.-]+$"
+    },
+    {
+      "name": "AEGAEON_PUBLICATION_ORG_REPO",
+      "pattern": "^[A-Za-z0-9_.-]+$"
+    },
+    {
+      "name": "AEGAEON_PUBLICATION_ORG_BRANCH",
+      "pattern": "^[A-Za-z0-9._/-]+$"
+    }
+  ],
+  "optional_secret_sets": [
+    {
+      "name": "managed_external_provider_login",
+      "all_of": [
+        "AEGAEON_MANAGED_EXTERNAL_PROVIDER_USERNAME",
+        "AEGAEON_MANAGED_EXTERNAL_PROVIDER_PASSWORD"
+      ]
+    },
+    {
+      "name": "admin_sdk_evidence_artifact_access",
+      "all_of": [
+        "AEGAEON_ADMIN_SDK_EVIDENCE_TOKEN"
+      ]
+    },
+    {
+      "name": "managed_provider_evidence_artifact_access",
+      "all_of": [
+        "AEGAEON_MANAGED_PROVIDER_EVIDENCE_TOKEN"
+      ]
+    }
+  ],
+  "conditional_requirements": [
+    {
+      "name": "managed_external_provider_lane",
+      "when_variable": {
+        "name": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_ENABLED",
+        "pattern": "^(1|true|TRUE)$"
+      },
+      "required_variables": [
+        {
+          "name": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_CONFIG_JSON",
+          "pattern": "^.+$"
+        }
+      ],
+      "required_secret_sets": [
+        {
+          "name": "managed_external_provider_login",
+          "all_of": [
+            "AEGAEON_MANAGED_EXTERNAL_PROVIDER_USERNAME",
+            "AEGAEON_MANAGED_EXTERNAL_PROVIDER_PASSWORD"
+          ]
+        }
+      ]
+    }
+  ],
+  "deferred_secrets": [
+    "AEGAEON_CARGO_REGISTRY_TOKEN",
+    "AEGAEON_COSIGN_KEY"
+  ]
+}

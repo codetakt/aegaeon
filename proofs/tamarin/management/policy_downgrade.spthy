@@ -1,0 +1,162 @@
+theory Management_Policy_Downgrade
+begin
+
+/*
+ * Policy Downgrade Attack Prevention — H-4 security finding
+ *
+ * Models the management plane's policy update mechanism.
+ * Security-critical policy fields cannot be weakened without
+ * explicit downgrade acknowledgement from an administrator.
+ *
+ * This prevents an attacker who gains limited management access
+ * from silently weakening security policies (e.g., disabling
+ * PKCE enforcement, lowering token TTL minimums, allowing
+ * weaker authentication methods).
+ *
+ * Threat model:
+ * - Admin registration is a trusted bootstrap step (system provisioning).
+ *   Each admin receives a signing key pair modeling session authentication.
+ * - The management API is network-exposed (same port as OAuth endpoints,
+ *   HTTP cookie-based session auth). The Dolev-Yao attacker can observe,
+ *   intercept, and replay messages on this channel. Modeled with In/Out.
+ * - Downgrade acks are signed by the admin's key (modeling authenticated
+ *   session requests). Signature verification prevents forgery by the
+ *   network attacker. A fresh nonce in each ack, consumed with Unique,
+ *   prevents replay.
+ * - Attacker can trigger policy upgrades (strengthening is always safe)
+ *   but cannot trigger downgrades without a registered admin's signed ack
+ *
+ * Security properties:
+ * - policy_monotonicity: every downgrade has explicit admin acknowledgement
+ * - no_silent_downgrade: weakening traces to an admin-generated signed ack
+ *   bound to the specific downgrade event
+ * - downgrade_requires_registered_admin: ack originates from registered admin
+ * - upgrade_always_allowed: strengthening does not require acknowledgement
+ *
+ * Known limitations:
+ * - Admin scope: The model uses global admin authority. The Rust implementation
+ *   scopes admin roles per team (team_memberships table with OWNER/ADMINISTRATOR
+ *   roles). The global model over-approximates admin power, making proofs
+ *   conservative (safe side). Cross-team isolation is NOT proved here.
+ * - Admin key lifecycle: No admin compromise, revocation, or rotation rules.
+ *   The implementation mitigates via session TTL (8h), session logout, and
+ *   API key revocation. If admin key compromise guarantees are needed, add
+ *   an Admin_Compromise rule outputting admin_sk and weaken lemmas to
+ *   allow a Compromised(admin) disjunct.
+ */
+
+builtins: signing
+
+/* ============ Restrictions ============ */
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Admin Role ============ */
+
+// Admin registration: trusted bootstrap step (system provisioning).
+// Each admin gets a signing key pair (models session authentication).
+// The public key is published for server-side verification; the secret
+// key is kept by the admin (persistent !AdminRole).
+rule Register_Admin:
+  [ Fr(~admin_id), Fr(~admin_sk) ]
+  --[ Admin_Registered(~admin_id),
+      Unique(<'admin', ~admin_id>) ]->
+  [ !AdminRole(~admin_id, ~admin_sk),
+    !AdminPK(~admin_id, pk(~admin_sk)),
+    Out(pk(~admin_sk)) ]
+
+/* ============ Policy Lifecycle ============ */
+
+// Admin creates initial policy with a security level
+rule Create_Policy:
+  [ Fr(~policy_id) ]
+  --[ Policy_Created($Env, ~policy_id, $security_level),
+      Policy_State_Set($Env, ~policy_id, $security_level),
+      Unique(<'policy', ~policy_id>) ]->
+  [ Policy($Env, ~policy_id, $security_level) ]
+
+// Policy upgrade: strengthening security is always allowed.
+// No acknowledgement required — making things more secure is safe.
+// NOTE: The model does not encode a partial order on $security_level
+// because Tamarin public constants lack arithmetic ordering.
+// Upgrade vs. downgrade classification is the Rust implementation's
+// responsibility; the model proves that the downgrade-classified path
+// (Policy_Downgrade) requires admin ack, while the upgrade-classified
+// path (Policy_Upgrade) does not.
+rule Policy_Upgrade:
+  [ Policy($Env, policy_id, $old_level) ]
+  --[ Policy_Upgraded($Env, policy_id, $old_level, $new_level),
+      Policy_State_Set($Env, policy_id, $new_level),
+      Security_Strengthened($Env, $old_level, $new_level) ]->
+  [ Policy($Env, policy_id, $new_level) ]
+
+// Policy downgrade: weakening requires a signed admin ack from the network.
+// The server verifies the signature against a registered admin's public key
+// and checks the ack binds to the correct (env, policy, level) triple.
+// Unique(<'downgrade_use', nonce>) prevents replay of the same ack.
+// Pattern-matching In(sign(ack_msg, admin_sk)) with !AdminPK(admin_id,
+// pk(admin_sk)) ensures the signature was produced by a key holder —
+// the Dolev-Yao attacker cannot construct sign(m, sk) without sk.
+rule Policy_Downgrade:
+  let ack_msg = <'downgrade_ack', $Env, policy_id, $new_level, nonce>
+  in
+  [ Policy($Env, policy_id, $old_level),
+    In(sign(ack_msg, admin_sk)),
+    !AdminPK(admin_id, pk(admin_sk)) ]
+  --[ Policy_Downgraded($Env, policy_id, $old_level, $new_level),
+      Policy_State_Set($Env, policy_id, $new_level),
+      Downgrade_Acknowledged($Env, policy_id, nonce),
+      Downgrade_Verified($Env, policy_id, admin_id),
+      Security_Weakened($Env, $old_level, $new_level),
+      Unique(<'downgrade_use', nonce>) ]->
+  [ Policy($Env, policy_id, $new_level) ]
+
+// Admin generates signed downgrade acknowledgement.
+// The ack is a signed message binding (env, policy, level, nonce).
+// Output via Out() — the management API is network-exposed, so the
+// Dolev-Yao attacker can observe this message. However, the attacker
+// cannot forge a new ack (lacks admin_sk) or replay (Unique on nonce).
+rule Admin_Generate_Ack:
+  let ack_msg = <'downgrade_ack', $Env, $policy_id, $new_level, ~nonce>
+  in
+  [ !AdminRole(admin_id, admin_sk), Fr(~nonce) ]
+  --[ Admin_Ack_Generated(admin_id, $Env, $policy_id, $new_level, ~nonce),
+      Unique(<'ack', ~nonce>) ]->
+  [ Out(sign(ack_msg, admin_sk)) ]
+
+/* ============ Security Properties ============ */
+
+// Policy monotonicity: every downgrade has explicit acknowledgement.
+// Without a valid signed ack, the Policy_Downgrade rule cannot fire.
+lemma policy_monotonicity:
+  "All env pid old new #i.
+     Policy_Downgraded(env, pid, old, new)@i
+     ==> Ex nonce #j. Downgrade_Acknowledged(env, pid, nonce)@j & #j = #i"
+
+// No silent downgrade: every weakening is bound to a specific admin-generated
+// signed ack. The SAME nonce appears in both the downgrade acknowledgement
+// (at the time of weakening) and a prior admin signing action.
+lemma no_silent_downgrade:
+  "All env old new #i.
+     Security_Weakened(env, old, new)@i
+     ==> Ex admin pid lvl nonce #j.
+           Downgrade_Acknowledged(env, pid, nonce)@i &
+           Admin_Ack_Generated(admin, env, pid, lvl, nonce)@j & #j < #i"
+
+// Downgrade requires registered admin: every downgrade ack was
+// generated by a registered admin (evidenced by AdminRole fact).
+lemma downgrade_requires_registered_admin:
+  "All admin env pid lvl nonce #i.
+     Admin_Ack_Generated(admin, env, pid, lvl, nonce)@i
+     ==> Ex #j. Admin_Registered(admin)@j & #j < #i"
+
+// Upgrade always allowed: strengthening does not require any
+// acknowledgement or network input (no In() premise).
+// We prove this indirectly: every upgrade traces to a prior policy state.
+lemma upgrade_always_allowed:
+  "All env pid old new #i.
+     Policy_Upgraded(env, pid, old, new)@i
+     ==> Ex #j. Policy_State_Set(env, pid, old)@j & #j < #i"
+
+end

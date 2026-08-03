@@ -1,0 +1,22 @@
+{
+	"artifacts": {
+		"localstack_health": null,
+		"log": "test.log",
+		"metadata": "metadata.txt"
+	},
+	"aws_endpoint_url": "",
+	"aws_region": "ap-northeast-1",
+	"aws_kms_key_id": "bb0a6c43-d0c0-4c92-9782-bf9e2762be0e",
+	"git_branch": "main",
+	"git_commit": "58a288aee2760cfb9ca115767a8a91ea97aeafb9",
+	"localstack_fallback_health_url": "http://127.0.0.1:4566/health",
+	"localstack_health_url": "http://127.0.0.1:4566/_localstack/health",
+	"mode": "aws",
+	"oidc_signing_kid": "aws-kms-bb0a6c43-d0c",
+	"require_localstack": false,
+	"scope": "oidc-aws-kms-rs256-parity",
+	"signing_backend": "aws-kms",
+	"status": "passed",
+	"test_command": "cargo test -p aegaeon-server --features kms-aws --test kms_integration_test test_oidc_aws_kms_signing_key_issues_verifiable_rs256_jwt -- --nocapture",
+	"timestamp": "2026-06-18T11:29:04Z"
+}

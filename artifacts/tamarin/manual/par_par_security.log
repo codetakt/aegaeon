@@ -1,0 +1,132 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory PARSecurity] Theory loaded
+[Theory PARSecurity] Theory translated
+[Theory PARSecurity] Derivation checks started
+[Theory PARSecurity] Derivation checks ended
+[Theory PARSecurity] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory PARSecurity begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+rule (modulo E) PAR_Push:
+   [ Fr( ~request_uri ), Fr( ~client_id ), Fr( ~redirect_uri ) ]
+  --[ PARPushed( $Client, ~request_uri, ~redirect_uri ) ]->
+   [
+   !PARRequest( $Client, ~request_uri, ~redirect_uri ), Out( ~request_uri )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Auth_With_PAR:
+   [ !PARRequest( $Client, request_uri, redirect_uri ), In( request_uri ) ]
+  --[ PARUsed( $Client, request_uri, redirect_uri ) ]->
+   [ AuthPending( $Client, redirect_uri ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Respond:
+   [ AuthPending( $Client, redirect_uri ), Fr( ~code ) ]
+  --[ AuthResponse( $AS, $Client, redirect_uri ) ]->
+   [ Out( <~code, redirect_uri> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attack_Redirect:
+   [ In( request_uri ), Fr( ~malicious_uri ) ]
+  --[ RedirectAttack( request_uri, ~malicious_uri ) ]->
+   [ Out( <request_uri, ~malicious_uri> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma par_redirect_binding:
+  all-traces
+  "∀ C AS uri1 uri2 #i #j.
+    ((PARPushed( C, uri1, uri2 ) @ #i) ∧
+     (AuthResponse( AS, C, uri2 ) @ #j)) ⇒
+    (∃ #k. ((PARUsed( C, uri1, uri2 ) @ #k) ∧ (#i < #k)) ∧ (#k < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C AS uri1 uri2 #i #j.
+  (PARPushed( C, uri1, uri2 ) @ #i) ∧ (AuthResponse( AS, C, uri2 ) @ #j)
+ ∧
+  ∀ #k. (PARUsed( C, uri1, uri2 ) @ #k) ⇒ ((¬(#i < #k)) ∨ (¬(#k < #j)))"
+*/
+simplify
+solve( AuthPending( $Client, ~redirect_uri ) ▶₀ #j )
+  case Auth_With_PAR
+  by contradiction /* from formulas */
+qed
+
+lemma par_integrity:
+  all-traces
+  "∀ C uri redirect1 redirect2 #i #j.
+    ((PARPushed( C, uri, redirect1 ) @ #i) ∧
+     (PARUsed( C, uri, redirect2 ) @ #j)) ⇒
+    (redirect1 = redirect2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C uri redirect1 redirect2 #i #j.
+  (PARPushed( C, uri, redirect1 ) @ #i) ∧
+  (PARUsed( C, uri, redirect2 ) @ #j)
+ ∧
+  ¬(redirect1 = redirect2)"
+*/
+simplify
+solve( !PARRequest( $Client, ~request_uri, redirect2 ) ▶₀ #j )
+  case PAR_Push
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./par/par_security.spthy
+
+  processing time: 0.40s
+
+  par_redirect_binding (all-traces): verified (3 steps)
+  par_integrity (all-traces): verified (3 steps)
+
+==============================================================================

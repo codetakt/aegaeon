@@ -1,0 +1,75 @@
+{
+  "$schema": "https://aegaeon.dev/spec/admin-ui-assurance-claim.schema.json",
+  "schema_version": 1,
+  "claim_target": "admin-ui-assurance",
+  "claim_active": false,
+  "current_public_wording": "first-party control-plane UI constrained by SDK and management-session boundary audits; not claimed as formally verified",
+  "future_allowed_wording": "admin control-plane security boundary with formally specified and mechanically checked authorization/session state-machine invariants",
+  "excluded_surfaces": [
+    "React runtime correctness",
+    "browser rendering",
+    "CSS/layout behaviour",
+    "browser extensions",
+    "OS UI behaviour",
+    "all possible visual interactions",
+    "end-user credential submission on the admin SPA"
+  ],
+  "required_evidence": [
+    {
+      "id": "admin-ui-assurance-case",
+      "description": "A separate admin UI assurance case defines the bounded security claim and out-of-scope browser/UI behaviour.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/admin-ui-assurance-case.md",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "route-action-session-model",
+      "description": "Admin route, action, authorization, dangerous-operation, and management-session state machine is formally specified.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "spec/admin-ui-security-state-machine.current.json",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "mechanically-checked-invariants",
+      "description": "Authorization/session invariants are mechanically checked using the selected modelling tool.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "sdk-api-contract-drift-gates",
+      "description": "UI routes/actions are bound to OpenAPI and management-client contracts with CI drift gates.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "hosted-runtime-evidence",
+      "description": "Hosted stack evidence exercises the bounded admin UI security claim and remains runtime regression evidence, not the proof itself.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "positioning-scope-update",
+      "description": "Product positioning uses bounded admin-security wording and does not imply formally verified React/browser/UI rendering.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/product-positioning.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "internal-evidence-bundle",
+      "description": "Record Phase 3 internal admin UI assurance evidence separately from public claim activation.",
+      "status": "complete",
+      "required_for_activation": false,
+      "evidence_uri": "docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json",
+      "owner": "aegaeon"
+    }
+  ]
+}

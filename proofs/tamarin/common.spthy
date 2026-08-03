@@ -1,0 +1,16 @@
+/**
+  Common definitions for Tamarin proofs across OAuth 2.x modules.
+  Include this at the top of each protocol-specific SPThy theory.
+*/
+theory Common
+
+begin
+
+/*
+  Shared types, public functions, and helper rules go here.
+  Example:
+    builtins: AAGlobalState;
+    functions: mk_nonce, verify_nonce;
+*/
+
+end

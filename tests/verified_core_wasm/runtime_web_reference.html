@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Verified Core runtime-web smoke</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; }
+      #status[data-status="pass"] { color: #0a7f2e; }
+      #status[data-status="fail"] { color: #b00020; }
+      li.ok { color: #0a7f2e; }
+      li.fail { color: #b00020; }
+      code { background: #f5f5f5; padding: 0.1rem 0.3rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Verified Core runtime-web smoke</h1>
+    <p>This page exercises the browser reference adapter against the current packaged artefact.</p>
+    <p>Status: <strong id="status" data-status="running">RUNNING</strong></p>
+    <ol id="results"></ol>
+    <script type="module" src="./runtime_web_reference_harness.ts"></script>
+  </body>
+</html>

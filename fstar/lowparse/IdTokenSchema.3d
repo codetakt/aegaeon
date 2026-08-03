@@ -1,0 +1,78 @@
+// EverParse schema for OIDC ID Token Claims and Userinfo payloads.
+// This schema mirrors the Rust/F* structures used in IdToken/Userinfo modules.
+
+// Helper for bounded byte strings (UTF-8 enforcement is handled in FFI).
+typedef struct _len_prefixed_bytes {
+  UINT32 len;
+  UINT8  bytes[len];
+} LenPrefixedBytes;
+
+typedef struct _maybe_string {
+  UINT8 present;
+  LenPrefixedBytes value;
+} MaybeString;
+
+typedef struct _maybe_bool {
+  UINT8 present;
+  UINT8 value;
+} MaybeBool;
+
+typedef struct _maybe_timestamp {
+  UINT8 present;
+  UINT64 value;
+} MaybeTimestamp;
+
+// Audience flattened as single string for schema purposes
+// Clients can encode arrays via JSON text inside this field
+// (a more precise schema would require nested structs, which 3d disallows).
+
+typedef struct _hash_claim {
+  UINT8 present;
+  LenPrefixedBytes value;
+} HashClaim;
+
+// The Rust FFI canonicalizer (`build_canonical_jwt_buffer`) emits three
+// sequential `len||segment` pairs (header, payload, signature). This entry hooks
+// the canonical buffer up to EverParse so the structural invariants (exactly
+// three segments with explicit lengths) are enforced before IdToken claims are
+// decoded.
+//
+// TODO(id-token/everparse): When EverParse or upstream generators support
+// per-segment constraints (e.g., max length) without custom C patches, mirror
+// `MAX_JWT_SEGMENT_BYTES` here so Rust and EverParse stay in lock-step. Until
+// then, the canonicalizer remains the single source of truth for these caps.
+entrypoint typedef struct _id_token_jwt_entry {
+  LenPrefixedBytes header;
+  LenPrefixedBytes payload;
+  LenPrefixedBytes signature;
+} IDTokenJwt;
+
+// ID Token claims entrypoint
+entrypoint typedef struct _id_token_claims_entry {
+  LenPrefixedBytes iss;
+  LenPrefixedBytes sub;
+  LenPrefixedBytes aud;
+  UINT64 exp;
+  UINT64 iat;
+  MaybeString nonce;
+  MaybeTimestamp nbf;
+  MaybeTimestamp auth_time;
+  MaybeString azp;
+  MaybeString acr;
+  LenPrefixedBytes amr; // JSON-encoded AMR list
+  HashClaim at_hash;
+  HashClaim c_hash;
+  MaybeString sid;
+} IDTokenClaims;
+
+// Userinfo response entrypoint
+entrypoint typedef struct _userinfo_response_entry {
+  LenPrefixedBytes sub;
+  MaybeString name;
+  MaybeString preferred_username;
+  MaybeString email;
+  MaybeBool email_verified;
+  MaybeString address;
+  MaybeString phone_number;
+  MaybeTimestamp updated_at;
+} UserinfoResponse;

@@ -1,0 +1,120 @@
+theory Federation_SSRF_Chain
+begin
+
+/*
+ * Federation SSRF Chain — C-3 security finding
+ *
+ * An attacker could craft malicious authority_hints in entity
+ * statements to cause the trust chain resolver to fetch from
+ * internal endpoints (Server-Side Request Forgery).
+ *
+ * This model proves that trust chain resolution only fetches from
+ * endpoints on the trust anchor's allowlist. The attacker can
+ * publish arbitrary entity configurations with malicious hints,
+ * but the resolver validates every fetch target against the allowlist.
+ *
+ * Security properties:
+ * - no_internal_fetch: every fetched endpoint was allowlisted
+ * - authority_hint_validated: followed hints are on the allowlist
+ * - chain_requires_fetch: resolved chains required prior fetch
+ */
+
+builtins: signing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Trust Anchor & Allowlist ============ */
+
+// Trust anchor with signing key
+rule TA_Init:
+  [ Fr(~sk) ]
+  --[ TA_Created($TA, pk(~sk)),
+      Unique(<'ta', $TA>) ]->
+  [ !TA($TA, ~sk, pk(~sk)), Out(pk(~sk)) ]
+
+// TA defines allowlisted entity endpoints.
+// Only these may be fetched by the resolver.
+rule TA_Allowlist:
+  [ !TA($TA, sk, pk) ]
+  --[ Endpoint_Allowed($TA, $entity_id) ]->
+  [ !Allowlisted($TA, $entity_id) ]
+
+/* ============ Entity Configurations ============ */
+
+// Legitimate entity publishes configuration
+rule Entity_Config:
+  [ Fr(~sk) ]
+  --[ Entity_Published($Entity, pk(~sk)) ]->
+  [ !Entity_SK($Entity, ~sk),
+    Out(<'entity_config', $Entity, pk(~sk)>) ]
+
+// Attacker publishes malicious entity with arbitrary authority_hint.
+// The hint could point to an internal endpoint (e.g., 169.254.169.254).
+rule Attacker_Malicious_Config:
+  [ Fr(~sk) ]
+  --[ Attacker_Entity($Entity, $authority_hint) ]->
+  [ Out(<'entity_config_hint', $Entity, pk(~sk), $authority_hint>) ]
+
+/* ============ Resolver (with allowlist enforcement) ============ */
+
+// Resolver fetches entity config (no hint): must be allowlisted
+rule Resolver_Fetch:
+  [ In(<'entity_config', entity_id, entity_pk>),
+    !Allowlisted($TA, entity_id) ]
+  --[ Fetched($TA, entity_id),
+      Endpoint_Checked($TA, entity_id) ]->
+  [ Fetched_Config($TA, entity_id, entity_pk) ]
+
+// Resolver processes config with authority_hint: BOTH entity and
+// hint must be allowlisted before fetching.
+rule Resolver_Follow_Hint:
+  [ In(<'entity_config_hint', entity_id, entity_pk, authority_hint>),
+    !Allowlisted($TA, entity_id),
+    !Allowlisted($TA, authority_hint) ]
+  --[ Fetched($TA, entity_id),
+      Hint_Followed($TA, entity_id, authority_hint),
+      Endpoint_Checked($TA, entity_id),
+      Endpoint_Checked($TA, authority_hint) ]->
+  [ Fetched_Config($TA, entity_id, entity_pk),
+    Fetch_Request($TA, authority_hint) ]
+
+// Resolve trust chain: verify subordinate statement from TA
+rule Resolve_Chain:
+  let stmt_claims = <'subordinate', $TA, entity_id, entity_pk>
+      stmt = sign(stmt_claims, ta_sk)
+  in
+  [ Fetched_Config($TA, entity_id, entity_pk),
+    !TA($TA, ta_sk, ta_pk) ]
+  --[ Eq(verify(stmt, stmt_claims, ta_pk), true),
+      Chain_Resolved($TA, entity_id, entity_pk) ]->
+  [ Trusted_Entity($TA, entity_id, entity_pk) ]
+
+/* ============ Security Properties ============ */
+
+// No internal fetch: every fetched endpoint was on the allowlist.
+// The attacker can inject malicious authority_hints, but the resolver
+// checks each fetch target against the TA's allowlist.
+lemma no_internal_fetch:
+  "All ta entity_id #i.
+     Fetched(ta, entity_id)@i
+     ==> Ex #j. Endpoint_Allowed(ta, entity_id)@j & #j < #i"
+
+// Authority hints validated: hints that were followed are allowlisted
+lemma authority_hint_validated:
+  "All ta entity hint #i.
+     Hint_Followed(ta, entity, hint)@i
+     ==> Ex #j. Endpoint_Allowed(ta, hint)@j & #j < #i"
+
+// Chain resolution requires prior fetch of the entity config
+lemma chain_requires_fetch:
+  "All ta entity pk #i.
+     Chain_Resolved(ta, entity, pk)@i
+     ==> Ex #j. Fetched(ta, entity)@j & #j < #i"
+
+end

@@ -1,0 +1,277 @@
+theory JWT_Introspection_Security
+begin
+
+/*
+ * JWT Introspection Response Security (RFC 9701)
+ *
+ * Extends the plain JSON introspection model (RFC 7662) to cover
+ * JWT-formatted introspection responses. The AS signs the introspection
+ * response as a JWT with typ: token-introspection+jwt, binding the
+ * response to a specific audience (the requesting Resource Server).
+ *
+ * Protocol overview:
+ * 1. RS sends introspection request with token + RS credentials
+ * 2. AS verifies RS authorization and token status
+ * 3. AS constructs JWT response: {iss, aud, iat, exp, jti, active, ...}
+ * 4. AS signs JWT with its signing key
+ * 5. RS receives and verifies JWT signature + aud claim
+ *
+ * Threat model (from Phase 6 security review):
+ * - JI-1: Audience binding — JWT aud MUST equal requesting RS's client_id
+ * - JI-2: Short expiration — exp ≤ 60s (symbolic: freshness constraint)
+ * - JI-3: Issuer binding — JWT iss MUST equal AS's issuer identifier
+ * - JI-4: Distinct typ header — prevents confusion with other JWT types
+ * - JI-5: Revocation window — token status reflects revocation within window
+ * - JI-6: Cross-tenant isolation — RS in tenant A cannot introspect tokens
+ *         from tenant B
+ *
+ * Security properties:
+ * - response_unforgeability: only AS can produce valid JWT introspection responses
+ * - audience_binding: JWT aud matches the requesting RS
+ * - issuer_binding: JWT iss matches the AS's registered issuer
+ * - no_token_swap: introspection result for token T cannot be replayed for token T'
+ * - jti_replay_prevention: each JWT introspection response has a unique jti
+ * - cross_tenant_isolation: RS cannot obtain introspection for cross-tenant tokens
+ *
+ * Attacker model (Dolev-Yao):
+ * - Attacker controls the network
+ * - Attacker can register as an RS in their own tenant
+ * - Attacker can intercept JWT introspection responses
+ * - Attacker can attempt to forge or replay responses
+ * - Attacker CANNOT obtain AS signing key (without compromise)
+ *
+ * Known limitations:
+ * - exp ≤ 60s (JI-2) not checkable symbolically; modeled as fresh exp
+ * - typ header (JI-4) modeled as part of signed claims structure
+ * - Revocation window timing (JI-5) is symbolic
+ *
+ * Modeling note — HMAC vs asymmetric signing:
+ * The implementation uses HS256 (HMAC-SHA256) via the KeyManager trait.
+ * This model uses builtins: signing (asymmetric) because:
+ * 1. Tamarin's sign/verify primitives model SUF-CMA (strongly unforgeable
+ *    under chosen message attack), which applies to both HMAC and asymmetric
+ *    signatures from the Dolev-Yao attacker's perspective.
+ * 2. The security properties proven here (unforgeability, audience binding,
+ *    issuer binding) hold for both signature schemes against a network
+ *    attacker who does not possess the signing key.
+ * 3. The additional threat of RS-as-forger (possible with HMAC since the
+ *    RS could obtain the shared key for verification) is outside the
+ *    Dolev-Yao model. If RS key distribution becomes a concern, the
+ *    implementation should migrate to asymmetric signing (RS256/ES256).
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ AS Setup ============ */
+
+// AS key generation
+rule AS_Keygen:
+  [ Fr(~as_sk) ]
+  --[ AS_Key($AS, pk(~as_sk)),
+      Unique(<'as_key', $AS>) ]->
+  [ !AS_SK($AS, ~as_sk),
+    !AS_PK($AS, pk(~as_sk)),
+    Out(pk(~as_sk)) ]
+
+// AS key compromise
+rule AS_Compromise:
+  [ !AS_SK(AS, sk) ]
+  --[ Compromised(AS) ]->
+  [ Out(sk) ]
+
+// AS issuer registration
+rule AS_Issuer_Init:
+  [ !AS_SK($AS, as_sk) ]
+  --[ AS_Issuer_Registered($AS, $issuer),
+      Unique(<'as_issuer', $AS>) ]->
+  [ !AS_Issuer($AS, $issuer) ]
+
+/* ============ Tenant / Environment Setup ============ */
+
+rule Tenant_Init:
+  [ Fr(~env_id) ]
+  --[ Environment_Created(~env_id, $Tenant),
+      Unique(<'env', ~env_id>) ]->
+  [ !Environment(~env_id, $Tenant) ]
+
+/* ============ Token & RS Registration ============ */
+
+// RS registration within a specific environment/tenant
+rule Register_RS:
+  [ !Environment(env_id, $Tenant), !AS_SK($AS, as_sk) ]
+  --[ RS_Registered($AS, $RS, env_id, $Tenant),
+      Unique(<'rs', $RS, env_id>) ]->
+  [ !ResourceServer($AS, $RS, env_id, $Tenant) ]
+
+// Token issuance (simplified — focus is on introspection, not grant flow)
+rule Issue_Token:
+  [ !AS_SK($AS, as_sk), !Environment(env_id, $Tenant), Fr(~token) ]
+  --[ Token_Issued($AS, $Client, ~token, env_id),
+      Token_Active(~token),
+      Unique(<'token', ~token>) ]->
+  [ !Token($AS, $Client, ~token, env_id),
+    Token_State(~token, 'active') ]
+
+// Token revocation
+rule Revoke_Token:
+  [ Token_State(token, 'active') ]
+  --[ Token_Revoked(token) ]->
+  [ Token_State(token, 'revoked'),
+    !Revoked(token) ]
+
+/* ============ JWT Introspection Flow ============ */
+
+// RS requests introspection (authorized — same environment)
+rule RS_Request_Introspection:
+  [ !ResourceServer($AS, $RS, env_id, $Tenant),
+    In(token) ]
+  --[ Introspection_Requested($RS, token, env_id) ]->
+  [ Out(<'introspect_req', token, $RS, env_id>),
+    Pending_Introspection($RS, token, env_id) ]
+
+// AS responds with signed JWT introspection response — active token.
+// The JWT binds: iss (AS issuer), aud (requesting RS), jti (unique),
+// token_id, active=true, client_id, and typ header.
+//
+// JI-1: aud = RS (audience binding)
+// JI-3: iss = AS issuer (issuer binding)
+// JI-4: typ = 'token-introspection+jwt' (distinct type)
+rule AS_JWT_Introspect_Active:
+  let jwt_claims = <'token-introspection+jwt', issuer, $RS,
+                     ~jti, token, client_id, 'active'>
+      jwt_response = sign(jwt_claims, as_sk)
+  in
+  [ In(<'introspect_req', token, $RS, env_id>),
+    !Token($AS, client_id, token, env_id),
+    Token_State(token, 'active'),
+    !ResourceServer($AS, $RS, env_id, $Tenant),
+    !AS_SK($AS, as_sk),
+    !AS_Issuer($AS, issuer),
+    Fr(~jti) ]
+  --[ JWT_Introspection_Active($AS, $RS, token, client_id, env_id, jwt_response),
+      JWT_Response_Issued($AS, $RS, ~jti, token, jwt_response),
+      JWT_Aud_Set($RS, jwt_response),
+      JWT_Iss_Set(issuer, jwt_response),
+      Unique(<'jti', ~jti>) ]->
+  [ Out(jwt_response),
+    // BUG-1 fix: re-produce Token_State so the same token can be
+    // introspected multiple times (introspection is non-destructive)
+    Token_State(token, 'active') ]
+
+// AS responds with signed JWT for inactive/revoked token.
+// Still a signed JWT (per RFC 9701 §4: response MUST be a JWT even
+// for inactive tokens to prevent unsigned downgrade).
+rule AS_JWT_Introspect_Inactive:
+  let jwt_claims = <'token-introspection+jwt', issuer, $RS,
+                     ~jti, token, 'none', 'inactive'>
+      jwt_response = sign(jwt_claims, as_sk)
+  in
+  [ In(<'introspect_req', token, $RS, env_id>),
+    !Revoked(token),
+    !ResourceServer($AS, $RS, env_id, $Tenant),
+    !AS_SK($AS, as_sk),
+    !AS_Issuer($AS, issuer),
+    Fr(~jti) ]
+  --[ JWT_Introspection_Inactive($AS, $RS, token, env_id, jwt_response),
+      JWT_Response_Issued($AS, $RS, ~jti, token, jwt_response),
+      JWT_Aud_Set($RS, jwt_response),
+      Unique(<'jti', ~jti>) ]->
+  [ Out(jwt_response) ]
+
+// RS verifies the JWT introspection response:
+// 1. Verify signature against AS public key
+// 2. Verify aud matches RS's own identity
+// 3. Verify iss matches expected AS issuer
+// 4. Verify typ = 'token-introspection+jwt'
+rule RS_Verify_JWT_Response:
+  let jwt_claims = <'token-introspection+jwt', issuer, $RS,
+                     jti, token, client_id, status>
+  in
+  [ In(<jwt_response, jti, token, client_id, status>),
+    !AS_PK($AS, as_pk),
+    !AS_Issuer($AS, issuer),
+    !ResourceServer($AS, $RS, env_id, $Tenant) ]
+  --[ Eq(verify(jwt_response, jwt_claims, as_pk), true),
+      RS_Accepted_Response($RS, $AS, token, status, jwt_response, env_id),
+      RS_Verified_Aud($RS, jwt_response),
+      RS_Verified_Iss($AS, issuer, jwt_response) ]->
+  [ ]
+
+/* ============ Security Properties ============ */
+
+// Response unforgeability (JI-1/JI-3/JI-4 combined):
+// If an RS accepted a JWT introspection response, then either the AS
+// legitimately issued it, or the AS signing key was compromised.
+// Non-trivial because jwt_response travels through the attacker-controlled
+// network (Out → In).
+lemma response_unforgeability:
+  "All RS AS token status jwt env #i.
+     RS_Accepted_Response(RS, AS, token, status, jwt, env)@i
+     ==> (Ex jti #j.
+            JWT_Response_Issued(AS, RS, jti, token, jwt)@j & #j < #i)
+         | (Ex #c. Compromised(AS)@c)"
+
+// JI-1: Audience binding — the JWT response's aud claim matches the
+// RS that requested the introspection. An attacker cannot redirect
+// an introspection response intended for RS_A to RS_B.
+lemma audience_binding:
+  "All RS AS token status jwt env #i.
+     RS_Accepted_Response(RS, AS, token, status, jwt, env)@i
+     ==> (Ex #j. JWT_Aud_Set(RS, jwt)@j & #j < #i)
+         | (Ex #c. Compromised(AS)@c)"
+
+// JI-3: Issuer binding — the JWT iss claim matches the AS's registered
+// issuer identifier.
+lemma issuer_binding:
+  "All RS AS token status jwt env #i.
+     RS_Accepted_Response(RS, AS, token, status, jwt, env)@i
+     ==> (Ex issuer #j.
+            RS_Verified_Iss(AS, issuer, jwt)@i &
+            AS_Issuer_Registered(AS, issuer)@j)
+         | (Ex #c. Compromised(AS)@c)"
+
+// No token swap: if an RS accepted a JWT introspection response, the
+// response traces back to an AS action on that specific token — either
+// an active introspection, an inactive introspection, or a key compromise.
+// An attacker who intercepts a JWT introspection response for token T1
+// cannot present it as being about token T2 because the token identity
+// is cryptographically bound inside the signed claims.
+lemma no_token_swap:
+  "All RS AS token status jwt env #i.
+     RS_Accepted_Response(RS, AS, token, status, jwt, env)@i
+     ==> (Ex client_id #j.
+            JWT_Introspection_Active(AS, RS, token, client_id, env, jwt)@j & #j < #i)
+         | (Ex #j.
+            JWT_Introspection_Inactive(AS, RS, token, env, jwt)@j & #j < #i)
+         | (Ex #c. Compromised(AS)@c)"
+
+// JI-2/JI-5: jti replay prevention — each JWT introspection response
+// has a unique jti. No two responses share the same jti.
+lemma jti_replay_prevention:
+  "All AS RS1 RS2 jti token1 token2 jwt1 jwt2 #i #j.
+     JWT_Response_Issued(AS, RS1, jti, token1, jwt1)@i &
+     JWT_Response_Issued(AS, RS2, jti, token2, jwt2)@j
+     ==> #i = #j"
+
+// JI-6: Cross-tenant isolation — an RS registered in environment env_A
+// (tenant A) cannot obtain a valid introspection response for a token
+// issued in environment env_B (tenant B).
+// This follows from AS_JWT_Introspect_Active requiring both !Token(...)
+// and !ResourceServer(...) to share the same env_id.
+lemma cross_tenant_isolation:
+  "All AS RS token client_id env jwt #i.
+     JWT_Introspection_Active(AS, RS, token, client_id, env, jwt)@i
+     ==> (Ex tenant #j #k.
+            RS_Registered(AS, RS, env, tenant)@j &
+            Token_Issued(AS, client_id, token, env)@k &
+            #j < #i & #k < #i)"
+
+end

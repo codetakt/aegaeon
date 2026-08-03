@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/client-claim-promotion.schema.json",
+  "title": "Aegaeon SDK Client Claim Promotion Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "promotion_target",
+    "required_boundary",
+    "required_release_attestation",
+    "required_lanes",
+    "required_managed_provider",
+    "required_admin_console"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "promotion_target": {
+      "type": "string",
+      "enum": [
+        "released-client-claim"
+      ]
+    },
+    "required_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_phase",
+        "released_client_claim_active",
+        "default_profile",
+        "promoted_client_slices",
+        "compat_only_surfaces"
+      ],
+      "properties": {
+        "claim_phase": {
+          "type": "string",
+          "enum": [
+            "pre-release-client-baseline"
+          ]
+        },
+        "released_client_claim_active": {
+          "const": false
+        },
+        "default_profile": {
+          "type": "string",
+          "enum": [
+            "aegaeon-rs256"
+          ]
+        },
+        "promoted_client_slices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "compat_only_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "required_release_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_phase",
+        "npm_provenance_enabled"
+      ],
+      "properties": {
+        "release_phase": {
+          "type": "string",
+          "enum": [
+            "pre-release-client-baseline"
+          ]
+        },
+        "npm_provenance_enabled": {
+          "const": true
+        }
+      }
+    },
+    "required_lanes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "required_managed_provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "provider_class",
+        "lane_name",
+        "hosted",
+        "status",
+        "expected_workflow",
+        "expected_job",
+        "github_ref_required",
+        "github_sha_required",
+        "github_job_required"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "const": "aegaeon-sdk"
+        },
+        "provider_class": {
+          "type": "string",
+          "enum": [
+            "commercial"
+          ]
+        },
+        "lane_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hosted": {
+          "const": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed"
+          ]
+        },
+        "expected_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_job": {
+          "type": "string",
+          "minLength": 1
+        },
+        "github_ref_required": {
+          "const": true
+        },
+        "github_sha_required": {
+          "const": true
+        },
+        "github_job_required": {
+          "const": true
+        }
+      }
+    },
+    "required_admin_console": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "lane_name",
+        "status",
+        "expected_workflow",
+        "expected_job",
+        "github_ref_required",
+        "github_sha_required",
+        "github_job_required",
+        "management_sdk_package",
+        "required_capabilities"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "const": "aegaeon-admin-console"
+        },
+        "lane_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed"
+          ]
+        },
+        "expected_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_job": {
+          "type": "string",
+          "minLength": 1
+        },
+        "github_ref_required": {
+          "const": true
+        },
+        "github_sha_required": {
+          "const": true
+        },
+        "github_job_required": {
+          "const": true
+        },
+        "management_sdk_package": {
+          "type": "string",
+          "const": "@aegaeon/management-client"
+        },
+        "required_capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "bootstrap-login-logout",
+              "team-tenant-environment-management",
+              "oauth-profile-management",
+              "connection-management",
+              "environment-policy-update",
+              "configuration-version-management",
+              "signing-key-management",
+              "key-store-management",
+              "user-management",
+              "client-management",
+              "client-secret-management",
+              "audit-read-export"
+            ]
+          }
+        }
+      }
+    },
+    "deferred_publication_org_tasks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

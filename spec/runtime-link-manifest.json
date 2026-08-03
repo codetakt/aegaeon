@@ -1,0 +1,523 @@
+{
+  "generated": "2026-08-03T10:46:31.717251+00:00",
+  "files": {
+    "crates/ffi/build.rs": {
+      "sha256": "c59ca5f51de78bd8a2ffb54514e94734c7d99b07ab23aa33b7e1a329d209567f",
+      "entries": [
+        "global-004-everparse"
+      ],
+      "critical": false
+    },
+    "crates/ffi/src/id_token.rs": {
+      "sha256": "322c452bfbe870e6247b89673d861079b43ae5ae463e08d3e4d1bb04bacce968",
+      "entries": [
+        "OIDC-1-005",
+        "OIDC-1-007"
+      ],
+      "critical": true
+    },
+    "crates/ffi/src/kani_tests.rs": {
+      "sha256": "d5cec49ab4b4a745bc8b31316e64c8e460e20f0fee1d4296092705189c755b49",
+      "entries": [
+        "7515-007"
+      ],
+      "critical": true
+    },
+    "crates/ffi/src/lib.rs": {
+      "sha256": "bbc4d6615c47cdb05f75bc072adacc49a9eea5252e7e9d0af9a7533233ae4be7",
+      "entries": [
+        "9449-001",
+        "9449-002"
+      ],
+      "critical": true
+    },
+    "crates/jose/src/json_lowstar.rs": {
+      "sha256": "b3cfa0f1f2423674d9d0d2c8616796424a90a7fe505e7e8be81b9cb8b1453536",
+      "entries": [
+        "7515-005",
+        "7515-KID-LENGTH",
+        "7516-ENC-ALLOWLIST"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/jwe.rs": {
+      "sha256": "e599099fa38d1f86350c54be716dcc236fcf301f8b423c737e58d5c21ea4f338",
+      "entries": [
+        "7515-CRIT-NOT-SUPPORTED",
+        "7516-001"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/jwk.rs": {
+      "sha256": "14b1051ce04cf6af7658c863fae2a4ff8d56f5e9620ad35d172a4aca4ef537b8",
+      "entries": [
+        "7517-001",
+        "7517-003",
+        "9278-101"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/jws.rs": {
+      "sha256": "20b38a724c8f261d3b1318573dea99cf392b4b92e0e1cd18639d7c89d8916778",
+      "entries": [
+        "7515-001",
+        "7518-001"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/jwt.rs": {
+      "sha256": "6d874cbc4fa7b81ba7d99cbc3214a72438426c71bf3a293f669c9b4698e9dc24",
+      "entries": [
+        "7519-002",
+        "7519-003",
+        "7519-004"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/policy.rs": {
+      "sha256": "e27cabec843ac7430e8a38ad1b4d22ea93de7771233a99bae2b97244c0f19b55",
+      "entries": [
+        "7515-002"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/request_object.rs": {
+      "sha256": "542d560c548a0565841476445b2b5e73daaabd8b50ec1d0175a2b917234dab18",
+      "entries": [
+        "OIDC-5-002"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/sd_jwt.rs": {
+      "sha256": "342311cc707089ab20b47a0509ab8e331049e81e75eb3780ad9b0cd703c3e6f8",
+      "entries": [
+        "9901-001"
+      ],
+      "critical": false
+    },
+    "crates/jose/src/tlv.rs": {
+      "sha256": "0893151c5e52627aef06522d8c4c646568e447ac8a9cc7b20d5376602b8f59b9",
+      "entries": [
+        "7515-ALG-ALLOWLIST"
+      ],
+      "critical": false
+    },
+    "crates/jose/tests/tlv_parity.rs": {
+      "sha256": "8f9cf8f740dd9c91662f7067a124a0e17da16481ff20e25c9e80c167121a0c92",
+      "entries": [
+        "7515-006"
+      ],
+      "critical": false
+    },
+    "crates/server/src/authcode/mod.rs": {
+      "sha256": "98f1f45365f487bc4c032025efaeb00533d1a1705b2d33a31cfb693129dce0dd",
+      "entries": [
+        "6749-007",
+        "7636-001",
+        "7636-002",
+        "7636-004",
+        "7636-007"
+      ],
+      "critical": false
+    },
+    "crates/server/src/authcode/store.rs": {
+      "sha256": "b41a8f9587f59194d680f953368ce548e85654f719272a049b992aa597e6426e",
+      "entries": [
+        "6749-005",
+        "6749-006",
+        "6749-012",
+        "v21-020",
+        "v21-021",
+        "v21-026"
+      ],
+      "critical": false
+    },
+    "crates/server/src/authcode/token.rs": {
+      "sha256": "dba7f135c77e9d6a722d9d508b2bf2265804e7af5068c8afd9a208c378650c5a",
+      "entries": [
+        "6749-008",
+        "7636-006",
+        "8705-101",
+        "8707-102",
+        "8707-103",
+        "8707-104",
+        "9068-001",
+        "9068-002",
+        "9068-003",
+        "9700-005",
+        "9700-007",
+        "9700-009",
+        "9700-010",
+        "v21-001",
+        "v21-003",
+        "v21-005",
+        "v21-022",
+        "v21-023"
+      ],
+      "critical": false
+    },
+    "crates/server/src/authcode/token/tests/oidc_id_token.rs": {
+      "sha256": "f7e724eb859bdfdc94df21e5567eaeec5a47ac3d89ad8d90fb681adfa3694e80",
+      "entries": [
+        "OIDC-1-001",
+        "OIDC-1-002",
+        "OIDC-1-003",
+        "OIDC-1-004"
+      ],
+      "critical": false
+    },
+    "crates/server/src/client_registry.rs": {
+      "sha256": "efe5078c10b4fb5c662ee336cb1fddbbc750e6e3c47590a69c8ba4d580d111d9",
+      "entries": [
+        "6749-001",
+        "7521-202",
+        "7523-113",
+        "7523-114",
+        "7523-116",
+        "7523-201",
+        "7523-202",
+        "7523-203",
+        "7523-204",
+        "7523-205",
+        "7523-206",
+        "7523-402",
+        "7592-004",
+        "8725-101",
+        "8725-102",
+        "8725-103",
+        "8725-104",
+        "8725-105",
+        "8725-107",
+        "8725-201",
+        "8725-202",
+        "8725-203",
+        "8725-204"
+      ],
+      "critical": false
+    },
+    "crates/server/src/dcr.rs": {
+      "sha256": "d4180b62b26b0a5d4733680181e650170b8131663c08bc827e3e7381250e42cf",
+      "entries": [
+        "7591-003"
+      ],
+      "critical": false
+    },
+    "crates/server/src/device_authz.rs": {
+      "sha256": "0b1398656d1007de3b0ae4eecf5f0617e457cc7ce8c9f5af908c3bc3f1e9bfd1",
+      "entries": [
+        "8628-101",
+        "8628-102",
+        "8628-103",
+        "8628-104"
+      ],
+      "critical": false
+    },
+    "crates/server/src/form_post.rs": {
+      "sha256": "607cd18db6a33bb84485ee81e20123a8ce5b8e7a0d062975ce1c99b290ab16cb",
+      "entries": [
+        "OIDC-4-001",
+        "OIDC-4-002"
+      ],
+      "critical": false
+    },
+    "crates/server/src/main.rs": {
+      "sha256": "9b45bd324497d196fb01950282e1d1934dc470ac0792704b9aeb75c185105a0d",
+      "entries": [
+        "9101-001",
+        "v21-002"
+      ],
+      "critical": false
+    },
+    "crates/server/src/metadata.rs": {
+      "sha256": "ff83cb24ae47f1f2220f39912b532debb2e8750d7edf1da38405d3e5c5b1f396",
+      "entries": [
+        "8414-001",
+        "8414-002",
+        "8414-003",
+        "8414-004",
+        "8414-006",
+        "8705-102",
+        "9068-004",
+        "9396-104",
+        "9728-101"
+      ],
+      "critical": false
+    },
+    "crates/server/src/middleware/dpop.rs": {
+      "sha256": "3106f07a8e35be5e35735695402977510ce934229b8420df0a0cf3d25aed5953",
+      "entries": [
+        "9449-004",
+        "9449-005",
+        "9449-006",
+        "9449-007",
+        "9449-008",
+        "9449-011",
+        "9449-012",
+        "9449-013"
+      ],
+      "critical": false
+    },
+    "crates/server/src/middleware/replay_store.rs": {
+      "sha256": "bf3b09d6c4e284102f9352097282f39a86a5adc8c3b24713d9a597234453220f",
+      "entries": [
+        "9449-009"
+      ],
+      "critical": false
+    },
+    "crates/server/src/oidc/config.rs": {
+      "sha256": "3ad2afe139ba84ccbb83cbd8c28578d9c6d4d681b68e28dafa170aaf993e72b5",
+      "entries": [
+        "OIDC-2-003"
+      ],
+      "critical": false
+    },
+    "crates/server/src/oidc/mod.rs": {
+      "sha256": "2f4a5fb7311734ee0449c811f83dd714c3a53631adc1a5a9c70e34fed36be754",
+      "entries": [
+        "OIDC-1-006"
+      ],
+      "critical": false
+    },
+    "crates/server/src/oidc/required_rs256.rs": {
+      "sha256": "bf58f6b59eccb425c314d3bcc3844d450392913ef7625ac2dd57eb75ae23868e",
+      "entries": [
+        "OIDC-1-010"
+      ],
+      "critical": false
+    },
+    "crates/server/src/oidc/session.rs": {
+      "sha256": "9b594d170aec97ee6473547cecadb3702c34169ccd0186aac3d0db1221eb61e3",
+      "entries": [
+        "OIDC-3-005"
+      ],
+      "critical": false
+    },
+    "crates/server/src/oidc/session/tests.rs": {
+      "sha256": "4d6328846f99db4e19260a3a6b162566261415bc9b0da00b7abc42ff0e50d841",
+      "entries": [
+        "OIDC-3-001",
+        "OIDC-3-002",
+        "OIDC-3-003",
+        "OIDC-3-004"
+      ],
+      "critical": false
+    },
+    "crates/server/src/par.rs": {
+      "sha256": "dc717127af145a6344eeaf91a9fb76db9189537257e58d87b3912b03d92d0385",
+      "entries": [
+        "9396-106"
+      ],
+      "critical": false
+    },
+    "crates/server/src/policy.rs": {
+      "sha256": "ec48335e539ac3e37ab15b7f659eba257cb60eede964bb06f9b937bc57d17244",
+      "entries": [
+        "v21-034"
+      ],
+      "critical": false
+    },
+    "crates/server/src/rfc_tests.rs": {
+      "sha256": "ea76f076ec9036d015d2f4606a26b2d6e7883f406061bceac35dd6e94a901d77",
+      "entries": [
+        "9700-006"
+      ],
+      "critical": false
+    },
+    "crates/server/src/stepup.rs": {
+      "sha256": "ab024b4e43309b101ba8db6504cf658896ed6e9b0f26072b9163203e2ab21dd1",
+      "entries": [
+        "9470-101",
+        "9470-102",
+        "9470-103"
+      ],
+      "critical": false
+    },
+    "crates/server/src/util.rs": {
+      "sha256": "434e9ce6623d13d43acae17bb6d87bc6334f838ff7cbc77a47e090175c5fefba",
+      "entries": [
+        "8693-103",
+        "8707-101",
+        "9396-101",
+        "9396-102"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/authorize_context.rs": {
+      "sha256": "306c448aff9f276c2439e83ef9520e3a25646fa95f74129d10749b686a00a272",
+      "entries": [
+        "v21-030"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/authorize_validation.rs": {
+      "sha256": "398187288c9257700c5b3d480d997ca4263bdff460c065ddff016df2f9aa93d3",
+      "entries": [
+        "v21-010"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/dcr_registration.rs": {
+      "sha256": "4dd32cdb25cee3a76ee90d1beb4ac4b982d484913155d97a7bbe43cccca66657",
+      "entries": [
+        "7591-002",
+        "7591-004"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/mod.rs": {
+      "sha256": "f0e1c17cde6629eb2505c2ec553423c62f02f88aad8c8bdad6e91123e265327e",
+      "entries": [
+        "6749-014",
+        "7521-201",
+        "7523-101",
+        "7523-102",
+        "7523-111",
+        "7523-112",
+        "7523-301",
+        "7592-001",
+        "7592-002",
+        "7592-003",
+        "7592-005",
+        "7800-101",
+        "8628-105",
+        "8693-101",
+        "8693-102",
+        "8693-104",
+        "8693-105",
+        "8693-106",
+        "8693-107",
+        "8693-108",
+        "8693-201",
+        "8693-202",
+        "8693-203",
+        "8693-204",
+        "8705-104",
+        "9207-002",
+        "9396-103",
+        "9396-105",
+        "9396-107",
+        "9449-014",
+        "9701-001",
+        "9701-002",
+        "9701-003",
+        "9701-004",
+        "9701-005",
+        "v21-019",
+        "v21-024",
+        "v21-035"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/par_endpoint.rs": {
+      "sha256": "6d8e8a9ba67d115e17e2b6fb7f9c0cd2d8ea10b08a5dde470471a54d285ef621",
+      "entries": [
+        "9126-003",
+        "9126-005",
+        "9126-007"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/token_exchange_tests/request_object_retention.rs": {
+      "sha256": "3822faff032f5cdefd097e6ef649ea89f0e26d3b459a9ce0a6b8e3eb2e32b68b",
+      "entries": [
+        "9101-002",
+        "OIDC-5-001"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/token_lifecycle.rs": {
+      "sha256": "d45216be25462126d1dbfd69b2184e3fcc948d32995eeaa998f7f0de0240cd2e",
+      "entries": [
+        "7009-002",
+        "7009-003",
+        "7009-005",
+        "7009-006",
+        "7662-003",
+        "7662-004",
+        "7662-005",
+        "7662-006",
+        "global-004"
+      ],
+      "critical": false
+    },
+    "crates/server/src/web/upstream_refresh.rs": {
+      "sha256": "b3ae578de613626d985c34c7cf47af4a63aab7c3edee2fa50f835144fdbd9f10",
+      "entries": [
+        "OIDC-1-009"
+      ],
+      "critical": false
+    }
+  },
+  "monitored_files": {
+    "crates/crypto/src/drbg.rs": {
+      "sha256": "b03ff162884f939aac9cd65a2209cfe5f78e8373d0a0e47d8b71a30072fb08b1",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/error.rs": {
+      "sha256": "8d85ab17e50a0b468a6c51612ac92193d11c95525c2d39a6a7633ec9d263a38d",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/hash.rs": {
+      "sha256": "c2b98b2b3330ca96bfd77ff5284e092f48329a4f7959f0316538291f2cb1e2d5",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/jwe.rs": {
+      "sha256": "79f401c6eb92adf90ce866cf6ffc1504ce6cb0a8b90ab7dd40ad71260bad35f6",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/lib.rs": {
+      "sha256": "a01309e0b81c89e5b4b25e717820f18ea723dcea903750f46570d1d81f0ce33c",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/mac.rs": {
+      "sha256": "f8e2d13e69c71de2f99c641407ea47518ffd24aa891c1137b1a64482895ac44c",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/rand.rs": {
+      "sha256": "697c0689b2e99eb1b463fdcf4a4f5184fca8f3709cdd67df7455ef5c07f2eb10",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/signature.rs": {
+      "sha256": "efca2a8771e37836ea2458540b52a9adca98f23797a71b1564f3a63ec7428b39",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/signing.rs": {
+      "sha256": "9b8557bb6c55f197dfea5581de48526b6ce59b8499d8216607647a8775d52b54",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/tls.rs": {
+      "sha256": "6271869191d9d3c5e8ffe2389aa6f67f6025eafbb8cea27784a6075e31fae542",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    }
+  }
+}

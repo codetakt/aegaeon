@@ -1,0 +1,199 @@
+# CI: Owns nix flake check, release build, clippy lints, OpenAPI / ABI drift
+# checks, and the dependency policy gate (cargo deny).
+# cargo audit runs in compliance.yml as the release/compliance security audit.
+# EverParse/Low* verification -> verification.yml (everparse-dcr, lowstar-extraction).
+# F* verification -> verification.yml (fstar job).
+name: CI - Core
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Flake Checks & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Install JavaScript dependencies
+        run: nix develop .#ci --command npm ci
+
+      - name: Hook baseline
+        run: |
+          PRE_COMMIT_HOME=/tmp/pre-commit-aegaeon nix develop .#ci --command pre-commit run --all-files
+
+      - name: Lint commit messages (push)
+        if: github.event_name == 'push'
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
+              nix develop .#ci --command ./scripts/commitlint-range.sh --to HEAD
+            else
+              git fetch origin "${{ github.event.repository.default_branch }}" --depth=1
+              base_sha="$(git merge-base HEAD "origin/${{ github.event.repository.default_branch }}" || true)"
+              nix develop .#ci --command ./scripts/commitlint-range.sh --from "$base_sha" --to HEAD
+            fi
+          else
+            nix develop .#ci --command \
+              ./scripts/commitlint-range.sh --from "${{ github.event.before }}" --to "${{ github.sha }}"
+          fi
+
+      - name: Lint commit messages (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          base_sha="$(git merge-base HEAD "origin/${{ github.base_ref }}" || true)"
+          nix develop .#ci --command ./scripts/commitlint-range.sh --from "$base_sha" --to HEAD
+
+      - name: Lint PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > /tmp/pr-title
+          nix develop .#ci --command commitlint --edit /tmp/pr-title
+
+      - name: Workflow inventory audit
+        run: |
+          nix develop .#ci --command node --experimental-strip-types \
+            tests/verified_core_wasm/workflow_inventory_policy_test.ts
+
+      - name: Check OpenAPI artefact drift
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix develop .#ci --command cargo xtask openapi --check
+
+      - name: nix flake check
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix flake check --print-build-logs
+
+      - name: Build release server
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix build .#server --print-build-logs --out-link result-server
+          mkdir -p artifacts
+          cp -R --dereference result-server artifacts/server
+
+      - name: Run supplemental clippy lints
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix develop .#ci --command cargo clippy --workspace --all-targets -- \
+            -W clippy::suspicious \
+            -D clippy::suspicious_else_formatting \
+            -D clippy::suspicious_operation_groupings
+
+      - name: Run server clippy inventory gate
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix develop .#ci --command bash scripts/flake/lint_server_clippy_inventory.sh
+
+      # EverParse/Low* artefact verification removed (Phase 9 CI deduplication).
+      # Now handled by verification.yml: everparse-dcr + lowstar-extraction jobs.
+
+      - name: Check Verified Core ABI drift
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix develop .#ci --command bash scripts/validation/check_abi_drift.sh
+
+      - name: Lint Nix, Markdown, and Actions
+        run: |
+          nix develop .#ci --command bash -c './scripts/lint/lint_nix.sh'
+          nix develop .#ci --command bash -c './scripts/lint/lint_markdown.sh'
+          nix develop .#ci --command bash -c './scripts/lint/lint_actions.sh'
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server
+          path: artifacts/server
+
+  dependency-audit:
+    name: Dependency Policy Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Check dependency policies (licenses, bans, sources, advisories)
+        run: nix develop .#ci --command cargo deny check
+
+  db-integration:
+    name: DB Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run DB-gated ignored integration tests
+        env:
+          AEGAEON_SERVER_CONTAINER_DOWN: "1"
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all

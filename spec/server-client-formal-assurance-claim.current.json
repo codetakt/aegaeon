@@ -1,0 +1,221 @@
+{
+  "$schema": "https://aegaeon.dev/spec/server-client-formal-assurance-claim.schema.json",
+  "schema_version": 1,
+  "claim_target": "server-client-formal-assurance",
+  "claim_active": false,
+  "claim_stage": "phase5-internal-complete",
+  "current_public_wording": "verified OIDC/OAuth server; client/RP SDK claim inactive",
+  "future_allowed_wording": "assumption-qualified server plus released SDK with TCBs",
+  "minimum_qualified_wording": "Shorthand must disclose assumptions, client-core scope, and TCBs.",
+  "prohibited_wording": [
+    "completely security-proven OIDC/OAuth implementation",
+    "fully formally verified server and client without assumptions",
+    "formally verified browser runtime",
+    "formally verified React/admin UI",
+    "formally verified third-party IdP behaviour",
+    "formally verified OS entropy or host storage",
+    "formally verified compat algorithms outside the promoted profile"
+  ],
+  "included_claim_boundaries": [
+    {
+      "id": "server-oidc-oauth-protocol-core",
+      "description": "Server OIDC/OAuth protocol core in the assurance case.",
+      "assurance_level": "assumption-qualified-formal",
+      "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md"
+    },
+    {
+      "id": "server-promoted-rs256-slices",
+      "description": "Promoted OIDC RS256 server slices.",
+      "assurance_level": "assumption-qualified-formal",
+      "evidence_uri": "docs/verification/claims/crypto-allowlist.md"
+    },
+    {
+      "id": "server-side-federation-broker-runtime",
+      "description": "Server-side RP / federation broker runtime support.",
+      "assurance_level": "runtime-supported",
+      "evidence_uri": "docs/product-positioning.md"
+    },
+    {
+      "id": "verified-client-core",
+      "description": "Verified Core checks claims, time, and replay semantics.",
+      "assurance_level": "verified-core",
+      "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md"
+    },
+    {
+      "id": "released-client-rp-sdk",
+      "description": "Released client/RP SDK evidence remains gated.",
+      "assurance_level": "release-gated",
+      "evidence_uri": "spec/released-client-claim.current.json"
+    }
+  ],
+  "excluded_tcb_boundaries": [
+    {
+      "id": "cryptographic-hardness-premises",
+      "description": "Cryptographic hardness assumptions are theorem premises.",
+      "required_disclosure": true
+    },
+    {
+      "id": "os-device-entropy",
+      "description": "OS, device, HSM, KMS, and browser entropy are external.",
+      "required_disclosure": true
+    },
+    {
+      "id": "third-party-dependencies",
+      "description": "Third-party runtime and platform dependencies are TCB.",
+      "required_disclosure": true
+    },
+    {
+      "id": "runtime-adapter-signature-preverification",
+      "description": "Adapter-side signature preverification is a TCB.",
+      "required_disclosure": true
+    },
+    {
+      "id": "external-idp-hosts-and-network",
+      "description": "External IdPs, DNS, network, and TLS hosting are TCB.",
+      "required_disclosure": true
+    },
+    {
+      "id": "client-storage-and-callback-hosting",
+      "description": "Client storage and callback hosting are app/runtime TCB.",
+      "required_disclosure": true
+    },
+    {
+      "id": "compat-algorithm-surfaces",
+      "description": "Compat-only algorithms remain outside the target.",
+      "required_disclosure": true
+    },
+    {
+      "id": "admin-ui-rendering",
+      "description": "Admin UI rendering and visual behaviour are excluded.",
+      "required_disclosure": true
+    }
+  ],
+  "dependent_gates": [
+    {
+      "id": "released-client-claim",
+      "description": "Released client claim must be active first.",
+      "path": "spec/released-client-claim.current.json",
+      "kind": "released-client-claim",
+      "must_be_ready_for_activation": true
+    },
+    {
+      "id": "client-claim-boundary",
+      "description": "Client boundary must be promoted to released profile.",
+      "path": "spec/client-claim-boundary.current.json",
+      "kind": "client-boundary",
+      "must_be_ready_for_activation": true
+    },
+    {
+      "id": "client-claim-promotion",
+      "description": "Client promotion gate must bind hosted release evidence.",
+      "path": "spec/client-claim-promotion.current.json",
+      "kind": "client-promotion",
+      "must_be_ready_for_activation": true
+    },
+    {
+      "id": "phase4-public-activation-preflight",
+      "description": "Phase 4 public-activation blockers must be reviewed.",
+      "path": "docs/releases/evidence/phase4-claim-activation-preflight.json",
+      "kind": "evidence-preflight",
+      "must_be_ready_for_activation": false
+    }
+  ],
+  "required_evidence": [
+    {
+      "id": "server-assurance-baseline",
+      "description": "Server assurance baseline supports the server claim.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "client-rp-assurance-case",
+      "description": "Client/RP assurance records core and adapter boundaries.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "client-boundary-policy",
+      "description": "Client boundary freezes promoted and compat surfaces.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "spec/client-claim-boundary.current.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "released-client-claim-gate",
+      "description": "Released client claim gate is not active yet.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "spec/released-client-claim.current.json",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "hosted-real-provider-evidence",
+      "description": "Hosted real-provider evidence must be fresh.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/managed-provider-evidence.md",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "admin-sdk-evidence",
+      "description": "Fresh hosted admin SDK evidence passed without widening UI claims.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/phase5-pre-public-blockers.json#admin-sdk-evidence-shape",
+      "owner": "aegaeon-admin-console"
+    },
+    {
+      "id": "publication-custody",
+      "description": "Publication custody and provenance must be complete.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/publication-org-rollout.md",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "release-security-evidence",
+      "description": "Release security archive must bind required outputs.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/release-security-evidence.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "multi-review-signoff",
+      "description": "Internal and external reviews must approve the wording.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "phase5-internal-evidence-bundle",
+      "description": "Phase 5 internal bundle records gate and blockers.",
+      "status": "complete",
+      "required_for_activation": false,
+      "evidence_uri": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "pre-public-blocker-closure",
+      "description": "Non-public blocker closure report is complete.",
+      "status": "complete",
+      "required_for_activation": false,
+      "evidence_uri": "docs/releases/evidence/phase5-pre-public-blockers.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "positioning-scope-update",
+      "description": "Product positioning preserves future-gated TCB wording.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/product-positioning.md",
+      "owner": "aegaeon"
+    }
+  ]
+}

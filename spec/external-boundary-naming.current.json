@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "external_boundary_env": {
+    "target_prefix": "AEGAEON_",
+    "deprecated_prefix": "AEG_"
+  },
+  "external_boundary_wire": {
+    "target_prefix": "aegaeon_",
+    "deprecated_prefix": "aeg_"
+  },
+  "artifact_naming": {
+    "target_prefix": "aegaeon-"
+  },
+  "internal_code": {
+    "prefix_policy": "none"
+  },
+  "migration": {
+    "strategy": "breaking_cutover_no_aliases",
+    "phase_order": [
+      "policy",
+      "server",
+      "sdk",
+      "admin-console",
+      "ci-mirrors",
+      "verification"
+    ]
+  },
+  "scope": {
+    "external_boundary_kinds": [
+      "environment_variables",
+      "github_secrets",
+      "github_variables",
+      "workflow_inputs",
+      "workflow_env",
+      "compose_env",
+      "docker_env",
+      "evidence_keys",
+      "report_keys",
+      "publication_bundle_keys",
+      "non_standard_metadata_keys"
+    ],
+    "excluded_kinds": [
+      "internal_code_symbols",
+      "crate_names",
+      "package_names",
+      "module_paths",
+      "standard_protocol_fields"
+    ]
+  },
+  "ignore_paths": [
+    ".artifacts",
+    ".git",
+    "coverage",
+    "dist",
+    "dist-tests",
+    "dist-tools",
+    "node_modules",
+    "result",
+    "storybook-static",
+    "target"
+  ]
+}

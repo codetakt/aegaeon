@@ -1,0 +1,52 @@
+[package]
+name = "aegaeon-jose"
+version = "0.9.0-beta"
+edition = "2021"
+license = "Apache-2.0"
+description = "JOSE primitives and verified parsing bridges for Aegaeon"
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "aegaeon_jose"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+ffi = { path = "../ffi", version = "0.9.0-beta" }
+aegaeon-jose-tlv = { path = "../jose-tlv", version = "0.9.0-beta" }
+aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
+thiserror = "2.0"
+base64 = "0.22"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+once_cell = "1.20"
+jsonwebtoken = "9.3"
+
+[dev-dependencies]
+simple_asn1 = "0.6"
+criterion = "0.5"
+hmac = "0.12"
+getrandom = "0.2"
+sha2 = "0.10"
+p256 = "0.13"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+[[bench]]
+name = "json_parsing"
+harness = false
+
+[[bench]]
+name = "rsa_pss_verification"
+harness = false
+
+### tests omitted
+
+[features]
+default = []
+everparse_jose_header_entry = []
+ffi_jose_header_tlv = []
+verified-claim = ["ffi/verified-claim", "everparse_jose_header_entry"]

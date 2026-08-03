@@ -1,0 +1,21 @@
+issuer: http://127.0.0.1:35556/dex
+storage:
+  type: sqlite3
+  config:
+    file: /tmp/dex.db
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+enablePasswordDB: true
+staticClients:
+  - id: browser-client
+    public: true
+    name: Browser Client
+    redirectURIs:
+      - http://127.0.0.1:41731/tests/browser/issuer_spa_external_provider_e2e.html
+staticPasswords:
+  - email: user@example.com
+    hash: "$2y$10$XweBarhSXfO/TVAzpUuEF.TGskSNv3TDqkgpzHXHotzQPCkQIJ1OW"
+    username: user
+    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466

@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/admin-ui-assurance-evidence-bundle.schema.json",
+  "title": "Aegaeon Admin UI Assurance Evidence Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "bundle_id",
+    "generated_at",
+    "claim_target",
+    "claim_gate_path",
+    "phase3_status",
+    "public_claim_ready",
+    "artifacts",
+    "hosted_runtime_evidence",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim_target": {
+      "const": "admin-ui-assurance"
+    },
+    "claim_gate_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase3_status": {
+      "type": "string",
+      "enum": [
+        "internal-complete",
+        "external-complete"
+      ]
+    },
+    "public_claim_ready": {
+      "type": "boolean"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assurance_case",
+        "state_machine",
+        "state_machine_schema",
+        "validator",
+        "validator_self_test",
+        "product_positioning"
+      ],
+      "properties": {
+        "assurance_case": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_machine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_machine_schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validator_self_test": {
+          "type": "string",
+          "minLength": 1
+        },
+        "product_positioning": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "hosted_runtime_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evidence_uri",
+        "public_claim_blocker",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "deferred",
+            "present",
+            "approved"
+          ]
+        },
+        "evidence_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public_claim_blocker": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

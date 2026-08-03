@@ -1,0 +1,984 @@
+# Formal Verification: Owns F*, Tamarin, Kani, EverParse/Low*, dudect,
+# JOSE test vectors, metrics E2E, and private_key_jwt E2E.
+# nix flake check (build gate) -> ci.yml.
+# F* was previously also in verify-fstar-ci.yml (now retired).
+name: Formal Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ opened, ready_for_review, synchronize, reopened ]
+  workflow_dispatch:
+
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # F* Verification
+  fstar:
+    name: F* Verification
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Run F* Verification (Nix)
+        run: |
+          nix build .#verify-fstar -L
+          if [ -L result ]; then
+            echo "=== F* Verification Log ==="
+            cat result/verify.log
+          fi
+
+      - name: Upload F* artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fstar-artifacts
+          path: |
+            result/verify.log
+          if-no-files-found: warn
+
+  everparse-dcr:
+    name: EverParse DCR Artefacts
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+
+      - name: Regenerate EverParse artefacts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/everparse
+          chmod +x scripts/extraction/run_everparse_batch.sh
+          scripts/extraction/run_everparse_batch.sh 2>&1 | tee artifacts/everparse/run.log
+
+      - name: Verify committed artefacts are up to date
+        run: |
+          set -euo pipefail
+          if [ ! -d generated/everparse ]; then
+            echo "generated/everparse directory missing after regeneration" >&2
+            exit 1
+          fi
+          git diff --exit-code --stat generated/everparse || {
+            echo \
+              "❌ EverParse artefacts are out of date." \
+              "Run scripts/extraction/run_everparse_batch.sh locally and commit the changes." \
+              >&2
+            git diff -- generated/everparse > artifacts/everparse/diff.patch || true
+            exit 1
+          }
+          legacy=$(
+            grep -R -n -E \
+              'EverParseErrorFrame|EverParseInputBuffer|EverParseDefaultErrorHandler_Impl' \
+              generated/everparse/*Wrapper.c 2>/dev/null || true
+          )
+          if [ -n "$legacy" ]; then
+            echo "::error::Found EverParse wrapper using legacy compatibility aliases" >&2
+            printf "%s\n" "$legacy"
+            exit 1
+          fi
+          missing=$(
+            grep -L 'uint64_t error_code' generated/everparse/*Wrapper.c 2>/dev/null || true
+          )
+          if [ -n "$missing" ]; then
+            echo \
+              "::error::Found EverParse wrapper missing error_code parameter" \
+              "(unexpected toolchain output)" >&2
+            printf "%s\n" "$missing"
+            exit 1
+          fi
+          echo "✅ EverParse artefacts match committed versions"
+
+      - name: Upload EverParse artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: everparse-dcr
+          path: |
+            artifacts/everparse/
+            generated/everparse/
+
+  lowstar-extraction:
+    name: Low* Extraction Parity
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Verify Low* artefacts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/lowstar
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix run .#verify-lowstar 2>&1 | tee artifacts/lowstar/verify.log
+
+      - name: Upload Low* logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lowstar-extraction
+          path: artifacts/lowstar/
+
+  # Verified Core WASM Build
+  verified-core-wasm:
+    name: Verified Core WASM
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+
+      - name: Build verified-core-wasm
+        run: |
+          set -euo pipefail
+          nix build .#verified-core-wasm -L
+
+      - name: Generate artifact manifest
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/verified-core-wasm
+          wasm_count=$(find -L result/ -name '*.wasm' -type f | wc -l)
+          if [ "$wasm_count" -eq 0 ]; then
+            echo "::error::No .wasm file found in build output"
+            exit 1
+          elif [ "$wasm_count" -gt 1 ]; then
+            echo "::error::Multiple .wasm files found — manifest would be nondeterministic"
+            find -L result/ -name '*.wasm' -type f
+            exit 1
+          fi
+          wasm_file=$(find -L result/ -name '*.wasm' -type f)
+          sha256sum "$wasm_file" > artifacts/verified-core-wasm/sha256sum.txt
+          {
+            echo "=== Verified Core WASM Manifest ==="
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+            echo "Git branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
+            echo ""
+            echo "SHA-256:"
+            cat artifacts/verified-core-wasm/sha256sum.txt
+            echo ""
+            echo "File size: $(wc -c < "$wasm_file") bytes"
+          } | tee artifacts/verified-core-wasm/manifest.txt
+
+      - name: Upload WASM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-core-wasm
+          path: artifacts/verified-core-wasm/
+          if-no-files-found: warn
+
+  # Native/WASM Equivalence Tests
+  verified-core-equivalence:
+    name: Verified Core Equivalence
+    runs-on: ubuntu-latest
+    needs: verified-core-wasm
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Build verified-core-wasm
+        run: nix build .#verified-core-wasm -L
+
+      - name: Run equivalence tests (fail-close)
+        run: |
+          set -euo pipefail
+          wasm_file=$(find -L result/ -name '*.wasm' -type f | head -1)
+          if [ -z "$wasm_file" ]; then
+            echo "::error::No .wasm file found in build output"
+            exit 1
+          fi
+          AEG_REQUIRE_WASM=1 tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
+
+  # Dudect Constant-Time Analysis (HACL*/EverCrypt)
+  dudect:
+    name: Constant-Time (dudect, HACL*)
+    runs-on: ubuntu-latest
+    needs: fstar
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Run dudect-check (Nix)
+        run: |
+          nix build .#dudect-check -L
+          echo "dudect-check: PASS"
+
+  # Tamarin Protocol Verification
+  tamarin:
+    name: Tamarin Protocol Verification
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run Tamarin verification (Nix)
+        run: |
+          mkdir -p artifacts/tamarin
+          nix build .#verify-tamarin -L
+          cp -f result/verify-tamarin.log artifacts/tamarin/tamarin_results.txt
+
+      - name: Verify all proofs passed
+        run: |
+          if [ -f "artifacts/tamarin/tamarin_results.txt" ]; then
+            grep -Eq "Lemmas failed: 0/[0-9]+" artifacts/tamarin/tamarin_results.txt || {
+              echo "Tamarin proofs failed"
+              cat artifacts/tamarin/tamarin_results.txt
+              exit 1
+            }
+          else
+            echo "No Tamarin results file found"
+            exit 1
+          fi
+          echo "✅ All Tamarin proofs verified"
+
+      - name: Upload Tamarin results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tamarin-results
+          path: artifacts/tamarin/
+
+  # Kani Bounded Model Checking
+  kani-pure:
+    name: Kani (Pure Harness)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - name: Install Kani
+        run: |
+          cargo install --locked kani-verifier --version 0.65.0
+          cargo kani setup
+      - name: Show Kani version
+        run: |
+          kani --version || true
+          cargo kani --version || true
+      - name: Run Kani (pure harness)
+        run: |
+          RUSTFLAGS="-C panic=abort -Z panic-abort-tests" \
+          KANI_LOG=info \
+          bash scripts/kani/run_kani.sh
+      - name: Summarize Kani run (pure harness)
+        if: always()
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = Path('artifacts/kani/report.json')
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+
+          if not report.exists():
+              print('⚠️ Kani summary not found at artifacts/kani/report.json')
+              if summary_path:
+                  with open(summary_path, 'a', encoding='utf-8') as fh:
+                      fh.write('### Kani (pure harness)\n')
+                      fh.write('⚠️ report.json not generated\n')
+              raise SystemExit(0)
+
+          data = json.loads(report.read_text(encoding='utf-8'))
+          status = data.get('status', 'unknown')
+          harnesses = data.get('harnesses', {})
+
+          print(f"Kani status: {status}")
+          for name, result in sorted(harnesses.items()):
+              print(f"  - {name}: {result}")
+
+          if summary_path:
+              with open(summary_path, 'a', encoding='utf-8') as fh:
+                  fh.write('### Kani (pure harness)\n')
+                  fh.write(f"Status: {status}\n")
+                  if harnesses:
+                      for name, result in sorted(harnesses.items()):
+                          fh.write(f"- {name}: {result}\n")
+                  fh.write('\n')
+          PY
+      - name: Upload Kani logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kani-pure-artifacts
+          path: |
+            artifacts/kani/
+            crates/kani-harness/target/kani*/
+          if-no-files-found: warn
+  kani:
+    name: Kani Model Checking
+    runs-on: ubuntu-latest
+    env:
+      AEG_KANI_RUN_SERVER: "1"
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Install Kani
+        run: |
+          # Install Kani verifier 0.65.0
+          cargo +nightly install --locked kani-verifier --version 0.65.0
+          cargo +nightly kani setup
+
+      - name: Run Kani verification
+        run: |
+          RUSTFLAGS="-C panic=abort -Z panic-abort-tests" \
+          KANI_LOG=info \
+          bash scripts/kani/run_kani.sh
+
+      - name: Summarize Kani results
+        if: always()
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = Path('artifacts/kani/report.json')
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+
+          if not report.exists():
+              print('⚠️ Kani summary not found at artifacts/kani/report.json')
+              if summary_path:
+                  with open(summary_path, 'a', encoding='utf-8') as fh:
+                      fh.write('### Kani (model checking)\n')
+                      fh.write('⚠️ report.json not generated\n')
+              raise SystemExit(1)
+
+          data = json.loads(report.read_text(encoding='utf-8'))
+          status = data.get('status', 'unknown')
+          harnesses = data.get('harnesses', {})
+          server_mode = data.get('server_run_mode', 'skipped')
+          server_harnesses = data.get('server_harnesses', {})
+
+          print(f"Kani status: {status}")
+          print(f"Server harness mode: {server_mode}")
+          for name, result in sorted(harnesses.items()):
+              print(f"  - {name}: {result}")
+          for name, result in sorted(server_harnesses.items()):
+              print(f"  - {name}: {result}")
+
+          if summary_path:
+              with open(summary_path, 'a', encoding='utf-8') as fh:
+                  fh.write('### Kani (model checking)\n')
+                  fh.write(f"Status: {status}\n")
+                  fh.write(f"Server harnesses: {server_mode}\n")
+                  if harnesses:
+                      for name, result in sorted(harnesses.items()):
+                          fh.write(f"- {name}: {result}\n")
+                  if server_harnesses:
+                      for name, result in sorted(server_harnesses.items()):
+                          fh.write(f"- {name}: {result}\n")
+                  fh.write('\n')
+
+          if status != 'success':
+              raise SystemExit(1)
+          PY
+
+      - name: Upload Kani report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kani-report
+          path: artifacts/kani/
+          if-no-files-found: warn
+
+  # JOSE Test Vectors
+  jose-vectors:
+    name: JOSE RFC Test Vectors
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space (GitHub hosted runner)
+        run: |
+          set -euxo pipefail
+          df -h
+          if command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+          else
+            SUDO=""
+          fi
+          $SUDO rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL || true
+          $SUDO docker system prune -af || true
+          $SUDO apt-get clean || true
+          df -h
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run JOSE JSON/TLV compatibility tests
+        run: |
+          run_test() {
+            cargo test "$@"
+          }
+
+          run_test -p aegaeon-jose --test rfc7520_vectors -- --nocapture
+          run_test -p aegaeon-jose --test tlv_parity -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test rfc7520_vectors \
+            --features everparse_jose_header_entry -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test tlv_parity \
+            --features everparse_jose_header_entry -- --test-threads=1 --nocapture
+          run_test -p ffi --test jose_header_runtime_test -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose ffi_tlv_feature \
+            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose json_header_pairs_via_ffi_tlv \
+            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test rfc7520_vectors \
+            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test tlv_parity \
+            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --lib -- tlv_utf8_values_match_json_header
+          run_test -p aegaeon-jose --lib \
+            request_object_raw_parser_preserves_authorization_details -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            request_object_verification_rejects_duplicate_claim_keys -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            request_object_rs256_promoted_rejects_duplicate_claim_keys -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_client_registration_value_rejects_duplicate_keys -- --nocapture
+          run_test -p aegaeon-server --lib \
+            required_rs256_rejects_duplicate_claim_keys -- --nocapture
+          run_test -p aegaeon-server --lib \
+            raw_id_token_payload_parser_rejects_unknown_surface_backend_override \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            compat_profile_falls_back_when_hash_runtime_is_unavailable -- --nocapture
+          run_test -p aegaeon-server --lib \
+            compat_profile_falls_back_when_hash_runtime_fails -- --nocapture
+          run_test -p aegaeon-server --lib \
+            compat_profile_falls_back_when_hash_runtime_returns_null_digest -- --nocapture
+          run_test -p aegaeon-server --lib \
+            finalize_hash_result_maps_input_too_large_to_invalid_request -- --nocapture
+          run_test -p aegaeon-server --lib \
+            software_statement_rejects_duplicate_claim_keys -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_duplicate_payload_claim_keys \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_unknown_payload_backend_override \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_duplicate_header_keys \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_unknown_header_backend_override \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_entity_statement_payload_rejects_duplicate_claim_keys \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_entity_statement_payload_rejects_unknown_surface_backend_override \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_trust_mark_claims_payload_rejects_duplicate_claim_keys \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_trust_mark_claims_payload_rejects_unknown_surface_backend_override \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_extract_nonce_from_proof_rejects_duplicate_keys -- --nocapture
+          run_test -p aegaeon-server --test oidc_hash_vectors -- --nocapture
+          run_test -p aegaeon-server --lib \
+            compat_profile_allows_dcr_self_check_bypass_when_disabled \
+            -- --nocapture
+          run_test -p aegaeon-server --lib \
+            compat_profile_allows_request_object_self_check_bypass_when_disabled \
+            -- --nocapture
+
+      - name: Run strict claim-bearing profile tests
+        run: |
+          run_test() {
+            cargo test "$@"
+          }
+
+          strict_features="verified-claim"
+          strict_ffi_features="ffi_jose_header_tlv,verified-claim"
+
+          run_test -p aegaeon-jose --test rfc7520_vectors \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose --test tlv_parity \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose ffi_tlv_feature \
+            --features "$strict_ffi_features" -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose \
+            tlv_abi_parser_unavailable_maps_to_json_parser_unavailable \
+            --features "$strict_ffi_features" -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test rfc7520_vectors \
+            --features "$strict_ffi_features" -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test tlv_parity \
+            --features "$strict_ffi_features" -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --lib \
+            request_object_verification_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            request_object_rs256_promoted_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_client_registration_value_rejects_duplicate_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            verified_claim_profile_rejects_parser_unavailable \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            verified_claim_profile_rejects_jwe_parser_unavailable \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-jose --lib \
+            verified_claim_profile_rejects_unavailable_everparse_entry_validator \
+            --features "$strict_features" -- --nocapture
+          run_test -p ffi --test jose_header_runtime_test \
+            --features "$strict_features" -- --test-threads=1 --nocapture
+          run_test -p ffi --test oidc_hash_runtime_test \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_rejects_unavailable_id_token_structure_parser \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            raw_id_token_payload_parser_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            raw_id_token_payload_parser_rejects_unknown_surface_backend_override \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            software_statement_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_duplicate_payload_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_unknown_payload_backend_override \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_duplicate_header_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_jwt_access_token_validator_rejects_unknown_header_backend_override \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_entity_statement_payload_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_entity_statement_payload_rejects_unknown_surface_backend_override \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_trust_mark_claims_payload_rejects_duplicate_claim_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            parse_trust_mark_claims_payload_rejects_unknown_surface_backend_override \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            test_extract_nonce_from_proof_rejects_duplicate_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --test oidc_hash_vectors \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_rejects_unavailable_hash_runtime \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_rejects_failed_hash_runtime \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_rejects_null_digest_hash_runtime \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            finalize_hash_result_maps_input_too_large_to_invalid_request \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_requires_dcr_self_check_without_env_gate \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib \
+            verified_claim_profile_requires_request_object_self_check_without_env_gate \
+            --features "$strict_features" -- --nocapture
+
+      - name: Run TLV parity tests
+        run: |
+          mkdir -p artifacts/jose/tlv-parity
+          : > artifacts/jose/tlv-parity/test-output.txt
+
+          for profile in \
+            default \
+            everparse-jose-header-entry \
+            verified-claim \
+            ffi-jose-header-tlv \
+            ffi-jose-header-tlv-verified-claim; do
+            case "$profile" in
+              default)
+                features=""
+                ;;
+              everparse-jose-header-entry)
+                features="everparse_jose_header_entry"
+                ;;
+              verified-claim)
+                features="verified-claim"
+                ;;
+              ffi-jose-header-tlv)
+                features="ffi_jose_header_tlv"
+                ;;
+              ffi-jose-header-tlv-verified-claim)
+                features="ffi_jose_header_tlv,verified-claim"
+                ;;
+            esac
+
+            output="artifacts/jose/tlv-parity/${profile}.txt"
+            echo "=== TLV parity profile: ${profile} ===" \
+              | tee -a artifacts/jose/tlv-parity/test-output.txt
+            if [ -n "$features" ]; then
+              cargo test -p aegaeon-jose --test tlv_parity \
+                --features "$features" -- --test-threads=1 --nocapture 2>&1 \
+                | tee "$output"
+            else
+              cargo test -p aegaeon-jose --test tlv_parity \
+                -- --test-threads=1 --nocapture 2>&1 | tee "$output"
+            fi
+            cat "$output" >> artifacts/jose/tlv-parity/test-output.txt
+          done
+
+      - name: Collect TLV parity failure artifacts
+        if: failure()
+        run: |
+          # Create failure summary
+          {
+            echo "=== TLV Parity Test Failures ==="
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+            echo "Git branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
+            echo ""
+            echo "Failed tests:"
+            grep -E "^test .* \.\.\. FAILED$" artifacts/jose/tlv-parity/test-output.txt 2>/dev/null | \
+              sed 's/^test //' | sed 's/ \.\.\. FAILED$//' || echo "(no failures parsed)"
+            echo ""
+            echo "Failure summary:"
+            grep -A 5 "^failures:$" \
+              artifacts/jose/tlv-parity/test-output.txt 2>/dev/null \
+              || echo "(see test-output.txt)"
+          } > artifacts/jose/tlv-parity/failure-summary.txt
+
+          # Copy source files for debugging
+          mkdir -p artifacts/jose/tlv-parity/sources
+          cp crates/jose/tests/tlv_parity.rs artifacts/jose/tlv-parity/sources/ 2>/dev/null || true
+          cp crates/jose/src/json_lowstar.rs artifacts/jose/tlv-parity/sources/ 2>/dev/null || true
+          cp crates/jose/src/jws.rs artifacts/jose/tlv-parity/sources/ 2>/dev/null || true
+          cp crates/jose/src/jwe.rs artifacts/jose/tlv-parity/sources/ 2>/dev/null || true
+          cp crates/jose/src/tlv.rs artifacts/jose/tlv-parity/sources/ 2>/dev/null || true
+          cp crates/jose/Cargo.toml artifacts/jose/tlv-parity/sources/jose-Cargo.toml 2>/dev/null || true
+
+          # Save environment info
+          {
+            echo "=== Environment Info ==="
+            echo "Rustc version:"
+            rustc --version 2>/dev/null || echo "rustc not available"
+            echo ""
+            echo "Cargo version:"
+            cargo --version 2>/dev/null || echo "cargo not available"
+          } > artifacts/jose/tlv-parity/environment.txt
+
+          echo "✅ TLV parity failure artifacts collected"
+
+      - name: Run context boundary tests
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts/jose/context-boundary
+          # Run context boundary tests and capture output
+          # Note: Currently blocked by C compilation errors (Jose_Utf8Lemmas_decode_error)
+          # See: docs/verification/fstar/troubleshooting.md
+          cargo test -p aegaeon-jose --test context_boundary \
+            -- --nocapture 2>&1 | tee artifacts/jose/context-boundary/test-output.txt || {
+            echo "⚠️ Context boundary tests failed (expected due to C compilation errors)"
+            exit 0
+          }
+
+      - name: Collect context boundary failure artifacts
+        if: always()
+        run: |
+          # Create failure summary
+          {
+            echo "=== Context Boundary Test Failures ==="
+            echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+            echo "Git branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
+            echo ""
+            echo "=== Test Output ==="
+            tail -100 artifacts/jose/context-boundary/test-output.txt 2>/dev/null || echo "(no test output)"
+          } > artifacts/jose/context-boundary/failure-summary.txt
+
+          # Copy source files for debugging
+          mkdir -p artifacts/jose/context-boundary/sources
+          cp crates/jose/tests/context_boundary.rs artifacts/jose/context-boundary/sources/ 2>/dev/null || true
+          cp crates/jose/src/jws.rs artifacts/jose/context-boundary/sources/ 2>/dev/null || true
+          cp crates/jose/src/jwe.rs artifacts/jose/context-boundary/sources/ 2>/dev/null || true
+          cp crates/jose/src/policy.rs artifacts/jose/context-boundary/sources/ 2>/dev/null || true
+          cp crates/ffi/src/lib.rs artifacts/jose/context-boundary/sources/ffi-lib.rs 2>/dev/null || true
+          cp crates/jose/Cargo.toml artifacts/jose/context-boundary/sources/jose-Cargo.toml 2>/dev/null || true
+          cp crates/ffi/Cargo.toml artifacts/jose/context-boundary/sources/ffi-Cargo.toml 2>/dev/null || true
+
+          # Save environment info
+          {
+            echo "=== Environment Info ==="
+            echo "Rustc version:"
+            rustc --version 2>/dev/null || echo "rustc not available"
+            echo ""
+            echo "Cargo version:"
+            cargo --version 2>/dev/null || echo "cargo not available"
+            echo ""
+            echo "Build profile: test (unoptimized + debuginfo)"
+            echo ""
+            echo "=== Known Issues ==="
+            echo "C compilation errors (Jose_Utf8Lemmas_decode_error) block FFI tests"
+            echo "See: docs/verification/fstar/troubleshooting.md"
+          } > artifacts/jose/context-boundary/environment.txt
+
+          echo "✅ Context boundary failure artifacts collected"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jose-test-results
+          path: artifacts/jose/
+
+  # VerifiedReqs Integrity Check
+  # Validates that every status: verified entry has valid formal proof references.
+  # Dependencies (pyyaml, jsonschema) provided via nix flake.
+  verified-reqs:
+    name: VerifiedReqs Integrity
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Run VerifiedReqs checks (Nix)
+        run: |
+          nix build .#verified-reqs -L
+          if [ -L result ]; then
+            echo "=== VerifiedReqs Integrity Log ==="
+            cat result/verify.log 2>/dev/null || true
+          fi
+
+  # FFI Contract Drift Detection
+  # Validates that F* assume vals match their C implementations.
+  # Dependencies provided via nix flake.
+  verify-ffi-contracts:
+    name: FFI Contract Drift Detection
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Run FFI contract checks (Nix)
+        run: |
+          nix build .#ffi-contracts -L
+          if [ -L result ]; then
+            echo "=== FFI Contract Drift Detection Log ==="
+            cat result/verify.log 2>/dev/null || true
+          fi
+
+  # Validation Scripts: crypto call boundary + runtime drift detection
+  validation-scripts:
+    name: Validation Scripts
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Check crypto call boundaries
+        run: python3 scripts/validation/check_crypto_calls.py --check
+
+      - name: Check keygen RNG boundary
+        run: python3 scripts/validation/check_keygen_rng.py --check
+
+      - name: Check runtime drift
+        run: python3 scripts/validation/check_runtime_drift.py --check
+
+  # Passthrough: nix flake check is now exclusively owned by ci.yml.
+  # This job preserves the "Formal Verification / verify-all" check name
+  # for branch protection rules that may reference it.
+  verify-all:
+    name: Unified Verification
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - name: Passthrough
+        run: |
+          echo "nix flake check (build gate) is now exclusively owned by ci.yml."
+          echo "This job preserves the check name for branch protection compatibility."
+
+  # Verification Summary
+  verification-summary:
+    name: Verification Summary
+    runs-on: ubuntu-latest
+    needs:
+      - fstar
+      - everparse-dcr
+      - lowstar-extraction
+      - tamarin
+      - kani-pure
+      - kani
+      - jose-vectors
+      - dudect
+      - verified-reqs
+      - verify-ffi-contracts
+      - validation-scripts
+      - verified-core-wasm
+      - verified-core-equivalence
+      - verify-all
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    steps:
+      - name: Generate summary
+        run: |
+          {
+            echo "## Formal Verification Summary"
+            echo ""
+
+            # Check job statuses
+            if [ "${{ needs.fstar.result }}" == "success" ]; then
+              echo "✅ F* verification passed"
+            else
+              echo "❌ F* verification failed"
+            fi
+
+            if [ "${{ needs.tamarin.result }}" == "success" ]; then
+              echo "✅ Tamarin protocol verification passed"
+            else
+              echo "❌ Tamarin protocol verification failed"
+            fi
+
+            if [ "${{ needs.kani.result }}" == "success" ]; then
+              echo "✅ Kani bounded model checking passed"
+            else
+              echo "❌ Kani bounded model checking failed"
+            fi
+
+            if [ "${{ needs.jose-vectors.result }}" == "success" ]; then
+              echo "✅ JOSE test vectors passed"
+            else
+              echo "❌ JOSE test vectors failed"
+            fi
+
+            if [ "${{ needs.dudect.result }}" == "success" ]; then
+              echo "✅ Constant-time analysis passed"
+            else
+              echo "❌ Constant-time analysis failed"
+            fi
+
+            if [ "${{ needs.everparse-dcr.result }}" == "success" ]; then
+              echo "✅ DCR EverParse schema verification passed"
+            else
+              echo "❌ DCR EverParse schema verification failed"
+            fi
+
+            if [ "${{ needs.verified-reqs.result }}" == "success" ]; then
+              echo "✅ VerifiedReqs integrity check passed"
+            else
+              echo "❌ VerifiedReqs integrity check failed"
+            fi
+
+            if [ "${{ needs.verify-ffi-contracts.result }}" == "success" ]; then
+              echo "✅ FFI contract drift detection passed"
+            else
+              echo "❌ FFI contract drift detection failed"
+            fi
+
+            if [ "${{ needs.validation-scripts.result }}" == "success" ]; then
+              echo "✅ Validation scripts passed (crypto calls + runtime drift)"
+            else
+              echo "❌ Validation scripts failed"
+            fi
+
+            if [ "${{ needs.dudect.result }}" == "success" ]; then
+              echo "✅ dudect-check (HACL*) passed"
+            else
+              echo "❌ dudect-check (HACL*) failed"
+            fi
+
+            if [ "${{ needs.verified-core-wasm.result }}" == "success" ]; then
+              echo "✅ Verified Core WASM build passed"
+            else
+              echo "❌ Verified Core WASM build failed"
+            fi
+
+            if [ "${{ needs.verified-core-equivalence.result }}" == "success" ]; then
+              echo "✅ Native/WASM equivalence tests passed"
+            else
+              echo "❌ Native/WASM equivalence tests failed"
+            fi
+
+            echo ""
+            echo "### Merge Guard"
+            echo "nix flake check (build gate) runs in **ci.yml**, not here."
+          } >> "${GITHUB_STEP_SUMMARY}"

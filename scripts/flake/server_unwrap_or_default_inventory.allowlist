@@ -1,0 +1,8 @@
+# Aegaeon server unwrap_or_default inventory.
+#
+# This file is intentionally exact: each non-comment line must match one
+# `rg -N "unwrap_or_default" crates/server/src` output line. New entries
+# need review because silent defaulting can hide persistence, protocol, or
+# security boundary bugs.
+
+# No reviewed `unwrap_or_default` call sites remain in `crates/server/src`.

@@ -1,0 +1,173 @@
+{
+  "$schema": "https://aegaeon.dev/spec/certification-evidence-bundle.schema.json",
+  "schema_version": 1,
+  "bundle_id": "phase2-oidf-op-config-basic-internal-2026-05-20",
+  "generated_at": "2026-05-20T00:00:00Z",
+  "claim_target": "certification",
+  "claim_gate_path": "spec/certification-claim.current.json",
+  "phase2_status": "internal-complete",
+  "public_claim_ready": false,
+  "certification_scope": {
+    "selected": true,
+    "target": "OIDF OpenID Provider Config + Basic internal evidence baseline",
+    "target_kind": "oidf-op",
+    "included_profiles": [
+      "oidcc-config-certification-test-plan",
+      "oidcc-basic-certification-test-plan"
+    ],
+    "excluded_profiles": [
+      "formal OIDF fee/legal/submission/review/public listing",
+      "oidcc-formpost-basic-certification-test-plan",
+      "FAPI and JARM certification plans",
+      "organizational certifications such as SOC 2 or ISO 27001"
+    ],
+    "notes": "This is an internal Phase 2 certification evidence baseline only. It selects the first bounded OIDF OP target and validates local conformance exports plus explicit dispositions, but it does not activate public certified wording."
+  },
+  "plans": [
+    {
+      "plan_name": "oidcc-config-certification-test-plan",
+      "claim_bearing": true,
+      "scope_status": "included",
+      "result_status": "pass",
+      "artifacts": {
+        "results_json": "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/results.json",
+        "plan_json": "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/plan.json",
+        "export_zip": "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/export.zip",
+        "suite_commit_txt": "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/suite_commit.txt",
+        "screenshots_dir": null
+      },
+      "result_counts": {
+        "passed": 1,
+        "review": 0,
+        "warning": 0,
+        "skipped": 0,
+        "failed": 0
+      },
+      "dispositions": []
+    },
+    {
+      "plan_name": "oidcc-basic-certification-test-plan",
+      "claim_bearing": true,
+      "scope_status": "included",
+      "result_status": "partial-with-dispositions",
+      "artifacts": {
+        "results_json": "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/results.json",
+        "plan_json": "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/plan.json",
+        "export_zip": "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/export.zip",
+        "suite_commit_txt": "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/suite_commit.txt",
+        "screenshots_dir": "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z"
+      },
+      "result_counts": {
+        "passed": 22,
+        "review": 3,
+        "warning": 8,
+        "skipped": 2,
+        "failed": 0
+      },
+      "dispositions": [
+        {
+          "test_module": "oidcc-scope-profile",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-scope-email",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-scope-address",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-scope-phone",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-scope-all",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-ensure-other-scope-order-succeeds",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-prompt-login",
+          "result": "REVIEW",
+          "disposition": "external-review-required",
+          "reason": "The upstream conformance suite requires human review of uploaded screenshot evidence for this module.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-max-age-1",
+          "result": "REVIEW",
+          "disposition": "external-review-required",
+          "reason": "The upstream conformance suite requires human review of uploaded screenshot evidence for this module.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-codereuse-30seconds",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-ensure-registered-redirect-uri",
+          "result": "REVIEW",
+          "disposition": "external-review-required",
+          "reason": "The upstream conformance suite requires human review of uploaded screenshot evidence for this module.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported",
+          "result": "SKIPPED",
+          "disposition": "out-of-scope",
+          "reason": "The initial Phase 2 internal scope is OP Config plus Basic local evidence; direct unsigned request-object handling is not included in the public claim candidate and remains subject to external certification review.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-claims-essential",
+          "result": "WARNING",
+          "disposition": "accepted-for-internal-evidence",
+          "reason": "The local TLS run completed without FAILED modules, but this warning still requires upstream or release-scope review before public certified wording.",
+          "public_claim_blocker": true
+        },
+        {
+          "test_module": "oidcc-ensure-request-object-with-redirect-uri",
+          "result": "SKIPPED",
+          "disposition": "out-of-scope",
+          "reason": "The initial Phase 2 internal scope excludes direct request-object submission because Aegaeon's deployment posture prefers PAR/request_uri flows; this remains subject to external certification review.",
+          "public_claim_blocker": true
+        }
+      ]
+    }
+  ],
+  "formal_submission": {
+    "required_for_public_claim": true,
+    "status": "deferred",
+    "evidence_uri": null,
+    "notes": "Formal OIDF certification submission, fee/legal processing, upstream review, and public listing are deferred to the final external claim-activation phase."
+  },
+  "review": {
+    "reviewer": "aegaeon-engineering",
+    "decision": "approved",
+    "notes": "Approved only as Phase 2 internal completion evidence. Public certified wording remains blocked."
+  }
+}

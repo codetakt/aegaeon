@@ -1,0 +1,48 @@
+theory AuthorizeSuccessRedirect
+
+begin
+
+// Concrete, simplified success path for authorization code with state echo.
+
+// Events
+// AuthzReq(C, RU, S, TID)  -- client C sent an authz request with state S and redirect_uri RU in session TID
+// CodeIssued(C, Code, S, RU, TID) -- AS issued an authorization code bound to state and redirect_uri
+// Redirect(C, RU, 'code', S, TID) -- AS emitted a redirect carrying code to RU with same state S
+
+rule ClientMakesAuthzReq:
+  [ Fr(~s), Fr(~tid) ]
+  --[ AuthzReq($C, $RU, ~s, ~tid) ]->
+  [ Req($C, $RU, ~s, ~tid) ]
+
+rule ServerIssuesCodeAndRedirect:
+  [ Req($C, $RU, $S, $TID), Fr(~code) ]
+  --[ CodeIssued($C, ~code, $S, $RU, $TID), Redirect($C, $RU, ~code, $S, $TID) ]->
+  [ ]
+
+// Properties
+
+// 1) State echo integrity on success
+lemma SuccessStateEcho:
+  all-traces
+  "All C RU S tid code #i #j.
+    ( AuthzReq(C, RU, S, tid)@i & Redirect(C, RU, code, S, tid)@j ) ==> #i < #j"
+
+// 2) Issued code is fresh and bound to the same state/session
+lemma CodeFreshAndBound:
+  all-traces
+  "All C RU S code tid #i #j.
+    ( CodeIssued(C, code, S, RU, tid)@i & Redirect(C, RU, code, S, tid)@j ) ==> #i < #j"
+
+// 3) A success redirect must be preceded by a matching authorization request
+lemma RedirectRequiresRequest:
+  all-traces
+  "All C RU S tid code #j.
+     Redirect(C, RU, code, S, tid)@j ==> (Ex #i. AuthzReq(C, RU, S, tid)@i & #i < #j)"
+
+// 4) Authorization codes are globally unique within a trace
+lemma CodeIssuedUnique:
+  all-traces
+  "All C1 C2 RU1 RU2 S1 S2 T1 T2 code #i #j.
+     CodeIssued(C1, code, S1, RU1, T1)@i & CodeIssued(C2, code, S2, RU2, T2)@j ==> #i = #j"
+
+end

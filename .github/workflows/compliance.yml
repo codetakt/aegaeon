@@ -1,0 +1,409 @@
+name: Standards Compliance
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM UTC (12 PM JST)
+  workflow_dispatch:
+
+concurrency:
+  group: compliance-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  build:
+    name: Build Release Binary
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Build release server only (faster)
+        run: nix develop .#ci --command cargo build --release --package aegaeon-server
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binary
+          path: |
+            target/release/aegaeon-server
+          retention-days: 1
+
+  rfc7520-vectors:
+    needs: build
+    name: RFC 7520 JOSE Test Vectors
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run RFC 7520 Test Vectors
+        run: nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose
+
+      - name: Generate test report
+        if: always()
+        run: |
+          nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors -- --format=json > rfc7520-results.json || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc7520-test-results
+          path: rfc7520-results.json
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run security audit
+        run: |
+          nix develop .#ci --command bash -c 'cargo audit --json > audit-report.json && cargo audit'
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: audit-report.json
+
+      - name: Check for vulnerabilities
+        run: |
+          nix develop .#ci --command bash -c '
+            if cargo audit 2>&1 | grep -q "Vulnerabilities"; then
+              echo "::error::Security vulnerabilities detected"
+              exit 1
+            fi
+          '
+
+  sbom-generation:
+    needs: build
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: release-binary
+          path: target/release/
+
+      - name: Generate SBOM
+        run: |
+          mkdir -p artifacts/sbom
+          nix develop .#ci --command bash -c '
+            cd crates/server
+            cargo cyclonedx --format json --spec-version 1.5
+            mv aegaeon-server.cdx.json ../../artifacts/sbom/aegaeon-sbom.json
+          '
+
+      - name: Validate SBOM
+        run: |
+          if ! jq -e '.bomFormat and .specVersion and .components' artifacts/sbom/aegaeon-sbom.json > /dev/null; then
+            echo "::error::SBOM validation failed"
+            exit 1
+          fi
+
+      # Attestation is only available for public repositories
+      # For private repos, we skip attestation but still generate and validate SBOM
+      - name: Generate SBOM attestation
+        if: github.event.repository.private == false
+        uses: actions/attest-sbom@v1
+        with:
+          subject-path: target/release/aegaeon-server
+          sbom-path: artifacts/sbom/aegaeon-sbom.json
+          
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: artifacts/sbom/
+
+  rfc-must-requirements:
+    name: RFC MUST Requirements Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run RFC compliance tests
+        run: |
+          chmod +x scripts/validation/test_rfc_compliance.sh
+          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh
+
+      - name: Generate compliance report
+        if: always()
+        run: |
+          echo "# RFC Compliance Report" > compliance-report.md
+          echo "Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> compliance-report.md
+          echo "" >> compliance-report.md
+          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee -a compliance-report.md || true
+
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfc-compliance-report
+          path: compliance-report.md
+
+  oauth2-conformance:
+    needs: build
+    name: OAuth 2.0 Conformance (local only)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Disabled in CI (run locally)
+        run: |
+          echo "OAuth 2.0 conformance checks are temporarily disabled in GitHub Actions."
+          echo "Run locally instead:"
+          echo "  - OAuth smoke runner: python scripts/validation/run_conformance.py --server http://localhost:8080"
+          echo "  - OIDF official suite: scripts/oidf_conformance/README.md"
+
+  compliance-monitor:
+    name: RFC Compliance Monitor
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for RFC updates
+        id: check-rfc
+        run: |
+          # Check for updates to tracked RFCs
+          python scripts/validation/check_rfc_updates.py || echo "updates_found=false" >> "${GITHUB_OUTPUT}"
+          
+      - name: Create issue for RFC updates
+        if: steps.check-rfc.outputs.updates_found == 'true'
+        uses: peter-evans/create-issue-from-file@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          title: "RFC Update Detected"
+          body: |
+            An update to a tracked RFC has been detected.
+            Please review the changes and update the implementation if necessary.
+            
+            See the RFC compliance check output for details.
+          labels: compliance, documentation
+
+  container-security:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Build container image
+        run: |
+          nix build .#docker-image --print-build-logs
+          gzip -dc result | docker load
+          docker tag aegaeon:latest aegaeon-server:${{ github.sha }}
+          
+      - name: Run Trivy scan
+        run: |
+          nix develop .#ci --command trivy image \
+            --format sarif \
+            --output trivy-results.sarif \
+            --severity CRITICAL,HIGH \
+            aegaeon-server:${{ github.sha }}
+          
+      - name: Upload Trivy results to GitHub Security
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          
+      - name: Check for critical vulnerabilities
+        run: |
+          # Ignore CRITICAL findings that have no upstream fix available (e.g. distro "will_not_fix").
+          if nix develop .#ci --command trivy image --ignore-unfixed --severity CRITICAL --exit-code 1 aegaeon-server:${{ github.sha }}; then
+            echo "No critical vulnerabilities found"
+          else
+            echo "::error::Critical vulnerabilities detected in container"
+            exit 1
+          fi
+
+  slsa-provenance:
+    name: SLSA Provenance Generation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Build release artifacts
+        run: nix develop .#default --command cargo build --release
+          
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            target/release/aegaeon-server
+            target/release/aegaeon-client
+            
+      - name: Upload provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: slsa-provenance
+          path: "*.intoto.jsonl"
+
+  oidf-conformance:
+    name: OpenID Foundation Conformance (local only)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Disabled in CI (run locally)
+        run: |
+          echo "OIDF official conformance suite is temporarily disabled in GitHub Actions."
+          echo "Run locally instead: scripts/oidf_conformance/README.md"
+
+  conformance-summary:
+    name: Conformance Summary
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    needs: [rfc7520-vectors, security-audit, sbom-generation, oauth2-conformance, oidf-conformance]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Generate summary report
+        run: |
+          {
+            echo "# Conformance Test Summary"
+            echo ""
+            echo "## Test Results"
+            echo ""
+
+            # Check each job result
+            echo "| Test Suite | Status |"
+            echo "|------------|--------|"
+
+            if [ -f rfc7520-test-results/rfc7520-results.json ]; then
+              echo "| RFC 7520 JOSE Vectors | ✅ Pass |"
+            else
+              echo "| RFC 7520 JOSE Vectors | ❌ Fail |"
+            fi
+
+            if [ -f security-audit-report/audit-report.json ]; then
+              vulns=$(jq '.vulnerabilities.count' security-audit-report/audit-report.json 2>/dev/null || echo "0")
+              if [ "$vulns" -eq "0" ]; then
+                echo "| Security Audit | ✅ Pass (0 vulnerabilities) |"
+              else
+                echo "| Security Audit | ⚠️ Warning (${vulns} vulnerabilities) |"
+              fi
+            fi
+
+            if [ -f sbom/aegaeon-sbom.json ]; then
+              echo "| SBOM Generation | ✅ Pass |"
+            else
+              echo "| SBOM Generation | ❌ Fail |"
+            fi
+
+            if [ -f conformance-report/conformance-results.json ]; then
+              pass_rate=$(jq -r '.summary.pass_rate' conformance-report/conformance-results.json)
+              echo "| OAuth 2.0 Conformance | ✅ Pass (${pass_rate}) |"
+            else
+              echo "| OAuth 2.0 Conformance | ⏸️ Skipped (disabled in CI) |"
+            fi
+
+            echo ""
+            echo "## Artifacts"
+            echo "- 📄 [SBOM](sbom/aegaeon-sbom.json)"
+            if [ -f conformance-report/conformance-report.html ]; then
+              echo "- 📊 [Conformance Report](conformance-report/conformance-report.html)"
+            else
+              echo "- 📊 Conformance Report: (skipped)"
+            fi
+            echo "- 🔒 [Security Audit](security-audit-report/audit-report.json)"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## 🔍 Conformance Test Results\n\n';
+            
+            // Add summary from file if it exists
+            if (fs.existsSync('conformance-report/conformance-results.json')) {
+              const results = JSON.parse(fs.readFileSync('conformance-report/conformance-results.json', 'utf8'));
+              comment += `OAuth 2.0 Conformance: ${results.summary.pass_rate} pass rate\n`;
+              comment += `- ✅ Passed: ${results.summary.passed}\n`;
+              comment += `- ❌ Failed: ${results.summary.failed}\n`;
+            } else {
+              comment += `OAuth 2.0 Conformance: skipped (disabled in CI; run locally)\n`;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

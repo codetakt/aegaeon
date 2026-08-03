@@ -1,0 +1,81 @@
+{
+  "description": "Test vectors for pure WASM functions (no host callbacks needed)",
+  "status_to_u32": [
+    {"input": 0, "expected": 0, "label": "OK"},
+    {"input": 1, "expected": 1, "label": "INVALID_ARGUMENT"},
+    {"input": 2, "expected": 2, "label": "INVALID_FORMAT"},
+    {"input": 3, "expected": 3, "label": "INVALID_SIGNATURE"},
+    {"input": 4, "expected": 4, "label": "INVALID_CLAIMS"},
+    {"input": 5, "expected": 5, "label": "REPLAY"},
+    {"input": 6, "expected": 6, "label": "UNAVAILABLE"},
+    {"input": 7, "expected": 7, "label": "UNSUPPORTED"},
+    {"input": 8, "expected": 8, "label": "INTERNAL_ERROR"}
+  ],
+  "iat_in_window": [
+    {
+      "id": "exact-match",
+      "iat": 1000, "now": 1000, "max_age": 300, "max_skew": 60,
+      "expected": 1, "label": "iat == now → valid"
+    },
+    {
+      "id": "expired",
+      "iat": 500, "now": 1000, "max_age": 300, "max_skew": 60,
+      "expected": 0, "label": "iat too old → expired"
+    },
+    {
+      "id": "within-window",
+      "iat": 800, "now": 1000, "max_age": 300, "max_skew": 60,
+      "expected": 1, "label": "iat within age window → valid"
+    },
+    {
+      "id": "future-within-skew",
+      "iat": 1030, "now": 1000, "max_age": 300, "max_skew": 60,
+      "expected": 1, "label": "iat 30s in future, skew=60 → valid"
+    },
+    {
+      "id": "future-beyond-skew",
+      "iat": 1100, "now": 1000, "max_age": 300, "max_skew": 60,
+      "expected": 0, "label": "iat 100s in future, skew=60 → invalid"
+    }
+  ],
+  "not_expired": [
+    {
+      "id": "not-expired",
+      "exp": 2000, "now": 1000,
+      "expected": 1, "label": "exp > now → valid"
+    },
+    {
+      "id": "expired",
+      "exp": 500, "now": 1000,
+      "expected": 0, "label": "exp < now → expired"
+    },
+    {
+      "id": "exact-boundary",
+      "exp": 1000, "now": 1000,
+      "expected": 1, "label": "exp == now → not expired (F* uses >=)"
+    }
+  ],
+  "is_active": [
+    {
+      "id": "active",
+      "nbf": 500, "now": 1000,
+      "expected": 1, "label": "nbf < now → active"
+    },
+    {
+      "id": "not-yet",
+      "nbf": 2000, "now": 1000,
+      "expected": 0, "label": "nbf > now → not yet active"
+    },
+    {
+      "id": "exact-boundary",
+      "nbf": 1000, "now": 1000,
+      "expected": 1, "label": "nbf == now → active"
+    }
+  ],
+  "bytes_handle_is_present": [
+    {"input": 0, "expected": 0, "label": "handle 0 → absent"},
+    {"input": 1, "expected": 1, "label": "handle 1 → present"},
+    {"input": 42, "expected": 1, "label": "handle 42 → present"},
+    {"input": 4294967295, "expected": 1, "label": "handle max_u32 → present"}
+  ]
+}

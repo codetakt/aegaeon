@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>issuer-spa external provider e2e</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+      #status[data-status="pass"] {
+        color: #0f766e;
+      }
+      #status[data-status="fail"] {
+        color: #b91c1c;
+      }
+      li.ok {
+        color: #0f766e;
+      }
+      li.fail {
+        color: #b91c1c;
+      }
+      li.note {
+        color: #475569;
+      }
+      pre {
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@aegaeon/issuer-spa": "/packages/issuer-spa/dist/index.js",
+          "@aegaeon/runtime-web": "/packages/runtime-web/dist/index.js",
+          "@aegaeon/rp-core": "/packages/rp-core/dist/index.js",
+          "@aegaeon/verified-core": "/packages/verified-core/dist/index.js",
+          "@aegaeon/verified-core/web": "/packages/verified-core/dist/web.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>issuer-spa external provider e2e</h1>
+    <p>This page runs a full Authorization Code + PKCE cycle against a configured external OIDC provider.</p>
+    <p id="status" data-status="pending">PENDING</p>
+    <ol id="results"></ol>
+    <pre id="session-record"></pre>
+    <script type="module" src="./issuer_spa_external_provider_e2e_harness.ts"></script>
+  </body>
+</html>

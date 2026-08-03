@@ -1,0 +1,52 @@
+theory CommonModel
+
+begin
+
+// Shared assumptions for OAuth2 models.
+// Channels, agents, and attacker capabilities.
+// Note: This theory is verified standalone and NOT included from others
+// due to CI constraints. Protocol-specific files redeclare the facts they use.
+
+rule InitConfidentialClient:
+  [ ] --[ Confidential('clientA') ]-> [ ]
+
+rule ValidBasicAuth:
+  [ ] --[ ValidAuth($C, 'basic') ]-> [ ]
+
+rule ValidPostAuth:
+  [ ] --[ ValidAuth($C, 'post') ]-> [ ]
+
+rule ValidPrivateKeyJwt:
+  [ ] --[ ValidAuth($C, 'pkjwt') ]-> [ ]
+
+// Public network: modeled by Tamarin's built-in Dolev-Yao adversary.
+// - Any term in an Out(M) fact is learned by the attacker.
+// - The attacker can provide any term it can derive via In(M).
+
+// Attacker capabilities (Dolev-Yao):
+// - Attacker can observe and forward messages on the public network via In/Out.
+// - No rule connects SSend/SRecv with In/Out, modeling a secure channel the
+//   attacker cannot observe or forge.
+
+// Registration and policy placeholders
+rule RegisterRedirectUri:
+  [ ] --[ Registered($C, $RU) ]-> [ ]
+
+rule AllowScope:
+  [ ] --[ AllowedScope($C, $S) ]-> [ ]
+
+rule AllowGrant:
+  [ ] --[ AllowedGrant($C, $G) ]-> [ ]
+
+// HTTPS-like protected channel abstraction (no attacker observation here)
+rule SecureDeliver:
+  [ ] --[ SSend($A, $B, $M) ]-> [ SRecv($A, $B, $M) ]
+
+// Note: No rule from SSend/SRecv to In/Out is provided, modeling a
+// protected channel between endpoints A and B that the attacker
+// cannot intercept or forge on.
+
+// Freshness helpers used by other models (redeclared there when needed)
+// Fr(x) facts are used to denote nonces, codes, jti, etc. as freshly generated.
+
+end

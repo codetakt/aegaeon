@@ -1,0 +1,313 @@
+{
+  "$schema": "https://aegaeon.dev/spec/admin-ui-security-state-machine.schema.json",
+  "schema_version": 1,
+  "model_id": "admin-control-plane-security-boundary-v1",
+  "claim_boundary": {
+    "boundary_type": "admin-control-plane-security-boundary",
+    "included_surfaces": [
+      "management-session acquisition and loss",
+      "CSRF and Origin guarded management API writes",
+      "management-client-only control-plane transport",
+      "route groups that require an active management session",
+      "dangerous operation confirmation and audit expectations",
+      "OpenAPI to management-client operation drift"
+    ],
+    "excluded_surfaces": [
+      "React runtime correctness",
+      "browser rendering",
+      "CSS/layout behaviour",
+      "browser extensions",
+      "OS UI behaviour",
+      "all possible visual interactions",
+      "end-user credential submission on the admin SPA"
+    ],
+    "trusted_boundaries": [
+      "server-owned management API",
+      "server-owned management-session cookie",
+      "server-enforced CSRF and Origin checks",
+      "@aegaeon/management-client transport adapter",
+      "generated/openapi/aegaeon-management-api.v1.json"
+    ]
+  },
+  "initial_state": "anonymous",
+  "states": [
+    {
+      "id": "anonymous",
+      "management_session": "absent",
+      "csrf_state": "absent",
+      "privileged": false
+    },
+    {
+      "id": "csrf-primed",
+      "management_session": "absent",
+      "csrf_state": "primed",
+      "privileged": false
+    },
+    {
+      "id": "authenticated",
+      "management_session": "present",
+      "csrf_state": "server-owned",
+      "privileged": true
+    },
+    {
+      "id": "confirmed-intent",
+      "management_session": "present",
+      "csrf_state": "server-owned",
+      "privileged": true
+    }
+  ],
+  "transitions": [
+    {
+      "id": "prime-csrf",
+      "from": "anonymous",
+      "to": "csrf-primed",
+      "event": "GET /api/v1/system/health",
+      "operation_class": "public-read"
+    },
+    {
+      "id": "bootstrap-owner",
+      "from": "csrf-primed",
+      "to": "csrf-primed",
+      "event": "POST /api/v1/bootstrapping/owners",
+      "operation_class": "public-management-session-write"
+    },
+    {
+      "id": "login",
+      "from": "csrf-primed",
+      "to": "authenticated",
+      "event": "POST /api/v1/authentication/sessions",
+      "operation_class": "public-management-session-write"
+    },
+    {
+      "id": "authenticated-read",
+      "from": "authenticated",
+      "to": "authenticated",
+      "event": "GET management resource",
+      "operation_class": "privileged-read"
+    },
+    {
+      "id": "authenticated-write",
+      "from": "authenticated",
+      "to": "authenticated",
+      "event": "non-destructive management write",
+      "operation_class": "privileged-write"
+    },
+    {
+      "id": "request-dangerous-operation",
+      "from": "authenticated",
+      "to": "confirmed-intent",
+      "event": "administrator confirms dangerous operation",
+      "operation_class": "privileged-read"
+    },
+    {
+      "id": "execute-dangerous-operation",
+      "from": "confirmed-intent",
+      "to": "authenticated",
+      "event": "destructive, token-affecting, key-affecting, or recovery operation",
+      "operation_class": "dangerous-write"
+    },
+    {
+      "id": "logout",
+      "from": "authenticated",
+      "to": "anonymous",
+      "event": "DELETE /api/v1/authentication/sessions/current",
+      "operation_class": "session-logout-write"
+    },
+    {
+      "id": "session-expiry",
+      "from": "authenticated",
+      "to": "anonymous",
+      "event": "management session expires or is rejected",
+      "operation_class": "public-read"
+    }
+  ],
+  "operation_classes": [
+    {
+      "id": "public-read",
+      "writes_management_api": false,
+      "requires_management_session": false,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "not-required",
+      "admin_confirmation_required": false,
+      "audit_event_required": false
+    },
+    {
+      "id": "public-management-session-write",
+      "writes_management_api": true,
+      "requires_management_session": false,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "server-enforced",
+      "admin_confirmation_required": false,
+      "audit_event_required": false
+    },
+    {
+      "id": "session-logout-write",
+      "writes_management_api": true,
+      "requires_management_session": true,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "server-enforced",
+      "admin_confirmation_required": false,
+      "audit_event_required": false
+    },
+    {
+      "id": "privileged-read",
+      "writes_management_api": false,
+      "requires_management_session": true,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "not-required",
+      "admin_confirmation_required": false,
+      "audit_event_required": false
+    },
+    {
+      "id": "privileged-write",
+      "writes_management_api": true,
+      "requires_management_session": true,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "server-enforced",
+      "admin_confirmation_required": false,
+      "audit_event_required": false
+    },
+    {
+      "id": "dangerous-write",
+      "writes_management_api": true,
+      "requires_management_session": true,
+      "transport_boundary": "management-client",
+      "csrf_origin_guard": "server-enforced",
+      "admin_confirmation_required": true,
+      "audit_event_required": true
+    }
+  ],
+  "route_groups": [
+    {
+      "id": "public-auth",
+      "paths": [
+        "/login",
+        "/bootstrap"
+      ],
+      "requires_management_session": false,
+      "allowed_operation_classes": [
+        "public-read",
+        "public-management-session-write"
+      ]
+    },
+    {
+      "id": "system-read",
+      "paths": [
+        "/system/health",
+        "/system/version"
+      ],
+      "requires_management_session": true,
+      "allowed_operation_classes": [
+        "privileged-read"
+      ]
+    },
+    {
+      "id": "team-tenant-environment-control",
+      "paths": [
+        "/dashboard",
+        "/profile",
+        "/teams",
+        "/teams/:teamId",
+        "/teams/:teamId/tenants",
+        "/teams/:teamId/environments/:environmentId"
+      ],
+      "requires_management_session": true,
+      "allowed_operation_classes": [
+        "privileged-read",
+        "privileged-write",
+        "dangerous-write",
+        "session-logout-write"
+      ]
+    },
+    {
+      "id": "issuer-configuration-control",
+      "paths": [
+        "/teams/:teamId/environments/:environmentId/oauth-profiles",
+        "/teams/:teamId/environments/:environmentId/connections",
+        "/teams/:teamId/environments/:environmentId/configuration-versions",
+        "/teams/:teamId/environments/:environmentId/policies"
+      ],
+      "requires_management_session": true,
+      "allowed_operation_classes": [
+        "privileged-read",
+        "privileged-write",
+        "dangerous-write"
+      ]
+    },
+    {
+      "id": "credential-and-key-control",
+      "paths": [
+        "/teams/:teamId/environments/:environmentId/clients",
+        "/teams/:teamId/environments/:environmentId/clients/:clientId/secrets",
+        "/teams/:teamId/environments/:environmentId/keys",
+        "/teams/:teamId/environments/:environmentId/keystore",
+        "/teams/:teamId/environments/:environmentId/signing-keys",
+        "/teams/:teamId/environments/:environmentId/users"
+      ],
+      "requires_management_session": true,
+      "allowed_operation_classes": [
+        "privileged-read",
+        "privileged-write",
+        "dangerous-write"
+      ]
+    },
+    {
+      "id": "federation-and-audit-control",
+      "paths": [
+        "/teams/:teamId/environments/:environmentId/account-links",
+        "/teams/:teamId/environments/:environmentId/federation-diagnostics",
+        "/teams/:teamId/environments/:environmentId/federation-logout-recovery",
+        "/teams/:teamId/environments/:environmentId/audit",
+        "/teams/:teamId/audit"
+      ],
+      "requires_management_session": true,
+      "allowed_operation_classes": [
+        "privileged-read",
+        "privileged-write",
+        "dangerous-write"
+      ]
+    }
+  ],
+  "forbidden_client_surfaces": [
+    "direct fetch from app sources",
+    "direct /api/v1 path literals in app sources",
+    "Authorization or Bearer header construction in app sources",
+    "direct cookie or CSRF handling outside the management-client adapter",
+    "OIDC/RP/runtime packages in the admin console",
+    "end-user password, reset, MFA, or WebAuthn submission on the admin SPA"
+  ],
+  "drift_policy": {
+    "management_openapi_path": "generated/openapi/aegaeon-management-api.v1.json",
+    "management_client_reference_path": "scripts/sdk/management_client_reference.ts",
+    "require_all_openapi_operations_in_management_client": true,
+    "require_write_csrf_origin_implementation": true,
+    "dangerous_write_fragments": [
+      "/revoke",
+      "/revokeAll",
+      "/rotate",
+      "/activate",
+      "/archive",
+      "/clear",
+      "/suspend",
+      "/unsuspend",
+      "/restore",
+      "/importCsv",
+      "/resolveConflict",
+      "/bulkRelink",
+      "/relink",
+      "/activationTokens",
+      "/passwordResetTokens",
+      "/credentials/password/revoke",
+      "/invalidateSessions",
+      "/keyStores/current"
+    ]
+  },
+  "invariants": [
+    "No privileged route group is reachable without management_session=present.",
+    "Every management API write is transported through @aegaeon/management-client.",
+    "Every management API write uses server-enforced CSRF and Origin guards.",
+    "Dangerous writes require administrator confirmation before execution.",
+    "Dangerous writes require server-side audit evidence.",
+    "The admin SPA never owns end-user credential submission or cryptographic verification."
+  ]
+}

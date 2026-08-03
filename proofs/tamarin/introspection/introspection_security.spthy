@@ -1,0 +1,141 @@
+theory IntrospectionSecurity
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Token introspection security model (RFC 7662)
+ *
+ * This model captures:
+ * - Client, Resource Server, Authorization Server roles
+ * - Active/inactive token responses
+ * - Confidentiality and authorization requirements
+ */
+
+// ============================================================================
+// Token lifecycle rules
+// ============================================================================
+
+// Token issuance by AS
+rule Issue_Token:
+  [ Fr(~token) ]
+  --[ TokenIssued($AS, $Client, ~token),
+      TokenActive(~token) ]->
+  [ !Token($AS, $Client, ~token),
+    !TokenOwner(~token, $Client) ]
+
+// Token revocation (makes token inactive)
+rule Revoke_Token:
+  [ !Token($AS, client_id, token),
+    !TokenOwner(token, client_id) ]
+  --[ TokenRevoked($AS, client_id, token),
+      TokenInactive(token) ]->
+  [ RevokedToken(token) ]
+
+// ============================================================================
+// Introspection request rules
+// ============================================================================
+
+// Resource Server requests introspection (authorized)
+rule RS_Introspect_Request:
+  let request = <'introspect', token, $RS>
+  in
+  [ !ResourceServer($AS, $RS), In(token) ]
+  --[ IntrospectionRequested($RS, token) ]->
+  [ Out(request),
+    PendingIntrospection($RS, token) ]
+
+// AS responds with active token metadata
+rule AS_Respond_Active:
+  let request = <'introspect', token, $RS>
+      response = <'active', token, client_id, 'no-store'>
+  in
+  [ In(request),
+    !Token($AS, client_id, token),
+    !TokenOwner(token, client_id),
+    !ResourceServer($AS, $RS) ]
+  --[ IntrospectionActive($AS, $RS, token, client_id),
+      ResponseSent($AS, $RS, 'active', token),
+      CacheControlSet('no-store') ]->
+  [ Out(response) ]
+
+// AS responds with inactive token (revoked or invalid)
+rule AS_Respond_Inactive:
+  let request = <'introspect', token, $RS>
+      response = <'inactive', token, 'no-store'>
+  in
+  [ In(request),
+    RevokedToken(token),
+    !ResourceServer($AS, $RS) ]
+  --[ IntrospectionInactive($AS, $RS, token),
+      ResponseSent($AS, $RS, 'inactive', token),
+      CacheControlSet('no-store') ]->
+  [ Out(response) ]
+
+// Unauthorized introspection attempt (no RS registration)
+rule Unauthorized_Introspect:
+  let request = <'introspect', token, ~attacker>
+  in
+  [ In(token), Fr(~attacker) ]
+  --[ UnauthorizedIntrospection(~attacker, token) ]->
+  [ Out(request) ]
+
+// RS registration with AS
+rule Register_ResourceServer:
+  [ Fr(~rs_id) ]
+  --[ ResourceServerRegistered($AS, ~rs_id) ]->
+  [ !ResourceServer($AS, ~rs_id) ]
+
+// ============================================================================
+// Security lemmas
+// ============================================================================
+
+/* Lemma: Introspection requires authorization
+ * Only registered Resource Servers can successfully introspect tokens
+ */
+lemma introspection_requires_authz:
+  "All AS RS token cid #i.
+    IntrospectionActive(AS, RS, token, cid) @ i ==>
+    Ex #j. ResourceServerRegistered(AS, RS) @ j & j < i"
+
+/* Lemma: Active token claims are sound
+ * If AS responds with 'active', the token must have been issued and not revoked
+ */
+lemma introspection_active_claim_sound:
+  "All AS RS token cid #i.
+    IntrospectionActive(AS, RS, token, cid) @ i ==>
+    (Ex #j. TokenIssued(AS, cid, token) @ j & j < i) &
+    not (Ex #k. TokenRevoked(AS, cid, token) @ k & k < i)"
+
+/* Lemma: Inactive tokens are correctly identified
+ * If AS responds with 'inactive', token was either revoked or never issued
+ */
+lemma introspection_inactive_claim_sound:
+  "All AS RS token #i.
+    IntrospectionInactive(AS, RS, token) @ i ==>
+    Ex cid #j. TokenRevoked(AS, cid, token) @ j & j < i"
+
+/* Lemma: Confidentiality - introspection response only to authorized RS
+ * Unauthorized parties cannot obtain introspection responses
+ */
+lemma introspection_confidentiality:
+  "All AS RS status token #i.
+    ResponseSent(AS, RS, status, token) @ i ==>
+    Ex #j. ResourceServerRegistered(AS, RS) @ j & j < i"
+
+/* Lemma: Cache control headers prevent caching
+ * All introspection responses include 'no-store' cache control
+ */
+lemma introspection_cache_control:
+  "All AS RS status token #i.
+    ResponseSent(AS, RS, status, token) @ i ==>
+    CacheControlSet('no-store') @ i"
+
+/* Lemma: Token owner privacy
+ * Introspection responses do not leak token owner to unauthorized parties
+ */
+lemma token_owner_privacy:
+  "All attacker token #i.
+    UnauthorizedIntrospection(attacker, token) @ i ==>
+    not (Ex AS cid #j. IntrospectionActive(AS, attacker, token, cid) @ j)"
+
+end

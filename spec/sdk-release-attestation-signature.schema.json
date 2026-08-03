@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/sdk-release-attestation-signature.schema.json",
+  "title": "Aegaeon SDK Release Attestation Detached Signature",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "attestation_path",
+    "attestation_sha256",
+    "signature_path",
+    "signature_sha256",
+    "public_key_path",
+    "public_key_sha256",
+    "signature_algorithm",
+    "key_type",
+    "signature_encoding",
+    "signer_source",
+    "signed_release_attestation_present"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "attestation_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attestation_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signature_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "signature_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "public_key_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "public_key_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signature_algorithm": {
+      "type": "string",
+      "enum": [
+        "ed25519",
+        "rsa-sha256",
+        "rsa-pss-sha256",
+        "ecdsa-sha256"
+      ]
+    },
+    "key_type": {
+      "type": "string",
+      "enum": [
+        "ed25519",
+        "rsa",
+        "rsa-pss",
+        "ec"
+      ]
+    },
+    "signature_encoding": {
+      "type": "string",
+      "const": "base64"
+    },
+    "signer_source": {
+      "type": "string",
+      "enum": [
+        "cosign_key_env",
+        "cosign_key_path"
+      ]
+    },
+    "signed_release_attestation_present": {
+      "type": "boolean",
+      "const": true
+    }
+  }
+}

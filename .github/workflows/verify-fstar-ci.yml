@@ -1,0 +1,31 @@
+# Passthrough: F* verification logic is in verification.yml (fstar job).
+# This workflow is retained to preserve the "F* Verification / verify-fstar"
+# check name in branch protection rules. Triggers cover main push/PR
+# (feature/* branches were dropped during passthrough conversion).
+#
+# See: .github/workflows/verification.yml -> fstar job
+# Converted to passthrough: 2026-02-15 (Phase 9 CI deduplication)
+
+name: "F* Verification"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ opened, ready_for_review, synchronize, reopened ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  verify-fstar:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    steps:
+      - name: Passthrough
+        run: |
+          echo "F* verification runs in the 'Formal Verification' workflow (verification.yml)."
+          echo "This job exists solely to satisfy branch protection rules that reference"
+          echo "the 'F* Verification / verify-fstar' check name."

@@ -1,0 +1,47 @@
+theory CSRFProtection
+begin
+
+builtins: hashing
+
+/* CSRF protection using state parameter */
+
+// Client initiates authorization with state
+rule Client_Init:
+  [ Fr(~state) ]
+  --[ StateGenerated($Client, ~state) ]->
+  [ ClientState($Client, ~state), !StateStore($Client, ~state) ]
+
+// Authorization server receives request
+rule AS_Authorize:
+  [ Fr(~code), !StateStore($Client, state) ]
+  --[ AuthRequest($AS, $Client, state) ]->
+  [ Out(<~code, h(state)>), !AuthorizedCode(~code, state) ]
+
+// Client validates response
+rule Client_Validate:
+  [ ClientState($Client, state), In(<code, h_state>), !AuthorizedCode(code, state) ]
+  --[ Eq(h_state, h(state)),
+      StateValidated($Client, state),
+      ResponseAccepted($Client, code) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y)@i ==> x = y"
+
+// Attacker tries CSRF
+rule CSRF_Attack:
+  [ In(state) ]
+  --[ CSRFAttempt($Attacker, state) ]->
+  [ Out(<$Attacker, state>) ]
+
+// Security properties
+lemma csrf_protection:
+  "All C code state #i. ResponseAccepted(C, code) @ i &
+    StateValidated(C, state) @ i ==>
+    Ex #j. StateGenerated(C, state) @ j & j < i"
+
+lemma state_unpredictability:
+  "All C state #i #j. StateGenerated(C, state) @ i & K(state) @ j ==>
+    Ex #k. StateValidated(C, state) @ k & k < j"
+
+end

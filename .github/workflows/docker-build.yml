@@ -1,0 +1,106 @@
+name: Build and Push OCI Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - nix/**
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
+      - c/**
+      - include/**
+      - generated/**
+      - artifacts/karamel/**
+      - scripts/**
+      - tests/docker/**
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push OCI Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Build OCI image (Nix)
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          nix build .#docker-image --print-build-logs
+
+      - name: Load image into Docker
+        run: |
+          gzip -dc result | docker load
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/aegaeon-server
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - name: Tag and push OCI image
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          SRC_IMAGE="aegaeon:latest"
+          tags="${{ steps.meta.outputs.tags }}"
+          if [[ -z "${tags}" ]]; then
+            echo "docker/metadata-action produced no tags" >&2
+            exit 1
+          fi
+
+          while IFS= read -r tag; do
+            [[ -n "${tag}" ]] || continue
+            docker tag "${SRC_IMAGE}" "${tag}"
+            docker push "${tag}"
+          done <<<"${tags}"
+
+      - name: Output image info
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Image pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/aegaeon-server"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"

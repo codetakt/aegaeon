@@ -1,0 +1,232 @@
+theory Federation_RP_Brokering
+begin
+
+/*
+ * OIDC RP Brokering — Aegaeon acting as both RP (upstream) and OP (downstream)
+ *
+ * Aegaeon receives a downstream authorization request, relays authentication
+ * to an upstream IdP via a fresh auth code flow, then mints downstream tokens
+ * only after validating the upstream response.
+ *
+ * Security properties:
+ * - Flow relay integrity (state/nonce chain binding)
+ * - PKCE independence (downstream vs upstream verifiers are cryptographically independent)
+ * - Code confusion prevention (upstream code != downstream code)
+ * - Issuer validation before downstream token issuance
+ * - Double-spend prevention (one upstream code exchange -> one downstream session)
+ * - Mix-up resistance in brokered flow
+ */
+
+builtins: signing, hashing, asymmetric-encryption
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ PKI ============ */
+
+rule Register_pk:
+  [ Fr(~sk) ]
+  -->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, sk) ] --[ Reveal(A) ]-> [ Out(sk) ]
+
+/* ============ Entity Setup ============ */
+
+// Upstream IdP initialization
+rule Upstream_IdP_Init:
+  [ Fr(~idp_key) ]
+  --[ UpstreamIdP_Initialized($IdP, $idp_issuer) ]->
+  [ !UpstreamIdP($IdP, ~idp_key, $idp_issuer),
+    Out(<$IdP, $idp_issuer>) ]
+
+// Aegaeon broker initialization (acts as OP to downstream, RP to upstream)
+rule Broker_Init:
+  [ Fr(~broker_key) ]
+  --[ Broker_Initialized($Broker, $broker_issuer) ]->
+  [ !Broker($Broker, ~broker_key, $broker_issuer),
+    Out(<$Broker, $broker_issuer>) ]
+
+// Aegaeon registers as RP with upstream IdP
+rule Broker_Register_Upstream:
+  [ !Broker($Broker, broker_key, broker_issuer),
+    !UpstreamIdP($IdP, idp_key, idp_issuer) ]
+  --[ Broker_Registered_Upstream($Broker, $IdP, $callback_uri) ]->
+  [ !BrokerUpstream($Broker, $IdP, $callback_uri, idp_issuer),
+    !UpstreamRP($IdP, $Broker, $callback_uri) ]
+
+// Downstream RP registration with Aegaeon broker
+rule DownstreamRP_Register:
+  [ !Broker($Broker, broker_key, broker_issuer) ]
+  --[ DownstreamRP_Registered($RP, $Broker, $redirect_uri) ]->
+  [ !DownstreamRP($RP, $Broker, $redirect_uri) ]
+
+/* ============ Brokered Authorization Code Flow ============ */
+
+// Step 1: Downstream RP initiates auth request to Aegaeon
+rule DownstreamRP_Start:
+  let ds_code_challenge = h(<'S256', ~ds_verifier>)
+  in
+  [ Fr(~ds_state), Fr(~ds_nonce), Fr(~ds_verifier),
+    !DownstreamRP($RP, $Broker, redirect_uri) ]
+  --[ DS_Auth_Started($RP, ~ds_state, ~ds_nonce, ds_code_challenge) ]->
+  [ Out(<'ds_auth_req', $RP, redirect_uri, ~ds_state, ~ds_nonce,
+         ds_code_challenge>),
+    DS_RP_Session($RP, ~ds_state, ~ds_nonce, ~ds_verifier, redirect_uri) ]
+
+// Step 2: Aegaeon receives downstream request, creates upstream auth request
+// with INDEPENDENT state/nonce/PKCE
+rule Broker_Relay_To_Upstream:
+  let us_code_challenge = h(<'S256', ~us_verifier>)
+  in
+  [ In(<'ds_auth_req', rp_id, redirect_uri, ds_state, ds_nonce,
+        ds_code_challenge>),
+    !DownstreamRP(rp_id, $Broker, redirect_uri),
+    !BrokerUpstream($Broker, $IdP, callback_uri, idp_issuer),
+    Fr(~us_state), Fr(~us_nonce), Fr(~us_verifier), Fr(~session_id) ]
+  --[ Broker_Relay($Broker, rp_id, $IdP, ~session_id),
+      US_Auth_Started($Broker, $IdP, ~us_state, ~us_nonce, us_code_challenge),
+      Unique(<'broker_session', ~session_id>) ]->
+  [ Out(<'us_auth_req', $Broker, callback_uri, ~us_state, ~us_nonce,
+         us_code_challenge>),
+    // Broker stores both downstream and upstream session state
+    Broker_Session(~session_id, $Broker, rp_id, $IdP,
+                   ds_state, ds_nonce, ds_code_challenge, redirect_uri,
+                   ~us_state, ~us_nonce, ~us_verifier) ]
+
+// Step 3: Upstream IdP authenticates user and issues code
+rule Upstream_IdP_Issue_Code:
+  [ In(<'us_auth_req', broker_id, callback_uri, us_state, us_nonce,
+        us_code_challenge>),
+    !UpstreamIdP($IdP, idp_key, idp_issuer),
+    !UpstreamRP($IdP, broker_id, callback_uri),
+    Fr(~us_code) ]
+  --[ US_Code_Issued($IdP, ~us_code, broker_id, $User, us_nonce),
+      Unique(<'us_code', ~us_code>) ]->
+  [ Out(<'us_auth_resp', ~us_code, us_state, idp_issuer>),
+    US_AuthCode($IdP, ~us_code, broker_id, $User, us_nonce,
+                us_code_challenge, callback_uri) ]
+
+// Step 4: Aegaeon receives upstream code, validates issuer, exchanges for upstream tokens
+rule Broker_Exchange_Upstream:
+  let us_id_token_claims = <'id_token', idp_issuer, broker_id, $User,
+                             us_nonce, ~us_auth_time>
+      us_id_token = sign(us_id_token_claims, idp_key)
+  in
+  [ In(<'us_auth_resp', us_code, us_state, claimed_issuer>),
+    Broker_Session(session_id, broker_id, rp_id, $IdP,
+                   ds_state, ds_nonce, ds_code_challenge, redirect_uri,
+                   us_state, us_nonce, us_verifier),
+    !BrokerUpstream(broker_id, $IdP, callback_uri, idp_issuer),
+    US_AuthCode($IdP, us_code, broker_id, $User, us_nonce,
+                us_code_challenge, callback_uri),
+    !UpstreamIdP($IdP, idp_key, idp_issuer),
+    Fr(~us_auth_time) ]
+  --[ Eq(claimed_issuer, idp_issuer),
+      US_Code_Exchanged(broker_id, $IdP, us_code, session_id),
+      US_IDToken_Verified(broker_id, $IdP, $User, us_id_token, us_nonce),
+      PKCE_Verified_US(us_verifier, us_code_challenge),
+      Issuer_Validated(broker_id, $IdP, idp_issuer, claimed_issuer),
+      Unique(<'us_exchange', us_code>) ]->
+  [ Broker_Upstream_Verified(session_id, broker_id, rp_id, $IdP, $User,
+                              ds_state, ds_nonce, ds_code_challenge,
+                              redirect_uri, us_id_token) ]
+
+// PKCE verification for upstream flow
+restriction pkce_upstream:
+  "All v c #i. PKCE_Verified_US(v, c)@i ==> h(<'S256', v>) = c"
+
+// Step 5: Aegaeon mints downstream auth code (only after upstream verification)
+rule Broker_Issue_Downstream_Code:
+  [ Broker_Upstream_Verified(session_id, broker_id, rp_id, $IdP, $User,
+                              ds_state, ds_nonce, ds_code_challenge,
+                              redirect_uri, us_id_token),
+    !Broker(broker_id, broker_key, broker_issuer),
+    Fr(~ds_code) ]
+  --[ DS_Code_Issued(broker_id, ~ds_code, rp_id, $User, ds_nonce, session_id),
+      Unique(<'ds_code', ~ds_code>),
+      Federation_Login_Succeeded(broker_id, $IdP, $User, session_id) ]->
+  [ Out(<'ds_auth_resp', ~ds_code, ds_state, broker_id>),
+    DS_AuthCode(broker_id, ~ds_code, rp_id, $User, ds_nonce,
+                ds_code_challenge, redirect_uri, session_id) ]
+
+// Step 6: Downstream RP exchanges code with Aegaeon
+rule DownstreamRP_Exchange:
+  [ In(<'ds_auth_resp', ds_code, ds_state, broker_id>),
+    DS_RP_Session($RP, ds_state, ds_nonce, ds_verifier, redirect_uri),
+    DS_AuthCode(broker_id, ds_code, $RP, $User, ds_nonce,
+                ds_code_challenge, redirect_uri, session_id) ]
+  --[ DS_Code_Exchanged($RP, ds_code, broker_id),
+      PKCE_Verified_DS(ds_verifier, ds_code_challenge),
+      DS_Session_Established($RP, $User, broker_id, ds_nonce, session_id) ]->
+  [ DS_Authenticated($RP, $User, broker_id, session_id) ]
+
+// PKCE verification for downstream flow
+restriction pkce_downstream:
+  "All v c #i. PKCE_Verified_DS(v, c)@i ==> h(<'S256', v>) = c"
+
+/* ============ Security Properties ============ */
+
+// Flow relay integrity: downstream session requires a prior upstream verification
+lemma flow_relay_integrity:
+  "All rp user broker nonce session_id #i.
+     DS_Session_Established(rp, user, broker, nonce, session_id)@i
+     ==> Ex idp us_token us_nonce #j.
+           US_IDToken_Verified(broker, idp, user, us_token, us_nonce)@j & #j < #i"
+
+// PKCE independence: downstream and upstream verifiers are distinct fresh values
+// (ensured by construction: Fr(~ds_verifier) and Fr(~us_verifier) are independent)
+// We prove the stronger property: upstream code exchange requires upstream PKCE
+lemma pkce_upstream_required:
+  "All broker idp us_code session_id #i.
+     US_Code_Exchanged(broker, idp, us_code, session_id)@i
+     ==> Ex v c #j. PKCE_Verified_US(v, c)@j & #j = #i"
+
+// Code confusion prevention: upstream code cannot appear as downstream code
+lemma code_confusion_prevention:
+  "All idp us_code broker_id user us_nonce #i.
+     US_Code_Issued(idp, us_code, broker_id, user, us_nonce)@i
+     ==> not(Ex broker ds_rp ds_user ds_nonce session_id #j.
+               DS_Code_Issued(broker, us_code, ds_rp, ds_user, ds_nonce, session_id)@j)"
+
+// Issuer validation: broker validates upstream issuer before any downstream issuance
+lemma issuer_validation_before_downstream:
+  "All broker ds_code rp user ds_nonce session_id #i.
+     DS_Code_Issued(broker, ds_code, rp, user, ds_nonce, session_id)@i
+     ==> Ex idp issuer claimed #j.
+           Issuer_Validated(broker, idp, issuer, claimed)@j & #j < #i & issuer = claimed"
+
+// Double-spend prevention: each upstream code is exchanged exactly once
+lemma upstream_code_single_use:
+  "All broker idp code s1 s2 #i #j.
+     US_Code_Exchanged(broker, idp, code, s1)@i &
+     US_Code_Exchanged(broker, idp, code, s2)@j
+     ==> #i = #j"
+
+// Mix-up resistance: downstream RP session is bound to the correct broker
+lemma mixup_resistance_brokered:
+  "All rp user broker nonce session_id #i.
+     DS_Session_Established(rp, user, broker, nonce, session_id)@i
+     ==> Ex state challenge #j.
+           DS_Auth_Started(rp, state, nonce, challenge)@j & #j < #i"
+
+// No downstream session without upstream authentication
+lemma no_downstream_without_upstream:
+  "All broker idp user session_id #i.
+     Federation_Login_Succeeded(broker, idp, user, session_id)@i
+     ==> Ex us_token us_nonce #j.
+           US_IDToken_Verified(broker, idp, user, us_token, us_nonce)@j & #j < #i"
+
+// NOTE: downstream_code_secrecy removed — auth codes travel through the
+// front channel (Out via user-agent redirect) and are known to the Dolev-Yao
+// attacker by construction. PKCE (proved in pkce_upstream_required and
+// pkce_downstream restriction) is the defense against code injection, not
+// code secrecy.
+
+end

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/server-client-pre-public-blocker-closure.schema.json",
+  "title": "Aegaeon Server / Client Pre-Public Blocker Closure Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "report_id",
+    "generated_at",
+    "claim_target",
+    "phase",
+    "public_claim_ready",
+    "all_non_public_blockers_closed",
+    "closure_items",
+    "activation_blockers",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim_target": {
+      "const": "server-client-formal-assurance"
+    },
+    "phase": {
+      "const": "phase5-pre-public-blocker-closure"
+    },
+    "public_claim_ready": {
+      "const": false
+    },
+    "all_non_public_blockers_closed": {
+      "type": "boolean"
+    },
+    "closure_items": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/closure_item"
+      }
+    },
+    "activation_blockers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/activation_blocker"
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision",
+        "notes"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "pending",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "closure_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "evidence_kind",
+        "evidence_uri",
+        "ready",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "blocked"
+          ]
+        },
+        "evidence_kind": {
+          "type": "string",
+          "enum": [
+            "source-managed-contract",
+            "local-artifact-snapshot",
+            "validator",
+            "internal-review"
+          ]
+        },
+        "evidence_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_generated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ready": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "activation_blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "blocker_class",
+        "required_next_evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "blocker_class": {
+          "type": "string",
+          "enum": [
+            "external-hosted-evidence",
+            "publication-org-rollout",
+            "release-candidate-evidence",
+            "external-review",
+            "public-claim-activation",
+            "public-wording-release"
+          ]
+        },
+        "required_next_evidence": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

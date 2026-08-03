@@ -1,0 +1,189 @@
+theory Federation_Account_Linking
+begin
+
+/*
+ * Account Linking Security — Aegaeon federation
+ *
+ * When Aegaeon brokers authentication from upstream IdPs, it must
+ * securely map upstream identities to downstream accounts. This theory
+ * proves the security of the account linking mechanism.
+ *
+ * Security properties:
+ * - Unique binding: one upstream identity -> at most one downstream account
+ * - Squatting prevention: attacker cannot link to victim's account
+ * - Linkage immutability: link change requires privileged operation
+ * - Cross-IdP isolation: IdP-A link does not grant IdP-B access
+ * - Key compromise resilience: linking requires honest IdP or compromised key
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+    "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+    "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Entity Setup ============ */
+
+// Upstream IdP with signing key
+rule UpstreamIdP_Init:
+    [ Fr(~idp_sk) ]
+    --[ IdP_Initialized($IdP) ]->
+    [ !IdP($IdP, ~idp_sk), !IdP_PK($IdP, pk(~idp_sk)), Out(pk(~idp_sk)) ]
+
+// IdP key compromise: attacker obtains the IdP signing key
+rule IdP_Compromise:
+    [ !IdP($IdP, idp_sk) ]
+    --[ IdP_Compromised($IdP) ]->
+    [ Out(idp_sk) ]
+
+// Aegaeon broker
+rule Broker_Init:
+    [ ]
+    --[ Broker_Initialized($Broker) ]->
+    [ !Broker($Broker) ]
+
+// Downstream user account (pre-existing, independent of federation)
+rule Create_Account:
+    [ Fr(~account_id) ]
+    --[ Account_Created($User, ~account_id),
+        Unique(<'account', ~account_id>) ]->
+    [ !Account($User, ~account_id) ]
+
+// Upstream user identity (sub claim from upstream IdP)
+rule Upstream_Identity:
+    [ !IdP($IdP, idp_sk) ]
+    --[ Upstream_Identity_Exists($IdP, $upstream_sub) ]->
+    [ !UpstreamIdentity($IdP, $upstream_sub) ]
+
+/* ============ Account Linking ============ */
+
+// IdP signs a linking assertion (upstream identity ownership proof)
+// The assertion binds the IdP, upstream sub, and target account.
+rule IdP_Sign_Link_Assertion:
+    let assertion = sign(<'link', $IdP, upstream_sub, account_id>, idp_sk)
+    in
+    [ !IdP($IdP, idp_sk),
+        !UpstreamIdentity($IdP, upstream_sub),
+        !Account($User, account_id) ]
+    --[ IdP_Signed_Assertion($IdP, upstream_sub, account_id) ]->
+    [ Out(assertion) ]
+
+// Initial account link: broker verifies IdP assertion and creates link.
+// The assertion must be a valid signature from the registered IdP key.
+// Goes through the network (In) so the Dolev-Yao attacker can inject
+// forged assertions if the IdP key is compromised.
+rule Link_Account:
+    [ In(assertion),
+        !Account($User, account_id),
+        !UpstreamIdentity($IdP, upstream_sub),
+        !IdP_PK($IdP, idp_pk),
+        !Broker($Broker) ]
+    --[ Eq(verify(assertion, <'link', $IdP, upstream_sub, account_id>, idp_pk), true),
+        Account_Linked($Broker, $IdP, upstream_sub, $User, account_id),
+        Link_Active_Established($Broker, $IdP, upstream_sub, $User, account_id),
+        Link_Ownership_Verified($User, $IdP, upstream_sub, account_id),
+        Unique(<'link', $IdP, upstream_sub>) ]->
+    [ !AccountLink($Broker, $IdP, upstream_sub, $User, account_id),
+        Link_Active($Broker, $IdP, upstream_sub, $User, account_id) ]
+
+// Federated login: upstream identity authenticates via existing link
+rule Federated_Login:
+    [ !AccountLink($Broker, $IdP, upstream_sub, $User, account_id),
+        Link_Active($Broker, $IdP, upstream_sub, $User, account_id),
+        !UpstreamIdentity($IdP, upstream_sub) ]
+    --[ Federated_Auth($Broker, $IdP, upstream_sub, $User, account_id),
+        Session_Granted($User, account_id, $IdP) ]->
+    [ Link_Active($Broker, $IdP, upstream_sub, $User, account_id) ]
+
+// Federated login limit (prevent unbounded traces)
+restriction federated_login_once_per_session:
+    "All broker idp sub user acct #i #j.
+        Federated_Auth(broker, idp, sub, user, acct)@i &
+        Federated_Auth(broker, idp, sub, user, acct)@j
+        ==> #i = #j"
+
+// Privileged unlink: requires admin action (modeled as a separate rule)
+rule Admin_Unlink:
+    [ Link_Active($Broker, $IdP, upstream_sub, $User, account_id),
+        !AccountLink($Broker, $IdP, upstream_sub, $User, account_id) ]
+    --[ Admin_Unlinked($Broker, $IdP, upstream_sub, $User, account_id),
+        Privileged_Operation('admin', 'unlink', $IdP, upstream_sub) ]->
+    [ Unlinked($Broker, $IdP, upstream_sub, $User, account_id) ]
+
+// Re-link after admin unlink (new link, different account allowed)
+// Also verified via network assertion for key compromise modeling.
+rule Relink_Account:
+    [ In(assertion),
+        Unlinked($Broker, $IdP, upstream_sub, old_user, old_account_id),
+        !Account($NewUser, new_account_id),
+        !UpstreamIdentity($IdP, upstream_sub),
+        !IdP_PK($IdP, idp_pk) ]
+    --[ Eq(verify(assertion, <'link', $IdP, upstream_sub, new_account_id>, idp_pk), true),
+        Account_Relinked($Broker, $IdP, upstream_sub, $NewUser, new_account_id),
+        Link_Active_Established($Broker, $IdP, upstream_sub, $NewUser, new_account_id),
+        Privileged_Operation('admin', 'relink', $IdP, upstream_sub) ]->
+    [ !AccountLink($Broker, $IdP, upstream_sub, $NewUser, new_account_id),
+        Link_Active($Broker, $IdP, upstream_sub, $NewUser, new_account_id) ]
+
+/* ============ Security Properties ============ */
+
+// Unique binding: one upstream identity maps to at most one downstream account
+lemma unique_upstream_binding:
+    "All broker idp sub user1 user2 acct1 acct2 #i #j.
+        Account_Linked(broker, idp, sub, user1, acct1)@i &
+        Account_Linked(broker, idp, sub, user2, acct2)@j
+        ==> #i = #j"
+
+// Squatting prevention: linking requires proof of upstream identity ownership
+// (IdP signature over the link assertion)
+lemma squatting_prevention:
+    "All broker idp sub user acct #i.
+        Account_Linked(broker, idp, sub, user, acct)@i
+        ==> Ex #j. Link_Ownership_Verified(user, idp, sub, acct)@j & #j = #i"
+
+// Linkage immutability: relinking requires a prior admin unlink.
+lemma linkage_immutability:
+    "All broker idp sub user2 acct2 #i.
+        Account_Relinked(broker, idp, sub, user2, acct2)@i
+        ==> Ex user1 acct1 #k.
+            Admin_Unlinked(broker, idp, sub, user1, acct1)@k & #k < #i"
+
+// Cross-IdP isolation: session from IdP-A does not grant access via IdP-B link
+lemma cross_idp_isolation:
+    "All user acct idp #i.
+        Session_Granted(user, acct, idp)@i
+        ==> Ex broker sub #j.
+            Link_Active_Established(broker, idp, sub, user, acct)@j"
+
+// No federated auth without prior linking
+lemma no_auth_without_link:
+    "All broker idp sub user acct #i.
+        Federated_Auth(broker, idp, sub, user, acct)@i
+        ==> Ex #j. Link_Active_Established(broker, idp, sub, user, acct)@j"
+
+// Admin operations required for unlink
+lemma unlink_requires_admin:
+    "All broker idp sub user acct #i.
+        Admin_Unlinked(broker, idp, sub, user, acct)@i
+        ==> Ex #j. Privileged_Operation('admin', 'unlink', idp, sub)@j & #j = #i"
+
+// Account isolation: different accounts remain distinct
+lemma account_isolation:
+    "All user1 user2 acct #i #j.
+        Account_Created(user1, acct)@i &
+        Account_Created(user2, acct)@j
+        ==> #i = #j"
+
+// Key compromise resilience: linking requires honest IdP assertion or compromised key.
+// Without IdP key compromise, every link traces to an IdP-signed assertion.
+lemma link_requires_honest_idp:
+    "All broker idp sub user acct #i.
+        Account_Linked(broker, idp, sub, user, acct)@i
+        ==> (Ex #j. IdP_Signed_Assertion(idp, sub, acct)@j & #j < #i)
+            | (Ex #c. IdP_Compromised(idp)@c)"
+
+end

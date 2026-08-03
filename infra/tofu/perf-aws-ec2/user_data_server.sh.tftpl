@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+exec > >(tee /var/log/aegaeon-user-data.log | logger -t aegaeon-user-data -s 2>/dev/console) 2>&1
+set -x
+
+echo "[aegaeon-user-data] starting server bootstrap at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+mkdir -p /etc/aegaeon
+
+dnf_install() {
+  local -a packages=("$@")
+  local attempts=5
+  local delay_secs=5
+
+  for attempt in $(seq 1 "$attempts"); do
+    if dnf install -y "$${packages[@]}"; then
+      return 0
+    fi
+    echo "[aegaeon-user-data] dnf install failed (attempt $${attempt}/$${attempts}); retrying in $${delay_secs}s..." >&2
+    sleep "$delay_secs"
+  done
+
+  return 1
+}
+
+if ! command -v curl >/dev/null 2>&1; then
+  dnf_install curl || dnf_install curl-minimal
+fi
+
+if ! command -v aws >/dev/null 2>&1; then
+  dnf_install awscli
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  if ! dnf_install docker; then
+    dnf_install podman podman-docker
+  fi
+fi
+
+systemctl enable --now amazon-ssm-agent || true
+if systemctl cat docker.service >/dev/null 2>&1; then
+  systemctl enable --now docker.service
+fi
+
+TOKEN="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+LOCAL_IPV4="$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/local-ipv4")"
+
+cat >/etc/aegaeon/server.env <<EOF
+BASE_URL=http://$${LOCAL_IPV4}:${server_port}
+AEGAEON_EXPOSE_METRICS_ON_MAIN=${expose_metrics_on_main ? "1" : "0"}
+AEGAEON_TRUSTED_PROXIES=${trusted_proxies}
+EOF
+
+cat >/etc/aegaeon/registry.env <<EOF
+AWS_REGION=${aws_region}
+AWS_DEFAULT_REGION=${aws_region}
+GHCR_AUTH_ENABLED=${ghcr_auth_enabled ? "1" : "0"}
+GHCR_USERNAME=${ghcr_username}
+GHCR_TOKEN_SSM_PARAMETER_NAME=${ghcr_token_ssm_parameter_name}
+GHCR_TOKEN_SECRETSMANAGER_SECRET_ID=${ghcr_token_secretsmanager_secret}
+EOF
+
+cat >/usr/local/bin/aegaeon-docker-login <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE_REF="$${1:-}"
+if [[ -z "$IMAGE_REF" ]]; then
+  exit 0
+fi
+
+if [[ ! -f /etc/aegaeon/registry.env ]]; then
+  exit 0
+fi
+
+set -a
+source /etc/aegaeon/registry.env
+set +a
+
+REGISTRY="$(echo "$IMAGE_REF" | cut -d/ -f1)"
+if [[ "$REGISTRY" != "ghcr.io" ]]; then
+  exit 0
+fi
+
+if [[ "$${GHCR_AUTH_ENABLED:-0}" != "1" ]]; then
+  exit 0
+fi
+
+if [[ -z "$${GHCR_USERNAME:-}" && -z "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}" && -z "$${GHCR_TOKEN_SECRETSMANAGER_SECRET_ID:-}" ]]; then
+  exit 0
+fi
+
+if [[ -z "$${GHCR_USERNAME:-}" ]]; then
+  echo "[aegaeon] GHCR auth enabled but GHCR_USERNAME is empty" >&2
+  exit 1
+fi
+
+detect_region() {
+  if [[ -n "$${AWS_REGION:-}" ]]; then
+    echo "$AWS_REGION"
+    return 0
+  fi
+  if [[ -n "$${AWS_DEFAULT_REGION:-}" ]]; then
+    echo "$AWS_DEFAULT_REGION"
+    return 0
+  fi
+
+  local token region az identity
+  token="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+
+  region="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/region" 2>/dev/null || true)"
+  if [[ -n "$region" ]]; then
+    echo "$region"
+    return 0
+  fi
+
+  az="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/availability-zone" 2>/dev/null || true)"
+  if [[ -n "$az" ]]; then
+    echo "$${az::-1}"
+    return 0
+  fi
+
+  identity="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/dynamic/instance-identity/document" 2>/dev/null || true)"
+  region="$(echo "$identity" | tr -d '\n' | sed -n 's/.*\"region\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')"
+  echo "$region"
+}
+
+region="$(detect_region || true)"
+if [[ -z "$region" ]]; then
+  echo "[aegaeon] failed to detect AWS region for GHCR token retrieval" >&2
+  exit 1
+fi
+
+if [[ -n "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}" ]]; then
+  AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
+    aws ssm get-parameter \
+      --with-decryption \
+      --name "$GHCR_TOKEN_SSM_PARAMETER_NAME" \
+      --query 'Parameter.Value' \
+      --output text \
+    | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin >/dev/null
+  exit 0
+fi
+
+if [[ -n "$${GHCR_TOKEN_SECRETSMANAGER_SECRET_ID:-}" ]]; then
+  AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
+    aws secretsmanager get-secret-value \
+      --secret-id "$GHCR_TOKEN_SECRETSMANAGER_SECRET_ID" \
+      --query 'SecretString' \
+      --output text \
+    | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin >/dev/null
+  exit 0
+fi
+
+echo "[aegaeon] GHCR auth enabled but no token source is configured (set GHCR_TOKEN_SSM_PARAMETER_NAME or GHCR_TOKEN_SECRETSMANAGER_SECRET_ID)" >&2
+exit 1
+EOF
+
+chmod +x /usr/local/bin/aegaeon-docker-login
+
+cat >/etc/systemd/system/aegaeon-server.service <<'EOF'
+[Unit]
+Description=Aegaeon server (container)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+LimitNOFILE=1048576
+RuntimeDirectory=aegaeon-docker
+RuntimeDirectoryMode=0700
+Environment=DOCKER_CONFIG=/run/aegaeon-docker
+
+ExecStartPre=/usr/bin/bash -lc 'if systemctl cat docker.service >/dev/null 2>&1; then systemctl start docker.service; fi'
+ExecStartPre=-/usr/bin/docker rm -f aegaeon-server
+ExecStartPre=/usr/local/bin/aegaeon-docker-login ${server_image}
+ExecStartPre=/usr/bin/docker pull ${server_image}
+ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host --env-file /etc/aegaeon/server.env ${server_image} --host 0.0.0.0 --port ${server_port}
+ExecStop=-/usr/bin/docker stop aegaeon-server
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now aegaeon-server.service || true

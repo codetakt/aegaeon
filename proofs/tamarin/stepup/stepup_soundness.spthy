@@ -1,0 +1,38 @@
+theory StepUpSoundness
+begin
+
+// Step-up authentication model: challenges are issued and completed
+// before issuing a token when step-up is required.
+
+rule StepUpRequired:
+  [ Fr(~req) ]
+  --[ StepUpRequired($Client, ~req) ]->
+  [ StepUpReq($Client, ~req) ]
+
+rule IssueChallenge:
+  [ StepUpReq(C, req), Fr(~challenge) ]
+  --[ ChallengeIssued(C, req, ~challenge) ]->
+  [ Challenge(C, req, ~challenge) ]
+
+rule CompleteChallenge:
+  [ Challenge(C, req, challenge) ]
+  --[ ChallengeCompleted(C, req, challenge) ]->
+  [ StepUpCompleted(C, req) ]
+
+rule TokenIssuedAfterStepUp:
+  [ StepUpReq(C, req), StepUpCompleted(C, req), Fr(~token) ]
+  --[ TokenIssued(C, req, ~token) ]->
+  [ ]
+
+rule TokenIssuedWithoutStepUp:
+  [ Fr(~req), Fr(~token) ]
+  --[ TokenIssuedNoStepUp($Client, ~req, ~token) ]->
+  [ ]
+
+lemma stepup_soundness:
+  "All C req tok #i #j.
+    StepUpRequired(C, req) @ j &
+    TokenIssued(C, req, tok) @ i ==>
+    Ex ch #k. ChallengeCompleted(C, req, ch) @ k & j < k & k < i"
+
+end

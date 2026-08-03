@@ -1,0 +1,30 @@
+{
+  "default": true,
+  "MD001": true,
+  "MD013": false,
+  "MD022": false,
+  "MD024": {
+    "siblings_only": true
+  },
+  "MD004": true,
+  "MD005": true,
+  "MD007": true,
+  "MD009": true,
+  "MD010": true,
+  "MD012": true,
+  "MD025": true,
+  "MD026": true,
+  "MD029": false,
+  "MD030": true,
+  "MD031": false,
+  "MD032": false,
+  "MD033": true,
+  "MD034": true,
+  "MD036": false,
+  "MD037": true,
+  "MD040": false,
+  "MD041": false,
+  "MD060": false,
+  "MD049": true,
+  "MD058": true
+}

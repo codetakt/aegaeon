@@ -1,0 +1,120 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory ClientAuthentication] Theory loaded
+[Theory ClientAuthentication] Theory translated
+[Theory ClientAuthentication] Derivation checks started
+[Theory ClientAuthentication] Derivation checks ended
+[Theory ClientAuthentication] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory ClientAuthentication begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+rule (modulo E) Register_Client:
+   [ Fr( ~client_id ), Fr( ~client_secret ) ]
+  --[
+  ClientRegistered( $A, ~client_id ),
+  ClientSecretStored( $A, ~client_id, ~client_secret )
+  ]->
+   [ !Client( $A, ~client_id, ~client_secret ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Token_Request:
+   [ !Client( $A, client_id, client_secret ) ]
+  --[ RequestToken( $A, client_id ) ]->
+   [ Out( <client_id, h(client_secret)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Validate_Client:
+   [
+   In( <client_id, h(client_secret)> ),
+   !Client( $A, client_id, client_secret )
+   ]
+  --[ ClientAuthenticated( $A, client_id ) ]->
+   [ ClientValid( $A, client_id ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma client_authentication:
+  all-traces
+  "∀ A cid #i.
+    (ClientAuthenticated( A, cid ) @ #i) ⇒
+    (∃ #j. (ClientRegistered( A, cid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A cid #i.
+  (ClientAuthenticated( A, cid ) @ #i)
+ ∧
+  ∀ #j. (ClientRegistered( A, cid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !Client( $A, cid, client_secret ) ▶₁ #i )
+  case Register_Client
+  by contradiction /* from formulas */
+qed
+
+lemma client_credential_secrecy:
+  all-traces
+  "∀ A cid cs #i.
+    (ClientSecretStored( A, cid, cs ) @ #i) ⇒ (¬(∃ #j. K( cs ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A cid cs #i.
+  (ClientSecretStored( A, cid, cs ) @ #i) ∧ ∃ #j. (K( cs ) @ #j)"
+*/
+simplify
+by solve( !KU( ~client_secret ) @ #vk )
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./client_auth/client_authentication.spthy
+
+  processing time: 0.25s
+
+  client_authentication (all-traces): verified (3 steps)
+  client_credential_secrecy (all-traces): verified (2 steps)
+
+==============================================================================

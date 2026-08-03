@@ -1,0 +1,19 @@
+{
+  "required_workflows": [
+    { "path": ".github/workflows/lint.yml", "name": "CI - Lint" },
+    { "path": ".github/workflows/ci.yml", "name": "CI - Core" },
+    { "path": ".github/workflows/compliance.yml", "name": "Standards Compliance" },
+    { "path": ".github/workflows/verification.yml", "name": "Formal Verification" },
+    { "path": ".github/workflows/verify-fstar-ci.yml", "name": "F* Verification" },
+    { "path": ".github/workflows/security.yml", "name": "Security Suite" },
+    { "path": ".github/workflows/performance.yml", "name": "Performance Testing" },
+    { "path": ".github/workflows/release-core.yml", "name": "Verified Core Release" },
+    { "path": ".github/workflows/release.yml", "name": "Release" },
+    { "path": ".github/workflows/docker-build.yml", "name": "Build and Push OCI Image" },
+    {
+      "path": ".github/workflows/oidf-conformance.yml",
+      "name": "OpenID Foundation Conformance Suite"
+    },
+    { "path": ".github/workflows/check-dependency-updates.yml", "name": "Check Dependency Updates" }
+  ]
+}

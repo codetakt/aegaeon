@@ -1,0 +1,69 @@
+{
+  "description": "PKCE S256 test vectors: code_verifier → code_challenge (RFC 7636 §4.2)",
+  "method": "S256",
+  "note": "challenge = base64url_no_pad(SHA-256(verifier))",
+  "vectors": [
+    {
+      "id": "rfc7636-appendix-b",
+      "description": "RFC 7636 Appendix B reference vector",
+      "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+      "challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      "expect": "ok"
+    },
+    {
+      "id": "alpha-43",
+      "description": "43-character uppercase+lowercase verifier",
+      "verifier": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq",
+      "challenge": "dp6NlaokagLZTUjEL7cYPlMchcQdWzRW3bkAEXEti9c",
+      "expect": "ok"
+    },
+    {
+      "id": "max-length-128",
+      "description": "128-character verifier (maximum allowed length)",
+      "verifier": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "challenge": "tqw8wQOGMxx2XwTwQcFH0PJ48q7Y6qAh4tAFf8b2_54",
+      "expect": "ok"
+    },
+    {
+      "id": "unreserved-mix",
+      "description": "Mixed unreserved characters: letters, digits, hyphen, dot, underscore, tilde",
+      "verifier": "abc-._~ABC0123456789abc-._~ABC0123456789abc",
+      "challenge": "CQbCbUyPN0si8rC3BpGB9nDW9_pKbJ56TsWCc4mFHuQ",
+      "expect": "ok"
+    },
+    {
+      "id": "same-char-43",
+      "description": "43-character single-character verifier",
+      "verifier": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "challenge": "7Pp-tc9FX3-cx8SRw_mlY-PFDNmz_LANb-C7qhdRBNg",
+      "expect": "ok"
+    }
+  ],
+  "error_vectors": [
+    {
+      "id": "too-short",
+      "description": "Verifier shorter than 43 characters",
+      "verifier": "short",
+      "expect": "invalid_argument"
+    },
+    {
+      "id": "too-long-129",
+      "description": "Verifier exactly 129 characters (one over maximum)",
+      "verifier": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expect": "invalid_argument"
+    },
+    {
+      "id": "invalid-char-space",
+      "description": "Verifier with space (not unreserved)",
+      "verifier": "dBjftJeZ4CVP mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+      "expect": "invalid_argument"
+    },
+    {
+      "id": "challenge-mismatch",
+      "description": "Valid verifier with wrong challenge",
+      "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+      "challenge": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expect": "invalid_claims"
+    }
+  ]
+}

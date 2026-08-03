@@ -1,0 +1,97 @@
+#![allow(clippy::result_large_err)] // Management API handlers intentionally return detailed HTTP responses on error.
+
+mod account_link;
+mod account_link_conflict;
+mod account_link_relink;
+mod account_link_support;
+mod api_keys;
+mod audit_csv;
+mod audit_events;
+mod audit_query;
+mod audit_redaction;
+mod audit_time;
+mod client_audit;
+mod client_input;
+mod client_secret_support;
+mod client_secrets;
+mod client_store;
+mod client_validation;
+mod clients;
+mod configuration_documents;
+mod configuration_federation;
+mod configuration_policy_rows;
+mod configuration_revocation;
+mod configuration_version_store;
+mod configuration_versions;
+mod connections;
+mod connections_audit;
+mod connections_store;
+mod connections_support;
+mod core;
+mod credential_support;
+mod dcr_bearer_tokens;
+mod environment_support;
+mod etag_support;
+mod federation;
+mod federation_cache;
+mod federation_entity_cache_handlers;
+mod federation_logout_recovery;
+mod federation_support;
+mod hash_support;
+mod host_validation;
+#[doc(hidden)]
+pub mod hosted_bootstrap;
+mod http_boundary;
+mod http_errors;
+mod key_stores;
+mod key_support;
+mod normalization;
+mod oauth_profile_store;
+mod oauth_profiles;
+mod oauth_profiles_support;
+mod operations;
+mod pagination;
+mod policy_patch;
+mod prelude;
+mod request_support;
+mod routes;
+mod row_mappers;
+mod runtime_clients;
+mod runtime_key_store;
+mod runtime_keys;
+mod runtime_restart;
+mod scope;
+mod security;
+mod session_support;
+mod state;
+mod team_support;
+#[cfg(test)]
+mod test_prelude;
+mod topology;
+mod topology_environment;
+mod topology_support;
+mod transactions;
+mod user_credentials;
+mod user_inventory;
+mod user_inventory_support;
+mod user_support;
+mod users;
+
+pub(crate) use audit_redaction::redacted_audit_data;
+use clients::get_client_inner;
+use connections::get_connection_inner;
+use key_stores::get_key_store_inner;
+use oauth_profiles::get_oauth_profile_inner;
+use prelude::*;
+pub use state::{ManagementConfig, ManagementState};
+use topology::{get_team_inner, get_tenant_inner};
+use topology_environment::get_environment_inner;
+
+const MGMT_SESSION_COOKIE_NAME: &str = "aegaeon_admin_session";
+const CSRF_COOKIE_NAME: &str = "csrf_token";
+const MAX_SQL_INTEGER_SECONDS: u32 = 2_147_483_647;
+const MAX_MANAGEMENT_JSON_BODY_BYTES: usize = 2 * 1024 * 1024;
+pub use routes::router;
+
+#[cfg(test)]
+mod tests;

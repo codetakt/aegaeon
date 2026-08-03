@@ -1,0 +1,82 @@
+theory JwtBearerGrant
+begin
+
+/*
+ * RFC 7523 (JWT Bearer Authorization Grant) — minimal token issuance model.
+ *
+ * Security-relevant invariants (Aegaeon profile):
+ * - The AS only issues tokens after validating a signed JWT assertion bound to the AS audience.
+ * - Replay prevention via single-use jti (modeled as a linear fact).
+ *
+ * Notes:
+ * - We abstract away JWT encoding and claim parsing; we embed (iss, sub, aud, jti) into the signed term.
+ * - Time window / exp/nbf/iat checks are handled by the F* model (and runtime tests), not modeled here.
+ */
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* Client registers a signing key for JWT bearer assertions. */
+rule Register_Client:
+  [ Fr(~sk_client) ]
+  --[ ClientRegistered($Client, pk(~sk_client)) ]->
+  [ !ClientSK($Client, ~sk_client)
+  , !ClientPK($Client, pk(~sk_client))
+  , Out($Client)
+  , Out(pk(~sk_client))
+  ]
+
+/* Client issues a JWT bearer assertion for a specific AS audience and subject. */
+rule Client_Issues_JwtBearer_Assertion:
+  [ !ClientSK($Client, sk_client)
+  , Fr(~sub)
+  , Fr(~jti)
+  ]
+  --[ JwtBearerRequest($Client, $AS, ~sub, ~jti)
+    , Unique(<'jwt_bearer_jti', $Client, ~jti>)
+  ]->
+  [ Out(<$Client, $AS,
+         <'jwt_bearer', $Client, $AS, ~sub, ~jti>,
+         sign(<'jwt_bearer', $Client, $AS, ~sub, ~jti>, sk_client)>)
+  , UsedJti($Client, ~jti)
+  ]
+
+/* AS validates the assertion signature, audience binding, and consumes the jti. */
+rule AS_Validates_JwtBearer:
+  [ In(<$Client, $AS,
+        <'jwt_bearer', $Client, $AS, sub, jti>,
+        sig>)
+  , !ClientPK($Client, pk_client)
+  , UsedJti($Client, jti)
+  ]
+  --[ Eq(verify(sig, <'jwt_bearer', $Client, $AS, sub, jti>, pk_client), true)
+    , JwtBearerAccepted($AS, $Client, sub, jti)
+    , JwtBearerTokenIssued($AS, $Client, sub, jti)
+  ]->
+  [ ]
+
+/* If a token is issued, it must originate from a client request (integrity + audience binding). */
+lemma jwt_bearer_grant_integrity:
+  "All as client sub jti #i.
+     JwtBearerTokenIssued(as, client, sub, jti)@i
+     ==> (Ex #j. JwtBearerRequest(client, as, sub, jti)@j & j < i)"
+
+/* Unforgeability: the AS can only accept assertions for clients that registered a verification key. */
+lemma jwt_bearer_unforgeability:
+  "All as client sub jti #i.
+     JwtBearerAccepted(as, client, sub, jti)@i
+     ==> (Ex pk #j. ClientRegistered(client, pk)@j & j < i)"
+
+/* Replay prevention: the same (client, jti) cannot successfully mint a token twice. */
+lemma jwt_bearer_no_replay:
+  "All as client sub1 sub2 jti #i #j.
+     JwtBearerTokenIssued(as, client, sub1, jti)@i
+     & JwtBearerTokenIssued(as, client, sub2, jti)@j
+     ==> #i = #j"
+
+end

@@ -1,0 +1,8 @@
+# Local environment (contains secrets)
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Local TLS certificates (do not commit)
+certificates/

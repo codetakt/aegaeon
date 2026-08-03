@@ -1,0 +1,119 @@
+theory Upstream_Refresh_Rotation
+begin
+
+/*
+ * Upstream Refresh Token Rotation — Aegaeon as OIDC RP
+ *
+ * When Aegaeon acts as an RP to upstream IdPs, it receives refresh
+ * tokens. The upstream IdP implements token rotation (RFC 6749 §6,
+ * OAuth 2.1 §6.1): each refresh yields a new refresh token and
+ * invalidates the old one.
+ *
+ * Security properties:
+ * - Rotation single use: each refresh token is used at most once
+ * - Replay detection: reuse of a consumed token triggers detection
+ * - Token chain integrity: each active RT traces to initial issuance
+ * - Consumed tokens were once active
+ * - Cross-client isolation: tokens bound to original client
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+    "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+    "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Token Lifecycle ============ */
+
+// Initial token issuance after authorization code exchange.
+// The refresh token is NOT sent via Out() — it travels over the
+// token endpoint (HTTPS back channel), not the front channel.
+rule IdP_Issue_Tokens:
+    [ Fr(~at), Fr(~rt) ]
+    --[ Tokens_Issued($IdP, $Client, ~at, ~rt),
+        RT_Active($IdP, $Client, ~rt),
+        Unique(<'rt_issue', ~rt>) ]->
+    [ Active_RT($IdP, $Client, ~rt),
+        Client_Holds_RT($Client, $IdP, ~rt) ]
+
+// Client presents refresh token for rotation (via back channel)
+rule Client_Use_RT:
+    [ Client_Holds_RT($Client, $IdP, rt) ]
+    --[ Client_Presented_RT($Client, $IdP, rt) ]->
+    [ Out(<'refresh_request', $Client, rt>) ]
+
+// IdP rotates: invalidates old RT, issues new pair
+rule IdP_Rotate:
+    [ In(<'refresh_request', client, rt>),
+        Active_RT($IdP, client, rt),
+        Fr(~new_at), Fr(~new_rt) ]
+    --[ Token_Rotated($IdP, client, rt, ~new_rt),
+        RT_Consumed($IdP, client, rt),
+        RT_Active($IdP, client, ~new_rt),
+        Unique(<'rt_rotate', rt>) ]->
+    [ Consumed_RT($IdP, client, rt),
+        Active_RT($IdP, client, ~new_rt),
+        Client_Holds_RT(client, $IdP, ~new_rt) ]
+
+// Replay detection: old RT presented after consumption.
+// The IdP detects token reuse and can revoke all tokens for the client.
+rule IdP_Detect_Replay:
+    [ In(<'refresh_request', client, rt>),
+        Consumed_RT($IdP, client, rt) ]
+    --[ RT_Replay_Detected($IdP, client, rt),
+        Breach_Detected($IdP, client) ]->
+    [ ]
+
+// Client compromise: attacker steals stored RT.
+// Models scenarios like XSS, device theft, or memory dump.
+rule Client_RT_Leak:
+    [ Client_Holds_RT($Client, $IdP, rt) ]
+    --[ RT_Leaked($Client, rt) ]->
+    [ Out(rt), Client_Holds_RT($Client, $IdP, rt) ]
+
+/* ============ Security Properties ============ */
+
+// Each refresh token is rotated at most once (Unique constraint)
+lemma rotation_single_use:
+    "All idp client rt new1 new2 #i #j.
+        Token_Rotated(idp, client, rt, new1)@i &
+        Token_Rotated(idp, client, rt, new2)@j
+        ==> #i = #j"
+
+// Replay detection: replaying a consumed RT triggers detection.
+// If a used RT is presented again, the IdP detects the replay,
+// which means someone (attacker or legitimate client) used it twice.
+lemma replay_triggers_detection:
+    "All idp client rt #i.
+        RT_Replay_Detected(idp, client, rt)@i
+        ==> Ex new_rt #j. Token_Rotated(idp, client, rt, new_rt)@j & #j < #i"
+
+// Token chain integrity: each active RT either was initially issued
+// or was obtained through rotation of a previous RT.
+lemma token_chain_integrity:
+    "All idp client rt #i.
+        RT_Active(idp, client, rt)@i
+        ==> (Ex at. Tokens_Issued(idp, client, at, rt)@i)
+            | (Ex old_rt. Token_Rotated(idp, client, old_rt, rt)@i)"
+
+// Consumed tokens were once active: you can only consume a token
+// that was previously in the active state.
+lemma consumed_was_active:
+    "All idp client rt #i.
+        RT_Consumed(idp, client, rt)@i
+        ==> Ex #j. RT_Active(idp, client, rt)@j & #j < #i"
+
+// Cross-client isolation: a token issued to one client cannot be
+// rotated by a different client. The IdP binds the RT to the
+// original client via Active_RT(IdP, client, rt).
+lemma cross_client_isolation:
+    "All idp c1 c2 at rt new_rt #i #j.
+        Tokens_Issued(idp, c1, at, rt)@i &
+        Token_Rotated(idp, c2, rt, new_rt)@j
+        ==> c1 = c2"
+
+end

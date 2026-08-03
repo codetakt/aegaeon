@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/admin-sdk-evidence.schema.json",
+  "title": "Aegaeon Admin Console SDK Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "source",
+    "lane",
+    "sdk_boundary",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admin_sdk_boundary_path",
+        "admin_sdk_boundary_sha256",
+        "github_run_id",
+        "github_workflow",
+        "github_repository",
+        "github_ref",
+        "github_sha",
+        "github_job"
+      ],
+      "properties": {
+        "admin_sdk_boundary_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admin_sdk_boundary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "github_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_workflow": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_sha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_job": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status",
+        "stack_mode"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "stack_mode": {
+          "type": "string",
+          "enum": [
+            "compose-sibling-aegaeon"
+          ]
+        }
+      }
+    },
+    "sdk_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "management_sdk_package",
+        "forbidden_oidc_packages"
+      ],
+      "properties": {
+        "management_sdk_package": {
+          "type": "string",
+          "const": "@aegaeon/management-client"
+        },
+        "forbidden_oidc_packages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "@aegaeon/issuer-spa",
+              "@aegaeon/rp-core"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "bootstrap-login-logout",
+          "team-tenant-environment-management",
+          "oauth-profile-management",
+          "connection-management",
+          "environment-policy-update",
+          "configuration-version-management",
+          "signing-key-management",
+          "key-store-management",
+          "user-management",
+          "client-management",
+          "client-secret-management",
+          "audit-read-export"
+        ]
+      }
+    }
+  }
+}

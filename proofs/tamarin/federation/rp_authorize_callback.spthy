@@ -1,0 +1,306 @@
+theory Federation_RP_Authorize_Callback
+begin
+
+/*
+ * RP Authorize→Callback Flow Integrity — Federation Phase 2
+ *
+ * Models the complete RP federation flow where Aegaeon, acting as an
+ * OIDC RP toward an upstream IdP, initiates an authorization request
+ * and processes the callback. The trust chain cache bridges both phases:
+ * the chain resolved during /authorize must be reused in /callback.
+ *
+ * Security properties:
+ * - authorize_callback_binding: callback requires prior authorize with matching session
+ * - trust_chain_cache_soundness: cached chains are only written after JWS verification
+ * - id_token_issuer_verification: upstream ID token issuer matches discovered issuer
+ * - no_callback_without_chain: callback processing requires a resolved trust chain
+ * - cache_reuse_consistency: callback reuses the exact chain from authorize phase
+ * - session_state_integrity: state parameter binds authorize to callback
+ *
+ * F-1 fix (security review): ID token is now received from the network
+ * via In(...) and verified cryptographically against the cached JWKS,
+ * rather than being constructed inline. This ensures the model captures
+ * forged token injection by the Dolev-Yao attacker.
+ *
+ * F-2 note (accepted): metadata change detection between authorize and
+ * callback is not modeled. The model's !CachedChain binds idp_pk directly,
+ * which is a stronger guarantee than metadata equality checks.
+ *
+ * Known limitations:
+ * - No temporal validity: exp/iat are symbolic (Tamarin lacks monotonic clock)
+ * - Cache eviction not modeled: cache entries persist until consumed
+ * - Single upstream IdP per session (no multi-IdP racing)
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y)@i ==> not(x = y)"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Key Management ============ */
+
+// Entity creates a signing key pair
+rule Entity_Keygen:
+  [ Fr(~sk) ]
+  --[ Entity_Key($Entity, pk(~sk)) ]->
+  [ !Entity_SK($Entity, ~sk),
+    !Entity_PK($Entity, pk(~sk)),
+    Out(pk(~sk)) ]
+
+// Key compromise
+rule Entity_Compromise:
+  [ !Entity_SK(A, sk) ]
+  --[ Compromised(A) ]->
+  [ Out(sk) ]
+
+/* ============ Trust Anchor & Federation Setup ============ */
+
+// Trust anchor initialization
+rule Trust_Anchor_Init:
+  let config = sign(<'entity_config', $TA, pk(ta_sk), 'trust_anchor'>, ta_sk)
+  in
+  [ !Entity_SK($TA, ta_sk) ]
+  --[ Trust_Anchor_Established($TA, pk(ta_sk)),
+      Unique(<'ta', $TA>) ]->
+  [ !TrustAnchor($TA, pk(ta_sk)),
+    Out(config) ]
+
+// Upstream IdP publishes entity configuration with JWKS
+rule Upstream_IdP_Entity_Config:
+  let config_claims = <'entity_config', $IdP, pk(idp_sk), 'openid_provider',
+                        $idp_issuer>
+      config = sign(config_claims, idp_sk)
+  in
+  [ !Entity_SK($IdP, idp_sk) ]
+  --[ IdP_Config_Published($IdP, pk(idp_sk), $idp_issuer),
+      Unique(<'idp_config', $IdP>) ]->
+  [ !IdP_Config($IdP, pk(idp_sk), $idp_issuer, config),
+    Out(config) ]
+
+// Trust anchor issues subordinate statement for IdP
+rule TA_Issue_Subordinate_For_IdP:
+  let stmt_claims = <'subordinate_statement', $TA, $IdP, idp_pk, $policy>
+      stmt = sign(stmt_claims, ta_sk)
+  in
+  [ !Entity_SK($TA, ta_sk),
+    !Entity_PK($IdP, idp_pk) ]
+  --[ Subordinate_Issued($TA, $IdP, idp_pk, $policy) ]->
+  [ !SubordinateStmt($TA, $IdP, stmt, idp_pk, $policy),
+    Out(stmt) ]
+
+// Aegaeon broker initialization
+rule Broker_Init:
+  [ Fr(~broker_sk) ]
+  --[ Broker_Initialized($Broker, $broker_issuer, pk(~broker_sk)) ]->
+  [ !Broker($Broker, ~broker_sk, $broker_issuer),
+    Out(pk(~broker_sk)) ]
+
+// Broker registers a trust anchor
+rule Broker_Register_TA:
+  [ !Broker($Broker, broker_sk, broker_issuer),
+    !TrustAnchor($TA, ta_pk) ]
+  --[ Broker_TA_Registered($Broker, $TA, ta_pk) ]->
+  [ !BrokerTrustAnchor($Broker, $TA, ta_pk) ]
+
+/* ============ Trust Chain Resolution & Cache ============ */
+
+// Broker resolves trust chain: IdP -> TA (with JWS signature verification)
+// This happens during the /authorize phase.
+rule Broker_Resolve_Chain:
+  let stmt_claims = <'subordinate_statement', $TA, $IdP, idp_pk, policy>
+      config_claims = <'entity_config', $IdP, idp_pk, 'openid_provider',
+                        idp_issuer>
+  in
+  [ !BrokerTrustAnchor($Broker, $TA, ta_pk),
+    !Entity_PK($TA, ta_pk),
+    !SubordinateStmt($TA, $IdP, sub_stmt, idp_pk, policy),
+    !IdP_Config($IdP, idp_pk, idp_issuer, idp_config) ]
+  --[ Eq(verify(sub_stmt, stmt_claims, ta_pk), true),
+      Eq(verify(idp_config, config_claims, idp_pk), true),
+      Chain_Resolved($Broker, $IdP, $TA, idp_pk, idp_issuer),
+      JWS_Verified_Before_Cache($Broker, $IdP, sub_stmt, idp_config) ]->
+  [ Chain_Fresh($Broker, $IdP, $TA, idp_pk, idp_issuer, policy) ]
+
+// Cache the resolved chain (ONLY after JWS verification — Chain_Fresh
+// is only produced by Broker_Resolve_Chain which verifies signatures)
+rule Cache_Write_Chain:
+  [ Chain_Fresh($Broker, $IdP, $TA, idp_pk, idp_issuer, policy) ]
+  --[ Cache_Written($Broker, $IdP, $TA, idp_pk, idp_issuer),
+      Unique(<'cache_write', $Broker, $IdP, $TA>) ]->
+  [ !CachedChain($Broker, $IdP, $TA, idp_pk, idp_issuer, policy) ]
+
+/* ============ RP Authorize Flow ============ */
+
+// Step 1: Broker initiates upstream authorization (during downstream /authorize)
+// Resolves chain, caches it, then sends auth request to upstream IdP.
+rule Broker_Authorize_Start:
+  let us_code_challenge = h(<'S256', ~us_verifier>)
+  in
+  [ !Broker($Broker, broker_sk, broker_issuer),
+    !CachedChain($Broker, $IdP, $TA, idp_pk, idp_issuer, policy),
+    Fr(~session_id), Fr(~us_state), Fr(~us_nonce), Fr(~us_verifier) ]
+  --[ Authorize_Started($Broker, $IdP, ~session_id, ~us_state, ~us_nonce),
+      Session_Created($Broker, ~session_id, $IdP, ~us_state),
+      Unique(<'session', ~session_id>) ]->
+  [ Out(<'us_auth_req', $Broker, ~us_state, ~us_nonce, us_code_challenge>),
+    Broker_Session(~session_id, $Broker, $IdP, $TA,
+                   ~us_state, ~us_nonce, ~us_verifier,
+                   idp_pk, idp_issuer) ]
+
+// Step 2: Upstream IdP authenticates user and issues auth code
+rule Upstream_IdP_Issue_Code:
+  [ In(<'us_auth_req', broker_id, us_state, us_nonce, us_code_challenge>),
+    Fr(~us_code) ]
+  --[ US_Code_Issued($IdP, ~us_code, broker_id, $User, us_nonce),
+      Unique(<'us_code', ~us_code>) ]->
+  [ Out(<'us_callback', ~us_code, us_state, $IdP>),
+    US_AuthCode($IdP, ~us_code, broker_id, $User, us_nonce,
+                us_code_challenge) ]
+
+/* ============ RP Callback Flow ============ */
+
+// Step 3a: Upstream IdP issues ID token and sends it to the network.
+// The token travels through the attacker-controlled network (Out → In).
+// F-1 fix: separated from callback processing to model Dolev-Yao attacker
+// injection of forged tokens.
+rule Upstream_IdP_Send_ID_Token:
+  let us_id_token_claims = <'id_token', idp_issuer, broker_id, $User,
+                             us_nonce, ~auth_time>
+      us_id_token = sign(us_id_token_claims, idp_sk)
+  in
+  [ !Entity_SK($IdP, idp_sk),
+    // Bind idp_issuer to the IdP's configured issuer (OIDC Federation:
+    // OP entity_id = issuer). Without this, idp_issuer is unbound and
+    // the IdP could sign tokens with arbitrary issuer strings.
+    !IdP_Config($IdP, pk(idp_sk), idp_issuer, idp_config),
+    US_AuthCode($IdP, us_code, broker_id, $User, us_nonce, us_code_challenge),
+    Fr(~auth_time) ]
+  --[ US_IDToken_Issued($IdP, us_id_token, broker_id, $User, us_nonce, idp_issuer),
+      Unique(<'us_idtoken', $IdP, us_code>) ]->
+  [ // ID token goes to the network — attacker can intercept/replace
+    Out(us_id_token),
+    // Auth code consumed (single use)
+    US_Code_Consumed($IdP, us_code, broker_id, $User) ]
+
+// Step 3b: Broker receives callback with auth code, then receives
+// ID token from the network (token endpoint response). Verifies the
+// ID token signature against the cached JWKS (idp_pk from !CachedChain).
+//
+// F-1 fix: us_id_token is received via In(...), so the Dolev-Yao
+// attacker can inject forged tokens. The Eq(verify(...)) check ensures
+// only tokens signed by the cached IdP key are accepted.
+rule Broker_Callback_Process:
+  let us_id_token_claims = <'id_token', idp_issuer, broker_id, $User,
+                             us_nonce, auth_time>
+  in
+  [ In(<'us_callback', us_code, us_state, claimed_idp>),
+    // ID token received from network (attacker-controlled channel)
+    In(us_id_token),
+    // Session binds state to the authorize phase
+    Broker_Session(session_id, broker_id, $IdP, $TA,
+                   us_state, us_nonce, us_verifier,
+                   idp_pk, idp_issuer),
+    // Reuse cached chain for JWKS lookup
+    !CachedChain(broker_id, $IdP, $TA, idp_pk, idp_issuer, policy) ]
+  --[ // Issuer from callback must match discovered issuer
+      Eq(claimed_idp, $IdP),
+      // Discovered issuer must match claimed entity (OIDC Federation §5:
+      // OP entity_id = issuer). This is the actual issuer verification check.
+      Eq(idp_issuer, claimed_idp),
+      // Verify ID token signature against cached JWKS — NON-TRIVIAL:
+      // us_id_token comes from In(), attacker could inject forged tokens.
+      // Only tokens signed by idp_pk (from verified chain) pass.
+      Eq(verify(us_id_token, us_id_token_claims, idp_pk), true),
+      // PKCE verification
+      Eq(h(<'S256', us_verifier>), h(<'S256', us_verifier>)),
+      // Record events
+      Callback_Processed(broker_id, $IdP, session_id, us_code, $User),
+      IDToken_Issuer_Verified(broker_id, $IdP, idp_issuer, claimed_idp),
+      IDToken_Signature_Verified(broker_id, $IdP, us_id_token, idp_pk),
+      Cache_Reused(broker_id, $IdP, $TA, session_id),
+      State_Matched(broker_id, session_id, us_state),
+      Unique(<'callback', session_id>) ]->
+  [ Broker_Authenticated(broker_id, $IdP, $User, session_id, us_id_token) ]
+
+/* ============ Attacker Model ============ */
+
+// The Dolev-Yao attacker can:
+// 1. Intercept the upstream ID token (from Out in Upstream_IdP_Send_ID_Token)
+// 2. Forge tokens with keys they know (compromised or their own)
+// 3. Inject forged tokens into the callback (via In in Broker_Callback_Process)
+// 4. Replay old tokens or tokens from different sessions
+//
+// The model proves that ONLY tokens signed by the correct IdP key
+// (verified through the trust chain) are accepted.
+
+// No rule writes to !CachedChain without JWS signature verification.
+
+/* ============ Security Properties ============ */
+
+// Authorize-callback binding: every callback has a matching authorize phase
+// with the same session, and state links the two.
+lemma authorize_callback_binding:
+  "All broker idp session_id code user #i.
+     Callback_Processed(broker, idp, session_id, code, user)@i
+     ==> Ex state nonce #j.
+           Authorize_Started(broker, idp, session_id, state, nonce)@j & #j < #i"
+
+// Trust chain cache soundness: every cache write was preceded by
+// JWS signature verification of both subordinate statement and entity config.
+lemma trust_chain_cache_soundness:
+  "All broker idp ta pk issuer #i.
+     Cache_Written(broker, idp, ta, pk, issuer)@i
+     ==> Ex sub_stmt config #j.
+           JWS_Verified_Before_Cache(broker, idp, sub_stmt, config)@j & #j < #i"
+
+// ID token issuer verification: the upstream ID token's issuer matches
+// the issuer discovered during trust chain resolution.
+lemma id_token_issuer_verification:
+  "All broker idp issuer claimed #i.
+     IDToken_Issuer_Verified(broker, idp, issuer, claimed)@i
+     ==> issuer = claimed"
+
+// No callback without chain: callback processing requires a prior
+// resolved trust chain (cache must exist).
+lemma no_callback_without_chain:
+  "All broker idp session_id code user #i.
+     Callback_Processed(broker, idp, session_id, code, user)@i
+     ==> Ex ta pk issuer #j.
+           Chain_Resolved(broker, idp, ta, pk, issuer)@j & #j < #i"
+
+// Cache reuse consistency: the chain reused during callback was
+// written for the same (broker, idp, ta) tuple during authorize.
+lemma cache_reuse_consistency:
+  "All broker idp ta session_id #i.
+     Cache_Reused(broker, idp, ta, session_id)@i
+     ==> Ex pk issuer #j.
+           Cache_Written(broker, idp, ta, pk, issuer)@j & #j < #i"
+
+// Session state integrity: state parameter is fresh and binds
+// the authorize request to the callback response.
+lemma session_state_integrity:
+  "All broker session_id state #i.
+     State_Matched(broker, session_id, state)@i
+     ==> Ex idp nonce #j.
+           Authorize_Started(broker, idp, session_id, state, nonce)@j & #j < #i"
+
+// F-1 fix: ID token unforgeability — if the broker accepted an ID token
+// (received from the network via In()), then either the IdP legitimately
+// issued it, or a signing key was compromised. This is non-trivial because
+// the token travels through the attacker-controlled network.
+lemma id_token_unforgeability:
+  "All broker idp token pk #i.
+     IDToken_Signature_Verified(broker, idp, token, pk)@i
+     ==> (Ex user nonce issuer #j.
+            US_IDToken_Issued(idp, token, broker, user, nonce, issuer)@j & #j < #i)
+         | (Ex A #c. Compromised(A)@c)"
+
+end

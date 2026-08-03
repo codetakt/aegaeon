@@ -1,0 +1,329 @@
+2025-10-30T18:39:35+09:00 status=success log=artifacts/kani/run_20251030T183929.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2025-12-17T20:22:56+09:00 status=success log=artifacts/kani/run_20251217T202250.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2025-12-17T20:39:30+09:00 status=success log=artifacts/kani/run_20251217T203927.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2025-12-17T20:43:31+09:00 status=success log=artifacts/kani/run_20251217T204328.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+2025-12-17T20:49:01+09:00 status=success log=artifacts/kani/run_20251217T204859.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2025-12-17T20:53:48+09:00 status=success log=artifacts/kani/run_20251217T205345.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2025-12-17T20:55:00+09:00 status=success log=artifacts/kani/run_20251217T205402.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_tests::verify_nonce_uniqueness: passed
+    - kani_tests::verify_pkce_challenge_binding: passed
+    - kani_tests::verify_redirect_uri_validation: passed
+    - kani_tests::verify_scope_parsing: passed
+    - kani_tests::verify_token_expiration: passed
+
+2025-12-18T08:48:30+09:00 status=success log=artifacts/kani/run_20251218T084710.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_tests::verify_nonce_uniqueness: passed
+    - kani_tests::verify_pkce_challenge_binding: passed
+    - kani_tests::verify_redirect_uri_validation: passed
+    - kani_tests::verify_scope_parsing: passed
+    - kani_tests::verify_token_expiration: passed
+
+2025-12-21T08:46:48+09:00 status=success log=artifacts/kani/run_20251221T084518.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_tests::verify_nonce_uniqueness: passed
+    - kani_tests::verify_pkce_challenge_binding: passed
+    - kani_tests::verify_redirect_uri_validation: passed
+    - kani_tests::verify_scope_parsing: passed
+    - kani_tests::verify_token_expiration: passed
+
+2026-01-27T18:40:04+09:00 status=failure log=artifacts/kani/run_20260127T183836.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_nonce_uniqueness: failed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: failed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: failed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: failed
+    - kani_test::kani_tests::verify_pkce_challenge_binding: failed
+    - kani_test::kani_tests::verify_redirect_uri_validation: failed
+    - kani_test::kani_tests::verify_scope_parsing: failed
+    - kani_test::kani_tests::verify_token_expiration: failed
+
+2026-01-27T18:46:57+09:00 status=success log=artifacts/kani/run_20260127T184041.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_nonce_uniqueness: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_pkce_challenge_binding: passed
+    - kani_test::kani_tests::verify_redirect_uri_validation: passed
+    - kani_test::kani_tests::verify_scope_parsing: passed
+    - kani_test::kani_tests::verify_token_expiration: passed
+
+2026-01-31T19:05:10+09:00 status=success log=artifacts/kani/run_20260131T190507.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+2026-05-29T15:25:01+09:00 status=success log=artifacts/kani/run_20260529T151924.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_overlap_active_kid_conflict_rejected: passed
+    - proof_overlap_merge_keeps_active_first_and_unique_kids: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+2026-05-29T17:34:03+09:00 status=success log=artifacts/kani/run_20260529T172759.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_overlap_active_kid_conflict_rejected: passed
+    - proof_overlap_merge_keeps_active_first_and_unique_kids: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+2026-05-30T12:29:19+09:00 status=success log=artifacts/kani/run_20260530T122212.log
+  harnesses:
+    - proof_bytestring_minimal_inline: passed
+    - proof_level0_primitives_only: passed
+    - proof_level6_bytestring_store: passed
+    - proof_nix_integration_check: passed
+    - proof_option_string_minimal: passed
+    - proof_overlap_active_kid_conflict_rejected: passed
+    - proof_overlap_merge_keeps_active_first_and_unique_kids: passed
+    - proof_parse_cache_control_no_panic: passed
+    - proof_string_from_minimal: passed
+    - proof_string_new_minimal: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-30T18:32:32+09:00 status=success log=artifacts/kani/run_20260530T182549.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-30T18:43:37+09:00 status=success log=artifacts/kani/run_20260530T183633.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-30T18:58:29+09:00 status=success log=artifacts/kani/run_20260530T185109.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T07:23:45+09:00 status=failure log=artifacts/kani/run_20260531T072317.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: failed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: failed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: failed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: failed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: failed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: failed
+
+2026-05-31T07:27:40+09:00 status=success log=artifacts/kani/run_20260531T072434.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T07:37:24+09:00 status=success log=artifacts/kani/run_20260531T073421.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T09:24:01+09:00 status=success log=artifacts/kani/run_20260531T092020.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T09:29:11+09:00 status=success log=artifacts/kani/run_20260531T092532.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T09:34:08+09:00 status=success log=artifacts/kani/run_20260531T093031.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+
+2026-05-31T09:38:50+09:00 status=success log=artifacts/kani/run_20260531T093510.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-05-31T12:01:04+09:00 status=success log=artifacts/kani/run_20260531T115738.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+2026-08-04T06:54:22+09:00 status=success log=artifacts/kani/run_20260804T065419.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+
+2026-08-04T07:01:16+09:00 status=success log=artifacts/kani/run_20260804T065437.log
+  harnesses:
+    - proof_parse_cache_control_no_panic: passed
+    - proof_trivial_arithmetic: passed
+  server_harnesses:
+    - kani_test::kani_tests::verify_client_assertion_replay_window_bounds: passed
+    - kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite: passed
+    - kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed: passed
+    - kani_test::kani_tests::verify_oidc_logout_idempotent_jti: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout: passed
+    - kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries: passed
+    - kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds: passed
+    - kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids: passed

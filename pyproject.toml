@@ -1,0 +1,207 @@
+# ---------------------------------------------------------------------------
+# Ruff — Linter & Formatter
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+# Enforce exclusions even for paths passed explicitly via CLI.
+force-exclude = true
+
+src = ["scripts", "tests", "ci"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+docstring-code-format = true
+docstring-code-line-length = 80
+
+[tool.ruff.lint]
+# ── Rule selection ──────────────────────────────────────────────────────────
+# Enable strict + functional-style rule groups.
+select = [
+  # ── Core ────────────────────────────────────────────────────────────────
+  "F",      # Pyflakes — undefined names, unused imports
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "I",      # isort — import sorting
+  "N",      # pep8-naming — naming conventions
+  "UP",     # pyupgrade — modernize syntax to target-version
+  "YTT",    # flake8-2020 — sys.version checks
+  "ANN",    # flake8-annotations — enforce type annotations
+  "ASYNC",  # flake8-async — async anti-patterns
+  "S",      # flake8-bandit — security
+  "BLE",    # flake8-blind-except — blind except clauses
+  "FBT",    # flake8-boolean-trap — boolean positional args
+  "B",      # flake8-bugbear — common bugs and design problems
+  "A",      # flake8-builtins — shadowing builtins
+  "COM",    # flake8-commas — trailing commas
+  "C4",     # flake8-comprehensions — prefer comprehensions
+  "DTZ",    # flake8-datetimez — naive datetime usage
+  "T10",    # flake8-debugger — debugger imports
+  "EM",     # flake8-errmsg — string literals in exceptions
+  "EXE",    # flake8-executable — shebang issues
+  "ISC",    # flake8-implicit-str-concat — implicit concatenation
+  "ICN",    # flake8-import-conventions — import aliases
+  "LOG",    # flake8-logging — logging anti-patterns
+  "G",      # flake8-logging-format — logging format strings
+  "INP",    # flake8-no-pep420 — implicit namespace packages
+  "PIE",    # flake8-pie — unnecessary code
+  "T20",    # flake8-print — print statements
+  "PYI",    # flake8-pyi — stub file rules
+  "PT",     # flake8-pytest-style — pytest idioms
+  "Q",      # flake8-quotes — quote consistency
+  "RSE",    # flake8-raise — unnecessary parentheses on raise
+  "RET",    # flake8-return — simplify returns
+  "SLF",    # flake8-self — private member access
+  "SLOT",   # flake8-slots — __slots__ enforcement
+  "SIM",    # flake8-simplify — simplify code
+  "TID",    # flake8-tidy-imports — tidy imports
+  "TCH",    # flake8-type-checking — TYPE_CHECKING blocks
+  "INT",    # flake8-gettext — gettext usage
+  "ARG",    # flake8-unused-arguments — unused function arguments
+  "PTH",    # flake8-use-pathlib — prefer pathlib over os.path
+  "TD",     # flake8-todos — TODO comment format
+  "FIX",    # flake8-fixme — FIXME/XXX/HACK markers
+  "ERA",    # eradicate — commented-out code
+  "PD",     # pandas-vet — pandas anti-patterns
+  "PGH",    # pygrep-hooks — blanket noqa, type: ignore
+  "PL",     # pylint — select pylint rules
+  "TRY",    # tryceratops — exception handling
+  "FLY",    # flynt — f-string conversion
+  "PERF",   # perflint — performance anti-patterns
+  "FURB",   # refurb — modern idioms
+  "RUF",    # ruff-specific rules
+  # ── Functional style ─────────────────────────────────��──────────────────
+  "C90",    # mccabe — cyclomatic complexity
+]
+
+ignore = [
+  # ── Intentional relaxations ─────────────────────────────────────────────
+  "COM812",   # trailing comma — conflicts with formatter
+  "ISC001",   # implicit string concat — conflicts with formatter
+  "TD003",    # TODO issue link — too noisy for most teams
+  "FIX002",   # TODO marker — useful during development
+]
+
+# Do NOT allow unfixed violations to pass silently.
+unfixable = [
+  "ERA001",   # commented-out code — require manual removal
+  "F841",     # unused variable — require manual removal
+  "T20",      # print statements — require manual removal
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-returns = 3
+max-branches = 8
+max-statements = 30
+max-bool-expr = 3
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = false
+suppress-none-returning = true
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+combine-as-imports = true
+force-single-line = false
+known-first-party = ["aegaeon"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "S101",     # assert — needed in tests
+  "ANN",      # annotations — relaxed in tests
+  "ARG",      # unused arguments — fixtures
+  "FBT",      # boolean trap — test parametrize
+  "INP001",   # implicit namespace package — tests aren't packages
+  "PLR2004",  # magic values — test assertions
+  "SLF001",   # private access — testing internals
+  "T20",      # print — debugging tests
+]
+"tests/conformance/jose_vector_test.py" = [
+  "BLE001",   # broad excepts acceptable in vector harness
+  "C901",     # complexity tolerated for conformance harness
+  "PLR0911",  # multiple returns for clarity in test helpers
+  "PLR0912",  # branching tolerated for vector decoding
+  "PLR0915",  # statement count tolerated for harness
+]
+"scripts/**/*.py" = [
+  "T20",      # print — scripts use print for output
+  "INP001",   # implicit namespace package — scripts are not packages
+]
+"examples/**/*.py" = [
+  "ANN",      # annotations — demo code, not library
+  "EXE001",   # shebang — expected for runnable scripts
+  "INP001",   # implicit namespace package — examples aren't packages
+  "PLR0911",  # multiple returns — clarity in request handlers
+  "PLR2004",  # magic values — HTTP status codes in demo
+  "PLW0603",  # global statement — simple singleton pattern for demo
+  "S104",     # binding all interfaces — intended for local demo
+  "T20",      # print — demo output
+  "I002",     # future annotations — not needed for demo
+]
+"ci/**/*.py" = [
+  "T20",      # print — CI scripts use print for output
+  "INP001",   # implicit namespace package — CI scripts are not packages
+]
+"ci/validate_slos.py" = [
+  "PLR0912",  # branch-heavy CLI validation
+  "PLR0915",  # statement-heavy CLI validation
+]
+"scripts/validation/*.py" = [
+  "ANN",      # annotations not required in validation scripts
+  "BLE",      # broad exception handling acceptable for CLI tools
+  "C90",      # complexity tolerated in validation helpers
+  "DTZ",      # legacy datetime usage in validation scripts
+  "EM",       # inline exception messages for CLI tools
+  "FBT",      # boolean params acceptable in CLI plumbing
+  "G",        # f-string logging acceptable in CLI tools
+  "PERF",     # perf linting not critical for validation scripts
+  "PLR",      # pylint refactor rules too strict for scripts
+  "PTH",      # pathlib enforcement not required in scripts
+  "RUF013",   # implicit Optional tolerated in scripts
+  "S",        # bandit rules relaxed for internal scripts
+  "SIM",      # simplify suggestions optional in scripts
+  "TRY",      # try/except style rules relaxed in scripts
+  "PLC0415",  # local imports allowed in scripts
+  "W293",     # whitespace-only lines tolerated in scripts
+]
+
+# ---------------------------------------------------------------------------
+# mypy — Type Checker
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["scripts/validation", "ci/validate_slos.py"]
+warn_return_any = true
+warn_unused_configs = true
+warn_unreachable = true
+enable_error_code = [
+  "ignore-without-code",
+  "redundant-cast",
+  "truthy-bool",
+  "truthy-iterable",
+  "unused-awaitable",
+]
+disable_error_code = ["import-untyped"]
+disallow_any_generics = true
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+
+[[tool.mypy.overrides]]
+module = ["jsonschema", "jsonschema.*"]
+ignore_missing_imports = true

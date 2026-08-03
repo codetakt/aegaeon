@@ -1,0 +1,31 @@
+{
+  "name": "aegaeon",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "npm@10.9.7",
+  "description": "Aegaeon identity provider (Rust backend). TypeScript SDK lives in the separate aegaeon-sdk repository.",
+  "scripts": {
+    "lint:ts": "eslint --max-warnings 0 scripts/check-strict-types.ts scripts/check-workflow-inventory.ts scripts/sdk/check_sdk_strict_types.ts scripts/sdk/tools-src/check-strict-types.ts tests/verified_core_wasm/root_strict_types_policy_test.ts tests/verified_core_wasm/strict_types_policy_test.ts tests/verified_core_wasm/workflow_inventory_policy_test.ts",
+    "typecheck:ts": "tsc --project tsconfig.json --pretty false --noEmit",
+    "audit:strict-types": "node --experimental-strip-types scripts/check-strict-types.ts",
+    "sdk": "echo 'TypeScript SDK lives in the separate aegaeon-sdk repository.' && exit 1",
+    "postinstall": "echo '\\n\u2139\ufe0f  This repository is the Rust backend + verification artefacts.\\n   TypeScript SDK lives in the separate aegaeon-sdk repository.\\n'",
+    "sdk:stage-reference-workspace": "node --experimental-strip-types scripts/sdk/stage_reference_sdk_workspace.ts",
+    "sdk:scaffold-repo-workspace": "node --experimental-strip-types scripts/sdk/scaffold_sdk_repo_workspace.ts",
+    "sdk:test-browser-smoke": "node --experimental-strip-types tests/verified_core_wasm/runtime_web_browser_smoke_test.ts",
+    "sdk:test-reference-workspace": "node --experimental-strip-types tests/verified_core_wasm/staged_sdk_workspace_test.ts",
+    "sdk:test-publishable-packages": "node --experimental-strip-types tests/verified_core_wasm/publishable_sdk_package_test.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^24.3.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.0.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.51.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

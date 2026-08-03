@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compliance Matrix",
+  "type": "object",
+  "required": ["metadata"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["description", "standards"],
+      "properties": {
+        "description": {"type": "string"},
+        "standards": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "patternProperties": {
+    "^(rfc_[0-9]+[a-z0-9_]*|draft_[a-z0-9_]+|global|openid_.*|oauth_.*|security_review)$": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/requirement"}
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "requirement": {
+      "type": "object",
+      "required": [
+        "id",
+        "requirement",
+        "description",
+        "module",
+        "status"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "section": {"type": "string"},
+        "requirement": {"type": "string"},
+        "description": {"type": "string"},
+        "module": {"type": "string"},
+        "proof": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/proof"}
+        },
+        "tests": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "ci_check": {"type": "string"},
+        "runtime_link": {
+          "type": "string",
+          "description": "Rust implementation file where the verified behaviour is enforced at runtime."
+        },
+        "trace": {
+          "$ref": "#/definitions/trace",
+          "description": "Optional refinement trace from a formal specification artifact to runtime evidence."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["verified", "implemented", "partial", "fixed", "planned", "in_progress", "blocked", "not_applicable"]
+        },
+        "notes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": true
+    },
+    "trace": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["oracle", "structural", "guard", "exempt"]
+        },
+        "fstar": {
+          "type": "string",
+          "description": "F*/F* interface reference in <file>#<identifier> form."
+        },
+        "rust": {
+          "type": "string",
+          "description": "Rust reference in <path>#<symbol> form."
+        },
+        "test": {
+          "type": "string",
+          "description": "Test file that fixes the trace correspondence."
+        },
+        "note": {
+          "type": "string",
+          "description": "Required when kind is exempt."
+        }
+      },
+      "additionalProperties": false
+    },
+    "proof": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string"},
+        "module": {"type": "string"},
+        "lemma": {"type": "string"},
+        "file": {"type": "string"},
+        "spec": {"type": "string"},
+        "coverage": {"type": "string"},
+        "rule": {"type": "string"},
+        "document": {"type": "string"},
+        "schema": {"type": "string"},
+        "invariant": {"type": "string"},
+        "refinement": {"type": "string"},
+        "harness": {"type": "string"},
+        "constant_time": {"type": "string"},
+        "primitive": {"type": "string"},
+        "artefact": {"type": "string"},
+        "proof_quality": {
+          "type": "string",
+          "enum": ["formal", "empirical", "unknown"],
+          "description": "Computed classification — do not add to YAML. Formal: fstar/tamarin/kani/everparse/lowstar/hacl. Empirical: dudect. Unknown: other types."
+        },
+        "strength": {
+          "type": "string",
+          "enum": ["lemma", "refinement", "semantic"],
+          "description": "Computed evidence strength — do not add to YAML. Documented for tooling reference."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,155 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OIDC_IDTokenNonce] Theory loaded
+[Theory OIDC_IDTokenNonce] Theory translated
+[Theory OIDC_IDTokenNonce] Derivation checks started
+[Theory OIDC_IDTokenNonce] Derivation checks ended
+[Theory OIDC_IDTokenNonce] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OIDC_IDTokenNonce begin
+
+// Function signature and definition of the equational theory E
+
+functions: NonceHash/1, adec/2, aenc/2, fst/1, h/1, pair/2, pk/1, snd/1
+equations:
+    adec(aenc(x.1, pk(x.2)), x.2) = x.1,
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+restriction nonce_unique:
+  "∀ rp user nonce hash rp2 user2 hash2 #i #j.
+    ((RPStart( rp, user, nonce, hash ) @ #i) ∧
+     (RPStart( rp2, user2, nonce, hash2 ) @ #j)) ⇒
+    (#i = #j)"
+  // safety formula
+
+rule (modulo E) RegisterKey:
+   [ Fr( ~sk ) ] --> [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_Start:
+   [ Fr( ~nonce ), Fr( ~code_verifier ) ]
+  --[ RPStart( $RP, $User, ~nonce, NonceHash(~code_verifier) ) ]->
+   [
+   RP_Session( $RP, $User, ~nonce, NonceHash(~code_verifier) ),
+   NonceRegistration( $RP, $User, ~nonce, NonceHash(~code_verifier) ),
+   Out( <'auth_request', $RP, $User, ~nonce, NonceHash(~code_verifier)> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_IssueCode:
+   [
+   In( <'auth_request', rp_id, user, nonce, hash_value> ),
+   NonceRegistration( rp_id, user, nonce, hash_value ), Fr( ~code )
+   ]
+  -->
+   [
+   AuthCode( ~code, rp_id, user, nonce, hash_value ),
+   Out( <'auth_response', ~code> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_TokenRequest:
+   [
+   In( <'auth_response', code> ),
+   RP_Session( rp_id, user, nonce, hash_value )
+   ]
+  -->
+   [ Out( <code, nonce, hash_value, rp_id> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_TokenResponse:
+   [
+   In( <code, nonce, hash_value, rp_id> ),
+   AuthCode( code, rp_id, user, nonce, hash_value ), Fr( ~token_id )
+   ]
+  --[ OPIdToken( rp_id, user, nonce, ~token_id ) ]->
+   [
+   IDToken( rp_id, user, nonce, ~token_id ),
+   TokenBinding( ~token_id, rp_id, user ),
+   IssuedToken( rp_id, user, nonce, ~token_id )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_VerifyIDToken:
+   [
+   IDToken( rp_id, user, nonce, token_id ),
+   RP_Session( rp_id, user, nonce, hash_value ),
+   IssuedToken( rp_id, user, nonce, token_id )
+   ]
+  --[ SessionEstablishedEvent( rp_id, user, nonce, token_id ) ]->
+   [ SessionEstablished( rp_id, user, token_id ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma nonce_session_integrity:
+  all-traces
+  "∀ rp user nonce token_id #j.
+    (SessionEstablishedEvent( rp, user, nonce, token_id ) @ #j) ⇒
+    (∃ #k. (OPIdToken( rp, user, nonce, token_id ) @ #k) ∧ (#k < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user nonce token_id #j.
+  (SessionEstablishedEvent( rp, user, nonce, token_id ) @ #j)
+ ∧
+  ∀ #k. (OPIdToken( rp, user, nonce, token_id ) @ #k) ⇒ ¬(#k < #j)"
+*/
+simplify
+solve( IDToken( rp, user, nonce, token_id ) ▶₀ #j )
+  case OP_TokenResponse
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./oidc/id_token_nonce.spthy
+
+  processing time: 1.21s
+
+  nonce_session_integrity (all-traces): verified (3 steps)
+
+==============================================================================

@@ -1,0 +1,28 @@
+theory ResourceIndicators
+begin
+
+// Minimal RFC 8707 model: tokens are bound to a single resource (audience).
+
+rule Client_Request_Token:
+  [ Fr(~client), In(resource) ]
+  --[ ResourceRequested(~client, resource) ]->
+  [ Out(<~client, resource>) ]
+
+rule AS_Issue_Token:
+  [ In(<client, resource>), Fr(~token) ]
+  --[ TokenIssued(client, resource, ~token) ]->
+  [ !Token(~token, client, resource),
+    Out(<~token, resource>) ]
+
+rule RS_Access:
+  [ In(<token, resource>), !Token(token, client, resource) ]
+  --[ ResourceAccessGranted(token, resource) ]->
+  [ Out('granted') ]
+
+lemma resource_audience_enforced:
+  "All client token res_issued res_used #i #j.
+     TokenIssued(client, res_issued, token) @ i &
+     ResourceAccessGranted(token, res_used) @ j
+     ==> res_issued = res_used"
+
+end

@@ -1,0 +1,156 @@
+- description: "RFC7519 JWT HS256 example"
+  alg: HS256
+  key: "AyM1MzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE"
+  header:
+    alg: HS256
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.axdQWnAI5ZxyR_iVXGd05XPGXDKdtZVt9I_-nsGoyrE"
+- description: "RFC7518 JWT HS384 example"
+  alg: HS384
+  key: "AyM1MzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE"
+  header:
+    alg: HS384
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.lVVZ8fGFjHq7GXzULzOfSC8-Yj2kfpup18SnInCJZ0kzDN-jKkHmTRnU9F3F-bsS"
+- description: "RFC7518 JWT HS512 example"
+  alg: HS512
+  key: "AyM1MzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE"
+  header:
+    alg: HS512
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.VD9eBn6CsnyihWAu2BnBrHXXVBcSN78YBtMpTo0l0gSMO9DQ2dcPGBnrKFfFYAreUT-sTuPE-ZsTWEStyeRoEg"
+- description: "RFC7515 Appendix A.2 RS256 example (kid from RFC7517)"
+  alg: RS256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAth14pt+B5O03IW0WudA9
+    LZYOZCU9F5wQY/SGchDTdQ/Ssdy1sG+C42ilpEY+Je942WoYqkwbjoU7B/krb25e
+    cevUdNedI1jAkfNa7hTKBj/yjUq+GElX299QCa8S07xcFgyKFk++DJx6VyRQ1ZFU
+    OvW/y56+Oy/s9fF9b5zi1vhgKOFrfipgLK4nsqd9JjMJMSOqQXKdf/sqgdSCvCH7
+    BJ1oj0xrCyG9qWaJ1gN9uQpOLJkxsfSyJzr8t8fl4v0KK87Y/i78VIRQrj1FsJZb
+    K3oVgnmpC1naQHzVul0O+w92jY0MRngVzMsnkJl2w9pGQHDMUlpPOiHSi5jHkhAz
+    IQIDAQAB
+    -----END PUBLIC KEY-----
+  header:
+    alg: RS256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.LCBXDw8Myp405TX6qNYL6g1SFyjpUwEDozFDpEF4dbAPo4EH192_VWYGQ7vi-o2xKEUGJr4sBr0Voyx8f1qem81vODDC-PyUS9VDxOJVIFt3ILdBQpp1XJ4_6RwYV70tn9Cufk1kKXujxaT-_jQLo5jzX3JD9mwA-sfJzp-giaVgOEm2YutXjjpUbijv1d3PwNm8ZlJ0BuHcrqNGhcit8QdcPrt1A0Eok2Qc0lVu1qmXJlPV3JpiYX5vHPSqB4yTDfS3mB5aQeHn5DvD9VtqNTBVOxtsjEKo49WJM4uHF4zE9e12YqzE6brWe5efnCznnPObLV_1wHQ3Pq_l5I93zQ"
+- description: "RFC7515 Appendix A.3 ES256 example"
+  alg: ES256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtDcFJ4h/IaU3xEIvnnAHxClQ+x69
+    nDQHS8twCvn4RzueLFEF/SVzRPRwHl/B7lTt52d7BSyE/eptOIzJciR7Aw==
+    -----END PUBLIC KEY-----
+  header:
+    alg: ES256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.gywmxP-NmufVhowd-Q2Z8cBtk7A-hd_ErnrBXVf6DuyiuRdmPHxSLx4F9Vn46GIgUoObiEN0CPwekT_4TP88MQ"
+- description: "RFC7518 PS256 example"
+  alg: PS256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzJxeMtmC2opPRaoydhf2
+    rlO/dLt5p7a/KGNPTRBjYfT5ihdDoLj13TEqmrLNdiPsaudmi+sAu/tQaOscPHU9
+    lJofXHpGH3E/keN8jnBI+lIg+qkM+JdUz/yDoCC694PgJqqcQ3DwWhBV/iN2Azry
+    DKa+TVnZMQro+yDyNn01YaA13XiHdXh8gbADIOKByxMtimISwybAHxN5WV3pUaAh
+    Dw6FS512+hbgNMbHj5705Y9gOWSuQy25sZMVvGymcckEF3RpKx1FsxwAmnUZW/Sd
+    WiJoNDAwWDCx88WISQnnUiR+dOi0eUB6jB3FzkibJxASvDt04gG/SbmOfSXnw5LA
+    OwIDAQAB
+    -----END PUBLIC KEY-----
+  header:
+    alg: PS256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJQUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.a1tCOxjVKmRW6vnS_gHTkpWZljjMSa6YwqpuqMAZQ7RotWiQh7yGc36rKJp1BVhVL0boHR0vY6H_Y1CVx3ljiEOJidkQPMQRhUqT-fUkev5GnsLAFRIev4xakiztxWE5cIfiqpX345doH5-F5J74yxB5ZybfOFVzaZYBPA5lNIYbzRSDkfMOxnl2iDelzf-_b7JvCX8DndnANe_N_nOdocLg_pC6uip9Rd-ZLIdOx2aQkIl4xRjZIdKWkVsCdLH1LsvjfafP6ZyI4Jr5DhafSrvSp_G_uHv8kFpH9nnrH5IEjZgC17yj8_HrCa4pdFFXdqNOnrBp1QGFcMGiSRbMLA"
+- description: "RFC7515 Appendix A.4 unsecured example"
+  alg: none
+  key: ""
+  header:
+    alg: none
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJub25lIn0.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ."
+- description: "RFC7515 ES256 flattened JSON example"
+  alg: ES256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtDcFJ4h/IaU3xEIvnnAHxClQ+x69
+    nDQHS8twCvn4RzueLFEF/SVzRPRwHl/B7lTt52d7BSyE/eptOIzJciR7Aw==
+    -----END PUBLIC KEY-----
+  header:
+    alg: ES256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_flattened:
+    payload: "eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+    protected: "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ"
+    signature: "gywmxP-NmufVhowd-Q2Z8cBtk7A-hd_ErnrBXVf6DuyiuRdmPHxSLx4F9Vn46GIgUoObiEN0CPwekT_4TP88MQ"
+
+- description: "RFC7515 ES256 general JSON example"
+  alg: ES256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtDcFJ4h/IaU3xEIvnnAHxClQ+x69
+    nDQHS8twCvn4RzueLFEF/SVzRPRwHl/B7lTt52d7BSyE/eptOIzJciR7Aw==
+    -----END PUBLIC KEY-----
+  header:
+    alg: ES256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_general:
+    payload: "eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+    signatures:
+      - protected: "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ"
+        signature: "gywmxP-NmufVhowd-Q2Z8cBtk7A-hd_ErnrBXVf6DuyiuRdmPHxSLx4F9Vn46GIgUoObiEN0CPwekT_4TP88MQ"
+
+- description: "Ed25519 EdDSA example"
+  alg: EdDSA
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MCowBQYDK2VwAyEAomymfjiTKpbiedsavZXILozZ8nXbopjeZw3Gc9kiPIs=
+    -----END PUBLIC KEY-----
+  header:
+    alg: EdDSA
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.ekX3xG2O4OxYkfHoBjwFBKBWdQ3WbM2FvNSiY2XIm3LAKkgN1gmWDryPXH2SJM6h-v1mmvCWutDfnnMbhpr0AQ"

@@ -1,0 +1,330 @@
+theory SD_JWT_Selective_Disclosure_Security
+begin
+
+/*
+ * SD-JWT Selective Disclosure Security (RFC 9901)
+ *
+ * Models the hash-commitment scheme of SD-JWT: an issuer replaces
+ * selected claims with SHA-256 digests of disclosure arrays
+ * [salt, claim_name, claim_value]. The holder can later reveal
+ * individual claims by presenting the corresponding disclosures.
+ *
+ * Protocol overview:
+ * 1. Issuer creates signing key pair
+ * 2. For each selectively-disclosed claim, issuer generates fresh salt
+ *    and computes digest = H(salt, claim_name, claim_value)
+ * 3. Issuer signs JWT with {_sd: [digests], cnf: holder_pk}
+ * 4. Issuer delivers JWT + all disclosures to Holder (secure channel)
+ * 5. Holder selects subset of disclosures to reveal
+ * 6. Holder sends JWT + selected disclosures + Key Binding JWT to Verifier
+ * 7. Verifier checks JWT signature, matches disclosure digests against _sd,
+ *    verifies KB-JWT signature, reconstructs disclosed claims
+ *
+ * This model uses two SD claims (A and B) to demonstrate partial disclosure.
+ * The holder presents one claim and withholds the other.
+ *
+ * Security properties (6 lemmas):
+ * - disclosure_non_forgeability: only issuer-committed disclosures accepted
+ * - selective_privacy: withheld claim values remain secret
+ * - binding_integrity: a digest binds to exactly one (name, value) pair
+ * - no_disclosure_without_key: valid KB-JWT requires holder's private key
+ * - salt_uniqueness: fresh salts are never reused across issuances
+ * - no_disclosure_without_salt: withheld disclosure's salt remains secret
+ *
+ * Threat model (Dolev-Yao):
+ * - Attacker controls the network between all parties
+ * - Attacker can intercept SD-JWT presentations (JWT + disclosures)
+ * - Attacker can attempt to forge disclosures or key binding JWTs
+ * - Attacker can compute h() on any known terms
+ * - Attacker CANNOT obtain issuer signing key (no issuer compromise)
+ * - Attacker CANNOT obtain holder private key (no holder compromise)
+ * - Attacker CANNOT reverse h() (one-way hash in symbolic model)
+ *
+ * Relation to other verification layers:
+ * - F* (Jose.SdJwt.fst): proves completeness (P1), non-forgeability (P2),
+ *   soundness subset (P3), no-duplicate (P4), reconstruction subset (P5)
+ * - Kani (bounded_sd_jwt.rs): bounded model checking of encode/decode
+ *   roundtrip, digest uniqueness, verifier reconstruction, holder selection
+ * - THIS model: protocol-level security under active network attacker,
+ *   key binding, and selective privacy (information-theoretic secrecy)
+ *
+ * Known limitations:
+ * - Salt entropy (>=128 bits per spec) modeled as Fr() freshness
+ * - Hash algorithm negotiation (_sd_alg) not modeled
+ * - Nested SD-JWT (recursive _sd in sub-objects) not modeled
+ * - Decoy digests (empty slots in _sd) not modeled
+ * - Two SD claims only; generalizes straightforwardly to N claims
+ * - Key binding JWT typ header ("kb+jwt") not modeled (format detail)
+ */
+
+builtins: hashing, signing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y)@i ==> not(x = y)"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Key Management ============ */
+
+// Issuer generates signing key pair (for JWT signatures).
+// The public key is published so verifiers can validate JWTs.
+rule Issuer_Keygen:
+  [ Fr(~isk) ]
+  --[ Issuer_Key($Issuer, pk(~isk)),
+      Unique(<'issuer_key', $Issuer>) ]->
+  [ !Issuer_SK($Issuer, ~isk),
+    !Issuer_PK($Issuer, pk(~isk)),
+    Out(pk(~isk)) ]
+
+// Holder generates key pair (for Key Binding JWT per RFC 9449 DPoP-like
+// holder binding). The public key is published so issuers can embed it
+// in the JWT's cnf claim.
+rule Holder_Keygen:
+  [ Fr(~hsk) ]
+  --[ Holder_Key($Holder, pk(~hsk)),
+      Unique(<'holder_key', $Holder>) ]->
+  [ !Holder_SK($Holder, ~hsk),
+    !Holder_PK($Holder, pk(~hsk)),
+    Out(pk(~hsk)) ]
+
+/* ============ SD-JWT Issuance ============ */
+
+// Issuer creates an SD-JWT with two selectively-disclosed claims (A and B).
+// Each claim gets a fresh salt (>= 128 bits, modeled by Fr()).
+//
+// Production equivalent (sd_jwt.rs):
+//   Disclosure::with_random_salt(claim_name, claim_value)
+//   digest = base64url(SHA-256(base64url(json([salt, name, value]))))
+//
+// The JWT payload contains:
+//   _sd:     [h(disc_a), h(disc_b)]
+//   _sd_alg: "sha-256"
+//   cnf:     holder_pk
+//
+// The holder receives the JWT + both disclosures over a secure channel
+// (not via Out — models HTTPS or direct delivery from issuer to holder).
+rule Issuer_Issue:
+  let disc_a   = <~salt_a, $name_a, ~value_a>
+      disc_b   = <~salt_b, $name_b, ~value_b>
+      digest_a = h(disc_a)
+      digest_b = h(disc_b)
+      payload  = <'sd_jwt', digest_a, digest_b, holder_pk>
+      jwt      = sign(payload, ~isk)
+  in
+  [ !Issuer_SK($Issuer, ~isk),
+    !Holder_PK($Holder, holder_pk),
+    Fr(~salt_a), Fr(~salt_b),
+    Fr(~value_a), Fr(~value_b) ]
+  --[ Issued($Issuer, $Holder, jwt, disc_a, disc_b),
+      Issuer_Committed($Issuer, $name_a, ~value_a, digest_a),
+      Issuer_Committed($Issuer, $name_b, ~value_b, digest_b),
+      Salt_Fresh(~salt_a), Salt_Fresh(~salt_b),
+      Unique(<'salt', ~salt_a>), Unique(<'salt', ~salt_b>) ]->
+  [ // Holder receives JWT + both disclosures (secure delivery)
+    Holder_Has_SdJwt($Holder, $Issuer, jwt, disc_a, disc_b),
+    // Track issued digests for verification
+    !Issued_Digest($Issuer, digest_a, disc_a),
+    !Issued_Digest($Issuer, digest_b, disc_b) ]
+
+/* ============ Holder Presentation ============ */
+
+// Holder presents SD-JWT disclosing ONLY claim A.
+// Claim B's disclosure is NOT sent to the network — its value remains
+// private. The holder signs a Key Binding JWT (KB-JWT) binding:
+// - The specific JWT being presented
+// - The specific disclosure being revealed
+// This proves the holder possesses the private key matching the JWT's cnf.
+//
+// Production equivalent (sd_jwt.rs):
+//   SdJwtHolder::present_with_kb(jwt, &[disc_a], kb_jwt)
+rule Holder_Present_A:
+  let kb_payload = <'kb_jwt', jwt, disc_a>
+      kb_jwt     = sign(kb_payload, ~hsk)
+  in
+  [ Holder_Has_SdJwt($Holder, $Issuer, jwt, disc_a, disc_b),
+    !Holder_SK($Holder, ~hsk) ]
+  --[ Presented($Holder, $Issuer, jwt, disc_a),
+      Withheld($Holder, disc_b) ]->
+  [ // JWT, disclosure A, and KB-JWT go to the network
+    // disc_b is NOT output — withheld from verifier and attacker
+    Out(<jwt, disc_a, kb_jwt>) ]
+
+// Holder presents SD-JWT disclosing ONLY claim B (symmetric case).
+rule Holder_Present_B:
+  let kb_payload = <'kb_jwt', jwt, disc_b>
+      kb_jwt     = sign(kb_payload, ~hsk)
+  in
+  [ Holder_Has_SdJwt($Holder, $Issuer, jwt, disc_a, disc_b),
+    !Holder_SK($Holder, ~hsk) ]
+  --[ Presented($Holder, $Issuer, jwt, disc_b),
+      Withheld($Holder, disc_a) ]->
+  [ Out(<jwt, disc_b, kb_jwt>) ]
+
+/* ============ Verifier ============ */
+
+// Verifier receives a presentation and performs three checks:
+// 1. Issuer JWT signature — using known issuer public key
+// 2. Disclosure digest — h(disclosure) matches a digest in _sd array
+// 3. Key Binding JWT — signed by the key in the JWT's cnf claim
+//
+// The pattern matching on sign(payload, isk) with !Issuer_PK(pk(isk))
+// correctly models signature verification: the verifier knows pk(isk)
+// and checks that the JWT was signed with the corresponding private key.
+// The Eq(holder_pk, pk(hsk)) restriction verifies the KB-JWT signer
+// matches the cnf key embedded in the JWT payload.
+//
+// Production equivalent (sd_jwt.rs):
+//   SdJwtVerifier::verify(&payload, &disclosures)
+//   + JWT signature verification + KB-JWT verification
+
+// Verifier: disclosure digest matches first slot in _sd array
+rule Verifier_Accept_Slot_A:
+  let disc     = <salt, name, value>
+      digest   = h(disc)
+      payload  = <'sd_jwt', digest, digest_b, holder_pk>
+      kb_body  = <'kb_jwt', sign(payload, isk), disc>
+  in
+  [ In(<sign(payload, isk), disc, sign(kb_body, hsk)>),
+    !Issuer_PK($Issuer, pk(isk)) ]
+  --[ Eq(holder_pk, pk(hsk)),
+      Verified_Claim($Issuer, name, value, digest),
+      Verified_Presentation($Issuer, sign(payload, isk), disc) ]->
+  [ ]
+
+// Verifier: disclosure digest matches second slot in _sd array
+rule Verifier_Accept_Slot_B:
+  let disc     = <salt, name, value>
+      digest   = h(disc)
+      payload  = <'sd_jwt', digest_a, digest, holder_pk>
+      kb_body  = <'kb_jwt', sign(payload, isk), disc>
+  in
+  [ In(<sign(payload, isk), disc, sign(kb_body, hsk)>),
+    !Issuer_PK($Issuer, pk(isk)) ]
+  --[ Eq(holder_pk, pk(hsk)),
+      Verified_Claim($Issuer, name, value, digest),
+      Verified_Presentation($Issuer, sign(payload, isk), disc) ]->
+  [ ]
+
+/* ============ Security Properties ============ */
+
+// 1. Disclosure Non-Forgeability:
+// If the verifier accepts a claim (name, value) with digest d from issuer I,
+// then I committed to that exact (name, value) for digest d during issuance.
+//
+// Why this holds:
+// - JWT signature verification ensures the digest d came from the issuer
+//   (only the issuer can sign with isk, and pk(isk) is verified)
+// - Hash preimage resistance ensures the presented disclosure matches the
+//   committed digest: h(<salt, name, value>) = d means the (name, value)
+//   pair is exactly what the issuer hashed
+// - Combined: the verifier's accepted (name, value) is authentically the
+//   issuer's original commitment
+//
+// F* equivalent: lemma_non_forgeability (Jose.SdJwt.fst, P2)
+lemma disclosure_non_forgeability:
+  "All Issuer name value digest #i.
+     Verified_Claim(Issuer, name, value, digest)@i
+     ==> Ex #j. Issuer_Committed(Issuer, name, value, digest)@j & #j < #i"
+
+// 2. Selective Privacy:
+// If the holder withholds a disclosure, the attacker cannot learn it.
+// The withheld disclosure <salt, name, value> contains:
+// - salt: fresh (Fr()), never output to the network
+// - name: public ($name), but knowing it alone doesn't help
+// - value: fresh (Fr()), never output to the network
+// The JWT only exposes h(<salt, name, value>), which is one-way.
+// Together: the attacker cannot reconstruct the withheld disclosure.
+//
+// This is the core privacy guarantee of SD-JWT: the holder controls
+// exactly which claims the verifier learns.
+//
+// F* equivalent: lemma_soundness_subset (Jose.SdJwt.fst, P3)
+lemma selective_privacy:
+  "All Holder disc_b #i.
+     Withheld(Holder, disc_b)@i
+     ==> not(Ex #j. K(disc_b)@j)"
+
+// 3. Binding Integrity:
+// The same digest always resolves to the same (name, value) pair.
+// An attacker cannot present a different claim for an existing digest.
+//
+// Why this holds:
+// - In the symbolic model, h() is injective (no collisions):
+//   h(<s1,n1,v1>) = h(<s2,n2,v2>) implies <s1,n1,v1> = <s2,n2,v2>
+// - Therefore the name and value are uniquely determined by the digest
+// - An attacker cannot find (name', value') != (name, value) such that
+//   h(<salt', name', value'>) equals a committed digest
+//
+// Computational interpretation: relies on SHA-256 collision resistance.
+// F* equivalent: disclosure_digest_collision_resistant assumption
+lemma binding_integrity:
+  "All Issuer name1 value1 name2 value2 digest #i #j.
+     Verified_Claim(Issuer, name1, value1, digest)@i &
+     Verified_Claim(Issuer, name2, value2, digest)@j
+     ==> name1 = name2 & value1 = value2"
+
+// 4. No Disclosure Without Key (Holder Key Binding):
+// Every verified presentation traces back to an honest holder action.
+// Without the holder's private key, the attacker cannot construct a valid
+// Key Binding JWT, and without a valid KB-JWT the verifier rejects.
+//
+// Why this holds:
+// - The verifier checks both the issuer JWT signature and the KB-JWT signature
+// - The issuer embeds holder_pk in the JWT payload (cnf claim)
+// - The verifier verifies Eq(holder_pk, pk(hsk)) — the KB-JWT signer
+//   must match the JWT's cnf key
+// - The attacker doesn't know the holder's private key (~hsk)
+// - Therefore only the legitimate holder can create a valid KB-JWT
+// - Replay of honest presentations is allowed (the Presented action exists)
+//
+// Note: This property assumes no holder key compromise. A key compromise
+// extension (rule Holder_Compromise: Out(~hsk)) would weaken this to
+// "either honest presentation or holder compromise".
+lemma no_disclosure_without_key:
+  "All Issuer jwt disc #i.
+     Verified_Presentation(Issuer, jwt, disc)@i
+     ==> Ex Holder #j. Presented(Holder, Issuer, jwt, disc)@j & #j < #i"
+
+// 5. Salt Uniqueness:
+// Each salt is used in exactly one SD-JWT issuance. This property ensures
+// that digest values are unpredictable and unlinkable across issuances.
+//
+// Why this holds:
+// - Salts are generated via Fr(~salt) — fresh nonces unique per rule firing
+// - The Unique restriction enforces one-time use per salt
+// - Even if the same claim (name, value) appears in multiple SD-JWTs,
+//   different salts produce different digests
+//
+// This models the spec requirement of >= 128 bits of salt entropy.
+lemma salt_uniqueness:
+  "All s #i #j.
+     Salt_Fresh(s)@i & Salt_Fresh(s)@j
+     ==> #i = #j"
+
+// 6. No Disclosure Without Salt:
+// The salt of a withheld disclosure remains secret. Even if the attacker
+// knows the claim name (public) and hypothetically guesses the claim value,
+// they cannot construct a valid disclosure without the issuer's fresh salt.
+//
+// Why this holds:
+// - The salt is generated by Fr(~salt) in the issuance rule
+// - The salt is embedded in the disclosure sent only to the holder
+// - Withheld disclosures (and their salts) are never output to the network
+// - The JWT only exposes h(<salt, name, value>), which cannot be inverted
+//
+// Computational interpretation: this relies on hash preimage resistance.
+// The salt's entropy (128+ bits) makes brute-force infeasible even if
+// the claim name and value are known or guessable (e.g., boolean claims
+// like "over_18": true/false are protected by the salt).
+lemma no_disclosure_without_salt:
+  "All Holder salt name value #i.
+     Withheld(Holder, <salt, name, value>)@i
+     ==> not(Ex #j. K(salt)@j)"
+
+end

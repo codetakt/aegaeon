@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "claim_target": "released-client-claim",
+  "current_state": {
+    "claim_phase": "pre-release-client-baseline",
+    "released_client_claim_active": false,
+    "canonical_statement": "Published packages and a released client claim do not exist yet."
+  },
+  "target_state": {
+    "claim_phase": "released-client-claim",
+    "canonical_statement": "Aegaeon SDK provides an assumption-qualified security-tested TypeScript client SDK and RP runtime for Aegaeon-issued OIDC flows, with a verified client core and a promoted RS256 required client slice.",
+    "default_profile": "aegaeon-rs256",
+    "promoted_client_slices": [
+      "rs256-required-client-slice"
+    ],
+    "compat_only_surfaces": [
+      "es256-interop-surface"
+    ]
+  },
+  "activation_requirements": {
+    "promotion_report_ready": true,
+    "managed_provider_evidence_required": true,
+    "managed_provider_evidence_max_age_hours": 168,
+    "managed_provider_hosted_provenance_required": true,
+    "managed_provider_expected_lane": "external-provider-managed",
+    "managed_provider_expected_workflow": "SDK Managed Provider Evidence",
+    "managed_provider_expected_repository": "aegaeon-sdk",
+    "managed_provider_github_ref_required": true,
+    "managed_provider_github_sha_required": true,
+    "managed_provider_github_job_required": true,
+    "managed_provider_expected_job": "external-provider-managed",
+    "admin_sdk_evidence_required": true,
+    "admin_sdk_evidence_max_age_hours": 168,
+    "admin_sdk_hosted_provenance_required": true,
+    "admin_sdk_expected_lane": "admin-console-stack-e2e",
+    "admin_sdk_expected_workflow": "Admin Console Stack E2E",
+    "admin_sdk_expected_repository": "aegaeon-admin-console",
+    "admin_sdk_github_ref_required": true,
+    "admin_sdk_github_sha_required": true,
+    "admin_sdk_github_job_required": true,
+    "admin_sdk_expected_job": "stack-e2e",
+    "signed_release_attestation_required": true,
+    "sbom_publication_required": true,
+    "publication_org_tasks_must_be_done": true
+  },
+  "required_publication_org_tasks": [
+    "publication_org_branch_protection",
+    "publication_org_secret_rollout"
+  ]
+}

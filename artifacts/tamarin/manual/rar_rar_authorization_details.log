@@ -1,0 +1,775 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RARAuthorizationDetails] Theory loaded
+[Theory RARAuthorizationDetails] Theory translated
+[Theory RARAuthorizationDetails] Derivation checks started
+[Theory RARAuthorizationDetails] Derivation checks ended
+[Theory RARAuthorizationDetails] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RARAuthorizationDetails begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) Client_Authenticate:
+   [ Fr( ~sid ) ] --[ ClientAuthenticated( ~sid ) ]-> [ ClientAuth( ~sid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Par_Submit_RequestObject:
+   [ ClientAuth( sid ), Fr( ~ro_details ) ]
+  --[
+  ParSubmission( sid ), RequestObjectProvided( sid, ~ro_details ),
+  ParStored( sid, ~ro_details )
+  ]->
+   [ !ParAuthDetails( sid, ~ro_details ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Par_Submit_Form:
+   [ ClientAuth( sid ), In( form_details ) ]
+  --[
+  ParSubmission( sid ), FormProvided( sid, form_details ),
+  FormInjected( sid, form_details ), ParStored( sid, form_details )
+  ]->
+   [ !ParAuthDetails( sid, form_details ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Par_Submit_RequestObject_Overrides_Form:
+   [ ClientAuth( sid ), Fr( ~ro_details ), In( form_details ) ]
+  --[
+  ParSubmission( sid ), RequestObjectProvided( sid, ~ro_details ),
+  FormProvided( sid, form_details ), FormInjected( sid, form_details ),
+  ParStored( sid, ~ro_details )
+  ]->
+   [ !ParAuthDetails( sid, ~ro_details ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_With_PAR_NoQuery:
+   [ !ParAuthDetails( sid, details ) ]
+  --[ ParUsed( sid ), AuthDetailsSelected( sid, details ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_With_PAR_And_Query:
+   [ !ParAuthDetails( sid, details ), In( query_details ) ]
+  --[
+  ParUsed( sid ), QueryProvided( sid, query_details ),
+  QueryInjected( sid, query_details ), AuthDetailsSelected( sid, details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_Direct_RequestObject:
+   [ Fr( ~sid ), Fr( ~ro_details ) ]
+  --[
+  DirectRequest( ~sid ), RequestObjectProvided( ~sid, ~ro_details ),
+  AuthDetailsSelected( ~sid, ~ro_details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_Direct_Form:
+   [ Fr( ~sid ), In( form_details ) ]
+  --[
+  DirectRequest( ~sid ), FormProvided( ~sid, form_details ),
+  FormInjected( ~sid, form_details ),
+  AuthDetailsSelected( ~sid, form_details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_Direct_Query:
+   [ Fr( ~sid ), In( query_details ) ]
+  --[
+  DirectRequest( ~sid ), QueryProvided( ~sid, query_details ),
+  QueryInjected( ~sid, query_details ),
+  AuthDetailsSelected( ~sid, query_details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_Direct_RequestObject_Overrides_Query:
+   [ Fr( ~sid ), Fr( ~ro_details ), In( query_details ) ]
+  --[
+  DirectRequest( ~sid ), RequestObjectProvided( ~sid, ~ro_details ),
+  QueryProvided( ~sid, query_details ),
+  QueryInjected( ~sid, query_details ),
+  AuthDetailsSelected( ~sid, ~ro_details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Authorize_Direct_RequestObject_Overrides_Form:
+   [ Fr( ~sid ), Fr( ~ro_details ), In( form_details ) ]
+  --[
+  DirectRequest( ~sid ), RequestObjectProvided( ~sid, ~ro_details ),
+  FormProvided( ~sid, form_details ), FormInjected( ~sid, form_details ),
+  AuthDetailsSelected( ~sid, ~ro_details )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma par_authorization_details_used:
+  all-traces
+  "∀ sid details #i.
+    ((AuthDetailsSelected( sid, details ) @ #i) ∧ (ParUsed( sid ) @ #i)) ⇒
+    (∃ #j. ParStored( sid, details ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid details #i.
+  (AuthDetailsSelected( sid, details ) @ #i) ∧ (ParUsed( sid ) @ #i)
+ ∧
+  ∀ #j. (ParStored( sid, details ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( AuthDetailsSelected( sid, details ) @ #i )
+  case Authorize_Direct_Form
+  by solve( ParUsed( ~sid ) @ #i )
+next
+  case Authorize_Direct_Query
+  by solve( ParUsed( ~sid ) @ #i )
+next
+  case Authorize_Direct_RequestObject
+  by solve( ParUsed( ~sid ) @ #i )
+next
+  case Authorize_Direct_RequestObject_Overrides_Form
+  by solve( ParUsed( ~sid ) @ #i )
+next
+  case Authorize_Direct_RequestObject_Overrides_Query
+  by solve( ParUsed( ~sid ) @ #i )
+next
+  case Authorize_With_PAR_And_Query
+  solve( !ParAuthDetails( sid, details ) ▶₀ #i )
+    case Par_Submit_Form
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by contradiction /* from formulas */
+  qed
+next
+  case Authorize_With_PAR_NoQuery
+  solve( !ParAuthDetails( sid, details ) ▶₀ #i )
+    case Par_Submit_Form
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma par_storage_requires_auth:
+  all-traces
+  "∀ sid details #i.
+    (ParStored( sid, details ) @ #i) ⇒
+    (∃ #j. ClientAuthenticated( sid ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid details #i.
+  (ParStored( sid, details ) @ #i)
+ ∧
+  ∀ #j. (ClientAuthenticated( sid ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( ParStored( sid, details ) @ #i )
+  case Par_Submit_Form
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    by contradiction /* from formulas */
+  qed
+next
+  case Par_Submit_RequestObject
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    by contradiction /* from formulas */
+  qed
+next
+  case Par_Submit_RequestObject_Overrides_Form
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma par_precedence_over_query:
+  all-traces
+  "∀ sid sel_details par_details query_details #i #j #k.
+    (((AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+      (ParStored( sid, par_details ) @ #j)) ∧
+     (QueryProvided( sid, query_details ) @ #k)) ⇒
+    (sel_details = par_details)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid sel_details par_details query_details #i #j #k.
+  (AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+  (ParStored( sid, par_details ) @ #j) ∧
+  (QueryProvided( sid, query_details ) @ #k)
+ ∧
+  ¬(sel_details = par_details)"
+*/
+simplify
+solve( AuthDetailsSelected( sid, sel_details ) @ #i )
+  case Authorize_Direct_Form
+  solve( ParStored( ~sid, par_details ) @ #j )
+    case Par_Submit_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_Query
+  solve( ParStored( ~sid, par_details ) @ #j )
+    case Par_Submit_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject
+  solve( ParStored( ~sid, par_details ) @ #j )
+    case Par_Submit_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Form
+  solve( ParStored( ~sid, par_details ) @ #j )
+    case Par_Submit_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Query
+  solve( ParStored( ~sid, par_details ) @ #j )
+    case Par_Submit_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_With_PAR_And_Query
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+next
+  case Authorize_With_PAR_NoQuery
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( ParStored( ~sid, par_details ) @ #j )
+      case Par_Submit_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma request_object_precedence_over_query:
+  all-traces
+  "∀ sid sel_details ro_details query_details #i #j #k.
+    (((AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+      (RequestObjectProvided( sid, ro_details ) @ #j)) ∧
+     (QueryProvided( sid, query_details ) @ #k)) ⇒
+    (sel_details = ro_details)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid sel_details ro_details query_details #i #j #k.
+  (AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+  (RequestObjectProvided( sid, ro_details ) @ #j) ∧
+  (QueryProvided( sid, query_details ) @ #k)
+ ∧
+  ¬(sel_details = ro_details)"
+*/
+simplify
+solve( AuthDetailsSelected( sid, sel_details ) @ #i )
+  case Authorize_Direct_Form
+  solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_Query
+  solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Form
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject_Overrides_Form
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Query
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject_Overrides_Query
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_With_PAR_And_Query
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+next
+  case Authorize_With_PAR_NoQuery
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma request_object_precedence_over_form:
+  all-traces
+  "∀ sid sel_details ro_details form_details #i #j #k.
+    (((AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+      (RequestObjectProvided( sid, ro_details ) @ #j)) ∧
+     (FormProvided( sid, form_details ) @ #k)) ⇒
+    (sel_details = ro_details)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid sel_details ro_details form_details #i #j #k.
+  (AuthDetailsSelected( sid, sel_details ) @ #i) ∧
+  (RequestObjectProvided( sid, ro_details ) @ #j) ∧
+  (FormProvided( sid, form_details ) @ #k)
+ ∧
+  ¬(sel_details = ro_details)"
+*/
+simplify
+solve( AuthDetailsSelected( sid, sel_details ) @ #i )
+  case Authorize_Direct_Form
+  solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_Query
+  solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Form
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject_Overrides_Form
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_Direct_RequestObject_Overrides_Query
+  solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+    case Authorize_Direct_RequestObject_Overrides_Query
+    by contradiction /* from formulas */
+  next
+    case Par_Submit_RequestObject
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    by solve( ClientAuth( ~sid ) ▶₀ #j )
+  qed
+next
+  case Authorize_With_PAR_And_Query
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+next
+  case Authorize_With_PAR_NoQuery
+  solve( !ParAuthDetails( sid, sel_details ) ▶₀ #i )
+    case Par_Submit_Form
+    solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  next
+    case Par_Submit_RequestObject_Overrides_Form
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma request_object_overrides_form_in_par:
+  all-traces
+  "∀ sid par_details ro_details form_details #i #j #k.
+    (((ParStored( sid, par_details ) @ #i) ∧
+      (RequestObjectProvided( sid, ro_details ) @ #j)) ∧
+     (FormProvided( sid, form_details ) @ #k)) ⇒
+    (par_details = ro_details)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ sid par_details ro_details form_details #i #j #k.
+  (ParStored( sid, par_details ) @ #i) ∧
+  (RequestObjectProvided( sid, ro_details ) @ #j) ∧
+  (FormProvided( sid, form_details ) @ #k)
+ ∧
+  ¬(par_details = ro_details)"
+*/
+simplify
+solve( ParStored( sid, par_details ) @ #i )
+  case Par_Submit_Form
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    solve( RequestObjectProvided( ~sid, ro_details ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  qed
+next
+  case Par_Submit_RequestObject
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    qed
+  qed
+next
+  case Par_Submit_RequestObject_Overrides_Form
+  solve( ClientAuth( sid ) ▶₀ #i )
+    case Client_Authenticate
+    solve( RequestObjectProvided( ~sid, ro_details.1 ) @ #j )
+      case Par_Submit_RequestObject
+      by solve( ClientAuth( ~sid ) ▶₀ #j )
+    next
+      case Par_Submit_RequestObject_Overrides_Form
+      solve( ClientAuth( ~sid ) ▶₀ #j )
+        case Client_Authenticate
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./rar/rar_authorization_details.spthy
+
+  processing time: 0.71s
+
+  par_authorization_details_used (all-traces): verified (15 steps)
+  par_storage_requires_auth (all-traces): verified (8 steps)
+  par_precedence_over_query (all-traces): verified (54 steps)
+  request_object_precedence_over_query (all-traces): verified (44 steps)
+  request_object_precedence_over_form (all-traces): verified (44 steps)
+  request_object_overrides_form_in_par (all-traces): verified (16 steps)
+
+==============================================================================

@@ -1,0 +1,171 @@
+name: Security Suite
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'
+
+env:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CORPUS_ARCHIVE_KEEP: 0
+  CORPUS_HISTORY_KEEP: 100
+
+jobs:
+  security-stage:
+    name: ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stage: supply-chain
+            label: Security / Supply Chain
+            timeout: 45
+            command: nix run .#security-suite -- --stage supply-chain
+          - stage: runtime-tests
+            label: Security / Runtime Tests
+            timeout: 45
+            command: nix run .#security-suite -- --stage runtime-tests
+          - stage: jose-boundaries
+            label: Security / JOSE Boundaries
+            timeout: 45
+            command: nix run .#security-suite -- --stage jose-boundaries
+          - stage: cargo-vet
+            label: Security / Cargo Vet
+            timeout: 35
+            command: nix run .#security-suite -- --stage cargo-vet
+          - stage: fuzz
+            label: Security / Fuzz Smoke
+            timeout: 40
+            command: nix run .#security-suite -- --stage fuzz
+          - stage: sanitizers
+            label: Security / Sanitizers
+            timeout: 45
+            command: nix run .#security-suite -- --stage sanitizers
+          - stage: sbom
+            label: Security / SBOM
+            timeout: 75
+            command: nix run .#security-suite -- --stage sbom
+          - stage: geiger
+            label: Security / Cargo Geiger
+            timeout: 90
+            command: nix run .#security-suite -- --stage geiger
+          - stage: udeps
+            label: Security / Cargo Udeps
+            timeout: 45
+            command: nix run .#security-suite -- --stage udeps
+          - stage: generated-artefacts
+            label: Security / Generated Artefacts
+            timeout: 45
+            command: |
+              if command -v sudo >/dev/null 2>&1; then
+                sudo rm -rf /homeless-shelter || true
+              else
+                rm -rf /homeless-shelter || true
+              fi
+              nix run .#verify-lowstar
+    timeout-minutes: ${{ matrix.timeout }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run security stage
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          ${{ matrix.command }}
+
+      - name: Cleanup transient outputs
+        if: always()
+        run: |
+          rm -rf target fuzz/target fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
+          rm -rf artifacts/security/latest/cargo-home || true
+          rm -rf ~/.cache/trivy ~/.cache/grype || true
+
+      - name: Record security status
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          printf '%s\n' \
+            '{"workflow":"${{ github.workflow }}",'\
+            '"stage":"${{ matrix.stage }}",'\
+            '"run_id":"${{ github.run_id }}",'\
+            '"run_number":"${{ github.run_number }}",'\
+            '"sha":"${{ github.sha }}",'\
+            '"ref":"${{ github.ref }}",'\
+            '"event":"${{ github.event_name }}",'\
+            '"timestamp":"'"${timestamp}"'",'\
+            '"job_status":"${{ job.status }}"}' \
+            > security-artifacts/security_status.jsonl
+
+      - name: Generate job summary
+        if: always()
+        run: |
+          {
+            echo "## Security Suite Summary"
+            echo ""
+            echo "- Stage: \`${{ matrix.stage }}\`"
+            echo "- Job status: \`${{ job.status }}\`"
+            echo ""
+            if [ -f artifacts/security/latest/fuzz/run_summary.json ]; then
+              python - <<'PY'
+          import json
+          from pathlib import Path
+
+          summary_path = Path("artifacts/security/latest/fuzz/run_summary.json")
+          data = json.loads(summary_path.read_text())
+          targets = data.get("targets", [])
+          print(f"- Fuzz targets recorded: {len(targets)}")
+          print("- Corpus archive:", data.get("corpus_archive") or "n/a")
+          print("- Crash archive :", data.get("crash_archive") or "n/a")
+          if targets:
+              print("")
+              print("### Fuzz Corpus Snapshot")
+              for target in targets[:6]:
+                  name = target.get("name")
+                  files = target.get("files")
+                  size_bytes = target.get("size_bytes")
+                  print(f"- `{name}` files={files} size={size_bytes}B")
+          PY
+            else
+              echo "- Fuzz run summary not available."
+            fi
+            echo ""
+            echo "### Reference"
+            echo "- [Load baseline (auth code flow)](docs/performance/load-baseline-auth-code.md)"
+            echo "- [Monitoring runbook](docs/operations/monitoring/README.md)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload security metrics
+        if: always() && matrix.stage != 'sbom'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-${{ matrix.stage }}-${{ github.run_id }}
+          path: |
+            artifacts/security/latest
+            artifacts/security/history
+            security-artifacts/security_status.jsonl
+
+      - name: Upload SBOM metrics
+        if: always() && matrix.stage == 'sbom'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-${{ matrix.stage }}-${{ github.run_id }}
+          path: |
+            artifacts/security/latest
+            artifacts/sbom
+            security-artifacts/security_status.jsonl

@@ -1,0 +1,195 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory IssuerMixup] Theory loaded
+[Theory IssuerMixup] Theory translated
+[Theory IssuerMixup] Derivation checks started
+[Theory IssuerMixup] Derivation checks ended
+[Theory IssuerMixup] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory IssuerMixup begin
+
+// Function signature and definition of the equational theory E
+
+functions: adec/2, aenc/2, fst/1, h/1, pair/2, pk/1, sign/2, snd/1,
+           true/0, verify/3
+equations:
+    adec(aenc(x.1, pk(x.2)), x.2) = x.1,
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+
+
+restriction Once:
+  "∀ x #i #j. ((Once( x ) @ #i) ∧ (Once( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) AS_Setup:
+   [ Fr( ~sk_as ) ]
+  --[ ASRegistered( $AS, pk(~sk_as) ) ]->
+   [ !AS( $AS, ~sk_as ), !ASPubKey( $AS, pk(~sk_as) ), Out( pk(~sk_as) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Register:
+   [ !ASPubKey( $AS, pk_as ), Fr( ~client_id ) ]
+  --[ ClientRegisteredWith( $Client, $AS ), Once( $Client ) ]->
+   [ !ClientAS( $Client, $AS, pk_as ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Authorize:
+   [ Fr( ~code ), !AS( $AS, sk_as ), !ClientAS( $Client, $AS, pk(sk_as) ) ]
+  --[
+  AuthorizedBy( $AS, $Client ), CodeIssued( $AS, $Client, ~code ),
+  Unique( <'code', ~code> )
+  ]->
+   [
+   Out( <~code, $AS, sign(<~code, $AS>, sk_as)> ),
+   !IssuedCode( ~code, $AS, $Client )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Validate_Issuer:
+   [
+   !ClientAS( $Client, $AS, pk_as ), In( <code, issuer, sig> ),
+   !IssuedCode( code, $AS, $Client )
+   ]
+  --[
+  Eq( issuer, $AS ), Eq( verify(sig, <code, issuer>, pk_as), true ),
+  IssuerValidated( $Client, $AS, code )
+  ]->
+   [ ValidCode( $Client, $AS, code ) ]
+
+  /*
+  rule (modulo AC) Client_Validate_Issuer:
+     [
+     !ClientAS( $Client, $AS, pk_as ), In( <code, issuer, sig> ),
+     !IssuedCode( code, $AS, $Client )
+     ]
+    --[
+    Eq( issuer, $AS ), Eq( z, true ), IssuerValidated( $Client, $AS, code )
+    ]->
+     [ ValidCode( $Client, $AS, code ) ]
+    variants (modulo AC)
+    1. code  = code.8
+       issuer
+             = issuer.8
+       pk_as = pk_as.8
+       sig   = sig.8
+       z     = verify(sig.8, <code.8, issuer.8>, pk_as.8)
+
+    2. code  = x.8
+       issuer
+             = x.9
+       pk_as = pk(x.10)
+       sig   = sign(<x.8, x.9>, x.10)
+       z     = true
+  */
+
+lemma no_issuer_mixup:
+  all-traces
+  "∀ C AS1 AS2 code #i #j.
+    ((ClientRegisteredWith( C, AS1 ) @ #i) ∧
+     (IssuerValidated( C, AS2, code ) @ #j)) ⇒
+    (AS1 = AS2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C AS1 AS2 code #i #j.
+  (ClientRegisteredWith( C, AS1 ) @ #i) ∧
+  (IssuerValidated( C, AS2, code ) @ #j)
+ ∧
+  ¬(AS1 = AS2)"
+*/
+simplify
+solve( !ASPubKey( $AS, pk_as ) ▶₀ #i )
+  case AS_Setup
+  solve( !ClientAS( $Client, $AS.1, pk(x) ) ▶₀ #j )
+    case Client_Register
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma issuer_binding:
+  all-traces
+  "∀ C AS code #i.
+    (IssuerValidated( C, AS, code ) @ #i) ⇒
+    (∃ #j. (CodeIssued( AS, C, code ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C AS code #i.
+  (IssuerValidated( C, AS, code ) @ #i)
+ ∧
+  ∀ #j. (CodeIssued( AS, C, code ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientAS( $Client, $AS, pk(x) ) ▶₀ #i )
+  case Client_Register
+  solve( !IssuedCode( code, $AS, $Client ) ▶₂ #i )
+    case AS_Authorize
+    by contradiction /* from formulas */
+  qed
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./oidc/iss_mixup.spthy
+
+  processing time: 0.45s
+
+  no_issuer_mixup (all-traces): verified (4 steps)
+  issuer_binding (all-traces): verified (4 steps)
+
+==============================================================================

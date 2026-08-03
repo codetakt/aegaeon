@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/sdk-release-publication-bundle.schema.json",
+  "title": "Aegaeon SDK Release Publication Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "release_phase",
+    "source",
+    "publish_manifest",
+    "release_attestation",
+    "release_attestation_signature",
+    "workspace_sbom",
+    "verified_core",
+    "managed_provider_evidence",
+    "admin_sdk_evidence",
+    "client_claim_promotion",
+    "released_client_claim_report",
+    "publication_org_rollout_report",
+    "deferred_publication_requirements"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "release_phase": {
+      "type": "string",
+      "enum": [
+        "pre-release-client-baseline",
+        "released-client-claim"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "github_ref",
+        "github_sha",
+        "github_run_id",
+        "github_workflow",
+        "npm_dist_tag"
+      ],
+      "properties": {
+        "github_ref": { "type": ["string", "null"] },
+        "github_sha": { "type": ["string", "null"] },
+        "github_run_id": { "type": ["string", "null"] },
+        "github_workflow": { "type": ["string", "null"] },
+        "npm_dist_tag": { "type": ["string", "null"] }
+      }
+    },
+    "publish_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "tarball_count"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "tarball_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "release_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "npm_provenance_enabled",
+        "signed_release_attestation_present",
+        "sbom_publication_present",
+        "deferred_requirements"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "npm_provenance_enabled": { "type": "boolean" },
+        "signed_release_attestation_present": { "type": "boolean" },
+        "sbom_publication_present": { "type": "boolean" },
+        "deferred_requirements": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "release_attestation_signature": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "signature_path",
+        "signature_sha256",
+        "public_key_path",
+        "public_key_sha256",
+        "signature_algorithm",
+        "key_type",
+        "signer_source"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "signature_path": { "type": "string", "minLength": 1 },
+        "signature_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "public_key_path": { "type": "string", "minLength": 1 },
+        "public_key_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "signature_algorithm": {
+          "type": "string",
+          "enum": [
+            "ed25519",
+            "rsa-sha256",
+            "rsa-pss-sha256",
+            "ecdsa-sha256"
+          ]
+        },
+        "key_type": {
+          "type": "string",
+          "enum": [
+            "ed25519",
+            "rsa",
+            "rsa-pss",
+            "ec"
+          ]
+        },
+        "signer_source": {
+          "type": "string",
+          "enum": [
+            "cosign_key_env",
+            "cosign_key_path"
+          ]
+        }
+      }
+    },
+    "workspace_sbom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bom_format",
+        "spec_version",
+        "component_count",
+        "serial_number"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bom_format": { "type": "string", "const": "CycloneDX" },
+        "spec_version": { "type": "string", "minLength": 1 },
+        "component_count": { "type": "integer", "minimum": 1 },
+        "serial_number": { "type": ["string", "null"] }
+      }
+    },
+    "verified_core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_path",
+        "manifest_sha256",
+        "handoff_manifest_path",
+        "handoff_manifest_sha256"
+      ],
+      "properties": {
+        "manifest_path": { "type": "string", "minLength": 1 },
+        "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "handoff_manifest_path": { "type": ["string", "null"] },
+        "handoff_manifest_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "managed_provider_evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "lane_name",
+        "provider_slug",
+        "provider_class",
+        "hosted",
+        "status"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lane_name": { "type": ["string", "null"] },
+        "provider_slug": { "type": ["string", "null"] },
+        "provider_class": { "type": ["string", "null"] },
+        "hosted": { "type": ["boolean", "null"] },
+        "status": { "type": ["string", "null"] }
+      }
+    },
+    "admin_sdk_evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "lane_name",
+        "stack_mode",
+        "management_sdk_package",
+        "capability_count"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "lane_name": { "type": ["string", "null"] },
+        "stack_mode": { "type": ["string", "null"] },
+        "management_sdk_package": { "type": ["string", "null"] },
+        "capability_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "client_claim_promotion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "ready",
+        "failure_count",
+        "failures"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ready": { "type": "boolean" },
+        "failure_count": { "type": "integer", "minimum": 0 },
+        "failures": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "released_client_claim_report": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "ready",
+        "blocker_count",
+        "current_claim_active",
+        "target_statement"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ready": { "type": "boolean" },
+        "blocker_count": { "type": "integer", "minimum": 0 },
+        "current_claim_active": { "type": "boolean" },
+        "target_statement": { "type": "string", "minLength": 1 }
+      }
+    },
+    "publication_org_rollout_report": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "ready",
+        "blocker_count",
+        "target_repository"
+      ],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ready": { "type": "boolean" },
+        "blocker_count": { "type": "integer", "minimum": 0 },
+        "target_repository": { "type": ["string", "null"] }
+      }
+    },
+    "deferred_publication_requirements": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

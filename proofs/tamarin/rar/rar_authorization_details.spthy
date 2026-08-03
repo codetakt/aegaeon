@@ -1,0 +1,127 @@
+theory RARAuthorizationDetails
+begin
+
+// Model the precedence rules in RFC 9396 composition:
+// - Request Object authorization_details override query/form parameters.
+// - PAR (request_uri) authorization_details override query parameters.
+// - PAR form/query inputs are attacker-controlled but gated by client authentication.
+// - Direct (non-PAR) query/form parameters are attacker-controlled on the public network.
+
+rule Client_Authenticate:
+  [ Fr(~sid) ]
+  --[ ClientAuthenticated(~sid) ]->
+  [ ClientAuth(~sid) ]
+
+rule Par_Submit_RequestObject:
+  [ ClientAuth(sid), Fr(~ro_details) ]
+  --[ ParSubmission(sid),
+      RequestObjectProvided(sid, ~ro_details),
+      ParStored(sid, ~ro_details) ]->
+  [ !ParAuthDetails(sid, ~ro_details) ]
+
+rule Par_Submit_Form:
+  [ ClientAuth(sid), In(form_details) ]
+  --[ ParSubmission(sid),
+      FormProvided(sid, form_details),
+      FormInjected(sid, form_details),
+      ParStored(sid, form_details) ]->
+  [ !ParAuthDetails(sid, form_details) ]
+
+rule Par_Submit_RequestObject_Overrides_Form:
+  [ ClientAuth(sid), Fr(~ro_details), In(form_details) ]
+  --[ ParSubmission(sid),
+      RequestObjectProvided(sid, ~ro_details),
+      FormProvided(sid, form_details),
+      FormInjected(sid, form_details),
+      ParStored(sid, ~ro_details) ]->
+  [ !ParAuthDetails(sid, ~ro_details) ]
+
+rule Authorize_With_PAR_NoQuery:
+  [ !ParAuthDetails(sid, details) ]
+  --[ ParUsed(sid),
+      AuthDetailsSelected(sid, details) ]->
+  [ ]
+
+rule Authorize_With_PAR_And_Query:
+  [ !ParAuthDetails(sid, details), In(query_details) ]
+  --[ ParUsed(sid),
+      QueryProvided(sid, query_details),
+      QueryInjected(sid, query_details),
+      AuthDetailsSelected(sid, details) ]->
+  [ ]
+
+rule Authorize_Direct_RequestObject:
+  [ Fr(~sid), Fr(~ro_details) ]
+  --[ DirectRequest(~sid),
+      RequestObjectProvided(~sid, ~ro_details),
+      AuthDetailsSelected(~sid, ~ro_details) ]->
+  [ ]
+
+rule Authorize_Direct_Form:
+  [ Fr(~sid), In(form_details) ]
+  --[ DirectRequest(~sid),
+      FormProvided(~sid, form_details),
+      FormInjected(~sid, form_details),
+      AuthDetailsSelected(~sid, form_details) ]->
+  [ ]
+
+rule Authorize_Direct_Query:
+  [ Fr(~sid), In(query_details) ]
+  --[ DirectRequest(~sid),
+      QueryProvided(~sid, query_details),
+      QueryInjected(~sid, query_details),
+      AuthDetailsSelected(~sid, query_details) ]->
+  [ ]
+
+rule Authorize_Direct_RequestObject_Overrides_Query:
+  [ Fr(~sid), Fr(~ro_details), In(query_details) ]
+  --[ DirectRequest(~sid),
+      RequestObjectProvided(~sid, ~ro_details),
+      QueryProvided(~sid, query_details),
+      QueryInjected(~sid, query_details),
+      AuthDetailsSelected(~sid, ~ro_details) ]->
+  [ ]
+
+rule Authorize_Direct_RequestObject_Overrides_Form:
+  [ Fr(~sid), Fr(~ro_details), In(form_details) ]
+  --[ DirectRequest(~sid),
+      RequestObjectProvided(~sid, ~ro_details),
+      FormProvided(~sid, form_details),
+      FormInjected(~sid, form_details),
+      AuthDetailsSelected(~sid, ~ro_details) ]->
+  [ ]
+
+lemma par_authorization_details_used:
+  "All sid details #i.
+    AuthDetailsSelected(sid, details) @ i &
+    ParUsed(sid) @ i ==> Ex #j. ParStored(sid, details) @ j"
+
+lemma par_storage_requires_auth:
+  "All sid details #i.
+    ParStored(sid, details) @ i ==> Ex #j. ClientAuthenticated(sid) @ j"
+
+lemma par_precedence_over_query:
+  "All sid sel_details par_details query_details #i #j #k.
+    AuthDetailsSelected(sid, sel_details) @ i &
+    ParStored(sid, par_details) @ j &
+    QueryProvided(sid, query_details) @ k ==> sel_details = par_details"
+
+lemma request_object_precedence_over_query:
+  "All sid sel_details ro_details query_details #i #j #k.
+    AuthDetailsSelected(sid, sel_details) @ i &
+    RequestObjectProvided(sid, ro_details) @ j &
+    QueryProvided(sid, query_details) @ k ==> sel_details = ro_details"
+
+lemma request_object_precedence_over_form:
+  "All sid sel_details ro_details form_details #i #j #k.
+    AuthDetailsSelected(sid, sel_details) @ i &
+    RequestObjectProvided(sid, ro_details) @ j &
+    FormProvided(sid, form_details) @ k ==> sel_details = ro_details"
+
+lemma request_object_overrides_form_in_par:
+  "All sid par_details ro_details form_details #i #j #k.
+    ParStored(sid, par_details) @ i &
+    RequestObjectProvided(sid, ro_details) @ j &
+    FormProvided(sid, form_details) @ k ==> par_details = ro_details"
+
+end

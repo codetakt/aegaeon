@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+exec > >(tee /var/log/aegaeon-user-data.log | logger -t aegaeon-user-data -s 2>/dev/console) 2>&1
+set -x
+
+echo "[aegaeon-user-data] starting loadgen bootstrap at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+mkdir -p /etc/aegaeon
+mkdir -p /opt/aegaeon/results
+chown 1000:1000 /opt/aegaeon/results || true
+chmod 0755 /opt/aegaeon/results || true
+
+dnf_install() {
+  local -a packages=("$@")
+  local attempts=5
+  local delay_secs=5
+
+  for attempt in $(seq 1 "$attempts"); do
+    if dnf install -y "$${packages[@]}"; then
+      return 0
+    fi
+    echo "[aegaeon-user-data] dnf install failed (attempt $${attempt}/$${attempts}); retrying in $${delay_secs}s..." >&2
+    sleep "$delay_secs"
+  done
+
+  return 1
+}
+
+if ! command -v curl >/dev/null 2>&1; then
+  dnf_install curl || dnf_install curl-minimal
+fi
+
+if ! command -v aws >/dev/null 2>&1; then
+  dnf_install awscli
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  if ! dnf_install docker; then
+    dnf_install podman podman-docker
+  fi
+fi
+
+systemctl enable --now amazon-ssm-agent || true
+if systemctl cat docker.service >/dev/null 2>&1; then
+  systemctl enable --now docker.service
+fi
+
+cat >/etc/aegaeon/loadtest.env <<EOF
+SERVER_URL=${server_url}
+SERVER_IMAGE=${server_image}
+ARTIFACT_BUCKET=${artifact_bucket}
+ARTIFACT_PREFIX=${artifact_prefix}
+WORKERS=${workers}
+RPS=${rps}
+RUN_TIME=${run_time}
+WARMUP=${warmup}
+SCENARIO=${scenario}
+EOF
+
+cat >/etc/aegaeon/registry.env <<EOF
+AWS_REGION=${aws_region}
+AWS_DEFAULT_REGION=${aws_region}
+GHCR_AUTH_ENABLED=${ghcr_auth_enabled ? "1" : "0"}
+GHCR_USERNAME=${ghcr_username}
+GHCR_TOKEN_SSM_PARAMETER_NAME=${ghcr_token_ssm_parameter_name}
+GHCR_TOKEN_SECRETSMANAGER_SECRET_ID=${ghcr_token_secretsmanager_secret}
+EOF
+
+cat >/usr/local/bin/aegaeon-docker-login <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE_REF="$${1:-}"
+if [[ -z "$IMAGE_REF" ]]; then
+  exit 0
+fi
+
+if [[ ! -f /etc/aegaeon/registry.env ]]; then
+  exit 0
+fi
+
+set -a
+source /etc/aegaeon/registry.env
+set +a
+
+REGISTRY="$(echo "$IMAGE_REF" | cut -d/ -f1)"
+if [[ "$REGISTRY" != "ghcr.io" ]]; then
+  exit 0
+fi
+
+if [[ "$${GHCR_AUTH_ENABLED:-0}" != "1" ]]; then
+  exit 0
+fi
+
+if [[ -z "$${GHCR_USERNAME:-}" && -z "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}" && -z "$${GHCR_TOKEN_SECRETSMANAGER_SECRET_ID:-}" ]]; then
+  exit 0
+fi
+
+if [[ -z "$${GHCR_USERNAME:-}" ]]; then
+  echo "[aegaeon] GHCR auth enabled but GHCR_USERNAME is empty" >&2
+  exit 1
+fi
+
+detect_region() {
+  if [[ -n "$${AWS_REGION:-}" ]]; then
+    echo "$AWS_REGION"
+    return 0
+  fi
+  if [[ -n "$${AWS_DEFAULT_REGION:-}" ]]; then
+    echo "$AWS_DEFAULT_REGION"
+    return 0
+  fi
+
+  local token region az identity
+  token="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+
+  region="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/region" 2>/dev/null || true)"
+  if [[ -n "$region" ]]; then
+    echo "$region"
+    return 0
+  fi
+
+  az="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/availability-zone" 2>/dev/null || true)"
+  if [[ -n "$az" ]]; then
+    echo "$${az::-1}"
+    return 0
+  fi
+
+  identity="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/dynamic/instance-identity/document" 2>/dev/null || true)"
+  region="$(echo "$identity" | tr -d '\n' | sed -n 's/.*\"region\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')"
+  echo "$region"
+}
+
+region="$(detect_region || true)"
+if [[ -z "$region" ]]; then
+  echo "[aegaeon] failed to detect AWS region for GHCR token retrieval" >&2
+  exit 1
+fi
+
+if [[ -n "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}" ]]; then
+  AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
+    aws ssm get-parameter \
+      --with-decryption \
+      --name "$GHCR_TOKEN_SSM_PARAMETER_NAME" \
+      --query 'Parameter.Value' \
+      --output text \
+    | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin >/dev/null
+  exit 0
+fi
+
+if [[ -n "$${GHCR_TOKEN_SECRETSMANAGER_SECRET_ID:-}" ]]; then
+  AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
+    aws secretsmanager get-secret-value \
+      --secret-id "$GHCR_TOKEN_SECRETSMANAGER_SECRET_ID" \
+      --query 'SecretString' \
+      --output text \
+    | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin >/dev/null
+  exit 0
+fi
+
+echo "[aegaeon] GHCR auth enabled but no token source is configured (set GHCR_TOKEN_SSM_PARAMETER_NAME or GHCR_TOKEN_SECRETSMANAGER_SECRET_ID)" >&2
+exit 1
+EOF
+
+chmod +x /usr/local/bin/aegaeon-docker-login
+
+cat >/usr/local/bin/aegaeon-run-loadtest <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+set -a
+source /etc/aegaeon/loadtest.env
+set +a
+
+export DOCKER_CONFIG="/run/aegaeon-loadtest-docker"
+mkdir -p "$${DOCKER_CONFIG}"
+chmod 0700 "$${DOCKER_CONFIG}"
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(cat /proc/sys/kernel/random/uuid)"
+OUT_DIR="/opt/aegaeon/results/$${RUN_ID}"
+mkdir -p "$${OUT_DIR}"
+chown 1000:1000 "$${OUT_DIR}" || true
+
+echo "[perf] waiting for server health at $${SERVER_URL%/}/health..."
+for _ in $(seq 1 120); do
+  if curl -fsS "$${SERVER_URL%/}/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+echo "[perf] pulling image $${SERVER_IMAGE}..."
+/usr/local/bin/aegaeon-docker-login "$${SERVER_IMAGE}"
+docker pull "$${SERVER_IMAGE}"
+
+SERVER_ENTRYPOINT="$(docker inspect "$${SERVER_IMAGE}" --format '{{ index .Config.Entrypoint 0 }}')"
+WORKSPACE_BIN_DIR="$(dirname "$${SERVER_ENTRYPOINT}")"
+LOADTEST_BIN="$${WORKSPACE_BIN_DIR}/aegaeon-loadtest"
+
+echo "[perf] running load test (scenario=$${SCENARIO}, workers=$${WORKERS}, rps=$${RPS}, run_time=$${RUN_TIME})..."
+set +e
+docker run --rm \
+  --network host \
+  --entrypoint "$${LOADTEST_BIN}" \
+  -v "$${OUT_DIR}:/results" \
+  "$${SERVER_IMAGE}" \
+  --url "$${SERVER_URL}" \
+  --workers "$${WORKERS}" \
+  --run-time "$${RUN_TIME}" \
+  --warmup "$${WARMUP}" \
+  --rps "$${RPS}" \
+  --scenario "$${SCENARIO}" \
+  --report-file "/results/report.json" \
+  >"$${OUT_DIR}/loadtest.stdout.log" 2>"$${OUT_DIR}/loadtest.stderr.log"
+LOADTEST_EXIT_CODE="$?"
+set -e
+
+echo "$${LOADTEST_EXIT_CODE}" >"$${OUT_DIR}/exit_code.txt"
+
+if [[ ! -f "$${OUT_DIR}/report.json" ]]; then
+  echo "[perf] load test failed before producing report.json (exit_code=$${LOADTEST_EXIT_CODE})" >&2
+  if [[ -f "$${OUT_DIR}/loadtest.stderr.log" ]]; then
+    echo "[perf] loadtest.stderr.log (tail):" >&2
+    tail -n 200 "$${OUT_DIR}/loadtest.stderr.log" >&2 || true
+  fi
+  exit "$${LOADTEST_EXIT_CODE}"
+fi
+
+if [[ -n "$${ARTIFACT_BUCKET}" ]]; then
+  DEST_PREFIX="s3://$${ARTIFACT_BUCKET}/$${ARTIFACT_PREFIX}$${RUN_ID}/"
+  echo "[perf] uploading artifacts to $${DEST_PREFIX}..."
+  aws s3 cp "$${OUT_DIR}/report.json" "$${DEST_PREFIX}report.json"
+  aws s3 cp "$${OUT_DIR}/loadtest.stdout.log" "$${DEST_PREFIX}loadtest.stdout.log" || true
+  aws s3 cp "$${OUT_DIR}/loadtest.stderr.log" "$${DEST_PREFIX}loadtest.stderr.log" || true
+  aws s3 cp "$${OUT_DIR}/exit_code.txt" "$${DEST_PREFIX}exit_code.txt" || true
+
+  curl -fsS "$${SERVER_URL%/}/metrics" >"$${OUT_DIR}/server.metrics.prom" || true
+  if [[ -f "$${OUT_DIR}/server.metrics.prom" ]]; then
+    aws s3 cp "$${OUT_DIR}/server.metrics.prom" "$${DEST_PREFIX}server.metrics.prom" || true
+  fi
+fi
+
+if [[ "$${LOADTEST_EXIT_CODE}" -ne 0 ]]; then
+  echo "[perf] NOTE: load test returned non-zero (exit_code=$${LOADTEST_EXIT_CODE}); report.json was produced and uploaded." >&2
+fi
+
+echo "[perf] done; local results at $${OUT_DIR}"
+EOF
+
+chmod +x /usr/local/bin/aegaeon-run-loadtest
+
+cat >/etc/systemd/system/aegaeon-loadtest.service <<'EOF'
+[Unit]
+Description=Aegaeon load test (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/bash -lc 'if systemctl cat docker.service >/dev/null 2>&1; then systemctl start docker.service; fi'
+ExecStart=/usr/local/bin/aegaeon-run-loadtest
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+
+%{ if auto_run_loadtest }
+systemctl start aegaeon-loadtest.service
+%{ endif }

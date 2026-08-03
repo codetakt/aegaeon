@@ -1,0 +1,26 @@
+// EverParse schema for the canonical (binary) DPoP claims layout.
+//
+// This schema validates the length-prefixed buffer produced by the Rust FFI
+// encoder in `ffi::verify_dpop` before semantic checks are applied.
+//
+// Note: This schema is NOT a JSON parser. It validates an internal
+// canonical encoding (len||bytes) that is derived from already-parsed JWT
+// claims, as defense-in-depth for the FFI boundary.
+
+typedef struct _len_prefixed_bytes {
+  UINT32 len;
+  UINT8 bytes[len];
+} len_prefixed_bytes;
+
+// DPoP claims canonical layout:
+//   htm||htu||iat||jti||ath||nonce
+//
+// Optional fields (`ath`, `nonce`) are encoded as a zero-length byte array when absent.
+entrypoint typedef struct _dpop_claims {
+  len_prefixed_bytes htm;
+  len_prefixed_bytes htu;
+  UINT64 iat;
+  len_prefixed_bytes jti;
+  len_prefixed_bytes ath;
+  len_prefixed_bytes nonce;
+} dpop_claims;

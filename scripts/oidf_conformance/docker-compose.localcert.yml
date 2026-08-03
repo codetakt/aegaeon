@@ -1,0 +1,20 @@
+services:
+  suite:
+    environment:
+      OIDF_LOCAL_CA_CERT_FILENAME: ${OIDF_LOCAL_CA_CERT_FILENAME:-}
+      SUITE_EXTRA_CA_CERT: ${SUITE_EXTRA_CA_CERT:-}
+    volumes:
+      - ./certificates:/etc/ssl/localcerts:ro
+
+  nginx:
+    # Local certificate override:
+    # Place `${CERT_PRIMARY_DOMAIN}.crt` and `${CERT_PRIMARY_DOMAIN}.key` under:
+    #   scripts/oidf_conformance/certificates/
+    # and run compose with:
+    #   -f scripts/oidf_conformance/docker-compose.oidf.yml
+    #   -f scripts/oidf_conformance/docker-compose.localcert.yml
+    volumes:
+      # Override the base `/etc/letsencrypt:ro` mount to be writable so Docker can create the
+      # `/etc/letsencrypt/certificates` mount point for the local bind.
+      - oidf_letsencrypt:/etc/letsencrypt
+      - ./certificates:/etc/letsencrypt/certificates:ro

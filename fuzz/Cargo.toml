@@ -1,0 +1,62 @@
+[package]
+name = "aegaeon-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+aegaeon-server = { path = "../crates/server", version = "0.9.0-beta" }
+base64 = "0.22"
+ffi = { path = "../crates/ffi", version = "0.9.0-beta" }
+sha2 = "0.10"
+serde_urlencoded = "0.7"
+urlencoding = "2"
+http = "1"
+serde_json = "1.0"
+
+[[bin]]
+name = "fuzz_bearer_token"
+path = "fuzz_targets/fuzz_bearer_token.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_dpop_proof"
+path = "fuzz_targets/fuzz_dpop_proof.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_pkce_verifier"
+path = "fuzz_targets/fuzz_pkce_verifier.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_jose_parsing"
+path = "fuzz_targets/fuzz_jose_parsing.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_ffi_parsers"
+path = "fuzz_targets/fuzz_ffi_parsers.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_introspection"
+path = "fuzz_targets/fuzz_introspection.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_par"
+path = "fuzz_targets/fuzz_par.rs"
+test = false
+doc = false

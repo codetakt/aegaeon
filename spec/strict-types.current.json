@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "required_base_flags": {
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "useUnknownInCatchVariables": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": false,
+    "allowJs": false,
+    "checkJs": false
+  },
+  "package_tsconfig_paths": [
+    "packages/verified-core/tsconfig.json",
+    "packages/issuer-spa/tsconfig.json",
+    "packages/runtime-node/tsconfig.json",
+    "packages/runtime-web/tsconfig.json",
+    "packages/management-client/tsconfig.json",
+    "packages/rp-core/tsconfig.json"
+  ],
+  "additional_tsconfig_requirements": [
+    {
+      "path": "tsconfig.tests.node.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    },
+    {
+      "path": "tsconfig.tools.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    },
+    {
+      "path": "packages/issuer-spa/tsconfig.test.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    },
+    {
+      "path": "packages/management-client/tsconfig.test.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    },
+    {
+      "path": "packages/rp-core/tsconfig.test.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    },
+    {
+      "path": "tsconfig.tests.browser.json",
+      "required_flags": {
+        "strict": true,
+        "useUnknownInCatchVariables": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true
+      }
+    }
+  ],
+  "forbidden_false_overrides": [
+    "strict",
+    "strictNullChecks",
+    "exactOptionalPropertyTypes",
+    "noUncheckedIndexedAccess",
+    "noImplicitAny",
+    "useUnknownInCatchVariables",
+    "noImplicitOverride"
+  ],
+  "required_no_tsnocheck_paths": [
+    "tools-src/build-hosted-release-readiness-report.ts",
+    "tools-src/build-managed-provider-evidence.ts",
+    "tools-src/build-publish-manifest.ts",
+    "tools-src/build-release-attestation.ts",
+    "tools-src/build-release-publication-bundle.ts",
+    "tools-src/build-released-client-claim-report.ts",
+    "tools-src/build-workspace-sbom.ts",
+    "tools-src/check-branch-protection.ts",
+    "tools-src/check-client-claim-promotion.ts",
+    "tools-src/check-hosted-evidence-sources.ts",
+    "tools-src/check-managed-provider-readiness.ts",
+    "tools-src/check-no-js-source.ts",
+    "tools-src/check-release-attestation-signature.ts",
+    "tools-src/check-release-custody.ts",
+    "tools-src/check-released-client-claim-activation.ts",
+    "tools-src/check-released-client-readiness.ts",
+    "tools-src/check-repository-settings.ts",
+    "tools-src/check-strict-types.ts",
+    "tools-src/check-workflow-inventory.ts",
+    "tools-src/download-admin-sdk-evidence.ts",
+    "tools-src/download-core-release.ts",
+    "tools-src/download-managed-provider-evidence.ts",
+    "tools-src/exec-tool.ts",
+    "tools-src/export-sdk-dispatch-env.ts",
+    "tools-src/fetch-core.ts",
+    "tools-src/import-managed-provider-evidence.ts",
+    "tools-src/materialize-sdk-dispatch-payload.ts",
+    "tools-src/materialize-verified-core-public-key.ts",
+    "tools-src/released-client-types.ts",
+    "tools-src/run-client-evidence-gates.ts",
+    "tools-src/run-hosted-evidence.ts",
+    "tools-src/run-real-tenant-readiness.ts",
+    "tools-src/verify-core.ts"
+  ]
+}

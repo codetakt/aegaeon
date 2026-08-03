@@ -1,0 +1,232 @@
+theory StepUp_ACR_Enforcement
+begin
+
+/*
+ * Step-Up Authentication ACR Enforcement (RFC 9470)
+ *
+ * Extends the minimal stepup_soundness model to cover ACR (Authentication
+ * Context Class Reference) level enforcement. When a resource requires a
+ * higher ACR level than the current session provides, the AS issues an
+ * insufficient_user_authentication challenge. The client must complete
+ * step-up authentication before accessing the resource.
+ *
+ * Protocol overview:
+ * 1. Client requests resource with current session (ACR level L_session)
+ * 2. RS checks required ACR level L_required for the resource
+ * 3. If L_session < L_required → RS returns 401 with
+ *    WWW-Authenticate: Bearer error="insufficient_user_authentication",
+ *    acr_values="<required_acr>"
+ * 4. Client initiates new authorization with acr_values=<required_acr>
+ * 5. AS performs step-up authentication (MFA, etc.)
+ * 6. AS issues new tokens with ACR level ≥ L_required
+ * 7. Client retries resource access with upgraded token
+ *
+ * Security properties:
+ * - acr_level_enforcement: resource access requires sufficient ACR level
+ * - challenge_session_binding: step-up challenge bound to session/client
+ * - no_acr_downgrade: step-up cannot reduce effective ACR level
+ * - step_up_preserves_identity: step-up doesn't change authenticated user
+ * - challenge_single_use: completed challenge cannot be replayed
+ * - max_age_triggers_reauth: expired session auth_time triggers re-authentication
+ *
+ * Modeling approach:
+ * - ACR levels modeled as symbolic constants with ordering restriction
+ * - Sessions carry current ACR level
+ * - Resources declare minimum required ACR level
+ * - Step-up transitions are atomic (challenge → complete → upgrade)
+ *
+ * Threat model:
+ * - Attacker has a valid session at ACR level 'basic'
+ * - Attacker wants to access resources requiring ACR level 'mfa'
+ * - Attacker can replay step-up completion tokens
+ * - Attacker can attempt to downgrade ACR requirements
+ *
+ * Known limitations:
+ * - Two ACR levels modeled ('basic', 'mfa'); generalizable by induction
+ * - max_age is symbolic (no real-valued timestamps)
+ * - auth_time freshness is modeled via linear facts, not clock comparison
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y)@i ==> not(x = y)"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+// ACR level ordering: 'mfa' is strictly higher than 'basic'.
+// This encodes the lattice: basic < mfa.
+// A session at level 'mfa' satisfies requirements for both 'mfa' and 'basic'.
+// A session at level 'basic' satisfies only 'basic'.
+restriction ACR_Ordering:
+  "All level #i.
+     ACR_Sufficient(level, 'basic')@i ==> (level = 'basic' | level = 'mfa')"
+
+restriction ACR_Ordering_MFA:
+  "All level #i.
+     ACR_Sufficient(level, 'mfa')@i ==> level = 'mfa'"
+
+/* ============ Session Management ============ */
+
+// Initial authentication: user logs in with a specific ACR level.
+// auth_time is fresh (models "current time of authentication").
+rule User_Authenticate:
+  [ Fr(~session_id), Fr(~auth_time) ]
+  --[ Session_Created($Client, $User, ~session_id, $acr_level, ~auth_time),
+      Unique(<'session', ~session_id>) ]->
+  [ Session($Client, $User, ~session_id, $acr_level, ~auth_time),
+    !Session_Principal($Client, $User, ~session_id) ]
+
+/* ============ Resource Access Control ============ */
+
+// Resource declares minimum ACR requirement
+rule Resource_ACR_Policy:
+  [ ]
+  --[ Resource_Requires($Resource, $min_acr),
+      Unique(<'resource_policy', $Resource>) ]->
+  [ !Resource_Policy($Resource, $min_acr) ]
+
+// Access granted: session ACR level meets resource requirement.
+// ACR_Sufficient action fact is checked by restrictions above.
+rule Access_Granted:
+  [ Session($Client, $User, session_id, session_acr, auth_time),
+    !Resource_Policy($Resource, required_acr) ]
+  --[ ACR_Sufficient(session_acr, required_acr),
+      Access_Granted($Client, $User, $Resource, session_id, session_acr),
+      Session_ACR_At_Access(session_id, session_acr) ]->
+  [ // Return session so it can be used again
+    Session($Client, $User, session_id, session_acr, auth_time) ]
+
+// Access denied: session ACR level insufficient → challenge issued.
+// The challenge is bound to the session, client, and required ACR.
+rule Access_Denied_Challenge:
+  [ Session($Client, $User, session_id, session_acr, auth_time),
+    !Resource_Policy($Resource, required_acr),
+    Fr(~challenge_id) ]
+  --[ Neq(session_acr, required_acr),
+      Neq(required_acr, 'basic'),
+      Eq(session_acr, 'basic'),
+      Challenge_Issued($Client, $User, ~challenge_id, session_id, required_acr),
+      Unique(<'challenge', ~challenge_id>) ]->
+  [ // Session persists (not consumed — user still has their basic session)
+    Session($Client, $User, session_id, session_acr, auth_time),
+    // Challenge is a linear fact — single-use
+    StepUp_Challenge($Client, $User, ~challenge_id, session_id, required_acr) ]
+
+/* ============ Step-Up Authentication ============ */
+
+// User completes step-up authentication (e.g., MFA prompt).
+// The challenge is consumed (linear fact — DA-5 style single-use).
+// A new upgraded session is created with the higher ACR level.
+rule StepUp_Complete:
+  [ StepUp_Challenge($Client, $User, challenge_id, session_id, target_acr),
+    !Session_Principal($Client, $User, session_id),
+    // Old session consumed — replaced by upgraded session
+    Session($Client, $User, session_id, old_acr, old_auth_time),
+    Fr(~new_auth_time) ]
+  --[ StepUp_Completed($Client, $User, challenge_id, session_id, target_acr),
+      Session_Upgraded(session_id, old_acr, target_acr),
+      Challenge_Consumed(challenge_id),
+      Unique(<'stepup_complete', challenge_id>) ]->
+  [ // Upgraded session with new ACR level and fresh auth_time
+    Session($Client, $User, session_id, target_acr, ~new_auth_time) ]
+
+/* ============ max_age Enforcement ============ */
+
+// Session auth_time becomes stale (models max_age expiry).
+// The session's auth_time is consumed, forcing re-authentication.
+rule Auth_Time_Expire:
+  [ Session($Client, $User, session_id, acr_level, auth_time) ]
+  --[ Auth_Time_Expired($Client, session_id, auth_time),
+      Session_Expired_MaxAge(session_id) ]->
+  [ Expired_Session($Client, $User, session_id, acr_level) ]
+
+// Re-authentication after max_age expiry: user must re-authenticate
+// at the required ACR level. This creates a fresh session.
+rule Reauth_After_MaxAge:
+  [ Expired_Session($Client, $User, session_id, old_acr),
+    !Session_Principal($Client, $User, session_id),
+    Fr(~new_auth_time) ]
+  --[ Reauth_Completed($Client, $User, session_id, $new_acr, ~new_auth_time),
+      Unique(<'reauth', session_id>) ]->
+  [ Session($Client, $User, session_id, $new_acr, ~new_auth_time) ]
+
+/* ============ Security Properties ============ */
+
+// Core property: Resource access requires sufficient ACR level.
+// If access is granted to a resource requiring 'mfa', the session
+// ACR level MUST be 'mfa'.
+lemma acr_level_enforcement:
+  "All client user resource session_id session_acr #i.
+     Access_Granted(client, user, resource, session_id, session_acr)@i
+     ==> Ex required_acr #j.
+           Resource_Requires(resource, required_acr)@j &
+           (Ex #k. ACR_Sufficient(session_acr, required_acr)@k & #k = #i)"
+
+// Challenge is bound to session and client: the step-up challenge
+// references the specific session and client that triggered it.
+lemma challenge_session_binding:
+  "All client user challenge_id session_id target_acr #i.
+     StepUp_Completed(client, user, challenge_id, session_id, target_acr)@i
+     ==> Ex #j.
+           Challenge_Issued(client, user, challenge_id, session_id, target_acr)@j
+           & #j < #i"
+
+// No ACR downgrade: step-up never results in a lower ACR level.
+// If the session was at 'basic' before step-up, the new level is
+// NOT 'basic' (it must be the challenge's target, which was required
+// to be non-basic by Access_Denied_Challenge's Neq constraint).
+// This is non-trivial: the proof must trace new_acr through
+// StepUp_Complete → StepUp_Challenge → Access_Denied_Challenge
+// where Neq(required_acr, 'basic') is enforced.
+lemma no_acr_downgrade:
+  "All session_id old_acr new_acr #i.
+     Session_Upgraded(session_id, old_acr, new_acr)@i &
+     old_acr = 'basic'
+     ==> not(new_acr = 'basic')"
+
+// Step-up preserves identity: the user associated with a session
+// does not change after step-up. The same (client, user) pair holds.
+lemma step_up_preserves_identity:
+  "All client user challenge_id session_id target_acr #i.
+     StepUp_Completed(client, user, challenge_id, session_id, target_acr)@i
+     ==> Ex old_acr old_auth_time #j.
+           Session_Created(client, user, session_id, old_acr, old_auth_time)@j
+           & #j < #i"
+  simplify
+  solve( !Session_Principal(client, user, session_id) ▶₁ #i )
+    case User_Authenticate
+    by contradiction /* from formulas */
+  qed
+
+// Challenge single-use: a completed step-up challenge cannot be
+// replayed. This follows from StepUp_Challenge being a linear fact.
+lemma challenge_single_use:
+  "All client1 client2 user1 user2 cid sid1 sid2 acr1 acr2 #i #j.
+     StepUp_Completed(client1, user1, cid, sid1, acr1)@i &
+     StepUp_Completed(client2, user2, cid, sid2, acr2)@j
+     ==> #i = #j"
+
+// max_age triggers re-authentication: if a session expired (max_age)
+// and access was subsequently granted, then re-authentication must have
+// occurred in between. This follows from:
+// 1. Auth_Time_Expire consumes Session (linear fact)
+// 2. Access_Granted requires Session
+// 3. Only Reauth_After_MaxAge can produce Session from Expired_Session
+// Therefore any post-expiry access implies re-authentication.
+lemma max_age_triggers_reauth:
+  "All client user resource session_id acr #i #j.
+     Session_Expired_MaxAge(session_id)@i &
+     Access_Granted(client, user, resource, session_id, acr)@j &
+     #i < #j
+     ==> Ex new_acr new_auth_time #k.
+           Reauth_Completed(client, user, session_id, new_acr, new_auth_time)@k
+           & #i < #k & #k < #j"
+
+end

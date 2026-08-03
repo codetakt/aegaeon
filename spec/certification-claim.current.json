@@ -1,0 +1,63 @@
+{
+  "$schema": "https://aegaeon.dev/spec/certification-claim.schema.json",
+  "schema_version": 1,
+  "claim_target": "certification",
+  "claim_active": false,
+  "current_public_wording": "beta self-certification and conformance evidence baseline",
+  "future_allowed_wording": "certified for the exact named certification target recorded in this gate",
+  "certification_scope": {
+    "selected": true,
+    "target": "OIDF OpenID Provider Config + Basic internal evidence baseline",
+    "notes": "The Phase 2 internal target is selected for evidence work only. Public certified wording remains blocked until formal external submission, review, and listing evidence are complete."
+  },
+  "required_evidence": [
+    {
+      "id": "scope-selection",
+      "description": "Select the exact certification target before using certified wording.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/certification-phase2-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "internal-evidence-bundle",
+      "description": "Record the Phase 2 internal certification evidence bundle separately from public claim activation.",
+      "status": "complete",
+      "required_for_activation": false,
+      "evidence_uri": "docs/releases/evidence/certification-phase2-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "target-plan-pass-exports",
+      "description": "Every claim-bearing OIDF/OAuth/FAPI plan has archived PASS exports, suite commit, plan JSON, result JSON, and release index links before public certified wording is activated.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/certification-phase2-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "review-warning-skip-disposition",
+      "description": "All REVIEW, WARNING, and SKIPPED modules are resolved or documented as outside the claimed certification scope.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/certification-phase2-internal-bundle.json",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "formal-submission",
+      "description": "If formal OIDF or similar certification is claimed, fee, legal, submission, review, and public listing steps are complete.",
+      "status": "planned",
+      "required_for_activation": true,
+      "evidence_uri": null,
+      "owner": "aegaeon"
+    },
+    {
+      "id": "positioning-scope-update",
+      "description": "Product positioning names the exact certified scope and does not imply broader protocol, deployment, or UI certification.",
+      "status": "planned",
+      "required_for_activation": true,
+      "evidence_uri": "docs/product-positioning.md",
+      "owner": "aegaeon"
+    }
+  ]
+}

@@ -1,0 +1,241 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory JwtBearerGrant] Theory loaded
+[Theory JwtBearerGrant] Theory translated
+[Theory JwtBearerGrant] Derivation checks started
+[Theory JwtBearerGrant] Derivation checks ended
+[Theory JwtBearerGrant] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory JwtBearerGrant begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register_Client:
+   [ Fr( ~sk_client ) ]
+  --[ ClientRegistered( $Client, pk(~sk_client) ) ]->
+   [
+   !ClientSK( $Client, ~sk_client ), !ClientPK( $Client, pk(~sk_client) ),
+   Out( $Client ), Out( pk(~sk_client) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Issues_JwtBearer_Assertion:
+   [ !ClientSK( $Client, sk_client ), Fr( ~sub ), Fr( ~jti ) ]
+  --[
+  JwtBearerRequest( $Client, $AS, ~sub, ~jti ),
+  Unique( <'jwt_bearer_jti', $Client, ~jti> )
+  ]->
+   [
+   Out( <$Client, $AS, <'jwt_bearer', $Client, $AS, ~sub, ~jti>,
+         sign(<'jwt_bearer', $Client, $AS, ~sub, ~jti>, sk_client)>
+   ),
+   UsedJti( $Client, ~jti )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Validates_JwtBearer:
+   [
+   In( <$Client, $AS, <'jwt_bearer', $Client, $AS, sub, jti>, sig> ),
+   !ClientPK( $Client, pk_client ), UsedJti( $Client, jti )
+   ]
+  --[
+  Eq( verify(sig, <'jwt_bearer', $Client, $AS, sub, jti>, pk_client), true
+  ),
+  JwtBearerAccepted( $AS, $Client, sub, jti ),
+  JwtBearerTokenIssued( $AS, $Client, sub, jti )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) AS_Validates_JwtBearer:
+     [
+     In( <$Client, $AS, <'jwt_bearer', $Client, $AS, sub, jti>, sig> ),
+     !ClientPK( $Client, pk_client ), UsedJti( $Client, jti )
+     ]
+    --[
+    Eq( z, true ), JwtBearerAccepted( $AS, $Client, sub, jti ),
+    JwtBearerTokenIssued( $AS, $Client, sub, jti )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. $AS   = $AS.10
+       $Client
+             = $Client.11
+       jti   = jti.12
+       pk_client
+             = pk_client.13
+       sig   = sig.14
+       sub   = sub.15
+       z     = verify(sig.14,
+                      <'jwt_bearer', $Client.11, $AS.10, sub.15, jti.12>, pk_client.13)
+
+    2. $AS   = $AS.14
+       $Client
+             = $Client.15
+       jti   = jti.16
+       pk_client
+             = pk(x.25)
+       sig   = sign(<'jwt_bearer', $Client.15, $AS.14, sub.19, jti.16>, x.25)
+       sub   = sub.19
+       z     = true
+  */
+
+lemma jwt_bearer_grant_integrity:
+  all-traces
+  "∀ as client sub jti #i.
+    (JwtBearerTokenIssued( as, client, sub, jti ) @ #i) ⇒
+    (∃ #j. (JwtBearerRequest( client, as, sub, jti ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client sub jti #i.
+  (JwtBearerTokenIssued( as, client, sub, jti ) @ #i)
+ ∧
+  ∀ #j. (JwtBearerRequest( client, as, sub, jti ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+  case Register_Client
+  solve( UsedJti( $Client, jti ) ▶₂ #i )
+    case Client_Issues_JwtBearer_Assertion
+    solve( !KU( sign(<'jwt_bearer', $Client, $AS, sub, ~jti>, ~sk_client)
+           ) @ #vk.12 )
+      case Client_Issues_JwtBearer_Assertion
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~sk_client ) @ #vk.13 )
+    qed
+  qed
+qed
+
+lemma jwt_bearer_unforgeability:
+  all-traces
+  "∀ as client sub jti #i.
+    (JwtBearerAccepted( as, client, sub, jti ) @ #i) ⇒
+    (∃ pk #j. (ClientRegistered( client, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client sub jti #i.
+  (JwtBearerAccepted( as, client, sub, jti ) @ #i)
+ ∧
+  ∀ pk #j. (ClientRegistered( client, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+  case Register_Client
+  by contradiction /* from formulas */
+qed
+
+lemma jwt_bearer_no_replay:
+  all-traces
+  "∀ as client sub1 sub2 jti #i #j.
+    ((JwtBearerTokenIssued( as, client, sub1, jti ) @ #i) ∧
+     (JwtBearerTokenIssued( as, client, sub2, jti ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client sub1 sub2 jti #i #j.
+  (JwtBearerTokenIssued( as, client, sub1, jti ) @ #i) ∧
+  (JwtBearerTokenIssued( as, client, sub2, jti ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+    case Register_Client
+    solve( UsedJti( $Client, jti ) ▶₂ #i )
+      case Client_Issues_JwtBearer_Assertion
+      solve( !ClientPK( $Client, pk(x) ) ▶₁ #j )
+        case Register_Client
+        solve( UsedJti( $Client, ~jti ) ▶₂ #j )
+          case Client_Issues_JwtBearer_Assertion
+          by contradiction /* cyclic */
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+    case Register_Client
+    solve( UsedJti( $Client, jti ) ▶₂ #i )
+      case Client_Issues_JwtBearer_Assertion
+      solve( !ClientPK( $Client, pk(x) ) ▶₁ #j )
+        case Register_Client
+        solve( UsedJti( $Client, ~jti ) ▶₂ #j )
+          case Client_Issues_JwtBearer_Assertion
+          by contradiction /* cyclic */
+        qed
+      qed
+    qed
+  qed
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./jwt_bearer/jwt_bearer_security.spthy
+
+  processing time: 0.56s
+
+  jwt_bearer_grant_integrity (all-traces): verified (6 steps)
+  jwt_bearer_unforgeability (all-traces): verified (3 steps)
+  jwt_bearer_no_replay (all-traces): verified (12 steps)
+
+==============================================================================

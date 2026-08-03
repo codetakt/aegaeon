@@ -1,0 +1,217 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory JAR_PAR_Fixation] Theory loaded
+[Theory JAR_PAR_Fixation] Theory translated
+[Theory JAR_PAR_Fixation] Derivation checks started
+[Open Chains] Too many chain constraints, stopping precomputation. Open Chains limits (can be changed with -c=): 10
+[Theory JAR_PAR_Fixation] Derivation checks ended
+[Theory JAR_PAR_Fixation] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Open Chains] Too many chain constraints, stopping precomputation. Open Chains limits (can be changed with -c=): 10
+[Saturating Sources] Step 2 (Max 5)
+[Saturating Sources] Done
+theory JAR_PAR_Fixation begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register_Client:
+   [ Fr( ~sk_client ) ]
+  --[ ClientRegistered( $Client, pk(~sk_client) ) ]->
+   [
+   !ClientKey( $Client, ~sk_client ), Out( $Client ), Out( pk(~sk_client) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) PAR_Request_With_JAR:
+   [
+   !ClientKey( $Client, sk_client ), Fr( ~state ), Fr( ~code_verifier ),
+   Fr( ~jti_ro ), Fr( ~redirect_uri )
+   ]
+  --[
+  JARRequest( $Client, $AS,
+              <'request_object', $Client, $AS, ~redirect_uri, ~state,
+               h(~code_verifier), 'openid', ~jti_ro>
+  ),
+  Unique( <'jar_jti', ~jti_ro> )
+  ]->
+   [
+   Out( <$Client, $AS, ~redirect_uri, ~state, h(~code_verifier),
+         <'request_object', $Client, $AS, ~redirect_uri, ~state,
+          h(~code_verifier), 'openid', ~jti_ro>,
+         sign(<'request_object', $Client, $AS, ~redirect_uri, ~state,
+               h(~code_verifier), 'openid', ~jti_ro>,
+              sk_client)
+        >
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Process_PAR_With_JAR:
+   [
+   In( <$Client, $AS, outer_ru, outer_state, outer_cc,
+        <'request_object', $Client, $AS, ru, st, cc, scope, jti>, sig>
+   ),
+   !ClientKey( $Client, sk_client ), Fr( ~request_uri )
+   ]
+  --[
+  Eq( verify(sig, <'request_object', $Client, $AS, ru, st, cc, scope, jti>,
+             pk(sk_client)),
+      true
+  ),
+  JARValidated( $AS, $Client, ~request_uri, st, cc, ru, scope, jti ),
+  Unique( <'request_uri', ~request_uri> )
+  ]->
+   [
+   !StoredPAR( ~request_uri, $AS, $Client, st, cc, ru, scope, jti ),
+   Out( ~request_uri )
+   ]
+
+  /*
+  rule (modulo AC) AS_Process_PAR_With_JAR:
+     [
+     In( <$Client, $AS, outer_ru, outer_state, outer_cc,
+          <'request_object', $Client, $AS, ru, st, cc, scope, jti>, sig>
+     ),
+     !ClientKey( $Client, sk_client ), Fr( ~request_uri )
+     ]
+    --[
+    Eq( z, true ),
+    JARValidated( $AS, $Client, ~request_uri, st, cc, ru, scope, jti ),
+    Unique( <'request_uri', ~request_uri> )
+    ]->
+     [
+     !StoredPAR( ~request_uri, $AS, $Client, st, cc, ru, scope, jti ),
+     Out( ~request_uri )
+     ]
+    variants (modulo AC)
+    1. $AS   = $AS.29
+       $Client
+             = $Client.30
+       cc    = cc.32
+       jti   = jti.33
+       ru    = ru.37
+       scope = scope.38
+       sig   = sig.39
+       sk_client
+             = sk_client.40
+       st    = st.41
+       z     = verify(sig.39,
+                      <'request_object', $Client.30, $AS.29, ru.37, st.41, cc.32, scope.38,
+                       jti.33>,
+                      pk(sk_client.40))
+
+    2. $AS   = $AS.29
+       $Client
+             = $Client.30
+       cc    = cc.32
+       jti   = jti.33
+       ru    = ru.37
+       scope = scope.38
+       sig   = sign(<'request_object', $Client.30, $AS.29, ru.37, st.41, cc.32,
+                     scope.38, jti.33>,
+                    sk_client.40)
+       sk_client
+             = sk_client.40
+       st    = st.41
+       z     = true
+  */
+
+rule (modulo E) User_Authorize_With_RequestURI:
+   [
+   In( uri ), !StoredPAR( uri, $AS, $Client, st, cc, ru, scope, jti ),
+   Fr( ~code )
+   ]
+  --[
+  AuthorizationWithPAR( $AS, $Client, st, ~code, ru ),
+  CodeIssued( $AS, $Client, ~code ), Unique( <'code', ~code> )
+  ]->
+   [ Out( <~code, st, $AS> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma jar_parameter_fixation:
+  all-traces
+  "∀ as client st code ru #i.
+    (AuthorizationWithPAR( as, client, st, code, ru ) @ #i) ⇒
+    (∃ uri cc scope jti #j.
+      (JARValidated( as, client, uri, st, cc, ru, scope, jti ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client st code ru #i.
+  (AuthorizationWithPAR( as, client, st, code, ru ) @ #i)
+ ∧
+  ∀ uri cc scope jti #j.
+   (JARValidated( as, client, uri, st, cc, ru, scope, jti ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+simplify
+solve( !StoredPAR( uri, $AS, $Client, st, cc, ru, scope, jti ) ▶₁ #i )
+  case AS_Process_PAR_With_JAR
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./par/jar_par_fixation.spthy
+
+  processing time: 2.96s
+
+  jar_parameter_fixation (all-traces): verified (3 steps)
+
+==============================================================================

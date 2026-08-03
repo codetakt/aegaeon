@@ -1,0 +1,50 @@
+# NOTE: This file is a template processed by the official nginx Docker entrypoint (envsubst).
+
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+server {
+  listen 80;
+  server_name ${AEGAEON_DOMAIN} ${SUITE_DOMAIN};
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen ${NGINX_HTTPS_PORT} ssl http2;
+  server_name ${AEGAEON_DOMAIN};
+
+  ssl_certificate     /etc/letsencrypt/certificates/${CERT_PRIMARY_DOMAIN}.crt;
+  ssl_certificate_key /etc/letsencrypt/certificates/${CERT_PRIMARY_DOMAIN}.key;
+
+  location / {
+    proxy_pass http://aegaeon:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Port ${NGINX_HTTPS_PORT};
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Upgrade $http_upgrade;
+  }
+}
+
+server {
+  listen ${NGINX_HTTPS_PORT} ssl http2;
+  server_name ${SUITE_DOMAIN};
+
+  ssl_certificate     /etc/letsencrypt/certificates/${CERT_PRIMARY_DOMAIN}.crt;
+  ssl_certificate_key /etc/letsencrypt/certificates/${CERT_PRIMARY_DOMAIN}.key;
+
+  location / {
+    proxy_pass http://suite:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Port ${NGINX_HTTPS_PORT};
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Upgrade $http_upgrade;
+  }
+}

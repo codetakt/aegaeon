@@ -1,0 +1,44 @@
+theory CodeReplay
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Authorization code replay attack prevention */
+
+// Code generation with timestamp
+rule Generate_Code:
+  [ Fr(~code), Fr(~nonce) ]
+  --[ CodeIssued($AS, $Client, ~code, ~nonce),
+      Once(~code) ]->
+  [ Code($AS, $Client, ~code, ~nonce) ]
+
+// Code redemption (can only happen once)
+rule Redeem_Code:
+  [ Code($AS, $Client, code, nonce), In(code), Fr(~token) ]
+  --[ CodeRedeemed($AS, $Client, code, nonce),
+      Unique(<'code', code>) ]->
+  [ SecChannel($AS, $Client, ~token) ]
+
+rule Deliver_Token_Securely:
+  [ SecChannel($AS, $Client, token) ]
+  --[ TokenDelivered($AS, $Client, token) ]->
+  [ !ClientToken($Client, token) ]
+
+// Security properties
+lemma code_single_use:
+  "All AS C code n1 n2 #i #j.
+    CodeRedeemed(AS, C, code, n1) @ i &
+    CodeRedeemed(AS, C, code, n2) @ j ==>
+    #i = #j"
+
+lemma code_freshness:
+  "All AS C code nonce #i. CodeRedeemed(AS, C, code, nonce) @ i ==>
+    Ex #j. CodeIssued(AS, C, code, nonce) @ j & j < i"
+
+restriction once:
+  "All x #i #j. Once(x) @ i & Once(x) @ j ==> #i = #j"
+
+restriction unique:
+  "All x #i #j. Unique(x) @ i & Unique(x) @ j ==> #i = #j"
+
+end

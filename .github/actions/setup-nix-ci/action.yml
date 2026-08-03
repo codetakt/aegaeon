@@ -1,0 +1,54 @@
+name: Setup Nix CI
+description: Standardize Nix setup, runner cleanup, and binary cache enablement.
+
+inputs:
+  extra-conf:
+    description: Additional nix.conf content for the installer.
+    required: false
+    default: experimental-features = nix-command flakes
+  free-disk:
+    description: Run the hosted-runner disk cleanup step.
+    required: false
+    default: "false"
+  enable-flakehub-cache:
+    description: Enable the FlakeHub binary cache.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Free disk space (GitHub hosted runner)
+      if: ${{ inputs.free-disk == 'true' }}
+      shell: bash
+      run: |
+        set -euxo pipefail
+        df -h
+        if command -v sudo >/dev/null 2>&1; then
+          SUDO="sudo"
+        else
+          SUDO=""
+        fi
+        $SUDO rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+        $SUDO docker system prune -af || true
+        $SUDO apt-get clean || true
+        df -h
+
+    - name: Install Nix
+      uses: DeterminateSystems/nix-installer-action@v21
+      with:
+        extra-conf: ${{ inputs.extra-conf }}
+        github-token: ${{ github.token }}
+
+    - name: Remove /homeless-shelter (Nix purity)
+      shell: bash
+      run: |
+        if command -v sudo >/dev/null 2>&1; then
+          sudo rm -rf /homeless-shelter || true
+        else
+          rm -rf /homeless-shelter || true
+        fi
+
+    - name: Enable FlakeHub cache
+      if: ${{ inputs.enable-flakehub-cache == 'true' }}
+      uses: DeterminateSystems/flakehub-cache-action@v1

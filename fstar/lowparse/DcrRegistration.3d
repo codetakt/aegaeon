@@ -1,0 +1,47 @@
+// EverParse schema for a minimal, canonical DCR registration payload.
+//
+// This schema is not a JSON parser. It validates an internal binary encoding
+// produced by the Rust policy layer before it is passed across the FFI boundary.
+//
+// Field layout is intentionally aligned with `fstar/lowparse/DCR.3d` where
+// possible (presence flag + length + bytes).
+
+entrypoint typedef struct _dcr_registration_payload {
+  // Required: redirect URIs (concatenated canonical bytes)
+  UINT32 redirect_uris_length;
+  UINT8 redirect_uris[redirect_uris_length];
+
+  // Optional: token_endpoint_auth_method (enum)
+  UINT8 has_token_endpoint_auth_method;
+  UINT32 token_endpoint_auth_method;
+
+  // PKCE declaration (required)
+  UINT8 requires_pkce;
+
+  // Optional: sender-constrained token requirement
+  UINT8 has_require_sender_constrained_tokens;
+  UINT8 require_sender_constrained_tokens;
+
+  // Optional: allowed sender constraint methods (canonical bytes)
+  UINT8 has_sender_constrained_methods;
+  UINT32 sender_constrained_methods_length;
+  UINT8 sender_constrained_methods[sender_constrained_methods_length];
+
+  // Optional: DPoP requirement flag
+  UINT8 has_require_dpop;
+  UINT8 require_dpop;
+
+  // Optional: mTLS requirement flag
+  UINT8 has_require_mtls;
+  UINT8 require_mtls;
+
+  // Optional: client display name
+  UINT8 has_client_name;
+  UINT32 client_name_length;
+  UINT8 client_name[client_name_length];
+
+  // Optional: software_id
+  UINT8 has_software_id;
+  UINT32 software_id_length;
+  UINT8 software_id[software_id_length];
+} dcr_registration_payload;

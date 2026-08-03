@@ -1,0 +1,6 @@
+- description: "Example JWE using dir and C20P"
+  alg: dir
+  enc: C20P
+  key: "HJJApetV04rzM4iGBPa18Ec5F8FAK4AJncpcvCBwdcA"
+  payload: "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it."
+  token: "eyJhbGciOiJkaXIiLCJlbmMiOiJDMjBQIn0..AAAAAAECAwQFBgcI.Ya-WGWKbX-Ej0DDhmPxE8VqfXLNwQfTP8UBmRcd1gKRROOBeIxsWvv6exkdqRGfzv6OjMX8BCkbe5Dt1M1WUzTItjkZtRZOAiIG1C6JEhMRAsAIqB4wirD683PT8LsdFkYHpK_WiuGHWmTkCLCRDNWJK.I78qqv3Be-__nfLULSFxhw"

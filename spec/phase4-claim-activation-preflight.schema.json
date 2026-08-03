@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/phase4-claim-activation-preflight.schema.json",
+  "title": "Aegaeon Phase 4 Claim Activation Preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "bundle_id",
+    "generated_at",
+    "phase4_status",
+    "public_claim_ready",
+    "claim_gates",
+    "internal_evidence",
+    "external_blockers",
+    "release_activation",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "phase4_status": {
+      "type": "string",
+      "enum": [
+        "internal-preflight-complete",
+        "external-activation-complete"
+      ]
+    },
+    "public_claim_ready": {
+      "type": "boolean"
+    },
+    "claim_gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/claim_gate"
+      }
+    },
+    "internal_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/internal_evidence"
+      }
+    },
+    "external_blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/external_blocker"
+      }
+    },
+    "release_activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_wording_update_required",
+        "readme_update_required",
+        "release_tag_required",
+        "notes"
+      ],
+      "properties": {
+        "product_wording_update_required": {
+          "type": "boolean"
+        },
+        "readme_update_required": {
+          "type": "boolean"
+        },
+        "release_tag_required": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "claim_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_target",
+        "claim_gate_path",
+        "internal_status",
+        "activation_status"
+      ],
+      "properties": {
+        "claim_target": {
+          "type": "string",
+          "enum": [
+            "enterprise-readiness",
+            "certification",
+            "admin-ui-assurance"
+          ]
+        },
+        "claim_gate_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "internal_status": {
+          "type": "string",
+          "enum": [
+            "internal-complete",
+            "internal-preflight-complete"
+          ]
+        },
+        "activation_status": {
+          "type": "string",
+          "enum": [
+            "blocked-on-external",
+            "ready-for-public-activation"
+          ]
+        }
+      }
+    },
+    "internal_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "path",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "schema",
+            "validator",
+            "bundle",
+            "runbook",
+            "roadmap",
+            "positioning"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "complete"
+        }
+      }
+    },
+    "external_blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_target",
+        "evidence_id",
+        "blocker_class",
+        "owner",
+        "required_next_evidence"
+      ],
+      "properties": {
+        "claim_target": {
+          "type": "string",
+          "enum": [
+            "enterprise-readiness",
+            "certification",
+            "admin-ui-assurance",
+            "release"
+          ]
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocker_class": {
+          "type": "string",
+          "enum": [
+            "external-hosted-evidence",
+            "external-certification",
+            "external-publication",
+            "public-wording-release"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_next_evidence": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

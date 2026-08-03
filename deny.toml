@@ -1,0 +1,73 @@
+# cargo-deny configuration for Aegaeon
+
+[graph]
+targets = []
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # rustls-pemfile is deprecated but no upgrade available; thin wrapper around rustls-pki-types
+    "RUSTSEC-2025-0134",
+]
+
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "NCSA", # libfuzzer-sys uses NCSA (University of Illinois/NCSA Open Source License)
+    "CDLA-Permissive-2.0",
+    "Unicode-3.0",
+    "OpenSSL",
+    "Unlicense",  # ring uses various licenses
+    "MPL-2.0",    # cbindgen uses MPL-2.0
+    "Zlib",
+]
+confidence-threshold = 0.8
+exceptions = [
+    # ring 0.16.20 doesn't specify license in manifest but has valid licenses
+    { allow = ["ISC", "MIT", "OpenSSL"], name = "ring", version = "*" }
+]
+clarify = [
+    # ring has a custom license situation
+    { name = "ring", expression = "MIT AND ISC AND OpenSSL", license-files = [] }
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = [
+    { name = "openssl", reason = "Use rustls or native-tls instead" },
+    # { name = "reqwest", reason = "Use hyper directly for better control" }, # Temporarily allowed for loadtest
+    { name = "chrono", reason = "Use time crate instead" },
+]
+
+skip = [
+    { name = "base64", version = "0.21.7", reason = "hdrhistogram (load testing) still depends on base64 0.21.x; upstream upgrade pending" },
+    { name = "getrandom", version = "0.2.16", reason = "Crypto stack (ring, rand_core) pinned to 0.2.x until upstream publishes 0.3-compatible releases" },
+    { name = "rand", version = "0.8.5", reason = "Legacy rand 0.8 required by quickcheck/tungstenite; tracing stack uses rand 0.9" },
+    { name = "rand_chacha", version = "0.3.1", reason = "Legacy rand 0.8 stack requires rand_chacha 0.3.x; telemetry stack uses 0.9" },
+    { name = "rand_core", version = "0.6.4", reason = "Crypto crates on rand_core 0.6.x; telemetry rand 0.9 pulls rand_core 0.9" },
+    { name = "thiserror", version = "1.0.69", reason = "protobuf/protobuf-support (via prometheus) still depend on thiserror 1.x; all direct deps now on 2.x" },
+    { name = "thiserror-impl", version = "1.0.69", reason = "Mirrors thiserror 1.x skip; transitive via protobuf until upstream migrates to 2.x" },
+    { name = "untrusted", version = "0.7.1", reason = "aws-lc-rs depends on untrusted 0.7.x while ring/rustls use 0.9.x" },
+    { name = "windows-sys", version = "0.52.0", reason = "Older windows crates still require 0.52.x; core runtime on 0.59+" },
+    { name = "windows-sys", version = "0.60.2", reason = "windows-targets 0.60.x still used by dependencies alongside 0.61" },
+    { name = "windows-targets", version = "0.52.6", reason = "backtrace/tokio chain still on windows-targets 0.52.x; others use 0.53.x" },
+    { name = "windows_aarch64_gnullvm", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_aarch64_msvc", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_i686_gnu", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_i686_gnullvm", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_i686_msvc", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_x86_64_gnu", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_x86_64_gnullvm", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+    { name = "windows_x86_64_msvc", version = "0.52.6", reason = "windows-targets 0.52.x transitive architecture package" },
+]
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

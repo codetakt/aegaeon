@@ -1,0 +1,262 @@
+theory Device_Authorization_Security
+begin
+
+/*
+ * Device Authorization Grant Security (RFC 8628)
+ *
+ * Models the Device Authorization Grant flow where an input-constrained
+ * device obtains user authorization via an out-of-band mechanism (user
+ * visits a verification URI on a secondary device).
+ *
+ * Protocol overview:
+ * 1. Device requests authorization → AS issues (device_code, user_code)
+ * 2. Device displays user_code / verification_uri to user
+ * 3. User visits verification_uri on a browser-equipped device
+ * 4. User enters user_code and approves/denies
+ * 5. Device polls /token with device_code until authorized or expired
+ * 6. AS issues tokens after user approval
+ *
+ * Threat model (from Phase 6 security review):
+ * - DA-1: Rate limiting — polling without backoff is denied
+ * - DA-2: User code entropy — modeled as fresh nonce (≥31 bits)
+ * - DA-3: Device code stored as hash — AS stores h(device_code), not plaintext
+ * - DA-4: Code lifetime — expired codes cannot be used
+ * - DA-5: Device code single-use — once authorized, code is consumed
+ * - DA-6: User code confusion — user_code binds to exactly one device_code
+ * - DA-7: Environment scoping — device codes scoped per environment
+ *
+ * Security properties:
+ * - no_token_without_user_approval: tokens only issued after user approves
+ * - device_code_single_use: device code consumed on token issuance
+ * - user_code_device_binding: user_code maps to exactly one device_code
+ * - no_token_after_expiry: expired device codes cannot yield tokens
+ * - device_code_secrecy: device_code not exposed to user (only user_code)
+ * - environment_isolation: device codes scoped to their environment
+ * - polling_requires_valid_code: token poll requires a legitimately issued code
+ *
+ * Attacker model (Dolev-Yao):
+ * - Attacker controls the network between device and AS
+ * - Attacker can observe user_code (displayed on device screen)
+ * - Attacker CANNOT observe device_code (sent only to device over HTTPS)
+ * - Attacker can attempt to authorize with stolen user_code
+ * - Attacker can attempt cross-environment code reuse
+ *
+ * Known limitations:
+ * - No real-valued time: expiry modeled via linear fact consumption
+ * - Polling rate-limit (DA-1) not modeled: Tamarin has no clock/counter
+ *   for rate limiting; implementation enforces via slow_down response
+ * - User code entropy (DA-2) modeled as Fr() freshness, not bit-length
+ * - Hash-based storage (DA-3) modeled but simplified: AS uses h(device_code)
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Environment & AS Setup ============ */
+
+// Environment initialization (multi-tenant scoping — DA-7)
+rule Environment_Init:
+  [ Fr(~env_id) ]
+  --[ Environment_Created(~env_id),
+      Unique(<'env', ~env_id>) ]->
+  [ !Environment(~env_id) ]
+
+// AS initialization with signing capability
+rule AS_Init:
+  [ Fr(~as_secret) ]
+  --[ AS_Initialized($AS) ]->
+  [ !AS($AS, ~as_secret) ]
+
+// Client registration for device flow
+rule Client_Register_Device:
+  [ !AS($AS, as_secret), !Environment(env_id) ]
+  --[ Client_Registered_Device($Client, $AS, env_id) ]->
+  [ !DeviceClient($Client, $AS, env_id) ]
+
+/* ============ Device Authorization Request (§3.1-3.2) ============ */
+
+// Device requests authorization from AS.
+// AS generates device_code (secret, stored as hash — DA-3) and
+// user_code (displayed to user, observable by attacker).
+rule AS_Device_Authorization:
+  let device_code_hash = h(~device_code)
+  in
+  [ !DeviceClient($Client, $AS, env_id),
+    !AS($AS, as_secret),
+    Fr(~device_code), Fr(~user_code) ]
+  --[ Device_Code_Issued($AS, env_id, ~device_code, ~user_code, $Client),
+      Device_Code_Hash_Stored($AS, env_id, device_code_hash, ~user_code),
+      User_Code_Issued(~user_code, ~device_code),
+      Unique(<'device_code', ~device_code>),
+      Unique(<'user_code', env_id, ~user_code>) ]->
+  [ // Device receives device_code over secure channel (HTTPS)
+    // NOT sent via Out() — attacker cannot intercept (DA-3 + HTTPS)
+    !Device_Has_Code($Client, $AS, env_id, ~device_code, ~user_code),
+    // AS stores hash of device_code and the user_code binding
+    AS_Pending($AS, env_id, device_code_hash, ~user_code, $Client),
+    Code_Live($AS, env_id, device_code_hash),
+    // User_code is displayed on device screen — attacker can observe
+    Out(~user_code) ]
+
+/* ============ User Authorization (§3.3) ============ */
+
+// User visits verification_uri and enters user_code.
+// The user_code comes from the network (attacker could substitute).
+// User approves the authorization.
+// BUG-2 fix: Use distinct variable names (in_uc vs stored_uc) so the
+// comparison is explicit via Eq restriction, not implicit unification.
+// This makes the security-critical check visible in the model.
+rule User_Approve:
+  [ In(in_uc),
+    AS_Pending($AS, env_id, dc_hash, stored_uc, $Client) ]
+  --[ Eq(in_uc, stored_uc),
+      User_Approved($AS, env_id, stored_uc, $Client, $User),
+      Unique(<'approval', env_id, stored_uc>) ]->
+  [ AS_Approved($AS, env_id, dc_hash, stored_uc, $Client, $User) ]
+
+// User denies the authorization
+rule User_Deny:
+  [ In(in_uc),
+    AS_Pending($AS, env_id, dc_hash, stored_uc, $Client),
+    Code_Live($AS, env_id, dc_hash) ]
+  --[ Eq(in_uc, stored_uc),
+      User_Denied($AS, env_id, stored_uc, $Client),
+      AS_Denied_Record($AS, env_id, dc_hash),
+      Unique(<'denial', env_id, stored_uc>) ]->
+  [ AS_Denied($AS, env_id, dc_hash) ]
+
+/* ============ Token Polling (§3.4-3.5) ============ */
+
+// Device polls /token with device_code.
+// AS verifies h(device_code) matches stored hash.
+// Token is issued only if user has approved (DA-5: single-use via linear fact).
+rule AS_Issue_Token:
+  let device_code_hash = h(device_code)
+  in
+  [ !Device_Has_Code($Client, $AS, env_id, device_code, user_code),
+    AS_Approved($AS, env_id, device_code_hash, user_code, $Client, $User),
+    Code_Live($AS, env_id, device_code_hash),
+    Fr(~access_token) ]
+  --[ Eq(h(device_code), device_code_hash),
+      Token_Issued_Device($AS, env_id, $Client, $User, ~access_token, device_code),
+      Token_Issued_Device_Hash($AS, env_id, $Client, $User, ~access_token, device_code_hash),
+      Device_Code_Consumed($AS, env_id, device_code),
+      Unique(<'token_issue', device_code>) ]->
+  [ Out(~access_token) ]
+
+// Polling when authorization is still pending (authorization_pending response)
+rule AS_Poll_Pending:
+  [ !Device_Has_Code($Client, $AS, env_id, device_code, user_code),
+    AS_Pending($AS, env_id, dc_hash, user_code, $Client) ]
+  --[ Poll_Pending($AS, env_id, device_code) ]->
+  [ AS_Pending($AS, env_id, dc_hash, user_code, $Client) ]
+
+/* ============ Expiry (DA-4) ============ */
+
+// Device code expires — AS consumes the pending state.
+// After this, no token can be issued for this code.
+rule Device_Code_Expire:
+  [ AS_Pending($AS, env_id, dc_hash, user_code, $Client),
+    Code_Live($AS, env_id, dc_hash) ]
+  --[ Device_Code_Expired($AS, env_id, dc_hash) ]->
+  [ AS_Expired($AS, env_id, dc_hash) ]
+
+// Approved code can also expire if device doesn't poll in time
+rule Approved_Code_Expire:
+  [ AS_Approved($AS, env_id, dc_hash, user_code, $Client, $User),
+    Code_Live($AS, env_id, dc_hash) ]
+  --[ Device_Code_Expired($AS, env_id, dc_hash),
+      Approved_Expired($AS, env_id, dc_hash) ]->
+  [ AS_Expired($AS, env_id, dc_hash) ]
+
+/* ============ Cross-Environment Attack (DA-7) ============ */
+
+// Attacker attempts to use a device code from env_A in env_B.
+// This is structurally impossible: AS_Pending/AS_Approved facts are
+// parameterized by env_id, so a device_code_hash issued in env_A
+// cannot match an AS_Approved in env_B.
+
+/* ============ Security Properties ============ */
+
+// DA-5 + core security: No token without user approval.
+// If a token was issued, the user must have explicitly approved.
+lemma no_token_without_user_approval:
+  "All AS env client user token dc #i.
+     Token_Issued_Device(AS, env, client, user, token, dc)@i
+     ==> Ex uc #j.
+           User_Approved(AS, env, uc, client, user)@j & #j < #i"
+
+// DA-5: Device code single-use — once a token is issued for a device_code,
+// no second token can be issued. This follows from AS_Approved being a
+// linear fact consumed by AS_Issue_Token.
+lemma device_code_single_use:
+  "All AS env client1 client2 user1 user2 token1 token2 dc #i #j.
+     Token_Issued_Device(AS, env, client1, user1, token1, dc)@i &
+     Token_Issued_Device(AS, env, client2, user2, token2, dc)@j
+     ==> #i = #j"
+
+// DA-6: User code binds to exactly one device code.
+// Within an environment, a user_code maps to one device_code.
+lemma user_code_device_binding:
+  "All uc dc1 dc2 #i #j.
+     User_Code_Issued(uc, dc1)@i &
+     User_Code_Issued(uc, dc2)@j
+     ==> dc1 = dc2"
+
+// DA-4: No token after expiry. If a device code has expired,
+// no token can subsequently be issued for it.
+// This follows from AS_Pending/AS_Approved being consumed by expiry rules.
+// We reason over the emitted device_code hash directly to avoid re-deriving
+// h(dc)=dc_hash inside the existential search.
+lemma no_token_after_expiry:
+  "All AS env dc_hash #i.
+     Device_Code_Expired(AS, env, dc_hash)@i
+     ==> not(Ex client user token #j.
+               Token_Issued_Device_Hash(AS, env, client, user, token, dc_hash)@j &
+               #i < #j)"
+
+// DA-3 + DA-5: Device code secrecy — device_code is never sent to the
+// network (no Out(device_code)). The user only sees user_code.
+// The attacker cannot derive device_code from user_code or its hash.
+// NOTE: This is a structural property — device_code appears only in
+// Device_Has_Code (not Out) and Fr(~device_code).
+lemma device_code_not_in_network:
+  "All AS env dc uc client #i.
+     Device_Code_Issued(AS, env, dc, uc, client)@i
+     ==> not(Ex #k. K(dc)@k)"
+
+// DA-7: Environment isolation — a token issued in environment env_A
+// requires a device code and approval in that same env_A.
+lemma environment_isolation:
+  "All AS env client user token dc #i.
+     Token_Issued_Device(AS, env, client, user, token, dc)@i
+     ==> Ex uc #j.
+           Device_Code_Issued(AS, env, dc, uc, client)@j & #j < #i"
+
+// Polling requires a legitimately issued code — no token without prior
+// device authorization request.
+lemma polling_requires_valid_code:
+  "All AS env client user token dc #i.
+     Token_Issued_Device(AS, env, client, user, token, dc)@i
+     ==> Ex uc #j.
+           Device_Code_Hash_Stored(AS, env, h(dc), uc)@j & #j < #i"
+
+// IMP-2: No token after user denial — once the AS records a denial for a
+// device_code hash, no token can be issued for that device_code.
+// User_Deny consumes AS_Pending and emits AS_Denied(dc_hash), so AS_Approved
+// is never produced for the same device_code.
+lemma no_token_after_denial:
+  "All AS env dc_hash #i.
+     AS_Denied_Record(AS, env, dc_hash)@i
+     ==> not(Ex client user token #j.
+               Token_Issued_Device_Hash(AS, env, client, user, token, dc_hash)@j &
+               #i < #j)"
+
+end

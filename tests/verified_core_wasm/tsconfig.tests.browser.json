@@ -1,0 +1,45 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "checkJs": false,
+    "noEmit": false,
+    "strict": true,
+    "strictNullChecks": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": true,
+    "useUnknownInCatchVariables": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aegaeon/verified-core": [
+        "packages/verified-core/dist/index.d.ts"
+      ],
+      "@aegaeon/verified-core/web": [
+        "packages/verified-core/dist/web.d.ts"
+      ],
+      "@aegaeon/runtime-web": [
+        "packages/runtime-web/dist/index.d.ts"
+      ],
+      "@aegaeon/issuer-spa": [
+        "packages/issuer-spa/dist/index.d.ts"
+      ],
+      "@aegaeon/rp-core": [
+        "packages/rp-core/dist/index.d.ts"
+      ]
+    },
+    "rootDir": "./tests",
+    "outDir": "./dist-tests",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "tests/playwright.config.ts",
+    "tests/browser/**/*.d.ts",
+    "tests/browser/**/*.ts",
+    "tests/providers/**/*.ts"
+  ]
+}

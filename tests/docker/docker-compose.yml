@@ -1,0 +1,92 @@
+services:
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: aegaeon-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    networks:
+      - aegaeon-test
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aegaeon-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - aegaeon-test
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aegaeon-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - aegaeon-test
+
+  # Mock OAuth server for testing (if not running locally)
+  mock-oauth:
+    image: mockserver/mockserver:latest
+    container_name: aegaeon-mock-oauth
+    ports:
+      - "18080:1080"
+    networks:
+      - aegaeon-test
+
+  # Redis for session/cache testing
+  redis:
+    image: redis:7-alpine
+    container_name: aegaeon-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - aegaeon-test
+
+  # PostgreSQL for local development (DB-backed features)
+  postgres:
+    image: postgres:${AEGAEON_POSTGRES_IMAGE_TAG:-18.1}
+    container_name: aegaeon-postgres
+    ports:
+      - "${AEGAEON_POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=aegaeon
+      - POSTGRES_USER=aegaeon
+      - POSTGRES_PASSWORD=aegaeon
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegaeon -d aegaeon"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - aegaeon-test
+
+networks:
+  aegaeon-test:
+    driver: bridge
+
+volumes:
+  grafana-storage:
+  redis-data:
+  postgres-data:

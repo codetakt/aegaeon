@@ -1,0 +1,70 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "aegaeon-server",
+    "description": "OAuth 2.1 and OpenID Connect server for the Aegaeon identity platform",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "0.9.0-beta"
+  },
+  "paths": {
+    "/api/v1/operations/metrics": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "Prometheus metrics for authenticated management operators",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Management session or API key required"
+          },
+          "403": {
+            "description": "Metrics access requires a human session or audit-capable API key"
+          },
+          "500": {
+            "description": "Failed to render metrics"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {},
+  "tags": [
+    {
+      "name": "ops",
+      "description": "Operational endpoints"
+    }
+  ]
+}

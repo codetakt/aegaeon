@@ -1,0 +1,67 @@
+theory DPoP_Replay
+begin
+
+builtins: signing, hashing
+
+/* DPoP replay attack prevention */
+
+// Initialize server with client key and token binding
+rule Init:
+    [ Fr(~skC), Fr(~token) ]
+    --[ TokenBound(~token, pk(~skC)) ]->
+    [ Out(pk(~skC)), !ClientKey(~skC), !TokenBinding(~token, pk(~skC)) ]
+
+// Client makes request with DPoP proof
+rule ClientRequest:
+    [ Fr(~n), !ClientKey(~skC), !TokenBinding($T, pk(~skC)) ]
+    --[ DPoPRequest($T, ~n, pk(~skC)) ]->
+    [ SecChannel('client', 'resource_server', <$T, ~n, sign(~n, ~skC)>),
+      Used(~n) ]
+
+// Resource server validates DPoP proof
+rule ResourceServer:
+    [ SecChannel('client', 'resource_server', <$T, nonce, sig>),
+      !TokenBinding($T, pkC), Used(nonce) ]
+    --[ Eq(verify(sig, nonce, pkC), true),
+        ResourceGranted($T, nonce, pkC) ]->
+    [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+lemma dpop_replay_impossible: "
+    All t n pk #i #j.
+      ResourceGranted(t,n,pk)@i &
+      ResourceGranted(t,n,pk)@j
+      ==> #i = #j
+  "
+
+lemma dpop_freshness_guaranteed: "
+    All t n pk #i.
+      ResourceGranted(t,n,pk)@i
+      ==> Ex #j. DPoPRequest(t,n,pk)@j & j < i
+  "
+
+lemma dpop_authentication: "
+    All t n pk #i.
+      ResourceGranted(t,n,pk)@i
+      ==> Ex #j. TokenBound(t,pk)@j & j < i
+  "
+
+lemma dpop_injective_agreement: "
+    All t n1 n2 pk #i #j.
+      DPoPRequest(t,n1,pk)@i &
+      DPoPRequest(t,n2,pk)@j &
+      #i < #j
+      ==> not(n1 = n2)
+  "
+
+// NOTE: token_secrecy removed — the token (~token) is created in Init
+// and stored in !TokenBinding but never appears in Out(). The SecChannel
+// fact used for client-server communication is not observable by the
+// Dolev-Yao attacker. Therefore K(t) is unreachable and the secrecy
+// lemma was vacuously true. The real DPoP security properties are
+// proof-of-possession binding (dpop_authentication), replay prevention
+// (dpop_replay_impossible), and freshness (dpop_freshness_guaranteed).
+
+end

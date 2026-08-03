@@ -1,0 +1,79 @@
+theory AuthorizeErrorRedirectState
+
+begin
+
+// include "../common/common_model.spthy"
+
+// Concrete but simplified model for error redirect with state echo
+
+// Events
+// AuthzReq(C, RU, S, TID) authorization request with state S and session TID
+// AuthzErr(C, RU, S, E, TID) marks an error in the authorization flow
+// Redirect(C, RU, E, S, TID) marks a redirect emitted by the AS
+// DisallowedScope(C) / DisallowedGrant(C) / NotRegistered(C,RU) model policy violations
+
+rule ConfigureDisallowedScope:
+  [ Fr(~c_scope) ]
+  -->
+  [ !DisallowedScope(~c_scope) ]
+
+rule ConfigureDisallowedGrant:
+  [ Fr(~c_grant) ]
+  -->
+  [ !DisallowedGrant(~c_grant) ]
+
+rule ConfigureNotRegistered:
+  [ Fr(~c_nr), Fr(~ru_nr) ]
+  -->
+  [ !NotRegistered(~c_nr, ~ru_nr) ]
+
+rule ConfigureRegistered:
+  [ Fr(~c_reg), Fr(~ru_reg) ]
+  -->
+  [ !Registered(~c_reg, ~ru_reg) ]
+
+rule ClientMakesAuthzReq:
+  [ Fr(~s), Fr(~tid) ]
+  --[ AuthzReq($C, $RU, ~s, ~tid) ]->
+  [ Req($C, $RU, ~s, ~tid) ]
+
+// Server processes the request and emits an authorization error (generic)
+rule ServerEmitsError:
+  [ Req($C, $RU, $S, $TID) ]
+  --[ AuthzErr($C, $RU, $S, $E, $TID) ]->
+  [ ]
+
+// Specific error cases based on policy facts
+rule ScopeNotAllowedError:
+  [ Req($C, $RU, $S, $TID), !DisallowedScope($C) ]
+  --[ AuthzErr($C, $RU, $S, 'invalid_scope', $TID) ]->
+  [ ]
+
+rule GrantNotAllowedError:
+  [ Req($C, $RU, $S, $TID), !DisallowedGrant($C) ]
+  --[ AuthzErr($C, $RU, $S, 'unauthorized_client', $TID) ]->
+  [ ]
+
+rule RedirectNotRegisteredError:
+  [ Req($C, $RU, $S, $TID), !NotRegistered($C, $RU) ]
+  --[ AuthzErr($C, $RU, $S, 'invalid_request', $TID) ]->
+  [ ]
+
+rule AuthzErrorTriggersRedirect:
+  [ !Registered($C, $RU) ]
+  --[ AuthzErr($C, $RU, $S, $E, $TID), Redirect($C, $RU, $E, $S, $TID) ]->
+  [ ]
+
+// Property: Whenever an error occurs for a client/session with state S, the
+// emitted redirect carries the same state S. (Echo integrity)
+lemma ErrorStateEcho:
+  "All C RU S E tid #i.
+    AuthzErr(C, RU, S, E, tid)@i ==>
+    Ex #j. Redirect(C, RU, E, S, tid)@j & i < #j"
+
+// Stronger property: the state value in Redirect equals the state from AuthzErr
+lemma StateEchoEq:
+  "All C RU S S2 E tid #i #j.
+    ( AuthzErr(C, RU, S, E, tid)@i & Redirect(C, RU, E, S2, tid)@j ) ==> S2 = S"
+
+end

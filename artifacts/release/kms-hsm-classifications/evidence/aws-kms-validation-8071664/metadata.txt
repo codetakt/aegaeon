@@ -1,0 +1,13 @@
+=== OIDC AWS KMS Parity Evidence ===
+Timestamp: 2026-06-19T05:16:39Z
+Git commit: 80716647f406e2dde1e0d0526908177c8eaead23
+Git branch: main
+Mode: aws
+Require LocalStack: 0
+AWS_REGION: ap-northeast-1
+AWS_ENDPOINT_URL:
+AEGAEON_OIDC_SIGNING_AWS_KMS_KEY_ID: 911c257a-37b0-4dcf-a697-936e4f2da53d
+AEGAEON_OIDC_SIGNING_KID: aegaeon-validation-8071664-rs256
+Health URL: http://127.0.0.1:4566/_localstack/health
+Fallback health URL: http://127.0.0.1:4566/health
+Command: cargo test -p aegaeon-server --features kms-aws --test kms_integration_test test_oidc_aws_kms_signing_key_issues_verifiable_rs256_jwt -- --nocapture

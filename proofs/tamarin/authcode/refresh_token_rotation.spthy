@@ -1,0 +1,175 @@
+theory Refresh_Token_Rotation
+begin
+
+/*
+ * Local Refresh Token Rotation — Aegaeon AS
+ *
+ * Models the server-side refresh token rotation mechanism per RFC 9700 §6.1
+ * (formerly OAuth 2.1 draft §6.1 and RFC 6749 §6).
+ *
+ * Implementation reference: crates/server/src/authcode/store.rs
+ *   - TokenStore::rotate_refresh_token (line 360)
+ *   - RefreshToken::rotate (types.rs line 250)
+ *   - TokenStore::revoke_token (line 398)
+ *
+ * Design notes:
+ * - Refresh tokens travel over the back channel (token endpoint, HTTPS).
+ *   However, we model the worst case: an attacker may obtain a refresh
+ *   token (e.g. via client compromise, XSS, or device theft). We thus
+ *   expose the RT via Out() when leaked, but not during normal issuance.
+ * - The AS stores tokens with a `rotated` flag and `rotation_count`.
+ * - If a client presents an already-rotated RT, the AS detects replay
+ *   and revokes the entire token family (cascade revocation).
+ * - Each rotation produces a new RT bound to the same (client, user)
+ *   with rotation_count incremented.
+ *
+ * Security properties verified:
+ * 1. rotation_single_use: each RT can be rotated at most once
+ * 2. replay_detection_and_revocation: reuse of a consumed RT triggers
+ *    family revocation
+ * 3. rotation_chain_integrity: every active RT traces back to initial
+ *    issuance through a chain of rotations
+ * 4. cross_client_isolation: RT issued to client A cannot be rotated
+ *    by client B
+ * 5. rotation_count_monotonicity: rotation count strictly increases
+ * 6. no_token_after_revocation: once a family is revoked, no new
+ *    tokens are issued from it
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y)@i ==> not(x = y)"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Initial Token Issuance ============ */
+
+// The AS issues an access token + refresh token after authorization code
+// exchange. The RT is bound to (client, user) and starts with
+// rotation_count = '0'. Tokens travel over the back channel — no Out().
+rule AS_Issue_Tokens:
+  [ Fr(~at), Fr(~rt) ]
+  --[ Tokens_Issued($Client, $User, ~at, ~rt),
+      RT_Active($Client, $User, ~rt, '0'),
+      Unique(<'rt_issue', ~rt>) ]->
+  [ Active_RT($Client, $User, ~rt, '0'),
+    !Grant_Family($Client, $User, ~rt),
+    Client_Holds_RT($Client, ~rt) ]
+
+/* ============ Rotation ============ */
+
+// Client presents refresh token for rotation (via token endpoint).
+// In normal operation this is over HTTPS, but we model the request
+// going through In() so the Dolev-Yao attacker can attempt injection.
+rule Client_Present_RT:
+  [ Client_Holds_RT($Client, rt) ]
+  --[ Client_Presented_RT($Client, rt) ]->
+  [ Out(<'refresh', $Client, rt>) ]
+
+// AS rotates: consumes old RT (linear fact consumed), issues new RT
+// with incremented rotation_count. The new RT is bound to the same
+// (client, user). The old RT is marked consumed.
+rule AS_Rotate:
+  [ In(<'refresh', client, rt>),
+    Active_RT(client, $User, rt, count),
+    Fr(~new_at), Fr(~new_rt) ]
+  --[ Token_Rotated(client, $User, rt, ~new_rt, count),
+      RT_Consumed(client, $User, rt),
+      RT_Active(client, $User, ~new_rt, <count, '1'>),
+      Unique(<'rt_rotate', rt>) ]->
+  [ Consumed_RT(client, $User, rt),
+    Active_RT(client, $User, ~new_rt, <count, '1'>),
+    Client_Holds_RT(client, ~new_rt) ]
+
+/* ============ Replay Detection & Family Revocation ============ */
+
+// If a consumed RT is presented again, the AS detects replay and
+// revokes the entire token family. This models the implementation's
+// behavior: rotate_refresh_token() checks `old_token.rotated` and
+// calls revoke_token() on detection.
+rule AS_Detect_Replay:
+  [ In(<'refresh', client, rt>),
+    Consumed_RT(client, $User, rt) ]
+  --[ RT_Replay_Detected(client, $User, rt),
+      Family_Revoked(client, $User) ]->
+  [ Revoked_Family(client, $User) ]
+
+// Once a family is revoked, any active RT for that (client, user) is
+// consumed/invalidated. Models cascade revocation from revoke_token().
+rule AS_Cascade_Revoke:
+  [ Revoked_Family($Client, $User),
+    Active_RT($Client, $User, rt, count) ]
+  --[ RT_Cascade_Revoked($Client, $User, rt) ]->
+  [ Revoked_Family($Client, $User) ]
+
+/* ============ Client Compromise ============ */
+
+// Attacker steals a client's stored refresh token.
+// Models XSS, device theft, memory dump, etc.
+rule Client_RT_Leak:
+  [ Client_Holds_RT($Client, rt) ]
+  --[ RT_Leaked($Client, rt) ]->
+  [ Out(rt), Client_Holds_RT($Client, rt) ]
+
+/* ============ Security Properties ============ */
+
+// 1. Rotation single-use: each refresh token is rotated at most once.
+//    Enforced by consuming the linear Active_RT fact + Unique constraint.
+lemma rotation_single_use:
+  "All client user rt new1 new2 c1 c2 #i #j.
+     Token_Rotated(client, user, rt, new1, c1)@i &
+     Token_Rotated(client, user, rt, new2, c2)@j
+     ==> #i = #j"
+
+// 2. Replay detection and revocation: if a consumed RT is replayed,
+//    the AS detects it AND revokes the family. The replay implies
+//    a prior legitimate rotation existed.
+lemma replay_detection_and_revocation:
+  "All client user rt #i.
+     RT_Replay_Detected(client, user, rt)@i
+     ==> (Ex new_rt count #j.
+            Token_Rotated(client, user, rt, new_rt, count)@j & #j < #i)
+         & (Ex #k. Family_Revoked(client, user)@k)"
+
+// 3. Rotation chain integrity: every active RT was either initially
+//    issued or obtained through rotation of a previous active RT.
+lemma rotation_chain_integrity:
+  "All client user rt count #i.
+     RT_Active(client, user, rt, count)@i
+     ==> (Ex at. Tokens_Issued(client, user, at, rt)@i)
+         | (Ex old_rt old_count. Token_Rotated(client, user, old_rt, rt, old_count)@i)"
+
+// 4. Cross-client isolation: a refresh token issued to one client
+//    cannot be rotated by a different client. Active_RT binds (client, rt).
+lemma cross_client_isolation:
+  "All c1 c2 user1 user2 at rt new_rt count #i #j.
+     Tokens_Issued(c1, user1, at, rt)@i &
+     Token_Rotated(c2, user2, rt, new_rt, count)@j
+     ==> c1 = c2 & user1 = user2"
+
+// 5. Rotation count monotonicity: the count associated with a rotated
+//    token is strictly "greater" than the original (modeled as nesting).
+//    If RT has count c and is rotated, new RT has count <c, '1'>.
+lemma rotation_count_monotonicity:
+  "All client user old_rt new_rt count #i.
+     Token_Rotated(client, user, old_rt, new_rt, count)@i
+     ==> Ex #j. RT_Active(client, user, new_rt, <count, '1'>)@j"
+
+// 6. No token after revocation: once a family is revoked, no new
+//    rotation can succeed for that (client, user) pair from the
+//    revoked family's tokens. Specifically: if a family is revoked
+//    and a token was cascade-revoked, that token cannot be rotated after.
+lemma no_token_after_revocation:
+  "All client user rt #i #j.
+     RT_Cascade_Revoked(client, user, rt)@i &
+     Token_Rotated(client, user, rt, new_rt, count)@j
+     ==> #j < #i"
+
+end

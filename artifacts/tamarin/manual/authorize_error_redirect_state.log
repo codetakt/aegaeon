@@ -1,0 +1,159 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory AuthorizeErrorRedirectState] Theory loaded
+[Theory AuthorizeErrorRedirectState] Theory translated
+[Theory AuthorizeErrorRedirectState] Derivation checks started
+[Theory AuthorizeErrorRedirectState] Derivation checks ended
+[Theory AuthorizeErrorRedirectState] Theory closed
+[Saturating Sources] Done
+theory AuthorizeErrorRedirectState begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) ConfigureDisallowedScope:
+   [ Fr( ~c_scope ) ] --> [ !DisallowedScope( ~c_scope ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ConfigureDisallowedGrant:
+   [ Fr( ~c_grant ) ] --> [ !DisallowedGrant( ~c_grant ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ConfigureNotRegistered:
+   [ Fr( ~c_nr ), Fr( ~ru_nr ) ] --> [ !NotRegistered( ~c_nr, ~ru_nr ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ConfigureRegistered:
+   [ Fr( ~c_reg ), Fr( ~ru_reg ) ] --> [ !Registered( ~c_reg, ~ru_reg ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ClientMakesAuthzReq:
+   [ Fr( ~s ), Fr( ~tid ) ]
+  --[ AuthzReq( $C, $RU, ~s, ~tid ) ]->
+   [ Req( $C, $RU, ~s, ~tid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ServerEmitsError:
+   [ Req( $C, $RU, $S, $TID ) ]
+  --[ AuthzErr( $C, $RU, $S, $E, $TID ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ScopeNotAllowedError:
+   [ Req( $C, $RU, $S, $TID ), !DisallowedScope( $C ) ]
+  --[ AuthzErr( $C, $RU, $S, 'invalid_scope', $TID ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) GrantNotAllowedError:
+   [ Req( $C, $RU, $S, $TID ), !DisallowedGrant( $C ) ]
+  --[ AuthzErr( $C, $RU, $S, 'unauthorized_client', $TID ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RedirectNotRegisteredError:
+   [ Req( $C, $RU, $S, $TID ), !NotRegistered( $C, $RU ) ]
+  --[ AuthzErr( $C, $RU, $S, 'invalid_request', $TID ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AuthzErrorTriggersRedirect:
+   [ !Registered( $C, $RU ) ]
+  --[ AuthzErr( $C, $RU, $S, $E, $TID ), Redirect( $C, $RU, $E, $S, $TID )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma ErrorStateEcho:
+  all-traces
+  "∀ C RU S E tid #i.
+    (AuthzErr( C, RU, S, E, tid ) @ #i) ⇒
+    (∃ #j. (Redirect( C, RU, E, S, tid ) @ #j) ∧ (#i < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C RU S E tid #i.
+  (AuthzErr( C, RU, S, E, tid ) @ #i)
+ ∧
+  ∀ #j. (Redirect( C, RU, E, S, tid ) @ #j) ⇒ ¬(#i < #j)"
+*/
+simplify
+solve( AuthzErr( C, RU, S, E, tid ) @ #i )
+  case AuthzErrorTriggersRedirect
+  by solve( !Registered( $C, $RU ) ▶₀ #i )
+next
+  case GrantNotAllowedError
+  by solve( Req( $C, $RU, $S, $TID ) ▶₀ #i )
+next
+  case RedirectNotRegisteredError
+  by solve( Req( $C, $RU, $S, $TID ) ▶₀ #i )
+next
+  case ScopeNotAllowedError
+  by solve( Req( $C, $RU, $S, $TID ) ▶₀ #i )
+next
+  case ServerEmitsError
+  by solve( Req( $C, $RU, $S, $TID ) ▶₀ #i )
+qed
+
+lemma StateEchoEq:
+  all-traces
+  "∀ C RU S S2 E tid #i #j.
+    ((AuthzErr( C, RU, S, E, tid ) @ #i) ∧
+     (Redirect( C, RU, E, S2, tid ) @ #j)) ⇒
+    (S2 = S)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C RU S S2 E tid #i #j.
+  (AuthzErr( C, RU, S, E, tid ) @ #i) ∧
+  (Redirect( C, RU, E, S2, tid ) @ #j)
+ ∧
+  ¬(S2 = S)"
+*/
+simplify
+by solve( !Registered( $C, $RU ) ▶₀ #j )
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./authorize/error_redirect_state.spthy
+
+  processing time: 0.30s
+
+  ErrorStateEcho (all-traces): verified (7 steps)
+  StateEchoEq (all-traces): verified (2 steps)
+
+==============================================================================

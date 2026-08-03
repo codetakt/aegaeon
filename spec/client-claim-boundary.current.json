@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "claim_phase": "pre-release-client-baseline",
+  "released_client_claim_active": false,
+  "default_profile": "aegaeon-rs256",
+  "profiles": {
+    "verified-core": {
+      "jwt_algorithms": [
+        "EdDSA"
+      ],
+      "dpop_algorithms": [
+        "EdDSA"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core"
+      },
+      "released_claim_target": true
+    },
+    "aegaeon-rs256": {
+      "jwt_algorithms": [
+        "EdDSA",
+        "RS256"
+      ],
+      "dpop_algorithms": [
+        "EdDSA"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core",
+        "RS256": "adapter-preverified"
+      },
+      "released_claim_target": true
+    },
+    "compat-interop": {
+      "jwt_algorithms": [
+        "EdDSA",
+        "RS256",
+        "ES256"
+      ],
+      "dpop_algorithms": [
+        "EdDSA",
+        "ES256"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core",
+        "RS256": "adapter-preverified",
+        "ES256": "adapter-preverified"
+      },
+      "released_claim_target": false
+    }
+  },
+  "promoted_client_slices": [
+    {
+      "name": "rs256-required-client-slice",
+      "algorithms": [
+        "RS256"
+      ],
+      "applies_to": [
+        "oidc-id-token",
+        "jwt-claims"
+      ],
+      "signature_model": "adapter-preverified",
+      "released_claim_target": true,
+      "notes": "Narrow first-party client slice for Aegaeon-issued OIDC tokens. Verified Core still enforces claims, time, and replay semantics after adapter-side signature preverification."
+    }
+  ],
+  "compat_only_surfaces": [
+    {
+      "name": "es256-interop-surface",
+      "algorithms": [
+        "ES256"
+      ],
+      "applies_to": [
+        "jwt-claims",
+        "dpop"
+      ],
+      "reason": "Interoperability-only surface. It remains outside the first released client-claim target until a separate promotion closes the corresponding runtime and evidence boundary."
+    }
+  ]
+}

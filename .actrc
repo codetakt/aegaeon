@@ -1,0 +1,25 @@
+# Act configuration for local GitHub Actions execution
+# This allows running all workflows locally with act
+
+# Default platform for runners
+#
+# Note: We pin image digests for reproducibility. To refresh, run:
+#   docker manifest inspect --verbose catthehacker/ubuntu:<tag> | jq -r '.[] | select(.Descriptor.platform.os=="linux" and .Descriptor.platform.architecture=="amd64") | .Descriptor.digest' | head -n 1
+--platform ubuntu-latest=catthehacker/ubuntu:act-latest@sha256:5410f044363373c6f84826ecd39c8b224ec595e90d0512bd87afb5f7c5870397
+--platform ubuntu-22.04=catthehacker/ubuntu:act-22.04@sha256:928e5749ba2c38f8fa4ddc5283cc7f36bcba7a5b88eb535a29217cf13165df70
+--platform ubuntu-20.04=catthehacker/ubuntu:act-20.04@sha256:01fa71b41ac0244d0cdd36028a5f741acaedc21cd86de9246b96924d0577c7db
+
+# Use local .env file for environment variables
+--env-file .env.act
+
+# Set artifact server path for local storage
+--artifact-server-path ./.act-artifacts
+
+# Reuse containers to speed up multiple runs
+--reuse
+
+# Clean up containers/volumes after a failed run.
+--rm
+
+# Default runner image
+--container-architecture linux/amd64

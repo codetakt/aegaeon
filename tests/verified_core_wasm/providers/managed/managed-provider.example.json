@@ -1,0 +1,44 @@
+{
+  "providerName": "commercial-staging",
+  "issuer": "https://login.example.com/oidc",
+  "clientId": "browser-client",
+  "authMethod": "client_secret_post",
+  "usernameEnv": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_USERNAME",
+  "passwordEnv": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_PASSWORD",
+  "clientSecretEnv": "AEGAEON_MANAGED_EXTERNAL_PROVIDER_CLIENT_SECRET",
+  "loginScript": [
+    {
+      "action": "waitForSelector",
+      "selector": "input[name='username']",
+      "timeoutMs": 20000
+    },
+    {
+      "action": "fill",
+      "selector": "input[name='username']",
+      "valueFrom": "username"
+    },
+    {
+      "action": "click",
+      "selector": "button[type='submit']"
+    },
+    {
+      "action": "waitForSelector",
+      "selector": "input[type='password']",
+      "timeoutMs": 20000
+    },
+    {
+      "action": "fill",
+      "selector": "input[type='password']",
+      "valueFrom": "password"
+    },
+    {
+      "action": "click",
+      "selector": "button[type='submit']"
+    },
+    {
+      "action": "clickIfVisible",
+      "selector": "button[data-testid='consent-accept']",
+      "timeoutMs": 3000
+    }
+  ]
+}

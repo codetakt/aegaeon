@@ -1,0 +1,29 @@
+{
+  "$schema": "https://aegaeon.dev/spec/admin-ui-assurance-evidence-bundle.schema.json",
+  "schema_version": 1,
+  "bundle_id": "phase3-admin-ui-assurance-internal-2026-05-20",
+  "generated_at": "2026-05-20T00:00:00Z",
+  "claim_target": "admin-ui-assurance",
+  "claim_gate_path": "spec/admin-ui-assurance-claim.current.json",
+  "phase3_status": "internal-complete",
+  "public_claim_ready": false,
+  "artifacts": {
+    "assurance_case": "docs/verification/claims/admin-ui-assurance-case.md",
+    "state_machine": "spec/admin-ui-security-state-machine.current.json",
+    "state_machine_schema": "spec/admin-ui-security-state-machine.schema.json",
+    "validator": "scripts/validation/validate_admin_ui_assurance.py",
+    "validator_self_test": "scripts/validation/test_admin_ui_assurance_validators.py",
+    "product_positioning": "docs/product-positioning.md"
+  },
+  "hosted_runtime_evidence": {
+    "status": "deferred",
+    "evidence_uri": null,
+    "public_claim_blocker": true,
+    "notes": "Hosted admin-console stack evidence remains deferred to Phase 4. The internal Phase 3 bundle closes the assurance case, checked model, and API/client drift gates only."
+  },
+  "review": {
+    "reviewer": "aegaeon-engineering",
+    "decision": "approved",
+    "notes": "Approved only as Phase 3 internal completion evidence. Public 'formally verified UI included' wording remains blocked."
+  }
+}

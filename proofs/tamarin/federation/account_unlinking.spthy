@@ -1,0 +1,101 @@
+theory Federation_Account_Unlinking
+begin
+
+/*
+ * Account Unlinking Security — Aegaeon federation
+ *
+ * Focused model for the security properties of unlinking upstream
+ * identities from downstream accounts. Proves that unlinking properly
+ * terminates access and prevents residual authentication.
+ *
+ * Security properties:
+ * - Post-unlink: no authentication possible after unlink
+ * - Unlink requires admin authorization
+ * - Link uniqueness: each upstream identity linked at most once
+ * - Authentication requires prior linking
+ */
+
+builtins: signing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Entity Setup ============ */
+
+// Upstream IdP
+rule IdP_Init:
+  [ Fr(~sk) ]
+  --[ IdP_Created($IdP) ]->
+  [ !IdP($IdP, ~sk), Out(pk(~sk)) ]
+
+// Downstream account
+rule Create_Account:
+  [ Fr(~acct_id) ]
+  --[ Account_Created($User, ~acct_id),
+      Unique(<'acct', ~acct_id>) ]->
+  [ !Account($User, ~acct_id) ]
+
+/* ============ Linking Lifecycle ============ */
+
+// Admin links upstream identity to downstream account.
+// Creates a linear Link_Active fact that governs authentication.
+rule Admin_Link:
+  [ !IdP($IdP, sk), !Account($User, acct_id) ]
+  --[ Linked($IdP, $Sub, $User, acct_id),
+      Admin_Action('link', $IdP, $Sub),
+      Unique(<'link', $IdP, $Sub>) ]->
+  [ Link_Active($IdP, $Sub, $User, acct_id) ]
+
+// Federated login: requires an active link (linear fact).
+// Link_Active is reproduced so that subsequent logins are possible,
+// but the Unique constraint below limits to one login per link
+// (preventing unbounded traces in the symbolic model).
+rule Fed_Login:
+  [ Link_Active($IdP, $Sub, $User, acct_id) ]
+  --[ Fed_Auth($IdP, $Sub, $User, acct_id),
+      Unique(<'fed_auth', $IdP, $Sub>) ]->
+  [ Link_Active($IdP, $Sub, $User, acct_id) ]
+
+// Admin unlink: consumes the linear Link_Active fact.
+// After this, no Link_Active remains, so Fed_Login cannot fire.
+rule Admin_Unlink:
+  [ Link_Active($IdP, $Sub, $User, acct_id) ]
+  --[ Unlinked($IdP, $Sub, $User, acct_id),
+      Admin_Action('unlink', $IdP, $Sub) ]->
+  [ ]
+
+/* ============ Security Properties ============ */
+
+// Post-unlink: authentication only happens before unlink.
+// After Admin_Unlink consumes Link_Active, Fed_Login cannot fire.
+lemma no_auth_after_unlink:
+  "All idp sub user acct #i #j.
+     Unlinked(idp, sub, user, acct)@i &
+     Fed_Auth(idp, sub, user, acct)@j
+     ==> #j < #i"
+
+// Unlink requires admin authorization
+lemma unlink_requires_admin:
+  "All idp sub user acct #i.
+     Unlinked(idp, sub, user, acct)@i
+     ==> Ex #j. Admin_Action('unlink', idp, sub)@j & #j = #i"
+
+// Link uniqueness: each upstream identity linked at most once
+lemma link_uniqueness:
+  "All idp sub u1 u2 a1 a2 #i #j.
+     Linked(idp, sub, u1, a1)@i &
+     Linked(idp, sub, u2, a2)@j
+     ==> #i = #j"
+
+// Authentication requires prior linking
+lemma auth_requires_link:
+  "All idp sub user acct #i.
+     Fed_Auth(idp, sub, user, acct)@i
+     ==> Ex #j. Linked(idp, sub, user, acct)@j & #j < #i"
+
+end

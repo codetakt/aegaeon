@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/enterprise-readiness-evidence-bundle.schema.json",
+  "title": "Aegaeon Enterprise Readiness Evidence Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "bundle_id",
+    "release_id",
+    "generated_at",
+    "source_revision",
+    "claim_target",
+    "claim_gate_path",
+    "evidence",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_target": {
+      "const": "enterprise-readiness"
+    },
+    "claim_gate_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publication_org_rollout_report",
+        "managed_provider_evidence",
+        "kms_hsm_classifications",
+        "release_security_evidence_manifest",
+        "enterprise_slo_baseline_manifest"
+      ],
+      "properties": {
+        "publication_org_rollout_report": {
+          "type": "string",
+          "minLength": 1
+        },
+        "managed_provider_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kms_hsm_classifications": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "release_security_evidence_manifest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enterprise_slo_baseline_manifest": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

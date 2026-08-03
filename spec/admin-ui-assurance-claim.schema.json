@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/admin-ui-assurance-claim.schema.json",
+  "title": "Aegaeon Admin UI Assurance Claim Gate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_target",
+    "claim_active",
+    "current_public_wording",
+    "future_allowed_wording",
+    "excluded_surfaces",
+    "required_evidence"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "claim_target": {
+      "const": "admin-ui-assurance"
+    },
+    "claim_active": {
+      "type": "boolean"
+    },
+    "current_public_wording": {
+      "type": "string",
+      "minLength": 1
+    },
+    "future_allowed_wording": {
+      "type": "string",
+      "minLength": 1
+    },
+    "excluded_surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/evidence_item"
+      }
+    }
+  },
+  "$defs": {
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "status",
+        "required_for_activation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "missing",
+            "planned",
+            "in_progress",
+            "complete",
+            "not_applicable"
+          ]
+        },
+        "required_for_activation": {
+          "type": "boolean"
+        },
+        "evidence_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

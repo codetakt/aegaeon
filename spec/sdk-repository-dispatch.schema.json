@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SDK Repository Dispatch Payload",
+  "description": "Canonical repository_dispatch payload consumed by the SDK repository verify-core workflow.",
+  "type": "object",
+  "required": ["event_type", "client_payload"],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "client_payload": {
+      "$ref": "#/$defs/clientPayload"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "clientPayload": {
+      "type": "object",
+      "required": [
+        "artifact_bundle",
+        "generated_at",
+        "source_commit",
+        "source_workflow"
+      ],
+      "properties": {
+        "artifact_bundle": {
+          "type": "string",
+          "enum": ["github-release", "direct-artifact"]
+        },
+        "core_repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$"
+        },
+        "core_release_tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{7,64}$"
+        },
+        "source_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_run_id": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "release_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "manifest_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wasm_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "public_key_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "artifact_bundle": {
+                "const": "github-release"
+              }
+            }
+          },
+          "then": {
+            "required": ["core_repo", "core_release_tag"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "artifact_bundle": {
+                "const": "direct-artifact"
+              }
+            }
+          },
+          "then": {
+            "required": ["manifest_path", "wasm_path"]
+          }
+        }
+      ]
+    }
+  }
+}

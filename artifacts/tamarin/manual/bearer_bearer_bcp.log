@@ -1,0 +1,707 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OAuth2_Bearer_BCP] Theory loaded
+[Theory OAuth2_Bearer_BCP] Theory translated
+[Theory OAuth2_Bearer_BCP] Derivation checks started
+[Theory OAuth2_Bearer_BCP] Derivation checks ended
+[Theory OAuth2_Bearer_BCP] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OAuth2_Bearer_BCP begin
+
+// Function signature and definition of the equational theory E
+
+builtins: multiset
+functions: fst/1, h/1, pair/2, pk/1, sdec/2, senc/2, sign/2, snd/1,
+           true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+
+
+
+
+rule (modulo E) Register_pk:
+   [ Fr( ~sk ) ] --> [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reveal_ltk:
+   [ !Ltk( A, sk ) ] --[ Reveal( A ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Init:
+   [ Fr( ~as_key ) ]
+  --[ AS_Initialized( $AS, $issuer ) ]->
+   [
+   !AS_Key( $AS, ~as_key ), !AS_Issuer( $AS, $issuer ),
+   Out( <$AS, $issuer> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Register:
+   [ !AS_Key( $AS, as_key ) ]
+  --[ Client_Registered( $AS, $C, $uri ) ]->
+   [ !Client( $AS, $C, $uri ), !Client_RedirectURI( $C, $uri ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Start_Auth:
+   [
+   Fr( ~verifier ), Fr( ~state ), Fr( ~nonce ), Fr( ~timestamp ),
+   Fr( ~dpop_key ), !Client( $AS, $C, redirect_uri )
+   ]
+  --[
+  Client_Started( $C, $U, h(<'S256', ~verifier>), <~state, ~timestamp>,
+                  ~timestamp
+  ),
+  State_Created( <~state, ~timestamp>, ~timestamp ),
+  Client_DPoP_Jkt( $C, pk(~dpop_key) )
+  ]->
+   [
+   Out( <'auth_request', $C, redirect_uri, h(<'S256', ~verifier>),
+         <~state, ~timestamp>, ~nonce, 'code', $AS>
+   ),
+   Client_Session( $C, $U, ~verifier, h(<'S256', ~verifier>),
+                   <~state, ~timestamp>, ~nonce, redirect_uri
+   ),
+   !State_Timestamp( <~state, ~timestamp>, ~timestamp ),
+   StateAlive( <~state, ~timestamp> ), !Client_DPoP_Key( $C, ~dpop_key )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) User_Authorize:
+   [
+   In( <'auth_request', client_id, redirect_uri, code_challenge, state,
+        nonce, 'code', $AS>
+   ),
+   Fr( ~code ), !AS_Issuer( $AS, issuer ),
+   !Client_RedirectURI( client_id, redirect_uri ),
+   !State_Timestamp( state, timestamp ), StateAlive( state )
+   ]
+  --[
+  User_Authorized( $U, client_id, $AS, ~code, state, timestamp ),
+  Exact_Redirect_Match( redirect_uri, redirect_uri ),
+  State_Verified( state, timestamp )
+  ]->
+   [
+   Out( <'auth_response', ~code, state, issuer> ),
+   !Auth_Code( $AS, ~code, client_id, $U, code_challenge, redirect_uri,
+               nonce
+   ),
+   !StateUsed( state )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction exact_redirect_match:
+  "∀ uri1 uri2 #i.
+    (Exact_Redirect_Match( uri1, uri2 ) @ #i) ⇒ (uri1 = uri2)"
+  // safety formula
+
+rule (modulo E) AS_Issue_Token_DPoP:
+   [
+   In( <'token_request', $C, auth_code, code_verifier, redirect_uri,
+        pk(~dpop_key)>
+   ),
+   !Auth_Code( $AS, auth_code, $C, $U, code_challenge, stored_uri, nonce ),
+   !Client_DPoP_Key( $C, ~dpop_key ), !AS_Key( $AS, as_key ),
+   !AS_Issuer( $AS, issuer ), Fr( ~token_id ), Fr( ~jti )
+   ]
+  --[
+  Token_Issued( $AS, $C, $U,
+                <'bearer', ~token_id, $C, $U, 'openid_profile_email', issuer,
+                 'resource_api', ~jti>,
+                'DPoP'
+  ),
+  Code_Used( $AS, auth_code, $C ),
+  PKCE_Verified( code_verifier, code_challenge ),
+  Redirect_URI_Matched( redirect_uri, stored_uri ),
+  Temporal_Consistency( 'iat', 'nbf', 'exp' ),
+  DPoP_Bound( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+               issuer, 'resource_api', ~jti>,
+              pk(~dpop_key)
+  ),
+  Token_Scope_Set( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+                    issuer, 'resource_api', ~jti>,
+                   'openid_profile_email'
+  ),
+  Token_Audience_Set( <'bearer', ~token_id, $C, $U,
+                       'openid_profile_email', issuer, 'resource_api', ~jti>,
+                      'resource_api'
+  )
+  ]->
+   [
+   Out( <'token_response',
+         <'bearer', ~token_id, $C, $U, 'openid_profile_email', issuer,
+          'resource_api', ~jti>,
+         'DPoP', pk(~dpop_key), issuer, $C>
+   ),
+   !Bearer_Token( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+                   issuer, 'resource_api', ~jti>,
+                  $C, $U, issuer, 'resource_api', 'iat', 'exp', pk(~dpop_key)
+   ),
+   !Token_Scope( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+                  issuer, 'resource_api', ~jti>,
+                 'openid_profile_email'
+   ),
+   !Token_Audience( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+                     issuer, 'resource_api', ~jti>,
+                    'resource_api'
+   ),
+   Token_State( <'bearer', ~token_id, $C, $U, 'openid_profile_email',
+                 issuer, 'resource_api', ~jti>,
+                'active'
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction pkce_verification:
+  "∀ v c #i. (PKCE_Verified( v, c ) @ #i) ⇒ (h(<'S256', v>) = c)"
+  // safety formula
+
+restriction temporal_consistency:
+  "∀ iat nbf exp #i.
+    (Temporal_Consistency( iat, nbf, exp ) @ #i) ⇒
+    (((iat = 'iat') ∧ (nbf = 'nbf')) ∧ (exp = 'exp'))"
+  // safety formula
+
+rule (modulo E) Client_Access_Resource_DPoP:
+   [
+   In( <'token_response', access_token, 'DPoP', pk(~dpop_key), issuer, $C>
+   ),
+   !Client_DPoP_Key( $C, ~dpop_key ), Fr( ~jti_proof )
+   ]
+  --[
+  Client_Access_Attempt( $C, access_token, 'DPoP',
+                         sign(<'DPoP', 'GET', 'resource_endpoint', access_token, ~jti_proof>,
+                              ~dpop_key)
+  ),
+  Client_Scope_Request( $C, access_token, 'openid_profile_email' )
+  ]->
+   [
+   Out( <'resource_request', access_token,
+         sign(<'DPoP', 'GET', 'resource_endpoint', access_token, ~jti_proof>,
+              ~dpop_key),
+         'GET', 'resource_endpoint', $C>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RS_Validate_DPoP:
+   [
+   In( <'resource_request', access_token, dpop_proof, htm, htu, $C> ),
+   !Bearer_Token( access_token, $C, $U, issuer, audience, iat, exp, dpop_jkt
+   ),
+   Token_State( access_token, 'active' )
+   ]
+  --[
+  Resource_Access_Granted( $C, $U, access_token, 'DPoP' ),
+  DPoP_Validated( access_token, dpop_proof, dpop_jkt )
+  ]->
+   [ Out( <'resource_response', 'granted'> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Token_Revoke:
+   [ Token_State( token, 'active' ) ]
+  --[ Token_Revoked( token ) ]->
+   [ Token_State( token, 'revoked' ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma no_access_after_revocation:
+  all-traces
+  "∀ token client user #i #j.
+    ((Token_Revoked( token ) @ #i) ∧
+     (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ token client user #i #j.
+  (Token_Revoked( token ) @ #i) ∧
+  (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+simplify
+solve( Token_State( token, 'active' ) ▶₀ #i )
+  case AS_Issue_Token_DPoP
+  solve( !Bearer_Token( <'bearer', ~token_id, $C, $U,
+                         'openid_profile_email', $issuer, 'resource_api', ~jti>,
+                        $C.1, $U.1, issuer.1, audience, iat, exp, dpop_jkt
+         ) ▶₁ #j )
+    case AS_Issue_Token_DPoP
+    by solve( Token_State( <'bearer', ~token_id, $C, $U,
+                            'openid_profile_email', $issuer, 'resource_api', ~jti>,
+                           'active'
+              ) ▶₂ #j )
+  qed
+qed
+
+lemma mixup_resistance:
+  all-traces
+  "∀ AS client user token #i #j.
+    ((Token_Issued( AS, client, user, token, 'DPoP' ) @ #i) ∧
+     (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)) ⇒
+    (∃ issuer. AS_Initialized( AS, issuer ) @ #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS client user token #i #j.
+  (Token_Issued( AS, client, user, token, 'DPoP' ) @ #i) ∧
+  (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)
+ ∧
+  ∀ issuer. (AS_Initialized( AS, issuer ) @ #i) ⇒ ⊥"
+*/
+simplify
+solve( !Auth_Code( $AS, auth_code, $C, $U, h(<'S256', code_verifier>),
+                   stored_uri, nonce
+       ) ▶₁ #i )
+  case User_Authorize
+  solve( !Client_DPoP_Key( $C, ~dpop_key ) ▶₂ #i )
+    case Client_Start_Auth
+    solve( !AS_Key( $AS, as_key ) ▶₃ #i )
+      case AS_Init
+      solve( !AS_Issuer( $AS, issuer ) ▶₄ #i )
+        case AS_Init
+        solve( !Bearer_Token( <'bearer', ~token_id, $C, $U,
+                               'openid_profile_email', $issuer, 'resource_api', ~jti>,
+                              $C, $U, issuer.1, audience, iat, exp, dpop_jkt
+               ) ▶₁ #j )
+          case AS_Issue_Token_DPoP
+          solve( Token_State( <'bearer', ~token_id, $C, $U,
+                               'openid_profile_email', $issuer, 'resource_api', ~jti>,
+                              'active'
+                 ) ▶₂ #j )
+            case AS_Issue_Token_DPoP
+            solve( !KU( pk(~dpop_key) ) @ #vk.20 )
+              case c_pk
+              by solve( !KU( ~dpop_key ) @ #vk.50 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma redirect_uri_exact_match [use_induction]:
+  all-traces
+  "∀ user client_id AS code state timestamp #i.
+    (User_Authorized( user, client_id, AS, code, state, timestamp ) @ #i) ⇒
+    (∃ uri. Exact_Redirect_Match( uri, uri ) @ #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user client_id AS code state timestamp #i.
+  (User_Authorized( user, client_id, AS, code, state, timestamp ) @ #i)
+ ∧
+  ∀ uri. (Exact_Redirect_Match( uri, uri ) @ #i) ⇒ ⊥"
+*/
+induction
+  case empty_trace
+  by contradiction /* from formulas */
+next
+  case non_empty_trace
+  simplify
+  by contradiction /* from formulas */
+qed
+
+lemma dpop_sender_constraint:
+  all-traces
+  "∀ token client user dpop_jkt #i #j.
+    ((DPoP_Bound( token, dpop_jkt ) @ #i) ∧
+     (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)) ⇒
+    (∃ proof. DPoP_Validated( token, proof, dpop_jkt ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ token client user dpop_jkt #i #j.
+  (DPoP_Bound( token, dpop_jkt ) @ #i) ∧
+  (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)
+ ∧
+  ∀ proof. (DPoP_Validated( token, proof, dpop_jkt ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( !Auth_Code( $AS, auth_code, $C, $U, h(<'S256', code_verifier>),
+                   stored_uri, nonce
+       ) ▶₁ #i )
+  case User_Authorize
+  solve( !Client_DPoP_Key( $C, ~dpop_key ) ▶₂ #i )
+    case Client_Start_Auth
+    solve( !AS_Key( $AS, as_key ) ▶₃ #i )
+      case AS_Init
+      solve( !AS_Issuer( $AS, issuer ) ▶₄ #i )
+        case AS_Init
+        solve( !Bearer_Token( <'bearer', ~token_id, $C, $U,
+                               'openid_profile_email', $issuer, 'resource_api', ~jti>,
+                              $C.1, $U.1, issuer.1, audience, iat, exp, dpop_jkt
+               ) ▶₁ #j )
+          case AS_Issue_Token_DPoP
+          by contradiction /* from formulas */
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma auth_code_single_use:
+  all-traces
+  "∀ AS code client #i #j.
+    ((Code_Used( AS, code, client ) @ #i) ∧
+     (Code_Used( AS, code, client ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS code client #i #j.
+  (Code_Used( AS, code, client ) @ #i) ∧
+  (Code_Used( AS, code, client ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( !Auth_Code( $AS, code, $C, $U, h(<'S256', code_verifier>),
+                     stored_uri, nonce
+         ) ▶₁ #i )
+    case User_Authorize
+    solve( !Client_DPoP_Key( $C, ~dpop_key ) ▶₂ #i )
+      case Client_Start_Auth
+      solve( !AS_Key( $AS, as_key ) ▶₃ #i )
+        case AS_Init
+        solve( !AS_Issuer( $AS, issuer ) ▶₄ #i )
+          case AS_Init
+          solve( !Auth_Code( $AS, ~code, $C, $U.1, h(<'S256', code_verifier.1>),
+                             stored_uri, nonce.1
+                 ) ▶₁ #j )
+            case User_Authorize
+            solve( !Client_DPoP_Key( $C, ~dpop_key.1 ) ▶₂ #j )
+              case Client_Start_Auth
+              solve( !AS_Key( $AS, as_key.1 ) ▶₃ #j )
+                case AS_Init
+                solve( !AS_Issuer( $AS, issuer.1 ) ▶₄ #j )
+                  case AS_Init
+                  solve( !KU( pk(~dpop_key) ) @ #vk.16 )
+                    case c_pk
+                    by solve( !KU( ~dpop_key ) @ #vk.34 )
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( !Auth_Code( $AS, code, $C, $U, h(<'S256', code_verifier>),
+                     stored_uri, nonce
+         ) ▶₁ #i )
+    case User_Authorize
+    solve( !Client_DPoP_Key( $C, ~dpop_key ) ▶₂ #i )
+      case Client_Start_Auth
+      solve( !AS_Key( $AS, as_key ) ▶₃ #i )
+        case AS_Init
+        solve( !AS_Issuer( $AS, issuer ) ▶₄ #i )
+          case AS_Init
+          solve( !Auth_Code( $AS, ~code, $C, $U.1, h(<'S256', code_verifier.1>),
+                             stored_uri, nonce.1
+                 ) ▶₁ #j )
+            case User_Authorize
+            solve( !Client_DPoP_Key( $C, ~dpop_key.1 ) ▶₂ #j )
+              case Client_Start_Auth
+              solve( !AS_Key( $AS, as_key.1 ) ▶₃ #j )
+                case AS_Init
+                solve( !AS_Issuer( $AS, issuer.1 ) ▶₄ #j )
+                  case AS_Init
+                  solve( !KU( pk(~dpop_key) ) @ #vk.16 )
+                    case c_pk
+                    by solve( !KU( ~dpop_key ) @ #vk.34 )
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma token_secrecy:
+  all-traces
+  "∀ AS client user token #i #j.
+    ((Token_Issued( AS, client, user, token, 'DPoP' ) @ #i) ∧
+     (K( token ) @ #j)) ⇒
+    (∃ A #k. (Reveal( A ) @ #k) ∧ (#k < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS client user token #i #j.
+  (Token_Issued( AS, client, user, token, 'DPoP' ) @ #i) ∧
+  (K( token ) @ #j)
+ ∧
+  ∀ A #k. (Reveal( A ) @ #k) ⇒ ¬(#k < #j)"
+*/
+simplify
+solve( !Auth_Code( $AS, auth_code, $C, $U, h(<'S256', code_verifier>),
+                   stored_uri, nonce
+       ) ▶₁ #i )
+  case User_Authorize
+  solve( !Client_DPoP_Key( $C, ~dpop_key ) ▶₂ #i )
+    case Client_Start_Auth
+    solve( !AS_Key( $AS, as_key ) ▶₃ #i )
+      case AS_Init
+      solve( !AS_Issuer( $AS, issuer ) ▶₄ #i )
+        case AS_Init
+        solve( !KU( pk(~dpop_key) ) @ #vk.15 )
+          case c_pk
+          by solve( !KU( ~dpop_key ) @ #vk.41 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma session_integrity:
+  all-traces
+  "∀ client user challenge state AS code timestamp #i #j.
+    ((Client_Started( client, user, challenge, state, timestamp ) @ #i) ∧
+     (User_Authorized( user, client, AS, code, state, timestamp ) @ #j)) ⇒
+    (#i < #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user challenge state AS code timestamp #i #j.
+  (Client_Started( client, user, challenge, state, timestamp ) @ #i) ∧
+  (User_Authorized( user, client, AS, code, state, timestamp ) @ #j)
+ ∧
+  ¬(#i < #j)"
+*/
+simplify
+by contradiction /* cyclic */
+
+lemma state_no_replay:
+  all-traces
+  "∀ state timestamp1 timestamp2 #i #j.
+    ((State_Created( state, timestamp1 ) @ #i) ∧
+     (State_Verified( state, timestamp2 ) @ #j)) ⇒
+    (timestamp1 = timestamp2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ state timestamp1 timestamp2 #i #j.
+  (State_Created( state, timestamp1 ) @ #i) ∧
+  (State_Verified( state, timestamp2 ) @ #j)
+ ∧
+  ¬(timestamp1 = timestamp2)"
+*/
+simplify
+solve( !Client( $AS, $C, redirect_uri ) ▶₅ #i )
+  case Client_Register
+  solve( !AS_Issuer( $AS.1, issuer ) ▶₂ #j )
+    case AS_Init
+    solve( !Client_RedirectURI( client_id, redirect_uri ) ▶₃ #j )
+      case Client_Register
+      solve( !State_Timestamp( <~state, ~timestamp>, timestamp2 ) ▶₄ #j )
+        case Client_Start_Auth
+        by contradiction /* from formulas */
+      qed
+    qed
+  qed
+qed
+
+lemma state_single_use:
+  all-traces
+  "∀ state t1 t2 #i #j.
+    ((State_Verified( state, t1 ) @ #i) ∧
+     (State_Verified( state, t2 ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ state t1 t2 #i #j.
+  (State_Verified( state, t1 ) @ #i) ∧ (State_Verified( state, t2 ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( !AS_Issuer( $AS, issuer ) ▶₂ #i )
+    case AS_Init
+    solve( !Client_RedirectURI( client_id, redirect_uri ) ▶₃ #i )
+      case Client_Register
+      solve( !State_Timestamp( state, t1 ) ▶₄ #i )
+        case Client_Start_Auth
+        solve( StateAlive( <~state, ~timestamp> ) ▶₅ #i )
+          case Client_Start_Auth
+          solve( !AS_Issuer( $AS.1, issuer.1 ) ▶₂ #j )
+            case AS_Init
+            solve( !Client_RedirectURI( client_id, redirect_uri ) ▶₃ #j )
+              case Client_Register
+              solve( !State_Timestamp( <~state, ~timestamp>, t2 ) ▶₄ #j )
+                case Client_Start_Auth
+                solve( StateAlive( <~state, ~timestamp> ) ▶₅ #j )
+                  case Client_Start_Auth
+                  by contradiction /* cyclic */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( !AS_Issuer( $AS, issuer ) ▶₂ #i )
+    case AS_Init
+    solve( !Client_RedirectURI( client_id, redirect_uri ) ▶₃ #i )
+      case Client_Register
+      solve( !State_Timestamp( state, t1 ) ▶₄ #i )
+        case Client_Start_Auth
+        solve( StateAlive( <~state, ~timestamp> ) ▶₅ #i )
+          case Client_Start_Auth
+          solve( !AS_Issuer( $AS.1, issuer.1 ) ▶₂ #j )
+            case AS_Init
+            solve( !Client_RedirectURI( client_id, redirect_uri ) ▶₃ #j )
+              case Client_Register
+              solve( !State_Timestamp( <~state, ~timestamp>, t2 ) ▶₄ #j )
+                case Client_Start_Auth
+                solve( StateAlive( <~state, ~timestamp> ) ▶₅ #j )
+                  case Client_Start_Auth
+                  by contradiction /* cyclic */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma scope_subset_enforced:
+  all-traces
+  "∀ client user token scope granted #i #j #k.
+    (((Client_Scope_Request( client, token, scope ) @ #i) ∧
+      (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j)) ∧
+     (Token_Scope_Set( token, granted ) @ #k)) ⇒
+    (scope = granted)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user token scope granted #i #j #k.
+  (Client_Scope_Request( client, token, scope ) @ #i) ∧
+  (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #j) ∧
+  (Token_Scope_Set( token, granted ) @ #k)
+ ∧
+  ¬(scope = granted)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma audience_enforced:
+  all-traces
+  "∀ client user token mode aud #i #j.
+    ((Resource_Access_Granted( client, user, token, mode ) @ #i) ∧
+     (Token_Audience_Set( token, aud ) @ #j)) ⇒
+    (aud = 'resource_api')"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user token mode aud #i #j.
+  (Resource_Access_Granted( client, user, token, mode ) @ #i) ∧
+  (Token_Audience_Set( token, aud ) @ #j)
+ ∧
+  ¬(aud = 'resource_api')"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma sender_binding_matches_dpop:
+  all-traces
+  "∀ client user token proof jkt #i.
+    ((Resource_Access_Granted( client, user, token, 'DPoP' ) @ #i) ∧
+     (DPoP_Validated( token, proof, jkt ) @ #i)) ⇒
+    (∃ #j. Client_DPoP_Jkt( client, jkt ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user token proof jkt #i.
+  (Resource_Access_Granted( client, user, token, 'DPoP' ) @ #i) ∧
+  (DPoP_Validated( token, proof, jkt ) @ #i)
+ ∧
+  ∀ #j. (Client_DPoP_Jkt( client, jkt ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( !Bearer_Token( token, $C, $U, issuer, audience, iat, exp, jkt
+       ) ▶₁ #i )
+  case AS_Issue_Token_DPoP
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./bearer/bearer_bcp.spthy
+
+  processing time: 5.77s
+
+  no_access_after_revocation (all-traces): verified (4 steps)
+  mixup_resistance (all-traces): verified (9 steps)
+  redirect_uri_exact_match (all-traces): verified (4 steps)
+  dpop_sender_constraint (all-traces): verified (7 steps)
+  auth_code_single_use (all-traces): verified (22 steps)
+  token_secrecy (all-traces): verified (7 steps)
+  session_integrity (all-traces): verified (2 steps)
+  state_no_replay (all-traces): verified (6 steps)
+  state_single_use (all-traces): verified (20 steps)
+  scope_subset_enforced (all-traces): verified (2 steps)
+  audience_enforced (all-traces): verified (2 steps)
+  sender_binding_matches_dpop (all-traces): verified (3 steps)
+
+==============================================================================

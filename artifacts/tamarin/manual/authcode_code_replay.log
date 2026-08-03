@@ -1,0 +1,128 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CodeReplay] Theory loaded
+[Theory CodeReplay] Theory translated
+[Theory CodeReplay] Derivation checks started
+[Theory CodeReplay] Derivation checks ended
+[Theory CodeReplay] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CodeReplay begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+rule (modulo E) Generate_Code:
+   [ Fr( ~code ), Fr( ~nonce ) ]
+  --[ CodeIssued( $AS, $Client, ~code, ~nonce ), Once( ~code ) ]->
+   [ Code( $AS, $Client, ~code, ~nonce ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Redeem_Code:
+   [ Code( $AS, $Client, code, nonce ), In( code ), Fr( ~token ) ]
+  --[ CodeRedeemed( $AS, $Client, code, nonce ), Unique( <'code', code> )
+  ]->
+   [ SecChannel( $AS, $Client, ~token ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Deliver_Token_Securely:
+   [ SecChannel( $AS, $Client, token ) ]
+  --[ TokenDelivered( $AS, $Client, token ) ]->
+   [ !ClientToken( $Client, token ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma code_single_use:
+  all-traces
+  "∀ AS C code n1 n2 #i #j.
+    ((CodeRedeemed( AS, C, code, n1 ) @ #i) ∧
+     (CodeRedeemed( AS, C, code, n2 ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS C code n1 n2 #i #j.
+  (CodeRedeemed( AS, C, code, n1 ) @ #i) ∧
+  (CodeRedeemed( AS, C, code, n2 ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma code_freshness:
+  all-traces
+  "∀ AS C code nonce #i.
+    (CodeRedeemed( AS, C, code, nonce ) @ #i) ⇒
+    (∃ #j. (CodeIssued( AS, C, code, nonce ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS C code nonce #i.
+  (CodeRedeemed( AS, C, code, nonce ) @ #i)
+ ∧
+  ∀ #j. (CodeIssued( AS, C, code, nonce ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( Code( $AS, $Client, code, nonce ) ▶₀ #i )
+  case Generate_Code
+  by contradiction /* cyclic */
+qed
+
+restriction once:
+  "∀ x #i #j. ((Once( x ) @ #i) ∧ (Once( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./authcode/code_replay.spthy
+
+  processing time: 0.32s
+
+  code_single_use (all-traces): verified (2 steps)
+  code_freshness (all-traces): verified (3 steps)
+
+==============================================================================

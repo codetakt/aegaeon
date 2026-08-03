@@ -1,0 +1,104 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory StepUpSoundness] Theory loaded
+[Theory StepUpSoundness] Theory translated
+[Theory StepUpSoundness] Derivation checks started
+[Theory StepUpSoundness] Derivation checks ended
+[Theory StepUpSoundness] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory StepUpSoundness begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) StepUpRequired:
+   [ Fr( ~req ) ]
+  --[ StepUpRequired( $Client, ~req ) ]->
+   [ StepUpReq( $Client, ~req ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IssueChallenge:
+   [ StepUpReq( C, req ), Fr( ~challenge ) ]
+  --[ ChallengeIssued( C, req, ~challenge ) ]->
+   [ Challenge( C, req, ~challenge ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) CompleteChallenge:
+   [ Challenge( C, req, challenge ) ]
+  --[ ChallengeCompleted( C, req, challenge ) ]->
+   [ StepUpCompleted( C, req ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TokenIssuedAfterStepUp:
+   [ StepUpReq( C, req ), StepUpCompleted( C, req ), Fr( ~token ) ]
+  --[ TokenIssued( C, req, ~token ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TokenIssuedWithoutStepUp:
+   [ Fr( ~req ), Fr( ~token ) ]
+  --[ TokenIssuedNoStepUp( $Client, ~req, ~token ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma stepup_soundness:
+  all-traces
+  "∀ C req tok #i #j.
+    ((StepUpRequired( C, req ) @ #j) ∧ (TokenIssued( C, req, tok ) @ #i)) ⇒
+    (∃ ch #k.
+      ((ChallengeCompleted( C, req, ch ) @ #k) ∧ (#j < #k)) ∧ (#k < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C req tok #i #j.
+  (StepUpRequired( C, req ) @ #j) ∧ (TokenIssued( C, req, tok ) @ #i)
+ ∧
+  ∀ ch #k.
+   (ChallengeCompleted( C, req, ch ) @ #k) ⇒ ((¬(#j < #k)) ∨ (¬(#k < #i)))"
+*/
+simplify
+solve( StepUpReq( $Client, ~req ) ▶₀ #i )
+  case StepUpRequired
+  by solve( StepUpCompleted( $Client, ~req ) ▶₁ #i )
+qed
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./stepup/stepup_soundness.spthy
+
+  processing time: 0.38s
+
+  stepup_soundness (all-traces): verified (3 steps)
+
+==============================================================================

@@ -1,0 +1,300 @@
+theory Federation_OP_Entity_Configuration
+begin
+
+/*
+ * Federation OP Entity Configuration & Subordinate Statement Security
+ *
+ * Models Aegaeon acting as an OpenID Provider (OP) in a federation.
+ * The OP publishes a self-signed Entity Configuration at
+ * /.well-known/openid-federation and serves subordinate statements
+ * for its registered RPs via the federation_fetch_endpoint.
+ *
+ * This model complements the existing federation models (which focus on
+ * Aegaeon as an RP consuming upstream IdP assertions) by modeling the
+ * OP-side federation operations:
+ *
+ * 1. Entity Configuration integrity — self-signed, iss==sub, JWKS included
+ * 2. Subordinate Statement issuance — OP vouches for registered RPs
+ * 3. Federation fetch endpoint — serves subordinate statements
+ * 4. Federation resolve endpoint — resolves trust chains to this OP
+ * 5. Key rotation — OP rotates federation signing key
+ *
+ * Security properties:
+ * - entity_config_self_signed: iss == sub for entity configuration
+ * - entity_config_integrity: config signed by OP's federation key
+ * - subordinate_only_for_registered: subordinate statements only for registered RPs
+ * - fetch_serves_valid_subordinate: fetched statements are properly signed
+ * - resolve_chain_integrity: resolved chain terminates at a valid trust anchor
+ * - key_rotation_continuity: old statements remain verifiable during grace period
+ * - no_cross_environment_subordinate: subordinate statements scoped to environment
+ *
+ * Threat model:
+ * - Attacker can request entity configuration (public endpoint)
+ * - Attacker can request subordinate statements for arbitrary entity_ids
+ * - Attacker can attempt to register a malicious RP to get a subordinate statement
+ * - Attacker can attempt to use a subordinate statement from environment A in B
+ *
+ * Relation to existing models:
+ * - trust_chain.spthy: models generic chain resolution (any entity type)
+ * - rp_authorize_callback.spthy: models Aegaeon as RP toward upstream IdP
+ * - THIS model: Aegaeon as OP serving its own federation metadata
+ *
+ * Known limitations:
+ * - metadata_policy application is modeled abstractly
+ * - No temporal validity for entity configurations (no clock)
+ * - Trust mark issuance not modeled (out of scope for this model)
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Key Management ============ */
+
+// OP generates a federation signing key
+rule OP_Federation_Keygen:
+  [ Fr(~fed_sk) ]
+  --[ OP_Fed_Key($OP, pk(~fed_sk)),
+      Unique(<'op_fed_key', $OP, pk(~fed_sk)>) ]->
+  [ !OP_Fed_SK($OP, ~fed_sk),
+    !OP_Fed_PK($OP, pk(~fed_sk)),
+    Out(pk(~fed_sk)) ]
+
+// OP key compromise
+rule OP_Fed_Compromise:
+  [ !OP_Fed_SK(OP, sk) ]
+  --[ Compromised(OP) ]->
+  [ Out(sk) ]
+
+// Trust Anchor key generation
+rule TA_Keygen:
+  [ Fr(~ta_sk) ]
+  --[ TA_Key($TA, pk(~ta_sk)),
+      Unique(<'ta_key', $TA>) ]->
+  [ !TA_SK($TA, ~ta_sk),
+    !TA_PK($TA, pk(~ta_sk)),
+    Out(pk(~ta_sk)) ]
+
+// TA compromise
+rule TA_Compromise:
+  [ !TA_SK(TA, sk) ]
+  --[ Compromised(TA) ]->
+  [ Out(sk) ]
+
+/* ============ OP Entity Configuration (§3.1) ============ */
+
+// OP publishes self-signed Entity Configuration.
+// INVARIANT: iss == sub == entity_id (self-signed requirement).
+// The configuration includes the OP's JWKS and authority_hints.
+rule OP_Publish_Entity_Config:
+  let entity_id = $OP
+      config_claims = <'entity_config', entity_id, entity_id,
+                        pk(fed_sk), 'openid_provider',
+                        $op_metadata, $authority_hint>
+      config_jws = sign(config_claims, fed_sk)
+  in
+  [ !OP_Fed_SK($OP, fed_sk) ]
+  --[ Entity_Config_Published($OP, pk(fed_sk), $op_metadata),
+      Entity_Config_Self_Signed($OP, entity_id, entity_id),
+      Unique(<'entity_config', $OP>) ]->
+  [ !OP_Entity_Config($OP, config_jws, pk(fed_sk), $op_metadata, $authority_hint),
+    Out(config_jws) ]
+
+/* ============ Environment & RP Registration ============ */
+
+// Environment (multi-tenant scoping)
+rule Environment_Init:
+  [ Fr(~env_id) ]
+  --[ Environment_Created(~env_id, $Tenant),
+      Unique(<'env', ~env_id>) ]->
+  [ !Environment(~env_id, $Tenant) ]
+
+// RP registration within an environment.
+// Only registered RPs can receive subordinate statements.
+rule RP_Register:
+  [ !Environment(env_id, $Tenant), Fr(~rp_sk) ]
+  --[ RP_Registered($RP, env_id, $Tenant, pk(~rp_sk)),
+      Unique(<'rp_reg', $RP, env_id>) ]->
+  [ !Registered_RP($RP, env_id, $Tenant, pk(~rp_sk)),
+    !RP_SK($RP, ~rp_sk),
+    Out(pk(~rp_sk)) ]
+
+/* ============ Subordinate Statement Issuance (§3.2) ============ */
+
+// OP issues subordinate statement for a REGISTERED RP.
+// The statement is signed with the OP's federation key and binds
+// the RP's public key and metadata policy.
+rule OP_Issue_Subordinate:
+  let sub_stmt_claims = <'subordinate_statement', $OP, $RP,
+                          rp_pk, $metadata_policy, env_id>
+      sub_stmt = sign(sub_stmt_claims, fed_sk)
+  in
+  [ !OP_Fed_SK($OP, fed_sk),
+    !Registered_RP($RP, env_id, $Tenant, rp_pk) ]
+  --[ Subordinate_Issued($OP, $RP, rp_pk, $metadata_policy, env_id),
+      Subordinate_For_Registered($OP, $RP, env_id),
+      Unique(<'sub_stmt', $OP, $RP, env_id>) ]->
+  [ !Subordinate_Statement($OP, $RP, sub_stmt, rp_pk, $metadata_policy, env_id) ]
+
+/* ============ Federation Fetch Endpoint (§7.1) ============ */
+
+// External party requests subordinate statement for an entity_id.
+// The fetch endpoint only serves statements for entities that have
+// a stored subordinate statement.
+rule Federation_Fetch:
+  [ In(<'fetch_request', $RP, env_id>),
+    !Subordinate_Statement($OP, $RP, sub_stmt, rp_pk, policy, env_id) ]
+  --[ Fetch_Served($OP, $RP, sub_stmt, env_id) ]->
+  [ Out(sub_stmt) ]
+
+// Fetch for unregistered entity returns error (no statement to serve)
+// — structurally enforced by requiring !Subordinate_Statement
+
+/* ============ Federation Resolve Endpoint (§7.2) ============ */
+
+// Trust Anchor issues a subordinate statement for the OP itself.
+// This establishes the OP in the trust hierarchy.
+rule TA_Vouch_For_OP:
+  let ta_sub_claims = <'subordinate_statement', $TA, $OP, op_fed_pk, $ta_policy>
+      ta_sub_stmt = sign(ta_sub_claims, ta_sk)
+  in
+  [ !TA_SK($TA, ta_sk),
+    !OP_Fed_PK($OP, op_fed_pk) ]
+  --[ TA_Vouched($TA, $OP, op_fed_pk, $ta_policy),
+      Unique(<'ta_vouch', $TA, $OP>) ]->
+  [ !TA_Sub_Stmt($TA, $OP, ta_sub_stmt, op_fed_pk, $ta_policy),
+    Out(ta_sub_stmt) ]
+
+// Resolve endpoint: given a target entity_id (RP), the OP resolves
+// the trust chain: RP → OP → TA. Returns the full chain.
+rule Federation_Resolve:
+  let ta_sub_claims = <'subordinate_statement', $TA, $OP, op_fed_pk, ta_policy>
+  in
+  [ In(<'resolve_request', $RP, $TA>),
+    !Subordinate_Statement($OP, $RP, rp_sub_stmt, rp_pk, rp_policy, env_id),
+    !OP_Entity_Config($OP, op_config, op_fed_pk, op_metadata, authority_hint),
+    !TA_Sub_Stmt($TA, $OP, ta_sub_stmt, op_fed_pk, ta_policy),
+    !TA_PK($TA, ta_pk) ]
+  --[ Eq(verify(ta_sub_stmt, ta_sub_claims, ta_pk), true),
+      Resolve_Chain_Served($OP, $RP, $TA, env_id),
+      Chain_Complete($RP, $OP, $TA, rp_pk, op_fed_pk) ]->
+  [ Out(<'resolve_response', rp_sub_stmt, op_config, ta_sub_stmt,
+          rp_pk, op_fed_pk, rp_policy, env_id, ta_policy, op_metadata,
+          authority_hint>) ]
+
+/* ============ External Verifier (Chain Consumer) ============ */
+
+// An external party verifies the full chain: RP → OP → TA.
+// This models the relying party or trust evaluator processing
+// the resolved chain.
+rule Verify_Chain:
+  let rp_sub_claims = <'subordinate_statement', $OP, $RP,
+                        rp_pk, rp_policy, env_id>
+      ta_sub_claims = <'subordinate_statement', $TA, $OP, op_pk, ta_policy>
+      config_claims = <'entity_config', $OP, $OP,
+                        op_pk, 'openid_provider',
+                        op_metadata, authority_hint>
+  in
+  [ In(<'resolve_response', rp_sub_stmt, op_config, ta_sub_stmt,
+         rp_pk, op_pk, rp_policy, env_id, ta_policy, op_metadata,
+         authority_hint>),
+    !TA_PK($TA, ta_pk) ]
+  --[ // Verify TA → OP subordinate statement
+      Eq(verify(ta_sub_stmt, ta_sub_claims, ta_pk), true),
+      // Verify OP entity config (self-signed)
+      Eq(verify(op_config, config_claims, op_pk), true),
+      // Verify OP → RP subordinate statement
+      Eq(verify(rp_sub_stmt, rp_sub_claims, op_pk), true),
+      Chain_Verified_External($RP, $OP, $TA, rp_pk),
+      RP_Trusted_Via_Chain($RP, rp_pk, $OP, $TA) ]->
+  [ ]
+
+/* ============ Key Rotation ============ */
+
+// OP rotates federation key. New entity config published with new key.
+// Old subordinate statements remain verifiable until TA re-vouches.
+rule OP_Rotate_Federation_Key:
+  [ !OP_Fed_SK($OP, old_sk), Fr(~new_sk) ]
+  --[ OP_Key_Rotated($OP, pk(old_sk), pk(~new_sk)),
+      Unique(<'op_rotation', $OP, pk(~new_sk)>) ]->
+  [ !OP_Fed_SK($OP, ~new_sk),
+    !OP_Fed_PK($OP, pk(~new_sk)),
+    Out(pk(~new_sk)),
+    // Old key still available for grace period (persistent fact)
+    !OP_Old_Key($OP, old_sk, pk(old_sk)) ]
+
+/* ============ Security Properties ============ */
+
+// Entity config self-signed: iss == sub for every published entity config.
+// This is structurally enforced by OP_Publish_Entity_Config using
+// entity_id for both iss and sub positions.
+lemma entity_config_self_signed:
+  "All op iss sub #i.
+     Entity_Config_Self_Signed(op, iss, sub)@i
+     ==> iss = sub"
+
+// Entity config integrity: every verified chain traces to a legitimate
+// entity config publication by the OP, or a chain entity key was compromised.
+// IMP-1 fix: Compromised scope narrowed to chain entities (op, ta) rather
+// than existentially quantified over all entities.
+lemma entity_config_integrity:
+  "All rp op ta rp_pk #i.
+     Chain_Verified_External(rp, op, ta, rp_pk)@i
+     ==> (Ex op_pk metadata #j.
+            Entity_Config_Published(op, op_pk, metadata)@j & #j < #i)
+         | (Ex #c. Compromised(op)@c)
+         | (Ex #c. Compromised(ta)@c)"
+
+// Subordinate statements only for registered RPs: the OP never issues
+// a subordinate statement for an entity that is not registered.
+lemma subordinate_only_for_registered:
+  "All op rp pk policy env #i.
+     Subordinate_Issued(op, rp, pk, policy, env)@i
+     ==> Ex tenant #j.
+           RP_Registered(rp, env, tenant, pk)@j & #j < #i"
+
+// Fetch serves only valid subordinate statements that were previously
+// issued by the OP. Attacker cannot inject statements into the fetch endpoint.
+lemma fetch_serves_valid_subordinate:
+  "All op rp stmt env #i.
+     Fetch_Served(op, rp, stmt, env)@i
+     ==> Ex pk policy #j.
+           Subordinate_Issued(op, rp, pk, policy, env)@j & #j < #i"
+
+// Resolve chain integrity: if a chain was served by the resolve endpoint,
+// the TA has vouched for the OP.
+lemma resolve_chain_integrity:
+  "All op rp ta env #i.
+     Resolve_Chain_Served(op, rp, ta, env)@i
+     ==> Ex op_pk policy #j.
+           TA_Vouched(ta, op, op_pk, policy)@j & #j < #i"
+
+// No cross-environment subordinate: a subordinate statement for an RP
+// in environment env_A cannot serve lookups for environment env_B.
+// Fetch_Served binds the env_id from the subordinate statement.
+lemma no_cross_environment_subordinate:
+  "All op rp stmt env #i.
+     Fetch_Served(op, rp, stmt, env)@i
+     ==> Ex tenant pk #j.
+           RP_Registered(rp, env, tenant, pk)@j"
+
+// Chain verification unforgeability: if an external verifier accepted
+// a chain, either all entities are honest or a chain entity key was compromised.
+// IMP-1 fix: Compromised scope narrowed to chain entities (op, ta).
+lemma chain_unforgeability:
+  "All rp rp_pk op ta #i.
+     RP_Trusted_Via_Chain(rp, rp_pk, op, ta)@i
+     ==> (Ex op_pk rp_policy ta_policy env #j #k.
+            Subordinate_Issued(op, rp, rp_pk, rp_policy, env)@j &
+            TA_Vouched(ta, op, op_pk, ta_policy)@k &
+            #j < #i & #k < #i)
+         | (Ex #c. Compromised(op)@c)
+         | (Ex #c. Compromised(ta)@c)"
+
+end

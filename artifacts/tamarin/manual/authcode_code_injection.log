@@ -1,0 +1,122 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CodeInjection] Theory loaded
+[Theory CodeInjection] Theory translated
+[Theory CodeInjection] Derivation checks started
+[Theory CodeInjection] Derivation checks ended
+[Theory CodeInjection] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CodeInjection begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+rule (modulo E) Generate_Code:
+   [ Fr( ~code ), Fr( ~state ) ]
+  --[ CodeGenerated( $AS, $Client, ~code, ~state ) ]->
+   [ !Code( $AS, $Client, ~code, ~state ), Out( ~state ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Exchange_Code:
+   [ !Code( $AS, $Client, code, state ), In( <code, state> ) ]
+  --[ CodeExchanged( $AS, $Client, code, state ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Inject_Code:
+   [ In( code ), Fr( ~fake_state ) ]
+  --[ InjectionAttempt( code, ~fake_state ) ]->
+   [ Out( <code, ~fake_state> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma no_code_injection:
+  all-traces
+  "∀ AS C code state #i.
+    (CodeExchanged( AS, C, code, state ) @ #i) ⇒
+    (∃ #j. (CodeGenerated( AS, C, code, state ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS C code state #i.
+  (CodeExchanged( AS, C, code, state ) @ #i)
+ ∧
+  ∀ #j. (CodeGenerated( AS, C, code, state ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !Code( $AS, $Client, code, state ) ▶₀ #i )
+  case Generate_Code
+  by contradiction /* from formulas */
+qed
+
+lemma state_binding:
+  all-traces
+  "∀ AS C code state1 state2 #i #j.
+    ((CodeGenerated( AS, C, code, state1 ) @ #i) ∧
+     (CodeExchanged( AS, C, code, state2 ) @ #j)) ⇒
+    (state1 = state2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS C code state1 state2 #i #j.
+  (CodeGenerated( AS, C, code, state1 ) @ #i) ∧
+  (CodeExchanged( AS, C, code, state2 ) @ #j)
+ ∧
+  ¬(state1 = state2)"
+*/
+simplify
+solve( !Code( $AS, $Client, ~code, state2 ) ▶₀ #j )
+  case Generate_Code
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./authcode/code_injection.spthy
+
+  processing time: 0.26s
+
+  no_code_injection (all-traces): verified (3 steps)
+  state_binding (all-traces): verified (3 steps)
+
+==============================================================================

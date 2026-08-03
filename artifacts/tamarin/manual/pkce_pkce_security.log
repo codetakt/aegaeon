@@ -1,0 +1,90 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory PKCE_Security] Theory loaded
+[Theory PKCE_Security] Theory translated
+[Theory PKCE_Security] Derivation checks started
+[Theory PKCE_Security] Derivation checks ended
+[Theory PKCE_Security] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory PKCE_Security begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+rule (modulo E) Authorization:
+   [ Fr( c ), Fr( v ) ]
+  --[ CodeIssued( c ), ChallengeStored( c, h(v) ) ]->
+   [ Out( c ), !Challenge( c, h(v) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Token:
+   [ In( <c, ver> ), !Challenge( c, h(ver) ) ]
+  --[ TokenRequest( c, ver ), TokenIssued( c ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma mismatched_verifiers_cannot_inject_codes:
+  all-traces
+  "∀ c hv ver #i #j #k.
+    ((((CodeIssued( c ) @ #i) ∧ (ChallengeStored( c, hv ) @ #i)) ∧
+      (TokenRequest( c, ver ) @ #j)) ∧
+     (TokenIssued( c ) @ #k)) ⇒
+    (hv = h(ver))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ c hv ver #i #j #k.
+  (CodeIssued( c ) @ #i) ∧
+  (ChallengeStored( c, hv ) @ #i) ∧
+  (TokenRequest( c, ver ) @ #j) ∧
+  (TokenIssued( c ) @ #k)
+ ∧
+  ¬(hv = h(ver))"
+*/
+simplify
+solve( !Challenge( ~n, h(ver) ) ▶₁ #j )
+  case Authorization
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./pkce/pkce_security.spthy
+
+  processing time: 0.26s
+
+  mismatched_verifiers_cannot_inject_codes (all-traces): verified (3 steps)
+
+==============================================================================

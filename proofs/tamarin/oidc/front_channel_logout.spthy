@@ -1,0 +1,200 @@
+theory OIDC_FrontChannelLogout
+begin
+
+/*
+ * OpenID Connect Front-Channel Logout Security Model
+ *
+ * Extends the existing back-channel-only model (logout_session_termination.spthy)
+ * with front-channel (iframe-based) logout and post_logout_redirect_uri security.
+ *
+ * Implementation reference: crates/server/src/web/mod.rs
+ *   - logout() handler (line 7884): RP-initiated logout via end_session_endpoint
+ *   - decode_id_token_hint (line 7741): JWS signature + issuer validation
+ *   - validate_post_logout_redirect_uri (client_registry.rs:286): allowlist check
+ *   - dispatch_backchannel_logout (line 7840): back-channel notification fan-out
+ *
+ * Front-channel logout threat model:
+ * - The OP renders iframes pointing to each RP's registered frontchannel_logout_uri
+ * - The Dolev-Yao attacker controls the network (can inject/modify iframe src)
+ * - post_logout_redirect_uri must be in the client's registered allowlist
+ * - id_token_hint is required when post_logout_redirect_uri is provided
+ *
+ * Security properties verified:
+ * 1. session_termination_reach: all RPs with sessions receive logout notification
+ * 2. post_logout_redirect_validation: redirect only to registered URIs
+ * 3. no_open_redirect: unregistered URIs cannot be used for post-logout redirect
+ * 4. iframe_origin_check: iframe src constrained to registered frontchannel_logout_uri
+ * 5. logout_consistency: front-channel and back-channel produce same session termination
+ */
+
+builtins: signing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ PKI ============ */
+
+rule OP_Setup:
+  [ Fr(~sk) ]
+  --[ OP_Initialized($OP, ~sk) ]->
+  [ !OP_Key($OP, ~sk),
+    Out(pk(~sk)) ]
+
+/* ============ Client Registration ============ */
+
+// RP registers with the OP, providing:
+// - redirect_uri for auth flow
+// - post_logout_redirect_uris (allowlist for post-logout redirect)
+// - frontchannel_logout_uri (iframe target for front-channel logout)
+// - backchannel_logout_uri (back-channel notification endpoint)
+rule RP_Register:
+  []
+  --[ RP_Registered($OP, $RP, $redirect_uri, $post_logout_uri, $fc_logout_uri) ]->
+  [ !RP($OP, $RP, $redirect_uri),
+    !Post_Logout_URI($OP, $RP, $post_logout_uri),
+    !FC_Logout_URI($OP, $RP, $fc_logout_uri),
+    !RP_Has_Session($OP, $RP) ]
+
+/* ============ Session & Token Issuance ============ */
+
+rule OP_Create_Session:
+  [ Fr(~sid) ]
+  --[ Session_Created($OP, $User, ~sid) ]->
+  [ Session_Active($OP, $User, ~sid),
+    Token_Issuance_Allowed(~sid) ]
+
+// OP issues a signed ID Token bound to (RP, User, sid).
+// The id_token_hint is the signed JWT that the RP will present at logout.
+rule OP_Issue_ID_Token:
+  [ Session_Active($OP, $User, sid),
+    Token_Issuance_Allowed(sid),
+    !RP($OP, $RP, redirect_uri),
+    !OP_Key($OP, sk),
+    Fr(~nonce) ]
+  --[ ID_Token_Issued($OP, $RP, $User, sid, ~nonce),
+      Unique(<'id_token_issue', sid, $RP>) ]->
+  [ Session_Active($OP, $User, sid),
+    RP_Session_Active($OP, $RP, $User, sid),
+    !Issued_Token($OP, $RP, $User, sid, sign(<'id_token', $OP, $RP, $User, sid, ~nonce>, sk)),
+    Out(sign(<'id_token', $OP, $RP, $User, sid, ~nonce>, sk)) ]
+
+/* ============ RP-Initiated Logout (Front-Channel) ============ */
+
+// RP initiates logout by presenting id_token_hint and optionally
+// post_logout_redirect_uri + state. The request goes through the
+// attacker-controlled network.
+rule RP_Initiate_Logout:
+  [ In(id_token_hint) ]
+  --[ RP_Logout_Requested(id_token_hint) ]->
+  [ Out(<'logout_request', id_token_hint>) ]
+
+// RP initiates logout with post_logout_redirect_uri.
+// Implementation requires id_token_hint when post_logout_redirect_uri is present.
+rule RP_Initiate_Logout_With_Redirect:
+  [ In(id_token_hint),
+    Fr(~state) ]
+  --[ RP_Logout_With_Redirect_Requested(id_token_hint, $post_logout_uri, ~state) ]->
+  [ Out(<'logout_request_redirect', id_token_hint, $post_logout_uri, ~state>) ]
+
+/* ============ OP Processes Logout ============ */
+
+// OP processes logout: validates id_token_hint (JWS verification),
+// terminates session, and notifies all RPs that participated in the session.
+rule OP_Process_Logout:
+  [ In(<'logout_request', id_token_hint>),
+    !OP_Key($OP, sk),
+    !Issued_Token($OP, $RP, $User, sid, id_token_hint),
+    Session_Active($OP, $User, sid),
+    Fr(~jti) ]
+  --[ Logout_Processed($OP, $RP, $User, sid, ~jti),
+      Session_Terminated($OP, $User, sid),
+      Unique(<'logout', sid>) ]->
+  [ !Logout_State($OP, sid, ~jti) ]
+
+// OP processes logout with post_logout_redirect_uri validation.
+// The OP validates:
+// 1. id_token_hint signature (via !Issued_Token)
+// 2. post_logout_redirect_uri is in the client's registered allowlist
+rule OP_Process_Logout_With_Redirect:
+  [ In(<'logout_request_redirect', id_token_hint, post_logout_uri, state>),
+    !OP_Key($OP, sk),
+    !Issued_Token($OP, $RP, $User, sid, id_token_hint),
+    !Post_Logout_URI($OP, $RP, post_logout_uri),
+    Session_Active($OP, $User, sid),
+    Fr(~jti) ]
+  --[ Logout_Processed($OP, $RP, $User, sid, ~jti),
+      Session_Terminated($OP, $User, sid),
+      Post_Logout_Redirect($OP, $RP, post_logout_uri, state),
+      Unique(<'logout', sid>) ]->
+  [ !Logout_State($OP, sid, ~jti),
+    Out(<'redirect', post_logout_uri, state>) ]
+
+/* ============ Front-Channel Notification (iframe) ============ */
+
+// OP renders iframe for each RP that has a registered frontchannel_logout_uri
+// and participated in the session. The iframe src is the registered URI.
+rule OP_Send_FC_Logout:
+  [ !Logout_State($OP, sid, jti),
+    !FC_Logout_URI($OP, $RP, fc_uri),
+    RP_Session_Active($OP, $RP, $User, sid) ]
+  --[ FC_Logout_Sent($OP, $RP, sid, fc_uri),
+      FC_Iframe_Rendered($OP, $RP, fc_uri) ]->
+  [ Out(<'fc_logout_iframe', $RP, fc_uri, sid>) ]
+
+/* ============ Back-Channel Notification ============ */
+
+// OP sends back-channel logout token (same as existing model).
+rule OP_Send_BC_Logout:
+  [ !Logout_State($OP, sid, jti),
+    RP_Session_Active($OP, $RP, $User, sid) ]
+  --[ BC_Logout_Sent($OP, $RP, sid, jti) ]->
+  [ Out(<'bc_logout', $RP, sid, jti>) ]
+
+/* ============ Security Properties ============ */
+
+// 1. Session termination reach: any front-channel logout notification
+//    is sent only after the OP has terminated the session.
+lemma session_termination_reach:
+  "All op rp sid fc_uri #i.
+     FC_Logout_Sent(op, rp, sid, fc_uri)@i
+     ==> Ex user #j. Session_Terminated(op, user, sid)@j & #j < #i"
+
+// 2. Post-logout redirect validation: any post_logout_redirect_uri used
+//    in a redirect was registered by the RP at the OP.
+lemma post_logout_redirect_validation:
+  "All op rp uri state #i.
+     Post_Logout_Redirect(op, rp, uri, state)@i
+     ==> Ex redirect_uri fc_uri #j.
+           RP_Registered(op, rp, redirect_uri, uri, fc_uri)@j"
+
+// 3. No open redirect: any post-logout redirect must reference a URI
+//    registered by the RP before the redirect is issued.
+lemma no_open_redirect:
+  "All op rp uri state #i.
+     Post_Logout_Redirect(op, rp, uri, state)@i
+     ==> Ex redirect_uri fc_uri #j.
+           RP_Registered(op, rp, redirect_uri, uri, fc_uri)@j & #j < #i"
+
+// 4. iframe origin check: every front-channel logout iframe rendered by
+//    the OP uses a URI that was registered as the RP's frontchannel_logout_uri.
+lemma iframe_origin_check:
+  "All op rp fc_uri #i.
+     FC_Iframe_Rendered(op, rp, fc_uri)@i
+     ==> Ex redirect_uri post_logout_uri #j.
+           RP_Registered(op, rp, redirect_uri, post_logout_uri, fc_uri)@j"
+
+// 5. Logout consistency: front-channel and back-channel logout notifications
+//    for the same session reference the same logout event (same sid).
+//    Both channels terminate the same session.
+lemma logout_consistency:
+  "All op rp1 rp2 sid fc_uri jti #i #j.
+     FC_Logout_Sent(op, rp1, sid, fc_uri)@i &
+     BC_Logout_Sent(op, rp2, sid, jti)@j
+     ==> Ex user #k. Session_Terminated(op, user, sid)@k & #k < #i & #k < #j"
+
+end

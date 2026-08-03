@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/released-client-claim.schema.json",
+  "title": "Aegaeon SDK Released Client Claim Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_target",
+    "current_state",
+    "target_state",
+    "activation_requirements",
+    "required_publication_org_tasks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "claim_target": {
+      "type": "string",
+      "enum": [
+        "released-client-claim"
+      ]
+    },
+    "current_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_phase",
+        "released_client_claim_active",
+        "canonical_statement"
+      ],
+      "properties": {
+        "claim_phase": {
+          "type": "string",
+          "enum": [
+            "pre-release-client-baseline",
+            "released-client-claim"
+          ]
+        },
+        "released_client_claim_active": {
+          "type": "boolean"
+        },
+        "canonical_statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "target_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_phase",
+        "canonical_statement",
+        "default_profile",
+        "promoted_client_slices",
+        "compat_only_surfaces"
+      ],
+      "properties": {
+        "claim_phase": {
+          "type": "string",
+          "enum": [
+            "released-client-claim"
+          ]
+        },
+        "canonical_statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "default_profile": {
+          "type": "string",
+          "enum": [
+            "verified-core",
+            "aegaeon-rs256",
+            "compat-interop"
+          ]
+        },
+        "promoted_client_slices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "compat_only_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "activation_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promotion_report_ready",
+        "managed_provider_evidence_required",
+        "managed_provider_evidence_max_age_hours",
+        "managed_provider_hosted_provenance_required",
+        "managed_provider_expected_lane",
+        "managed_provider_expected_workflow",
+        "managed_provider_expected_repository",
+        "managed_provider_github_ref_required",
+        "managed_provider_github_sha_required",
+        "managed_provider_github_job_required",
+        "managed_provider_expected_job",
+        "admin_sdk_evidence_required",
+        "admin_sdk_evidence_max_age_hours",
+        "admin_sdk_hosted_provenance_required",
+        "admin_sdk_expected_lane",
+        "admin_sdk_expected_workflow",
+        "admin_sdk_expected_repository",
+        "admin_sdk_github_ref_required",
+        "admin_sdk_github_sha_required",
+        "admin_sdk_github_job_required",
+        "admin_sdk_expected_job",
+        "signed_release_attestation_required",
+        "sbom_publication_required",
+        "publication_org_tasks_must_be_done"
+      ],
+      "properties": {
+        "promotion_report_ready": {
+          "const": true
+        },
+        "managed_provider_evidence_required": {
+          "const": true
+        },
+        "managed_provider_evidence_max_age_hours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "managed_provider_hosted_provenance_required": {
+          "const": true
+        },
+        "managed_provider_expected_lane": {
+          "type": "string",
+          "minLength": 1
+        },
+        "managed_provider_expected_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "managed_provider_expected_repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "managed_provider_github_ref_required": {
+          "const": true
+        },
+        "managed_provider_github_sha_required": {
+          "const": true
+        },
+        "managed_provider_github_job_required": {
+          "const": true
+        },
+        "managed_provider_expected_job": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admin_sdk_evidence_required": {
+          "const": true
+        },
+        "admin_sdk_evidence_max_age_hours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "admin_sdk_hosted_provenance_required": {
+          "const": true
+        },
+        "admin_sdk_expected_lane": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admin_sdk_expected_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admin_sdk_expected_repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admin_sdk_github_ref_required": {
+          "const": true
+        },
+        "admin_sdk_github_sha_required": {
+          "const": true
+        },
+        "admin_sdk_github_job_required": {
+          "const": true
+        },
+        "admin_sdk_expected_job": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signed_release_attestation_required": {
+          "const": true
+        },
+        "sbom_publication_required": {
+          "const": true
+        },
+        "publication_org_tasks_must_be_done": {
+          "const": true
+        }
+      }
+    },
+    "required_publication_org_tasks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

@@ -1,0 +1,5 @@
+USER_TARGET=
+USER_CFLAGS=
+USER_C_FILES=
+ALL_C_FILES=JoseNatLemmas.c Jose_Arith_Bounds.c Jose_Context.c Jose_LowStar_Json_Stack.c Jose_Utf8Lemmas.c
+ALL_H_FILES=JoseNatLemmas.h Jose_Arith_Bounds.h Jose_Context.h Jose_LowStar_Json_Stack.h Jose_Utf8Lemmas.h internal/FStar.h internal/Prims.h

@@ -1,0 +1,18 @@
+--- a/compiler/rustc_target/src/spec/mod.rs
++++ b/compiler/rustc_target/src/spec/mod.rs
+@@
+-    if sess.opts.unstable_opts.sanitizer.contains(SanitizerSet::ADDRESS) {
+-        add_pre_link_args(
+-            &mut pre_link_args,
+-            feat,
+-            LinkerFlavor::Gcc,
+-            &[
+-                format!("-lclang_rt.asan-{}", target.arch),
+-                format!("-lclang_rt.asan-preinit-{}", target.arch),
+-            ],
+-        );
+-    }
++    if sess.opts.unstable_opts.sanitizer.contains(SanitizerSet::ADDRESS) {
++        // patched: no automatic static sanitizer runtime
++    }
+ EOF

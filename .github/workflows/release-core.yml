@@ -1,0 +1,187 @@
+name: Verified Core Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v0.9.0-core.1)"
+        required: true
+      commit:
+        description: "Git commit SHA to build from"
+        required: true
+      sdk_repo:
+        description: "Optional SDK repository (owner/repo) to notify via repository_dispatch"
+        required: false
+      sdk_dispatch_event_type:
+        description: "repository_dispatch event type for the SDK repository"
+        required: false
+        default: "verified-core-release"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-core-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CORE_OUT_DIR: artifacts/verified-core
+  CORE_RELEASE_ARTIFACT_NAME: verified-core-${{ github.event.inputs.version }}
+  CORE_SDK_DISPATCH_ARTIFACT_NAME: verified-core-sdk-dispatch-${{ github.event.inputs.version }}
+  CORE_HANDOFF_MANIFEST_FILE: verified-core-handoff-manifest.json
+
+jobs:
+  build-and-sign:
+    runs-on: ubuntu-latest
+    name: Build & sign verified core
+    env:
+      NIX_PATH: nixpkgs=channel:nixos-25.11
+
+    steps:
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit }}
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Build verified core artefact (wasm + manifest)
+        run: |
+          nix develop .#verification --command bash -e scripts/extraction/package_verified_core.sh
+        shell: bash
+
+      - name: Display artefact contents
+        run: ls -R "$CORE_OUT_DIR"
+
+      - name: Compute additional integrity metadata
+        run: |
+          pushd "$CORE_OUT_DIR"
+          sha512sum verified_core.wasm > verified_core.wasm.sha512
+          node --version
+          if [ -f "${{ github.workspace }}/.github/keys/verified-core.pub" ]; then
+            node scripts/sdk/fetch_core_artifact.js \
+              --manifest manifest.json \
+              --wasm verified_core.wasm \
+              --signature verified_core.wasm.sig \
+              --public-key "${{ github.workspace }}/.github/keys/verified-core.pub" \
+              --outDir "$CORE_OUT_DIR/verified"
+          else
+            echo "Public key not found; skipping fetch_core_artifact smoke check."
+          fi
+          popd
+        shell: bash
+
+      - name: Sign artefact (cosign)
+        if: env.AEGAEON_COSIGN_KEY != ''
+        env:
+          COSIGN_YES: "true"
+          AEGAEON_COSIGN_KEY: ${{ secrets.AEGAEON_COSIGN_KEY }}
+        run: |
+          cosign sign-blob --key env://AEGAEON_COSIGN_KEY \
+            "$CORE_OUT_DIR/verified_core.wasm" \
+            > "$CORE_OUT_DIR/verified_core.wasm.cosign.sig"
+        shell: bash
+
+      - name: Upload build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CORE_RELEASE_ARTIFACT_NAME }}
+          path: |
+            ${{ env.CORE_OUT_DIR }}/*
+            ${{ env.CORE_OUT_DIR }}/verified/*
+            ${{ env.CORE_OUT_DIR }}/verified_core.wasm.cosign.sig
+          if-no-files-found: error
+
+  draft-release:
+    runs-on: ubuntu-latest
+    needs: build-and-sign
+    permissions:
+      contents: write
+    env:
+      AEGAEON_SDK_REPOSITORY_DISPATCH_TOKEN_PRESENT: ${{ secrets.AEGAEON_SDK_REPOSITORY_DISPATCH_TOKEN != '' }}
+    steps:
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit }}
+
+      - name: Download artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CORE_RELEASE_ARTIFACT_NAME }}
+          path: dist
+
+      - name: Build Verified Core handoff manifest
+        run: |
+          node --experimental-strip-types scripts/sdk/build_verified_core_handoff_manifest.ts \
+            --core-repo "${{ github.repository }}" \
+            --core-release-tag "${{ github.event.inputs.version }}" \
+            --source-commit "${{ github.event.inputs.commit }}" \
+            --source-workflow "Verified Core Release" \
+            --source-run-id "${{ github.run_id }}" \
+            --release-url \
+              "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.event.inputs.version }}" \
+            --release-artifact-name "${{ env.CORE_RELEASE_ARTIFACT_NAME }}" \
+            --dispatch-artifact-name "${{ env.CORE_SDK_DISPATCH_ARTIFACT_NAME }}" \
+            --handoff-manifest-file "${{ env.CORE_HANDOFF_MANIFEST_FILE }}" \
+            --output "dist/${{ env.CORE_HANDOFF_MANIFEST_FILE }}"
+
+      - name: Validate Verified Core handoff manifest
+        run: |
+          python3 scripts/validation/validate_verified_core_handoff_manifest.py \
+            "dist/${{ env.CORE_HANDOFF_MANIFEST_FILE }}"
+
+      - name: Create draft release
+        id: draft_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          draft: true
+          name: Verified Core ${{ github.event.inputs.version }}
+          body: |
+            ## Artefacts
+            - `verified_core.wasm`
+            - `manifest.json`
+            - `verified_core.wasm.sig`
+            - `verified_core.wasm.sha256`
+            - `verified_core.wasm.sha512`
+            - `integrity.txt`
+            - `verified-core-handoff-manifest.json`
+
+            Built from commit `${{ github.event.inputs.commit }}`.
+          files: dist/**
+
+      - name: Build SDK repository dispatch payload
+        run: |
+          node --experimental-strip-types scripts/sdk/build_sdk_repository_dispatch_payload.ts \
+            --core-repo "${{ github.repository }}" \
+            --core-release-tag "${{ github.event.inputs.version }}" \
+            --source-commit "${{ github.event.inputs.commit }}" \
+            --source-workflow "release-core" \
+            --source-run-id "${{ github.run_id }}" \
+            --release-url "${{ steps.draft_release.outputs.url }}" \
+            --event-type "${{ github.event.inputs.sdk_dispatch_event_type }}" \
+            --output dist/sdk-repository-dispatch.json
+
+      - name: Validate SDK repository dispatch payload
+        run: |
+          python3 scripts/validation/validate_sdk_repository_dispatch_payload.py dist/sdk-repository-dispatch.json
+
+      - name: Upload SDK dispatch payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CORE_SDK_DISPATCH_ARTIFACT_NAME }}
+          path: dist/sdk-repository-dispatch.json
+          if-no-files-found: error
+
+      - name: Notify SDK repository
+        if: ${{ github.event.inputs.sdk_repo != '' && env.AEGAEON_SDK_REPOSITORY_DISPATCH_TOKEN_PRESENT == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.AEGAEON_SDK_REPOSITORY_DISPATCH_TOKEN }}
+        run: |
+          gh api "repos/${{ github.event.inputs.sdk_repo }}/dispatches" \
+            --method POST \
+            --input dist/sdk-repository-dispatch.json

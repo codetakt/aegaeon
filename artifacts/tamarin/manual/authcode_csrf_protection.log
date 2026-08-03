@@ -1,0 +1,126 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CSRFProtection] Theory loaded
+[Theory CSRFProtection] Theory translated
+[Theory CSRFProtection] Derivation checks started
+[Theory CSRFProtection] Derivation checks ended
+[Theory CSRFProtection] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory CSRFProtection begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+rule (modulo E) Client_Init:
+   [ Fr( ~state ) ]
+  --[ StateGenerated( $Client, ~state ) ]->
+   [ ClientState( $Client, ~state ), !StateStore( $Client, ~state ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Authorize:
+   [ Fr( ~code ), !StateStore( $Client, state ) ]
+  --[ AuthRequest( $AS, $Client, state ) ]->
+   [ Out( <~code, h(state)> ), !AuthorizedCode( ~code, state ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Validate:
+   [
+   ClientState( $Client, state ), In( <code, h_state> ),
+   !AuthorizedCode( code, state )
+   ]
+  --[
+  Eq( h_state, h(state) ), StateValidated( $Client, state ),
+  ResponseAccepted( $Client, code )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+rule (modulo E) CSRF_Attack:
+   [ In( state ) ]
+  --[ CSRFAttempt( $Attacker, state ) ]->
+   [ Out( <$Attacker, state> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma csrf_protection:
+  all-traces
+  "∀ C code state #i.
+    ((ResponseAccepted( C, code ) @ #i) ∧
+     (StateValidated( C, state ) @ #i)) ⇒
+    (∃ #j. (StateGenerated( C, state ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C code state #i.
+  (ResponseAccepted( C, code ) @ #i) ∧ (StateValidated( C, state ) @ #i)
+ ∧
+  ∀ #j. (StateGenerated( C, state ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( ClientState( $Client, state ) ▶₀ #i )
+  case Client_Init
+  by contradiction /* from formulas */
+qed
+
+lemma state_unpredictability:
+  all-traces
+  "∀ C state #i #j.
+    ((StateGenerated( C, state ) @ #i) ∧ (K( state ) @ #j)) ⇒
+    (∃ #k. (StateValidated( C, state ) @ #k) ∧ (#k < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C state #i #j.
+  (StateGenerated( C, state ) @ #i) ∧ (K( state ) @ #j)
+ ∧
+  ∀ #k. (StateValidated( C, state ) @ #k) ⇒ ¬(#k < #j)"
+*/
+simplify
+by solve( !KU( ~state ) @ #vk )
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./authcode/csrf_protection.spthy
+
+  processing time: 0.26s
+
+  csrf_protection (all-traces): verified (3 steps)
+  state_unpredictability (all-traces): verified (2 steps)
+
+==============================================================================

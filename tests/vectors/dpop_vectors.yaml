@@ -1,0 +1,36 @@
+- description: valid proof without ath
+  proof: "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6Im5vbmUifQ.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3Jlc291cmNlLmV4YW1wbGUuY29tL2FwaSIsImlhdCI6MTcwMDAwMDAwMCwianRpIjoidW5pcXVlLTEyMyJ9."
+  method: GET
+  uri: https://resource.example.com/api
+  now: 1700000100
+  expect: pass
+
+- description: method mismatch should fail
+  proof: "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6Im5vbmUifQ.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9yZXNvdXJjZS5leGFtcGxlLmNvbS9hcGkiLCJpYXQiOjE3MDAwMDAwMDAsImp0aSI6InVuaXF1ZS1hYmMifQ."
+  method: GET
+  uri: https://resource.example.com/api
+  now: 1700000100
+  expect: fail
+
+- description: expired proof should fail
+  proof: "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6Im5vbmUifQ.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3Jlc291cmNlLmV4YW1wbGUuY29tL2FwaSIsImlhdCI6MTYwMDAwMDAwMCwianRpIjoic3RhbGUtMSJ9."
+  method: GET
+  uri: https://resource.example.com/api
+  now: 1700000100
+  expect: fail
+
+- description: valid proof with ath binding
+  proof: "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6Im5vbmUifQ.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3Jlc291cmNlLmV4YW1wbGUuY29tL2FwaSIsImlhdCI6MTcwMDAwMDAwMCwianRpIjoiYXRoLTEiLCJhdGgiOiJzVHJqUzVJeC1WWjFfMUFuWWJaSzdkRENlUFcyNkhNTTZadHk4MXN0MzdBIn0."
+  method: GET
+  uri: https://resource.example.com/api
+  now: 1700000100
+  expected_ath: sTrjS5Ix-VZ1_1AnYbZK7dDCePW26HMM6Zty81st37A
+  expect: pass
+
+- description: mismatched ath should fail
+  proof: "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6Im5vbmUifQ.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3Jlc291cmNlLmV4YW1wbGUuY29tL2FwaSIsImlhdCI6MTcwMDAwMDAwMCwianRpIjoiYXRoLTIiLCJhdGgiOiJ3cm9uZyJ9."
+  method: GET
+  uri: https://resource.example.com/api
+  now: 1700000100
+  expected_ath: sTrjS5Ix-VZ1_1AnYbZK7dDCePW26HMM6Zty81st37A
+  expect: fail

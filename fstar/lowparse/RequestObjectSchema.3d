@@ -1,0 +1,40 @@
+// EverParse schema for OAuth 2.0 / OpenID Connect Request Objects (RFC 9101 / JAR).
+//
+// This schema validates a canonical binary encoding derived from an already
+// validated Request Object payload (signature, aud, exp/nbf are checked by the
+// JOSE layer). It is intended as defense-in-depth to enforce structural
+// invariants and fail-close semantics when the optional EverParse runtime gate
+// is enabled.
+
+// Helper for length-prefixed byte strings (UTF-8 enforcement is handled by Rust/F*).
+typedef struct _len_prefixed_bytes {
+  UINT32 len;
+  UINT8  bytes[len];
+} LenPrefixedBytes;
+
+typedef struct _maybe_string {
+  UINT8 present;
+  LenPrefixedBytes value;
+} MaybeString;
+
+// Request Object claims entrypoint.
+//
+// Required fields capture the parameters that MUST be bound by the Request
+// Object for this implementation (aud, exp/nbf, client_id, redirect_uri,
+// response_type, scope, PKCE, jti). Optional fields model the remaining
+// parameters that may be supplied by clients.
+entrypoint typedef struct _request_object_claims_entry {
+  LenPrefixedBytes aud;
+  UINT64 exp;
+  UINT64 nbf;
+  LenPrefixedBytes client_id;
+  LenPrefixedBytes redirect_uri;
+  LenPrefixedBytes response_type;
+  LenPrefixedBytes scope;
+  MaybeString state;
+  MaybeString nonce;
+  LenPrefixedBytes code_challenge;
+  LenPrefixedBytes code_challenge_method;
+  MaybeString response_mode;
+  LenPrefixedBytes jti;
+} RequestObjectClaims;

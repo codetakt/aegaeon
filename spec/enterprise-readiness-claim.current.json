@@ -1,0 +1,66 @@
+{
+  "$schema": "https://aegaeon.dev/spec/enterprise-readiness-claim.schema.json",
+  "schema_version": 1,
+  "claim_target": "enterprise-readiness",
+  "claim_active": false,
+  "current_public_wording": "feature-complete beta / phase-release baseline with formal server-side assurance and constrained management UI",
+  "future_allowed_wording": "enterprise-ready identity platform with audited release custody, regulated-operation runbooks, hardened deployment guidance, real managed-provider evidence, and KMS/HSM deployment classification",
+  "required_evidence": [
+    {
+      "id": "publication-org-rollout",
+      "description": "Publication organization branch protection, repository settings, release custody, secrets, and package publication controls are applied and audited.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/publication-org-rollout.md",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "managed-provider-evidence",
+      "description": "Hosted evidence is generated from at least one provisioned real commercial provider tenant.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/managed-provider-evidence.md",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "kms-hsm-classification",
+      "description": "Concrete KMS/HSM-backed OIDC signing deployments are classified as claim-preserving or compat-only with fresh parity evidence.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/operations/kms-hsm-deployment-classification.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "regulated-runbooks",
+      "description": "Regulated-environment runbooks cover key custody, audit retention, evidence review cadence, backup/restore, DR, incident response, and operator access review.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/operations/management-platform-regulated-environment.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "hardened-reference-deployment",
+      "description": "Reference deployment guidance covers DB, TLS, networking, secrets, observability, alerting, upgrades, rollback, and data retention.",
+      "status": "complete",
+      "required_for_activation": true,
+      "evidence_uri": "docs/operations/hardened-reference-deployment.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "release-security-evidence",
+      "description": "Release evidence, SDK publication bundle, SBOM, vulnerability scan, dependency policy, and support response procedures are archived and linkable.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/releases/evidence/release-security-evidence.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "enterprise-slo-baselines",
+      "description": "Load, performance, observability, and SLO baselines exist for the management and issuer surfaces included in the enterprise claim.",
+      "status": "in_progress",
+      "required_for_activation": true,
+      "evidence_uri": "docs/performance/enterprise-slo-baselines.md",
+      "owner": "aegaeon"
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+theory Federation_Key_Rotation
+begin
+
+/*
+ * Key Rotation During Federation — Aegaeon
+ *
+ * Models the security properties of signing key rotation for upstream
+ * IdPs during active federation sessions. When an IdP rotates its
+ * signing key, tokens signed with the old key may still be in flight.
+ * The broker must handle this gracefully.
+ *
+ * Security properties:
+ * - Verified token provenance: tokens accepted by broker were issued
+ *   by the IdP or a key was compromised
+ * - Rotation continuity: new key replaces an existing active key
+ * - Post-rotation old key validity: old-key tokens remain verifiable
+ *   while the broker still has the old JWKS registered
+ * - Registered key authenticity: broker only registers genuine IdP keys
+ */
+
+builtins: signing
+
+/* ============ Restrictions ============ */
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ IdP Key Lifecycle ============ */
+
+// IdP generates initial signing key.
+// IdP_Active_Key tracks only the public key for rotation bookkeeping;
+// the secret key lives in the persistent !IdP_SK fact.
+rule IdP_Init:
+  [ Fr(~sk) ]
+  --[ IdP_Key_Created($IdP, pk(~sk), 'initial'),
+      Key_Active($IdP, pk(~sk)),
+      Unique(<'idp_init', $IdP>) ]->
+  [ !IdP_SK($IdP, ~sk),
+    !IdP_PK($IdP, pk(~sk)),
+    IdP_Active_Key($IdP, pk(~sk)),
+    Out(pk(~sk)) ]
+
+// Key compromise: attacker obtains IdP signing key
+rule Reveal_Key:
+  [ !IdP_SK($IdP, sk) ]
+  --[ Revealed($IdP) ]->
+  [ Out(sk) ]
+
+// IdP rotates signing key: old key retired, new key active.
+// IdP_Active_Key is linear, so this consumes the old active key.
+rule IdP_Rotate_Key:
+  [ IdP_Active_Key($IdP, old_pk),
+    Fr(~new_sk) ]
+  --[ Key_Rotated($IdP, old_pk, pk(~new_sk)),
+      Key_Active($IdP, pk(~new_sk)),
+      Key_Retired($IdP, old_pk),
+      IdP_Key_Created($IdP, pk(~new_sk), 'rotation'),
+      Unique(<'rotate', $IdP, pk(~new_sk)>) ]->
+  [ !IdP_SK($IdP, ~new_sk),
+    !IdP_PK($IdP, pk(~new_sk)),
+    IdP_Active_Key($IdP, pk(~new_sk)),
+    Out(pk(~new_sk)) ]
+
+/* ============ Token Issuance & Verification ============ */
+
+// IdP issues ID token signed with the ACTIVE signing key.
+// Uses persistent !IdP_SK for the secret key (avoids re-extracting sk
+// from IdP_Active_Key) and linear IdP_Active_Key to ensure only the
+// current active key can sign. IdP_Active_Key is consumed and
+// reproduced to preserve linearity (same pattern as Sign_Token in
+// key_rotation_race.spthy).
+rule IdP_Issue_Token:
+  let claims = <'id_token', $IdP, $aud, $User, ~nonce>
+      token = sign(claims, sk)
+  in
+  [ !IdP_SK($IdP, sk),
+    IdP_Active_Key($IdP, pk(sk)),
+    Fr(~nonce) ]
+  --[ Token_Issued($IdP, token, pk(sk), $User, ~nonce),
+      Signed_With_Key($IdP, token, pk(sk)),
+      IdP_Key_Used($IdP, pk(sk)) ]->
+  [ IdP_Active_Key($IdP, pk(sk)),
+    Out(token) ]
+
+// Broker registers IdP's JWKS (public key).
+// The broker may register both old and new keys (JWKS can contain
+// multiple keys), enabling graceful key rotation.
+rule Broker_Register_JWKS:
+  [ !IdP_PK($IdP, idp_pk) ]
+  --[ JWKS_Registered($Broker, $IdP, idp_pk) ]->
+  [ !Broker_JWKS($Broker, $IdP, idp_pk) ]
+
+// Broker verifies token against registered JWKS.
+// Pattern-matches on sign(claims, sk) from the network, binding all
+// claim fields including nonce.  This avoids the unbound-variable
+// issue of an explicit verify()/Eq() formulation.
+rule Broker_Verify:
+  let token = sign(<'id_token', $IdP, broker_id, $User, nonce>, sk)
+  in
+  [ In(token),
+    !Broker_JWKS(broker_id, $IdP, pk(sk)) ]
+  --[ Token_Verified(broker_id, $IdP, token, pk(sk), $User) ]->
+  [ Broker_Authenticated(broker_id, $IdP, $User) ]
+
+/* ============ Helper Lemmas ============ */
+
+// Inductive helper: breaks the IdP_Issue_Token consume/reproduce loop
+// for IdP_Active_Key. Any key used for signing was active at or before
+// the signing event. This is the same pattern as env_key_was_activated
+// in key_rotation_race.spthy.
+lemma idp_key_was_active [reuse, use_induction]:
+  "All idp pk #i.
+     IdP_Key_Used(idp, pk)@i
+     ==> Ex #j. Key_Active(idp, pk)@j & ( #j < #i | #j = #i )"
+
+/* ============ Security Properties ============ */
+
+// Token provenance: a verified token was either legitimately issued
+// by the IdP, or the IdP's signing key was compromised.
+lemma token_provenance:
+  "All broker idp token pk user #i.
+     Token_Verified(broker, idp, token, pk, user)@i
+     ==> (Ex nonce #j. Token_Issued(idp, token, pk, user, nonce)@j)
+         | (Ex #c. Revealed(idp)@c)"
+
+// Verified tokens use registered keys
+lemma verified_uses_registered_key:
+  "All broker idp token pk user #i.
+     Token_Verified(broker, idp, token, pk, user)@i
+     ==> Ex #j. JWKS_Registered(broker, idp, pk)@j & #j < #i"
+
+// Rotation continuity: new key replaces an existing active key
+lemma rotation_continuity:
+  "All idp old_pk new_pk #i.
+     Key_Rotated(idp, old_pk, new_pk)@i
+     ==> Ex #j. Key_Active(idp, old_pk)@j & #j < #i"
+
+// Post-rotation old key validity: tokens signed with a retired key
+// can still be verified if the broker has that key in its JWKS.
+// This models the graceful rotation window.
+lemma post_rotation_old_key_valid:
+  "All broker idp token old_pk user #i #j.
+     Token_Verified(broker, idp, token, old_pk, user)@i &
+     Key_Retired(idp, old_pk)@j & #j < #i
+     ==> Ex #k. JWKS_Registered(broker, idp, old_pk)@k & #k < #i"
+
+// Registered key authenticity: every registered key was generated by the IdP
+lemma registered_key_authenticity:
+  "All broker idp pk #i.
+     JWKS_Registered(broker, idp, pk)@i
+     ==> Ex method #j. IdP_Key_Created(idp, pk, method)@j & #j < #i"
+
+end

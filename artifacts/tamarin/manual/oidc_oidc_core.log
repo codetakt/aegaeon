@@ -1,0 +1,599 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OIDC_Core] Theory loaded
+[Theory OIDC_Core] Theory translated
+[Theory OIDC_Core] Derivation checks started
+[Theory OIDC_Core] Derivation checks ended
+[Theory OIDC_Core] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OIDC_Core begin
+
+// Function signature and definition of the equational theory E
+
+builtins: multiset
+functions: adec/2, aenc/2, fst/1, h/1, pair/2, pk/1, sign/2, snd/1,
+           true/0, verify/3
+equations:
+    adec(aenc(x.1, pk(x.2)), x.2) = x.1,
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+
+
+
+
+rule (modulo E) Register_pk:
+   [ Fr( ~sk ) ] --> [ !Ltk( $A, ~sk ), !Pk( $A, pk(~sk) ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reveal_ltk:
+   [ !Ltk( A, sk ) ] --[ Reveal( A ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Init:
+   [ Fr( ~op_key ) ]
+  --[ OP_Initialized( $OP, <'https', $OP, $domain> ) ]->
+   [
+   !OP_Key( $OP, ~op_key ), !OP_Issuer( $OP, <'https', $OP, $domain> ),
+   Out( <$OP, 'https', $OP, $domain> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_Register:
+   [ !OP_Key( $OP, op_key ), !Ltk( $RP, rp_sk ), !Pk( $RP, pk(rp_sk) ) ]
+  --[ RP_Registered( $OP, $RP, $redirect_uri, $client_secret ) ]->
+   [
+   !RP( $OP, $RP, $redirect_uri, $client_secret ),
+   !RP_RedirectURI( $RP, $redirect_uri )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_Start_Auth:
+   [
+   Fr( ~nonce ), Fr( ~state ), Fr( ~code_verifier ),
+   !RP( $OP, $RP, redirect_uri, client_secret )
+   ]
+  --[
+  RP_Auth_Started( $RP, $User, ~nonce, ~state, h(<'S256', ~code_verifier>)
+  )
+  ]->
+   [
+   Out( <'auth_request', $RP, redirect_uri, 'openid', ~state, ~nonce,
+         h(<'S256', ~code_verifier>), 'code'>
+   ),
+   RP_Session( $RP, $User, ~nonce, ~state, ~code_verifier, redirect_uri )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) User_Authenticate:
+   [
+   In( <'auth_request', rp_id, redirect_uri, scope, state, nonce,
+        code_challenge, response_type>
+   ),
+   Fr( ~code ), !OP_Issuer( $OP, issuer ),
+   !RP_RedirectURI( rp_id, redirect_uri )
+   ]
+  --[
+  User_Authenticated( $User, rp_id, $OP, ~code, nonce, state, 'auth_time'
+  ),
+  Auth_Code_Issued( $OP, ~code, rp_id, $User, nonce, code_challenge )
+  ]->
+   [
+   Out( <'auth_response', ~code, state> ),
+   Auth_Code( $OP, ~code, rp_id, $User, nonce, code_challenge, redirect_uri,
+              'auth_time'
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Issue_Tokens:
+   [
+   In( <'token_request', rp_id, auth_code, code_verifier, redirect_uri> ),
+   Auth_Code( $OP, auth_code, rp_id, $User, nonce, code_challenge,
+              stored_uri, auth_time
+   ),
+   !OP_Key( $OP, op_key ), !OP_Issuer( $OP, issuer ), !Pk( rp_id, rp_pk ),
+   Fr( ~token_id ), Fr( ~refresh_id ), Fr( ~exp_time ), Fr( ~iat_time )
+   ]
+  --[
+  ID_Token_Issued( $OP, rp_id, $User,
+                   sign(<'id_token', issuer, rp_id, $User, ~exp_time, ~iat_time, nonce,
+                         auth_time, h(<'access', ~token_id, rp_id, $User, 'openid'>)>,
+                        op_key),
+                   nonce, h(<'access', ~token_id, rp_id, $User, 'openid'>)
+  ),
+  ID_Token( sign(<'id_token', issuer, rp_id, $User, ~exp_time, ~iat_time,
+                  nonce, auth_time, h(<'access', ~token_id, rp_id, $User, 'openid'>)>,
+                 op_key),
+            rp_id, $User, issuer, nonce, auth_time,
+            h(<'access', ~token_id, rp_id, $User, 'openid'>)
+  ),
+  Access_Token_Issued( $OP, rp_id, $User,
+                       <'access', ~token_id, rp_id, $User, 'openid'>
+  ),
+  Code_Used( $OP, auth_code, rp_id ),
+  PKCE_Verified( code_verifier, code_challenge ),
+  Redirect_URI_Matched( redirect_uri, stored_uri ),
+  Token_Binding( sign(<'id_token', issuer, rp_id, $User, ~exp_time,
+                       ~iat_time, nonce, auth_time,
+                       h(<'access', ~token_id, rp_id, $User, 'openid'>)>,
+                      op_key),
+                 <'access', ~token_id, rp_id, $User, 'openid'>,
+                 h(<'access', ~token_id, rp_id, $User, 'openid'>)
+  )
+  ]->
+   [
+   Out( aenc(<'token_response',
+              sign(<'id_token', issuer, rp_id, $User, ~exp_time, ~iat_time, nonce,
+                    auth_time, h(<'access', ~token_id, rp_id, $User, 'openid'>)>,
+                   op_key),
+              <'access', ~token_id, rp_id, $User, 'openid'>, 'refresh', ~refresh_id,
+              rp_id, $User>,
+             rp_pk)
+   ),
+   !StoredIDToken( sign(<'id_token', issuer, rp_id, $User, ~exp_time,
+                         ~iat_time, nonce, auth_time,
+                         h(<'access', ~token_id, rp_id, $User, 'openid'>)>,
+                        op_key),
+                   $OP, rp_id, $User, issuer, nonce, auth_time,
+                   h(<'access', ~token_id, rp_id, $User, 'openid'>), ~exp_time, ~iat_time,
+                   op_key, <'access', ~token_id, rp_id, $User, 'openid'>
+   ),
+   !Access_Token( <'access', ~token_id, rp_id, $User, 'openid'>, rp_id,
+                  $User, $OP
+   ),
+   Active_Access_Token( <'access', ~token_id, rp_id, $User, 'openid'>,
+                        rp_id, $User, $OP
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+restriction pkce_verification:
+  "∀ v c #i. (PKCE_Verified( v, c ) @ #i) ⇒ (h(<'S256', v>) = c)"
+  // safety formula
+
+restriction redirect_uri_exact_match:
+  "∀ uri1 uri2 #i.
+    (Redirect_URI_Matched( uri1, uri2 ) @ #i) ⇒ (uri1 = uri2)"
+  // safety formula
+
+rule (modulo E) RP_Verify_ID_Token:
+   [
+   In( aenc(<'token_response', id_token, access_token, refresh_token>,
+            pk(rp_sk))
+   ),
+   !Ltk( rp_id, rp_sk ),
+   RP_Session( rp_id, $User, expected_nonce, state, code_verifier,
+               redirect_uri
+   ),
+   !StoredIDToken( id_token, $OP, rp_id, $User, issuer, nonce, auth_time,
+                   at_hash, exp_time, iat_time, op_key, access_token
+   ),
+   !Pk( $OP, pk(op_key) )
+   ]
+  --[
+  ID_Token_Verified( rp_id, $User,
+                     <'id_token', issuer, rp_id, $User, exp_time, iat_time, nonce, auth_time,
+                      at_hash>,
+                     expected_nonce
+  ),
+  Nonce_Matched( nonce, expected_nonce ),
+  AT_Hash_Verified( at_hash, access_token )
+  ]->
+   [ RP_Authenticated( rp_id, $User, access_token ) ]
+
+  /* has exactly the trivial AC variant */
+
+restriction nonce_must_match:
+  "∀ n1 n2 #i. (Nonce_Matched( n1, n2 ) @ #i) ⇒ (n1 = n2)"
+  // safety formula
+
+restriction at_hash_verification:
+  "∀ at_hash token #i.
+    (AT_Hash_Verified( at_hash, token ) @ #i) ⇒ (at_hash = h(token))"
+  // safety formula
+
+rule (modulo E) OP_UserInfo:
+   [
+   In( <'userinfo_request', access_token> ),
+   Active_Access_Token( access_token, rp_id, $User, $OP )
+   ]
+  --[
+  UserInfo_Accessed( rp_id, $User, access_token,
+                     <'userinfo', $User, 'email', 'profile'>
+  )
+  ]->
+   [
+   Out( <'userinfo_response', 'userinfo', $User, 'email', 'profile'> ),
+   Active_Access_Token( access_token, rp_id, $User, $OP )
+   ]
+
+  // loop breaker: [1]
+  /* has exactly the trivial AC variant */
+
+restriction userinfo_single_use:
+  "∀ rp user token info #i #j.
+    ((UserInfo_Accessed( rp, user, token, info ) @ #i) ∧
+     (UserInfo_Accessed( rp, user, token, info ) @ #j)) ⇒
+    (#i = #j)"
+  // safety formula
+
+rule (modulo E) Revoke_Token:
+   [ Active_Access_Token( token, rp_id, user, op ) ]
+  --[ Token_Revoked( token ) ]->
+   [ Revoked_Token( token ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma id_token_session_binding:
+  all-traces
+  "∀ op rp user token nonce at_hash #i #j.
+    ((ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+     (ID_Token_Verified( rp, user, token, nonce ) @ #j)) ⇒
+    (∃ state challenge #k.
+      (RP_Auth_Started( rp, user, nonce, state, challenge ) @ #k) ∧ (#k < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ op rp user token nonce at_hash #i #j.
+  (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+  (ID_Token_Verified( rp, user, token, nonce ) @ #j)
+ ∧
+  ∀ state challenge #k.
+   (RP_Auth_Started( rp, user, nonce, state, challenge ) @ #k) ⇒ ¬(#k < #i)"
+*/
+by simplify
+
+lemma nonce_replay_prevention:
+  all-traces
+  "∀ op rp user token nonce at_hash #i #j.
+    ((ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+     (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ op rp user token nonce at_hash #i #j.
+  (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+  (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma session_integrity:
+  all-traces
+  "∀ rp user nonce1 state challenge claims nonce2 #i #j.
+    ((RP_Auth_Started( rp, user, nonce1, state, challenge ) @ #i) ∧
+     (ID_Token_Verified( rp, user, claims, nonce2 ) @ #j)) ⇒
+    (nonce1 = nonce2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user nonce1 state challenge claims nonce2 #i #j.
+  (RP_Auth_Started( rp, user, nonce1, state, challenge ) @ #i) ∧
+  (ID_Token_Verified( rp, user, claims, nonce2 ) @ #j)
+ ∧
+  ¬(nonce1 = nonce2)"
+*/
+simplify
+solve( !RP( $OP, $RP, redirect_uri, client_secret ) ▶₃ #i )
+  case RP_Register
+  solve( !Ltk( $RP, rp_sk ) ▶₁ #j )
+    case Register_pk
+    solve( RP_Session( $RP, $User, nonce2, state.1, code_verifier.1,
+                       redirect_uri.1
+           ) ▶₂ #j )
+      case RP_Start_Auth
+      solve( !StoredIDToken( id_token, $OP.1, $RP, $User, issuer, ~nonce.1,
+                             auth_time, h(access_token), exp_time, iat_time, op_key, access_token
+             ) ▶₃ #j )
+        case OP_Issue_Tokens
+        by solve( !Pk( $OP.1, pk(~op_key) ) ▶₄ #j )
+      qed
+    qed
+  qed
+qed
+
+lemma token_binding_integrity:
+  all-traces
+  "∀ token access_token at_hash #i.
+    (Token_Binding( token, access_token, at_hash ) @ #i) ⇒
+    (at_hash = h(access_token))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ token access_token at_hash #i.
+  (Token_Binding( token, access_token, at_hash ) @ #i)
+ ∧
+  ¬(at_hash = h(access_token))"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma auth_code_single_use:
+  all-traces
+  "∀ op code rp #i #j.
+    ((Code_Used( op, code, rp ) @ #i) ∧ (Code_Used( op, code, rp ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ op code rp #i #j.
+  (Code_Used( op, code, rp ) @ #i) ∧ (Code_Used( op, code, rp ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( Auth_Code( $OP, code, rp, $User, nonce,
+                    h(<'S256', code_verifier>), redirect_uri, auth_time
+         ) ▶₁ #i )
+    case User_Authenticate
+    solve( !OP_Key( $OP, op_key ) ▶₂ #i )
+      case OP_Init
+      solve( !OP_Issuer( $OP, issuer ) ▶₃ #i )
+        case OP_Init
+        solve( !Pk( $RP, rp_pk ) ▶₄ #i )
+          case Register_pk
+          solve( Auth_Code( $OP, ~code, $RP, $User.1, nonce.1,
+                            h(<'S256', code_verifier.1>), redirect_uri.1, auth_time
+                 ) ▶₁ #j )
+            case User_Authenticate
+            by contradiction /* cyclic */
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Auth_Code( $OP, code, rp, $User, nonce,
+                    h(<'S256', code_verifier>), redirect_uri, auth_time
+         ) ▶₁ #i )
+    case User_Authenticate
+    solve( !OP_Key( $OP, op_key ) ▶₂ #i )
+      case OP_Init
+      solve( !OP_Issuer( $OP, issuer ) ▶₃ #i )
+        case OP_Init
+        solve( !Pk( $RP, rp_pk ) ▶₄ #i )
+          case Register_pk
+          solve( Auth_Code( $OP, ~code, $RP, $User.1, nonce.1,
+                            h(<'S256', code_verifier.1>), redirect_uri.1, auth_time
+                 ) ▶₁ #j )
+            case User_Authenticate
+            by contradiction /* cyclic */
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma no_access_after_revocation:
+  all-traces
+  "∀ rp user info token #i #j.
+    ((Token_Revoked( token ) @ #i) ∧
+     (UserInfo_Accessed( rp, user, token, info ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user info token #i #j.
+  (Token_Revoked( token ) @ #i) ∧
+  (UserInfo_Accessed( rp, user, token, info ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+simplify
+solve( Active_Access_Token( token, rp_id, user, op ) ▶₀ #i )
+  case OP_Issue_Tokens
+  solve( !KU( ~token_id ) @ #vk.28 )
+    case OP_Issue_Tokens
+    solve( !KU( ~sk ) @ #vk.32 )
+      case Reveal_ltk
+      solve( Active_Access_Token( <'access', ~token_id, $A, $User, 'openid'>,
+                                  rp, $User.1, $OP.1
+             ) ▶₁ #j )
+        case OP_UserInfo
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+next
+  case OP_UserInfo
+  solve( Active_Access_Token( token, rp, $User.1, $OP.1 ) ▶₁ #j )
+    case OP_Issue_Tokens
+    solve( !KU( ~token_id ) @ #vk.28 )
+      case OP_Issue_Tokens
+      solve( !KU( ~sk ) @ #vk.32 )
+        case Reveal_ltk
+        solve( Active_Access_Token( <'access', ~token_id, $A, $User, 'openid'>,
+                                    rp_id, $User.1, $OP
+               ) ▶₁ #vr )
+          case OP_Issue_Tokens
+          by contradiction /* cyclic */
+        qed
+      qed
+    qed
+  next
+    case OP_UserInfo
+    by contradiction /* cyclic */
+  qed
+qed
+
+lemma id_token_secrecy:
+  all-traces
+  "∀ op rp user token nonce at_hash #i #j.
+    ((ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+     (K( token ) @ #j)) ⇒
+    (∃ A #k. (Reveal( A ) @ #k) ∧ (#k < #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ op rp user token nonce at_hash #i #j.
+  (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #i) ∧
+  (K( token ) @ #j)
+ ∧
+  ∀ A #k. (Reveal( A ) @ #k) ⇒ ¬(#k < #j)"
+*/
+simplify
+solve( Auth_Code( $OP, auth_code, rp, $User, nonce,
+                  h(<'S256', code_verifier>), redirect_uri, auth_time
+       ) ▶₁ #i )
+  case User_Authenticate
+  solve( !OP_Key( $OP, op_key ) ▶₂ #i )
+    case OP_Init
+    solve( !OP_Issuer( $OP, issuer ) ▶₃ #i )
+      case OP_Init
+      solve( !Pk( $RP, rp_pk ) ▶₄ #i )
+        case Register_pk
+        solve( !KU( sign(<'id_token', <'https', $OP, $domain>, $RP, $User,
+                          ~exp_time, ~iat_time, nonce, 'auth_time',
+                          h(<'access', ~token_id, $RP, $User, 'openid'>)>,
+                         ~op_key)
+               ) @ #vk.12 )
+          case OP_Issue_Tokens
+          solve( !KU( ~sk ) @ #vk.23 )
+            case Reveal_ltk
+            by contradiction /* from formulas */
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~op_key ) @ #vk.26 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma auth_time_consistency:
+  all-traces
+  "∀ user rp op code nonce state auth_time token at_hash #i #j.
+    (((User_Authenticated( user, rp, op, code, nonce, state, auth_time
+       ) @ #i) ∧
+      (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #j)) ∧
+     (#i < #j)) ⇒
+    (∃ issuer #k.
+      ID_Token( token, rp, user, issuer, nonce, auth_time, at_hash ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user rp op code nonce state auth_time token at_hash #i #j.
+  (User_Authenticated( user, rp, op, code, nonce, state, auth_time
+   ) @ #i) ∧
+  (ID_Token_Issued( op, rp, user, token, nonce, at_hash ) @ #j)
+ ∧
+  (#i < #j) ∧
+  (∀ issuer #k.
+    (ID_Token( token, rp, user, issuer, nonce, auth_time, at_hash ) @ #k)
+   ⇒
+    ⊥)"
+*/
+simplify
+solve( !OP_Issuer( $OP, issuer ) ▶₂ #i )
+  case OP_Init
+  solve( !RP_RedirectURI( rp, redirect_uri ) ▶₃ #i )
+    case RP_Register
+    solve( Auth_Code( $OP, auth_code, $RP, $User, nonce,
+                      h(<'S256', code_verifier>), redirect_uri.1, auth_time
+           ) ▶₁ #j )
+      case User_Authenticate
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+lemma pkce_code_injection_prevention:
+  all-traces
+  "∀ op code rp user nonce challenge verifier #i #j #k.
+    (((Auth_Code_Issued( op, code, rp, user, nonce, challenge ) @ #i) ∧
+      (PKCE_Verified( verifier, challenge ) @ #j)) ∧
+     (Code_Used( op, code, rp ) @ #k)) ⇒
+    (h(<'S256', verifier>) = challenge)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ op code rp user nonce challenge verifier #i #j #k.
+  (Auth_Code_Issued( op, code, rp, user, nonce, challenge ) @ #i) ∧
+  (PKCE_Verified( verifier, challenge ) @ #j) ∧
+  (Code_Used( op, code, rp ) @ #k)
+ ∧
+  ¬(h(<'S256', verifier>) = challenge)"
+*/
+simplify
+by contradiction /* from formulas */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Derivation Checks
+=================
+
+  Derivation checks timed out.
+  Use --derivcheck-timeout=INT to configure timeout.
+  Set to 0 to deactivate for no timeout.
+*/
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./oidc/oidc_core.spthy
+
+  processing time: 6.76s
+
+  WARNING: 1 wellformedness check failed!
+           The analysis results might be wrong!
+
+  id_token_session_binding (all-traces): verified (1 steps)
+  nonce_replay_prevention (all-traces): verified (2 steps)
+  session_integrity (all-traces): verified (6 steps)
+  token_binding_integrity (all-traces): verified (2 steps)
+  auth_code_single_use (all-traces): verified (14 steps)
+  no_access_after_revocation (all-traces): verified (12 steps)
+  id_token_secrecy (all-traces): verified (9 steps)
+  auth_time_consistency (all-traces): verified (5 steps)
+  pkce_code_injection_prevention (all-traces): verified (2 steps)
+
+==============================================================================

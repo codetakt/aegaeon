@@ -1,0 +1,21 @@
+# Build and generated outputs
+artifacts/
+generated/
+result/
+result-*/
+target/
+
+# F* extracted outputs and proofs
+c/
+include/
+proofs/
+
+# Tooling/vendor
+vendor/
+**/node_modules/
+.cargo-vet-cache/
+**/.artifacts/
+**/cargo-home/
+
+# Temporary
+/tmp/

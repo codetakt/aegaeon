@@ -1,0 +1,15 @@
+[alias]
+xtask = "run --package xtask --"
+
+[env]
+# Keep native Linux builds pinned to the host toolchain even if a parent shell
+# leaks cross-compilation variables.
+CC_x86_64_unknown_linux_gnu = { value = "cc", force = true }
+CXX_x86_64_unknown_linux_gnu = { value = "c++", force = true }
+AR_x86_64_unknown_linux_gnu = { value = "ar", force = true }
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = { value = "cc", force = true }
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR = { value = "ar", force = true }
+
+[target.x86_64-unknown-linux-gnu]
+linker = "cc"
+rustflags = ["-Clink-self-contained=no"]

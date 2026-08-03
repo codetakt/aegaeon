@@ -1,0 +1,42 @@
+{
+  "$schema": "https://aegaeon.dev/spec/kms-hsm-deployment-classification.schema.json",
+  "algorithm": {
+    "jose_alg": "RS256",
+    "provider_algorithm": "gateway-finished-jwt"
+  },
+  "claim_boundary": {
+    "broad_rsa_not_promoted": true,
+    "external_signer_recorded_as_tcb": true,
+    "rs256_required_slice_unchanged": true
+  },
+  "classification": "compat-only",
+  "compat_reason": "The provider returns complete JWTs and does not expose raw RS256 signatures over Aegaeon-owned JWS signing input.",
+  "deployment_id": "external-finished-jwt-gateway",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "jwks_rotation": {
+    "kid_reuse_prevented": true,
+    "overlap_matches_local_path": false,
+    "rollback_matches_local_path": false
+  },
+  "parity_evidence": {
+    "generated_at": null,
+    "status": "missing",
+    "uri": null
+  },
+  "public_jwk_derivation": {
+    "key_match_checked": false,
+    "method": "operator-supplied"
+  },
+  "review": {
+    "decision": "pending",
+    "notes": "Fail-closed compatibility classification for providers that finish JWT construction outside Aegaeon.",
+    "reviewer": null
+  },
+  "schema_version": 1,
+  "signer_backend": "other-external",
+  "signing_input_ownership": {
+    "aegaeon_constructs_jws_signing_input": false,
+    "provider_returns_finished_jwt": true
+  },
+  "source_revision": "4f6764449322d634ffee35a8c694dadfd4b90feb"
+}

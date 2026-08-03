@@ -1,0 +1,15 @@
+   Compiling rustls-pemfile v2.2.0
+   Compiling ffi v0.9.0-beta (/home/claude/Workspaces/conceptual/aegaeon/crates/ffi)
+   Compiling combine v4.6.7
+   Compiling rustls-native-certs v0.7.3
+warning: ffi@0.9.0-beta: Generated /home/claude/Workspaces/conceptual/aegaeon/target/debug/build/ffi-2e95ca6d5bb48376/out/aegaeon_tlv.h
+   Compiling aegaeon-jose v0.9.0-beta (/home/claude/Workspaces/conceptual/aegaeon/crates/jose)
+   Compiling redis v0.27.6
+   Compiling aegaeon-server v0.9.0-beta (/home/claude/Workspaces/conceptual/aegaeon/crates/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 53.45s
+     Running tests/kms_integration_test.rs (target/debug/deps/kms_integration_test-0145c74b0b702b7b)
+
+running 1 test
+test test_oidc_aws_kms_signing_key_issues_verifiable_rs256_jwt ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.90s

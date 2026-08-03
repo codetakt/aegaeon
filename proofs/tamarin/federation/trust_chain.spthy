@@ -1,0 +1,252 @@
+theory Federation_Trust_Chain
+begin
+
+/*
+ * OpenID Federation 1.0 Trust Chain Validation
+ *
+ * Models the hierarchical trust chain of Entity Statements as defined
+ * in OpenID Connect Federation 1.0. Each entity publishes a self-signed
+ * Entity Configuration, and superior entities issue Subordinate Statements.
+ * A trust chain is valid when it links a leaf entity to a trust anchor
+ * through an unbroken chain of signed statements.
+ *
+ * Security properties:
+ * - Entity Statement chain verification (leaf to trust anchor)
+ * - Intermediate chain key authenticity (both signatures verified)
+ * - Metadata policy resolution (resolved metadata constrained by ancestors)
+ * - Entity key uniqueness (distinct entities have distinct keys)
+ * - Key rotation safety (authorized by old key or parent)
+ *
+ * Known limitations:
+ * - No temporal validity: iat/exp are generated but not checked against a
+ *   global clock. Tamarin's symbolic model lacks monotonic time; real-world
+ *   expiration must be verified in the implementation.
+ * - Chain depth limited to 2. OpenID Federation allows arbitrary depth.
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Entity Key Management ============ */
+
+// Entity creates a signing key pair
+rule Entity_Keygen:
+  [ Fr(~sk) ]
+  --[ Entity_Key($Entity, pk(~sk)) ]->
+  [ !Entity_SK($Entity, ~sk),
+    !Entity_PK($Entity, pk(~sk)),
+    Out(pk(~sk)) ]
+
+// Key compromise
+rule Entity_Compromise:
+  [ !Entity_SK(A, sk) ]
+  --[ Compromised(A) ]->
+  [ Out(sk) ]
+
+/* ============ Trust Anchor Setup ============ */
+
+// Trust Anchor publishes self-signed Entity Configuration
+rule Trust_Anchor_Init:
+  let config_claims = <'entity_config', $TA, pk(ta_sk), 'trust_anchor',
+                        $ta_policy>
+      config = sign(config_claims, ta_sk)
+  in
+  [ !Entity_SK($TA, ta_sk) ]
+  --[ Trust_Anchor_Established($TA, pk(ta_sk), $ta_policy),
+      Unique(<'ta', $TA>) ]->
+  [ !TrustAnchor($TA, pk(ta_sk), $ta_policy),
+    Out(config) ]
+
+/* ============ Subordinate Statement Issuance ============ */
+
+// Intermediate entity or trust anchor issues a Subordinate Statement
+// for a subordinate entity, constraining its metadata policy.
+rule Issue_Subordinate_Statement:
+  let sub_stmt_claims = <'subordinate_statement', $Superior, $Subordinate,
+                          sub_pk, $sub_policy, ~iat, ~exp>
+      sub_stmt = sign(sub_stmt_claims, superior_sk)
+  in
+  [ !Entity_SK($Superior, superior_sk),
+    !Entity_PK($Subordinate, sub_pk),
+    Fr(~iat), Fr(~exp) ]
+  --[ Subordinate_Statement_Issued($Superior, $Subordinate, sub_pk, $sub_policy),
+      Policy_Constraint($Superior, $Subordinate, $sub_policy) ]->
+  [ !SubordinateStatement($Superior, $Subordinate, sub_stmt, sub_pk, $sub_policy),
+    Out(sub_stmt) ]
+
+// Leaf entity publishes self-signed Entity Configuration
+rule Leaf_Entity_Config:
+  let config_claims = <'entity_config', $Leaf, pk(leaf_sk), 'openid_relying_party',
+                        $leaf_metadata>
+      config = sign(config_claims, leaf_sk)
+  in
+  [ !Entity_SK($Leaf, leaf_sk) ]
+  --[ Leaf_Config_Published($Leaf, pk(leaf_sk), $leaf_metadata),
+      Unique(<'leaf_config', $Leaf>) ]->
+  [ !LeafConfig($Leaf, pk(leaf_sk), $leaf_metadata, config),
+    Out(config) ]
+
+/* ============ Trust Chain Resolution ============ */
+
+// Direct chain: Leaf -> Trust Anchor (depth 1)
+rule Resolve_Direct_Chain:
+  let sub_stmt_claims = <'subordinate_statement', $TA, $Leaf,
+                          leaf_pk, sub_policy, iat, exp>
+  in
+  [ !TrustAnchor($TA, ta_pk, ta_policy),
+    !Entity_PK($TA, ta_pk),
+    !SubordinateStatement($TA, $Leaf, sub_stmt, leaf_pk, sub_policy),
+    !LeafConfig($Leaf, leaf_pk, leaf_metadata, leaf_config) ]
+  --[ Eq(verify(sub_stmt, sub_stmt_claims, ta_pk), true),
+      Chain_Resolved($Leaf, $TA, leaf_pk, sub_policy),
+      Chain_Depth($Leaf, $TA, 'direct'),
+      Metadata_Resolved($Leaf, leaf_metadata, sub_policy, ta_policy) ]->
+  [ !TrustedEntity($Leaf, leaf_pk, $TA, sub_policy) ]
+
+// Intermediate chain: Leaf -> Intermediate -> Trust Anchor (depth 2)
+rule Resolve_Intermediate_Chain:
+  let sub_stmt_ta_claims = <'subordinate_statement', $TA, $Intermediate,
+                             int_pk, int_policy, iat1, exp1>
+      sub_stmt_int_claims = <'subordinate_statement', $Intermediate, $Leaf,
+                              leaf_pk, leaf_policy, iat2, exp2>
+  in
+  [ !TrustAnchor($TA, ta_pk, ta_policy),
+    !Entity_PK($TA, ta_pk),
+    !Entity_PK($Intermediate, int_pk),
+    !SubordinateStatement($TA, $Intermediate, sub_stmt_ta, int_pk, int_policy),
+    !SubordinateStatement($Intermediate, $Leaf, sub_stmt_int, leaf_pk, leaf_policy),
+    !LeafConfig($Leaf, leaf_pk, leaf_metadata, leaf_config) ]
+  --[ Eq(verify(sub_stmt_ta, sub_stmt_ta_claims, ta_pk), true),
+      Eq(verify(sub_stmt_int, sub_stmt_int_claims, int_pk), true),
+      Chain_Resolved($Leaf, $TA, leaf_pk, leaf_policy),
+      Chain_Depth($Leaf, $TA, 'intermediate'),
+      Intermediate_Verified($Intermediate, $TA, int_pk),
+      Metadata_Resolved($Leaf, leaf_metadata, leaf_policy, ta_policy) ]->
+  [ !TrustedEntity($Leaf, leaf_pk, $TA, leaf_policy) ]
+
+// Relying party uses a resolved trust chain to authenticate
+rule RP_Use_Trusted_Entity:
+  [ !TrustedEntity($Entity, entity_pk, $TA, policy) ]
+  --[ Entity_Trusted($Entity, $TA, entity_pk, policy) ]->
+  [ ]
+
+/* ============ Key Rotation ============ */
+
+// Entity rotates key: new key must be signed by old key or by parent
+rule Entity_Key_Rotation_Self:
+  let rotation_stmt = sign(<'key_rotation', $Entity, pk(~new_sk), pk(old_sk)>, old_sk)
+  in
+  [ !Entity_SK($Entity, old_sk),
+    Fr(~new_sk) ]
+  --[ Key_Rotated($Entity, pk(old_sk), pk(~new_sk), 'self_signed'),
+      Entity_Key($Entity, pk(~new_sk)),
+      Unique(<'rotation', $Entity, pk(~new_sk)>) ]->
+  [ !Entity_SK($Entity, ~new_sk),
+    !Entity_PK($Entity, pk(~new_sk)),
+    Out(pk(~new_sk)),
+    Out(rotation_stmt) ]
+
+// Key rotation endorsed by parent entity
+rule Entity_Key_Rotation_Parent:
+  let rotation_stmt = sign(<'key_rotation', $Child, pk(~new_sk), old_child_pk>,
+                           parent_sk)
+  in
+  [ !Entity_SK($Parent, parent_sk),
+    !Entity_PK($Child, old_child_pk),
+    Fr(~new_sk) ]
+  --[ Key_Rotated($Child, old_child_pk, pk(~new_sk), 'parent_endorsed'),
+      Entity_Key($Child, pk(~new_sk)),
+      Key_Rotation_Authorized($Parent, $Child, pk(~new_sk)),
+      Unique(<'rotation', $Child, pk(~new_sk)>) ]->
+  [ !Entity_SK($Child, ~new_sk),
+    !Entity_PK($Child, pk(~new_sk)),
+    Out(pk(~new_sk)),
+    Out(rotation_stmt) ]
+
+/* ============ Security Properties ============ */
+
+// Chain verification: trusted entity must chain to a trust anchor
+lemma chain_to_trust_anchor:
+  "All entity ta pk policy #i.
+     Entity_Trusted(entity, ta, pk, policy)@i
+     ==> Ex ta_pk ta_policy #j. Trust_Anchor_Established(ta, ta_pk, ta_policy)@j & #j < #i"
+
+// Intermediate chain authenticity: depth-2 chain resolution requires both
+// the intermediate and the trust anchor to have legitimately established keys.
+// This is stronger than just checking the TA exists — it ensures the
+// intermediate's key was generated before the chain was resolved.
+lemma intermediate_chain_key_authenticity:
+  "All entity ta pk policy #i.
+     Chain_Resolved(entity, ta, pk, policy)@i &
+     Chain_Depth(entity, ta, 'intermediate')@i
+     ==> Ex intermediate int_pk ta_pk ta_policy #j #k.
+           Intermediate_Verified(intermediate, ta, int_pk)@i &
+           Entity_Key(intermediate, int_pk)@j & #j < #i &
+           Trust_Anchor_Established(ta, ta_pk, ta_policy)@k & #k < #i"
+
+// Subordinate statement requires issuer's key
+lemma subordinate_statement_authenticity:
+  "All superior sub pk policy #i.
+     Subordinate_Statement_Issued(superior, sub, pk, policy)@i
+     ==> Ex sup_pk #j. Entity_Key(superior, sup_pk)@j & #j < #i"
+
+// Metadata policy: resolved metadata is constrained by ancestor policies
+lemma metadata_policy_enforcement:
+  "All entity metadata sub_policy ta_policy #i.
+     Metadata_Resolved(entity, metadata, sub_policy, ta_policy)@i
+     ==> Ex superior #j.
+           Policy_Constraint(superior, entity, sub_policy)@j & #j < #i"
+
+// Entity key uniqueness: distinct entities have distinct keys.
+// This follows from freshness of Fr(~sk) in Entity_Keygen: each entity's
+// key is generated independently, so pk(~sk1) != pk(~sk2) for sk1 != sk2.
+// NOTE: This is NOT subtree isolation (compromise containment). True subtree
+// isolation — "compromising intermediate A doesn't affect entities under
+// intermediate B" — follows from the intermediate_chain_key_authenticity
+// lemma above: chain resolution requires the actual intermediate's key,
+// so a different intermediate's compromised key cannot satisfy it.
+lemma entity_key_uniqueness:
+  "All entity1 entity2 ta pk1 pk2 policy1 policy2 #i #j.
+     Entity_Trusted(entity1, ta, pk1, policy1)@i &
+     Entity_Trusted(entity2, ta, pk2, policy2)@j &
+     not(entity1 = entity2)
+     ==> not(pk1 = pk2)"
+
+// Key rotation: new key is authorized by old key or parent
+lemma key_rotation_authorization:
+  "All entity old_pk new_pk method #i.
+     Key_Rotated(entity, old_pk, new_pk, method)@i
+     ==> (method = 'self_signed' & Ex #j. Entity_Key(entity, old_pk)@j & #j < #i)
+         | (method = 'parent_endorsed' &
+            Ex parent #j. Key_Rotation_Authorized(parent, entity, new_pk)@j & #j = #i)"
+
+// No trust without chain: entity cannot be trusted without chain resolution
+lemma no_trust_without_chain:
+  "All entity ta pk policy #i.
+     Entity_Trusted(entity, ta, pk, policy)@i
+     ==> Ex #j. Chain_Resolved(entity, ta, pk, policy)@j & #j < #i"
+
+// Intermediate verification: depth-2 chains require intermediate verification
+lemma intermediate_must_be_verified:
+  "All entity ta pk policy #i.
+     Chain_Resolved(entity, ta, pk, policy)@i &
+     Chain_Depth(entity, ta, 'intermediate')@i
+     ==> Ex intermediate int_pk #j.
+           Intermediate_Verified(intermediate, ta, int_pk)@j & #j = #i"
+
+// Direct chain: depth-1 chains go directly to trust anchor
+lemma direct_chain_no_intermediate:
+  "All entity ta pk policy #i.
+     Chain_Resolved(entity, ta, pk, policy)@i &
+     Chain_Depth(entity, ta, 'direct')@i
+     ==> Ex ta_pk ta_policy #j.
+           Trust_Anchor_Established(ta, ta_pk, ta_policy)@j & #j < #i"
+
+end

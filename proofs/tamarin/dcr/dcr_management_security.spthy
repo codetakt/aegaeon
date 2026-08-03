@@ -1,0 +1,263 @@
+theory DCR_Management_Security
+begin
+
+/*
+ * Dynamic Client Registration Management Security (RFC 7591 + 7592)
+ *
+ * Models the client registration lifecycle: initial registration via
+ * RFC 7591 (POST /register with initial_access_token) and subsequent
+ * management operations via RFC 7592 (GET/PUT/DELETE on the client
+ * configuration endpoint using a registration_access_token).
+ *
+ * Protocol overview:
+ * 1. Admin configures an initial_access_token (IAT) for the environment
+ * 2. Client software presents IAT to POST /register
+ * 3. AS validates IAT, creates client, returns:
+ *    - client_id
+ *    - client_secret (confidential clients)
+ *    - registration_access_token (RAT)
+ *    - registration_client_uri
+ * 4. Client uses RAT + registration_client_uri for management:
+ *    - GET: read current configuration
+ *    - PUT: update configuration (returns new RAT — rotation)
+ *    - DELETE: remove client registration
+ *
+ * Implementation reference:
+ * - crates/server/src/dcr.rs: validation, BCP compliance
+ * - crates/server/src/web/dcr_registration.rs: POST /register
+ * - crates/server/src/web/dcr_configuration.rs: RFC 7592 read/update/delete routing
+ * - crates/server/src/client_registry.rs: RegisteredClient storage
+ *
+ * Threat model:
+ * - Attacker controls the network (Dolev-Yao)
+ * - Attacker can attempt registration with stolen/guessed IATs
+ * - Attacker can attempt management with stolen/guessed RATs
+ * - Attacker can observe client_id (public identifier)
+ * - Attacker CANNOT observe IAT, RAT, or client_secret (TLS protected)
+ * - Attacker can attempt cross-admin management (admin A manages B's client)
+ *
+ * Security properties (6 lemmas):
+ * - registration_token_binding: registration requires valid IAT
+ * - no_unauthorized_update: update requires valid RAT for that client
+ * - client_identity_integrity: client_id is immutable across updates
+ * - registration_access_token_secrecy: RAT not leaked to network
+ * - no_unauthorized_delete: delete requires valid RAT for that client
+ * - rat_rotation_on_update: each update rotates the RAT (old RAT invalid)
+ *
+ * Known limitations:
+ * - TLS modeled as secure channel (direct fact delivery, not Out/In)
+ * - Client secret hashing modeled but simplified (h(secret))
+ * - Metadata validation (redirect_uri, grant_type checks) abstracted away
+ * - Software statement verification not modeled (separate concern)
+ * - Rate limiting / throttling not modeled (no clock)
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Environment & AS Setup ============ */
+
+// Multi-tenant environment (scoping boundary)
+rule Environment_Init:
+  [ Fr(~env_id) ]
+  --[ Environment_Created(~env_id),
+      Unique(<'env', ~env_id>) ]->
+  [ !Environment(~env_id) ]
+
+// AS initialization
+rule AS_Init:
+  [ Fr(~as_secret) ]
+  --[ AS_Initialized($AS) ]->
+  [ !AS($AS, ~as_secret) ]
+
+/* ============ Initial Access Token Provisioning ============ */
+
+// Admin provisions an initial_access_token for an environment.
+// The IAT is a bearer token used to authorize POST /register.
+// Delivered over a secure channel (admin console / TLS API).
+rule Admin_Provision_IAT:
+  [ !AS($AS, as_secret),
+    !Environment(env_id),
+    Fr(~iat) ]
+  --[ IAT_Provisioned($Admin, $AS, env_id, ~iat),
+      Unique(<'iat', env_id, ~iat>) ]->
+  [ // IAT stored at AS (linear — consumed on registration or revocation)
+    AS_Has_IAT($AS, env_id, ~iat),
+    // Admin receives IAT over secure channel (NOT Out — TLS)
+    Admin_Has_IAT($Admin, $AS, env_id, ~iat) ]
+
+/* ============ Client Registration (RFC 7591 §3) ============ */
+
+// Client software presents IAT to register.
+// AS validates IAT, creates client_id + client_secret + RAT.
+// The response is delivered over TLS (secure channel).
+//
+// Production equivalent (registration.rs):
+//   POST /register with Authorization: Bearer <iat>
+//   → { client_id, client_secret, registration_access_token, registration_client_uri }
+rule Client_Register:
+  let client_secret_hash = h(~client_secret)
+  in
+  [ Admin_Has_IAT($Admin, $AS, env_id, iat),
+    AS_Has_IAT($AS, env_id, iat),
+    Fr(~client_id), Fr(~client_secret), Fr(~rat) ]
+  --[ Client_Registered($AS, env_id, ~client_id, $Admin),
+      Registration_Used_IAT($AS, env_id, iat, ~client_id),
+      RAT_Issued($AS, env_id, ~client_id, ~rat),
+      Unique(<'client', ~client_id>) ]->
+  [ // AS stores client record with hashed secret and RAT
+    AS_Client_Record($AS, env_id, ~client_id, client_secret_hash, ~rat, $Admin),
+    !Client_Owner($AS, env_id, ~client_id, $Admin),
+    // Client software receives credentials over TLS (NOT Out)
+    Client_Has_Credentials($Admin, $AS, env_id, ~client_id, ~client_secret, ~rat),
+    // client_id is public (used in authorize requests, token requests)
+    Out(~client_id) ]
+
+/* ============ Client Configuration Read (RFC 7592 §2.1) ============ */
+
+// Client reads its configuration using RAT.
+// GET /register/<client_id> with Authorization: Bearer <rat>
+// Returns current configuration (metadata + new RAT).
+rule Client_Read_Config:
+  [ Client_Has_Credentials($Admin, $AS, env_id, client_id, client_secret, rat),
+    AS_Client_Record($AS, env_id, client_id, secret_hash, rat, $Admin) ]
+  --[ Eq(h(client_secret), secret_hash),
+      Config_Read($AS, env_id, client_id, $Admin) ]->
+  [ // Record and credentials persist (read is non-destructive)
+    AS_Client_Record($AS, env_id, client_id, secret_hash, rat, $Admin),
+    Client_Has_Credentials($Admin, $AS, env_id, client_id, client_secret, rat) ]
+
+/* ============ Client Configuration Update (RFC 7592 §2.2) ============ */
+
+// Client updates its configuration using RAT.
+// PUT /register/<client_id> with Authorization: Bearer <rat>
+// The RAT is rotated on each update (old RAT invalidated).
+// Returns updated configuration + new RAT.
+//
+// Key security invariant: client_id MUST NOT change across updates.
+// Only metadata (redirect_uris, grant_types, etc.) can be updated.
+rule Client_Update_Config:
+  let new_secret_hash = h(~new_secret)
+  in
+  [ Client_Has_Credentials($Admin, $AS, env_id, client_id, client_secret, old_rat),
+    !Client_Owner($AS, env_id, client_id, $Admin),
+    AS_Client_Record($AS, env_id, client_id, old_secret_hash, old_rat, $Admin),
+    Fr(~new_rat), Fr(~new_secret) ]
+  --[ Eq(h(client_secret), old_secret_hash),
+      Config_Updated($AS, env_id, client_id, $Admin),
+      RAT_Rotated($AS, env_id, client_id, old_rat, ~new_rat),
+      RAT_Issued($AS, env_id, client_id, ~new_rat),
+      RAT_Consumed($AS, env_id, client_id, old_rat),
+      Client_Id_Preserved($AS, env_id, client_id) ]->
+  [ // New record with rotated RAT and new secret
+    AS_Client_Record($AS, env_id, client_id, new_secret_hash, ~new_rat, $Admin),
+    // Client receives new credentials over TLS
+    Client_Has_Credentials($Admin, $AS, env_id, client_id, ~new_secret, ~new_rat) ]
+
+/* ============ Client Deletion (RFC 7592 §2.3) ============ */
+
+// Client deletes its registration using RAT.
+// DELETE /register/<client_id> with Authorization: Bearer <rat>
+// Consumes the AS_Client_Record (linear fact — no further operations possible).
+rule Client_Delete:
+  [ Client_Has_Credentials($Admin, $AS, env_id, client_id, client_secret, rat),
+    !Client_Owner($AS, env_id, client_id, $Admin),
+    AS_Client_Record($AS, env_id, client_id, secret_hash, rat, $Admin) ]
+  --[ Eq(h(client_secret), secret_hash),
+      Client_Deleted($AS, env_id, client_id, $Admin),
+      RAT_Consumed($AS, env_id, client_id, rat),
+      Unique(<'delete', client_id>) ]->
+  [ // Record consumed — no further management operations possible
+    AS_Client_Deleted($AS, env_id, client_id) ]
+
+/* ============ Attacker Scenarios ============ */
+
+// Attacker attempts to register with a guessed/forged IAT.
+// This is structurally impossible: AS_Has_IAT is a linear fact
+// created only by Admin_Provision_IAT, and the attacker cannot
+// inject it. The rule Client_Register requires both:
+// - Admin_Has_IAT (held by legitimate admin)
+// - AS_Has_IAT (held by AS)
+// Without both, registration cannot proceed.
+
+// Attacker attempts management with a guessed RAT.
+// Also structurally impossible: AS_Client_Record contains the RAT
+// and is only created by Client_Register / Client_Update_Config.
+// The attacker would need to match the RAT in both the client
+// credential and the AS record.
+
+/* ============ Security Properties ============ */
+
+// 1. Registration Token Binding:
+// Every registered client traces back to a valid IAT provisioned by an admin.
+// No client can be registered without a legitimately provisioned IAT.
+lemma registration_token_binding:
+  "All AS env client_id admin #i.
+     Client_Registered(AS, env, client_id, admin)@i
+     ==> Ex iat #j.
+           IAT_Provisioned(admin, AS, env, iat)@j & #j < #i"
+
+// 2. No Unauthorized Update:
+// If a client configuration was updated, the update was performed by
+// the same admin who registered the client (RAT holder).
+// An attacker or different admin cannot update another admin's client.
+lemma no_unauthorized_update:
+  "All AS env client_id admin #i.
+     Config_Updated(AS, env, client_id, admin)@i
+     ==> Ex #j. Client_Registered(AS, env, client_id, admin)@j & #j < #i"
+  simplify
+  solve( !Client_Owner($AS, env, client_id, $Admin) ▶₁ #i )
+    case Client_Register
+    by contradiction /* from formulas */
+  qed
+
+// 3. Client Identity Integrity:
+// The client_id is immutable: every update preserves the original client_id.
+// This ensures that update operations cannot change the client's identity,
+// which would break token bindings, audit trails, and access control.
+lemma client_identity_integrity:
+  "All AS env client_id #i.
+     Client_Id_Preserved(AS, env, client_id)@i
+     ==> Ex admin #j. Client_Registered(AS, env, client_id, admin)@j & #j < #i"
+
+// 4. Registration Access Token Secrecy:
+// The RAT is never exposed to the network attacker. RATs are delivered
+// only via secure channels (TLS) between AS and client software.
+// The attacker cannot learn any RAT value.
+lemma registration_access_token_secrecy:
+  "All AS env client_id rat #i.
+     RAT_Issued(AS, env, client_id, rat)@i
+     ==> not(Ex #k. K(rat)@k)"
+
+// 5. No Unauthorized Delete:
+// Client deletion requires the same admin who registered the client.
+// An attacker or different admin cannot delete another admin's client.
+lemma no_unauthorized_delete:
+  "All AS env client_id admin #i.
+     Client_Deleted(AS, env, client_id, admin)@i
+     ==> Ex #j. Client_Registered(AS, env, client_id, admin)@j & #j < #i"
+  simplify
+  solve( !Client_Owner($AS, env, client_id, $Admin) ▶₁ #i )
+    case Client_Register
+    by contradiction /* from formulas */
+  qed
+
+// 6. RAT Rotation on Update:
+// Every configuration update rotates the RAT. The old RAT is consumed
+// (invalidated) and a fresh RAT is issued. This limits the window of
+// exposure if a RAT is compromised — it becomes invalid after the next
+// legitimate update.
+lemma rat_rotation_on_update:
+  "All AS env client_id old_rat new_rat #i.
+     RAT_Rotated(AS, env, client_id, old_rat, new_rat)@i
+     ==> Ex #j. RAT_Consumed(AS, env, client_id, old_rat)@j &
+         not(old_rat = new_rat)"
+
+end

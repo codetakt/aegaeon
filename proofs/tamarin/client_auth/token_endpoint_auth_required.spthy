@@ -1,0 +1,44 @@
+theory TokenEndpointAuthRequired
+
+begin
+
+// include "../common/common_model.spthy"
+
+// Simplified model of token issuance with client authentication for
+// confidential clients.
+
+// Register a confidential client (persistent fact so multiple grants can use it)
+rule RegisterConfidentialClient:
+  [ Fr(~client) ]
+  --[ ConfidentialRegistered(~client),
+      ConfidentialMarked(~client) ]->
+  [ !Confidential(~client) ]
+
+rule ClientRequestsToken:
+  [ ] --[ TokenReq($C, $Grant, $Auth) ]-> [ ]
+
+rule TokenGranting:
+  [ !Confidential($C) ]
+  --[ TokenReq($C, $Grant, $Auth), ValidAuth($C, $Auth), TokenGranted($C, $Grant, $Auth) ]->
+  [ ]
+
+// Derive ValidAuth from the requested auth method (abstractly)
+rule InferBasicValidAuth:
+  [ ] --[ TokenReq($C, $Grant, 'basic') ]-> [ ValidAuth($C, 'basic') ]
+
+rule InferPostValidAuth:
+  [ ] --[ TokenReq($C, $Grant, 'post') ]-> [ ValidAuth($C, 'post') ]
+
+rule InferPkjwtValidAuth:
+  [ ] --[ TokenReq($C, $Grant, 'pkjwt') ]-> [ ValidAuth($C, 'pkjwt') ]
+
+// Property: If a confidential client's token is granted, then valid client
+// authentication was presented for that request.
+lemma TokenAuth:
+  "All C Grant Auth #i #j #k.
+     ( ConfidentialMarked(C)@i
+       & TokenReq(C, Grant, Auth)@j
+        & TokenGranted(C, Grant, Auth)@k )
+      ==> (Ex #m. ValidAuth(C, Auth)@m)"
+
+end

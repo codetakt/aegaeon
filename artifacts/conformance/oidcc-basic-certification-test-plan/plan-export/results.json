@@ -1,0 +1,212 @@
+[
+  {
+    "test_module": "oidcc-server",
+    "test_id": "aUmgkqTYE5ocauf",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-response-type-missing",
+    "test_id": "VX0z3tlN8OXi3sN",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-userinfo-get",
+    "test_id": "y1JntB67dMkhrea",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-userinfo-post-header",
+    "test_id": "ObvC7MbVeyHS7ab",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-userinfo-post-body",
+    "test_id": "C54c43IdPiHlmrq",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-ensure-request-without-nonce-succeeds-for-code-flow",
+    "test_id": "ScmWl62UWWlj4Iq",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-scope-profile",
+    "test_id": "S6atThBFyRjLb70",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-scope-email",
+    "test_id": "aFabFKopgauiNBp",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-scope-address",
+    "test_id": "DTlsERDY5U47kjo",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-scope-phone",
+    "test_id": "E0jHxBkZgsS5EV2",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-scope-all",
+    "test_id": "WdAMD58ev8gSU7Y",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-ensure-other-scope-order-succeeds",
+    "test_id": "QYnJx5CFtTVe32T",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-display-page",
+    "test_id": "30ZKPD6BkXaFWg0",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-display-popup",
+    "test_id": "LAIfrrs0uGsyvje",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-prompt-login",
+    "test_id": "KaCDGB63sykT1v2",
+    "status": "FINISHED",
+    "result": "REVIEW"
+  },
+  {
+    "test_module": "oidcc-prompt-none-not-logged-in",
+    "test_id": "H4u5hXE3F2KXJav",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-prompt-none-logged-in",
+    "test_id": "N9BOLTjkQO6Fs9S",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-max-age-1",
+    "test_id": "NJJe2svewJ7YSxE",
+    "status": "FINISHED",
+    "result": "REVIEW"
+  },
+  {
+    "test_module": "oidcc-max-age-10000",
+    "test_id": "d3QV6TPNikCBbQq",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-ensure-request-with-unknown-parameter-succeeds",
+    "test_id": "io4vv69oYbTBDln",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-id-token-hint",
+    "test_id": "oFnzq1GFBf1RQHy",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-login-hint",
+    "test_id": "SuehZ9kajpIjpnW",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-ui-locales",
+    "test_id": "vPm6XPOaGDOAWLE",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-claims-locales",
+    "test_id": "lXNt1cEacr4PTw4",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-ensure-request-with-acr-values-succeeds",
+    "test_id": "a5rdIdHr50lmWVC",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-codereuse",
+    "test_id": "hyhnnMFuRC2hK2R",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-codereuse-30seconds",
+    "test_id": "Hqc5XkwQXsLHbEx",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-ensure-registered-redirect-uri",
+    "test_id": "vAOO5JgXwYcuxpq",
+    "status": "FINISHED",
+    "result": "REVIEW"
+  },
+  {
+    "test_module": "oidcc-ensure-post-request-succeeds",
+    "test_id": "QiOc9agkHY466Jc",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-server-client-secret-post",
+    "test_id": "BuDrMYcqiJAMnuF",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported",
+    "test_id": "U27LknUYcnRRCRD",
+    "status": "FINISHED",
+    "result": "SKIPPED"
+  },
+  {
+    "test_module": "oidcc-claims-essential",
+    "test_id": "eB7yjz7BTcTwcdI",
+    "status": "FINISHED",
+    "result": "WARNING"
+  },
+  {
+    "test_module": "oidcc-ensure-request-object-with-redirect-uri",
+    "test_id": "2ac6qyyn6WkQH00",
+    "status": "FINISHED",
+    "result": "SKIPPED"
+  },
+  {
+    "test_module": "oidcc-refresh-token",
+    "test_id": "geAg6ss3Zveves3",
+    "status": "FINISHED",
+    "result": "PASSED"
+  },
+  {
+    "test_module": "oidcc-ensure-request-with-valid-pkce-succeeds",
+    "test_id": "AG16L44c3QUNkKK",
+    "status": "FINISHED",
+    "result": "PASSED"
+  }
+]

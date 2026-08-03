@@ -1,0 +1,135 @@
+// EverParse 3D specification for OAuth 2.0 Dynamic Client Registration (RFC 7591)
+// This generates verified parsers for DCR request/response messages
+
+// Client metadata structure for registration
+typedef struct _client_metadata {
+  // Required fields
+  UINT32 redirect_uris_length;
+  UINT8 redirect_uris[redirect_uris_length]; // Concatenated URI strings
+
+  // Optional fields with presence flags
+  UINT8 has_token_endpoint_auth_method;
+  UINT32 token_endpoint_auth_method; // 0=none, 1=client_secret_post, 2=client_secret_basic, 3=private_key_jwt
+
+  UINT8 has_grant_types;
+  UINT32 grant_types; // Bitmask: 1=authorization_code, 2=refresh_token, 4=client_credentials, 8=urn:ietf:params:oauth:grant-type:jwt-bearer
+
+  UINT8 has_response_types;
+  UINT32 response_types; // Bitmask: 1=code, 2=token (deprecated)
+
+  UINT8 has_client_name;
+  UINT32 client_name_length;
+  UINT8 client_name[client_name_length];
+
+  UINT8 has_client_uri;
+  UINT32 client_uri_length;
+  UINT8 client_uri[client_uri_length];
+
+  UINT8 has_logo_uri;
+  UINT32 logo_uri_length;
+  UINT8 logo_uri[logo_uri_length];
+
+  UINT32 scopes_length;
+  UINT8 scopes[scopes_length]; // Concatenated scope strings
+
+  UINT8 has_contacts;
+  UINT32 contacts_length;
+  UINT8 contacts[contacts_length]; // Concatenated email addresses
+
+  UINT8 has_tos_uri;
+  UINT32 tos_uri_length;
+  UINT8 tos_uri[tos_uri_length];
+
+  UINT8 has_policy_uri;
+  UINT32 policy_uri_length;
+  UINT8 policy_uri[policy_uri_length];
+
+  UINT8 has_jwks_uri;
+  UINT32 jwks_uri_length;
+  UINT8 jwks_uri[jwks_uri_length];
+
+  UINT8 has_software_id;
+  UINT32 software_id_length;
+  UINT8 software_id[software_id_length];
+
+  UINT8 has_software_version;
+  UINT32 software_version_length;
+  UINT8 software_version[software_version_length];
+
+  // OAuth 2.1 / RFC 9700 additions
+  UINT8 requires_pkce;
+  UINT8 requires_dpop;
+  UINT8 requires_par;
+
+  // Sender-constrained token support
+  UINT8 has_require_sender_constrained_tokens;
+  UINT8 require_sender_constrained_tokens;
+
+  UINT8 has_sender_constrained_methods;
+  UINT32 sender_constrained_methods_length;
+  UINT8 sender_constrained_methods[sender_constrained_methods_length]; // Method names
+
+  UINT8 has_require_mtls;
+  UINT8 require_mtls;
+} client_metadata;
+
+// Registration request
+entrypoint typedef struct _registration_request {
+  UINT32 version; // Protocol version (should be 1)
+  client_metadata metadata;
+
+  // Optional initial access token reference
+  UINT8 has_initial_access_token;
+  UINT32 initial_access_token_id;
+} registration_request;
+
+// Registration response
+entrypoint typedef struct _registration_response {
+  UINT32 client_id_length;
+  UINT8 client_id[client_id_length];
+
+  UINT8 has_client_secret;
+  UINT32 client_secret_length;
+  UINT8 client_secret[client_secret_length];
+
+  UINT32 client_id_issued_at; // Unix timestamp
+
+  UINT8 has_client_secret_expires_at;
+  UINT32 client_secret_expires_at; // Unix timestamp or 0 for no expiry
+
+  // Echo back the registered metadata
+  client_metadata registered_metadata;
+
+  // Registration management
+  UINT8 has_registration_access_token;
+  UINT32 registration_access_token_length;
+  UINT8 registration_access_token[registration_access_token_length];
+
+  UINT8 has_registration_client_uri;
+  UINT32 registration_client_uri_length;
+  UINT8 registration_client_uri[registration_client_uri_length];
+} registration_response;
+
+// Update request (for already registered clients)
+entrypoint typedef struct _update_request {
+  UINT32 client_id_length;
+  UINT8 client_id[client_id_length];
+
+  UINT32 registration_access_token_length;
+  UINT8 registration_access_token[registration_access_token_length];
+
+  client_metadata updated_metadata;
+} update_request;
+
+// Error response
+entrypoint typedef struct _error_response {
+  UINT32 error_code; // 0=invalid_redirect_uri, 1=invalid_client_metadata, 2=invalid_software_statement
+
+  UINT8 has_error_description;
+  UINT32 error_description_length;
+  UINT8 error_description[error_description_length];
+
+  UINT8 has_error_uri;
+  UINT32 error_uri_length;
+  UINT8 error_uri[error_uri_length];
+} error_response;

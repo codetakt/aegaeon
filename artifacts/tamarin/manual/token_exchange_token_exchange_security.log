@@ -1,0 +1,229 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OAuth2_Token_Exchange] Theory loaded
+[Theory OAuth2_Token_Exchange] Theory translated
+[Theory OAuth2_Token_Exchange] Derivation checks started
+[Theory OAuth2_Token_Exchange] Derivation checks ended
+[Theory OAuth2_Token_Exchange] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OAuth2_Token_Exchange begin
+
+// Function signature and definition of the equational theory E
+
+builtins: multiset
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+rule (modulo E) AS_Issue_Subject_Token_Read_Unbound:
+   [ Fr( ~sub_token ) ]
+  --[ Subject_Token_Issued( $C, ~sub_token, $aud, 'read', 'none' ) ]->
+   [ !TokenMeta( ~sub_token, $C, $aud, 'read', 'none' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Issue_Subject_Token_ReadWrite_Bound_Mtls:
+   [ Fr( ~sub_token ), Fr( ~fp ) ]
+  --[
+  Subject_Token_Issued( $C, ~sub_token, $aud, 'read_write', <'mtls', ~fp> )
+  ]->
+   [ !TokenMeta( ~sub_token, $C, $aud, 'read_write', <'mtls', ~fp> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Token_Exchange_Read_From_Read:
+   [ !TokenMeta( sub, client, aud, 'read', binding ), Fr( ~out_token ) ]
+  --[
+  Token_Exchanged( client, sub, ~out_token, aud, 'read', 'read', binding,
+                   binding
+  ),
+  Subject_Token_Issued( client, ~out_token, aud, 'read', binding )
+  ]->
+   [ !TokenMeta( ~out_token, client, aud, 'read', binding ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Token_Exchange_Read_From_ReadWrite:
+   [ !TokenMeta( sub, client, aud, 'read_write', binding ), Fr( ~out_token )
+   ]
+  --[
+  Token_Exchanged( client, sub, ~out_token, aud, 'read', 'read_write',
+                   binding, binding
+  ),
+  Subject_Token_Issued( client, ~out_token, aud, 'read', binding )
+  ]->
+   [ !TokenMeta( ~out_token, client, aud, 'read', binding ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Token_Exchange_ReadWrite_From_ReadWrite:
+   [ !TokenMeta( sub, client, aud, 'read_write', binding ), Fr( ~out_token )
+   ]
+  --[
+  Token_Exchanged( client, sub, ~out_token, aud, 'read_write',
+                   'read_write', binding, binding
+  ),
+  Subject_Token_Issued( client, ~out_token, aud, 'read_write', binding )
+  ]->
+   [ !TokenMeta( ~out_token, client, aud, 'read_write', binding ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+lemma token_exchange_scope_subset:
+  all-traces
+  "∀ c sub out aud req sub_scope bind #i.
+    (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind ) @ #i) ⇒
+    ((req = sub_scope) ∨ ((req = 'read') ∧ (sub_scope = 'read_write')))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ c sub out aud req sub_scope bind #i.
+  (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind ) @ #i)
+ ∧
+  (¬(req = sub_scope)) ∧
+  (((¬(req = 'read')) ∨ (¬(sub_scope = 'read_write'))))"
+*/
+simplify
+solve( (¬(req = 'read'))  ∥ (¬(sub_scope = 'read_write')) )
+  case case_1
+  solve( Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind
+         ) @ #i )
+    case AS_Token_Exchange_ReadWrite_From_ReadWrite
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_Read
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_ReadWrite
+    by contradiction /* from formulas */
+  qed
+next
+  case case_2
+  solve( Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind
+         ) @ #i )
+    case AS_Token_Exchange_ReadWrite_From_ReadWrite
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_Read
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_ReadWrite
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma token_exchange_preserves_audience_and_client:
+  all-traces
+  "∀ c sub out aud req sub_scope bind #i.
+    (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind ) @ #i) ⇒
+    (∃ #j. Subject_Token_Issued( c, sub, aud, sub_scope, bind ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ c sub out aud req sub_scope bind #i.
+  (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind ) @ #i)
+ ∧
+  ∀ #j. (Subject_Token_Issued( c, sub, aud, sub_scope, bind ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( Token_Exchanged( c, sub, out, aud, req, sub_scope, bind, bind
+       ) @ #i )
+  case AS_Token_Exchange_ReadWrite_From_ReadWrite
+  solve( !TokenMeta( sub, c, aud, 'read_write', bind ) ▶₀ #i )
+    case AS_Issue_Subject_Token_ReadWrite_Bound_Mtls
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_ReadWrite_From_ReadWrite
+    by contradiction /* from formulas */
+  qed
+next
+  case AS_Token_Exchange_Read_From_Read
+  solve( !TokenMeta( sub, c, aud, 'read', bind ) ▶₀ #i )
+    case AS_Issue_Subject_Token_Read_Unbound
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_Read
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_ReadWrite_case_1
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_Read_From_ReadWrite_case_2
+    by contradiction /* from formulas */
+  qed
+next
+  case AS_Token_Exchange_Read_From_ReadWrite
+  solve( !TokenMeta( sub, c, aud, 'read_write', bind ) ▶₀ #i )
+    case AS_Issue_Subject_Token_ReadWrite_Bound_Mtls
+    by contradiction /* from formulas */
+  next
+    case AS_Token_Exchange_ReadWrite_From_ReadWrite
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma token_exchange_preserves_sender_binding:
+  all-traces
+  "∀ c sub out aud req sub_scope bind_in bind_out #i.
+    (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind_in, bind_out
+     ) @ #i) ⇒
+    (bind_in = bind_out)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ c sub out aud req sub_scope bind_in bind_out #i.
+  (Token_Exchanged( c, sub, out, aud, req, sub_scope, bind_in, bind_out
+   ) @ #i)
+ ∧
+  ¬(bind_in = bind_out)"
+*/
+simplify
+solve( Token_Exchanged( c, sub, out, aud, req, sub_scope, bind_in,
+                        bind_out
+       ) @ #i )
+  case AS_Token_Exchange_ReadWrite_From_ReadWrite
+  by contradiction /* from formulas */
+next
+  case AS_Token_Exchange_Read_From_Read
+  by contradiction /* from formulas */
+next
+  case AS_Token_Exchange_Read_From_ReadWrite
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./token_exchange/token_exchange_security.spthy
+
+  processing time: 0.66s
+
+  token_exchange_scope_subset (all-traces): verified (10 steps)
+  token_exchange_preserves_audience_and_client (all-traces): verified (13 steps)
+  token_exchange_preserves_sender_binding (all-traces): verified (5 steps)
+
+==============================================================================

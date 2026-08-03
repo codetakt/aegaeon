@@ -1,0 +1,139 @@
+{
+  "$schema": "https://aegaeon.dev/spec/server-client-pre-public-blocker-closure.schema.json",
+  "schema_version": 1,
+  "report_id": "phase5-pre-public-blocker-closure-2026-05-20",
+  "generated_at": "2026-05-20T00:00:00Z",
+  "claim_target": "server-client-formal-assurance",
+  "phase": "phase5-pre-public-blocker-closure",
+  "public_claim_ready": false,
+  "all_non_public_blockers_closed": true,
+  "closure_items": [
+    {
+      "id": "client-promotion-report-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/release/client-claim-promotion-report.json",
+      "source_generated_at": "2026-05-20T08:55:16.404Z",
+      "ready": true,
+      "notes": "Client promotion report snapshot is ready with no failures."
+    },
+    {
+      "id": "released-client-report-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/release/released-client-claim-report.json",
+      "source_generated_at": "2026-05-20T08:55:16.453Z",
+      "ready": false,
+      "notes": "Report shape is valid; managed-provider hosted evidence freshness remains open."
+    },
+    {
+      "id": "hosted-readiness-report-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/release/hosted-release-readiness-report.json",
+      "source_generated_at": "2026-03-21T08:42:34.752Z",
+      "ready": true,
+      "notes": "Hosted readiness snapshot is ready; rerun is needed for activation freshness."
+    },
+    {
+      "id": "managed-provider-evidence-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:managed-provider-evidence",
+      "source_generated_at": "2026-03-16T22:43:33.964Z",
+      "ready": true,
+      "notes": "Managed provider evidence validates locally; activation needs fresh hosted run."
+    },
+    {
+      "id": "admin-sdk-evidence-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/admin-sdk/admin-sdk-evidence.json",
+      "source_generated_at": "2026-05-20T08:54:34.459Z",
+      "ready": true,
+      "notes": "Fresh hosted admin evidence validates from run 26151511742."
+    },
+    {
+      "id": "release-publication-bundle-shape",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/release/release-publication-bundle.json",
+      "source_generated_at": "2026-05-20T08:55:16.674Z",
+      "ready": false,
+      "notes": "Bundle validates as pre-release; released-client publication remains gated."
+    },
+    {
+      "id": "publication-org-rollout-ready",
+      "status": "complete",
+      "evidence_kind": "local-artifact-snapshot",
+      "evidence_uri": "sibling:aegaeon-sdk/.artifacts/release/publication-org-rollout-report.json",
+      "source_generated_at": "2026-05-20T07:46:30.451Z",
+      "ready": true,
+      "notes": "Publication-org branch protection and release-secret rollout validate as ready."
+    },
+    {
+      "id": "publication-org-contract",
+      "status": "complete",
+      "evidence_kind": "source-managed-contract",
+      "evidence_uri": "spec/publication-org-rollout.schema.json",
+      "source_generated_at": null,
+      "ready": null,
+      "notes": "Publication rollout schema and validator are source-managed."
+    },
+    {
+      "id": "release-security-contract",
+      "status": "complete",
+      "evidence_kind": "source-managed-contract",
+      "evidence_uri": "spec/release-security-evidence.schema.json",
+      "source_generated_at": null,
+      "ready": null,
+      "notes": "Release security archive schema and validator are source-managed."
+    },
+    {
+      "id": "internal-review-signoff",
+      "status": "complete",
+      "evidence_kind": "internal-review",
+      "evidence_uri": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
+      "source_generated_at": "2026-05-20T00:00:00Z",
+      "ready": true,
+      "notes": "Internal claim, boundary, server, and SDK-adapter reviews are approved."
+    }
+  ],
+  "activation_blockers": [
+    {
+      "id": "released-client-claim-activation",
+      "blocker_class": "public-claim-activation",
+      "required_next_evidence": "Activate after fresh hosted evidence and custody."
+    },
+    {
+      "id": "fresh-managed-provider-evidence",
+      "blocker_class": "external-hosted-evidence",
+      "required_next_evidence": "Provision tenant config; rerun managed-provider lane."
+    },
+    {
+      "id": "release-security-archive",
+      "blocker_class": "release-candidate-evidence",
+      "required_next_evidence": "Archive fresh release-candidate security evidence."
+    },
+    {
+      "id": "release-custody-review",
+      "blocker_class": "external-review",
+      "required_next_evidence": "Approve release custody using publication-org evidence."
+    },
+    {
+      "id": "external-security-review",
+      "blocker_class": "external-review",
+      "required_next_evidence": "Complete independent security review."
+    },
+    {
+      "id": "public-wording-release",
+      "blocker_class": "public-wording-release",
+      "required_next_evidence": "Publish final wording change only after gates are active."
+    }
+  ],
+  "review": {
+    "reviewer": "aegaeon-engineering",
+    "decision": "approved",
+    "notes": "Approved as non-public closure only; public activation remains blocked."
+  }
+}

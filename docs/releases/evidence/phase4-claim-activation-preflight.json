@@ -1,0 +1,180 @@
+{
+  "$schema": "https://aegaeon.dev/spec/phase4-claim-activation-preflight.schema.json",
+  "schema_version": 1,
+  "bundle_id": "phase4-internal-preflight-2026-05-20",
+  "generated_at": "2026-05-20T00:00:00Z",
+  "phase4_status": "internal-preflight-complete",
+  "public_claim_ready": false,
+  "claim_gates": [
+    {
+      "claim_target": "enterprise-readiness",
+      "claim_gate_path": "spec/enterprise-readiness-claim.current.json",
+      "internal_status": "internal-preflight-complete",
+      "activation_status": "blocked-on-external"
+    },
+    {
+      "claim_target": "certification",
+      "claim_gate_path": "spec/certification-claim.current.json",
+      "internal_status": "internal-complete",
+      "activation_status": "blocked-on-external"
+    },
+    {
+      "claim_target": "admin-ui-assurance",
+      "claim_gate_path": "spec/admin-ui-assurance-claim.current.json",
+      "internal_status": "internal-complete",
+      "activation_status": "blocked-on-external"
+    }
+  ],
+  "internal_evidence": [
+    {
+      "id": "enterprise-readiness-phase1-runbook",
+      "kind": "runbook",
+      "path": "docs/releases/runbooks/phase1-evidence-acquisition.md",
+      "status": "complete"
+    },
+    {
+      "id": "enterprise-readiness-bundle-validator",
+      "kind": "validator",
+      "path": "scripts/validation/validate_enterprise_readiness_evidence_bundle.py",
+      "status": "complete"
+    },
+    {
+      "id": "phase1-closure-validator",
+      "kind": "validator",
+      "path": "scripts/validation/validate_enterprise_readiness_phase1.py",
+      "status": "complete"
+    },
+    {
+      "id": "certification-phase2-internal-bundle",
+      "kind": "bundle",
+      "path": "docs/releases/evidence/certification-phase2-internal-bundle.json",
+      "status": "complete"
+    },
+    {
+      "id": "certification-validator",
+      "kind": "validator",
+      "path": "scripts/validation/validate_certification_evidence_bundle.py",
+      "status": "complete"
+    },
+    {
+      "id": "admin-ui-phase3-internal-bundle",
+      "kind": "bundle",
+      "path": "docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json",
+      "status": "complete"
+    },
+    {
+      "id": "admin-ui-assurance-validator",
+      "kind": "validator",
+      "path": "scripts/validation/validate_admin_ui_assurance.py",
+      "status": "complete"
+    },
+    {
+      "id": "claim-gate-validator",
+      "kind": "validator",
+      "path": "scripts/validation/validate_claim_gates.py",
+      "status": "complete"
+    },
+    {
+      "id": "product-positioning",
+      "kind": "positioning",
+      "path": "docs/product-positioning.md",
+      "status": "complete"
+    },
+    {
+      "id": "phase4-roadmap",
+      "kind": "roadmap",
+      "path": "docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md",
+      "status": "complete"
+    }
+  ],
+  "external_blockers": [
+    {
+      "claim_target": "enterprise-readiness",
+      "evidence_id": "publication-org-rollout",
+      "blocker_class": "external-publication",
+      "owner": "aegaeon-sdk",
+      "required_next_evidence": "Audited publication organization branch protection, repository settings, release custody, secrets, and package publication controls."
+    },
+    {
+      "claim_target": "enterprise-readiness",
+      "evidence_id": "managed-provider-evidence",
+      "blocker_class": "external-hosted-evidence",
+      "owner": "aegaeon-sdk",
+      "required_next_evidence": "Hosted evidence from at least one provisioned real commercial or enterprise provider tenant with full GitHub refs metadata."
+    },
+    {
+      "claim_target": "enterprise-readiness",
+      "evidence_id": "kms-hsm-classification",
+      "blocker_class": "external-hosted-evidence",
+      "owner": "aegaeon",
+      "required_next_evidence": "Reviewed concrete deployment classification manifest with fresh KMS/HSM parity evidence."
+    },
+    {
+      "claim_target": "enterprise-readiness",
+      "evidence_id": "release-security-evidence",
+      "blocker_class": "external-publication",
+      "owner": "aegaeon",
+      "required_next_evidence": "Concrete release-candidate archive containing release evidence, SDK publication bundle, SBOM, vulnerability scan, dependency policy, and support response evidence."
+    },
+    {
+      "claim_target": "enterprise-readiness",
+      "evidence_id": "enterprise-slo-baselines",
+      "blocker_class": "external-hosted-evidence",
+      "owner": "aegaeon",
+      "required_next_evidence": "Fresh management and issuer SLO baseline manifests from hosted or self-hosted release-candidate evidence."
+    },
+    {
+      "claim_target": "certification",
+      "evidence_id": "target-plan-pass-exports",
+      "blocker_class": "external-certification",
+      "owner": "aegaeon",
+      "required_next_evidence": "External-complete certification bundle with claim-bearing plan exports accepted for the exact named public certification scope."
+    },
+    {
+      "claim_target": "certification",
+      "evidence_id": "review-warning-skip-disposition",
+      "blocker_class": "external-certification",
+      "owner": "aegaeon",
+      "required_next_evidence": "External reviewer disposition or scope update for every REVIEW, WARNING, and SKIPPED conformance module."
+    },
+    {
+      "claim_target": "certification",
+      "evidence_id": "formal-submission",
+      "blocker_class": "external-certification",
+      "owner": "aegaeon",
+      "required_next_evidence": "Formal OIDF fee/legal/submission/review and public listing evidence before using certified wording."
+    },
+    {
+      "claim_target": "certification",
+      "evidence_id": "positioning-scope-update",
+      "blocker_class": "public-wording-release",
+      "owner": "aegaeon",
+      "required_next_evidence": "Release change set that names the exact certified scope without implying broader protocol, deployment, or UI certification."
+    },
+    {
+      "claim_target": "admin-ui-assurance",
+      "evidence_id": "hosted-runtime-evidence",
+      "blocker_class": "external-hosted-evidence",
+      "owner": "aegaeon-admin-console",
+      "required_next_evidence": "Approved hosted admin-console stack evidence against the bounded assurance model."
+    },
+    {
+      "claim_target": "release",
+      "evidence_id": "public-wording-change-set",
+      "blocker_class": "public-wording-release",
+      "owner": "aegaeon",
+      "required_next_evidence": "Coordinated product-positioning, README, release notes, launch assets, and release tag change set after eligible claim gates close."
+    }
+  ],
+  "release_activation": {
+    "product_wording_update_required": true,
+    "readme_update_required": true,
+    "release_tag_required": true,
+    "notes": "No stronger public wording is activated by this preflight bundle. Phase 4 remains the single public activation checkpoint."
+  },
+  "review": {
+    "reviewer": "aegaeon-engineering",
+    "decision": "approved",
+    "notes": "Approved as internal Phase 4 preflight only. Remaining blockers are external hosted evidence, external certification/publication evidence, and the final public wording release change set."
+  }
+}

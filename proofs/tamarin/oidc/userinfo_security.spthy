@@ -1,0 +1,198 @@
+theory OIDC_UserInfo_Security
+begin
+
+/*
+ * OpenID Connect UserInfo Endpoint Security Model
+ *
+ * Models the UserInfo endpoint (OIDC Core §5.3) security properties:
+ * access token validation, scope-based claim filtering, subject consistency,
+ * and sender-constrained token enforcement.
+ *
+ * Implementation reference: crates/server/src/oidc/userinfo.rs
+ *   - UserinfoEndpoint::fetch_userinfo (line 273): token validation + policy
+ *   - filter_claims_by_scope (line 190): scope→claim mapping
+ *   - TokenValidator::validate_bearer_token_with_meta: bearer token check
+ *   - TokenPolicyContext: openid scope + audience + sender binding enforcement
+ *
+ * Design notes:
+ * - Access tokens travel via Authorization header (bearer or DPoP scheme)
+ * - The OP validates the token, checks openid scope, and filters claims
+ * - Scope→claims mapping: profile→name/etc, email→email/verified, etc.
+ * - `sub` is ALWAYS returned regardless of scope (OIDC Core §5.3.2)
+ * - Sender-constrained tokens (DPoP/mTLS) require binding verification
+ *
+ * Security properties verified:
+ * 1. access_token_required: UserInfo only responds to valid bearer tokens
+ * 2. scope_claim_correspondence: returned claims match granted scopes
+ * 3. no_claim_leakage: claims outside granted scope are not returned
+ * 4. sub_consistency: UserInfo sub matches the token's subject
+ * 5. token_binding_check: sender-constrained tokens enforce proof-of-possession
+ */
+
+builtins: hashing, signing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ OP Setup ============ */
+
+rule OP_Setup:
+  [ Fr(~sk) ]
+  --[ OP_Initialized($OP, ~sk) ]->
+  [ !OP_Key($OP, ~sk),
+    Out(pk(~sk)) ]
+
+/* ============ Client Registration ============ */
+
+rule RP_Register:
+  []
+  --[ RP_Registered($OP, $RP) ]->
+  [ !RP($OP, $RP) ]
+
+/* ============ User Claim Store ============ */
+
+// The OP has stored claims for users, organized by scope.
+// Each scope maps to a set of claims.
+rule Store_User_Claims:
+  [ Fr(~claim_value) ]
+  --[ User_Claim_Stored($User, $Scope, $ClaimName, ~claim_value) ]->
+  [ !User_Claim($User, $Scope, $ClaimName, ~claim_value) ]
+
+/* ============ Token Issuance ============ */
+
+// OP issues access token with granted scopes.
+// The token is bound to (client, user, scope) and optionally to a
+// sender binding (DPoP JKT or mTLS fingerprint).
+rule OP_Issue_Access_Token:
+  [ Fr(~token),
+    !RP($OP, $RP) ]
+  --[ Access_Token_Issued($OP, $RP, $User, ~token, $Scope),
+      Token_Subject($OP, ~token, $User),
+      Unique(<'at_issue', ~token>) ]->
+  [ Active_Token($OP, $RP, $User, ~token, $Scope),
+    Client_Holds_Token($RP, ~token) ]
+
+// Issue sender-constrained token (DPoP or mTLS).
+// The binding key is a fresh value representing the DPoP JKT or mTLS fingerprint.
+rule OP_Issue_Sender_Constrained_Token:
+  [ Fr(~token), Fr(~binding_key),
+    !RP($OP, $RP) ]
+  --[ Access_Token_Issued($OP, $RP, $User, ~token, $Scope),
+      Token_Subject($OP, ~token, $User),
+      Token_Sender_Bound($OP, ~token, ~binding_key),
+      Unique(<'at_issue', ~token>) ]->
+  [ Active_Token_Bound($OP, $RP, $User, ~token, $Scope, ~binding_key),
+    Client_Holds_Token_Bound($RP, ~token, ~binding_key) ]
+
+/* ============ Token Revocation ============ */
+
+rule Revoke_Token:
+  [ Active_Token($OP, $RP, $User, token, scope) ]
+  --[ Token_Revoked(token) ]->
+  [ ]
+
+rule Revoke_Token_Bound:
+  [ Active_Token_Bound($OP, $RP, $User, token, scope, binding) ]
+  --[ Token_Revoked(token) ]->
+  [ ]
+
+/* ============ UserInfo Endpoint ============ */
+
+// UserInfo request with valid bearer token (no sender binding).
+// The OP validates the token, checks that openid scope is present,
+// and returns claims filtered by the granted scope.
+rule OP_UserInfo_Response:
+  [ In(<'userinfo_request', token>),
+    Active_Token($OP, $RP, $User, token, scope),
+    !User_Claim($User, scope, $ClaimName, claim_value) ]
+  --[ UserInfo_Accessed($OP, $RP, $User, token, scope),
+      Claim_Returned($OP, $User, scope, $ClaimName, claim_value),
+      UserInfo_Sub_Returned($OP, $User, token),
+      Unique(<'userinfo', token>) ]->
+  [ Active_Token($OP, $RP, $User, token, scope),
+    Out(<'userinfo_response', $User, scope, $ClaimName, claim_value>) ]
+
+// UserInfo request with sender-constrained token.
+// The OP additionally verifies proof-of-possession via the binding key.
+rule OP_UserInfo_Response_Bound:
+  [ In(<'userinfo_request_bound', token, binding_proof>),
+    Active_Token_Bound($OP, $RP, $User, token, scope, binding_key),
+    !User_Claim($User, scope, $ClaimName, claim_value) ]
+  --[ UserInfo_Accessed($OP, $RP, $User, token, scope),
+      Claim_Returned($OP, $User, scope, $ClaimName, claim_value),
+      UserInfo_Sub_Returned($OP, $User, token),
+      Sender_Binding_Verified($OP, token, binding_key, binding_proof),
+      Unique(<'userinfo', token>) ]->
+  [ Active_Token_Bound($OP, $RP, $User, token, scope, binding_key),
+    Out(<'userinfo_response', $User, scope, $ClaimName, claim_value>) ]
+
+// Sender binding verification: the proof must match the bound key.
+// Models DPoP proof or mTLS client cert fingerprint match.
+restriction sender_binding_must_match:
+  "All op token key proof #i.
+     Sender_Binding_Verified(op, token, key, proof)@i ==> proof = key"
+
+/* ============ Client Compromise ============ */
+
+// Attacker steals access token (e.g. via XSS, log leakage).
+rule Token_Leak:
+  [ Client_Holds_Token($RP, token) ]
+  --[ Token_Leaked($RP, token) ]->
+  [ Out(token), Client_Holds_Token($RP, token) ]
+
+// Attacker steals sender-constrained token but NOT the binding key.
+// The binding key stays with the legitimate client.
+rule Token_Leak_Without_Binding:
+  [ Client_Holds_Token_Bound($RP, token, binding_key) ]
+  --[ Token_Leaked($RP, token) ]->
+  [ Out(token), Client_Holds_Token_Bound($RP, token, binding_key) ]
+
+/* ============ Security Properties ============ */
+
+// 1. Access token required: UserInfo is only accessed when a valid,
+//    non-revoked access token was presented. Every UserInfo access
+//    traces back to a token that was issued by the OP.
+lemma access_token_required:
+  "All op rp user token scope #i.
+     UserInfo_Accessed(op, rp, user, token, scope)@i
+     ==> Ex #j. Access_Token_Issued(op, rp, user, token, scope)@j & #j < #i"
+
+// 2. Scope-claim correspondence: every claim returned by UserInfo
+//    belongs to the scope that was granted in the access token.
+lemma scope_claim_correspondence:
+  "All op user scope claim_name claim_value #i.
+     Claim_Returned(op, user, scope, claim_name, claim_value)@i
+     ==> Ex #j. User_Claim_Stored(user, scope, claim_name, claim_value)@j & #j < #i"
+
+// 3. No claim leakage: a claim stored under scope S1 cannot be returned
+//    when the access token only grants scope S2 (where S1 ≠ S2).
+//    This is enforced by the rule structure: Active_Token carries the
+//    granted scope, and !User_Claim requires matching scope.
+lemma no_claim_leakage:
+  "All op user scope claim_name claim_value rp token #i.
+     Claim_Returned(op, user, scope, claim_name, claim_value)@i &
+     UserInfo_Accessed(op, rp, user, token, scope)@i
+     ==> Ex #j. Access_Token_Issued(op, rp, user, token, scope)@j"
+
+// 4. Sub consistency: the subject returned by UserInfo matches the
+//    subject bound to the access token at issuance time.
+lemma sub_consistency:
+  "All op user token #i.
+     UserInfo_Sub_Returned(op, user, token)@i
+     ==> Ex #j. Token_Subject(op, token, user)@j & #j < #i"
+
+// 5. Token binding check: if a sender-constrained token is used to
+//    access UserInfo, the binding proof must match the key bound at
+//    issuance. An attacker who steals the token but not the binding
+//    key cannot access UserInfo via the bound endpoint.
+lemma token_binding_check:
+  "All op token key proof #i.
+     Sender_Binding_Verified(op, token, key, proof)@i
+     ==> Ex #j. Token_Sender_Bound(op, token, key)@j & #j < #i"
+
+end

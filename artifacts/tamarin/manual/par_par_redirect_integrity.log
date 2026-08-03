@@ -1,0 +1,481 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory PAR_Redirect_Integrity] Theory loaded
+[Theory PAR_Redirect_Integrity] Theory translated
+[Theory PAR_Redirect_Integrity] Derivation checks started
+[Theory PAR_Redirect_Integrity] Derivation checks ended
+[Theory PAR_Redirect_Integrity] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory PAR_Redirect_Integrity begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+restriction unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register_Client:
+   [ Fr( ~client_secret ) ]
+  --[ ClientRegistered( $Client, $AS, ~client_secret, $RedirectURI ) ]->
+   [
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ), Out( $Client ),
+   Out( $RedirectURI )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_AS:
+   [ Fr( ~sk_as ) ]
+  --[ ASRegistered( $AS, pk(~sk_as) ) ]->
+   [ !AS( $AS, ~sk_as ), Out( pk(~sk_as) ), Out( $AS ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) PAR_Request:
+   [
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ),
+   !AS( $AS, ~sk_as ), Fr( ~state ), Fr( ~code_verifier )
+   ]
+  --[
+  PARRequest( $Client, $AS, ~state, h(~code_verifier), $RedirectURI ),
+  Unique( <'par_request', $Client, ~state> )
+  ]->
+   [
+   PARRequestSent( $Client, $AS, ~state, h(~code_verifier), $RedirectURI ),
+   Out( <$Client, ~client_secret, $RedirectURI, ~state, h(~code_verifier)> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Process_PAR:
+   [
+   In( <$Client, client_secret, $RedirectURI, state, code_challenge> ),
+   !Client( $Client, $AS, client_secret, $RedirectURI ), !AS( $AS, ~sk_as ),
+   Fr( ~request_uri )
+   ]
+  --[
+  PARStored( $AS, $Client, ~request_uri, state, code_challenge,
+             $RedirectURI
+  ),
+  RequestURIIssued( $AS, $Client, ~request_uri ),
+  Unique( <'request_uri', ~request_uri> )
+  ]->
+   [
+   !StoredPAR( ~request_uri, $AS, $Client, state, code_challenge,
+               $RedirectURI
+   ),
+   Out( ~request_uri ),
+   Out( sign(<'request_uri', ~request_uri, $AS>, ~sk_as) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) User_Authorize_With_RequestURI:
+   [
+   PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI ),
+   In( request_uri ), In( sign(<'request_uri', request_uri, $AS>, sk_as) ),
+   !AS( $AS, sk_as ),
+   !StoredPAR( request_uri, $AS, $Client, state, code_challenge,
+               $RedirectURI
+   ),
+   Fr( ~code )
+   ]
+  --[
+  UserAuthorized( $AS, $Client, request_uri, ~code ),
+  AuthorizationWithPAR( $AS, $Client, state, ~code, $RedirectURI ),
+  CodeIssued( $AS, $Client, ~code ), Unique( <'auth_code', ~code> ),
+  RequestURIConsumed( $Client, request_uri )
+  ]->
+   [
+   !AuthCode( ~code, $AS, $Client, state, code_challenge, $RedirectURI ),
+   Out( <~code, state, $AS> ), !ConsumedRequestURI( request_uri )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Token_Exchange:
+   [
+   In( <code, state_recv, $AS_recv> ),
+   !AuthCode( code, $AS, $Client, state, code_challenge, $RedirectURI ),
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ), Fr( ~token )
+   ]
+  --[
+  Eq( state_recv, state ), Eq( $AS_recv, $AS ),
+  TokenIssued( $AS, $Client, ~token, code ),
+  TokenExchanged( $Client, ~token, $RedirectURI )
+  ]->
+   [ Out( ~token ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Detect_RequestURI_Reuse:
+   [ !ConsumedRequestURI( request_uri ), In( request_uri ) ]
+  --[ RequestURIReused( request_uri ) ]->
+   [ !ConsumedRequestURI( request_uri ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Detect_MixUp_Attack:
+   [
+   !StoredPAR( request_uri, $AS1, $Client, state, code_challenge,
+               $RedirectURI
+   ),
+   In( <$AS2, request_uri> )
+   ]
+  --[ MixUpAttempt( $AS1, $AS2, request_uri ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Uniqueness:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+lemma redirect_integrity:
+  all-traces
+  "∀ as client code #i.
+    (CodeIssued( as, client, code ) @ #i) ⇒
+    (∃ secret redirect_uri state #j.
+      ((ClientRegistered( client, as, secret, redirect_uri ) @ #j) ∧
+       (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i)) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client code #i.
+  (CodeIssued( as, client, code ) @ #i)
+ ∧
+  ∀ secret redirect_uri state #j.
+   (ClientRegistered( client, as, secret, redirect_uri ) @ #j) ∧
+   (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i)
+  ⇒
+   ¬(#j < #i)"
+*/
+simplify
+solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+       ) ▶₀ #i )
+  case PAR_Request
+  by contradiction /* from formulas */
+qed
+
+lemma request_uri_single_use:
+  all-traces
+  "∀ as client uri code1 code2 #i #j.
+    ((UserAuthorized( as, client, uri, code1 ) @ #i) ∧
+     (UserAuthorized( as, client, uri, code2 ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client uri code1 code2 #i #j.
+  (UserAuthorized( as, client, uri, code1 ) @ #i) ∧
+  (UserAuthorized( as, client, uri, code2 ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+         ) ▶₀ #i )
+    case PAR_Request
+    solve( !AS( $AS, sk_as ) ▶₃ #i )
+      case Register_AS
+      solve( !StoredPAR( uri, $AS, $Client, ~state, h(~code_verifier),
+                         $RedirectURI
+             ) ▶₄ #i )
+        case AS_Process_PAR
+        solve( PARRequestSent( $Client, $AS, state.1, code_challenge,
+                               $RedirectURI.1
+               ) ▶₀ #j )
+          case PAR_Request
+          solve( !AS( $AS, sk_as.1 ) ▶₃ #j )
+            case Register_AS
+            solve( !StoredPAR( ~request_uri, $AS, $Client, ~state.1,
+                               h(~code_verifier.1), $RedirectURI.1
+                   ) ▶₄ #j )
+              case AS_Process_PAR
+              by contradiction /* cyclic */
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+         ) ▶₀ #i )
+    case PAR_Request
+    solve( !AS( $AS, sk_as ) ▶₃ #i )
+      case Register_AS
+      solve( !StoredPAR( uri, $AS, $Client, ~state, h(~code_verifier),
+                         $RedirectURI
+             ) ▶₄ #i )
+        case AS_Process_PAR
+        solve( PARRequestSent( $Client, $AS, state.1, code_challenge,
+                               $RedirectURI.1
+               ) ▶₀ #j )
+          case PAR_Request
+          solve( !AS( $AS, sk_as.1 ) ▶₃ #j )
+            case Register_AS
+            solve( !StoredPAR( ~request_uri, $AS, $Client, ~state.1,
+                               h(~code_verifier.1), $RedirectURI.1
+                   ) ▶₄ #j )
+              case AS_Process_PAR
+              by contradiction /* cyclic */
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma mixup_resistance:
+  all-traces
+  "∀ client token redirect_uri as1 as2 code #i #j #k.
+    (((((TokenExchanged( client, token, redirect_uri ) @ #i) ∧
+        (TokenIssued( as1, client, token, code ) @ #j)) ∧
+       (CodeIssued( as2, client, code ) @ #k)) ∧
+      (#k < #j)) ∧
+     (#j < #i)) ⇒
+    (as1 = as2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client token redirect_uri as1 as2 code #i #j #k.
+  (TokenExchanged( client, token, redirect_uri ) @ #i) ∧
+  (TokenIssued( as1, client, token, code ) @ #j) ∧
+  (CodeIssued( as2, client, code ) @ #k)
+ ∧
+  (#k < #j) ∧ (#j < #i) ∧ (¬(as1 = as2))"
+*/
+simplify
+by contradiction /* cyclic */
+
+lemma par_binding:
+  all-traces
+  "∀ as client state code redirect_uri #i.
+    (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i) ⇒
+    (∃ uri cc #j.
+      (PARStored( as, client, uri, state, cc, redirect_uri ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client state code redirect_uri #i.
+  (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i)
+ ∧
+  ∀ uri cc #j.
+   (PARStored( as, client, uri, state, cc, redirect_uri ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+simplify
+solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+       ) ▶₀ #i )
+  case PAR_Request
+  solve( !AS( $AS, sk_as ) ▶₃ #i )
+    case Register_AS
+    solve( !StoredPAR( request_uri, $AS, $Client, ~state, h(~code_verifier),
+                       $RedirectURI
+           ) ▶₄ #i )
+      case AS_Process_PAR
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+lemma par_client_authentication:
+  all-traces
+  "∀ as client uri state cc redirect_uri #i.
+    (PARStored( as, client, uri, state, cc, redirect_uri ) @ #i) ⇒
+    (∃ secret #j.
+      (ClientRegistered( client, as, secret, redirect_uri ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client uri state cc redirect_uri #i.
+  (PARStored( as, client, uri, state, cc, redirect_uri ) @ #i)
+ ∧
+  ∀ secret #j.
+   (ClientRegistered( client, as, secret, redirect_uri ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !Client( $Client, $AS, client_secret, $RedirectURI ) ▶₁ #i )
+  case Register_Client
+  by contradiction /* from formulas */
+qed
+
+lemma request_uri_integrity:
+  all-traces
+  "∀ as client uri #i.
+    (RequestURIIssued( as, client, uri ) @ #i) ⇒
+    (∃ state cc redirect_uri #j.
+      (PARRequest( client, as, state, cc, redirect_uri ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client uri #i.
+  (RequestURIIssued( as, client, uri ) @ #i)
+ ∧
+  ∀ state cc redirect_uri #j.
+   (PARRequest( client, as, state, cc, redirect_uri ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !Client( $Client, $AS, client_secret, $RedirectURI ) ▶₁ #i )
+  case Register_Client
+  solve( !AS( $AS, ~sk_as ) ▶₂ #i )
+    case Register_AS
+    solve( !KU( ~client_secret ) @ #vk.3 )
+      case PAR_Request
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+lemma no_request_uri_injection:
+  all-traces
+  "∀ as client uri code #i.
+    (UserAuthorized( as, client, uri, code ) @ #i) ⇒
+    (∃ #j. (RequestURIIssued( as, client, uri ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client uri code #i.
+  (UserAuthorized( as, client, uri, code ) @ #i)
+ ∧
+  ∀ #j. (RequestURIIssued( as, client, uri ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+       ) ▶₀ #i )
+  case PAR_Request
+  solve( !AS( $AS, sk_as ) ▶₃ #i )
+    case Register_AS
+    solve( !StoredPAR( uri, $AS, $Client, ~state, h(~code_verifier),
+                       $RedirectURI
+           ) ▶₄ #i )
+      case AS_Process_PAR
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+lemma authorization_requires_par:
+  all-traces
+  "∀ as client state code redirect_uri #i.
+    (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i) ⇒
+    (∃ cc #j.
+      (PARRequest( client, as, state, cc, redirect_uri ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client state code redirect_uri #i.
+  (AuthorizationWithPAR( as, client, state, code, redirect_uri ) @ #i)
+ ∧
+  ∀ cc #j.
+   (PARRequest( client, as, state, cc, redirect_uri ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( PARRequestSent( $Client, $AS, state, code_challenge, $RedirectURI
+       ) ▶₀ #i )
+  case PAR_Request
+  by contradiction /* from formulas */
+qed
+
+lemma request_uri_consumed_on_use:
+  all-traces
+  "∀ as client uri code #i.
+    (UserAuthorized( as, client, uri, code ) @ #i) ⇒
+    (∃ #j.
+      (RequestURIConsumed( client, uri ) @ #j) ∧ ((#j < #i) ∨ (#j = #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client uri code #i.
+  (UserAuthorized( as, client, uri, code ) @ #i)
+ ∧
+  ∀ #j.
+   (RequestURIConsumed( client, uri ) @ #j) ⇒ (¬(#j < #i)) ∧ (¬(#j = #i))"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma request_uri_issued_unique:
+  all-traces
+  "∀ as1 as2 c1 c2 uri #i #j.
+    ((RequestURIIssued( as1, c1, uri ) @ #i) ∧
+     (RequestURIIssued( as2, c2, uri ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as1 as2 c1 c2 uri #i #j.
+  (RequestURIIssued( as1, c1, uri ) @ #i) ∧
+  (RequestURIIssued( as2, c2, uri ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./par/par_redirect_integrity.spthy
+
+  processing time: 1.54s
+
+  redirect_integrity (all-traces): verified (3 steps)
+  request_uri_single_use (all-traces): verified (16 steps)
+  mixup_resistance (all-traces): verified (2 steps)
+  par_binding (all-traces): verified (5 steps)
+  par_client_authentication (all-traces): verified (3 steps)
+  request_uri_integrity (all-traces): verified (5 steps)
+  no_request_uri_injection (all-traces): verified (5 steps)
+  authorization_requires_par (all-traces): verified (3 steps)
+  request_uri_consumed_on_use (all-traces): verified (2 steps)
+  request_uri_issued_unique (all-traces): verified (2 steps)
+
+==============================================================================

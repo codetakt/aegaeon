@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/server",
+    "crates/client",
+    "crates/ffi",
+    "crates/jose",
+    "crates/jose-tlv",
+    "crates/observability",
+    "crates/loadtest",
+    "crates/aegaeon-core",
+    "crates/crypto",
+    "xtask"
+]
+exclude = [
+    "crates/pure",
+    "crates/kani-harness",
+    "fuzz",
+    "dev-tools/sanitizer-smoke"
+]
+
+[workspace.package]
+repository = "https://github.com/codetakt/aegaeon"
+readme = "README.md"
+keywords = ["oauth", "oidc", "identity", "security", "formal-verification"]
+categories = ["authentication", "cryptography", "network-programming"]

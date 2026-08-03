@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/kms-hsm-deployment-classification.schema.json",
+  "title": "Aegaeon KMS/HSM Deployment Classification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "deployment_id",
+    "generated_at",
+    "source_revision",
+    "signer_backend",
+    "classification",
+    "algorithm",
+    "signing_input_ownership",
+    "public_jwk_derivation",
+    "jwks_rotation",
+    "parity_evidence",
+    "claim_boundary",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "deployment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "signer_backend": {
+      "type": "string",
+      "enum": [
+        "aws-kms",
+        "hsm",
+        "other-external"
+      ]
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "claim-preserving",
+        "compat-only"
+      ]
+    },
+    "algorithm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jose_alg",
+        "provider_algorithm"
+      ],
+      "properties": {
+        "jose_alg": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_algorithm": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "signing_input_ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aegaeon_constructs_jws_signing_input",
+        "provider_returns_finished_jwt"
+      ],
+      "properties": {
+        "aegaeon_constructs_jws_signing_input": {
+          "type": "boolean"
+        },
+        "provider_returns_finished_jwt": {
+          "type": "boolean"
+        }
+      }
+    },
+    "public_jwk_derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "key_match_checked"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "provider-api",
+            "checked-import",
+            "operator-supplied",
+            "unknown"
+          ]
+        },
+        "key_match_checked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "jwks_rotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overlap_matches_local_path",
+        "rollback_matches_local_path",
+        "kid_reuse_prevented"
+      ],
+      "properties": {
+        "overlap_matches_local_path": {
+          "type": "boolean"
+        },
+        "rollback_matches_local_path": {
+          "type": "boolean"
+        },
+        "kid_reuse_prevented": {
+          "type": "boolean"
+        }
+      }
+    },
+    "parity_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "uri"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "stale",
+            "missing"
+          ]
+        },
+        "uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "claim_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rs256_required_slice_unchanged",
+        "external_signer_recorded_as_tcb",
+        "broad_rsa_not_promoted"
+      ],
+      "properties": {
+        "rs256_required_slice_unchanged": {
+          "type": "boolean"
+        },
+        "external_signer_recorded_as_tcb": {
+          "type": "boolean"
+        },
+        "broad_rsa_not_promoted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "compat_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

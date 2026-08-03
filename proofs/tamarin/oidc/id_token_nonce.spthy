@@ -1,0 +1,61 @@
+theory OIDC_IDTokenNonce
+begin
+
+builtins: hashing, asymmetric-encryption
+
+functions: NonceHash/1
+
+restriction nonce_unique:
+  "All rp user nonce hash rp2 user2 hash2 #i #j.
+     RPStart(rp, user, nonce, hash) @ #i &
+     RPStart(rp2, user2, nonce, hash2) @ #j
+     ==> #i = #j"
+
+rule RegisterKey:
+  [ Fr(~sk) ]
+  -->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)) ]
+
+rule RP_Start:
+  [ Fr(~nonce), Fr(~code_verifier) ]
+  --[ RPStart($RP, $User, ~nonce, NonceHash(~code_verifier)) ]->
+  [ RP_Session($RP, $User, ~nonce, NonceHash(~code_verifier)),
+    NonceRegistration($RP, $User, ~nonce, NonceHash(~code_verifier)),
+    Out(<'auth_request', $RP, $User, ~nonce, NonceHash(~code_verifier)>) ]
+
+rule OP_IssueCode:
+  [ In(<'auth_request', rp_id, user, nonce, hash_value>),
+    NonceRegistration(rp_id, user, nonce, hash_value),
+    Fr(~code) ]
+  -->
+  [ AuthCode(~code, rp_id, user, nonce, hash_value),
+    Out(<'auth_response', ~code>) ]
+
+rule RP_TokenRequest:
+  [ In(<'auth_response', code>),
+    RP_Session(rp_id, user, nonce, hash_value) ]
+  -->
+  [ Out(<code, nonce, hash_value, rp_id>) ]
+
+rule OP_TokenResponse:
+  [ In(<code, nonce, hash_value, rp_id>),
+    AuthCode(code, rp_id, user, nonce, hash_value),
+    Fr(~token_id) ]
+  --[ OPIdToken(rp_id, user, nonce, ~token_id) ]->
+  [ IDToken(rp_id, user, nonce, ~token_id),
+    TokenBinding(~token_id, rp_id, user),
+    IssuedToken(rp_id, user, nonce, ~token_id) ]
+
+rule RP_VerifyIDToken:
+  [ IDToken(rp_id, user, nonce, token_id),
+    RP_Session(rp_id, user, nonce, hash_value),
+    IssuedToken(rp_id, user, nonce, token_id) ]
+  --[ SessionEstablishedEvent(rp_id, user, nonce, token_id) ]->
+  [ SessionEstablished(rp_id, user, token_id) ]
+
+lemma nonce_session_integrity:
+  "All rp user nonce token_id #j.
+     SessionEstablishedEvent(rp, user, nonce, token_id) @ #j
+     ==> Ex #k. OPIdToken(rp, user, nonce, token_id) @ #k & #k < #j"
+
+end

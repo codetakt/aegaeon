@@ -1,0 +1,21 @@
+theory BearerCnfSingleKey
+begin
+
+// RFC 7800 cnf claim must represent a single PoP key.
+
+rule Issue_Token_DPoP:
+  [ Fr(~token), Fr(~jkt) ]
+  --[ CnfDpop(~token, ~jkt) ]->
+  [ ]
+
+rule Issue_Token_mTLS:
+  [ Fr(~token), Fr(~x5t) ]
+  --[ CnfMtls(~token, ~x5t) ]->
+  [ ]
+
+lemma cnf_single_key:
+  "not (Ex token jkt x5t #i #j.
+     CnfDpop(token, jkt) @ i &
+     CnfMtls(token, x5t) @ j)"
+
+end

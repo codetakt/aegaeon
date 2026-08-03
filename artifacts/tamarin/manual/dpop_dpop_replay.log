@@ -1,0 +1,204 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory DPoP_Replay] Theory loaded
+[Theory DPoP_Replay] Theory translated
+[Theory DPoP_Replay] Derivation checks started
+[Theory DPoP_Replay] Derivation checks ended
+[Theory DPoP_Replay] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory DPoP_Replay begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+rule (modulo E) Init:
+   [ Fr( ~skC ), Fr( ~token ) ]
+  --[ TokenBound( ~token, pk(~skC) ) ]->
+   [ Out( pk(~skC) ), !ClientKey( ~skC ), !TokenBinding( ~token, pk(~skC) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ClientRequest:
+   [ Fr( ~n ), !ClientKey( ~skC ), !TokenBinding( $T, pk(~skC) ) ]
+  --[ DPoPRequest( $T, ~n, pk(~skC) ) ]->
+   [
+   SecChannel( 'client', 'resource_server', <$T, ~n, sign(~n, ~skC)> ),
+   Used( ~n )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ResourceServer:
+   [
+   SecChannel( 'client', 'resource_server', <$T, nonce, sig> ),
+   !TokenBinding( $T, pkC ), Used( nonce )
+   ]
+  --[
+  Eq( verify(sig, nonce, pkC), true ), ResourceGranted( $T, nonce, pkC )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) ResourceServer:
+     [
+     SecChannel( 'client', 'resource_server', <$T, nonce, sig> ),
+     !TokenBinding( $T, pkC ), Used( nonce )
+     ]
+    --[ Eq( z, true ), ResourceGranted( $T, nonce, pkC ) ]->
+     [ ]
+    variants (modulo AC)
+    1. nonce = nonce.11
+       pkC   = pkC.12
+       sig   = sig.13
+       z     = verify(sig.13, nonce.11, pkC.12)
+
+    2. nonce = nonce.16
+       pkC   = pk(x.29)
+       sig   = sign(nonce.16, x.29)
+       z     = true
+  */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+lemma dpop_replay_impossible:
+  all-traces
+  "∀ t n pk #i #j.
+    ((ResourceGranted( t, n, pk ) @ #i) ∧
+     (ResourceGranted( t, n, pk ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ t n pk #i #j.
+  (ResourceGranted( t, n, pk ) @ #i) ∧ (ResourceGranted( t, n, pk ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  by solve( SecChannel( 'client', 'resource_server', <$T, n, sign(n, x)>
+            ) ▶₀ #i )
+next
+  case case_2
+  by solve( SecChannel( 'client', 'resource_server', <$T, n, sign(n, x)>
+            ) ▶₀ #i )
+qed
+
+lemma dpop_freshness_guaranteed:
+  all-traces
+  "∀ t n pk #i.
+    (ResourceGranted( t, n, pk ) @ #i) ⇒
+    (∃ #j. (DPoPRequest( t, n, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ t n pk #i.
+  (ResourceGranted( t, n, pk ) @ #i)
+ ∧
+  ∀ #j. (DPoPRequest( t, n, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+by solve( SecChannel( 'client', 'resource_server', <$T, n, sign(n, x)>
+          ) ▶₀ #i )
+
+lemma dpop_authentication:
+  all-traces
+  "∀ t n pk #i.
+    (ResourceGranted( t, n, pk ) @ #i) ⇒
+    (∃ #j. (TokenBound( t, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ t n pk #i.
+  (ResourceGranted( t, n, pk ) @ #i)
+ ∧
+  ∀ #j. (TokenBound( t, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+by solve( SecChannel( 'client', 'resource_server', <$T, n, sign(n, x)>
+          ) ▶₀ #i )
+
+lemma dpop_injective_agreement:
+  all-traces
+  "∀ t n1 n2 pk #i #j.
+    (((DPoPRequest( t, n1, pk ) @ #i) ∧ (DPoPRequest( t, n2, pk ) @ #j)) ∧
+     (#i < #j)) ⇒
+    (¬(n1 = n2))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ t n1 n2 pk #i #j.
+  (DPoPRequest( t, n1, pk ) @ #i) ∧ (DPoPRequest( t, n2, pk ) @ #j)
+ ∧
+  (#i < #j) ∧ (n1 = n2)"
+*/
+simplify
+by contradiction /* cyclic */
+
+lemma token_secrecy:
+  all-traces
+  "∀ t pk #i. (TokenBound( t, pk ) @ #i) ⇒ (¬(∃ #j. K( t ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ t pk #i. (TokenBound( t, pk ) @ #i) ∧ ∃ #j. (K( t ) @ #j)"
+*/
+simplify
+by solve( !KU( ~token ) @ #vk )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./dpop/dpop_replay.spthy
+
+  processing time: 0.30s
+
+  dpop_replay_impossible (all-traces): verified (4 steps)
+  dpop_freshness_guaranteed (all-traces): verified (2 steps)
+  dpop_authentication (all-traces): verified (2 steps)
+  dpop_injective_agreement (all-traces): verified (2 steps)
+  token_secrecy (all-traces): verified (2 steps)
+
+==============================================================================

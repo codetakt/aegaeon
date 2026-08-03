@@ -1,0 +1,210 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OIDC_LogoutSessionTermination] Theory loaded
+[Theory OIDC_LogoutSessionTermination] Theory translated
+[Theory OIDC_LogoutSessionTermination] Derivation checks started
+[Theory OIDC_LogoutSessionTermination] Derivation checks ended
+[Theory OIDC_LogoutSessionTermination] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OIDC_LogoutSessionTermination begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) RP_Register:
+   [ ] --[ RP_Registered( $RP ) ]-> [ !RP( $RP ), Out( $RP ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Create_Session:
+   [ Fr( ~sid ) ]
+  --[ Session_Created( $User, ~sid ) ]->
+   [ Session_Active( $User, ~sid ), Token_Issuance_Allowed( ~sid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Issue_ID_Token:
+   [
+   Session_Active( $User, sid ), Token_Issuance_Allowed( sid ), !RP( $RP ),
+   Fr( ~id_token )
+   ]
+  --[ ID_Token_Issued( $RP, $User, sid, ~id_token ) ]->
+   [
+   Session_Active( $User, sid ),
+   !Issued_ID_Token( $RP, $User, sid, ~id_token ), Out( ~id_token )
+   ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RP_Initiate_Logout:
+   [ In( id_token ) ]
+  --[ RP_Logout_Requested( id_token ) ]->
+   [ Out( <'logout_request', id_token> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Process_Logout:
+   [
+   In( <'logout_request', id_token> ), Session_Active( $User, sid ),
+   !Issued_ID_Token( $RP, $User, sid, id_token ), Fr( ~jti )
+   ]
+  --[ Logout_Processed( $RP, $User, sid, ~jti ) ]->
+   [ !Logout_State( sid, ~jti ), Out( <'logout_ok', sid> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) OP_Send_Backchannel_Logout:
+   [ !Logout_State( sid, jti ), !RP( $RP ) ]
+  --[ Backchannel_Logout_Sent( $RP, sid, jti ) ]->
+   [ Out( <'backchannel_logout', $RP, sid, jti> ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma logout_requires_id_token:
+  all-traces
+  "∀ rp user sid jti #i.
+    (Logout_Processed( rp, user, sid, jti ) @ #i) ⇒
+    (∃ tok #j. (ID_Token_Issued( rp, user, sid, tok ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user sid jti #i.
+  (Logout_Processed( rp, user, sid, jti ) @ #i)
+ ∧
+  ∀ tok #j. (ID_Token_Issued( rp, user, sid, tok ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( Session_Active( $User, sid ) ▶₁ #i )
+  case OP_Create_Session
+  solve( !Issued_ID_Token( $RP, $User, ~sid, id_token ) ▶₂ #i )
+    case OP_Issue_ID_Token
+    by contradiction /* from formulas */
+  qed
+next
+  case OP_Issue_ID_Token
+  solve( !Issued_ID_Token( $RP, $User, ~sid, id_token ) ▶₂ #i )
+    case OP_Issue_ID_Token
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma no_id_token_after_logout:
+  all-traces
+  "∀ rp user sid tok jti #i #j.
+    ((Logout_Processed( rp, user, sid, jti ) @ #i) ∧
+     (ID_Token_Issued( rp, user, sid, tok ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user sid tok jti #i #j.
+  (Logout_Processed( rp, user, sid, jti ) @ #i) ∧
+  (ID_Token_Issued( rp, user, sid, tok ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+simplify
+solve( Session_Active( $User, sid ) ▶₁ #i )
+  case OP_Create_Session
+  solve( !Issued_ID_Token( $RP, $User, ~sid, id_token ) ▶₂ #i )
+    case OP_Issue_ID_Token
+    solve( Token_Issuance_Allowed( ~sid ) ▶₁ #j )
+      case OP_Create_Session
+      by contradiction /* cyclic */
+    qed
+  qed
+next
+  case OP_Issue_ID_Token
+  solve( !Issued_ID_Token( $RP, $User, ~sid, id_token ) ▶₂ #i )
+    case OP_Issue_ID_Token
+    solve( Token_Issuance_Allowed( ~sid ) ▶₁ #j )
+      case OP_Create_Session
+      by contradiction /* cyclic */
+    qed
+  qed
+qed
+
+lemma backchannel_logout_jti_stable:
+  all-traces
+  "∀ rp1 rp2 sid jti1 jti2 #i #j.
+    ((Backchannel_Logout_Sent( rp1, sid, jti1 ) @ #i) ∧
+     (Backchannel_Logout_Sent( rp2, sid, jti2 ) @ #j)) ⇒
+    (jti1 = jti2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp1 rp2 sid jti1 jti2 #i #j.
+  (Backchannel_Logout_Sent( rp1, sid, jti1 ) @ #i) ∧
+  (Backchannel_Logout_Sent( rp2, sid, jti2 ) @ #j)
+ ∧
+  ¬(jti1 = jti2)"
+*/
+simplify
+solve( !Logout_State( sid, jti1 ) ▶₀ #i )
+  case OP_Process_Logout_case_1
+  solve( !RP( $RP ) ▶₁ #i )
+    case RP_Register
+    solve( !Logout_State( ~sid, jti2 ) ▶₀ #j )
+      case OP_Process_Logout_case_1
+      by contradiction /* from formulas */
+    next
+      case OP_Process_Logout_case_2
+      solve( !RP( $RP.1 ) ▶₁ #j )
+        case RP_Register
+        by solve( Session_Active( $User, ~sid ) ▶₀ #vr.2 )
+      qed
+    qed
+  qed
+next
+  case OP_Process_Logout_case_2
+  solve( !RP( $RP ) ▶₁ #i )
+    case RP_Register
+    solve( !Logout_State( ~sid, jti2 ) ▶₀ #j )
+      case OP_Process_Logout_case_1
+      solve( !RP( $RP.1 ) ▶₁ #j )
+        case RP_Register
+        by solve( Session_Active( $User, ~sid ) ▶₀ #vr.1 )
+      qed
+    next
+      case OP_Process_Logout_case_2
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./oidc/logout_session_termination.spthy
+
+  processing time: 0.58s
+
+  logout_requires_id_token (all-traces): verified (6 steps)
+  no_id_token_after_logout (all-traces): verified (8 steps)
+  backchannel_logout_jti_stable (all-traces): verified (12 steps)
+
+==============================================================================

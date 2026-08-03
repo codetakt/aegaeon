@@ -1,0 +1,160 @@
+name: CI - Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIX_CONFIG: experimental-features = nix-command flakes
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Install JavaScript dependencies
+        run: nix develop .#ci --command npm ci
+
+      - name: Run pre-commit hooks
+        run: |
+          PRE_COMMIT_HOME=/tmp/pre-commit-aegaeon nix develop .#ci --command pre-commit run --all-files
+
+      - name: Run documentation structure audit
+        run: |
+          nix develop .#ci --command python scripts/validation/check_docs_structure.py
+
+      - name: Lint commit messages (push)
+        if: github.event_name == 'push'
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
+              nix develop .#ci --command ./scripts/commitlint-range.sh --to HEAD
+            else
+              git fetch origin "${{ github.event.repository.default_branch }}" --depth=1
+              base_sha="$(git merge-base HEAD "origin/${{ github.event.repository.default_branch }}" || true)"
+              nix develop .#ci --command ./scripts/commitlint-range.sh --from "$base_sha" --to HEAD
+            fi
+          else
+            nix develop .#ci --command \
+              ./scripts/commitlint-range.sh --from "${{ github.event.before }}" --to "${{ github.sha }}"
+          fi
+
+      - name: Lint commit messages (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          base_sha="$(git merge-base HEAD "origin/${{ github.base_ref }}" || true)"
+          nix develop .#ci --command ./scripts/commitlint-range.sh --from "$base_sha" --to HEAD
+
+      - name: Lint PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > /tmp/pr-title
+          nix develop .#ci --command commitlint --edit /tmp/pr-title
+
+      - name: Run workflow inventory audit
+        run: |
+          nix develop .#ci --command node --experimental-strip-types \
+            tests/verified_core_wasm/workflow_inventory_policy_test.ts
+
+  typescript-lint:
+    name: TypeScript Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Install JavaScript dependencies
+        run: nix develop .#ci --command npm ci
+
+      - name: Run TypeScript lint
+        run: nix develop .#ci --command npm run lint:ts
+
+      - name: Run TypeScript type checks
+        run: nix develop .#ci --command npm run typecheck:ts
+
+      - name: Run strict TypeScript policy audit
+        run: nix develop .#ci --command npm run audit:strict-types
+
+      - name: Run root strict TypeScript policy tests
+        run: |
+          nix develop .#ci --command node --experimental-strip-types \
+            tests/verified_core_wasm/root_strict_types_policy_test.ts
+
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run Ruff checks
+        run: nix develop .#ci --command ruff check scripts/validation ci/validate_slos.py
+
+      - name: Run mypy checks
+        run: |
+          nix develop .#ci --command \
+            mypy scripts/validation ci/validate_slos.py
+
+  rust-strict-lint:
+    name: Rust Strict Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run strict Rust package lint
+        run: nix develop .#ci --command bash ./scripts/flake/lint_rust_strict_packages.sh

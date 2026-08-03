@@ -1,0 +1,101 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory TokenEndpointAuthRequired] Theory loaded
+[Theory TokenEndpointAuthRequired] Theory translated
+[Theory TokenEndpointAuthRequired] Derivation checks started
+[Theory TokenEndpointAuthRequired] Derivation checks ended
+[Theory TokenEndpointAuthRequired] Theory closed
+theory TokenEndpointAuthRequired begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) RegisterConfidentialClient:
+   [ Fr( ~client ) ]
+  --[ ConfidentialRegistered( ~client ), ConfidentialMarked( ~client ) ]->
+   [ !Confidential( ~client ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ClientRequestsToken:
+   [ ] --[ TokenReq( $C, $Grant, $Auth ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TokenGranting:
+   [ !Confidential( $C ) ]
+  --[
+  TokenReq( $C, $Grant, $Auth ), ValidAuth( $C, $Auth ),
+  TokenGranted( $C, $Grant, $Auth )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) InferBasicValidAuth:
+   [ ] --[ TokenReq( $C, $Grant, 'basic' ) ]-> [ ValidAuth( $C, 'basic' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) InferPostValidAuth:
+   [ ] --[ TokenReq( $C, $Grant, 'post' ) ]-> [ ValidAuth( $C, 'post' ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) InferPkjwtValidAuth:
+   [ ] --[ TokenReq( $C, $Grant, 'pkjwt' ) ]-> [ ValidAuth( $C, 'pkjwt' ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma TokenAuth:
+  all-traces
+  "∀ C Grant Auth #i #j #k.
+    (((ConfidentialMarked( C ) @ #i) ∧ (TokenReq( C, Grant, Auth ) @ #j)) ∧
+     (TokenGranted( C, Grant, Auth ) @ #k)) ⇒
+    (∃ #m. ValidAuth( C, Auth ) @ #m)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ C Grant Auth #i #j #k.
+  (ConfidentialMarked( C ) @ #i) ∧
+  (TokenReq( C, Grant, Auth ) @ #j) ∧
+  (TokenGranted( C, Grant, Auth ) @ #k)
+ ∧
+  ∀ #m. (ValidAuth( C, Auth ) @ #m) ⇒ ⊥"
+*/
+by simplify
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./client_auth/token_endpoint_auth_required.spthy
+
+  processing time: 0.16s
+
+  TokenAuth (all-traces): verified (1 steps)
+
+==============================================================================

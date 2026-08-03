@@ -1,0 +1,90 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory ResourceIndicators] Theory loaded
+[Theory ResourceIndicators] Theory translated
+[Theory ResourceIndicators] Derivation checks started
+[Theory ResourceIndicators] Derivation checks ended
+[Theory ResourceIndicators] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory ResourceIndicators begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) Client_Request_Token:
+   [ Fr( ~client ), In( resource ) ]
+  --[ ResourceRequested( ~client, resource ) ]->
+   [ Out( <~client, resource> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Issue_Token:
+   [ In( <client, resource> ), Fr( ~token ) ]
+  --[ TokenIssued( client, resource, ~token ) ]->
+   [ !Token( ~token, client, resource ), Out( <~token, resource> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RS_Access:
+   [ In( <token, resource> ), !Token( token, client, resource ) ]
+  --[ ResourceAccessGranted( token, resource ) ]->
+   [ Out( 'granted' ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma resource_audience_enforced:
+  all-traces
+  "∀ client token res_issued res_used #i #j.
+    ((TokenIssued( client, res_issued, token ) @ #i) ∧
+     (ResourceAccessGranted( token, res_used ) @ #j)) ⇒
+    (res_issued = res_used)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client token res_issued res_used #i #j.
+  (TokenIssued( client, res_issued, token ) @ #i) ∧
+  (ResourceAccessGranted( token, res_used ) @ #j)
+ ∧
+  ¬(res_issued = res_used)"
+*/
+simplify
+solve( !Token( ~token, client.1, res_used ) ▶₁ #j )
+  case AS_Issue_Token
+  by contradiction /* from formulas */
+qed
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./resource/resource_indicators.spthy
+
+  processing time: 0.34s
+
+  resource_audience_enforced (all-traces): verified (3 steps)
+
+==============================================================================

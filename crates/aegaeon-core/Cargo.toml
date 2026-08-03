@@ -1,0 +1,17 @@
+[package]
+name = "aegaeon-core"
+version = "0.9.0-beta"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+description = "Verified Core (WASM) manifest helpers for Aegaeon"
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
+humantime = "2.1"

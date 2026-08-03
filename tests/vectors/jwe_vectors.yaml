@@ -1,0 +1,6 @@
+- description: "Example JWE using dir and A256GCM"
+  alg: dir
+  enc: A256GCM
+  key: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+  payload: "Hello, JOSE JWE!"
+  token: "eyJhbGciOiAiZGlyIiwgImVuYyI6ICJBMjU2R0NNIn0..1h2iSjW8dLdM62-P.Bn6dnC-ZN0ZafFC7Le9Bzw.kPBNOpAC7dyO8w0nx4Z6Aw"

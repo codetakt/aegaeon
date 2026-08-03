@@ -1,0 +1,45 @@
+[default.extend-words]
+aegaeon = "aegaeon"
+formating = "formating"
+karamel = "karamel"
+intoto = "intoto"
+Stik = "Stik"
+tamarin = "tamarin"
+activ = "activ"
+
+[default.extend-identifiers]
+environment_policies_federation_entity_cache_ttl_secon_not_null = "environment_policies_federation_entity_cache_ttl_secon_not_null"
+
+[files]
+extend-exclude = [
+    ".git/",
+    "artifacts/",
+    "c/dudect.h",
+    "crates/server/tests/private_key_jwt_tests.rs",
+    "dist/",
+    "db/migrations/atlas.sum",
+    "fstar/",
+    "generated/",
+    "nix/kani/",
+    "node_modules/",
+    "playwright-report-app/",
+    "public/fonts/",
+    "result",
+    "result-dev",
+    "result-server",
+    "sdk/.pnpm-store/",
+    "sdk/dist-tests/",
+    "sdk/dist-tools/",
+    "sdk/node_modules/",
+    "sdk/packages/*/dist/",
+    "src/Mingcute.css",
+    "storybook-static/",
+    "styled-system/",
+    "supply-chain/audits.toml",
+    "proofs/tamarin/",
+    "target/",
+    "tests/constant_time/run.sh",
+    "test-results/",
+    "tests/vectors/",
+    "tests/verified_core_wasm/vectors/",
+]

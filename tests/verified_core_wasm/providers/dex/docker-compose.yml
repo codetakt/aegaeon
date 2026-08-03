@@ -1,0 +1,11 @@
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    command:
+      - dex
+      - serve
+      - /etc/dex/config.yaml
+    ports:
+      - "${AEGAEON_EXTERNAL_PROVIDER_DEX_PORT:-35556}:5556"
+    volumes:
+      - ${AEGAEON_EXTERNAL_PROVIDER_DEX_CONFIG_PATH:-./dex-config.yaml}:/etc/dex/config.yaml:ro

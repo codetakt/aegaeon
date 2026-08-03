@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/certification-evidence-bundle.schema.json",
+  "title": "Aegaeon Certification Evidence Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "bundle_id",
+    "generated_at",
+    "claim_target",
+    "claim_gate_path",
+    "phase2_status",
+    "public_claim_ready",
+    "certification_scope",
+    "plans",
+    "formal_submission",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim_target": {
+      "const": "certification"
+    },
+    "claim_gate_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase2_status": {
+      "type": "string",
+      "enum": [
+        "internal-complete",
+        "external-complete"
+      ]
+    },
+    "public_claim_ready": {
+      "type": "boolean"
+    },
+    "certification_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected",
+        "target",
+        "target_kind",
+        "included_profiles",
+        "excluded_profiles",
+        "notes"
+      ],
+      "properties": {
+        "selected": {
+          "type": "boolean"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_kind": {
+          "type": "string",
+          "enum": [
+            "oidf-op",
+            "oauth-fapi",
+            "organizational",
+            "other"
+          ]
+        },
+        "included_profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "excluded_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "plans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/plan"
+      }
+    },
+    "formal_submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_for_public_claim",
+        "status",
+        "evidence_uri",
+        "notes"
+      ],
+      "properties": {
+        "required_for_public_claim": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "not_required",
+            "deferred",
+            "submitted",
+            "approved",
+            "publicly_listed"
+          ]
+        },
+        "evidence_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_name",
+        "claim_bearing",
+        "scope_status",
+        "result_status",
+        "artifacts",
+        "result_counts",
+        "dispositions"
+      ],
+      "properties": {
+        "plan_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim_bearing": {
+          "type": "boolean"
+        },
+        "scope_status": {
+          "type": "string",
+          "enum": [
+            "included",
+            "excluded",
+            "future"
+          ]
+        },
+        "result_status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "partial-with-dispositions",
+            "not-run",
+            "out-of-scope"
+          ]
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "results_json",
+            "plan_json",
+            "export_zip",
+            "suite_commit_txt"
+          ],
+          "properties": {
+            "results_json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plan_json": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "export_zip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "suite_commit_txt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "screenshots_dir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "result_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "passed",
+            "review",
+            "warning",
+            "skipped",
+            "failed"
+          ],
+          "properties": {
+            "passed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "review": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warning": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "dispositions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/disposition"
+          }
+        }
+      }
+    },
+    "disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test_module",
+        "result",
+        "disposition",
+        "reason",
+        "public_claim_blocker"
+      ],
+      "properties": {
+        "test_module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "REVIEW",
+            "WARNING",
+            "SKIPPED"
+          ]
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "accepted-for-internal-evidence",
+            "external-review-required",
+            "out-of-scope"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "public_claim_blocker": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

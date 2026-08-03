@@ -1,0 +1,17 @@
+[package]
+name = "aegaeon-jose-tlv"
+version = "0.9.0-beta"
+edition = "2021"
+license = "Apache-2.0"
+description = "TLV parser utilities for canonical JOSE header handling in Aegaeon"
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "aegaeon_jose_tlv"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[dependencies]

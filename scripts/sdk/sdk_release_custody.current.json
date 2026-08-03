@@ -1,0 +1,123 @@
+{
+  "profile": "pre-release-client-baseline",
+  "required_secret_sets": [],
+  "required_variables": [],
+  "optional_variables": [
+    {
+      "name": "AEGAEON_REAL_PUBLISH_ENABLED",
+      "pattern": "^(0|1|true|false|TRUE|FALSE)$"
+    },
+    {
+      "name": "AEGAEON_NPM_DIST_TAG",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    {
+      "name": "AEGAEON_SDK_SIGNED_RELEASE_ATTESTATION",
+      "pattern": "^(0|1|true|false|TRUE|FALSE)$"
+    },
+    {
+      "name": "AEGAEON_SDK_SBOM_PUBLICATION",
+      "pattern": "^(0|1|true|false|TRUE|FALSE)$"
+    },
+    {
+      "name": "AEGAEON_SDK_CARGO_PUBLISH_ENABLED",
+      "pattern": "^(0|1|true|false|TRUE|FALSE)$"
+    }
+  ],
+  "optional_secret_sets": [
+    {
+      "name": "npm_publish",
+      "all_of": [
+        "AEGAEON_NPM_TOKEN"
+      ]
+    },
+    {
+      "name": "signed_release_attestation_key",
+      "all_of": [
+        "AEGAEON_COSIGN_KEY"
+      ]
+    },
+    {
+      "name": "cargo_publish",
+      "all_of": [
+        "AEGAEON_CARGO_REGISTRY_TOKEN"
+      ]
+    }
+  ],
+  "conditional_requirements": [
+    {
+      "name": "real_publish_lane",
+      "when_variable": {
+        "name": "AEGAEON_REAL_PUBLISH_ENABLED",
+        "pattern": "^(1|true|TRUE)$"
+      },
+      "required_secret_sets": [
+        {
+          "name": "npm_publish",
+          "all_of": [
+            "AEGAEON_NPM_TOKEN"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "signed_release_attestation_lane",
+      "when_variable": {
+        "name": "AEGAEON_SDK_SIGNED_RELEASE_ATTESTATION",
+        "pattern": "^(1|true|TRUE)$"
+      },
+      "required_variables": [
+        {
+          "name": "AEGAEON_REAL_PUBLISH_ENABLED",
+          "pattern": "^(1|true|TRUE)$"
+        }
+      ],
+      "required_secret_sets": [
+        {
+          "name": "signed_release_attestation_key",
+          "all_of": [
+            "AEGAEON_COSIGN_KEY"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "published_sdk_sbom_lane",
+      "when_variable": {
+        "name": "AEGAEON_SDK_SBOM_PUBLICATION",
+        "pattern": "^(1|true|TRUE)$"
+      },
+      "required_variables": [
+        {
+          "name": "AEGAEON_REAL_PUBLISH_ENABLED",
+          "pattern": "^(1|true|TRUE)$"
+        }
+      ]
+    },
+    {
+      "name": "cargo_publish_lane",
+      "when_variable": {
+        "name": "AEGAEON_SDK_CARGO_PUBLISH_ENABLED",
+        "pattern": "^(1|true|TRUE)$"
+      },
+      "required_variables": [
+        {
+          "name": "AEGAEON_REAL_PUBLISH_ENABLED",
+          "pattern": "^(1|true|TRUE)$"
+        }
+      ],
+      "required_secret_sets": [
+        {
+          "name": "cargo_publish",
+          "all_of": [
+            "AEGAEON_CARGO_REGISTRY_TOKEN"
+          ]
+        }
+      ]
+    }
+  ],
+  "deferred_secrets": [
+    "AEGAEON_COSIGN_KEY",
+    "AEGAEON_CARGO_REGISTRY_TOKEN"
+  ]
+}

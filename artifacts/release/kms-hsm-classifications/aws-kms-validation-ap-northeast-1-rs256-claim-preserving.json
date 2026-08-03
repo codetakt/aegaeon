@@ -1,0 +1,42 @@
+{
+  "$schema": "https://aegaeon.dev/spec/kms-hsm-deployment-classification.schema.json",
+  "schema_version": 1,
+  "deployment_id": "aws-kms-335451551839-ap-northeast-1-validation-8071664",
+  "generated_at": "2026-06-19T05:16:39Z",
+  "source_revision": "80716647f406e2dde1e0d0526908177c8eaead23",
+  "signer_backend": "aws-kms",
+  "classification": "claim-preserving",
+  "algorithm": {
+    "jose_alg": "RS256",
+    "provider_algorithm": "RSASSA_PKCS1_V1_5_SHA_256"
+  },
+  "signing_input_ownership": {
+    "aegaeon_constructs_jws_signing_input": true,
+    "provider_returns_finished_jwt": false
+  },
+  "public_jwk_derivation": {
+    "method": "provider-api",
+    "key_match_checked": true
+  },
+  "jwks_rotation": {
+    "overlap_matches_local_path": true,
+    "rollback_matches_local_path": true,
+    "kid_reuse_prevented": true
+  },
+  "parity_evidence": {
+    "status": "pass",
+    "uri": "evidence/aws-kms-validation-8071664/summary.json",
+    "generated_at": "2026-06-19T05:16:39Z"
+  },
+  "claim_boundary": {
+    "rs256_required_slice_unchanged": true,
+    "external_signer_recorded_as_tcb": true,
+    "broad_rsa_not_promoted": true
+  },
+  "compat_reason": null,
+  "review": {
+    "reviewer": "takafumi.asano@codetakt.com",
+    "decision": "approved",
+    "notes": "Generated from AWS KMS OpenTofu parity stack outputs for account 335451551839 in ap-northeast-1; reviewer must confirm this deployment is the intended release evidence boundary."
+  }
+}

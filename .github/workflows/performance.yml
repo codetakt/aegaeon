@@ -1,0 +1,342 @@
+# Performance Testing: Owns load tests, observability verification, code coverage, and KPI validation.
+# Schedule (daily 2 AM UTC): load tests + observability + coverage + KPI validation.
+# Push to main: observability + coverage (no load tests).
+# PR: deferred (summary note only).
+# Manual dispatch: set run_load_tests=true to include load tests + KPI validation.
+name: Performance Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Daily regression: load tests + observability + coverage + KPI validation
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_load_tests:
+        description: "Run load tests + KPI validation (heavy)"
+        required: false
+        default: "false"
+
+concurrency:
+  group: perf-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_INCREMENTAL: "0"
+  SLO_TARGET_RPS: "100"
+  SLO_MIN_THROUGHPUT_RATIO: "0.9"
+  SLO_MAX_ERROR_RATE: "0.01"
+
+jobs:
+  pr-note:
+    name: PR Performance Gate (deferred)
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "## Performance (PR)"
+            echo ""
+            echo "Load tests, observability, and coverage run on \`push main\`,"
+            echo "daily schedule (2 AM UTC), and manual \`workflow_dispatch\`."
+            echo ""
+            echo "Run locally:"
+            echo "- \`nix run .#perf-load\`"
+            echo "- \`nix run .#perf-load -- --scenario policy-mixed\`"
+            echo "- \`nix run .#perf-coverage\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Load Testing
+  load-test:
+    name: Load Testing
+    # Runs on schedule (daily regression) and on manual dispatch with run_load_tests.
+    if: >-
+      ${{
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.run_load_tests == 'true')
+      }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aegaeon
+          POSTGRES_PASSWORD: aegaeon
+          POSTGRES_DB: aegaeon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aegaeon -d aegaeon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run public smoke load test
+        env:
+          PERF_MANAGE_SERVER: "1"
+          PERF_SCENARIO: smoke
+          PERF_WORKERS: "25"
+          PERF_RPS: "100"
+          PERF_RUN_TIME: 30s
+          PERF_WARMUP: "2"
+          PERF_SERVER_PORT: "18095"
+          AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
+          AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+          PERF_APPLY_DATABASE_MIGRATIONS: "1"
+          ARTIFACT_DIR: artifacts/perf/ci-load-smoke
+          REPORT_PATH: artifacts/perf/ci-load-smoke/report.json
+          LEGACY_REPORT: artifacts/load-test-report.json
+        run: |
+          nix run .#perf-load
+
+      - name: Validate public smoke SLOs
+        run: |
+          python3 ci/validate_slos.py artifacts/perf/ci-load-smoke/report.json
+
+      - name: Run policy-mixed load smoke
+        env:
+          PERF_MANAGE_SERVER: "1"
+          PERF_SCENARIO: policy-mixed
+          PERF_WORKERS: "2"
+          PERF_RPS: "4"
+          PERF_RUN_TIME: 4s
+          PERF_WARMUP: "1"
+          PERF_SERVER_PORT: "18096"
+          AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18096"
+          AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+          PERF_APPLY_DATABASE_MIGRATIONS: "0"
+          ARTIFACT_DIR: artifacts/perf/ci-policy-mixed
+          REPORT_PATH: artifacts/perf/ci-policy-mixed/report.json
+          LEGACY_REPORT: artifacts/policy-mixed-report.json
+        run: |
+          export AEG_LOADTEST_PROOF_ORIGIN="https://127.0.0.1:${PERF_SERVER_PORT}"
+          nix run .#perf-load
+
+      - name: Validate policy-mixed smoke SLOs
+        env:
+          SLO_TARGET_RPS: "4"
+        run: |
+          python3 ci/validate_slos.py artifacts/perf/ci-policy-mixed/report.json
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: |
+            artifacts/load-test-report.json
+            artifacts/policy-mixed-report.json
+            artifacts/perf/ci-load-smoke/
+            artifacts/perf/ci-policy-mixed/
+
+  # Observability Testing
+  observability-test:
+    name: Observability Verification
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    env:
+      AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aegaeon
+          POSTGRES_PASSWORD: aegaeon
+          POSTGRES_DB: aegaeon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aegaeon -d aegaeon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      prometheus:
+        image: prom/prometheus:latest
+        ports:
+          - 9090:9090
+      grafana:
+        image: grafana/grafana:latest
+        ports:
+          - 3000:3000
+      jaeger:
+        image: jaegertracing/all-in-one:latest
+        ports:
+          - 16686:16686
+          - 14268:14268
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Configure Prometheus
+        run: |
+          cat > prometheus.yml << EOF
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'aegaeon'
+              static_configs:
+                - targets: ['localhost:8080']
+          EOF
+
+      - name: Apply database migrations
+        run: |
+          set -euo pipefail
+          nix develop .#ci --command bash -c 'atlas migrate apply --env local'
+
+      - name: Build with telemetry
+        run: nix develop .#ci --command cargo build --release --features telemetry
+
+      - name: Start server with telemetry
+        run: |
+          env -u BASE_URL \
+          RUST_LOG=info \
+          AEGAEON_EXPOSE_METRICS_ON_MAIN=1 \
+          OTEL_EXPORTER_JAEGER_ENDPOINT=http://localhost:14268/api/traces \
+          ./target/release/aegaeon-server &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "${GITHUB_ENV}"
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -f http://localhost:8080/health 2>/dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server to start... ($i/30)"
+            sleep 1
+          done
+
+      - name: Generate traffic for metrics
+        run: |
+          for _ in {1..20}; do
+            curl -s -o /dev/null \
+              -H "Authorization: Bearer invalid-token" \
+              http://localhost:8080/resource || true
+            curl -s -o /dev/null \
+              -H "Authorization: DPoP invalid-token" \
+              -H "DPoP: invalid-proof" \
+              http://localhost:8080/resource || true
+          done
+
+      - name: Verify metrics exported
+        run: |
+          curl -fsS http://localhost:8080/metrics > metrics.prom
+          grep -E "oauth_dpop_failure_rate|oauth_par_usage_rate|oauth_pkce_mismatch_rate" metrics.prom
+
+          # Check health endpoint
+          curl -f http://localhost:8080/health
+
+      - name: Check trace data
+        run: |
+          # Query Jaeger for traces
+          curl -s http://localhost:16686/api/traces?service=aegaeon-server | jq '.data[0]'
+
+      - name: Stop server
+        if: always()
+        run: kill ${{ env.SERVER_PID }} || true
+
+  # Code Coverage
+  coverage:
+    name: Code Coverage Analysis
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run tests with coverage
+        run: |
+          nix develop .#ci --command cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Check coverage threshold
+        run: |
+          nix develop .#ci --command bash <<'EOF'
+          set -euo pipefail
+          COVERAGE=$(awk -F: '
+            BEGIN { lines_found = 0; lines_hit = 0 }
+            /^LF:/ { lines_found += $2 }
+            /^LH:/ { lines_hit += $2 }
+            END {
+              if (lines_found == 0) {
+                print "0.00"
+              } else {
+                printf "%.2f", (lines_hit / lines_found) * 100
+              }
+            }
+          ' lcov.info)
+          echo "Coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 40" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below 40% threshold"
+            exit 1
+          fi
+          EOF
+
+  # KPI Validation
+  validate-kpis:
+    name: Validate Performance KPIs
+    runs-on: ubuntu-latest
+    needs: [load-test, observability-test]
+    if: >-
+      ${{
+        github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.run_load_tests == 'true')
+      }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: load-test-results
+          path: artifacts
+
+      - name: Validate public smoke KPIs
+        env:
+          SLO_TARGET_RPS: "100"
+          SLO_MIN_THROUGHPUT_RATIO: "0.9"
+          SLO_MAX_ERROR_RATE: "0.01"
+        run: |
+          python3 ci/validate_slos.py artifacts/load-test-report.json
+
+      - name: Validate policy-mixed KPIs
+        env:
+          SLO_TARGET_RPS: "4"
+          SLO_MIN_THROUGHPUT_RATIO: "0.9"
+          SLO_MAX_ERROR_RATE: "0.01"
+        run: |
+          python3 ci/validate_slos.py artifacts/policy-mixed-report.json

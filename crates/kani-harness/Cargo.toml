@@ -1,0 +1,18 @@
+[package]
+name = "aegaeon-kani-harness"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+aegaeon-pure = { path = "../pure" }
+
+[features]
+kani-bytestring-utils = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
+[profile.kani]
+inherits = "dev"
+panic = "unwind"

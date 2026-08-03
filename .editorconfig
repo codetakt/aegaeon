@@ -1,0 +1,131 @@
+# EditorConfig enforces consistent style across editors and IDEs.
+# https://editorconfig.org
+root = true
+
+# Defaults for all files.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# JavaScript and TypeScript.
+[*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}]
+indent_size = 2
+max_line_length = 100
+
+# Rust (rustfmt default max width is 100).
+[*.rs]
+indent_size = 4
+max_line_length = 100
+
+# TOML (Cargo manifests, deny.toml, etc.).
+[*.toml]
+indent_size = 4
+max_line_length = 100
+
+[pyproject.toml]
+indent_size = 2
+
+# JSON.
+[*.{json,jsonc}]
+indent_size = 2
+max_line_length = 100
+
+[package*.json]
+max_line_length = off
+
+# YAML (GitHub Actions included).
+[*.{yml,yaml}]
+indent_size = 2
+max_line_length = 120
+
+# Markdown.
+[*.{md,markdown,mdx}]
+indent_style = unset
+indent_size = unset
+max_line_length = off
+trim_trailing_whitespace = false
+
+# CSS and HTML.
+[*.{css,scss,html}]
+indent_size = 2
+max_line_length = 100
+
+# Python.
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# Shell scripts.
+[*.{sh,bash}]
+indent_style = tab
+tab_width = 2
+max_line_length = 100
+
+[scripts/kani/run_kani.sh]
+indent_style = unset
+max_line_length = off
+
+[artifacts/kani/report.json]
+max_line_length = off
+
+# Nix.
+[*.nix]
+indent_size = 2
+max_line_length = 100
+
+[flake.nix]
+max_line_length = off
+
+# F*.
+[*.{fst,fsti}]
+indent_size = 2
+max_line_length = 100
+
+# Tamarin.
+[*.spthy]
+indent_size = 4
+max_line_length = 100
+
+# Makefiles require tabs.
+[{Makefile,makefile,GNUmakefile}]
+indent_style = tab
+tab_width = 4
+
+# Just.
+[{Justfile,justfile}]
+indent_size = 4
+max_line_length = 100
+
+# C/C++ (FFI shims, harnesses, etc.).
+[*.{c,h,cpp,hpp}]
+indent_size = 2
+max_line_length = 100
+
+# Generated Low*/KaRaMeL C output is source-managed evidence but not manually
+# wrapped; keep hook noise out of generated files.
+[generated/lowstar/**]
+max_line_length = off
+
+# Generated OpenAPI JSON contains long path keys and schema descriptions.
+[generated/openapi/**]
+max_line_length = off
+
+# Patch files (keep whitespace for diffs).
+[*.patch]
+trim_trailing_whitespace = false
+
+[LICENSE]
+indent_style = unset
+indent_size = unset
+max_line_length = off
+trim_trailing_whitespace = false
+
+[**/LICENSE]
+indent_style = unset
+indent_size = unset
+max_line_length = off
+trim_trailing_whitespace = false

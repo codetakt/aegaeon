@@ -1,0 +1,191 @@
+{
+  "$schema": "https://aegaeon.dev/spec/server-client-formal-assurance-evidence-bundle.schema.json",
+  "schema_version": 1,
+  "bundle_id": "phase5-server-client-formal-assurance-internal-2026-05-20",
+  "generated_at": "2026-07-30T00:00:00Z",
+  "claim_target": "server-client-formal-assurance",
+  "claim_gate_path": "spec/server-client-formal-assurance-claim.current.json",
+  "claim_gate_sha256": "59d1592072ba29ddf79abb9f72c498311dfeee2550585a4e061e44f2e1f2e5c9",
+  "release_stage": "internal-complete",
+  "public_claim_ready": false,
+  "dependent_gate_snapshots": [
+    {
+      "id": "released-client-claim",
+      "path": "spec/released-client-claim.current.json",
+      "status": "in_progress",
+      "ready_for_activation": false,
+      "notes": "Released client claim remains inactive; public server/client wording is blocked."
+    },
+    {
+      "id": "client-claim-boundary",
+      "path": "spec/client-claim-boundary.current.json",
+      "status": "in_progress",
+      "ready_for_activation": false,
+      "notes": "Client boundary default profile is aegaeon-rs256; released claim active=False."
+    },
+    {
+      "id": "client-claim-promotion",
+      "path": "spec/client-claim-promotion.current.json",
+      "status": "in_progress",
+      "ready_for_activation": false,
+      "notes": "Promotion policy is source-managed; hosted release evidence remains open."
+    },
+    {
+      "id": "phase4-public-activation-preflight",
+      "path": "docs/releases/evidence/phase4-claim-activation-preflight.json",
+      "status": "in_progress",
+      "ready_for_activation": false,
+      "notes": "Phase 4 preflight is internally complete; public blockers remain."
+    }
+  ],
+  "evidence_items": [
+    {
+      "id": "server-assurance-baseline",
+      "status": "complete",
+      "path": "docs/verification/claims/assurance-case/claim-definition.md",
+      "fresh": true,
+      "sha256": "55834e6cf85f235c4247500b9e2ca21a81fe2017a181fb8d411374ad97555d5b",
+      "notes": "Server assurance baseline supports the server claim."
+    },
+    {
+      "id": "client-rp-assurance-case",
+      "status": "complete",
+      "path": "docs/verification/claims/client-rp-assurance-case.md",
+      "fresh": true,
+      "sha256": "d886ec0a337198584d36b6f6d242488d203188b7328efaf01533128928333b09",
+      "notes": "Client/RP assurance records core and adapter boundaries."
+    },
+    {
+      "id": "client-boundary-policy",
+      "status": "complete",
+      "path": "spec/client-claim-boundary.current.json",
+      "fresh": true,
+      "sha256": "e50c952e43fbfd6df5d5abb62f8641415f38a26c95d505979a3a280dba1c18aa",
+      "notes": "Client boundary freezes promoted and compat surfaces."
+    },
+    {
+      "id": "released-client-claim-gate",
+      "status": "in_progress",
+      "path": "spec/released-client-claim.current.json",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Released client claim gate is not active yet."
+    },
+    {
+      "id": "hosted-real-provider-evidence",
+      "status": "in_progress",
+      "path": "docs/releases/evidence/managed-provider-evidence.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Hosted real-provider evidence must be fresh."
+    },
+    {
+      "id": "admin-sdk-evidence",
+      "status": "complete",
+      "path": "docs/releases/evidence/phase5-pre-public-blockers.json",
+      "fresh": true,
+      "sha256": "8edd36d884f9eba0dbdc86454df15d8c1b059167419654a06ba818adca5afbba",
+      "notes": "Fresh hosted admin SDK evidence passed without widening UI claims."
+    },
+    {
+      "id": "publication-custody",
+      "status": "in_progress",
+      "path": "docs/releases/evidence/publication-org-rollout.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Publication custody and provenance must be complete."
+    },
+    {
+      "id": "release-security-evidence",
+      "status": "in_progress",
+      "path": "docs/releases/evidence/release-security-evidence.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Release security archive must bind required outputs."
+    },
+    {
+      "id": "multi-review-signoff",
+      "status": "in_progress",
+      "path": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Internal and external reviews must approve the wording."
+    },
+    {
+      "id": "phase5-internal-evidence-bundle",
+      "status": "complete",
+      "path": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
+      "fresh": true,
+      "sha256": null,
+      "notes": "Self-reference to this Phase 5 internal completion bundle."
+    },
+    {
+      "id": "pre-public-blocker-closure",
+      "status": "complete",
+      "path": "docs/releases/evidence/phase5-pre-public-blockers.json",
+      "fresh": true,
+      "sha256": "8edd36d884f9eba0dbdc86454df15d8c1b059167419654a06ba818adca5afbba",
+      "notes": "Non-public blocker closure report is complete."
+    },
+    {
+      "id": "positioning-scope-update",
+      "status": "complete",
+      "path": "docs/product-positioning.md",
+      "fresh": true,
+      "sha256": "c6715a98a62b3ad1aa1606e47c70d88ca1fd902f7fe0b2d1548931a4a6820412",
+      "notes": "Product positioning preserves future-gated TCB wording."
+    }
+  ],
+  "review_passes": [
+    {
+      "id": "claim-wording-review",
+      "scope": "claim-wording",
+      "reviewer": "aegaeon-engineering",
+      "status": "approved",
+      "evidence_uri": "docs/product-positioning.md"
+    },
+    {
+      "id": "formal-boundary-review",
+      "scope": "formal-boundary",
+      "reviewer": "aegaeon-engineering",
+      "status": "approved",
+      "evidence_uri": "spec/server-client-formal-assurance-claim.current.json"
+    },
+    {
+      "id": "server-implementation-review",
+      "scope": "server-implementation",
+      "reviewer": "aegaeon-engineering",
+      "status": "approved",
+      "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md"
+    },
+    {
+      "id": "sdk-adapter-boundary-review",
+      "scope": "sdk-adapter",
+      "reviewer": "aegaeon-engineering",
+      "status": "approved",
+      "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md"
+    },
+    {
+      "id": "release-custody-review",
+      "scope": "release-custody",
+      "reviewer": "aegaeon-release",
+      "status": "pending",
+      "evidence_uri": "docs/releases/evidence/publication-org-rollout.md"
+    },
+    {
+      "id": "external-security-review",
+      "scope": "external-security",
+      "reviewer": "external-reviewer",
+      "status": "pending",
+      "evidence_uri": null
+    }
+  ],
+  "blockers": [
+    "released-client-claim-activation: Activate after fresh hosted evidence and custody.",
+    "fresh-managed-provider-evidence: Provision tenant config; rerun managed-provider lane.",
+    "release-security-archive: Archive fresh release-candidate security evidence.",
+    "release-custody-review: Approve release custody using publication-org evidence.",
+    "external-security-review: Complete independent security review.",
+    "public-wording-release: Publish final wording change only after gates are active."
+  ]
+}

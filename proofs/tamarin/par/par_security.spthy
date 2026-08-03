@@ -1,0 +1,47 @@
+theory PARSecurity
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Pushed Authorization Request (PAR) security */
+
+// Client pushes authorization request
+rule PAR_Push:
+  [ Fr(~request_uri), Fr(~client_id), Fr(~redirect_uri) ]
+  --[ PARPushed($Client, ~request_uri, ~redirect_uri) ]->
+  [ !PARRequest($Client, ~request_uri, ~redirect_uri),
+    Out(~request_uri) ]
+
+// Authorization request with request_uri
+rule Auth_With_PAR:
+  [ !PARRequest($Client, request_uri, redirect_uri),
+    In(request_uri) ]
+  --[ PARUsed($Client, request_uri, redirect_uri) ]->
+  [ AuthPending($Client, redirect_uri) ]
+
+// Authorization response
+rule AS_Respond:
+  [ AuthPending($Client, redirect_uri), Fr(~code) ]
+  --[ AuthResponse($AS, $Client, redirect_uri) ]->
+  [ Out(<~code, redirect_uri>) ]
+
+// Attack: Try to modify redirect_uri
+rule Attack_Redirect:
+  [ In(request_uri), Fr(~malicious_uri) ]
+  --[ RedirectAttack(request_uri, ~malicious_uri) ]->
+  [ Out(<request_uri, ~malicious_uri>) ]
+
+// Security properties
+lemma par_redirect_binding:
+  "All C AS uri1 uri2 #i #j.
+    PARPushed(C, uri1, uri2) @ i &
+    AuthResponse(AS, C, uri2) @ j ==>
+    Ex #k. PARUsed(C, uri1, uri2) @ k & i < k & k < j"
+
+lemma par_integrity:
+  "All C uri redirect1 redirect2 #i #j.
+    PARPushed(C, uri, redirect1) @ i &
+    PARUsed(C, uri, redirect2) @ j ==>
+    redirect1 = redirect2"
+
+end

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>issuer-spa local upstream e2e</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; }
+      #status[data-status="pass"] { color: #0a7f2e; }
+      #status[data-status="fail"] { color: #b00020; }
+      li.ok { color: #0a7f2e; }
+      li.fail { color: #b00020; }
+      pre { background: #f5f5f5; padding: 0.75rem; overflow: auto; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@aegaeon/issuer-spa": "/packages/issuer-spa/dist/index.js",
+          "@aegaeon/runtime-web": "/packages/runtime-web/dist/index.js",
+          "@aegaeon/rp-core": "/packages/rp-core/dist/index.js",
+          "@aegaeon/verified-core": "/packages/verified-core/dist/index.js",
+          "@aegaeon/verified-core/web": "/packages/verified-core/dist/web.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>issuer-spa local upstream e2e</h1>
+    <p>This page runs a full local Authorization Code + PKCE redirect cycle against the mock upstream issuer.</p>
+    <p>Status: <strong id="status" data-status="running">RUNNING</strong></p>
+    <ol id="results"></ol>
+    <pre id="session-record"></pre>
+    <script type="module" src="./issuer_spa_upstream_e2e_harness.ts"></script>
+  </body>
+</html>

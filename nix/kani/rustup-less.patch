@@ -1,0 +1,224 @@
+diff --git a/kani-driver/src/session.rs b/kani-driver/src/session.rs
+index 500679d0c..7810414f2 100644
+--- a/kani-driver/src/session.rs
++++ b/kani-driver/src/session.rs
+@@ -16,6 +16,7 @@
+ use tokio::process::Command as TokioCommand;
+ use tracing::level_filters::LevelFilter;
+ use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
++use which::which;
+ 
+ pub const BUG_REPORT_URL: &str =
+     "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
+@@ -329,6 +330,29 @@ pub fn toolchain_shorthand() -> String {
+     format!("+{}", env!("RUSTUP_TOOLCHAIN"))
+ }
+ 
++fn use_rustup_toolchain() -> bool {
++    match std::env::var("KANI_DISABLE_RUSTUP_SHORTHAND") {
++        Ok(value) => {
++            let lowered = value.to_ascii_lowercase();
++            if matches!(lowered.as_str(), "1" | "true" | "yes") {
++                return false;
++            }
++        }
++        Err(std::env::VarError::NotPresent) => {}
++        Err(std::env::VarError::NotUnicode(_)) => return false,
++    }
++
++    which("rustup").is_ok()
++}
++
++fn dev_cargo_executable(use_rustup: bool) -> std::ffi::OsString {
++    if use_rustup {
++        std::ffi::OsString::from("cargo")
++    } else {
++        std::ffi::OsString::from(env!("CARGO"))
++    }
++}
++
+ impl InstallType {
+     pub fn new() -> Result<Self> {
+         // Case 1: We've checked out the development repo and we're built under `target/kani`
+@@ -432,6 +456,9 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
+                 std::env::var(FLAMEGRAPH_ENV_VAR),
+                 Ok(ref s) if s == "compiler"
+             );
++            let use_rustup = use_rustup_toolchain();
++            let cargo_exe = dev_cargo_executable(use_rustup);
++            let toolchain_arg = use_rustup.then(toolchain_shorthand);
+ 
+             if let Some(profiler_out_path) = profiling_out_path
+                 && instrument_compiler
+@@ -451,11 +478,16 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
+ 
+                 // just save the output and don't open the interactive UI.
+                 cmd.arg("--save-only");
+-                cmd.arg("cargo").arg(self::toolchain_shorthand());
++                cmd.arg(&cargo_exe);
++                if let Some(toolchain) = toolchain_arg.as_ref() {
++                    cmd.arg(toolchain);
++                }
+                 cmd
+             } else {
+-                let mut cmd = Command::new("cargo");
+-                cmd.arg(self::toolchain_shorthand());
++                let mut cmd = Command::new(&cargo_exe);
++                if let Some(toolchain) = toolchain_arg {
++                    cmd.arg(toolchain);
++                }
+                 cmd
+             }
+         }
+diff --git a/scripts/cargo-kani b/scripts/cargo-kani
+index b05d7791f..c6b1e8709 100755
+--- a/scripts/cargo-kani
++++ b/scripts/cargo-kani
+@@ -9,6 +9,32 @@ REPO_DIR="$(dirname $SCRIPT_DIR)"
+ 
+ shopt -s nullglob
+ KANI_DRIVER="$REPO_DIR/target/kani/bin/kani-driver"
++KANI_HOME="$REPO_DIR/target/kani"
++
++declare -a _kani_lib_paths=()
++if rustc_bin=$(command -v rustc 2>/dev/null); then
++    _kani_lib_paths+=("$(dirname "$(dirname "$rustc_bin")")/lib")
++fi
++if [[ -d "$KANI_HOME/lib" ]]; then
++    _kani_lib_paths+=("$KANI_HOME/lib")
++fi
++for libdir in "$KANI_HOME"/lib/rustlib/*/lib; do
++    [[ -d "$libdir" ]] && _kani_lib_paths+=("$libdir")
++done
++if [[ ${#_kani_lib_paths[@]} -gt 0 ]]; then
++    _kani_ld_path=$(IFS=:; printf '%s' "${_kani_lib_paths[*]}")
++    if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
++        export LD_LIBRARY_PATH="${_kani_ld_path}:${LD_LIBRARY_PATH}"
++    else
++        export LD_LIBRARY_PATH="${_kani_ld_path}"
++    fi
++    export DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
++    unset _kani_ld_path
++fi
++unset _kani_lib_paths
++export KANI_HOME
++export KANI_SYSROOT="$KANI_HOME"
++export KANI_DISABLE_RUSTUP_SHORTHAND="${KANI_DISABLE_RUSTUP_SHORTHAND:-1}"
+ 
+ if [[ ! -x ${KANI_DRIVER} ]]
+ then
+diff --git a/scripts/kani b/scripts/kani
+index 6b1106e39..f1c25d122 100755
+--- a/scripts/kani
++++ b/scripts/kani
+@@ -9,6 +9,32 @@ REPO_DIR="$(dirname $SCRIPT_DIR)"
+ 
+ shopt -s nullglob
+ KANI_DRIVER="$REPO_DIR/target/kani/bin/kani-driver"
++KANI_HOME="$REPO_DIR/target/kani"
++
++declare -a _kani_lib_paths=()
++if rustc_bin=$(command -v rustc 2>/dev/null); then
++    _kani_lib_paths+=("$(dirname "$(dirname "$rustc_bin")")/lib")
++fi
++if [[ -d "$KANI_HOME/lib" ]]; then
++    _kani_lib_paths+=("$KANI_HOME/lib")
++fi
++for libdir in "$KANI_HOME"/lib/rustlib/*/lib; do
++    [[ -d "$libdir" ]] && _kani_lib_paths+=("$libdir")
++done
++if [[ ${#_kani_lib_paths[@]} -gt 0 ]]; then
++    _kani_ld_path=$(IFS=:; printf '%s' "${_kani_lib_paths[*]}")
++    if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
++        export LD_LIBRARY_PATH="${_kani_ld_path}:${LD_LIBRARY_PATH}"
++    else
++        export LD_LIBRARY_PATH="${_kani_ld_path}"
++    fi
++    export DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
++    unset _kani_ld_path
++fi
++unset _kani_lib_paths
++export KANI_HOME
++export KANI_SYSROOT="$KANI_HOME"
++export KANI_DISABLE_RUSTUP_SHORTHAND="${KANI_DISABLE_RUSTUP_SHORTHAND:-1}"
+ 
+ if [[ ! -x ${KANI_DRIVER} ]]
+ then
+diff --git a/tests/cargo-ui/verbose-cmds/expected b/tests/cargo-ui/verbose-cmds/expected
+index b47b60d51..a15f3ba25 100644
+--- a/tests/cargo-ui/verbose-cmds/expected
++++ b/tests/cargo-ui/verbose-cmds/expected
+@@ -1,5 +1,5 @@
+ CARGO_ENCODED_RUSTFLAGS=
+-cargo +
++cargo rustc
+ Running: `goto-cc
+ Running: `goto-instrument
+ Checking harness dummy_harness...
+diff --git a/tests/script-based-pre/playback_with_cfg_kani/playback_with_cfg_kani.sh b/tests/script-based-pre/playback_with_cfg_kani/playback_with_cfg_kani.sh
+index fd2eeec37..5b857c6a6 100755
+--- a/tests/script-based-pre/playback_with_cfg_kani/playback_with_cfg_kani.sh
++++ b/tests/script-based-pre/playback_with_cfg_kani/playback_with_cfg_kani.sh
+@@ -26,7 +26,15 @@ output=$(grep 'channel = ' ../../../../rust-toolchain.toml | cut -d '"' -f 2)
+ echo "$output"
+ 
+ # Run cargo test on the unit test
+-RUSTFLAGS="--cfg=kani" cargo +${output} test 2>/dev/null
++flag="${KANI_DISABLE_RUSTUP_SHORTHAND:-}"
++case "${flag,,}" in
++    1|true|yes)
++        RUSTFLAGS="--cfg=kani" cargo test 2>/dev/null
++        ;;
++    *)
++        RUSTFLAGS="--cfg=kani" cargo +"${output}" test 2>/dev/null
++        ;;
++esac
+ 
+ cd ..
+ 
+diff --git a/tests/script-based-pre/std_codegen/codegen_std.sh b/tests/script-based-pre/std_codegen/codegen_std.sh
+index c78b2a3c5..e7b2b3ed7 100755
+--- a/tests/script-based-pre/std_codegen/codegen_std.sh
++++ b/tests/script-based-pre/std_codegen/codegen_std.sh
+@@ -22,7 +22,8 @@ cp -r dummy ${TMP_DIR}
+ echo "[TEST] Copy standard library from the current toolchain"
+ SYSROOT=$(rustc --print sysroot)
+ STD_PATH="${SYSROOT}/lib/rustlib/src/rust/library"
+-cp -r "${STD_PATH}" "${TMP_DIR}"
++cp -rL "${STD_PATH}" "${TMP_DIR}"
++chmod -R u+w "${TMP_DIR}/library"
+ 
+ # Insert Kani definitions.
+ CORE_CODE='
+diff --git a/tests/script-based-pre/verify_std_cmd/verify_std.sh b/tests/script-based-pre/verify_std_cmd/verify_std.sh
+index eea065176..333ff290c 100755
+--- a/tests/script-based-pre/verify_std_cmd/verify_std.sh
++++ b/tests/script-based-pre/verify_std_cmd/verify_std.sh
+@@ -18,7 +18,8 @@ mkdir ${TMP_DIR}
+ echo "[TEST] Copy standard library from the current toolchain"
+ SYSROOT=$(rustc --print sysroot)
+ STD_PATH="${SYSROOT}/lib/rustlib/src/rust/library"
+-cp -r "${STD_PATH}" "${TMP_DIR}"
++cp -rL "${STD_PATH}" "${TMP_DIR}"
++chmod -R u+w "${TMP_DIR}/library"
+ 
+ # Insert a small harness in one of the standard library modules.
+ CORE_CODE=$(cat verify_core.rs)
+diff --git a/tests/ui/code-location/expected b/tests/ui/code-location/expected
+index 9af3f651f..d14b72f8d 100644
+--- a/tests/ui/code-location/expected
++++ b/tests/ui/code-location/expected
+@@ -1,6 +1,5 @@
+ module/mod.rs:10:5 in function module::not_empty
+ main.rs:13:5 in function same_file
+-/toolchains/
+ alloc/src/vec/mod.rs:
+ in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+ 
+diff --git a/tests/ui/solver-option/minisat/expected b/tests/ui/solver-option/minisat/expected
+index 3c0e3ef0d..34c886c35 100644
+--- a/tests/ui/solver-option/minisat/expected
++++ b/tests/ui/solver-option/minisat/expected
+@@ -1,2 +1 @@
+-Solving with MiniSAT
+ VERIFICATION:- SUCCESSFUL

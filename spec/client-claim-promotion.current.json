@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "promotion_target": "released-client-claim",
+  "required_boundary": {
+    "claim_phase": "pre-release-client-baseline",
+    "released_client_claim_active": false,
+    "default_profile": "aegaeon-rs256",
+    "promoted_client_slices": [
+      "rs256-required-client-slice"
+    ],
+    "compat_only_surfaces": [
+      "es256-interop-surface"
+    ]
+  },
+  "required_release_attestation": {
+    "release_phase": "pre-release-client-baseline",
+    "npm_provenance_enabled": true
+  },
+  "required_lanes": [
+    "browser-smoke",
+    "playwright",
+    "external-provider-dex",
+    "external-provider-keycloak",
+    "external-provider-managed"
+  ],
+  "required_managed_provider": {
+    "repository": "aegaeon-sdk",
+    "provider_class": "commercial",
+    "lane_name": "external-provider-managed",
+    "hosted": true,
+    "status": "passed",
+    "expected_workflow": "SDK Managed Provider Evidence",
+    "expected_job": "external-provider-managed",
+    "github_ref_required": true,
+    "github_sha_required": true,
+    "github_job_required": true
+  },
+  "required_admin_console": {
+    "repository": "aegaeon-admin-console",
+    "lane_name": "admin-console-stack-e2e",
+    "status": "passed",
+    "expected_workflow": "Admin Console Stack E2E",
+    "expected_job": "stack-e2e",
+    "github_ref_required": true,
+    "github_sha_required": true,
+    "github_job_required": true,
+    "management_sdk_package": "@aegaeon/management-client",
+    "required_capabilities": [
+      "bootstrap-login-logout",
+      "team-tenant-environment-management",
+      "oauth-profile-management",
+      "connection-management",
+      "environment-policy-update",
+      "configuration-version-management",
+      "signing-key-management",
+      "key-store-management",
+      "user-management",
+      "client-management",
+      "client-secret-management",
+      "audit-read-export"
+    ]
+  },
+  "deferred_publication_org_tasks": [
+    "publication_org_branch_protection",
+    "publication_org_secret_rollout"
+  ]
+}

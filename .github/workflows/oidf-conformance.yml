@@ -1,0 +1,512 @@
+name: OpenID Foundation Conformance Suite
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  oidf-conformance:
+    name: OpenID Foundation Conformance Tests
+    runs-on: ubuntu-latest
+    services:
+      # MongoDB for conformance suite
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: password
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: aegaeon
+          POSTGRES_PASSWORD: aegaeon
+          POSTGRES_DB: aegaeon
+        options: >-
+          --health-cmd "pg_isready -U aegaeon -d aegaeon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CONFORMANCE_ARTIFACT_DIR: artifacts/conformance
+      AEG_OIDF_CONFORMANCE_ENABLED: "1"
+      SUITE_BASE: "http://localhost:9999"
+      AEGAEON_BASE: "http://localhost:8080"
+      AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:8080"
+      AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      # Plans to run (space-separated)
+      TARGET_PLANS: >-
+        oidcc-config-certification-test-plan
+        oidcc-basic-certification-test-plan
+        oidcc-formpost-basic-certification-test-plan
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+
+      - name: Build aegaeon-server
+        run: nix develop .#default --command cargo build --release --bin aegaeon-server
+
+      - name: Apply database migrations
+        run: |
+          set -euo pipefail
+          nix develop .#default --command bash -c 'atlas migrate apply --env local'
+
+      - name: Run aegaeon-server in background
+        run: |
+          env -u BASE_URL \
+            CONFORMANCE_MODE=true LOG_LEVEL=debug ./target/release/aegaeon-server \
+            --host 0.0.0.0 --port 8080 &
+          for i in {1..30}; do
+            if curl -f http://localhost:8080/health 2>/dev/null; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Setup Java 17 (required for conformance suite)
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Clone OpenID Foundation Conformance Suite
+        run: |
+          git clone https://github.com/openid-certification/conformance-suite.git
+          cd conformance-suite
+          # Use main branch; pin to a stable release tag when available
+          # git checkout release-v5.1.x
+
+      - name: Build Conformance Suite
+        run: |
+          cd conformance-suite
+          mvn clean package -DskipTests
+
+      - name: Start Conformance Suite
+        run: |
+          cd conformance-suite
+          SUITE_JAR=""
+          if [ -f target/conformance-suite.jar ]; then
+            SUITE_JAR="target/conformance-suite.jar"
+          elif [ -f target/fapi-test-suite.jar ]; then
+            SUITE_JAR="target/fapi-test-suite.jar"
+          else
+            echo "could not find suite jar under conformance-suite/target" >&2
+            ls -la target >&2 || true
+            exit 1
+          fi
+
+          java -jar "$SUITE_JAR" \
+            --server.port=9999 \
+            --server.forward-headers-strategy=native \
+            --spring.profiles.active=dev \
+            --spring.data.mongodb.uri="mongodb://admin:password@localhost:27017/conformance?authSource=admin" \
+            --fintechlabs.base_url="${SUITE_BASE}" \
+            --fintechlabs.devmode=true &
+          sleep 30
+
+      - name: Wait for services
+        run: |
+          for i in {1..60}; do
+            if curl -f "${AEGAEON_BASE}/.well-known/openid-configuration" 2>/dev/null && \
+               curl -f "${SUITE_BASE}/actuator/health" 2>/dev/null; then
+              echo "All services ready"
+              break
+            fi
+            echo "Waiting for services... ($i/60)"
+            sleep 2
+          done
+
+      - name: Export Available Plans (bootstrap)
+        run: |
+          BOOTSTRAP_DIR="${CONFORMANCE_ARTIFACT_DIR}/bootstrap"
+          mkdir -p "${BOOTSTRAP_DIR}"
+          curl -fsS "${SUITE_BASE}/api/plan/available" > "${BOOTSTRAP_DIR}/plan_available.json"
+          jq -r '.[].planName' "${BOOTSTRAP_DIR}/plan_available.json" | sort > "${BOOTSTRAP_DIR}/plan_available.txt"
+          echo "Available plans:"
+          cat "${BOOTSTRAP_DIR}/plan_available.txt"
+
+      - name: Validate target plans exist
+        run: |
+          BOOTSTRAP_DIR="${CONFORMANCE_ARTIFACT_DIR}/bootstrap"
+          missing=0
+          for plan in ${TARGET_PLANS}; do
+            if ! grep -qx "${plan}" "${BOOTSTRAP_DIR}/plan_available.txt"; then
+              echo "::error::Plan not found in suite: ${plan}"
+              missing=1
+            else
+              echo "OK: ${plan}"
+            fi
+          done
+          if [ "${missing}" = "1" ]; then
+            echo "::error::One or more target plans not found. Check plan names against suite version."
+            exit 1
+          fi
+
+      - name: Run conformance plans
+        id: run_plans
+        run: |
+          set -euo pipefail
+
+          ART_DIR="${CONFORMANCE_ARTIFACT_DIR}"
+          DISCOVERY_URL="${AEGAEON_BASE}/.well-known/openid-configuration"
+          CALLBACK_BASE="${SUITE_BASE}/test/a"
+          RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+          PLAN_IDS_FILE="$(mktemp)"
+          OVERALL_RESULTS="$(mktemp)"
+          echo '[]' > "${OVERALL_RESULTS}"
+          TOTAL_FAILURES=0
+          TOTAL_PASSED=0
+          TOTAL_WARNINGS=0
+
+          for plan in ${TARGET_PLANS}; do
+            echo "========================================"
+            echo "== Plan: ${plan}"
+            echo "========================================"
+
+            ALIAS="aegaeon-${plan%%--*}"
+            ALIAS="${ALIAS:0:40}"
+            CALLBACK_URL="${CALLBACK_BASE}/${ALIAS}/callback"
+            PLAN_DIR="${ART_DIR}/${plan}"
+            mkdir -p "${PLAN_DIR}/plan-export"
+
+            # Check if plan has variants
+            BOOTSTRAP_DIR="${ART_DIR}/bootstrap"
+            plan_variants_len="$(
+              jq -r \
+                --arg plan "${plan}" \
+                '.[] | select(.planName == $plan) | (.variants | length)' \
+                "${BOOTSTRAP_DIR}/plan_available.json"
+            )"
+
+            variant_param=""
+            if [ -n "${plan_variants_len}" ] && [ "${plan_variants_len}" != "0" ] && [ "${plan_variants_len}" != "null" ]; then
+              VARIANT_JSON='{"client_registration":"static_client","server_metadata":"discovery"}'
+              VARIANT_URI="$(printf '%s' "${VARIANT_JSON}" | jq -sRr @uri)"
+              variant_param="&variant=${VARIANT_URI}"
+            fi
+
+            CONFIG_JSON="$(
+              jq -n \
+                --arg alias "${ALIAS}" \
+                --arg discovery "${DISCOVERY_URL}" \
+                --arg cb "${CALLBACK_URL}" \
+                '{
+                  alias: $alias,
+                  publish: "summary",
+                  server: { discoveryUrl: $discovery },
+                  client: { client_id: "test-client", client_secret: "test-secret", redirect_uri: $cb },
+                  client2: { client_id: "test-client2", client_secret: "test-secret2", redirect_uri: $cb },
+                  client_secret_post: { client_id: "test-client-post", client_secret: "test-secret-post", redirect_uri: $cb }
+                }'
+            )"
+
+            # Create plan instance
+            echo "-- Create plan instance"
+            plan_create_path="${PLAN_DIR}/plan_create_${RUN_ID}.json"
+            plan_create_url="${SUITE_BASE}/api/plan?planName=${plan}${variant_param}"
+            http_status="$(
+              curl -sS -o "${plan_create_path}" -w '%{http_code}' -X POST \
+                "${plan_create_url}" \
+                -H 'Content-Type: application/json' \
+                -d "${CONFIG_JSON}"
+            )"
+            if [ "${http_status}" != "200" ] && [ "${http_status}" != "201" ]; then
+              echo "::error::Plan creation failed for ${plan} (HTTP ${http_status})"
+              cat "${plan_create_path}" >&2 || true
+              TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+              continue
+            fi
+
+            PLAN_ID="$(jq -r '.id' "${plan_create_path}")"
+            if [ -z "${PLAN_ID}" ] || [ "${PLAN_ID}" = "null" ]; then
+              echo "::error::Plan creation did not return an id for ${plan}"
+              TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+              continue
+            fi
+            echo "${plan}=${PLAN_ID}" >> "${PLAN_IDS_FILE}"
+            echo "${PLAN_ID}" > "${PLAN_DIR}/plan_id_${RUN_ID}.txt"
+            echo "plan_id=${PLAN_ID}"
+
+            # Discover modules
+            MODULES="$(jq -r '.modules[].testModule' "${plan_create_path}")"
+            echo "-- Modules: $(echo "${MODULES}" | tr '\n' ' ')"
+
+            # Run each module
+            for test_name in ${MODULES}; do
+              echo "-- create: ${test_name}"
+              create_json="$(
+                curl -fsS -X POST \
+                  "${SUITE_BASE}/api/runner?test=${test_name}&plan=${PLAN_ID}" \
+                  -H 'Content-Type: application/json'
+              )"
+              test_id="$(echo "${create_json}" | jq -r '.id')"
+              if [ -z "${test_id}" ] || [ "${test_id}" = "null" ]; then
+                echo "::warning::Failed to create test instance for ${test_name}"
+                continue
+              fi
+
+              # Wait for test to leave CREATED state
+              for i in $(seq 1 120); do
+                info="$(curl -fsS "${SUITE_BASE}/api/info/${test_id}")"
+                status="$(echo "${info}" | jq -r '.status')"
+                if [ "${status}" != "CREATED" ]; then
+                  break
+                fi
+                sleep 1
+                if [ "${i}" = "120" ]; then
+                  echo "::warning::Timeout waiting for ${test_name} to leave CREATED"
+                  break
+                fi
+              done
+
+              # Start if CONFIGURED (some auto-start)
+              info="$(curl -fsS "${SUITE_BASE}/api/info/${test_id}")"
+              status="$(echo "${info}" | jq -r '.status')"
+              if [ "${status}" = "CONFIGURED" ]; then
+                echo "-- start: ${test_name} (${test_id})"
+                curl -fsS -X POST "${SUITE_BASE}/api/runner/${test_id}" >/dev/null
+              fi
+
+              # Poll for completion (max 600s)
+              final_info=""
+              for i in $(seq 1 600); do
+                info="$(curl -fsS "${SUITE_BASE}/api/info/${test_id}")"
+                status="$(echo "${info}" | jq -r '.status')"
+                if [ "${status}" = "FINISHED" ] || [ "${status}" = "INTERRUPTED" ]; then
+                  final_info="${info}"
+                  break
+                fi
+                sleep 1
+                if [ "${i}" = "600" ]; then
+                  echo "::warning::Timeout waiting for ${test_name} (${test_id})"
+                fi
+              done
+
+              if [ -z "${final_info}" ]; then
+                final_info="$(curl -fsS "${SUITE_BASE}/api/info/${test_id}")"
+              fi
+              echo "${final_info}" > "${PLAN_DIR}/plan-export/info_${test_id}_${RUN_ID}.json"
+
+              result="$(echo "${final_info}" | jq -r '.result // empty')"
+              echo "-- done: ${test_name} (${test_id}) status=${status} result=${result}"
+
+              # Track results
+              case "${result}" in
+                PASSED) TOTAL_PASSED=$((TOTAL_PASSED + 1)) ;;
+                WARNING) TOTAL_WARNINGS=$((TOTAL_WARNINGS + 1)) ;;
+                FAILED|ERROR) TOTAL_FAILURES=$((TOTAL_FAILURES + 1)) ;;
+              esac
+
+              tmp="$(mktemp)"
+              jq \
+                --arg plan "${plan}" \
+                --arg test_name "${test_name}" \
+                --arg test_id "${test_id}" \
+                --arg status "${status}" \
+                --arg result "${result}" \
+                '. + [{plan: $plan, test_module: $test_name, test_id: $test_id, status: $status, result: $result}]' \
+                "${OVERALL_RESULTS}" > "${tmp}"
+              mv "${tmp}" "${OVERALL_RESULTS}"
+            done
+
+            # Export plan logs
+            echo "-- Export plan: ${plan}"
+            export_zip="${PLAN_DIR}/plan-export/export_${RUN_ID}.zip"
+            curl -sS -o "${export_zip}" "${SUITE_BASE}/api/plan/export/${PLAN_ID}" || true
+            cp "${export_zip}" "${PLAN_DIR}/plan-export/export.zip" 2>/dev/null || true
+            curl -fsS "${SUITE_BASE}/api/plan/${PLAN_ID}" > "${PLAN_DIR}/plan-export/plan_${RUN_ID}.json" || true
+            cp "${PLAN_DIR}/plan-export/plan_${RUN_ID}.json" "${PLAN_DIR}/plan-export/plan.json" 2>/dev/null || true
+          done
+
+          # Write combined results
+          cp "${OVERALL_RESULTS}" "${ART_DIR}/results.json"
+          echo "${RUN_ID}" > "${ART_DIR}/run_id.txt"
+
+          # Set outputs
+          {
+            echo "total_passed=${TOTAL_PASSED}"
+            echo "total_failures=${TOTAL_FAILURES}"
+            echo "total_warnings=${TOTAL_WARNINGS}"
+            echo "run_id=${RUN_ID}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo ""
+          echo "========================================"
+          echo "== Summary: passed=${TOTAL_PASSED} warnings=${TOTAL_WARNINGS} failures=${TOTAL_FAILURES}"
+          echo "========================================"
+
+          if [ "${TOTAL_FAILURES}" -gt 0 ]; then
+            echo "::error::${TOTAL_FAILURES} conformance test(s) failed"
+            exit 1
+          fi
+
+      - name: Generate Suite Summary JSON
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          art_dir = Path(os.environ.get("CONFORMANCE_ARTIFACT_DIR", "artifacts/conformance"))
+          results_path = art_dir / "results.json"
+          summary = []
+
+          if results_path.exists():
+              try:
+                  entries = json.loads(results_path.read_text())
+                  # Group by plan
+                  plans = {}
+                  for e in entries:
+                      plan = e.get("plan", "unknown")
+                      plans.setdefault(plan, {"passed": 0, "failed": 0, "warnings": 0, "modules": []})
+                      result = e.get("result", "")
+                      if result == "PASSED":
+                          plans[plan]["passed"] += 1
+                      elif result in ("FAILED", "ERROR"):
+                          plans[plan]["failed"] += 1
+                      elif result == "WARNING":
+                          plans[plan]["warnings"] += 1
+                      plans[plan]["modules"].append(e)
+
+                  for plan, data in sorted(plans.items()):
+                      summary.append({
+                          "plan": plan,
+                          "passed": data["passed"],
+                          "failed": data["failed"],
+                          "warnings": data["warnings"],
+                          "modules": data["modules"],
+                      })
+              except Exception as exc:
+                  print(f"Warning: could not parse results: {exc}")
+
+          (art_dir / "suite_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          PY
+
+      - name: Check for Regressions
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+
+            const totalFailures = parseInt('${{ steps.run_plans.outputs.total_failures }}' || '0');
+            if (totalFailures === 0) {
+              console.log('No failures detected.');
+              return;
+            }
+
+            // Read detailed results
+            let results = [];
+            try {
+              const data = fs.readFileSync(
+                process.env.CONFORMANCE_ARTIFACT_DIR + '/results.json', 'utf8'
+              );
+              results = JSON.parse(data);
+            } catch (e) {
+              console.error('Could not parse results:', e);
+            }
+
+            const failures = results.filter(
+              r => r.result === 'FAILED' || r.result === 'ERROR'
+            );
+
+            if (failures.length > 0) {
+              const body = [
+                '## OpenID Foundation Conformance Test Failures',
+                '',
+                `**${failures.length}** test(s) failed in run \`${{ steps.run_plans.outputs.run_id }}\`:`,
+                '',
+                '| Plan | Module | Result |',
+                '|------|--------|--------|',
+                ...failures.map(f => `| ${f.plan} | ${f.test_module} | ${f.result} |`),
+                '',
+                `- Workflow: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
+                `- Commit: \`${{ github.sha }}\``,
+                `- Branch: \`${{ github.ref }}\``,
+              ].join('\n');
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[Conformance] ${failures.length} OIDF test failure(s) - ${new Date().toISOString().split('T')[0]}`,
+                body: body,
+                labels: ['conformance', 'automated']
+              });
+
+              console.log(`Created issue for ${failures.length} failure(s)`);
+            }
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oidf-conformance-results
+          if-no-files-found: warn
+          path: |
+            ${{ env.CONFORMANCE_ARTIFACT_DIR }}
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          {
+            echo "## OpenID Foundation Conformance Test Summary"
+            echo ""
+            echo "- **Run ID**: \`${{ steps.run_plans.outputs.run_id }}\`"
+            echo "- **Passed**: ${{ steps.run_plans.outputs.total_passed }}"
+            echo "- **Warnings**: ${{ steps.run_plans.outputs.total_warnings }}"
+            echo "- **Failures**: ${{ steps.run_plans.outputs.total_failures }}"
+            echo ""
+            echo "### Target Plans"
+            for plan in ${TARGET_PLANS}; do
+              echo "- \`${plan}\`"
+            done
+
+            if [ -f "${CONFORMANCE_ARTIFACT_DIR}/suite_summary.json" ]; then
+              echo ""
+              echo "### Per-Plan Results"
+              python3 - <<'PY'
+          import json
+          import os
+
+          summary_path = (
+              os.environ.get("CONFORMANCE_ARTIFACT_DIR", "artifacts/conformance")
+              + "/suite_summary.json"
+          )
+          try:
+              with open(summary_path, "r", encoding="utf-8") as fh:
+                  entries = json.load(fh)
+          except Exception:
+              entries = []
+
+          if entries:
+              print("| Plan | Passed | Failed | Warnings |")
+              print("|------|--------|--------|----------|")
+              for entry in entries:
+                  print(
+                      "| {plan} | {passed} | {failed} | {warnings} |".format(
+                          plan=entry.get("plan", ""),
+                          passed=entry.get("passed", 0),
+                          failed=entry.get("failed", 0),
+                          warnings=entry.get("warnings", 0),
+                      )
+                  )
+          else:
+              print("No suite summary available.")
+          PY
+            fi
+
+            echo ""
+            echo "### Bootstrap"
+            echo "- Available plans exported to \`${CONFORMANCE_ARTIFACT_DIR}/bootstrap/plan_available.txt\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

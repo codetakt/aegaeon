@@ -1,0 +1,64 @@
+name: Check Dependency Updates
+
+on:
+  schedule:
+    # Run weekly on Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  check-rsa-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check rsa crate version
+        run: |
+          # Get latest stable version of rsa crate
+          LATEST=$(cargo search rsa --limit 1 2>/dev/null | grep "^rsa =" | sed -E 's/rsa = "([^"]+)".*/\1/')
+          echo "Latest rsa version: $LATEST"
+
+          if [ -z "$LATEST" ]; then
+            echo "Could not determine rsa version (cargo search returned empty)"
+            exit 0
+          fi
+
+          # Skip pre-release tags (e.g. -rc, -alpha, -beta)
+          if [[ "$LATEST" == *-* ]]; then
+            echo "rsa $LATEST is a pre-release; skipping"
+            exit 0
+          fi
+          
+          # Check if it's 0.10.0 or higher
+          if [[ "$LATEST" =~ ^0\.10\.[0-9]+$ ]] || [[ "$LATEST" =~ ^0\.1[1-9]\.[0-9]+$ ]] || [[ "$LATEST" =~ ^[1-9][0-9]*\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice title=RSA Update Available::rsa $LATEST is now stable! Update crates/jose/Cargo.toml"
+            
+            # Create an issue if not already exists
+            gh issue list --label "dependency-update" --search "rsa 0.10" --state open | grep -q "Update rsa" || \
+            gh issue create \
+              --title "Update rsa crate to $LATEST (stable)" \
+              --body "The rsa crate version $LATEST is now stable and available. This will fix the num-bigint-dig deprecation warning.
+            
+            ## Action Required
+            - Update \`crates/jose/Cargo.toml\` from rsa 0.9 to $LATEST
+            - Run tests to ensure compatibility
+            - Update KNOWN_ISSUES.md to mark this as resolved
+            
+            ## References
+            - Current warning: \`num-bigint-dig v0.8.4\` deprecation
+            - File: \`crates/jose/Cargo.toml\`" \
+              --label "dependency-update,good-first-issue"
+          else
+            echo "rsa 0.10 is not yet stable (current: $LATEST)"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

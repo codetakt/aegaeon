@@ -1,0 +1,239 @@
+theory Federation_IDToken_Chain
+begin
+
+/*
+ * ID Token Verification Chain — Aegaeon federation brokering
+ *
+ * When Aegaeon brokers authentication, the downstream ID token must be
+ * traceable to a verified upstream ID token. This theory proves the
+ * integrity of the ID token chain across the broker boundary.
+ *
+ * Security properties:
+ * - Chain binding: downstream ID token requires verified upstream ID token
+ * - Upstream signature verification against registered JWKS
+ * - Nonce chain integrity through broker session
+ * - at_hash computed over downstream access token (not upstream)
+ * - Claims provenance: sub traces to upstream authentication
+ * - Issuer rewriting: downstream iss is always Aegaeon, never upstream
+ * - Token unforgeability under key compromise (T-5/T-7 fix)
+ * - Non-trivial issuer verification via cryptography (T-4 fix)
+ *
+ * T-4 fix: DownstreamRP_Verify uses purely cryptographic verification
+ * (In + verify against broker public key) instead of pattern-matching on
+ * server-side !DS_IDToken_Record. This makes issuer_rewriting_integrity
+ * non-trivially verified: the RP receives tokens from the attacker-
+ * controlled network, and the lemma proves the claimed issuer must be
+ * the broker's registered issuer (or a signing key was compromised).
+ *
+ * T-5/T-7 fix: Replaces trivially-satisfied secrecy lemmas with
+ * unforgeability properties under key compromise. Tokens travel through
+ * the network (Out/In) by design; the security guarantee is that
+ * without the signing key, the attacker cannot forge valid tokens.
+ */
+
+builtins: signing, hashing, asymmetric-encryption
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Key Management ============ */
+
+// Key compromise for any entity (uses !Ltk produced by entity setup rules)
+rule Reveal_ltk:
+  [ !Ltk(A, sk) ] --[ Reveal(A) ]-> [ Out(sk) ]
+
+/* ============ Entity Setup ============ */
+
+// Upstream IdP with signing key (JWKS)
+// Produces !Pk and !Ltk so that Broker_Verify_Upstream_IDToken can look up
+// the IdP's public key via !Pk, and Reveal_ltk can model key compromise.
+rule UpstreamIdP_Setup:
+  [ Fr(~idp_sk) ]
+  --[ UpstreamIdP_Key($IdP, $idp_issuer, pk(~idp_sk)) ]->
+  [ !UpstreamIdP_SK($IdP, ~idp_sk, $idp_issuer),
+    !UpstreamIdP_JWKS($IdP, pk(~idp_sk), $idp_issuer),
+    !Ltk($IdP, ~idp_sk),
+    !Pk($IdP, pk(~idp_sk)),
+    Out(pk(~idp_sk)) ]
+
+// Aegaeon broker with signing key
+// Produces !Pk and !Ltk for downstream RP verification and key compromise.
+rule Broker_Setup:
+  [ Fr(~broker_sk) ]
+  --[ Broker_Key($Broker, $broker_issuer, pk(~broker_sk)) ]->
+  [ !Broker_SK($Broker, ~broker_sk, $broker_issuer),
+    !Ltk($Broker, ~broker_sk),
+    !Pk($Broker, pk(~broker_sk)),
+    Out(pk(~broker_sk)) ]
+
+// Broker registers upstream IdP's JWKS for verification
+rule Broker_Register_JWKS:
+  [ !UpstreamIdP_JWKS($IdP, idp_pk, idp_issuer) ]
+  --[ JWKS_Registered($Broker, $IdP, idp_pk, idp_issuer) ]->
+  [ !Broker_Trusted_JWKS($Broker, $IdP, idp_pk, idp_issuer) ]
+
+/* ============ Upstream ID Token Issuance ============ */
+
+// Upstream IdP issues ID token with standard claims
+rule UpstreamIdP_Issue_IDToken:
+  let id_token_claims = <'id_token', idp_issuer, $aud, $User,
+                          ~exp, ~iat, us_nonce, ~auth_time>
+      id_token = sign(id_token_claims, idp_sk)
+      us_at_hash = h(~us_access_token)
+  in
+  [ !UpstreamIdP_SK($IdP, idp_sk, idp_issuer),
+    Fr(~exp), Fr(~iat), Fr(~auth_time), Fr(~us_access_token) ]
+  --[ US_IDToken_Issued($IdP, $aud, $User, id_token, us_nonce, idp_issuer),
+      Unique(<'us_idtoken', $IdP, $aud, us_nonce>) ]->
+  [ Out(id_token),
+    US_AccessToken($IdP, ~us_access_token, $aud, $User),
+    !US_IDToken_Record($IdP, id_token, $aud, $User, us_nonce, idp_issuer) ]
+
+/* ============ Broker Verification & Downstream Issuance ============ */
+
+// Broker verifies upstream ID token signature against registered JWKS
+rule Broker_Verify_Upstream_IDToken:
+  let id_token_claims = <'id_token', idp_issuer, broker_id, $User,
+                          exp, iat, us_nonce, auth_time>
+  in
+  [ In(id_token),
+    !Broker_Trusted_JWKS(broker_id, $IdP, idp_pk, idp_issuer),
+    !Pk($IdP, idp_pk) ]
+  --[ Eq(verify(id_token, id_token_claims, idp_pk), true),
+      US_Signature_Verified(broker_id, $IdP, id_token, idp_pk, idp_issuer),
+      US_Claims_Extracted(broker_id, $IdP, $User, us_nonce, idp_issuer) ]->
+  [ Broker_Verified_Upstream(broker_id, $IdP, $User, us_nonce,
+                              idp_issuer, id_token) ]
+
+// Broker maps upstream sub to downstream sub and issues downstream ID token
+rule Broker_Issue_Downstream_IDToken:
+  let ds_at_hash = h(~ds_access_token)
+      ds_id_token_claims = <'id_token', broker_issuer, $RP, $User,
+                             ~ds_exp, ~ds_iat, ds_nonce, ~ds_auth_time,
+                             ds_at_hash>
+      ds_id_token = sign(ds_id_token_claims, broker_sk)
+  in
+  [ Broker_Verified_Upstream(broker_id, $IdP, $User, us_nonce,
+                              idp_issuer, us_id_token),
+    !Broker_SK(broker_id, broker_sk, broker_issuer),
+    Fr(~ds_access_token), Fr(~ds_exp), Fr(~ds_iat), Fr(~ds_auth_time),
+    Fr(~session_id) ]
+  --[ DS_IDToken_Issued(broker_id, $RP, $User, ds_id_token, ds_nonce,
+                         broker_issuer, ~session_id),
+      DS_ATHash_Computed(ds_at_hash, ~ds_access_token),
+      Chain_Binding(ds_id_token, us_id_token, broker_id, $IdP, $User),
+      Nonce_Chain(ds_nonce, us_nonce, ~session_id),
+      Issuer_Rewritten(broker_issuer, idp_issuer, ds_id_token),
+      Claims_Provenance($User, $IdP, broker_id, ds_id_token),
+      Unique(<'ds_idtoken', ~session_id>) ]->
+  [ Out(ds_id_token),
+    !DS_IDToken_Record(ds_id_token, broker_id, $RP, $User, broker_issuer,
+                       ds_nonce, ds_at_hash, us_id_token),
+    DS_AccessToken(~ds_access_token, broker_id, $RP, $User) ]
+
+// Downstream RP verifies the downstream ID token CRYPTOGRAPHICALLY.
+// T-4 fix: Removed !DS_IDToken_Record dependency. The RP only has the
+// broker's public key and the token from the network. It performs pure
+// signature verification. This makes security lemmas non-trivial because
+// the attacker controls the network and could inject forged tokens.
+rule DownstreamRP_Verify:
+  let ds_id_token_claims = <'id_token', claimed_issuer, rp_id, $User,
+                             ds_exp, ds_iat, ds_nonce, ds_auth_time,
+                             ds_at_hash>
+  in
+  [ In(ds_id_token),
+    !Pk(broker_id, broker_pk) ]
+  --[ Eq(verify(ds_id_token, ds_id_token_claims, broker_pk), true),
+      DS_IDToken_Verified(rp_id, $User, ds_id_token, claimed_issuer, ds_nonce) ]->
+  [ RP_Authenticated(rp_id, $User, broker_id) ]
+
+/* ============ Security Properties ============ */
+
+// Chain binding: downstream ID token requires a verified upstream ID token
+lemma chain_binding:
+  "All ds_token us_token broker idp user #i.
+     Chain_Binding(ds_token, us_token, broker, idp, user)@i
+     ==> Ex idp_pk idp_issuer #j.
+           US_Signature_Verified(broker, idp, us_token, idp_pk, idp_issuer)@j
+           & #j < #i"
+
+// Upstream signature verification: must use registered JWKS key
+lemma upstream_jwks_verification:
+  "All broker idp token pk issuer #i.
+     US_Signature_Verified(broker, idp, token, pk, issuer)@i
+     ==> Ex #j. JWKS_Registered(broker, idp, pk, issuer)@j & #j < #i"
+
+// Nonce chain integrity: downstream nonce is bound through broker session
+lemma nonce_chain_integrity:
+  "All ds_nonce us_nonce session_id #i.
+     Nonce_Chain(ds_nonce, us_nonce, session_id)@i
+     ==> Ex broker idp user idp_issuer #j.
+           US_Claims_Extracted(broker, idp, user, us_nonce, idp_issuer)@j
+           & #j < #i"
+
+// at_hash computed over downstream access token
+lemma at_hash_downstream_only:
+  "All at_hash token #i.
+     DS_ATHash_Computed(at_hash, token)@i
+     ==> at_hash = h(token)"
+
+// Claims provenance: user in downstream ID token traces to upstream authentication
+lemma claims_provenance:
+  "All user idp broker ds_token #i.
+     Claims_Provenance(user, idp, broker, ds_token)@i
+     ==> Ex us_nonce issuer #j.
+           US_Claims_Extracted(broker, idp, user, us_nonce, issuer)@j & #j < #i"
+
+// T-4 FIX: Issuer rewriting integrity — non-trivially verified via crypto.
+// When the RP cryptographically verifies a downstream token (from In(),
+// against the broker's public key), the claimed issuer in the token
+// payload must be the broker's registered issuer — or a signing key was
+// compromised. This is non-trivial because the RP receives tokens from
+// the attacker-controlled network and could receive tokens with any
+// claimed issuer, but only tokens signed by the broker's key will pass
+// signature verification.
+lemma issuer_rewriting_integrity:
+  "All rp user ds_token claimed_iss nonce #i.
+     DS_IDToken_Verified(rp, user, ds_token, claimed_iss, nonce)@i
+     ==> (Ex broker pk #j. Broker_Key(broker, claimed_iss, pk)@j)
+         | (Ex A #c. Reveal(A)@c)"
+
+// No downstream issuance without verified upstream chain (no bypass)
+lemma no_downstream_without_upstream:
+  "All broker rp user ds_token nonce issuer session #i.
+     DS_IDToken_Issued(broker, rp, user, ds_token, nonce, issuer, session)@i
+     ==> Ex idp us_token us_pk us_issuer #j.
+           US_Signature_Verified(broker, idp, us_token, us_pk, us_issuer)@j
+           & #j < #i"
+
+// T-5/T-7 FIX: Downstream token unforgeability.
+// If the RP accepts a downstream token (via cryptographic signature
+// verification against the broker's public key), then either the broker
+// legitimately issued it after verifying an upstream ID token, or a
+// signing key was compromised. This replaces the false "secrecy" lemma
+// that was trivially satisfied because tokens travel through the network.
+lemma downstream_token_unforgeability:
+  "All rp user ds_token claimed_iss nonce #i.
+     DS_IDToken_Verified(rp, user, ds_token, claimed_iss, nonce)@i
+     ==> (Ex broker idp us_token #j.
+            Chain_Binding(ds_token, us_token, broker, idp, user)@j & #j < #i)
+         | (Ex A #c. Reveal(A)@c)"
+
+// T-5/T-7 FIX: End-to-end authentication with key compromise resilience.
+// Downstream RP authentication requires upstream IdP authentication,
+// unless a signing key was compromised. Non-trivially verified because
+// the RP performs crypto-only verification against the broker's public key.
+lemma end_to_end_authentication:
+  "All rp user ds_token broker_iss nonce #i.
+     DS_IDToken_Verified(rp, user, ds_token, broker_iss, nonce)@i
+     ==> (Ex broker idp us_token us_pk idp_iss #j.
+            US_Signature_Verified(broker, idp, us_token, us_pk, idp_iss)@j
+            & #j < #i)
+         | (Ex A #c. Reveal(A)@c)"
+
+end

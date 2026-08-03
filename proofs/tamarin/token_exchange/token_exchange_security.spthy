@@ -1,0 +1,70 @@
+theory OAuth2_Token_Exchange
+begin
+
+/*
+ * OAuth 2.0 Token Exchange (RFC 8693) — Aegaeon MVP profile
+ *
+ * Model intent (standards-first, fail-closed):
+ * - Exchanged tokens MUST NOT exceed the subject token's effective privileges.
+ * - Target audience (resource) MUST remain stable (no audience switching).
+ * - If the subject token is sender-constrained, the exchange MUST preserve the binding.
+ *
+ * This is a minimal model that focuses on core invariants, not cryptographic details.
+ */
+
+builtins: multiset
+
+// Simplified token metadata tracked by the AS for issued access tokens.
+// TokenMeta(token_id, client_id, audience, scope, sender_binding)
+
+rule AS_Issue_Subject_Token_Read_Unbound:
+  [ Fr(~sub_token) ]
+  --[ Subject_Token_Issued($C, ~sub_token, $aud, 'read', 'none') ]->
+  [ !TokenMeta(~sub_token, $C, $aud, 'read', 'none') ]
+
+rule AS_Issue_Subject_Token_ReadWrite_Bound_Mtls:
+  [ Fr(~sub_token), Fr(~fp) ]
+  --[ Subject_Token_Issued($C, ~sub_token, $aud, 'read_write', <'mtls', ~fp>) ]->
+  [ !TokenMeta(~sub_token, $C, $aud, 'read_write', <'mtls', ~fp>) ]
+
+// Token exchange (RFC 8693): request_scope must be <= subject_scope.
+rule AS_Token_Exchange_Read_From_Read:
+  [ !TokenMeta(sub, client, aud, 'read', binding), Fr(~out_token) ]
+  --[
+    Token_Exchanged(client, sub, ~out_token, aud, 'read', 'read', binding, binding),
+    Subject_Token_Issued(client, ~out_token, aud, 'read', binding)
+  ]->
+  [ !TokenMeta(~out_token, client, aud, 'read', binding) ]
+
+rule AS_Token_Exchange_Read_From_ReadWrite:
+  [ !TokenMeta(sub, client, aud, 'read_write', binding), Fr(~out_token) ]
+  --[
+    Token_Exchanged(client, sub, ~out_token, aud, 'read', 'read_write', binding, binding),
+    Subject_Token_Issued(client, ~out_token, aud, 'read', binding)
+  ]->
+  [ !TokenMeta(~out_token, client, aud, 'read', binding) ]
+
+rule AS_Token_Exchange_ReadWrite_From_ReadWrite:
+  [ !TokenMeta(sub, client, aud, 'read_write', binding), Fr(~out_token) ]
+  --[
+    Token_Exchanged(client, sub, ~out_token, aud, 'read_write', 'read_write', binding, binding),
+    Subject_Token_Issued(client, ~out_token, aud, 'read_write', binding)
+  ]->
+  [ !TokenMeta(~out_token, client, aud, 'read_write', binding) ]
+
+lemma token_exchange_scope_subset:
+  "All c sub out aud req sub_scope bind #i.
+     Token_Exchanged(c, sub, out, aud, req, sub_scope, bind, bind) @ #i
+     ==> (req = sub_scope | (req = 'read' & sub_scope = 'read_write'))"
+
+lemma token_exchange_preserves_audience_and_client:
+  "All c sub out aud req sub_scope bind #i.
+     Token_Exchanged(c, sub, out, aud, req, sub_scope, bind, bind) @ #i
+     ==> Ex #j. Subject_Token_Issued(c, sub, aud, sub_scope, bind) @ #j"
+
+lemma token_exchange_preserves_sender_binding:
+  "All c sub out aud req sub_scope bind_in bind_out #i.
+     Token_Exchanged(c, sub, out, aud, req, sub_scope, bind_in, bind_out) @ #i
+     ==> bind_in = bind_out"
+
+end

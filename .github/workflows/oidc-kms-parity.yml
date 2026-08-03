@@ -1,0 +1,57 @@
+name: OIDC KMS Signing Parity
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [ main ]
+    types: [ opened, ready_for_review, synchronize, reopened ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oidc-kms-parity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  oidc-kms-parity:
+    name: OIDC AWS KMS Parity
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    services:
+      localstack:
+        image: localstack/localstack:3.4
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: kms
+          EDGE_PORT: 4566
+          AWS_DEFAULT_REGION: us-east-1
+          EAGER_SERVICE_LOADING: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Run OIDC AWS KMS parity lane
+        run: |
+          nix develop .#ci --command bash scripts/validation/run_oidc_kms_parity.sh
+
+      - name: Upload OIDC KMS parity artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oidc-kms-parity
+          path: artifacts/oidc-kms/
+          if-no-files-found: warn

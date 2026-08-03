@@ -1,0 +1,46 @@
+- description: "HS256 JWS example"
+  alg: HS256
+  key: "AyM1MzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE"
+  header:
+    alg: HS256
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.axdQWnAI5ZxyR_iVXGd05XPGXDKdtZVt9I_-nsGoyrE"
+- description: "RS256 JWS example"
+  alg: RS256
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAth14pt+B5O03IW0WudA9
+    LZYOZCU9F5wQY/SGchDTdQ/Ssdy1sG+C42ilpEY+Je942WoYqkwbjoU7B/krb25e
+    cevUdNedI1jAkfNa7hTKBj/yjUq+GElX299QCa8S07xcFgyKFk++DJx6VyRQ1ZFU
+    OvW/y56+Oy/s9fF9b5zi1vhgKOFrfipgLK4nsqd9JjMJMSOqQXKdf/sqgdSCvCH7
+    BJ1oj0xrCyG9qWaJ1gN9uQpOLJkxsfSyJzr8t8fl4v0KK87Y/i78VIRQrj1FsJZb
+    K3oVgnmpC1naQHzVul0O+w92jY0MRngVzMsnkJl2w9pGQHDMUlpPOiHSi5jHkhAz
+    IQIDAQAB
+    -----END PUBLIC KEY-----
+  header:
+    alg: RS256
+    kid: "2011-04-29"
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjIwMTEtMDQtMjkiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.LCBXDw8Myp405TX6qNYL6g1SFyjpUwEDozFDpEF4dbAPo4EH192_VWYGQ7vi-o2xKEUGJr4sBr0Voyx8f1qem81vODDC-PyUS9VDxOJVIFt3ILdBQpp1XJ4_6RwYV70tn9Cufk1kKXujxaT-_jQLo5jzX3JD9mwA-sfJzp-giaVgOEm2YutXjjpUbijv1d3PwNm8ZlJ0BuHcrqNGhcit8QdcPrt1A0Eok2Qc0lVu1qmXJlPV3JpiYX5vHPSqB4yTDfS3mB5aQeHn5DvD9VtqNTBVOxtsjEKo49WJM4uHF4zE9e12YqzE6brWe5efnCznnPObLV_1wHQ3Pq_l5I93zQ"
+- description: "Ed25519 EdDSA JWS example"
+  alg: EdDSA
+  key: |
+    -----BEGIN PUBLIC KEY-----
+    MCowBQYDK2VwAyEAomymfjiTKpbiedsavZXILozZ8nXbopjeZw3Gc9kiPIs=
+    -----END PUBLIC KEY-----
+  header:
+    alg: EdDSA
+    typ: JWT
+  payload:
+    iss: joe
+    exp: 1300819380
+    "http://example.com/is_root": true
+  expected_compact: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqb2UiLCJleHAiOjEzMDA4MTkzODAsImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.ekX3xG2O4OxYkfHoBjwFBKBWdQ3WbM2FvNSiY2XIm3LAKkgN1gmWDryPXH2SJM6h-v1mmvCWutDfnnMbhpr0AQ"

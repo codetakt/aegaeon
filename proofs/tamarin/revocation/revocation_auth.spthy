@@ -1,0 +1,47 @@
+theory RevocationAuth
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Token revocation authorization model */
+
+// Token issuance
+rule Issue_Token:
+    [ Fr(~token) ]
+    --[ TokenIssued($AS, $Client, ~token) ]->
+    [ !Token($AS, $Client, ~token),
+        !TokenOwner(~token, $Client) ]
+
+// Client requests revocation
+rule Client_Revoke:
+    [ !Token($AS, client_id, token),
+        !TokenOwner(token, client_id) ]
+    --[ RevocationRequested(client_id, token) ]->
+    [ Out(<'revoke', token, client_id>) ]
+
+// AS validates and revokes
+rule AS_Revoke:
+    [ In(<'revoke', token, client_id>),
+        !Token($AS, client_id, token),
+        !TokenOwner(token, client_id) ]
+    --[ TokenRevoked($AS, client_id, token) ]->
+    [ RevokedToken(token) ]
+
+// Unauthorized revocation attempt
+rule Unauthorized_Revoke:
+    [ In(token), Fr(~attacker_id) ]
+    --[ UnauthorizedRevocation(~attacker_id, token) ]->
+    [ Out(<'revoke', token, ~attacker_id>) ]
+
+// Security properties
+lemma authorized_revocation:
+    "All AS cid token #i. TokenRevoked(AS, cid, token) @ i ==>
+        Ex #j. TokenIssued(AS, cid, token) @ j & j < i"
+
+lemma revocation_authorization:
+    "All AS cid1 cid2 token #i #j.
+        TokenIssued(AS, cid1, token) @ i &
+        TokenRevoked(AS, cid2, token) @ j ==>
+        cid1 = cid2"
+
+end

@@ -1,0 +1,233 @@
+theory OIDC_Core
+begin
+
+/*
+ * OpenID Connect Core 1.0 Security Properties
+ * Proves: ID token binding, nonce replay prevention, session integrity
+ * Authorization code flow with ID Token
+ */
+
+builtins: signing, hashing, multiset, asymmetric-encryption
+
+/* ============ Public Key Infrastructure ============ */
+
+rule Register_pk:
+  [ Fr(~sk) ]
+  -->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, sk) ] --[ Reveal(A) ]-> [ Out(sk) ]
+
+/* ============ OIDC Entities Setup ============ */
+
+// OpenID Provider (OP) initialization
+rule OP_Init:
+  let issuer_url = <'https', $OP, $domain>
+  in
+  [ Fr(~op_key) ]
+  --[ OP_Initialized($OP, issuer_url) ]->
+  [ !OP_Key($OP, ~op_key),
+    !OP_Issuer($OP, issuer_url),
+    Out(<$OP, issuer_url>) ]
+
+// Relying Party (client) registration
+rule RP_Register:
+  [ !OP_Key($OP, op_key),
+    !Ltk($RP, rp_sk),
+    !Pk($RP, pk(rp_sk)) ]
+  --[ RP_Registered($OP, $RP, $redirect_uri, $client_secret) ]->
+  [ !RP($OP, $RP, $redirect_uri, $client_secret),
+    !RP_RedirectURI($RP, $redirect_uri) ]
+
+/* ============ OIDC Authorization Code Flow with ID Token ============ */
+
+// RP initiates authorization request with nonce
+rule RP_Start_Auth:
+  let nonce = ~nonce
+      state = ~state
+      code_challenge = h(<'S256', ~code_verifier>)
+  in
+  [ Fr(~nonce), Fr(~state), Fr(~code_verifier),
+    !RP($OP, $RP, redirect_uri, client_secret) ]
+  --[ RP_Auth_Started($RP, $User, nonce, state, code_challenge) ]->
+  [ Out(<'auth_request', $RP, redirect_uri, 'openid', state, nonce,
+         code_challenge, 'code'>),
+    RP_Session($RP, $User, nonce, state, ~code_verifier, redirect_uri) ]
+
+// User authenticates and OP issues authorization code
+rule User_Authenticate:
+  let auth_code = ~code
+      auth_time = 'auth_time'
+  in
+  [ In(<'auth_request', rp_id, redirect_uri, scope, state, nonce,
+        code_challenge, response_type>),
+    Fr(~code),
+    !OP_Issuer($OP, issuer),
+    !RP_RedirectURI(rp_id, redirect_uri) ]  // Exact match required
+  --[ User_Authenticated($User, rp_id, $OP, auth_code, nonce, state, auth_time),
+      Auth_Code_Issued($OP, auth_code, rp_id, $User, nonce, code_challenge) ]->
+  [ Out(<'auth_response', auth_code, state>),
+    Auth_Code($OP, auth_code, rp_id, $User, nonce, code_challenge,
+                redirect_uri, auth_time) ]
+
+// RP exchanges code for tokens (ID token + access token)
+// Token response is encrypted with the RP public key to model the TLS channel.
+rule OP_Issue_Tokens:
+  let scope = 'openid'
+      access_token = <'access', ~token_id, rp_id, $User, scope>
+      at_hash = h(access_token)  // Simplified at_hash computation
+      exp_time = ~exp_time
+      iat_time = ~iat_time
+      id_token_claims = <'id_token', issuer, rp_id, $User, exp_time, iat_time,
+                          nonce, auth_time, at_hash>
+      id_token = sign(id_token_claims, op_key)
+      refresh_token = <'refresh', ~refresh_id, rp_id, $User>
+      tls_payload = <'token_response', id_token, access_token, refresh_token>
+  in
+  [ In(<'token_request', rp_id, auth_code, code_verifier, redirect_uri>),
+    Auth_Code($OP, auth_code, rp_id, $User, nonce, code_challenge,
+                stored_uri, auth_time),
+    !OP_Key($OP, op_key),
+    !OP_Issuer($OP, issuer),
+    !Pk(rp_id, rp_pk),
+    Fr(~token_id), Fr(~refresh_id),
+    Fr(~exp_time), Fr(~iat_time) ]
+  --[ ID_Token_Issued($OP, rp_id, $User, id_token, nonce, at_hash),
+      ID_Token(id_token, rp_id, $User, issuer, nonce, auth_time, at_hash),
+      Access_Token_Issued($OP, rp_id, $User, access_token),
+      Code_Used($OP, auth_code, rp_id),
+      PKCE_Verified(code_verifier, code_challenge),
+      Redirect_URI_Matched(redirect_uri, stored_uri),
+      Token_Binding(id_token, access_token, at_hash) ]->
+  [ Out(aenc(tls_payload, rp_pk)),
+    !StoredIDToken(id_token, $OP, rp_id, $User, issuer, nonce, auth_time,
+                   at_hash, exp_time, iat_time, op_key, access_token),
+    !Access_Token(access_token, rp_id, $User, $OP),
+    Active_Access_Token(access_token, rp_id, $User, $OP) ]
+
+// PKCE verification
+restriction pkce_verification:
+  "All v c #i. PKCE_Verified(v, c) @ #i ==> h(<'S256', v>) = c"
+
+// Redirect URI exact matching
+restriction redirect_uri_exact_match:
+  "All uri1 uri2 #i. Redirect_URI_Matched(uri1, uri2) @ #i ==> uri1 = uri2"
+
+// RP verifies ID token
+rule RP_Verify_ID_Token:
+  let id_token_claims = <'id_token', issuer, rp_id, $User, exp_time, iat_time,
+                          nonce, auth_time, at_hash>
+  in
+  [ In(aenc(<'token_response', id_token, access_token, refresh_token>, pk(rp_sk))),
+    !Ltk(rp_id, rp_sk),
+    RP_Session(rp_id, $User, expected_nonce, state, code_verifier, redirect_uri),
+    !StoredIDToken(id_token, $OP, rp_id, $User, issuer, nonce, auth_time,
+                   at_hash, exp_time, iat_time, op_key, access_token),
+    !Pk($OP, pk(op_key)) ]
+  --[ ID_Token_Verified(rp_id, $User, id_token_claims, expected_nonce),
+      Nonce_Matched(nonce, expected_nonce),
+      AT_Hash_Verified(at_hash, access_token) ]->
+  [ RP_Authenticated(rp_id, $User, access_token) ]
+
+// Nonce must match
+restriction nonce_must_match:
+  "All n1 n2 #i. Nonce_Matched(n1, n2) @ #i ==> n1 = n2"
+
+// at_hash verification
+restriction at_hash_verification:
+  "All at_hash token #i. AT_Hash_Verified(at_hash, token) @ #i ==> at_hash = h(token)"
+
+/* ============ UserInfo Endpoint ============ */
+
+rule OP_UserInfo:
+  let userinfo = <'userinfo', $User, 'email', 'profile'>
+  in
+  [ In(<'userinfo_request', access_token>),
+    Active_Access_Token(access_token, rp_id, $User, $OP) ]
+  --[ UserInfo_Accessed(rp_id, $User, access_token, userinfo) ]->
+  [ Out(<'userinfo_response', userinfo>),
+    Active_Access_Token(access_token, rp_id, $User, $OP) ]
+
+// Limit userinfo to a single successful call per token to avoid infinite replay traces.
+restriction userinfo_single_use:
+  "All rp user token info #i #j.
+    UserInfo_Accessed(rp, user, token, info) @ #i &
+    UserInfo_Accessed(rp, user, token, info) @ #j
+    ==> #i = #j"
+
+/* ============ Token Revocation ============ */
+
+rule Revoke_Token:
+  [ Active_Access_Token(token, rp_id, user, op) ]
+  --[ Token_Revoked(token) ]->
+  [ Revoked_Token(token) ]
+
+/* ============ Security Properties ============ */
+
+// ID Token uniquely bound to authentication session
+lemma id_token_session_binding:
+  "All op rp user token nonce at_hash #i #j.
+    ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #i &
+    ID_Token_Verified(rp, user, token, nonce) @ #j
+    ==> Ex state challenge #k.
+          RP_Auth_Started(rp, user, nonce, state, challenge) @ #k & #k < #i"
+
+// Nonce prevents replay attacks
+lemma nonce_replay_prevention:
+  "All op rp user token nonce at_hash #i #j.
+    ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #i &
+    ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #j
+    ==> #i = #j"
+
+// Session integrity: auth request parameters preserved
+lemma session_integrity:
+  "All rp user nonce1 state challenge claims nonce2 #i #j.
+    RP_Auth_Started(rp, user, nonce1, state, challenge) @ #i &
+    ID_Token_Verified(rp, user, claims, nonce2) @ #j
+    ==> nonce1 = nonce2"
+
+// Access token bound to ID token via at_hash
+lemma token_binding_integrity:
+  "All token access_token at_hash #i.
+    Token_Binding(token, access_token, at_hash) @ #i
+    ==> at_hash = h(access_token)"
+
+// Authorization code single use
+lemma auth_code_single_use:
+  "All op code rp #i #j.
+    Code_Used(op, code, rp) @ #i &
+    Code_Used(op, code, rp) @ #j
+    ==> #i = #j"
+
+// No access after revocation
+lemma no_access_after_revocation:
+  "All rp user info token #i #j.
+    Token_Revoked(token) @ #i &
+    UserInfo_Accessed(rp, user, token, info) @ #j
+    ==> #j < #i"
+
+// ID token secrecy (only RP and OP know the token)
+lemma id_token_secrecy:
+  "All op rp user token nonce at_hash #i #j.
+    ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #i &
+    K(token) @ #j
+    ==> Ex A #k. Reveal(A) @ #k & #k < #j"
+
+// Authentication time consistency
+lemma auth_time_consistency:
+  "All user rp op code nonce state auth_time token at_hash #i #j.
+    User_Authenticated(user, rp, op, code, nonce, state, auth_time) @ #i &
+    ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #j &
+    #i < #j
+    ==> Ex issuer #k. ID_Token(token, rp, user, issuer, nonce, auth_time, at_hash) @ #k"
+
+// PKCE prevents code injection even with compromised redirect
+lemma pkce_code_injection_prevention:
+  "All op code rp user nonce challenge verifier #i #j #k.
+    Auth_Code_Issued(op, code, rp, user, nonce, challenge) @ #i &
+    PKCE_Verified(verifier, challenge) @ #j &
+    Code_Used(op, code, rp) @ #k
+    ==> h(<'S256', verifier>) = challenge"
+
+end

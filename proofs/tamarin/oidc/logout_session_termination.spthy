@@ -1,0 +1,85 @@
+theory OIDC_LogoutSessionTermination
+begin
+
+/*
+ * OpenID Connect Logout – symbolic model (intentionally minimal).
+ *
+ * We model:
+ * - A session identified by `sid` that allows ID Token issuance.
+ * - RP-initiated logout as an attacker-visible request carrying an `id_token_hint`.
+ * - Back-channel logout fan-out with arbitrary retries.
+ *
+ * We prove:
+ * 1) Logout requires a previously issued ID token (fail-close).
+ * 2) After logout, the session cannot mint additional ID tokens.
+ * 3) Back-channel logout reuses a stable `jti` per `sid` across fan-out/retries.
+ */
+
+rule RP_Register:
+  []
+  --[ RP_Registered($RP) ]->
+  [ !RP($RP),
+    Out($RP) ]
+
+// OP creates an authenticated session (sid) for the user.
+rule OP_Create_Session:
+  [ Fr(~sid) ]
+  --[ Session_Created($User, ~sid) ]->
+  [ Session_Active($User, ~sid),
+    Token_Issuance_Allowed(~sid) ]
+
+// OP issues an ID Token for a relying party (RP).
+// We model the `id_token_hint` boundary as an opaque fresh token bound to (rp, user, sid).
+// To keep the proof search bounded, we allow at most one ID token issuance per `sid`.
+rule OP_Issue_ID_Token:
+  [ Session_Active($User, sid),
+    Token_Issuance_Allowed(sid),
+    !RP($RP),
+    Fr(~id_token) ]
+  --[ ID_Token_Issued($RP, $User, sid, ~id_token) ]->
+  [ Session_Active($User, sid),
+    !Issued_ID_Token($RP, $User, sid, ~id_token),
+    Out(~id_token) ]
+
+// RP initiates logout with an id_token_hint.
+rule RP_Initiate_Logout:
+  [ In(id_token) ]
+  --[ RP_Logout_Requested(id_token) ]->
+  [ Out(< 'logout_request', id_token >) ]
+
+// OP validates that the id_token_hint is one it issued and consumes the session.
+// It emits a fresh `jti` and stores it persistently to support retries/fan-out.
+rule OP_Process_Logout:
+  [ In(< 'logout_request', id_token >),
+    Session_Active($User, sid),
+    !Issued_ID_Token($RP, $User, sid, id_token),
+    Fr(~jti) ]
+  --[ Logout_Processed($RP, $User, sid, ~jti) ]->
+  [ !Logout_State(sid, ~jti),
+    Out(< 'logout_ok', sid >) ]
+
+// Back-channel logout delivery: can be retried arbitrarily.
+rule OP_Send_Backchannel_Logout:
+  [ !Logout_State(sid, jti),
+    !RP($RP) ]
+  --[ Backchannel_Logout_Sent($RP, sid, jti) ]->
+  [ Out(< 'backchannel_logout', $RP, sid, jti >) ]
+
+lemma logout_requires_id_token:
+  "All rp user sid jti #i.
+     Logout_Processed(rp, user, sid, jti) @ #i
+     ==> (Ex tok #j. ID_Token_Issued(rp, user, sid, tok) @ #j & #j < #i)"
+
+lemma no_id_token_after_logout:
+  "All rp user sid tok jti #i #j.
+     Logout_Processed(rp, user, sid, jti) @ #i &
+     ID_Token_Issued(rp, user, sid, tok) @ #j
+     ==> #j < #i"
+
+lemma backchannel_logout_jti_stable:
+  "All rp1 rp2 sid jti1 jti2 #i #j.
+     Backchannel_Logout_Sent(rp1, sid, jti1) @ #i &
+     Backchannel_Logout_Sent(rp2, sid, jti2) @ #j
+     ==> jti1 = jti2"
+
+end

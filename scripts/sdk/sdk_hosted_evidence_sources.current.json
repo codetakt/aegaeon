@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "current_repository_suffixes": [
+    "aegaeon-sdk",
+    "aegaeon-sdk-ci"
+  ],
+  "sources": [
+    {
+      "name": "admin_sdk_evidence",
+      "repository_variable": "AEGAEON_ADMIN_CONSOLE_REPOSITORY",
+      "repository_required": true,
+      "expected_repository_suffixes": [
+        "aegaeon-admin-console",
+        "aegaeon-admin-console-ci"
+      ],
+      "missing_repository_uses_current_repo": false,
+      "ref_variable": "AEGAEON_ADMIN_CONSOLE_REF",
+      "default_ref": "main",
+      "workflow_variable": "AEGAEON_ADMIN_CONSOLE_STACK_WORKFLOW",
+      "expected_workflow": "stack-e2e.yml",
+      "artifact_variable": "AEGAEON_ADMIN_SDK_EVIDENCE_ARTIFACT",
+      "expected_artifact": "admin-sdk-evidence",
+      "cross_repo_token_secret": "AEGAEON_ADMIN_SDK_EVIDENCE_TOKEN"
+    },
+    {
+      "name": "managed_provider_evidence",
+      "repository_variable": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_REPOSITORY",
+      "repository_required": false,
+      "expected_repository_suffixes": [
+        "aegaeon-sdk",
+        "aegaeon-sdk-ci"
+      ],
+      "missing_repository_uses_current_repo": true,
+      "ref_variable": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_REF",
+      "default_ref": "main",
+      "workflow_variable": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_WORKFLOW",
+      "expected_workflow": "managed-provider-evidence.yml",
+      "artifact_variable": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_ARTIFACT",
+      "expected_artifact": "managed-provider-evidence",
+      "cross_repo_token_secret": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_TOKEN"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+theory StateEchoIntegrity
+
+begin
+
+/*
+ * State Echo Integrity — OAuth 2.x authorization code flow
+ *
+ * The client includes a fresh, unpredictable state parameter in the
+ * authorization request. The authorization server echoes it back in
+ * the redirect response. The client verifies the echo matches before
+ * accepting the authorization code.
+ *
+ * This model proves:
+ * - StateEcho: accepted response state equals the original request state
+ * - StateFreshness: each authorization request uses a unique state value
+ * - StateSingleUse: each state can only be accepted once (replay prevention)
+ * - StateUnpredictability: different requests use distinct state values
+ *
+ * Threat model: standard Dolev-Yao (attacker controls the network).
+ * The state parameter travels through the front channel (user-agent)
+ * and is visible to the attacker. The defense relies on the client
+ * verifying the state match against its stored session state (modeled
+ * by the linear Client_Pending fact).
+ */
+
+builtins: hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Protocol Rules ============ */
+
+// Client generates fresh state and nonce, sends authorization request.
+// State is stored client-side (modeled by the linear Client_Pending fact).
+rule Client_Initiate:
+  [ Fr(~state), Fr(~nonce) ]
+  --[ Client_AuthzReq($C, ~state, $redirect_uri, ~nonce),
+      Fresh_State(~state),
+      Unique(<'authz_req', $C, ~state>) ]->
+  [ Out(<'authz_req', $C, $redirect_uri, ~state, ~nonce>),
+    Client_Pending($C, ~state, $redirect_uri, ~nonce) ]
+
+// Authorization server receives request, authenticates user, issues code.
+// The AS echoes the state parameter back in the redirect response.
+rule AS_Issue_Code:
+  [ In(<'authz_req', client_id, redirect_uri, state, nonce>),
+    Fr(~code) ]
+  --[ AS_Issued(client_id, ~code, state, redirect_uri),
+      Unique(<'authz_code', ~code>) ]->
+  [ Out(<'authz_resp', ~code, state, redirect_uri>) ]
+
+// Client receives the authorization response and verifies state match.
+// The Eq restriction enforces that state_echo = state (from Client_Pending).
+// Client_Pending is linear: consumed on use, preventing replay.
+rule Client_Accept:
+  [ In(<'authz_resp', code, state_echo, redirect_uri>),
+    Client_Pending($C, state, redirect_uri, nonce) ]
+  --[ Eq(state_echo, state),
+      Client_Accepted($C, code, state, redirect_uri),
+      State_Verified($C, state) ]->
+  [ Client_Authenticated($C, code, redirect_uri) ]
+
+/* ============ Security Properties ============ */
+
+// StateEcho: if the client accepts a response, there was a prior
+// authorization request with the same state and redirect_uri.
+// This is the core CSRF-prevention property.
+lemma StateEcho:
+  "All C code state uri #i.
+     Client_Accepted(C, code, state, uri)@i
+     ==> Ex nonce #j.
+           Client_AuthzReq(C, state, uri, nonce)@j & #j < #i"
+
+// StateFreshness: every state used in an authorization request is fresh.
+lemma StateFreshness:
+  "All C state uri nonce #i.
+     Client_AuthzReq(C, state, uri, nonce)@i
+     ==> Ex #j. Fresh_State(state)@j & #j = #i"
+
+// StateSingleUse: the client's pending session is consumed on acceptance,
+// so each state value can lead to at most one accepted response.
+// This prevents authorization response replay.
+lemma StateSingleUse:
+  "All C code1 code2 state uri1 uri2 #i #j.
+     Client_Accepted(C, code1, state, uri1)@i &
+     Client_Accepted(C, code2, state, uri2)@j
+     ==> #i = #j"
+
+// StateUnpredictability: distinct authorization requests use distinct
+// state values (guaranteed by Fr(~state) freshness).
+lemma StateUnpredictability:
+  "All C1 C2 s uri1 uri2 n1 n2 #i #j.
+     Client_AuthzReq(C1, s, uri1, n1)@i &
+     Client_AuthzReq(C2, s, uri2, n2)@j
+     ==> #i = #j"
+
+end

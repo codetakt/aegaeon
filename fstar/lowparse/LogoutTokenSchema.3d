@@ -1,0 +1,38 @@
+// EverParse schema for OIDC Logout Token claims (Back-Channel Logout).
+//
+// The OIDC Logout Token is transported as a JWT (JWS Compact serialization).
+// As with `IdTokenSchema.3d`, we model the Rust-side canonicalization boundary
+// as explicit `len || segment` framing, and we expose a claims entrypoint for
+// future Low*/FFI wiring.
+
+typedef struct _len_prefixed_bytes {
+  UINT32 len;
+  UINT8  bytes[len];
+} LenPrefixedBytes;
+
+typedef struct _maybe_string {
+  UINT8 present;
+  LenPrefixedBytes value;
+} MaybeString;
+
+// Canonicalized JWS Compact serialization buffer (header, payload, signature).
+entrypoint typedef struct _logout_token_jwt_entry {
+  LenPrefixedBytes header;
+  LenPrefixedBytes payload;
+  LenPrefixedBytes signature;
+} LogoutTokenJwt;
+
+// Back-channel logout token claims.
+// Notes:
+// - `sub` is optional; when `backchannel_logout_session_required=true` the OP omits it.
+// - `events` is represented as a length-prefixed byte string; higher-level layers
+//   validate the expected event URI is present.
+entrypoint typedef struct _logout_token_claims_entry {
+  LenPrefixedBytes iss;
+  LenPrefixedBytes aud;
+  UINT64 iat;
+  LenPrefixedBytes jti;
+  LenPrefixedBytes sid;
+  MaybeString sub;
+  LenPrefixedBytes events;
+} LogoutTokenClaims;

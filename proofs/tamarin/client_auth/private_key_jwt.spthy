@@ -1,0 +1,90 @@
+theory PrivateKeyJwtClientAuth
+begin
+
+/*
+ * RFC 7523 (private_key_jwt) — client authentication model.
+ *
+ * This theory focuses on the security-relevant invariants:
+ * - unforgeability of client assertions (signature binding to the registered key)
+ * - audience binding (assertion for AS A cannot authenticate to AS B)
+ * - replay prevention via single-use jti
+ *
+ * Notes:
+ * - We model "iss=sub=client_id" and "aud=token_endpoint" by embedding (Client, AS)
+ *   into the signed term.
+ * - The actual JWT encoding/claims parsing is abstracted away; only the signed
+ *   message structure and its verification matter for these properties.
+ */
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* Client registers a signing key for private_key_jwt assertions. */
+rule Register_Client:
+  [ Fr(~sk_client) ]
+  --[ ClientRegistered($Client, pk(~sk_client)) ]->
+  [ !ClientSK($Client, ~sk_client)
+  , !ClientPK($Client, pk(~sk_client))
+  , Out($Client)
+  , Out(pk(~sk_client))
+  ]
+
+/* Client issues a private_key_jwt assertion for a specific AS audience. */
+rule Client_Issues_Pkjwt_Assertion:
+  [ !ClientSK($Client, sk_client)
+  , Fr(~jti)
+  ]
+  --[ PkjwtRequest($Client, $AS, ~jti)
+    , Unique(<'pkjwt_jti', $Client, ~jti>)
+  ]->
+  [ Out(<$Client, $AS,
+         <'pkjwt', $Client, $AS, ~jti>,
+         sign(<'pkjwt', $Client, $AS, ~jti>, sk_client)>)
+  , UsedJti($Client, ~jti)
+  ]
+
+/* AS validates the assertion signature, the audience binding, and consumes the jti. */
+rule AS_Validates_Pkjwt:
+  [ In(<$Client, $AS,
+        <'pkjwt', $Client, $AS, jti>,
+        sig>)
+  , !ClientPK($Client, pk_client)
+  , UsedJti($Client, jti)
+  ]
+  --[ Eq(verify(sig, <'pkjwt', $Client, $AS, jti>, pk_client), true)
+    , PkjwtAccepted($AS, $Client, jti)
+    , TokenIssued($AS, $Client, jti)
+  ]->
+  [ ]
+
+/* If a token is issued for client authentication, it must originate from a client request. */
+lemma pkjwt_client_auth_integrity:
+  "All as client jti #i.
+     TokenIssued(as, client, jti)@i
+     ==> (Ex #j. PkjwtRequest(client, as, jti)@j & j < i)"
+
+/* Audience binding: the AS audience in the accepted assertion matches the AS that issued the token. */
+lemma pkjwt_audience_binding:
+  "All as client jti #i.
+     TokenIssued(as, client, jti)@i
+     ==> (Ex #j. PkjwtRequest(client, as, jti)@j & j < i)"
+
+/* Unforgeability: the AS can only validate assertions for clients that registered a verification key. */
+lemma pkjwt_unforgeability:
+  "All as client jti #i.
+     PkjwtAccepted(as, client, jti)@i
+     ==> (Ex pk #j. ClientRegistered(client, pk)@j & j < i)"
+
+/* Replay prevention: the same (client, jti) cannot authenticate successfully twice. */
+lemma pkjwt_no_replay:
+  "All as client jti #i #j.
+     TokenIssued(as, client, jti)@i
+     & TokenIssued(as, client, jti)@j
+     ==> #i = #j"
+
+end

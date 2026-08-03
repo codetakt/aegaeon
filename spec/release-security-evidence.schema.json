@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/release-security-evidence.schema.json",
+  "title": "Aegaeon Release Security Evidence Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "release_id",
+    "source_revision",
+    "flake_lock_revision",
+    "generated_at",
+    "claim_context",
+    "evidence",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "flake_lock_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enterprise_readiness_claim_active",
+        "certification_claim_active",
+        "admin_ui_assurance_claim_active"
+      ],
+      "properties": {
+        "enterprise_readiness_claim_active": {
+          "type": "boolean"
+        },
+        "certification_claim_active": {
+          "type": "boolean"
+        },
+        "admin_ui_assurance_claim_active": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "build",
+        "verification",
+        "security",
+        "sbom",
+        "conformance",
+        "kms",
+        "support"
+      ],
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "verification": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "security": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "sbom": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "conformance": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "kms": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "managed_provider": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "performance": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "publication": {
+          "$ref": "#/$defs/evidence_list"
+        },
+        "support": {
+          "$ref": "#/$defs/evidence_list"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "decision"
+      ],
+      "properties": {
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidence_list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence_item"
+      }
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "uri",
+        "kind",
+        "required"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "log",
+            "json",
+            "markdown",
+            "signature",
+            "checksum",
+            "external"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

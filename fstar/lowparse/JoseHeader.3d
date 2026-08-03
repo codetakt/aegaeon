@@ -1,0 +1,14 @@
+/* EverParse specification for JOSE header micro-language entries.
+ * The micro-language is a simple TLV stream composed of repeated key/value
+ * pairs. Each pair is encoded as:
+ *   [key_len : UINT8][key bytes][value_len : UINT8][value bytes]
+ * The parser validates a single entry; higher-level code iterates over the
+ * stream until the buffer is fully consumed.
+ */
+
+entrypoint typedef struct _jose_header_entry {
+  UINT8 key_len;
+  UINT8 key[key_len];
+  UINT8 value_len;
+  UINT8 value[value_len];
+} jose_header_entry;

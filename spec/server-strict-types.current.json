@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "required_tsconfig_requirements": [
+    {
+      "path": "tsconfig.json",
+      "required_flags": {
+        "strict": true,
+        "strictNullChecks": true,
+        "noImplicitAny": true,
+        "useUnknownInCatchVariables": true,
+        "exactOptionalPropertyTypes": true,
+        "noUncheckedIndexedAccess": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": false,
+        "allowJs": false,
+        "checkJs": false,
+        "noEmit": true
+      },
+      "required_include_paths": [
+        "scripts/check-strict-types.ts",
+        "scripts/check-workflow-inventory.ts",
+        "scripts/sdk/check_sdk_strict_types.ts",
+        "scripts/sdk/tools-src/check-strict-types.ts",
+        "tests/verified_core_wasm/root_strict_types_policy_test.ts",
+        "tests/verified_core_wasm/strict_types_policy_test.ts",
+        "tests/verified_core_wasm/workflow_inventory_policy_test.ts"
+      ]
+    }
+  ],
+  "required_no_tsnocheck_paths": [
+    "scripts/check-strict-types.ts",
+    "scripts/check-workflow-inventory.ts",
+    "scripts/sdk/check_sdk_strict_types.ts",
+    "scripts/sdk/tools-src/check-strict-types.ts",
+    "tests/verified_core_wasm/root_strict_types_policy_test.ts",
+    "tests/verified_core_wasm/strict_types_policy_test.ts",
+    "tests/verified_core_wasm/workflow_inventory_policy_test.ts"
+  ],
+  "documented_blockers": []
+}

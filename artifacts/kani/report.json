@@ -1,0 +1,26 @@
+{
+  "status": "success",
+  "run_id": "20260804T065437",
+  "run_date": "2026-08-04T07:01:16+09:00",
+  "log": "artifacts/kani/run_20260804T065437.log",
+  "server_run_mode": "enabled",
+  "harnesses": {
+    "proof_parse_cache_control_no_panic": "passed",
+    "proof_trivial_arithmetic": "passed"
+},
+  "server_harnesses": {
+    "kani_test::kani_tests::verify_client_assertion_replay_window_bounds": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_idempotent_jti": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries": "passed",
+    "kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds": "passed",
+    "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids": "passed"
+},
+  "toolchain": {
+    "kani": "cargo-kani 0.66.0",
+    "cbmc": "cbmc unknown"
+  }
+}

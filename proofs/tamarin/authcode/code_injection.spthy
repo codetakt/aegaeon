@@ -1,0 +1,37 @@
+theory CodeInjection
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Authorization code injection attack prevention */
+
+// Authorization code generation
+rule Generate_Code:
+  [ Fr(~code), Fr(~state) ]
+  --[ CodeGenerated($AS, $Client, ~code, ~state) ]->
+  [ !Code($AS, $Client, ~code, ~state), Out(~state) ]
+
+// Code exchange with state validation
+rule Exchange_Code:
+  [ !Code($AS, $Client, code, state), In(<code, state>) ]
+  --[ CodeExchanged($AS, $Client, code, state) ]->
+  [ ]
+
+// Attacker tries code injection
+rule Inject_Code:
+  [ In(code), Fr(~fake_state) ]
+  --[ InjectionAttempt(code, ~fake_state) ]->
+  [ Out(<code, ~fake_state>) ]
+
+// Security properties
+lemma no_code_injection:
+  "All AS C code state #i. CodeExchanged(AS, C, code, state) @ i ==>
+    Ex #j. CodeGenerated(AS, C, code, state) @ j & j < i"
+
+lemma state_binding:
+  "All AS C code state1 state2 #i #j.
+    CodeGenerated(AS, C, code, state1) @ i &
+    CodeExchanged(AS, C, code, state2) @ j ==>
+    state1 = state2"
+
+end

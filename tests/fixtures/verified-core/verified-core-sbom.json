@@ -1,0 +1,121 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:47678bca-d9de-4172-9cbf-8924116d0235",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-03-10T10:08:52.666Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "package_verified_core_dist.js",
+          "version": "1.0.0",
+          "description": "Aegaeon Verified Core distribution packager"
+        }
+      ]
+    },
+    "component": {
+      "type": "library",
+      "bom-ref": "verified-core-wasm",
+      "name": "verified_core.wasm",
+      "version": "1.0.0",
+      "description": "Formally verified cryptographic core compiled to WebAssembly",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6cb7c55a0ff4384c88b51f002587324953e303ca60f4e9d2ba8bd4df49529539"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/aegaeon/verified-core@1.0.0?source_commit=unknown",
+      "properties": [
+        {
+          "name": "cdx:verified-core:sri",
+          "value": "sha256-bLfFWg/0OEyItR8AJYcySVPjA8pg9OnSuovU30lSlTk="
+        },
+        {
+          "name": "cdx:security:formal-verification",
+          "value": "F* (proofs checked by Z3 SMT solver)"
+        },
+        {
+          "name": "cdx:security:tcb",
+          "value": "F* type system, KaRaMeL extraction, WASI libc"
+        },
+        {
+          "name": "cdx:abi:version",
+          "value": "1.0.0"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "fstar-pkce",
+      "name": "Pkce.fst",
+      "version": "1.0.0",
+      "description": "PKCE (RFC 7636) S256 challenge verification",
+      "properties": [
+        {
+          "name": "cdx:source:language",
+          "value": "F*"
+        },
+        {
+          "name": "cdx:verification:status",
+          "value": "verified"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "fstar-dpop",
+      "name": "Dpop.fst",
+      "version": "1.0.0",
+      "description": "DPoP (RFC 9449) proof validation",
+      "properties": [
+        {
+          "name": "cdx:source:language",
+          "value": "F*"
+        },
+        {
+          "name": "cdx:verification:status",
+          "value": "verified"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "fstar-claims-runtime",
+      "name": "VerifiedCore_Api_Claims_Runtime.fst",
+      "version": "1.0.0",
+      "description": "Claims-based JWT/DPoP verification runtime",
+      "properties": [
+        {
+          "name": "cdx:source:language",
+          "value": "F*"
+        },
+        {
+          "name": "cdx:verification:status",
+          "value": "verified"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "verified-core-wasm",
+      "dependsOn": [
+        "fstar-pkce",
+        "fstar-dpop",
+        "fstar-claims-runtime"
+      ]
+    }
+  ]
+}

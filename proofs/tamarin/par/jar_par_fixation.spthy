@@ -1,0 +1,79 @@
+theory JAR_PAR_Fixation
+begin
+
+/*
+ * RFC 9101 (JAR) + RFC 9126 (PAR) — Request fixation model.
+ *
+ * This model captures the security-critical invariant enforced by the server:
+ * when a Request Object is present, the authorization request parameters used
+ * at /authorize originate from the validated (signed) Request Object payload,
+ * not from attacker-controlled outer parameters.
+ */
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x,y)@i ==> x = y"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* Client registers a signing key (JAR verification key) with the AS. */
+rule Register_Client:
+  [ Fr(~sk_client) ]
+  --[ ClientRegistered($Client, pk(~sk_client)) ]->
+  [ !ClientKey($Client, ~sk_client)
+  , Out($Client)
+  , Out(pk(~sk_client))
+  ]
+
+/* Client pushes a PAR request containing a signed Request Object. */
+rule PAR_Request_With_JAR:
+  [ !ClientKey($Client, sk_client)
+  , Fr(~state)
+  , Fr(~code_verifier)
+  , Fr(~jti_ro)
+  , Fr(~redirect_uri)
+  ]
+  --[ JARRequest($Client, $AS, <'request_object', $Client, $AS, ~redirect_uri, ~state, h(~code_verifier), 'openid', ~jti_ro>)
+    , Unique(<'jar_jti', ~jti_ro>)
+  ]->
+  [ Out(<$Client, $AS, ~redirect_uri, ~state, h(~code_verifier),
+         <'request_object', $Client, $AS, ~redirect_uri, ~state, h(~code_verifier), 'openid', ~jti_ro>,
+         sign(<'request_object', $Client, $AS, ~redirect_uri, ~state, h(~code_verifier), 'openid', ~jti_ro>, sk_client)>) ]
+
+/* AS validates the Request Object signature and stores the bound parameters. */
+rule AS_Process_PAR_With_JAR:
+  [ In(<$Client, $AS, outer_ru, outer_state, outer_cc,
+        <'request_object', $Client, $AS, ru, st, cc, scope, jti>, sig>)
+  , !ClientKey($Client, sk_client)
+  , Fr(~request_uri)
+  ]
+  --[ Eq(verify(sig, <'request_object', $Client, $AS, ru, st, cc, scope, jti>, pk(sk_client)), true)
+    , JARValidated($AS, $Client, ~request_uri, st, cc, ru, scope, jti)
+    , Unique(<'request_uri', ~request_uri>)
+  ]->
+  [ !StoredPAR(~request_uri, $AS, $Client, st, cc, ru, scope, jti)
+  , Out(~request_uri)
+  ]
+
+/* User authorizes using the request_uri; the AS uses stored parameters. */
+rule User_Authorize_With_RequestURI:
+  [ In(uri)
+  , !StoredPAR(uri, $AS, $Client, st, cc, ru, scope, jti)
+  , Fr(~code)
+  ]
+  --[ AuthorizationWithPAR($AS, $Client, st, ~code, ru)
+    , CodeIssued($AS, $Client, ~code)
+    , Unique(<'code', ~code>)
+  ]->
+  [ Out(<~code, st, $AS>) ]
+
+/* Security property: authorization parameters are fixed by the validated Request Object. */
+lemma jar_parameter_fixation:
+  "All as client st code ru #i.
+     AuthorizationWithPAR(as, client, st, code, ru)@i
+     ==> (Ex uri cc scope jti #j.
+           JARValidated(as, client, uri, st, cc, ru, scope, jti)@j & #j < #i)"
+
+end

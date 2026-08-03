@@ -1,0 +1,264 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory PrivateKeyJwtClientAuth] Theory loaded
+[Theory PrivateKeyJwtClientAuth] Theory translated
+[Theory PrivateKeyJwtClientAuth] Derivation checks started
+[Theory PrivateKeyJwtClientAuth] Derivation checks ended
+[Theory PrivateKeyJwtClientAuth] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory PrivateKeyJwtClientAuth begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register_Client:
+   [ Fr( ~sk_client ) ]
+  --[ ClientRegistered( $Client, pk(~sk_client) ) ]->
+   [
+   !ClientSK( $Client, ~sk_client ), !ClientPK( $Client, pk(~sk_client) ),
+   Out( $Client ), Out( pk(~sk_client) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Issues_Pkjwt_Assertion:
+   [ !ClientSK( $Client, sk_client ), Fr( ~jti ) ]
+  --[
+  PkjwtRequest( $Client, $AS, ~jti ),
+  Unique( <'pkjwt_jti', $Client, ~jti> )
+  ]->
+   [
+   Out( <$Client, $AS, <'pkjwt', $Client, $AS, ~jti>,
+         sign(<'pkjwt', $Client, $AS, ~jti>, sk_client)>
+   ),
+   UsedJti( $Client, ~jti )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Validates_Pkjwt:
+   [
+   In( <$Client, $AS, <'pkjwt', $Client, $AS, jti>, sig> ),
+   !ClientPK( $Client, pk_client ), UsedJti( $Client, jti )
+   ]
+  --[
+  Eq( verify(sig, <'pkjwt', $Client, $AS, jti>, pk_client), true ),
+  PkjwtAccepted( $AS, $Client, jti ), TokenIssued( $AS, $Client, jti )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) AS_Validates_Pkjwt:
+     [
+     In( <$Client, $AS, <'pkjwt', $Client, $AS, jti>, sig> ),
+     !ClientPK( $Client, pk_client ), UsedJti( $Client, jti )
+     ]
+    --[
+    Eq( z, true ), PkjwtAccepted( $AS, $Client, jti ),
+    TokenIssued( $AS, $Client, jti )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. $AS   = $AS.9
+       $Client
+             = $Client.10
+       jti   = jti.11
+       pk_client
+             = pk_client.12
+       sig   = sig.13
+       z     = verify(sig.13, <'pkjwt', $Client.10, $AS.9, jti.11>,
+                      pk_client.12)
+
+    2. $AS   = $AS.12
+       $Client
+             = $Client.13
+       jti   = jti.14
+       pk_client
+             = pk(x.22)
+       sig   = sign(<'pkjwt', $Client.13, $AS.12, jti.14>, x.22)
+       z     = true
+  */
+
+lemma pkjwt_client_auth_integrity:
+  all-traces
+  "∀ as client jti #i.
+    (TokenIssued( as, client, jti ) @ #i) ⇒
+    (∃ #j. (PkjwtRequest( client, as, jti ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client jti #i.
+  (TokenIssued( as, client, jti ) @ #i)
+ ∧
+  ∀ #j. (PkjwtRequest( client, as, jti ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+  case Register_Client
+  solve( UsedJti( $Client, jti ) ▶₂ #i )
+    case Client_Issues_Pkjwt_Assertion
+    solve( !KU( sign(<'pkjwt', $Client, $AS, ~jti>, ~sk_client) ) @ #vk.10 )
+      case Client_Issues_Pkjwt_Assertion
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~sk_client ) @ #vk.11 )
+    qed
+  qed
+qed
+
+lemma pkjwt_audience_binding:
+  all-traces
+  "∀ as client jti #i.
+    (TokenIssued( as, client, jti ) @ #i) ⇒
+    (∃ #j. (PkjwtRequest( client, as, jti ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client jti #i.
+  (TokenIssued( as, client, jti ) @ #i)
+ ∧
+  ∀ #j. (PkjwtRequest( client, as, jti ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+  case Register_Client
+  solve( UsedJti( $Client, jti ) ▶₂ #i )
+    case Client_Issues_Pkjwt_Assertion
+    solve( !KU( sign(<'pkjwt', $Client, $AS, ~jti>, ~sk_client) ) @ #vk.10 )
+      case Client_Issues_Pkjwt_Assertion
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~sk_client ) @ #vk.11 )
+    qed
+  qed
+qed
+
+lemma pkjwt_unforgeability:
+  all-traces
+  "∀ as client jti #i.
+    (PkjwtAccepted( as, client, jti ) @ #i) ⇒
+    (∃ pk #j. (ClientRegistered( client, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client jti #i.
+  (PkjwtAccepted( as, client, jti ) @ #i)
+ ∧
+  ∀ pk #j. (ClientRegistered( client, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+  case Register_Client
+  by contradiction /* from formulas */
+qed
+
+lemma pkjwt_no_replay:
+  all-traces
+  "∀ as client jti #i #j.
+    ((TokenIssued( as, client, jti ) @ #i) ∧
+     (TokenIssued( as, client, jti ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client jti #i #j.
+  (TokenIssued( as, client, jti ) @ #i) ∧
+  (TokenIssued( as, client, jti ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+    case Register_Client
+    solve( UsedJti( $Client, jti ) ▶₂ #i )
+      case Client_Issues_Pkjwt_Assertion
+      solve( !ClientPK( $Client, pk(x) ) ▶₁ #j )
+        case Register_Client
+        solve( UsedJti( $Client, ~jti ) ▶₂ #j )
+          case Client_Issues_Pkjwt_Assertion
+          by contradiction /* cyclic */
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( !ClientPK( $Client, pk(x) ) ▶₁ #i )
+    case Register_Client
+    solve( UsedJti( $Client, jti ) ▶₂ #i )
+      case Client_Issues_Pkjwt_Assertion
+      solve( !ClientPK( $Client, pk(x) ) ▶₁ #j )
+        case Register_Client
+        solve( UsedJti( $Client, ~jti ) ▶₂ #j )
+          case Client_Issues_Pkjwt_Assertion
+          by contradiction /* cyclic */
+        qed
+      qed
+    qed
+  qed
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./client_auth/private_key_jwt.spthy
+
+  processing time: 0.49s
+
+  pkjwt_client_auth_integrity (all-traces): verified (6 steps)
+  pkjwt_audience_binding (all-traces): verified (6 steps)
+  pkjwt_unforgeability (all-traces): verified (3 steps)
+  pkjwt_no_replay (all-traces): verified (12 steps)
+
+==============================================================================

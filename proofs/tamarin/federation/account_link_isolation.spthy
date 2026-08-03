@@ -1,0 +1,220 @@
+theory Federation_Account_Link_Isolation
+begin
+
+/*
+ * Account Link Scope Isolation — Multi-tenant federation
+ *
+ * Aegaeon is a multi-tenant authorization server where account links
+ * (upstream identity → local end_user) are scoped per environment.
+ * The DB schema enforces: UNIQUE(environment_id, upstream_issuer, upstream_sub_hash).
+ *
+ * IMPORTANT: Environment isolation is enforced at the DB/application level
+ * (SQL WHERE clauses and unique indexes), NOT by cryptographic binding in
+ * IdP assertions. The upstream IdP does not know about Aegaeon's environment
+ * structure. The model reflects this: IdP assertions bind (idp, sub, user)
+ * but NOT environment_id. The environment scoping is enforced by the
+ * Link_Account rule requiring !Environment($Tenant, env_id) and the
+ * Unique constraint on (env_id, idp, sub).
+ *
+ * C-4 finding (security review): The implementation has UPDATE queries
+ * (upstream_refresh_token_encrypted, last_used_at) at web/mod.rs:1596
+ * and web/mod.rs:2077-2088 that are NOT scoped by environment_id.
+ * While the SELECT for identity lookup IS properly scoped (line 1508),
+ * the unscoped UPDATEs could cross-contaminate refresh tokens across
+ * environments sharing the same (upstream_issuer, upstream_sub_hash).
+ * This model proves the DESIRED isolation property; the implementation
+ * must be fixed to match by adding environment_id to all WHERE clauses.
+ *
+ * F-8 fix: Added cross_env_denial — explicitly proves that accessing
+ * env_B requires a SEPARATE link in env_B, regardless of links in env_A.
+ *
+ * F-9 fix: Replaced trivial link_environment_immutability with
+ * link_tenant_binding — proves the link's tenant cannot change.
+ *
+ * F-10 fix: Removed redundant no_cross_env_link_reuse (was identical
+ * to environment_scoped_login tracing to a different action fact).
+ *
+ * Security properties:
+ * - cross_tenant_isolation: session in env_A requires link in env_A
+ * - cross_env_denial: session in env_B requires separate link in env_B
+ * - upstream_sub_binding: (env, idp, sub) maps to exactly one end_user
+ * - environment_scoped_login: federated auth requires link in same env
+ * - link_tenant_binding: link's tenant is determined by its environment
+ *
+ * Threat model:
+ * - Attacker controls one environment (tenant A) and wants to access
+ *   resources in another (tenant B).
+ * - Attacker has valid upstream credentials from a shared IdP.
+ * - Upstream IdP is shared across environments (worst case).
+ * - IdP assertions do NOT include environment_id (realistic).
+ *
+ * Known limitations:
+ * - Two environments modeled (scalable to N by induction)
+ * - No temporal validity (Tamarin symbolic model)
+ * - Refresh token cross-contamination (C-4) not modeled — that is a
+ *   data integrity issue, not an authentication bypass.
+ */
+
+builtins: signing, hashing
+
+/* ============ Restrictions ============ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y)@i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y)@i ==> not(x = y)"
+
+restriction Unique:
+  "All x #i #j. Unique(x)@i & Unique(x)@j ==> #i = #j"
+
+/* ============ Entity Setup ============ */
+
+// Upstream IdP (shared across environments — worst case for isolation).
+// The IdP has NO knowledge of Aegaeon's environment structure.
+rule UpstreamIdP_Init:
+  [ Fr(~idp_sk) ]
+  --[ IdP_Initialized($IdP) ]->
+  [ !IdP($IdP, ~idp_sk), !IdP_PK($IdP, pk(~idp_sk)), Out(pk(~idp_sk)) ]
+
+// IdP key compromise
+rule IdP_Compromise:
+  [ !IdP($IdP, idp_sk) ]
+  --[ IdP_Compromised($IdP) ]->
+  [ Out(idp_sk) ]
+
+// Tenant with its own set of environments
+rule Tenant_Init:
+  [ ]
+  --[ Tenant_Created($Tenant),
+      Unique(<'tenant', $Tenant>) ]->
+  [ !Tenant($Tenant) ]
+
+// Environment within a tenant (each has its own isolated scope)
+rule Environment_Init:
+  [ !Tenant($Tenant), Fr(~env_id) ]
+  --[ Environment_Created($Tenant, ~env_id),
+      Env_Belongs_To_Tenant(~env_id, $Tenant),
+      Unique(<'env', ~env_id>) ]->
+  [ !Environment($Tenant, ~env_id) ]
+
+// End user account within an environment
+rule Create_Account:
+  [ !Environment($Tenant, env_id), Fr(~account_id) ]
+  --[ Account_Created(env_id, $User, ~account_id),
+      Unique(<'account', env_id, ~account_id>) ]->
+  [ !Account(env_id, $User, ~account_id) ]
+
+/* ============ Account Linking (DB-Level Environment Scoping) ============ */
+
+// IdP signs a linking assertion for a specific upstream identity.
+// NOTE: The assertion does NOT include env_id — the upstream IdP has
+// no knowledge of Aegaeon's multi-tenant environment structure.
+// This matches the real implementation where the IdP ID token's sub
+// claim is environment-agnostic.
+rule IdP_Sign_Assertion:
+  let assertion = sign(<'link', $IdP, $upstream_sub, account_id>, idp_sk)
+  in
+  [ !IdP($IdP, idp_sk),
+    !Account(env_id, $User, account_id) ]
+  --[ IdP_Signed($IdP, $upstream_sub, account_id) ]->
+  [ Out(assertion) ]
+
+// Create account link: environment-scoped via DB constraint.
+// The environment scoping is enforced by:
+// 1. !Environment($Tenant, env_id) — link is created in a specific env
+// 2. !Account(env_id, ...) — account belongs to the same env
+// 3. Unique(<'link', env_id, $IdP, $upstream_sub>) — DB unique index
+//
+// The assertion does NOT contain env_id (F-8/C-4 fix: reflects reality).
+// Environment binding is a DB/application concern, not cryptographic.
+rule Link_Account:
+  [ In(assertion),
+    !Account(env_id, $User, account_id),
+    !IdP_PK($IdP, idp_pk),
+    !Environment($Tenant, env_id) ]
+  --[ Eq(verify(assertion, <'link', $IdP, $upstream_sub, account_id>,
+                idp_pk), true),
+      Account_Linked(env_id, $IdP, $upstream_sub, $User, account_id),
+      Link_In_Environment(env_id, $Tenant, $IdP, $upstream_sub),
+      Unique(<'link', env_id, $IdP, $upstream_sub>) ]->
+  [ !AccountLink(env_id, $IdP, $upstream_sub, $User, account_id),
+    Link_Active(env_id, $IdP, $upstream_sub, $User, account_id) ]
+
+/* ============ Federated Login (Environment-Scoped) ============ */
+
+// Federated login: MUST use a link from the SAME environment.
+// This models the SQL: WHERE al.environment_id = $1 AND ...
+// The !AccountLink fact is parameterized by env_id, so a link in
+// env_A structurally cannot satisfy a login attempt that requires
+// a link in env_B (different env_id → different fact instance).
+rule Federated_Login:
+  [ !AccountLink(env_id, $IdP, upstream_sub, $User, account_id),
+    Link_Active(env_id, $IdP, upstream_sub, $User, account_id),
+    !Environment($Tenant, env_id) ]
+  --[ Federated_Auth(env_id, $Tenant, $IdP, upstream_sub, $User, account_id),
+      Session_Granted(env_id, $Tenant, $User, account_id, $IdP),
+      Auth_In_Environment(env_id, $Tenant) ]->
+  [ Link_Active(env_id, $IdP, upstream_sub, $User, account_id) ]
+
+// Limit federated logins per environment (prevent unbounded traces)
+restriction federated_login_bounded:
+  "All env tenant idp sub user acct #i #j.
+     Federated_Auth(env, tenant, idp, sub, user, acct)@i &
+     Federated_Auth(env, tenant, idp, sub, user, acct)@j
+     ==> #i = #j"
+
+/* ============ Security Properties ============ */
+
+// Cross-tenant isolation: a session granted in environment env_A
+// requires a link in env_A. This is the positive assertion.
+lemma cross_tenant_isolation:
+  "All env_a tenant_a user acct idp #i.
+     Session_Granted(env_a, tenant_a, user, acct, idp)@i
+     ==> Ex upstream_sub #j.
+           Account_Linked(env_a, idp, upstream_sub, user, acct)@j & #j < #i"
+
+// F-8 FIX: Cross-environment denial — the stronger isolation property.
+// If a link exists in env_A and a session is granted in env_B (where
+// env_A != env_B), then env_B MUST have its OWN separate link.
+// This proves that links don't "leak" across environment boundaries:
+// accessing env_B always requires a link created specifically in env_B.
+lemma cross_env_denial:
+  "All env_a env_b tenant_b idp sub_a user acct_a acct_b #i #j.
+     Account_Linked(env_a, idp, sub_a, user, acct_a)@i &
+     Session_Granted(env_b, tenant_b, user, acct_b, idp)@j &
+     not(env_a = env_b)
+     ==> Ex sub_b #k.
+           Account_Linked(env_b, idp, sub_b, user, acct_b)@k & #k < #j"
+
+// Upstream sub binding: within a given environment, one upstream identity
+// (idp + sub) maps to exactly one end_user. This follows from the
+// Unique(<'link', env_id, $IdP, $upstream_sub>) constraint, modeling the
+// DB unique index on (environment_id, upstream_issuer, upstream_sub_hash).
+lemma upstream_sub_binding:
+  "All env idp sub user1 user2 acct1 acct2 #i #j.
+     Account_Linked(env, idp, sub, user1, acct1)@i &
+     Account_Linked(env, idp, sub, user2, acct2)@j
+     ==> #i = #j"
+
+// Environment-scoped login: every federated auth event is bound to
+// the specific environment where the link was created.
+lemma environment_scoped_login:
+  "All env tenant idp sub user acct #i.
+     Federated_Auth(env, tenant, idp, sub, user, acct)@i
+     ==> Ex #j. Account_Linked(env, idp, sub, user, acct)@j & #j < #i"
+
+// F-9 FIX: Link-tenant binding — the tenant associated with a session
+// is determined by the link's environment, which belongs to exactly
+// one tenant. This replaces the trivial link_environment_immutability
+// (which only proved environment existence).
+//
+// This proves that federated auth in env_id always associates with the
+// tenant that owns env_id — there's no way to authenticate "through"
+// one tenant's environment but get a session attributed to another tenant.
+lemma link_tenant_binding:
+  "All env tenant idp sub user acct #i.
+     Federated_Auth(env, tenant, idp, sub, user, acct)@i
+     ==> Ex #j. Env_Belongs_To_Tenant(env, tenant)@j & #j < #i"
+
+end

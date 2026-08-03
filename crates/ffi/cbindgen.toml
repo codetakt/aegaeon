@@ -1,0 +1,16 @@
+language = "C"
+cpp_compat = true
+include_guard = "AEGAEON_FFI_H"
+sys_includes = ["stdint.h", "stddef.h"]
+
+[export]
+include = [
+    "aegaeon_tlv_header_entry",
+    "aegaeon_tlv_header_result",
+    "aegaeon_parse_jose_header_tlv",
+    "aegaeon_free_tlv_header_result",
+    "aegaeon_raw_json_structural_member",
+    "aegaeon_raw_json_structural_result",
+    "aegaeon_parse_raw_json_structural",
+    "aegaeon_free_raw_json_structural_result",
+]

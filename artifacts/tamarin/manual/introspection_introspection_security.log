@@ -1,0 +1,266 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory IntrospectionSecurity] Theory loaded
+[Theory IntrospectionSecurity] Theory translated
+[Theory IntrospectionSecurity] Derivation checks started
+[Theory IntrospectionSecurity] Derivation checks ended
+[Theory IntrospectionSecurity] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory IntrospectionSecurity begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
+
+rule (modulo E) Issue_Token:
+   [ Fr( ~token ) ]
+  --[ TokenIssued( $AS, $Client, ~token ), TokenActive( ~token ) ]->
+   [ !Token( $AS, $Client, ~token ), !TokenOwner( ~token, $Client ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Revoke_Token:
+   [ !Token( $AS, client_id, token ), !TokenOwner( token, client_id ) ]
+  --[ TokenRevoked( $AS, client_id, token ), TokenInactive( token ) ]->
+   [ RevokedToken( token ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RS_Introspect_Request:
+   [ !ResourceServer( $AS, $RS ), In( token ) ]
+  --[ IntrospectionRequested( $RS, token ) ]->
+   [ Out( <'introspect', token, $RS> ), PendingIntrospection( $RS, token ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Respond_Active:
+   [
+   In( <'introspect', token, $RS> ), !Token( $AS, client_id, token ),
+   !TokenOwner( token, client_id ), !ResourceServer( $AS, $RS )
+   ]
+  --[
+  IntrospectionActive( $AS, $RS, token, client_id ),
+  ResponseSent( $AS, $RS, 'active', token ), CacheControlSet( 'no-store' )
+  ]->
+   [ Out( <'active', token, client_id, 'no-store'> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Respond_Inactive:
+   [
+   In( <'introspect', token, $RS> ), RevokedToken( token ),
+   !ResourceServer( $AS, $RS )
+   ]
+  --[
+  IntrospectionInactive( $AS, $RS, token ),
+  ResponseSent( $AS, $RS, 'inactive', token ),
+  CacheControlSet( 'no-store' )
+  ]->
+   [ Out( <'inactive', token, 'no-store'> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Unauthorized_Introspect:
+   [ In( token ), Fr( ~attacker ) ]
+  --[ UnauthorizedIntrospection( ~attacker, token ) ]->
+   [ Out( <'introspect', token, ~attacker> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_ResourceServer:
+   [ Fr( ~rs_id ) ]
+  --[ ResourceServerRegistered( $AS, ~rs_id ) ]->
+   [ !ResourceServer( $AS, ~rs_id ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma introspection_requires_authz:
+  all-traces
+  "∀ AS RS token cid #i.
+    (IntrospectionActive( AS, RS, token, cid ) @ #i) ⇒
+    (∃ #j. (ResourceServerRegistered( AS, RS ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS RS token cid #i.
+  (IntrospectionActive( AS, RS, token, cid ) @ #i)
+ ∧
+  ∀ #j. (ResourceServerRegistered( AS, RS ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !Token( $AS, cid, token ) ▶₁ #i )
+  case Issue_Token
+  solve( !TokenOwner( ~token, $Client ) ▶₂ #i )
+    case Issue_Token
+    by solve( !ResourceServer( $AS, $RS ) ▶₃ #i )
+  qed
+qed
+
+lemma introspection_active_claim_sound:
+  all-traces
+  "∀ AS RS token cid #i.
+    (IntrospectionActive( AS, RS, token, cid ) @ #i) ⇒
+    ((∃ #j. (TokenIssued( AS, cid, token ) @ #j) ∧ (#j < #i)) ∧
+     (¬(∃ #k. (TokenRevoked( AS, cid, token ) @ #k) ∧ (#k < #i))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS RS token cid #i.
+  (IntrospectionActive( AS, RS, token, cid ) @ #i)
+ ∧
+  ((∀ #j. (TokenIssued( AS, cid, token ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∃ #k. (TokenRevoked( AS, cid, token ) @ #k) ∧ #k < #i))"
+*/
+simplify
+solve( (∀ #j. (TokenIssued( $AS, cid, token ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∃ #k. (TokenRevoked( $AS, cid, token ) @ #k) ∧ #k < #i) )
+  case case_1
+  solve( !Token( $AS, cid, token ) ▶₁ #i )
+    case Issue_Token
+    by contradiction /* from formulas */
+  qed
+next
+  case case_2
+  solve( !Token( $AS, cid, token ) ▶₁ #i )
+    case Issue_Token
+    solve( !TokenOwner( ~token, $Client ) ▶₂ #i )
+      case Issue_Token
+      by solve( !ResourceServer( $AS, $RS ) ▶₃ #i )
+    qed
+  qed
+qed
+
+lemma introspection_inactive_claim_sound:
+  all-traces
+  "∀ AS RS token #i.
+    (IntrospectionInactive( AS, RS, token ) @ #i) ⇒
+    (∃ cid #j. (TokenRevoked( AS, cid, token ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS RS token #i.
+  (IntrospectionInactive( AS, RS, token ) @ #i)
+ ∧
+  ∀ cid #j. (TokenRevoked( AS, cid, token ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( RevokedToken( token ) ▶₁ #i )
+  case Revoke_Token
+  by solve( !ResourceServer( $AS, $RS ) ▶₂ #i )
+qed
+
+lemma introspection_confidentiality:
+  all-traces
+  "∀ AS RS status token #i.
+    (ResponseSent( AS, RS, status, token ) @ #i) ⇒
+    (∃ #j. (ResourceServerRegistered( AS, RS ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS RS status token #i.
+  (ResponseSent( AS, RS, status, token ) @ #i)
+ ∧
+  ∀ #j. (ResourceServerRegistered( AS, RS ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( ResponseSent( AS, RS, status, token ) @ #i )
+  case AS_Respond_Active
+  solve( !Token( $AS, client_id, token ) ▶₁ #i )
+    case Issue_Token
+    solve( !TokenOwner( ~token, $Client ) ▶₂ #i )
+      case Issue_Token
+      by solve( !ResourceServer( $AS, $RS ) ▶₃ #i )
+    qed
+  qed
+next
+  case AS_Respond_Inactive
+  solve( RevokedToken( token ) ▶₁ #i )
+    case Revoke_Token
+    by solve( !ResourceServer( $AS, $RS ) ▶₂ #i )
+  qed
+qed
+
+lemma introspection_cache_control:
+  all-traces
+  "∀ AS RS status token #i.
+    (ResponseSent( AS, RS, status, token ) @ #i) ⇒
+    (CacheControlSet( 'no-store' ) @ #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ AS RS status token #i.
+  (ResponseSent( AS, RS, status, token ) @ #i)
+ ∧
+  ¬(CacheControlSet( 'no-store' ) @ #i)"
+*/
+simplify
+solve( ResponseSent( AS, RS, status, token ) @ #i )
+  case AS_Respond_Active
+  by contradiction /* from formulas */
+next
+  case AS_Respond_Inactive
+  by contradiction /* from formulas */
+qed
+
+lemma token_owner_privacy:
+  all-traces
+  "∀ attacker token #i.
+    (UnauthorizedIntrospection( attacker, token ) @ #i) ⇒
+    (¬(∃ AS cid #j. IntrospectionActive( AS, attacker, token, cid ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ attacker token #i.
+  (UnauthorizedIntrospection( attacker, token ) @ #i)
+ ∧
+  ∃ AS cid #j. (IntrospectionActive( AS, attacker, token, cid ) @ #j)"
+*/
+by simplify
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./introspection/introspection_security.spthy
+
+  processing time: 0.48s
+
+  introspection_requires_authz (all-traces): verified (4 steps)
+  introspection_active_claim_sound (all-traces): verified (7 steps)
+  introspection_inactive_claim_sound (all-traces): verified (3 steps)
+  introspection_confidentiality (all-traces): verified (7 steps)
+  introspection_cache_control (all-traces): verified (4 steps)
+  token_owner_privacy (all-traces): verified (1 steps)
+
+==============================================================================

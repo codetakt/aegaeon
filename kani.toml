@@ -1,0 +1,93 @@
+# Kani runner configuration for Aegaeon.
+#
+# This file is consumed by `scripts/kani/run_kani.sh` (and `nix run .#verify-kani`).
+# Kani itself does not auto-load this file; the wrapper script translates this
+# TOML into `cargo kani` flags to keep local/CI behaviour consistent.
+#
+# Precedence:
+# - Environment variables override this file (see scripts/kani/run_kani.sh).
+# - This file provides the default policy for local runs.
+
+[kani]
+# Preferred CBMC SAT solver.
+# See `cargo kani --help` for supported values.
+solver = "cadical"
+
+# Number of worker threads for Kani (note: this only affects runs that verify
+# multiple harnesses in a single `cargo kani` invocation).
+jobs = 1
+
+# Default loop unwinding used by CBMC when not overridden per harness.
+default_unwind = 4
+
+# Common flags passed to every `cargo kani` invocation.
+# Claim-bearing Kani evidence keeps default unwinding checks enabled by not
+# passing `--no-unwinding-checks`; use an explicit KANI_EXTRA_FLAGS override
+# only for diagnostic regression triage.
+# Keep this aligned with `docs/verification/kani/README.md`.
+extra_flags = "--unwind 16"
+
+# Preferred panic strategy for Kani builds: "abort" or "unwind".
+panic = "abort"
+
+# Soft virtual-memory cap applied to the Kani process (0 disables).
+vmem_limit_mb = 16384
+
+[timeouts]
+# Per-harness timeout (seconds). This is enforced by the wrapper script via the
+# host's `timeout(1)` command (not by Kani itself).
+harness_secs = 180
+
+# Per-harness timeout for the optional server harnesses.
+server_harness_secs = 180
+
+[suites]
+# Default suite for local runs. CI overrides via `AEG_KANI_SUITE`.
+default = "smoke"
+
+[suites.smoke]
+harnesses = [
+    "proof_trivial_arithmetic",
+    "proof_parse_cache_control_no_panic",
+]
+
+[suites.regression]
+# Keep the smoke set first.
+harnesses = [
+    "proof_trivial_arithmetic",
+    "proof_parse_cache_control_no_panic",
+
+    # Toolchain regressions (historical ICE triggers / sanity checks).
+    "proof_nix_integration_check",
+    "proof_level0_primitives_only",
+    "proof_bytestring_minimal_inline",
+    "proof_level6_bytestring_store",
+    "proof_string_new_minimal",
+    "proof_string_from_minimal",
+    "proof_option_string_minimal",
+    "proof_overlap_active_kid_conflict_rejected",
+    "proof_overlap_merge_keeps_active_first_and_unique_kids",
+]
+
+[server]
+# Server harnesses are compiled from `crates/server` and can be slow on cold
+# builds. CI enables these by default; local runs keep them disabled.
+enabled_default = false
+
+harnesses = [
+    "kani_test::kani_tests::verify_client_assertion_replay_window_bounds",
+    "kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds",
+    "kani_test::kani_tests::verify_oidc_logout_idempotent_jti",
+    "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids",
+    "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout",
+    "kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries",
+    "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed",
+    "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite",
+    "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite",
+]
+
+# `crates/server/kani-reproducers/*.rs` are integration-style Kani assets.
+# They are retained outside Cargo's integration-test target set as reproducers
+# until each property is
+# converted into a bounded `src/kani_test.rs` harness that this runner can
+# execute directly with `cargo kani --harness ...`.

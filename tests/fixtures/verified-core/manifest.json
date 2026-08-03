@@ -1,0 +1,11 @@
+{
+  "artifact": "verified_core.wasm",
+  "version": "1.0.0",
+  "size_bytes": 193011,
+  "sha256": "6cb7c55a0ff4384c88b51f002587324953e303ca60f4e9d2ba8bd4df49529539",
+  "sha512": "e81e2b4598c5d3fa31f9c4ead3e747dc24b5018686631f2c499b1a8aa457d8e8d8cabd50952196ce52e0ec3354d2db040ea42835633a04b3965b74eb620fd9fb",
+  "sri": "sha256-bLfFWg/0OEyItR8AJYcySVPjA8pg9OnSuovU30lSlTk=",
+  "generated_at": "2026-03-10T10:08:52.509Z",
+  "source_commit": "unknown",
+  "abi_version": "1.0.0"
+}

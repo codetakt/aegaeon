@@ -1,0 +1,36 @@
+theory ClientAuthentication
+begin
+
+builtins: hashing, symmetric-encryption
+
+/* Client authentication protocol model */
+
+// Client credentials
+rule Register_Client:
+  [ Fr(~client_id), Fr(~client_secret) ]
+  --[ ClientRegistered($A, ~client_id),
+      ClientSecretStored($A, ~client_id, ~client_secret) ]->
+  [ !Client($A, ~client_id, ~client_secret) ]
+
+// Token request with client authentication (hashed secret sent over the wire)
+rule Token_Request:
+  [ !Client($A, client_id, client_secret) ]
+  --[ RequestToken($A, client_id) ]->
+  [ Out(<client_id, h(client_secret)>) ]
+
+// Authorization server validates client
+rule AS_Validate_Client:
+  [ In(<client_id, h(client_secret)>), !Client($A, client_id, client_secret) ]
+  --[ ClientAuthenticated($A, client_id) ]->
+  [ ClientValid($A, client_id) ]
+
+// Security properties
+lemma client_authentication:
+  "All A cid #i. ClientAuthenticated(A, cid) @ i ==>
+    Ex #j. ClientRegistered(A, cid) @ j & j < i"
+
+lemma client_credential_secrecy:
+  "All A cid cs #i. ClientSecretStored(A, cid, cs) @ i ==>
+    not Ex #j. K(cs) @ j"
+
+end

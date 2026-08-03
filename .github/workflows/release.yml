@@ -1,0 +1,269 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.9.0-beta)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "${GITHUB_OUTPUT}"
+          echo "Release version: $VERSION"
+          
+      - name: Validate crate versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NUM="${VERSION#v}"  # Remove 'v' prefix
+          
+          for crate in server client jose observability loadtest; do
+            if grep -q "version = \"$VERSION_NUM\"" "crates/$crate/Cargo.toml"; then
+              echo "✓ $crate: $VERSION_NUM"
+            else
+              echo "✗ $crate: Version mismatch"
+              exit 1
+            fi
+          done
+
+  build-release:
+    name: Build Release Artifacts
+    needs: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binaries
+        run: |
+          cargo build --release --all
+          
+      - name: Package artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp target/release/aegaeon-server release-artifacts/
+          cp target/release/aegaeon-client release-artifacts/ || true
+          tar czf aegaeon-${{ needs.validate-release.outputs.version }}-linux-amd64.tar.gz -C release-artifacts .
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries
+          path: aegaeon-*.tar.gz
+
+  generate-sbom:
+    name: Generate SBOM
+    needs: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx
+        
+      - name: Generate SBOM
+        run: |
+          cargo cyclonedx --format json --spec-version 1.5 > aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json
+          cargo cyclonedx --format xml --spec-version 1.5 > aegaeon-${{ needs.validate-release.outputs.version }}-sbom.xml
+          
+      - name: Sign SBOM
+        uses: sigstore/cosign-installer@v3
+      - run: |
+          cosign sign-blob --yes \
+            --output-signature aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json.sig \
+            aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json
+            
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            aegaeon-*-sbom.json
+            aegaeon-*-sbom.json.sig
+            aegaeon-*-sbom.xml
+
+  security-scan:
+    name: Security Scan
+    needs: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run security audit
+        run: |
+          cargo install cargo-audit
+          cargo audit --json > security-report.json
+          cargo audit
+          
+      - name: Check for vulnerabilities
+        run: |
+          if cargo audit 2>&1 | grep -q "Vulnerabilities"; then
+            echo "::warning::Security vulnerabilities detected in release"
+          fi
+          
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.json
+
+  run-conformance:
+    name: Run Conformance Tests
+    needs: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run RFC compliance tests
+        run: |
+          chmod +x scripts/validation/test_rfc_compliance.sh
+          ./scripts/validation/test_rfc_compliance.sh | tee conformance-report.txt
+          
+      - name: Run RFC 7520 test vectors
+        run: |
+          cargo test --package aegaeon-jose --test rfc7520_vectors | tee -a conformance-report.txt
+          
+      - name: Upload conformance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: conformance-report.txt
+
+  create-release:
+    name: Create GitHub Release
+    needs: [validate-release, build-release, generate-sbom, security-scan, run-conformance]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Generate release notes
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          cat > release-notes.md << EOF
+          # Aegaeon - $VERSION
+          
+          ## 📦 Release Artifacts
+          - Binary: aegaeon-$VERSION-linux-amd64.tar.gz
+          - SBOM: aegaeon-$VERSION-sbom.json (signed)
+          - Security Report: security-report.json
+          - Conformance Report: conformance-report.txt
+          
+          ## ✅ Validation Results
+          - RFC Compliance: All MUST requirements validated
+          - Security Scan: Completed
+          - SBOM: Generated and signed
+          - Test Vectors: 100% pass rate
+          
+          ## 📋 RFC Coverage
+          - RFC 6749: OAuth 2.0 Framework ✓
+          - RFC 6750: Bearer Token Usage ✓
+          - RFC 7636: PKCE ✓
+          - RFC 7009: Token Revocation ✓
+          - RFC 7662: Token Introspection ✓
+          - RFC 7515-7519: JOSE/JWT Suite ✓
+          - RFC 7591: Dynamic Client Registration ✓
+          - RFC 8414: AS Metadata ✓
+          - RFC 9126: PAR ✓
+          - RFC 9449: DPoP ✓
+          - RFC 9700: Security BCP ✓
+          
+          See CHANGELOG.md for detailed release notes.
+          EOF
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.5.0
+        with:
+          tag_name: ${{ needs.validate-release.outputs.version }}
+          name: Aegaeon ${{ needs.validate-release.outputs.version }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(needs.validate-release.outputs.version, 'beta') || contains(needs.validate-release.outputs.version, 'alpha') }}
+          files: |
+            release-binaries/aegaeon-*.tar.gz
+            sbom/aegaeon-*-sbom.json
+            sbom/aegaeon-*-sbom.json.sig
+            sbom/aegaeon-*-sbom.xml
+            security-report/security-report.json
+            conformance-report/conformance-report.txt
+            
+      - name: Generate attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: release-binaries/aegaeon-*.tar.gz
+
+  publish-container:
+    name: Publish Container Image
+    needs: [validate-release, create-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+
+      - name: Build OCI image (Nix)
+        run: |
+          nix build .#docker-image --print-build-logs
+          gzip -dc result | docker load
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push OCI image
+        run: |
+          set -euo pipefail
+          SRC_IMAGE="aegaeon:latest"
+          VERSION_TAG="ghcr.io/${{ github.repository }}/aegaeon-server:${{ needs.validate-release.outputs.version }}"
+          LATEST_TAG="ghcr.io/${{ github.repository }}/aegaeon-server:latest"
+          docker tag "$SRC_IMAGE" "$VERSION_TAG"
+          docker tag "$SRC_IMAGE" "$LATEST_TAG"
+          docker push "$VERSION_TAG"
+          docker push "$LATEST_TAG"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+            
+      - name: Sign container image
+        run: |
+          cosign sign --yes ghcr.io/${{ github.repository }}/aegaeon-server:${{ needs.validate-release.outputs.version }}

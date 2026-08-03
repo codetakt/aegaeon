@@ -1,0 +1,22 @@
+theory PKCE_Security
+begin
+
+builtins: hashing
+
+rule Authorization:
+    [ Fr(c), Fr(v) ]
+    --[ CodeIssued(c), ChallengeStored(c, h(v)) ]->
+    [ Out(c), !Challenge(c, h(v)) ]
+
+rule Token:
+    [ In(<c, ver>), !Challenge(c, h(ver)) ]
+    --[ TokenRequest(c, ver), TokenIssued(c) ]->
+    [ ]
+
+lemma mismatched_verifiers_cannot_inject_codes:
+  "All c hv ver #i #j #k.
+    (CodeIssued(c)@i & ChallengeStored(c, hv)@i &
+     TokenRequest(c, ver)@j & TokenIssued(c)@k)
+    ==> (hv = h(ver))"
+
+end

@@ -1,0 +1,86 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory CommonModel] Theory loaded
+[Theory CommonModel] Theory translated
+[Theory CommonModel] Derivation checks started
+[Theory CommonModel] Derivation checks ended
+[Theory CommonModel] Theory closed
+theory CommonModel begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+rule (modulo E) InitConfidentialClient:
+   [ ] --[ Confidential( 'clientA' ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ValidBasicAuth:
+   [ ] --[ ValidAuth( $C, 'basic' ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ValidPostAuth:
+   [ ] --[ ValidAuth( $C, 'post' ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) ValidPrivateKeyJwt:
+   [ ] --[ ValidAuth( $C, 'pkjwt' ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RegisterRedirectUri:
+   [ ] --[ Registered( $C, $RU ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AllowScope:
+   [ ] --[ AllowedScope( $C, $S ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AllowGrant:
+   [ ] --[ AllowedGrant( $C, $G ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) SecureDeliver:
+   [ ] --[ SSend( $A, $B, $M ) ]-> [ SRecv( $A, $B, $M ) ]
+
+  /* has exactly the trivial AC variant */
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./common/common_model.spthy
+
+  processing time: 0.12s
+
+
+==============================================================================

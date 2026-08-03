@@ -1,0 +1,448 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory AuthCode_Session_Integrity] Theory loaded
+[Theory AuthCode_Session_Integrity] Theory translated
+[Theory AuthCode_Session_Integrity] Derivation checks started
+[Theory AuthCode_Session_Integrity] Derivation checks ended
+[Theory AuthCode_Session_Integrity] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory AuthCode_Session_Integrity begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, mac/2, pair/2, pk/1, sdec/2, senc/2, sign/2,
+           snd/1, true/0, verify/3, verify_mac/3[destructor]
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true,
+    verify_mac(mac(m, k), m, k) = true
+
+
+
+
+
+
+
+
+
+
+
+restriction unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register_User:
+   [ Fr( ~password ) ]
+  --[ UserRegistered( $User, ~password ) ]->
+   [ !User( $User, ~password ), Out( $User ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Register_Client:
+   [ Fr( ~client_secret ) ]
+  --[ ClientRegistered( $Client, $AS, ~client_secret, $RedirectURI ) ]->
+   [
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ), Out( $Client ),
+   Out( $RedirectURI )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Setup:
+   [ Fr( ~sk_as ) ]
+  --[ ASSetup( $AS, pk(~sk_as) ) ]->
+   [ !AS( $AS, ~sk_as ), Out( pk(~sk_as) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) User_Authorize:
+   [
+   !User( $User, ~password ),
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ), Fr( ~state ),
+   Fr( ~nonce ), Fr( ~code_verifier )
+   ]
+  --[
+  UserAuthorizes( $User, $Client, ~state, ~nonce ),
+  StateGenerated( $User, $Client, ~state ),
+  NonceGenerated( $User, $Client, ~nonce ), Unique( <'state', ~state> ),
+  Unique( <'nonce', ~nonce> )
+  ]->
+   [
+   AuthRequest( $User, $Client, $AS, ~state, ~nonce, h(~code_verifier),
+                $RedirectURI
+   ),
+   UserSession( $User, $Client, ~state, ~nonce, ~code_verifier )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Issue_Code:
+   [
+   AuthRequest( $User, $Client, $AS, state, nonce, code_challenge,
+                $RedirectURI
+   ),
+   !User( $User, password ),
+   !Client( $Client, $AS, client_secret, $RedirectURI ), !AS( $AS, ~sk_as ),
+   Fr( ~code )
+   ]
+  --[
+  ASIssuesCode( $AS, $User, $Client, ~code, state, nonce ),
+  CodeBoundToClient( $AS, ~code, $Client ),
+  CodeBoundToUser( $AS, ~code, $User ),
+  CodeBoundToChallenge( $AS, ~code, code_challenge ),
+  Unique( <'code', ~code> )
+  ]->
+   [
+   AuthCode( $AS, $Client, $User, ~code, state, nonce, code_challenge,
+             $RedirectURI
+   ),
+   Out( <~code, state> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Exchange_Code:
+   [
+   In( <code, state> ),
+   UserSession( $User, $Client, state, nonce, code_verifier ),
+   AuthCode( $AS, $Client, $User, code, state, nonce, h(code_verifier),
+             $RedirectURI
+   ),
+   !Client( $Client, $AS, ~client_secret, $RedirectURI ),
+   !AS( $AS, ~sk_as ), Fr( ~access_token ), Fr( ~refresh_token )
+   ]
+  --[
+  CodeExchanged( $Client, code, ~access_token ),
+  TokenIssued( $AS, $Client, $User, ~access_token ),
+  StateVerified( $Client, state ), PKCEVerified( $Client, code_verifier ),
+  SessionComplete( $User, $Client, state, nonce, ~access_token ),
+  Unique( <'token_exchange', code> )
+  ]->
+   [
+   !AccessToken( $Client, $User, ~access_token, nonce ),
+   !RefreshToken( $Client, $User, ~refresh_token ),
+   SecChannel( $AS, $Client, ~access_token )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Receives_Token:
+   [ SecChannel( $AS, $Client, token ) ]
+  --[ TokenDelivered( $AS, $Client, token ) ]->
+   [ !ClientToken( $Client, token ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Resource_Access:
+   [
+   !AccessToken( $Client, $User, access_token, nonce ),
+   !ClientToken( $Client, access_token ), Fr( ~resource_id )
+   ]
+  --[
+  ResourceAccessed( $Client, $User, access_token, ~resource_id ),
+  NonceVerified( nonce )
+  ]->
+   [ Out( ~resource_id ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) State_Injection:
+   [ Fr( ~fake_state ) ]
+  --[ StateInjected( ~fake_state ) ]->
+   [ Out( ~fake_state ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma session_integrity:
+  all-traces
+  "∀ user client state nonce token #i.
+    (SessionComplete( user, client, state, nonce, token ) @ #i) ⇒
+    (∃ #k. (UserAuthorizes( user, client, state, nonce ) @ #k) ∧ (#k < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user client state nonce token #i.
+  (SessionComplete( user, client, state, nonce, token ) @ #i)
+ ∧
+  ∀ #k. (UserAuthorizes( user, client, state, nonce ) @ #k) ⇒ ¬(#k < #i)"
+*/
+simplify
+solve( UserSession( $User, $Client, state, nonce, code_verifier ) ▶₁ #i )
+  case User_Authorize
+  by contradiction /* from formulas */
+qed
+
+lemma code_single_use:
+  all-traces
+  "∀ client code1 token1 token2 #i #j.
+    ((CodeExchanged( client, code1, token1 ) @ #i) ∧
+     (CodeExchanged( client, code1, token2 ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client code1 token1 token2 #i #j.
+  (CodeExchanged( client, code1, token1 ) @ #i) ∧
+  (CodeExchanged( client, code1, token2 ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma state_csrf_protection:
+  all-traces
+  "∀ user client state1 state2 nonce token #i #j.
+    ((UserAuthorizes( user, client, state1, nonce ) @ #i) ∧
+     (SessionComplete( user, client, state2, nonce, token ) @ #j)) ⇒
+    (state1 = state2)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user client state1 state2 nonce token #i #j.
+  (UserAuthorizes( user, client, state1, nonce ) @ #i) ∧
+  (SessionComplete( user, client, state2, nonce, token ) @ #j)
+ ∧
+  ¬(state1 = state2)"
+*/
+simplify
+solve( !User( $User, ~password ) ▶₀ #i )
+  case Register_User
+  solve( !Client( $Client, $AS, ~client_secret, $RedirectURI ) ▶₁ #i )
+    case Register_Client
+    solve( UserSession( $User, $Client, state2, ~nonce, code_verifier.1
+           ) ▶₁ #j )
+      case User_Authorize
+      by contradiction /* from formulas */
+    qed
+  qed
+qed
+
+lemma nonce_replay_protection:
+  all-traces
+  "∀ user1 user2 client1 client2 nonce #i #j.
+    ((NonceGenerated( user1, client1, nonce ) @ #i) ∧
+     (NonceGenerated( user2, client2, nonce ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user1 user2 client1 client2 nonce #i #j.
+  (NonceGenerated( user1, client1, nonce ) @ #i) ∧
+  (NonceGenerated( user2, client2, nonce ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+simplify
+by contradiction /* from formulas */
+
+lemma authorization_binding:
+  all-traces
+  "∀ client user token resource #i.
+    (ResourceAccessed( client, user, token, resource ) @ #i) ⇒
+    (∃ as #j. (TokenIssued( as, client, user, token ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user token resource #i.
+  (ResourceAccessed( client, user, token, resource ) @ #i)
+ ∧
+  ∀ as #j. (TokenIssued( as, client, user, token ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !AccessToken( $Client, $User, token, nonce ) ▶₀ #i )
+  case Client_Exchange_Code
+  by contradiction /* from formulas */
+qed
+
+lemma pkce_code_injection_prevention:
+  all-traces
+  "∀ client verifier code token #i.
+    ((CodeExchanged( client, code, token ) @ #i) ∧
+     (PKCEVerified( client, verifier ) @ #i)) ⇒
+    (∃ as #j.
+      (CodeBoundToChallenge( as, code, h(verifier) ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client verifier code token #i.
+  (CodeExchanged( client, code, token ) @ #i) ∧
+  (PKCEVerified( client, verifier ) @ #i)
+ ∧
+  ∀ as #j.
+   (CodeBoundToChallenge( as, code, h(verifier) ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( UserSession( $User, $Client, state, nonce, verifier ) ▶₁ #i )
+  case User_Authorize
+  solve( AuthCode( $AS, $Client, $User, code, ~state, ~nonce,
+                   h(~code_verifier), $RedirectURI
+         ) ▶₂ #i )
+    case AS_Issue_Code
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma user_authentication:
+  all-traces
+  "∀ as user client code state nonce #i.
+    (ASIssuesCode( as, user, client, code, state, nonce ) @ #i) ⇒
+    (∃ password #j. (UserRegistered( user, password ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as user client code state nonce #i.
+  (ASIssuesCode( as, user, client, code, state, nonce ) @ #i)
+ ∧
+  ∀ password #j. (UserRegistered( user, password ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( AuthRequest( $User, $Client, $AS, state, nonce, code_challenge,
+                    $RedirectURI
+       ) ▶₀ #i )
+  case User_Authorize
+  by contradiction /* from formulas */
+qed
+
+lemma client_authentication:
+  all-traces
+  "∀ client code token #i.
+    (CodeExchanged( client, code, token ) @ #i) ⇒
+    (∃ as secret uri #j.
+      (ClientRegistered( client, as, secret, uri ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client code token #i.
+  (CodeExchanged( client, code, token ) @ #i)
+ ∧
+  ∀ as secret uri #j.
+   (ClientRegistered( client, as, secret, uri ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( UserSession( $User, $Client, state, nonce, code_verifier ) ▶₁ #i )
+  case User_Authorize
+  by contradiction /* from formulas */
+qed
+
+lemma token_session_binding:
+  all-traces
+  "∀ client user token nonce resource #i.
+    ((ResourceAccessed( client, user, token, resource ) @ #i) ∧
+     (NonceVerified( nonce ) @ #i)) ⇒
+    (∃ state #j.
+      (SessionComplete( user, client, state, nonce, token ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user token nonce resource #i.
+  (ResourceAccessed( client, user, token, resource ) @ #i) ∧
+  (NonceVerified( nonce ) @ #i)
+ ∧
+  ∀ state #j.
+   (SessionComplete( user, client, state, nonce, token ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( !AccessToken( $Client, $User, token, nonce ) ▶₀ #i )
+  case Client_Exchange_Code
+  by contradiction /* from formulas */
+qed
+
+lemma no_token_without_authorization:
+  all-traces
+  "∀ as client user token #i.
+    (TokenIssued( as, client, user, token ) @ #i) ⇒
+    (∃ state nonce #j.
+      (UserAuthorizes( user, client, state, nonce ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client user token #i.
+  (TokenIssued( as, client, user, token ) @ #i)
+ ∧
+  ∀ state nonce #j.
+   (UserAuthorizes( user, client, state, nonce ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( UserSession( $User, $Client, state, nonce, code_verifier ) ▶₁ #i )
+  case User_Authorize
+  by contradiction /* from formulas */
+qed
+
+lemma token_secrecy:
+  all-traces
+  "∀ as client user token #i.
+    (TokenIssued( as, client, user, token ) @ #i) ⇒
+    (¬(∃ #j. K( token ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ as client user token #i.
+  (TokenIssued( as, client, user, token ) @ #i) ∧ ∃ #j. (K( token ) @ #j)"
+*/
+simplify
+solve( UserSession( $User, $Client, state, nonce, code_verifier ) ▶₁ #i )
+  case User_Authorize
+  solve( AuthCode( $AS, $Client, $User, code, ~state, ~nonce,
+                   h(~code_verifier), $RedirectURI
+         ) ▶₂ #i )
+    case AS_Issue_Code
+    solve( !Client( $Client, $AS, ~client_secret, $RedirectURI ) ▶₃ #i )
+      case Register_Client
+      solve( !AS( $AS, ~sk_as ) ▶₄ #i )
+        case AS_Setup
+        by solve( !KU( ~access_token ) @ #vk.3 )
+      qed
+    qed
+  qed
+qed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.10.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2025-12-19 02:05:44.696222109 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: ./authcode/authcode_session_integrity.spthy
+
+  processing time: 1.61s
+
+  session_integrity (all-traces): verified (3 steps)
+  code_single_use (all-traces): verified (2 steps)
+  state_csrf_protection (all-traces): verified (5 steps)
+  nonce_replay_protection (all-traces): verified (2 steps)
+  authorization_binding (all-traces): verified (3 steps)
+  pkce_code_injection_prevention (all-traces): verified (4 steps)
+  user_authentication (all-traces): verified (3 steps)
+  client_authentication (all-traces): verified (3 steps)
+  token_session_binding (all-traces): verified (3 steps)
+  no_token_without_authorization (all-traces): verified (3 steps)
+  token_secrecy (all-traces): verified (6 steps)
+
+==============================================================================

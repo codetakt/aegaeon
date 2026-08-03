@@ -1,0 +1,44 @@
+=== OIDC Test Suite Results ===
+Date: 2025-12-15
+Command: cargo test -p aegaeon-server --test oidc_e2e_test --test oidc_hash_vectors --test oidc_rp_flow_test --test userinfo_route_test -- --include-ignored
+
+=== oidc_e2e_test (9 tests) ===
+test test_hash_computation ... ok
+test test_multiple_audiences_azp ... ok
+test test_id_token_max_age_and_hash_validation ... ok
+test test_scope_claim_filtering ... ok
+test test_id_token_creation_validation ... ok
+test test_oidc_authorization_code_flow ... ok
+test test_oidc_discovery ... ok
+test test_token_issuer_id_token_validates_end_to_end ... ok
+test test_userinfo_endpoint ... ok
+
+=== oidc_hash_vectors (2 tests) ===
+test oidc_hash_vector_rs256 ... ok
+test oidc_hash_vector_rs512 ... ok
+
+=== oidc_rp_flow_test (1 test) ===
+test oidc_rp_end_to_end_flow ... ok
+
+=== userinfo_route_test (5 tests) ===
+test userinfo_returns_not_found_when_disabled ... ok
+test discovery_returns_not_found_when_disabled ... ok
+test userinfo_requires_authorization_header ... ok
+test discovery_returns_document_when_enabled ... ok
+test userinfo_returns_claims_when_enabled ... ok
+
+=== Summary ===
+Total Tests: 17
+Passed: 17
+Failed: 0
+Ignored: 0
+
+Test Coverage:
+- OIDC E2E Flow: Authorization code flow with id_token
+- ID Token: Creation, validation, max_age, hash (at_hash/c_hash)
+- Audiences: Multiple audiences with azp claim
+- Scopes: Claim filtering based on scopes
+- Hash Computation: RS256 and RS512 vectors verified
+- RP Flow: End-to-end relying party flow
+- Userinfo: Enabled/disabled states, authorization header requirement
+- Discovery: Enabled/disabled states, document content

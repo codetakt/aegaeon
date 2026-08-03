@@ -1,0 +1,8 @@
+warning: ffi@0.9.0-beta: Generated /home/claude/Workspaces/conceptual/aegaeon/target/debug/build/ffi-2e95ca6d5bb48376/out/aegaeon_tlv.h
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running tests/kms_integration_test.rs (target/debug/deps/kms_integration_test-50c10ddfde054e93)
+
+running 1 test
+test test_oidc_aws_kms_signing_key_issues_verifiable_rs256_jwt ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.89s

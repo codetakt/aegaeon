@@ -1,0 +1,18 @@
+# cargo-audit configuration for Aegaeon
+# Documentation: https://rustsec.org/docs/cargo-audit/config.html
+
+[advisories]
+ignore = [
+    # Marvin Attack in rsa crate (PKCS#1 v1.5 decryption timing oracle).
+    # This comes from sqlx-mysql via the sqlx meta-crate. Aegaeon only uses
+    # PostgreSQL (sqlx-postgres) - sqlx-mysql is in Cargo.lock but NOT in the
+    # actual dependency tree (verified via `cargo tree`). The vulnerable code
+    # path (MySQL caching_sha2_password auth) is never compiled or executed.
+    # Tracking: https://github.com/RustCrypto/RSA/issues/19
+    "RUSTSEC-2023-0071",
+]
+
+[database]
+# Fetch the advisory database from the default URL
+fetch = true
+stale = true

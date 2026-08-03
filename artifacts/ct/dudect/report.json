@@ -1,0 +1,1 @@
+{"p":0.999,"state":1,"num_traces":20000,"tests":{"compare":{"p":0.013607,"state":1},"ed25519":{"p":0.31201,"state":1},"hmac":{"p":0.999,"state":1},"jwe":{"p":0.999,"state":1},"rsa":{"p":0.999,"state":1}}}

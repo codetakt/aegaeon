@@ -1,0 +1,60 @@
+{
+  "required_workflows": [
+    {
+      "path": ".github/workflows/lint.yml",
+      "name": "CI - Lint"
+    },
+    {
+      "path": ".github/workflows/verify-core.yml",
+      "name": "SDK Verify Core"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "name": "CI - SDK"
+    },
+    {
+      "path": ".github/workflows/playwright.yml",
+      "name": "SDK Browser E2E"
+    },
+    {
+      "path": ".github/workflows/managed-provider-evidence.yml",
+      "name": "SDK Managed Provider Evidence"
+    },
+    {
+      "path": ".github/workflows/client-claim-promotion.yml",
+      "name": "SDK Client Claim Promotion"
+    },
+    {
+      "path": ".github/workflows/released-client-readiness.yml",
+      "name": "SDK Released Client Readiness"
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "name": "SDK Publish"
+    },
+    {
+      "path": ".github/workflows/publication-org-rollout.yml",
+      "name": "SDK Publication-Org Rollout"
+    }
+  ],
+  "workflow_reference_defaults": [
+    {
+      "variable": "AEGAEON_ADMIN_CONSOLE_STACK_WORKFLOW",
+      "filename": "stack-e2e.yml",
+      "referenced_by": [
+        ".github/workflows/publish.yml",
+        ".github/workflows/client-claim-promotion.yml",
+        ".github/workflows/released-client-readiness.yml"
+      ]
+    },
+    {
+      "variable": "AEGAEON_MANAGED_PROVIDER_EVIDENCE_WORKFLOW",
+      "filename": "managed-provider-evidence.yml",
+      "referenced_by": [
+        ".github/workflows/publish.yml",
+        ".github/workflows/client-claim-promotion.yml",
+        ".github/workflows/released-client-readiness.yml"
+      ]
+    }
+  ]
+}
