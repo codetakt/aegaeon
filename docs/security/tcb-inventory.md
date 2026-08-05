@@ -1,6 +1,6 @@
 # Trusted Computing Base (TCB) Inventory
 
-Last updated: 2026-07-24
+Last updated: 2026-08-05
 
 Status: current implementation baseline
 
@@ -11,12 +11,10 @@ Audience: security reviewers, maintainers
 > **Status note (2026-03-08):** This document describes the broader system/security TCB. It must not be read as redefining the formal verification boundary, which is owned by `docs/verification/claims/assurance-case/claim-definition.md` and `docs/verification/claims/assumptions/current-register.md`.
 
 ## Document Version
-- Version: 1.1.1
-- Date: 2026-07-24
-- Changes: completed component enumeration (Kani, EverParse, C toolchain,
-  service dependencies), corrected crypto-library roles, replaced stale
-  verification metrics with pointers to the maintained snapshot, and recorded
-  the RS256 verifier move from project-local bigint arithmetic to `aws-lc-rs`
+- Version: 1.1.2
+- Date: 2026-08-05
+- Changes: corrected the kernel CSPRNG access description and documented the
+  declared DRBG and direct UUID identifier boundaries
 - Prior: 1.0.0 (2025-09-02, Sprint 8 - External Conformance & Beta)
 
 ## Executive Summary
@@ -88,6 +86,15 @@ This document identifies and catalogs all components within Aegaeon's Trusted Co
   - Mitigation: Widely reviewed crates; F*-verified construction above the
     primitive (DRBG); slice boundary conditions verified
 
+- **`uuid`** (Rust)
+  - Role: Public or uniqueness-only identifier generation through
+    `getrandom` 0.3; not used for security-sensitive secrets in the formal
+    claim boundary after 2026-08-05
+  - Trust Assumption: UUID v4 collision probability is negligible
+  - Mitigation: Security-sensitive session and challenge identifiers use the
+    declared DRBG boundary instead. Both `getrandom` 0.2 (aegaeon-crypto) and
+    0.3 (`uuid`) are statically present for their documented roles.
+
 #### 3. Runtime Components
 - **Rust Compiler**: 1.91.0-nightly-2025-08-28
   - Role: System layer compilation
@@ -128,9 +135,13 @@ This document identifies and catalogs all components within Aegaeon's Trusted Co
   - Trust Assumption: Constant-time operations (AES-NI, etc.)
   - Mitigation: dudect validation, no speculation in critical paths
 
-- **RNG**: /dev/urandom
-  - Trust Assumption: Sufficient entropy
-  - Mitigation: getrandom(2) with GRND_RANDOM flag
+- **RNG**: Linux kernel CSPRNG via getrandom(2)
+  - Trust Assumption: Kernel CSPRNG is properly seeded and cryptographically
+    strong (RC-1)
+  - Access path: `getrandom` crate (flags=0; falls back to `/dev/urandom` on
+    older kernels), consumed as per-request DRBG seeds
+    (`crates/crypto/src/drbg.rs`)
+  - Failure mode: Process aborts if the entropy source fails (fail-closed)
 
 ## TCB Minimization Strategy
 

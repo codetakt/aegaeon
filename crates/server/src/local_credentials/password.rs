@@ -26,7 +26,11 @@ pub fn validate_password(password: &str) -> Result<(), &'static str> {
 ///
 /// Returns an error when the password violates the configured bounds.
 pub fn hash_password(password: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let mut salt_bytes = [0u8; 16];
+    aegaeon_crypto::rand::fill_random(&mut salt_bytes)
+        .map_err(|_| "Failed to generate password salt".to_string())?;
+    let salt = SaltString::encode_b64(&salt_bytes)
+        .map_err(|_| "Failed to encode password salt".to_string())?;
     Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .map(|hash| hash.to_string())

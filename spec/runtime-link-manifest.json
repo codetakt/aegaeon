@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-03T10:46:31.717251+00:00",
+  "generated": "2026-08-05T08:57:25.497749+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "c59ca5f51de78bd8a2ffb54514e94734c7d99b07ab23aa33b7e1a329d209567f",
@@ -324,7 +324,7 @@
       "critical": false
     },
     "crates/server/src/stepup.rs": {
-      "sha256": "ab024b4e43309b101ba8db6504cf658896ed6e9b0f26072b9163203e2ab21dd1",
+      "sha256": "14f2004c10193a3432aa2356f1c161869fe5718143ca90da96a1c87a203e7840",
       "entries": [
         "9470-101",
         "9470-102",

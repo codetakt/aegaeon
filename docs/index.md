@@ -242,7 +242,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assumptions/current-register.md` | claim | Current F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/historical-reductions.md` | claim | F* Assumption Historical Reductions | historical record | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/mitigation-and-audit.md` | claim | F* Assumption Mitigation And Audit Checklist | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-07-24 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-08-05 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions.md` | claim | F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-07-24 | Verification | verification reviewers, maintainers |
@@ -349,7 +349,7 @@ Audience: contributors, maintainers
 | `docs/security/security-review/runtime-hardening-and-testing.md` | security | Security Review Runtime Hardening And Testing | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review/threat-vulnerability-and-formal-review.md` | security | Security Review Threat, Vulnerability, And Formal Review | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review.md` | security | Security Review | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
-| `docs/security/tcb-inventory.md` | security | Trusted Computing Base (TCB) Inventory | current implementation baseline | 2026-07-24 | Security | security reviewers, maintainers |
+| `docs/security/tcb-inventory.md` | security | Trusted Computing Base (TCB) Inventory | current implementation baseline | 2026-08-05 | Security | security reviewers, maintainers |
 
 ## Development
 

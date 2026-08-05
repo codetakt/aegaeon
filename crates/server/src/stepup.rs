@@ -109,7 +109,13 @@ impl StepUpStore {
         request_id: &str,
         now_epoch_secs: u64,
     ) -> Result<Option<StepUpChallenge>, String> {
-        let id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Builder::from_random_bytes(
+            aegaeon_crypto::rand::random_bytes(16)
+                .try_into()
+                .expect("random_bytes(16) yields exactly 16 bytes"),
+        )
+        .into_uuid()
+        .to_string();
         let Some(expires_at) = now_epoch_secs.checked_add(self.ttl.as_secs()) else {
             return Ok(None);
         };

@@ -109,6 +109,12 @@ test-results/
 # Documentation sources are tracked even when user-level ignores exclude Markdown.
 !/docs/**/*.md
 
+# The user-level core.excludesFile ignores Markdown. Re-include Markdown for
+# this docs-heavy repository while keeping local agent instructions private.
+!**/*.md
+/AGENTS.md
+/CLAUDE.md
+
 # Python (for build scripts)
 __pycache__/
 *.pyc

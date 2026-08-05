@@ -108,7 +108,13 @@ pub(super) fn get_or_create_session(
         }
     }
 
-    let sid = uuid::Uuid::new_v4().to_string();
+    let sid = uuid::Builder::from_random_bytes(
+        aegaeon_crypto::rand::random_bytes(16)
+            .try_into()
+            .expect("random_bytes(16) yields exactly 16 bytes"),
+    )
+    .into_uuid()
+    .to_string();
     store
         .sessions_by_auth_session
         .insert(context.auth_session_id.to_string(), sid.clone());
