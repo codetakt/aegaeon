@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1151%2B%20passing-brightgreen.svg)](spec/compliance-matrix.yaml)
 [![F*](https://img.shields.io/badge/F%2A-155%20modules%20%7C%200%20admit-blueviolet.svg)](fstar/)
-[![Tamarin](https://img.shields.io/badge/Tamarin-247%20lemmas%20verified-blueviolet.svg)](proofs/tamarin/)
+[![Tamarin](https://img.shields.io/badge/Tamarin-248%20lemmas%20verified-blueviolet.svg)](proofs/tamarin/)
 
 Aegaeon is an assumption-qualified formally verified and security-tested
 OIDC 1.0 / OAuth 2.0/2.1 identity-provider server, with OpenID Connect Federation
@@ -226,7 +226,7 @@ git diff -- generated/everparse generated/lowstar artifacts/karamel
 - `examples/`: sample applications (minimal RP)
 - `fstar/`: F* sources (155 modules, 0 admit, 12 assume vals across 8 files)
 - `generated/`: committed generated artefacts (EverParse wrappers, extracted Low* C, ...)
-- `proofs/`: protocol-level models (54 Tamarin files, 247 lemmas)
+- `proofs/`: protocol-level models (54 Tamarin files, 248 lemmas)
 - `nix/`: pinned toolchains and packaging (incl. OCI image)
 - `scripts/`: verification runners and local tooling
 - `spec/`: compliance matrix + schema (308 entries)

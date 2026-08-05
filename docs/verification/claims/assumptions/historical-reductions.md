@@ -109,7 +109,7 @@ claim is now substantially stronger.
 ### 8.4 Cross-Validation
 
 The security properties modeled by Category A assume vals are independently
-verified at the protocol level by **Tamarin** (247 lemmas, symbolic Dolev-Yao
+verified at the protocol level by **Tamarin** (248 lemmas, symbolic Dolev-Yao
 model). At runtime, these properties are provided by:
 - **aws-lc-rs** — FIPS 140-3 validated (signatures, hashing, RNG)
 - **ring** — extensively audited (ECDSA, Ed25519, CSPRNG)

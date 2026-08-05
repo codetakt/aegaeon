@@ -83,7 +83,7 @@ as explicit assumptions outside the formal claim:
   `assume val` declarations across 8 files (6 crypto hardness, 2 HACL\*
   linkage, 1 EverParse linkage, 2 OIDC hash runtime linkage, 1 WASM host --
   see [Assumption Register](docs/verification/claims/assumptions/current-register.md))
-- **Tamarin Prover** -- 54 protocol models with 247 verified lemmas (symbolic Dolev-Yao model)
+- **Tamarin Prover** -- 54 protocol models with 248 verified lemmas (symbolic Dolev-Yao model)
 - **Kani** -- 139 bounded model-checking harnesses for Rust code
 - **Supply chain** -- `cargo deny`, `cargo audit`, `cargo vet`, SBOM generation,
   and Trivy container scanning in CI

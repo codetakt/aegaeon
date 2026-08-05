@@ -14,7 +14,7 @@ This document is part of the split formal verification assurance case.
 
 | Layer | Tool | Confidence | Key caveat |
 |---|---|---|---|
-| Protocol design | Tamarin (247 lemmas) | **High** | Symbolic model — real crypto may have implementation flaws |
+| Protocol design | Tamarin (248 lemmas) | **High** | Symbolic model — real crypto may have implementation flaws |
 | Specification logic | F\* (155 unique modules, 0 admit) | **High** | 12 assume vals: 6 crypto + 2 HACL\* linkage + 1 EverParse linkage + 2 OIDC hash runtime linkage + 1 WASM host (see [Assumption Register](../assumptions/current-register.md)) |
 | Rust memory safety | Kani (139 harnesses) | **Medium** | Bounded inputs only; HashMap paths excluded due to CBMC limits |
 | Binary parsing | EverParse (7/7 verified) | **High** | Defense-in-depth layer only; Dpop verified as DpopSchema (renamed copy) |

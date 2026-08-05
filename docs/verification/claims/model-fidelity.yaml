@@ -145,7 +145,7 @@ modules:
   fstar/resource/ProtectedResourceMetadata.fst: faithful
   fstar/resource/ResourceIndicators.fst: simplified
   fstar/revocation/Revocation.fst: faithful
-  fstar/stepup/StepUp.fst: faithful
+  fstar/stepup/StepUp.fst: simplified
   fstar/token/Bearer.Policy.fst: faithful
   fstar/token/Bearer.fst: faithful
   fstar/token/Bearer_validation.fst: toy-stub

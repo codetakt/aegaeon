@@ -31,7 +31,7 @@ from first principles but are standard assumptions in cryptography:
 
 **Defense-in-depth:**
 - **Tamarin models** independently verify the same security properties at the
-  protocol level (247 lemmas, Dolev-Yao model).
+  protocol level (248 lemmas, Dolev-Yao model).
 - **Runtime libraries**: FIPS-validated (aws-lc-rs) or extensively audited (ring).
 - **HACL\* spec implementations**: the F\* crypto models now use the same spec
   functions verified by the HACL\* project (Spec.Agile.Hash, Spec.Agile.HMAC,
@@ -120,7 +120,7 @@ For a security auditor reviewing this register:
    resistance, EUF-CMA unforgeability). Confirm they use honest HACL\* spec
    implementations, not identity/false/constant models.
 3. **Cross-reference Tamarin:** Tamarin independently verifies the same
-   security properties at the protocol level (247 lemmas, Dolev-Yao model).
+   security properties at the protocol level (248 lemmas, Dolev-Yao model).
 4. **Review FFI contracts:** Category B = 0 (all eliminated). Review
    [FFI contract register](../../runbooks/ffi-contracts/README.md) for historical elimination details.
 5. **Check WASM host contracts:** Category C = 1 (only #12

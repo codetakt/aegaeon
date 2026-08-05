@@ -256,7 +256,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-08-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-07-24 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-08-05 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-model.md` | claim | Verification Maturity Model | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/README.md` | index | Verification Maturity Status Details | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/current-level.md` | claim | Verification Maturity Current Level | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |

@@ -1,8 +1,16 @@
 theory StepUpSoundness
 begin
 
-// Step-up authentication model: challenges are issued and completed
-// before issuing a token when step-up is required.
+// Step-up authentication model: when step-up is required for a request,
+// a token for that request can only be issued after a challenge bound to
+// that request has been completed.
+//
+// 2026-08-05 rework: the previous model consumed the only StepUpReq fact
+// in IssueChallenge, making TokenIssuedAfterStepUp unreachable and the
+// soundness lemma vacuously true, and contained an unconstrained
+// TokenIssuedWithoutStepUp bypass rule outside the lemma's action facts.
+// IssueChallenge now restores StepUpReq, the bypass rule is removed, and
+// reachability is witnessed by an exists-trace lemma.
 
 rule StepUpRequired:
   [ Fr(~req) ]
@@ -12,7 +20,7 @@ rule StepUpRequired:
 rule IssueChallenge:
   [ StepUpReq(C, req), Fr(~challenge) ]
   --[ ChallengeIssued(C, req, ~challenge) ]->
-  [ Challenge(C, req, ~challenge) ]
+  [ StepUpReq(C, req), Challenge(C, req, ~challenge) ]
 
 rule CompleteChallenge:
   [ Challenge(C, req, challenge) ]
@@ -24,10 +32,11 @@ rule TokenIssuedAfterStepUp:
   --[ TokenIssued(C, req, ~token) ]->
   [ ]
 
-rule TokenIssuedWithoutStepUp:
-  [ Fr(~req), Fr(~token) ]
-  --[ TokenIssuedNoStepUp($Client, ~req, ~token) ]->
-  [ ]
+// Reachability witness: the soundness lemma below is meaningless if
+// TokenIssued is unreachable.
+lemma token_issuance_reachable:
+  exists-trace
+  "Ex C req tok #i. TokenIssued(C, req, tok) @ i"
 
 lemma stepup_soundness:
   "All C req tok #i #j.

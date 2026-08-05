@@ -197,7 +197,7 @@ This document identifies and catalogs all components within Aegaeon's Trusted Co
 
 ### Formal Proofs
 - **F* Verification**: 155 verified modules, 0 `admit()`
-- **Tamarin Lemmas**: 247 security properties proven (54 models)
+- **Tamarin Lemmas**: 248 security properties proven (54 models)
 - **Kani**: bounded model-checking harnesses over JOSE/DPoP/token/federation
   code paths
 

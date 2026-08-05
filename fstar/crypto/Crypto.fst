@@ -85,7 +85,7 @@ module Crypto
     **Soundness:** The identity model is weaker than SHA-256 (trivially
     injective). Proofs that hold under identity also hold under any
     injective hash. Defense-in-depth: Tamarin models hash as injective
-    (247 lemmas), runtime uses SHA-256 via aws-lc-rs (FIPS-validated).
+    (248 lemmas), runtime uses SHA-256 via aws-lc-rs (FIPS-validated).
 
     ## Permanent vs. Reducible
 

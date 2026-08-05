@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-07-24
+Last updated: 2026-08-05
 
 Status: current implementation baseline
 
@@ -32,6 +32,7 @@ modules as grounding for `status: verified` entries.
 | `fstar/par/Client_auth.fst` | `toy-stub` | Lines 5-14 define a toy in-memory registry for `client_a`; partial rows `9126-002` and `9700-004` may reference it, but verified rows must not. |
 | `fstar/par/Request_uri.fst` | `simplified` | Lines 62-72 model request URI issuance as a sequential counter; this preserves uniqueness reasoning but does not model RFC 9126 entropy. Runtime entropy remains evidenced by tests and runtime code. |
 | `fstar/dpop/Dpop.Htu_validation.fst` | `simplified` | `validate_htu` models only the final exact string comparison; the runtime (`crates/ffi/src/lib.rs` DPoP checks) additionally rejects `?`/`#` in the proof `htu` and strips query/fragment from the request URI before the modeled comparison. The trace for `9449-006` claims the comparison step; the normalization prefix remains evidenced by runtime tests. |
+| `fstar/stepup/StepUp.fst` | `simplified` | The F* module is a small pure model that binds a challenge to one immutable `session`. It does not model the runtime successor transfer during login session rotation (`crates/server/src/web/local_auth/post.rs` `complete_stepup_for_local_login`) or authorize-endpoint error responses. Its four lemmas are shallow properties discharged by definition unfolding with `()` proofs. |
 
 ## Review Rule
 

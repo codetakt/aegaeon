@@ -78,7 +78,7 @@ statements remain.
 | Metric | Value |
 |---|---|
 | Specification files | 54 |
-| Verified lemmas | 247 (all pass) |
+| Verified lemmas | 248 (all pass) |
 | CI gate | `nix build .#verify-tamarin` |
 
 Tamarin operates in the symbolic (Dolev-Yao) model: the adversary controls the
@@ -100,7 +100,7 @@ perfect (no implementation bugs, no side channels).
 | Introspection | 2 | 12 | Standard introspection auth, JWT introspection security |
 | Management | 3 | 16 | Policy enforcement monotonicity, policy downgrade resistance (Dolev-Yao), key rotation race safety |
 | Token exchange | 1 | 3 | Token exchange security |
-| Step-up | 2 | 7 | Soundness, ACR enforcement |
+| Step-up | 2 | 8 | Soundness, ACR enforcement |
 | Device authorization | 1 | 8 | Device auth security |
 | SD-JWT | 1 | 6 | Selective disclosure |
 | RAR | 1 | 6 | Authorization details |
@@ -167,7 +167,7 @@ level.
 **Aegaeon is formally verified modulo the assumptions in the Assumption
 Register.** Specifically: given that the 12 assumed function contracts are
 faithfully implemented by their runtime counterparts, all F\* proof obligations
-(0 `admit()`) and all Tamarin lemmas (247/247) hold. A violation of any assumed
+(0 `admit()`) and all Tamarin lemmas (248/248) hold. A violation of any assumed
 contract could invalidate proofs that depend on it.
 The claim additionally presupposes the runtime contracts RC-1 through RC-7
 enumerated in the

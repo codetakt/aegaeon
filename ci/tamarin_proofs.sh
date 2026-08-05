@@ -85,7 +85,7 @@ PROOFS=(
 	"revocation/revocation_auth.spthy:authorized_revocation,revocation_authorization"
 
 	# --- stepup ---
-	"stepup/stepup_soundness.spthy:stepup_soundness"
+	"stepup/stepup_soundness.spthy:token_issuance_reachable,stepup_soundness"
 
 	# --- token_exchange ---
 	"token_exchange/token_exchange_security.spthy:"

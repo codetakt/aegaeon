@@ -136,7 +136,7 @@ HMAC being a PRF, which is the runtime implementation's responsibility
 
 This separation is standard practice:
 - The F\* model verifies the construction is correct.
-- The Tamarin model verifies the protocol uses randomness correctly (247 lemmas).
+- The Tamarin model verifies the protocol uses randomness correctly (248 lemmas).
 - The runtime provides actual cryptographic strength.
 
 ### 7.4 Relationship to Existing HMAC Infrastructure
