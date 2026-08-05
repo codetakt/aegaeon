@@ -85,7 +85,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run public smoke load test
         env:
@@ -188,7 +187,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Configure Prometheus
         run: |
@@ -269,7 +267,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run tests with coverage
         run: |

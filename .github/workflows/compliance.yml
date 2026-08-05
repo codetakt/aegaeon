@@ -30,7 +30,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Build release server only (faster)
         run: nix develop .#ci --command cargo build --release --package aegaeon-server
@@ -55,7 +54,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run RFC 7520 Test Vectors
         run: nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose
@@ -83,7 +81,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run security audit
         run: |
@@ -121,7 +118,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Download release binary
         uses: actions/download-artifact@v4
@@ -170,7 +166,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run RFC compliance tests
         run: |
@@ -246,7 +241,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Build container image
         run: |

@@ -37,7 +37,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
         run: nix develop .#ci --command npm ci
@@ -168,7 +167,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Check dependency policies (licenses, bans, sources, advisories)
         run: nix develop .#ci --command cargo deny check
@@ -185,7 +183,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run DB-gated ignored integration tests
         env:

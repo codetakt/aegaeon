@@ -130,7 +130,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Verify Low* artefacts
         run: |
@@ -259,7 +258,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run Tamarin verification (Nix)
         run: |

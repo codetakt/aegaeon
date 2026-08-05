@@ -34,7 +34,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
         run: nix develop .#ci --command npm ci
@@ -97,7 +96,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
         run: nix develop .#ci --command npm ci
@@ -130,7 +128,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run Ruff checks
         run: nix develop .#ci --command ruff check scripts/validation ci/validate_slos.py
@@ -154,7 +151,6 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
-          enable-flakehub-cache: "true"
 
       - name: Run strict Rust package lint
         run: nix develop .#ci --command bash ./scripts/flake/lint_rust_strict_packages.sh
