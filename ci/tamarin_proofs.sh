@@ -70,7 +70,7 @@ PROOFS=(
 	"par/jar_par_fixation.spthy:jar_parameter_fixation"
 
 	# --- pkce ---
-	"pkce/pkce_security.spthy:mismatched_verifiers_cannot_inject_codes"
+	"pkce/pkce_security.spthy:token_issuance_reachable,mismatched_verifiers_cannot_inject_codes"
 
 	# --- rar ---
 	"rar/rar_authorization_details.spthy:"

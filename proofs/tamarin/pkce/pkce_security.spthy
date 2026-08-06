@@ -3,15 +3,42 @@ begin
 
 builtins: hashing
 
+// 2026-08-06 vacuity repair: the original model had the authorization
+// server generate the verifier (Fr(v)) and never release it, so no party
+// could ever present v, Token was a dead rule, TokenIssued was
+// unreachable, and mismatched_verifiers_cannot_inject_codes was vacuously
+// true. PKCE in reality has the client generate the secret verifier,
+// register challenge = h(v), and present v at the token endpoint. The
+// client now retains the verifier (ClientVerifier) and redeems via
+// TokenHonest; TokenAdversary keeps the network-facing injection surface.
+// Reachability is witnessed by token_issuance_reachable.
+
 rule Authorization:
     [ Fr(c), Fr(v) ]
     --[ CodeIssued(c), ChallengeStored(c, h(v)) ]->
-    [ Out(c), !Challenge(c, h(v)) ]
+    [ Out(c), !Challenge(c, h(v)), ClientVerifier(c, v) ]
 
-rule Token:
+// Honest client redeems its own code with the verifier it generated.
+// ClientVerifier is linear, so honest redemption is single-use.
+rule TokenHonest:
+    [ ClientVerifier(c, v), !Challenge(c, h(v)) ]
+    --[ TokenRequest(c, v), TokenIssued(c) ]->
+    [ ]
+
+// Adversarial redemption: a verifier presented from the network. An
+// attacker holding the code c but not the secret verifier cannot satisfy
+// !Challenge(c, h(ver)), which is exactly the code-injection resistance
+// the lemma below asserts.
+rule TokenAdversary:
     [ In(<c, ver>), !Challenge(c, h(ver)) ]
     --[ TokenRequest(c, ver), TokenIssued(c) ]->
     [ ]
+
+// Reachability witness: verifier-injection security is meaningless if
+// TokenIssued is unreachable.
+lemma token_issuance_reachable:
+  exists-trace
+  "Ex c #i. TokenIssued(c) @ i"
 
 lemma mismatched_verifiers_cannot_inject_codes:
   "All c hv ver #i #j #k.
