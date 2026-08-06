@@ -34,6 +34,12 @@ rule Unauthorized_Revoke:
     [ Out(<'revoke', token, ~attacker_id>) ]
 
 // Security properties
+// Reachability witness: revocation authorization is meaningless if a token
+// revocation is unreachable.
+lemma token_revocation_reachable:
+    exists-trace
+    "Ex AS cid token #i. TokenRevoked(AS, cid, token) @ i"
+
 lemma authorized_revocation:
     "All AS cid token #i. TokenRevoked(AS, cid, token) @ i ==>
         Ex #j. TokenIssued(AS, cid, token) @ j & j < i"

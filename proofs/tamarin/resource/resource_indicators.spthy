@@ -19,6 +19,12 @@ rule RS_Access:
   --[ ResourceAccessGranted(token, resource) ]->
   [ Out('granted') ]
 
+// Reachability witness: audience enforcement is meaningless if successful
+// resource access is unreachable.
+lemma resource_access_reachable:
+  exists-trace
+  "Ex token resource #i. ResourceAccessGranted(token, resource) @ i"
+
 lemma resource_audience_enforced:
   "All client token res_issued res_used #i #j.
      TokenIssued(client, res_issued, token) @ i &

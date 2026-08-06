@@ -79,10 +79,10 @@ PROOFS=(
 	"request_object_precedence_over_form,request_object_overrides_form_in_par"
 
 	# --- resource ---
-	"resource/resource_indicators.spthy:resource_audience_enforced"
+	"resource/resource_indicators.spthy:resource_access_reachable,resource_audience_enforced"
 
 	# --- revocation ---
-	"revocation/revocation_auth.spthy:authorized_revocation,revocation_authorization"
+	"revocation/revocation_auth.spthy:token_revocation_reachable,authorized_revocation,revocation_authorization"
 
 	# --- stepup ---
 	"stepup/stepup_soundness.spthy:token_issuance_reachable,stepup_soundness"
