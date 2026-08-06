@@ -34,7 +34,7 @@ PROOFS=(
 	"pkjwt_unforgeability,pkjwt_no_replay"
 
 	# --- dpop ---
-	"dpop/dpop_replay.spthy:dpop_replay_impossible"
+	"dpop/dpop_replay.spthy:dpop_resource_grant_reachable,dpop_replay_impossible"
 
 	# --- introspection ---
 	"introspection/introspection_security.spthy:"

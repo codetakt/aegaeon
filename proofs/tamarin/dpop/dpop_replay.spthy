@@ -13,21 +13,27 @@ rule Init:
 
 // Client makes request with DPoP proof
 rule ClientRequest:
-    [ Fr(~n), !ClientKey(~skC), !TokenBinding($T, pk(~skC)) ]
-    --[ DPoPRequest($T, ~n, pk(~skC)) ]->
-    [ SecChannel('client', 'resource_server', <$T, ~n, sign(~n, ~skC)>),
+    [ Fr(~n), !ClientKey(~skC), !TokenBinding(token, pk(~skC)) ]
+    --[ DPoPRequest(token, ~n, pk(~skC)) ]->
+    [ SecChannel('client', 'resource_server', <token, ~n, sign(~n, ~skC)>),
       Used(~n) ]
 
 // Resource server validates DPoP proof
 rule ResourceServer:
-    [ SecChannel('client', 'resource_server', <$T, nonce, sig>),
-      !TokenBinding($T, pkC), Used(nonce) ]
+    [ SecChannel('client', 'resource_server', <token, nonce, sig>),
+      !TokenBinding(token, pkC), Used(nonce) ]
     --[ Eq(verify(sig, nonce, pkC), true),
-        ResourceGranted($T, nonce, pkC) ]->
+        ResourceGranted(token, nonce, pkC) ]->
     [ ]
 
 restriction Equality:
   "All x y #i. Eq(x, y)@i ==> x = y"
+
+// Reachability witness: replay prevention is meaningless if a DPoP-bound
+// resource grant is unreachable.
+lemma dpop_resource_grant_reachable:
+  exists-trace
+  "Ex t n pk #i. ResourceGranted(t, n, pk) @ i"
 
 lemma dpop_replay_impossible: "
     All t n pk #i #j.
@@ -63,5 +69,14 @@ lemma dpop_injective_agreement: "
 // lemma was vacuously true. The real DPoP security properties are
 // proof-of-possession binding (dpop_authentication), replay prevention
 // (dpop_replay_impossible), and freshness (dpop_freshness_guaranteed).
+
+// 2026-08-06 sort-consistency repair: ClientRequest and ResourceServer
+// consumed !TokenBinding with a pub-sorted variable ($T) while Init
+// produced it with a fresh name (~token). Pub and fresh are disjoint
+// subsorts of msg, so the request was a dead rule, and ResourceGranted
+// was unreachable, making all four security lemmas vacuously true. The
+// consumer variables are now msg-sorted (token), which unifies with the
+// fresh ~token, and reachability is witnessed by
+// dpop_resource_grant_reachable.
 
 end
