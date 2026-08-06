@@ -223,6 +223,15 @@ lemma auth_time_consistency:
     ==> Ex issuer #k. ID_Token(token, rp, user, issuer, nonce, auth_time, at_hash) @ #k"
 
 // PKCE prevents code injection even with compromised redirect
+// Reachability witness: pkce_code_injection_prevention is meaningless if
+// the token-issuance flow (PKCE_Verified & Code_Used) is unreachable.
+lemma pkce_flow_reachable:
+  exists-trace
+  "Ex op code rp user nonce challenge verifier #i #j #k.
+     Auth_Code_Issued(op, code, rp, user, nonce, challenge) @ #i &
+     PKCE_Verified(verifier, challenge) @ #j &
+     Code_Used(op, code, rp) @ #k"
+
 lemma pkce_code_injection_prevention:
   "All op code rp user nonce challenge verifier #i #j #k.
     Auth_Code_Issued(op, code, rp, user, nonce, challenge) @ #i &
