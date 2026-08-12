@@ -2,8 +2,6 @@ theory AuthorizeErrorRedirectState
 
 begin
 
-// include "../common/common_model.spthy"
-
 // Concrete but simplified model for error redirect with state echo
 
 // Events
@@ -12,64 +10,79 @@ begin
 // Redirect(C, RU, E, S, TID) marks a redirect emitted by the AS
 // DisallowedScope(C) / DisallowedGrant(C) / NotRegistered(C,RU) model policy violations
 
+// Policy facts are configured for public client/uri identities so that the
+// request/error rules can consume them (no fresh/pub sort mismatch).
 rule ConfigureDisallowedScope:
-  [ Fr(~c_scope) ]
+  [ ]
   -->
-  [ !DisallowedScope(~c_scope) ]
+  [ !DisallowedScope($C) ]
 
 rule ConfigureDisallowedGrant:
-  [ Fr(~c_grant) ]
+  [ ]
   -->
-  [ !DisallowedGrant(~c_grant) ]
+  [ !DisallowedGrant($C) ]
 
 rule ConfigureNotRegistered:
-  [ Fr(~c_nr), Fr(~ru_nr) ]
+  [ ]
   -->
-  [ !NotRegistered(~c_nr, ~ru_nr) ]
+  [ !NotRegistered($C, $RU) ]
 
 rule ConfigureRegistered:
-  [ Fr(~c_reg), Fr(~ru_reg) ]
+  [ ]
   -->
-  [ !Registered(~c_reg, ~ru_reg) ]
+  [ !Registered($C, $RU) ]
 
 rule ClientMakesAuthzReq:
   [ Fr(~s), Fr(~tid) ]
   --[ AuthzReq($C, $RU, ~s, ~tid) ]->
   [ Req($C, $RU, ~s, ~tid) ]
 
-// Server processes the request and emits an authorization error (generic)
+// Server processes the request and emits an authorization error (generic).
+// The fresh state/session flow in via msg-sorted s, tid. A redirect is queued
+// only for a registered client/uri pair.
 rule ServerEmitsError:
-  [ Req($C, $RU, $S, $TID) ]
-  --[ AuthzErr($C, $RU, $S, $E, $TID) ]->
-  [ ]
+  [ Req($C, $RU, s, tid), !Registered($C, $RU) ]
+  --[ AuthzErr($C, $RU, s, $E, tid) ]->
+  [ PendingRedirect($C, $RU, $E, s, tid) ]
 
 // Specific error cases based on policy facts
 rule ScopeNotAllowedError:
-  [ Req($C, $RU, $S, $TID), !DisallowedScope($C) ]
-  --[ AuthzErr($C, $RU, $S, 'invalid_scope', $TID) ]->
-  [ ]
+  [ Req($C, $RU, s, tid), !DisallowedScope($C), !Registered($C, $RU) ]
+  --[ AuthzErr($C, $RU, s, 'invalid_scope', tid) ]->
+  [ PendingRedirect($C, $RU, 'invalid_scope', s, tid) ]
 
 rule GrantNotAllowedError:
-  [ Req($C, $RU, $S, $TID), !DisallowedGrant($C) ]
-  --[ AuthzErr($C, $RU, $S, 'unauthorized_client', $TID) ]->
-  [ ]
+  [ Req($C, $RU, s, tid), !DisallowedGrant($C), !Registered($C, $RU) ]
+  --[ AuthzErr($C, $RU, s, 'unauthorized_client', tid) ]->
+  [ PendingRedirect($C, $RU, 'unauthorized_client', s, tid) ]
 
+// Unregistered redirect_uri: the AS records the error but MUST NOT redirect
+// to an unregistered URI (RFC 6749 4.1.2.1). No PendingRedirect is queued.
 rule RedirectNotRegisteredError:
-  [ Req($C, $RU, $S, $TID), !NotRegistered($C, $RU) ]
-  --[ AuthzErr($C, $RU, $S, 'invalid_request', $TID) ]->
+  [ Req($C, $RU, s, tid), !NotRegistered($C, $RU) ]
+  --[ AuthzErr($C, $RU, s, 'invalid_request', tid) ]->
   [ ]
 
-rule AuthzErrorTriggersRedirect:
-  [ !Registered($C, $RU) ]
-  --[ AuthzErr($C, $RU, $S, $E, $TID), Redirect($C, $RU, $E, $S, $TID) ]->
+// The queued error redirect is emitted in a distinct step, strictly after the
+// error was recorded.
+rule EmitRedirect:
+  [ PendingRedirect($C, $RU, e, s, tid) ]
+  --[ Redirect($C, $RU, e, s, tid) ]->
   [ ]
 
-// Property: Whenever an error occurs for a client/session with state S, the
-// emitted redirect carries the same state S. (Echo integrity)
-lemma ErrorStateEcho:
-  "All C RU S E tid #i.
-    AuthzErr(C, RU, S, E, tid)@i ==>
-    Ex #j. Redirect(C, RU, E, S, tid)@j & i < #j"
+// Reachability witness: the success action of this theory is not vacuous.
+lemma redirect_reachable:
+  exists-trace
+  "Ex C RU E S tid #i. Redirect(C, RU, E, S, tid)@i"
+
+// Property (safety direction): every error redirect corresponds to a prior
+// authorization error carrying the same state. The converse liveness reading
+// ("every error is followed by a redirect") is both inexpressible in a trace
+// model and RFC-incorrect for unregistered redirect_uri errors.
+lemma ErrorRedirectEchoesState:
+  "All C RU E S tid #j.
+     Redirect(C, RU, E, S, tid)@j ==>
+     (Ex #i. AuthzErr(C, RU, S, E, tid)@i & #i < #j)"
 
 // Stronger property: the state value in Redirect equals the state from AuthzErr
 lemma StateEchoEq:

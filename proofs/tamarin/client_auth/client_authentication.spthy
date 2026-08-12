@@ -24,6 +24,11 @@ rule AS_Validate_Client:
   --[ ClientAuthenticated($A, client_id) ]->
   [ ClientValid($A, client_id) ]
 
+// Reachability witness: successful client authentication is not vacuous.
+lemma client_authenticated_reachable:
+  exists-trace
+  "Ex A cid #i. ClientAuthenticated(A, cid) @ i"
+
 // Security properties
 lemma client_authentication:
   "All A cid #i. ClientAuthenticated(A, cid) @ i ==>

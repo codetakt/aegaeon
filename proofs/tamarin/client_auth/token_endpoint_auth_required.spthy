@@ -17,9 +17,11 @@ rule RegisterConfidentialClient:
 rule ClientRequestsToken:
   [ ] --[ TokenReq($C, $Grant, $Auth) ]-> [ ]
 
+// The confidential client identity flows in via msg-sorted c, so the
+// persistent fact (produced with a fresh name) actually unifies here.
 rule TokenGranting:
-  [ !Confidential($C) ]
-  --[ TokenReq($C, $Grant, $Auth), ValidAuth($C, $Auth), TokenGranted($C, $Grant, $Auth) ]->
+  [ !Confidential(c) ]
+  --[ TokenReq(c, $Grant, $Auth), ValidAuth(c, $Auth), TokenGranted(c, $Grant, $Auth) ]->
   [ ]
 
 // Derive ValidAuth from the requested auth method (abstractly)
@@ -31,6 +33,11 @@ rule InferPostValidAuth:
 
 rule InferPkjwtValidAuth:
   [ ] --[ TokenReq($C, $Grant, 'pkjwt') ]-> [ ValidAuth($C, 'pkjwt') ]
+
+// Reachability witness: token granting is not vacuous.
+lemma token_granted_reachable:
+  exists-trace
+  "Ex C Grant Auth #k. TokenGranted(C, Grant, Auth)@k"
 
 // Property: If a confidential client's token is granted, then valid client
 // authentication was presented for that request.

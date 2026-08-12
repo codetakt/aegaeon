@@ -62,6 +62,11 @@ rule AS_Validates_Pkjwt:
   ]->
   [ ]
 
+/* Reachability witness: token issuance for private_key_jwt is not vacuous. */
+lemma token_issued_reachable:
+  exists-trace
+  "Ex as client jti #i. TokenIssued(as, client, jti)@i"
+
 /* If a token is issued for client authentication, it must originate from a client request. */
 lemma pkjwt_client_auth_integrity:
   "All as client jti #i.

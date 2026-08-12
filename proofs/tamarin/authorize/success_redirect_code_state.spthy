@@ -14,10 +14,23 @@ rule ClientMakesAuthzReq:
   --[ AuthzReq($C, $RU, ~s, ~tid) ]->
   [ Req($C, $RU, ~s, ~tid) ]
 
-rule ServerIssuesCodeAndRedirect:
-  [ Req($C, $RU, $S, $TID), Fr(~code) ]
-  --[ CodeIssued($C, ~code, $S, $RU, $TID), Redirect($C, $RU, ~code, $S, $TID) ]->
+// Two-phase issuance: the code is issued first (msg-sorted state/session flow
+// in from the fresh request), then the redirect carrying it is emitted in a
+// strictly later step.
+rule ServerIssuesCode:
+  [ Req($C, $RU, s, tid), Fr(~code) ]
+  --[ CodeIssued($C, ~code, s, $RU, tid) ]->
+  [ PendingCodeRedirect($C, $RU, ~code, s, tid) ]
+
+rule ServerRedirectsCode:
+  [ PendingCodeRedirect($C, $RU, code, s, tid) ]
+  --[ Redirect($C, $RU, code, s, tid) ]->
   [ ]
+
+// Reachability witness: the issuance action is not vacuous.
+lemma code_issued_reachable:
+  exists-trace
+  "Ex C code S RU tid #i. CodeIssued(C, code, S, RU, tid)@i"
 
 // Properties
 

@@ -16,9 +16,9 @@ PROOFS=(
 	"cross_client_isolation,rotation_count_monotonicity,no_token_after_revocation"
 
 	# --- authorize ---
-	"authorize/error_redirect_state.spthy:ErrorStateEcho,StateEchoEq"
+	"authorize/error_redirect_state.spthy:ErrorRedirectEchoesState,StateEchoEq,redirect_reachable"
 	"authorize/success_redirect_code_state.spthy:"
-	"SuccessStateEcho,CodeFreshAndBound,RedirectRequiresRequest,CodeIssuedUnique"
+	"SuccessStateEcho,CodeFreshAndBound,RedirectRequiresRequest,CodeIssuedUnique,code_issued_reachable"
 
 	# --- bearer ---
 	"bearer/bearer_bcp.spthy:"
@@ -27,11 +27,11 @@ PROOFS=(
 	"bearer/cnf_single_key.spthy:cnf_single_key"
 
 	# --- client_auth ---
-	"client_auth/token_endpoint_auth_required.spthy:TokenAuth"
-	"client_auth/client_authentication.spthy:client_authentication,client_credential_secrecy"
+	"client_auth/token_endpoint_auth_required.spthy:TokenAuth,token_granted_reachable"
+	"client_auth/client_authentication.spthy:client_authentication,client_credential_secrecy,client_authenticated_reachable"
 	"client_auth/private_key_jwt.spthy:"
 	"pkjwt_client_auth_integrity,pkjwt_audience_binding,"
-	"pkjwt_unforgeability,pkjwt_no_replay"
+	"pkjwt_unforgeability,pkjwt_no_replay,token_issued_reachable"
 
 	# --- dpop ---
 	"dpop/dpop_replay.spthy:dpop_resource_grant_reachable,dpop_replay_impossible"
