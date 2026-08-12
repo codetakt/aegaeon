@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+source "$ROOT/scripts/extraction/lib/everparse_postprocess.sh"
+
 OUT_DIR="$ROOT/generated/everparse"
 mkdir -p "$OUT_DIR"
 
@@ -71,6 +73,13 @@ nix develop .#verification --command bash -lc '
     fstar/lowparse/LogoutTokenSchema.3d \
     fstar/lowparse/RequestObjectSchema.3d \
     fstar/lowparse/Dpop.3d
+'
+
+nix develop .#verification --command bash -lc '
+  set -euo pipefail
+  cd "$(git rev-parse --show-toplevel)"
+  source scripts/extraction/lib/everparse_postprocess.sh
+  postprocess_everparse_dir "${AEG_EVERPARSE_OUT_DIR:?}"
 '
 
 echo "[everparse] Generated artefacts under $OUT_DIR"
