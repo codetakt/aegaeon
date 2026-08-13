@@ -227,7 +227,7 @@ jobs:
             echo "::error::No .wasm file found in build output"
             exit 1
           fi
-          AEG_REQUIRE_WASM=1 tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
+          AEG_REQUIRE_WASM=1 nix develop . --command tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
 
   # Dudect Constant-Time Analysis (HACL*/EverCrypt)
   dudect:
