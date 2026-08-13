@@ -465,11 +465,12 @@ jobs:
           $SUDO apt-get clean || true
           df -h
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
 
       - name: Run JOSE JSON/TLV compatibility tests
         run: |
+          nix develop . --command bash -c "$(cat <<'BASH'
           run_test() {
             cargo test "$@"
           }
@@ -546,9 +547,12 @@ jobs:
           run_test -p aegaeon-server --lib \
             compat_profile_allows_request_object_self_check_bypass_when_disabled \
             -- --nocapture
+          BASH
+          )"
 
       - name: Run strict claim-bearing profile tests
         run: |
+          nix develop . --command bash -c "$(cat <<'BASH'
           run_test() {
             cargo test "$@"
           }
@@ -650,9 +654,12 @@ jobs:
           run_test -p aegaeon-server --lib \
             verified_claim_profile_requires_request_object_self_check_without_env_gate \
             --features "$strict_features" -- --nocapture
+          BASH
+          )"
 
       - name: Run TLV parity tests
         run: |
+          nix develop . --command bash -c "$(cat <<'BASH'
           mkdir -p artifacts/jose/tlv-parity
           : > artifacts/jose/tlv-parity/test-output.txt
 
@@ -693,10 +700,13 @@ jobs:
             fi
             cat "$output" >> artifacts/jose/tlv-parity/test-output.txt
           done
+          BASH
+          )"
 
       - name: Collect TLV parity failure artifacts
         if: failure()
         run: |
+          mkdir -p artifacts/jose/tlv-parity
           # Create failure summary
           {
             echo "=== TLV Parity Test Failures ==="
@@ -738,19 +748,21 @@ jobs:
       - name: Run context boundary tests
         continue-on-error: true
         run: |
+          nix develop . --command bash -c "$(cat <<'BASH'
           mkdir -p artifacts/jose/context-boundary
           # Run context boundary tests and capture output
-          # Note: Currently blocked by C compilation errors (Jose_Utf8Lemmas_decode_error)
-          # See: docs/verification/fstar/troubleshooting.md
           cargo test -p aegaeon-jose --test context_boundary \
             -- --nocapture 2>&1 | tee artifacts/jose/context-boundary/test-output.txt || {
-            echo "⚠️ Context boundary tests failed (expected due to C compilation errors)"
+            echo "Context boundary tests failed; see captured output"
             exit 0
           }
+          BASH
+          )"
 
       - name: Collect context boundary failure artifacts
         if: always()
         run: |
+          mkdir -p artifacts/jose/context-boundary
           # Create failure summary
           {
             echo "=== Context Boundary Test Failures ==="
@@ -782,10 +794,6 @@ jobs:
             cargo --version 2>/dev/null || echo "cargo not available"
             echo ""
             echo "Build profile: test (unoptimized + debuginfo)"
-            echo ""
-            echo "=== Known Issues ==="
-            echo "C compilation errors (Jose_Utf8Lemmas_decode_error) block FFI tests"
-            echo "See: docs/verification/fstar/troubleshooting.md"
           } > artifacts/jose/context-boundary/environment.txt
 
           echo "✅ Context boundary failure artifacts collected"
