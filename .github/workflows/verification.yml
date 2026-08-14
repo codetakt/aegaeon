@@ -470,7 +470,7 @@ jobs:
 
       - name: Run JOSE JSON/TLV compatibility tests
         run: |
-          nix develop . --command bash -c "$(cat <<'BASH'
+          nix develop .#verification --command bash -c "$(cat <<'BASH'
           run_test() {
             cargo test "$@"
           }
@@ -552,7 +552,7 @@ jobs:
 
       - name: Run strict claim-bearing profile tests
         run: |
-          nix develop . --command bash -c "$(cat <<'BASH'
+          nix develop .#verification --command bash -c "$(cat <<'BASH'
           run_test() {
             cargo test "$@"
           }
@@ -659,7 +659,7 @@ jobs:
 
       - name: Run TLV parity tests
         run: |
-          nix develop . --command bash -c "$(cat <<'BASH'
+          nix develop .#verification --command bash -c "$(cat <<'BASH'
           mkdir -p artifacts/jose/tlv-parity
           : > artifacts/jose/tlv-parity/test-output.txt
 
@@ -748,7 +748,7 @@ jobs:
       - name: Run context boundary tests
         continue-on-error: true
         run: |
-          nix develop . --command bash -c "$(cat <<'BASH'
+          nix develop .#verification --command bash -c "$(cat <<'BASH'
           mkdir -p artifacts/jose/context-boundary
           # Run context boundary tests and capture output
           cargo test -p aegaeon-jose --test context_boundary \
