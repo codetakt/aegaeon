@@ -16,6 +16,9 @@
 }:
 let
   perfRuntimeInputs = devTools ++ [ karamel ];
+  extractionRuntimeInputs = builtins.filter (
+    input: input != pkgs.cargo-vet
+  ) verificationRuntimeInputs;
 
   perfApps = {
     perf-bench = mkAppSpec {
@@ -79,7 +82,7 @@ let
     verify-lowstar = mkAppSpec {
       binName = "aegaeon-verify-lowstar";
       description = "Run Low* verification.";
-      runtimeInputs = verificationRuntimeInputs;
+      runtimeInputs = extractionRuntimeInputs;
       script = ../../scripts/flake/verify_lowstar.sh;
     };
     verify-kani = mkAppSpec {

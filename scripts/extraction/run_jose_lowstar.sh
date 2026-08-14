@@ -430,6 +430,12 @@ normalize_karamel_sources() {
 			if normalized != text: path.write_text(normalized)
 		PY
 	done
+
+	# Nested KaRaMeL outputs (currently only jose/internal/Prims.h) sit below the
+	# maxdepth-1 loop above, which deliberately owns the invocation rewrap. Apply
+	# only banner/newline normalization here so the single-line invocation remains.
+	find "$dir" -mindepth 2 -type f \( -name '*.c' -o -name '*.h' \) -exec \
+		perl -0pi -e 's{\A/\* }{/*}; s/\n+\z/\n/' {} +
 }
 
 init_upstream_warning_logging
