@@ -40,8 +40,20 @@ lemma csrf_protection:
     StateValidated(C, state) @ i ==>
     Ex #j. StateGenerated(C, state) @ j & j < i"
 
+// State unpredictability: distinct state-generation events never collide
+// (guaranteed by Fr(~state)). Front-channel `state` is not secret in OAuth;
+// the security-relevant property is unpredictability, not secrecy. This
+// replaces the prior K(state)-based formulation, which was vacuous (raw
+// `state` is never released, so K(state) is unreachable) and would be FALSE
+// if it were reachable. Parallels the removal of `token_secrecy` and mirrors
+// state_echo_integrity.spthy's StateUnpredictability.
 lemma state_unpredictability:
-  "All C state #i #j. StateGenerated(C, state) @ i & K(state) @ j ==>
-    Ex #k. StateValidated(C, state) @ k & k < j"
+  "All C1 C2 state #i #j.
+     StateGenerated(C1, state) @ i & StateGenerated(C2, state) @ j
+     ==> #i = #j"
+
+lemma response_accepted_reachable:
+  exists-trace
+  "Ex C code #i. ResponseAccepted(C, code) @ i"
 
 end
