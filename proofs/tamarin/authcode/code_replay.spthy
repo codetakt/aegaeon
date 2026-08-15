@@ -10,7 +10,7 @@ rule Generate_Code:
   [ Fr(~code), Fr(~nonce) ]
   --[ CodeIssued($AS, $Client, ~code, ~nonce),
       Once(~code) ]->
-  [ Code($AS, $Client, ~code, ~nonce) ]
+  [ Code($AS, $Client, ~code, ~nonce), Out(~code) ]
 
 // Code redemption (can only happen once)
 rule Redeem_Code:
@@ -40,5 +40,9 @@ restriction once:
 
 restriction unique:
   "All x #i #j. Unique(x) @ i & Unique(x) @ j ==> #i = #j"
+
+lemma code_redemption_reachable:
+  exists-trace
+  "Ex AS C code nonce #i. CodeRedeemed(AS, C, code, nonce) @ i"
 
 end
