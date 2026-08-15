@@ -217,4 +217,9 @@ lemma no_token_without_authorization:
 // and token_session_binding, which prove the authorization flow's
 // structural integrity rather than false secrecy claims.
 
+lemma session_flow_reachable:
+  exists-trace
+  "Ex client user token resource #i.
+     ResourceAccessed(client, user, token, resource) @ i"
+
 end

@@ -99,4 +99,8 @@ lemma StateUnpredictability:
      Client_AuthzReq(C2, s, uri2, n2)@j
      ==> #i = #j"
 
+lemma client_accept_reachable:
+  exists-trace
+  "Ex C code state uri #i. Client_Accepted(C, code, state, uri) @ i"
+
 end

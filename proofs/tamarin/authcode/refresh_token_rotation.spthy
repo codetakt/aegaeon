@@ -172,4 +172,13 @@ lemma no_token_after_revocation:
      Token_Rotated(client, user, rt, new_rt, count)@j
      ==> #j < #i"
 
+lemma rotation_reachable:
+  exists-trace
+  "Ex client user rt new count #i.
+     Token_Rotated(client, user, rt, new, count) @ i"
+
+lemma replay_detection_reachable:
+  exists-trace
+  "Ex client user rt #i. RT_Replay_Detected(client, user, rt) @ i"
+
 end
