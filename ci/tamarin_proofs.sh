@@ -3,17 +3,20 @@
 # Paths are relative to proofs/tamarin.
 PROOFS=(
 	# --- authcode ---
-	"authcode/code_injection.spthy:no_code_injection,state_binding"
+	"authcode/code_injection.spthy:no_code_injection,state_binding,code_exchange_reachable"
 	"authcode/authcode_session_integrity.spthy:"
 	"session_integrity,code_single_use,state_csrf_protection,"
-	"nonce_replay_protection"
-	"authcode/csrf_protection.spthy:csrf_protection,state_unpredictability"
-	"authcode/code_replay.spthy:code_single_use,code_freshness"
+	"nonce_replay_protection,authorization_binding,pkce_code_injection_prevention,"
+	"user_authentication,client_authentication,token_session_binding,"
+	"no_token_without_authorization,session_flow_reachable"
+	"authcode/csrf_protection.spthy:csrf_protection,state_unpredictability,response_accepted_reachable"
+	"authcode/code_replay.spthy:code_single_use,code_freshness,code_redemption_reachable"
 	"authcode/state_echo_integrity.spthy:"
-	"StateEcho,StateFreshness,StateSingleUse,StateUnpredictability"
+	"StateEcho,StateFreshness,StateSingleUse,StateUnpredictability,client_accept_reachable"
 	"authcode/refresh_token_rotation.spthy:"
 	"rotation_single_use,replay_detection_and_revocation,rotation_chain_integrity,"
-	"cross_client_isolation,rotation_count_monotonicity,no_token_after_revocation"
+	"cross_client_isolation,rotation_count_monotonicity,no_token_after_revocation,"
+	"rotation_reachable,replay_detection_reachable"
 
 	# --- authorize ---
 	"authorize/error_redirect_state.spthy:ErrorRedirectEchoesState,StateEchoEq,redirect_reachable"
