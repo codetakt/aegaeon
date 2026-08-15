@@ -9,7 +9,7 @@ builtins: hashing, symmetric-encryption
 rule Generate_Code:
   [ Fr(~code), Fr(~state) ]
   --[ CodeGenerated($AS, $Client, ~code, ~state) ]->
-  [ !Code($AS, $Client, ~code, ~state), Out(~state) ]
+  [ !Code($AS, $Client, ~code, ~state), Out(<~code, ~state>) ]
 
 // Code exchange with state validation
 rule Exchange_Code:
@@ -33,5 +33,9 @@ lemma state_binding:
     CodeGenerated(AS, C, code, state1) @ i &
     CodeExchanged(AS, C, code, state2) @ j ==>
     state1 = state2"
+
+lemma code_exchange_reachable:
+  exists-trace
+  "Ex AS C code state #i. CodeExchanged(AS, C, code, state) @ i"
 
 end
