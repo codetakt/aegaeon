@@ -201,4 +201,12 @@ lemma request_uri_issued_unique:
   "All as1 as2 c1 c2 uri #i #j.
      RequestURIIssued(as1, c1, uri)@i & RequestURIIssued(as2, c2, uri)@j ==> #i = #j"
 
+lemma par_flow_reachable:
+  exists-trace
+  "Ex as client uri code token redirect #i #j.
+     UserAuthorized(as, client, uri, code) @ i &
+     CodeIssued(as, client, code) @ i &
+     TokenExchanged(client, token, redirect) @ j &
+     #i < #j"
+
 end

@@ -76,4 +76,11 @@ lemma jar_parameter_fixation:
      ==> (Ex uri cc scope jti #j.
            JARValidated(as, client, uri, st, cc, ru, scope, jti)@j & #j < #i)"
 
+lemma jar_flow_reachable:
+  exists-trace
+  "Ex as client uri st cc ru scope jti code #i #j.
+     JARValidated(as, client, uri, st, cc, ru, scope, jti) @ i &
+     AuthorizationWithPAR(as, client, st, code, ru) @ j &
+     #i < #j"
+
 end

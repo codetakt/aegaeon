@@ -68,9 +68,9 @@ PROOFS=(
 	# --- par ---
 	"par/par_redirect_integrity.spthy:"
 	"redirect_integrity,request_uri_single_use,no_request_uri_injection,"
-	"request_uri_consumed_on_use,request_uri_issued_unique"
-	"par/par_security.spthy:par_redirect_binding,par_integrity"
-	"par/jar_par_fixation.spthy:jar_parameter_fixation"
+	"request_uri_consumed_on_use,request_uri_issued_unique,par_flow_reachable"
+	"par/par_security.spthy:par_redirect_binding,par_integrity,par_flow_reachable"
+	"par/jar_par_fixation.spthy:jar_parameter_fixation,jar_flow_reachable"
 
 	# --- pkce ---
 	"pkce/pkce_security.spthy:token_issuance_reachable,mismatched_verifiers_cannot_inject_codes"

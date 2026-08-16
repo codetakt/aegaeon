@@ -44,4 +44,12 @@ lemma par_integrity:
     PARUsed(C, uri, redirect2) @ j ==>
     redirect1 = redirect2"
 
+lemma par_flow_reachable:
+  exists-trace
+  "Ex C AS uri redir #i #j #k.
+     PARPushed(C, uri, redir) @ i &
+     PARUsed(C, uri, redir) @ j &
+     AuthResponse(AS, C, redir) @ k &
+     #i < #j & #j < #k"
+
 end
