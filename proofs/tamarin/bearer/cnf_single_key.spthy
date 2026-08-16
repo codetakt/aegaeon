@@ -18,4 +18,10 @@ lemma cnf_single_key:
      CnfDpop(token, jkt) @ i &
      CnfMtls(token, x5t) @ j)"
 
+lemma cnf_both_kinds_reachable:
+  exists-trace
+  "Ex t1 jkt t2 x5t #i #j.
+     CnfDpop(t1, jkt) @ i &
+     CnfMtls(t2, x5t) @ j"
+
 end

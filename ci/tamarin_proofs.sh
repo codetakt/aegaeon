@@ -28,7 +28,7 @@ PROOFS=(
 	"no_access_after_revocation,mixup_resistance,redirect_uri_exact_match,"
 	"dpop_sender_constraint,auth_code_single_use,token_unforgeability,session_integrity,"
 	"bearer_flow_reachable"
-	"bearer/cnf_single_key.spthy:cnf_single_key"
+	"bearer/cnf_single_key.spthy:cnf_single_key,cnf_both_kinds_reachable"
 
 	# --- client_auth ---
 	"client_auth/token_endpoint_auth_required.spthy:TokenAuth,token_granted_reachable"
