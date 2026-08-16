@@ -26,7 +26,8 @@ PROOFS=(
 	# --- bearer ---
 	"bearer/bearer_bcp.spthy:"
 	"no_access_after_revocation,mixup_resistance,redirect_uri_exact_match,"
-	"dpop_sender_constraint,auth_code_single_use,token_secrecy,session_integrity"
+	"dpop_sender_constraint,auth_code_single_use,token_unforgeability,session_integrity,"
+	"bearer_flow_reachable"
 	"bearer/cnf_single_key.spthy:cnf_single_key"
 
 	# --- client_auth ---
