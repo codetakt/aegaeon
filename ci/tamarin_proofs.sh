@@ -65,7 +65,7 @@ PROOFS=(
 	"iframe_origin_check,logout_consistency"
 	"oidc/userinfo_security.spthy:"
 	"access_token_required,scope_claim_correspondence,no_claim_leakage,"
-	"sub_consistency,token_binding_check"
+	"sub_consistency,token_binding_check,sender_binding_reachable"
 
 	# --- par ---
 	"par/par_redirect_integrity.spthy:"

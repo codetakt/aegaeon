@@ -120,6 +120,8 @@ rule OP_UserInfo_Response:
 // UserInfo request with sender-constrained token.
 // The OP additionally verifies proof-of-possession via the binding key.
 rule OP_UserInfo_Response_Bound:
+ let binding_proof = sign(<'pop', token>, binding_key)  // PoP: signed by bound key
+ in
   [ In(<'userinfo_request_bound', token, binding_proof>),
     Active_Token_Bound($OP, $RP, $User, token, scope, binding_key),
     !User_Claim($User, scope, $ClaimName, claim_value) ]
@@ -131,11 +133,14 @@ rule OP_UserInfo_Response_Bound:
   [ Active_Token_Bound($OP, $RP, $User, token, scope, binding_key),
     Out(<'userinfo_response', $User, scope, $ClaimName, claim_value>) ]
 
-// Sender binding verification: the proof must match the bound key.
-// Models DPoP proof or mTLS client cert fingerprint match.
-restriction sender_binding_must_match:
-  "All op token key proof #i.
-     Sender_Binding_Verified(op, token, key, proof)@i ==> proof = key"
+// Sender binding is enforced structurally by matching a signature made with the
+// key stored in Active_Token_Bound.
+
+rule Client_UserInfo_Request_Bound:
+  [ Client_Holds_Token_Bound($RP, token, binding_key) ]
+  --[ Client_Presents_PoP($RP, token) ]->
+  [ Out(<'userinfo_request_bound', token, sign(<'pop', token>, binding_key)>),
+    Client_Holds_Token_Bound($RP, token, binding_key) ]
 
 /* ============ Client Compromise ============ */
 
@@ -194,5 +199,9 @@ lemma token_binding_check:
   "All op token key proof #i.
      Sender_Binding_Verified(op, token, key, proof)@i
      ==> Ex #j. Token_Sender_Bound(op, token, key)@j & #j < #i"
+
+lemma sender_binding_reachable:
+  exists-trace
+  "Ex op token key proof #i. Sender_Binding_Verified(op, token, key, proof) @ #i"
 
 end
