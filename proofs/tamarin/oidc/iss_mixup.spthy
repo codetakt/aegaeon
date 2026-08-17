@@ -50,4 +50,7 @@ lemma issuer_binding:
   "All C AS code #i. IssuerValidated(C, AS, code) @ i ==>
     Ex #j. CodeIssued(AS, C, code) @ j & j < i"
 
+lemma issuer_validated_reachable:
+  exists-trace "Ex C AS code #i. IssuerValidated(C, AS, code) @ #i"
+
 end

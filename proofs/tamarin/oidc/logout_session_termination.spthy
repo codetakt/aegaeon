@@ -82,4 +82,7 @@ lemma backchannel_logout_jti_stable:
      Backchannel_Logout_Sent(rp2, sid, jti2) @ #j
      ==> jti1 = jti2"
 
+lemma backchannel_logout_reachable:
+  exists-trace "Ex rp sid jti #i. Backchannel_Logout_Sent(rp, sid, jti) @ #i"
+
 end

@@ -58,4 +58,8 @@ lemma nonce_session_integrity:
      SessionEstablishedEvent(rp, user, nonce, token_id) @ #j
      ==> Ex #k. OPIdToken(rp, user, nonce, token_id) @ #k & #k < #j"
 
+lemma session_established_reachable:
+  exists-trace
+  "Ex rp user nonce tid #j. SessionEstablishedEvent(rp, user, nonce, tid) @ #j"
+
 end

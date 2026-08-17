@@ -197,4 +197,7 @@ lemma logout_consistency:
      BC_Logout_Sent(op, rp2, sid, jti)@j
      ==> Ex user #k. Session_Terminated(op, user, sid)@k & #k < #i & #k < #j"
 
+lemma fc_logout_reachable:
+  exists-trace "Ex op rp sid fc_uri #i. FC_Logout_Sent(op, rp, sid, fc_uri) @ #i"
+
 end
