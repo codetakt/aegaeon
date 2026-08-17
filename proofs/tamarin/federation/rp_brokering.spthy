@@ -229,4 +229,8 @@ lemma no_downstream_without_upstream:
 // pkce_downstream restriction) is the defense against code injection, not
 // code secrecy.
 
+lemma federation_login_reachable:
+  exists-trace
+  "Ex idp rp user sess #i. Federation_Login_Succeeded(idp, rp, user, sess) @ #i"
+
 end

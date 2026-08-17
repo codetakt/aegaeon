@@ -297,4 +297,8 @@ lemma chain_unforgeability:
          | (Ex #c. Compromised(op)@c)
          | (Ex #c. Compromised(ta)@c)"
 
+lemma rp_trusted_via_chain_reachable:
+  exists-trace
+  "Ex op rp anchor chain #i. RP_Trusted_Via_Chain(op, rp, anchor, chain) @ #i"
+
 end

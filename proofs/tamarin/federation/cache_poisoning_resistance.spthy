@@ -213,4 +213,8 @@ lemma no_stale_key_cache:
      Cache_Entry_Written(env, entity, ta, pk, issuer)@i
      ==> Ex #j. Subordinate_Issued(ta, entity, pk)@j & #j < #i"
 
+lemma cache_hit_reachable:
+  exists-trace
+  "Ex env entity key meta #i. Cache_Hit(env, entity, key, meta) @ #i"
+
 end

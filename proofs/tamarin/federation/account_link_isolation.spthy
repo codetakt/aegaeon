@@ -217,4 +217,8 @@ lemma link_tenant_binding:
      Federated_Auth(env, tenant, idp, sub, user, acct)@i
      ==> Ex #j. Env_Belongs_To_Tenant(env, tenant)@j & #j < #i"
 
+lemma isolated_fed_auth_reachable:
+  exists-trace
+  "Ex tenant env idp rp user sub #i. Federated_Auth(tenant, env, idp, rp, user, sub) @ #i"
+
 end

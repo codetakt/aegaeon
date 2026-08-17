@@ -249,4 +249,8 @@ lemma direct_chain_no_intermediate:
      ==> Ex ta_pk ta_policy #j.
            Trust_Anchor_Established(ta, ta_pk, ta_policy)@j & #j < #i"
 
+lemma chain_resolved_reachable:
+  exists-trace
+  "Ex entity anchor meta key #i. Chain_Resolved(entity, anchor, meta, key) @ #i"
+
 end

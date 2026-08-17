@@ -117,4 +117,8 @@ lemma chain_requires_fetch:
      Chain_Resolved(ta, entity, pk)@i
      ==> Ex #j. Fetched(ta, entity)@j & #j < #i"
 
+lemma ssrf_chain_resolved_reachable:
+  exists-trace
+  "Ex entity anchor meta #i. Chain_Resolved(entity, anchor, meta) @ #i"
+
 end

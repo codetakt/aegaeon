@@ -150,4 +150,8 @@ lemma registered_key_authenticity:
      JWKS_Registered(broker, idp, pk)@i
      ==> Ex method #j. IdP_Key_Created(idp, pk, method)@j & #j < #i"
 
+lemma token_verified_reachable:
+  exists-trace
+  "Ex idp rp tok key kid #i. Token_Verified(idp, rp, tok, key, kid) @ #i"
+
 end

@@ -303,4 +303,8 @@ lemma id_token_unforgeability:
             US_IDToken_Issued(idp, token, broker, user, nonce, issuer)@j & #j < #i)
          | (Ex A #c. Compromised(A)@c)"
 
+lemma callback_processed_reachable:
+  exists-trace
+  "Ex rp user state code sess #i. Callback_Processed(rp, user, state, code, sess) @ #i"
+
 end

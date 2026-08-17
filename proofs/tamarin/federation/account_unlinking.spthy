@@ -98,4 +98,8 @@ lemma auth_requires_link:
      Fed_Auth(idp, sub, user, acct)@i
      ==> Ex #j. Linked(idp, sub, user, acct)@j & #j < #i"
 
+lemma fed_auth_reachable:
+  exists-trace
+  "Ex idp rp user sub #i. Fed_Auth(idp, rp, user, sub) @ #i"
+
 end

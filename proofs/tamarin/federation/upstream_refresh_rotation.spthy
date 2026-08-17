@@ -116,4 +116,8 @@ lemma cross_client_isolation:
         Token_Rotated(idp, c2, rt, new_rt)@j
         ==> c1 = c2"
 
+lemma token_rotated_reachable:
+  exists-trace
+  "Ex client old new sess #i. Token_Rotated(client, old, new, sess) @ #i"
+
 end

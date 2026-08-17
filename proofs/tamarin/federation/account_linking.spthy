@@ -186,4 +186,8 @@ lemma link_requires_honest_idp:
         ==> (Ex #j. IdP_Signed_Assertion(idp, sub, acct)@j & #j < #i)
             | (Ex #c. IdP_Compromised(idp)@c)"
 
+lemma linked_session_reachable:
+  exists-trace
+  "Ex rp user sess #i. Session_Granted(rp, user, sess) @ #i"
+
 end

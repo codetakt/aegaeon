@@ -236,4 +236,8 @@ lemma end_to_end_authentication:
             & #j < #i)
          | (Ex A #c. Reveal(A)@c)"
 
+lemma ds_idtoken_verified_reachable:
+  exists-trace
+  "Ex rp user tok nonce iss #i. DS_IDToken_Verified(rp, user, tok, nonce, iss) @ #i"
+
 end
