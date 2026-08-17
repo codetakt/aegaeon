@@ -29,7 +29,8 @@ rule OP_Init:
   --[ OP_Initialized($OP, issuer_url) ]->
   [ !OP_Key($OP, ~op_key),
     !OP_Issuer($OP, issuer_url),
-    Out(<$OP, issuer_url>) ]
+    !Pk($OP, pk(~op_key)),  // publish signing pubkey (JWKS) so RPs can verify
+    Out(<$OP, issuer_url, pk(~op_key)>) ]
 
 // Relying Party (client) registration
 rule RP_Register:
@@ -167,9 +168,9 @@ rule Revoke_Token:
 
 // ID Token uniquely bound to authentication session
 lemma id_token_session_binding:
-  "All op rp user token nonce at_hash #i #j.
+  "All op rp user token claims nonce at_hash #i #j.
     ID_Token_Issued(op, rp, user, token, nonce, at_hash) @ #i &
-    ID_Token_Verified(rp, user, token, nonce) @ #j
+    ID_Token_Verified(rp, user, claims, nonce) @ #j
     ==> Ex state challenge #k.
           RP_Auth_Started(rp, user, nonce, state, challenge) @ #k & #k < #i"
 
@@ -182,10 +183,10 @@ lemma nonce_replay_prevention:
 
 // Session integrity: auth request parameters preserved
 lemma session_integrity:
-  "All rp user nonce1 state challenge claims nonce2 #i #j.
-    RP_Auth_Started(rp, user, nonce1, state, challenge) @ #i &
+  "All rp user claims nonce2 #j.
     ID_Token_Verified(rp, user, claims, nonce2) @ #j
-    ==> nonce1 = nonce2"
+    ==> Ex state challenge #i.
+          RP_Auth_Started(rp, user, nonce2, state, challenge) @ #i & #i < #j"
 
 // Access token bound to ID token via at_hash
 lemma token_binding_integrity:
@@ -238,5 +239,9 @@ lemma pkce_code_injection_prevention:
     PKCE_Verified(verifier, challenge) @ #j &
     Code_Used(op, code, rp) @ #k
     ==> h(<'S256', verifier>) = challenge"
+
+lemma oidc_verify_reachable:
+  exists-trace
+  "Ex rp user claims nonce #j. ID_Token_Verified(rp, user, claims, nonce) @ #j"
 
 end
