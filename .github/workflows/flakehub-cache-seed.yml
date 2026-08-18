@@ -49,6 +49,17 @@ jobs:
           metadata=$(nix derivation show "$vendor_drv")
           staging_name=$(jq -r '.derivations[].env.name' <<<"$metadata")
           source_path=$(jq -r '.derivations[].env.src' <<<"$metadata")
+          mapfile -t source_drvs < <(
+            jq -r \
+              '.derivations[].inputs.drvs | keys[] | select(endswith("-source.drv"))' \
+              <<<"$metadata"
+          )
+          if [ "${#source_drvs[@]}" -ne 1 ]; then
+            printf 'Expected one cargo-vet source derivation, found %s\n' \
+              "${#source_drvs[@]}" >&2
+            exit 1
+          fi
+          source_drv="/nix/store/${source_drvs[0]}"
           cargo_hash=$(jq -r '.derivations[].env.outputHash' <<<"$metadata")
           expected_output=$(nix-store --query --outputs "$vendor_drv")
           package_name=${staging_name%-vendor-staging}
@@ -57,6 +68,7 @@ jobs:
             echo "vendor_drv=$vendor_drv"
             echo "package_name=$package_name"
             echo "source_path=$source_path"
+            echo "source_drv=$source_drv"
             echo "cargo_hash=$cargo_hash"
             echo "expected_output=$expected_output"
           } | tee -a "$GITHUB_OUTPUT"
@@ -66,6 +78,7 @@ jobs:
         env:
           PACKAGE_NAME: ${{ steps.fod.outputs.package_name }}
           SOURCE_PATH: ${{ steps.fod.outputs.source_path }}
+          SOURCE_DRV: ${{ steps.fod.outputs.source_drv }}
           CARGO_HASH: ${{ steps.fod.outputs.cargo_hash }}
           EXPECTED_OUTPUT: ${{ steps.fod.outputs.expected_output }}
         run: |
@@ -73,6 +86,8 @@ jobs:
           seed_nixpkgs=$(
             nix eval --raw "github:NixOS/nixpkgs/${SEED_NIXPKGS_REV}#path"
           )
+          nix build "$SOURCE_DRV^out" --no-link -L
+          nix-store --check-validity "$SOURCE_PATH"
           seed_expr="$RUNNER_TEMP/seed-cargo-vet-vendor.nix"
           cat >"$seed_expr" <<'EOF'
           {
