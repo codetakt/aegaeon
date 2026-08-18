@@ -1,0 +1,181 @@
+name: FlakeHub Cache Seed
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: flakehub-cache-seed
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  SEED_NIXPKGS_REV: ec2d622de0773551768cf98f3fc50cbcc003b9c5
+
+jobs:
+  seed-cargo-vet-vendor:
+    name: Seed cargo-vet vendor FOD
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI with FlakeHub
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Resolve pinned cargo-vet FOD
+        id: fod
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_drv=$(nix eval --raw .#devShells.x86_64-linux.default.drvPath)
+          mapfile -t matches < <(
+            nix-store --query --requisites "$shell_drv" \
+              | grep -E '/[^/]*cargo-vet-.*-vendor-staging\.drv$'
+          )
+          if [ "${#matches[@]}" -ne 1 ]; then
+            printf 'Expected one cargo-vet vendor-staging derivation, found %s\n' \
+              "${#matches[@]}" >&2
+            printf '%s\n' "${matches[@]}" >&2
+            exit 1
+          fi
+
+          vendor_drv=${matches[0]}
+          metadata=$(nix derivation show "$vendor_drv")
+          staging_name=$(jq -r '.derivations[].env.name' <<<"$metadata")
+          source_path=$(jq -r '.derivations[].env.src' <<<"$metadata")
+          cargo_hash=$(jq -r '.derivations[].env.outputHash' <<<"$metadata")
+          expected_output=$(nix-store --query --outputs "$vendor_drv")
+          package_name=${staging_name%-vendor-staging}
+
+          {
+            echo "vendor_drv=$vendor_drv"
+            echo "package_name=$package_name"
+            echo "source_path=$source_path"
+            echo "cargo_hash=$cargo_hash"
+            echo "expected_output=$expected_output"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Seed fixed-output vendor closure
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.fod.outputs.package_name }}
+          SOURCE_PATH: ${{ steps.fod.outputs.source_path }}
+          CARGO_HASH: ${{ steps.fod.outputs.cargo_hash }}
+          EXPECTED_OUTPUT: ${{ steps.fod.outputs.expected_output }}
+        run: |
+          set -euo pipefail
+          seed_nixpkgs=$(
+            nix eval --raw "github:NixOS/nixpkgs/${SEED_NIXPKGS_REV}#path"
+          )
+          seed_expr="$RUNNER_TEMP/seed-cargo-vet-vendor.nix"
+          cat >"$seed_expr" <<'EOF'
+          {
+            nixpkgsPath,
+            sourcePath,
+            packageName,
+            cargoHash,
+          }:
+          let
+            pkgs = import (builtins.storePath nixpkgsPath) { };
+          in
+          pkgs.rustPlatform.fetchCargoVendor {
+            name = packageName;
+            src = builtins.storePath sourcePath;
+            hash = cargoHash;
+          }
+          EOF
+
+          nix build --no-link -L --impure --file "$seed_expr" \
+            --argstr nixpkgsPath "$seed_nixpkgs" \
+            --argstr sourcePath "$SOURCE_PATH" \
+            --argstr packageName "$PACKAGE_NAME" \
+            --argstr cargoHash "$CARGO_HASH"
+
+          nix-store --check-validity "$EXPECTED_OUTPUT"
+          actual_hash=$(
+            nix path-info --json-format 1 --json "$EXPECTED_OUTPUT" \
+              | jq -r '.[].narHash'
+          )
+          if [ "$actual_hash" != "$CARGO_HASH" ]; then
+            echo "FOD hash mismatch: expected $CARGO_HASH, got $actual_hash" >&2
+            exit 1
+          fi
+          echo "Seeded $EXPECTED_OUTPUT ($actual_hash)"
+
+  validate-cold-substitution:
+    name: Validate cold cargo-vet FOD substitution
+    needs: seed-cargo-vet-vendor
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Nix CI with FlakeHub
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+
+      - name: Build original FOD from a cold runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_drv=$(nix eval --raw .#devShells.x86_64-linux.default.drvPath)
+          mapfile -t matches < <(
+            nix-store --query --requisites "$shell_drv" \
+              | grep -E '/[^/]*cargo-vet-.*-vendor-staging\.drv$'
+          )
+          if [ "${#matches[@]}" -ne 1 ]; then
+            printf 'Expected one cargo-vet vendor-staging derivation, found %s\n' \
+              "${#matches[@]}" >&2
+            exit 1
+          fi
+
+          vendor_drv=${matches[0]}
+          expected_output=$(nix-store --query --outputs "$vendor_drv")
+          expected_hash=$(
+            nix derivation show "$vendor_drv" \
+              | jq -r '.derivations[].env.outputHash'
+          )
+          validation_log="$RUNNER_TEMP/cargo-vet-fod-cold-validation.log"
+
+          nix build "$vendor_drv^out" --no-link -L 2>&1 | tee "$validation_log"
+
+          grep -E \
+            "copying path '$expected_output' from 'https://(edge\.)?cache\.flakehub\.com'" \
+            "$validation_log"
+          if grep -F "building '$vendor_drv'" "$validation_log"; then
+            echo "Original cargo-vet FOD was rebuilt instead of substituted" >&2
+            exit 1
+          fi
+          if grep -E 'crates\.io.*(403|rate limit)' "$validation_log"; then
+            echo "Cold substitution unexpectedly contacted a failing crates.io path" >&2
+            exit 1
+          fi
+
+          actual_hash=$(
+            nix path-info --json-format 1 --json "$expected_output" \
+              | jq -r '.[].narHash'
+          )
+          if [ "$actual_hash" != "$expected_hash" ]; then
+            echo "FOD hash mismatch: expected $expected_hash, got $actual_hash" >&2
+            exit 1
+          fi
+          cp "$validation_log" cargo-vet-fod-cold-validation.log
+
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-vet-fod-cold-validation
+          path: cargo-vet-fod-cold-validation.log
+          if-no-files-found: warn
