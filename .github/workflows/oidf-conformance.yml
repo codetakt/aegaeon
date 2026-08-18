@@ -9,6 +9,9 @@ jobs:
   oidf-conformance:
     name: OpenID Foundation Conformance Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     services:
       # MongoDB for conformance suite
       mongodb:
@@ -50,6 +53,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Build aegaeon-server
         run: nix develop .#default --command cargo build --release --bin aegaeon-server

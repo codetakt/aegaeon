@@ -24,6 +24,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,6 +37,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
         run: nix develop .#ci --command npm ci
@@ -86,6 +90,9 @@ jobs:
     name: TypeScript Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -96,6 +103,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
         run: nix develop .#ci --command npm ci
@@ -118,6 +126,9 @@ jobs:
     name: Python Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -128,6 +139,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run Ruff checks
         run: nix develop .#ci --command ruff check scripts/validation ci/validate_slos.py
@@ -141,6 +153,9 @@ jobs:
     name: Rust Strict Lint
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -151,6 +166,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run strict Rust package lint
         run: nix develop .#ci --command bash ./scripts/flake/lint_rust_strict_packages.sh

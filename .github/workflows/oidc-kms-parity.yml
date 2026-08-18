@@ -25,6 +25,9 @@ jobs:
     name: OIDC AWS KMS Parity
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    permissions:
+      contents: read
+      id-token: write
     services:
       localstack:
         image: localstack/localstack:3.4
@@ -42,6 +45,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run OIDC AWS KMS parity lane
         run: |

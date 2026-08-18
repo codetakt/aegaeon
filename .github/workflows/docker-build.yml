@@ -38,6 +38,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -47,6 +48,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Build OCI image (Nix)
         run: |

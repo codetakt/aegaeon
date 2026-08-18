@@ -64,6 +64,9 @@ jobs:
         github.event.inputs.run_load_tests == 'true')
       }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     services:
       postgres:
         image: postgres:16
@@ -85,6 +88,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run public smoke load test
         env:
@@ -149,6 +153,9 @@ jobs:
     name: Observability Verification
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
@@ -187,6 +194,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Configure Prometheus
         run: |
@@ -260,6 +268,9 @@ jobs:
     name: Code Coverage Analysis
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -267,6 +278,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run tests with coverage
         run: |
