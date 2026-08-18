@@ -48,7 +48,8 @@ PROOFS=(
 
 	# --- jwt_bearer ---
 	"jwt_bearer/jwt_bearer_security.spthy:"
-	"jwt_bearer_grant_integrity,jwt_bearer_unforgeability,jwt_bearer_no_replay"
+	"jwt_bearer_grant_integrity,jwt_bearer_unforgeability,jwt_bearer_no_replay,"
+	"jwt_bearer_grant_reachable"
 
 	# --- oidc ---
 	"oidc/iss_mixup.spthy:no_issuer_mixup,issuer_binding,issuer_validated_reachable"
@@ -82,7 +83,8 @@ PROOFS=(
 	"rar/rar_authorization_details.spthy:"
 	"par_authorization_details_used,par_storage_requires_auth,"
 	"par_precedence_over_query,request_object_precedence_over_query,"
-	"request_object_precedence_over_form,request_object_overrides_form_in_par"
+	"request_object_precedence_over_form,request_object_overrides_form_in_par,"
+	"authorization_details_reachable"
 
 	# --- resource ---
 	"resource/resource_indicators.spthy:resource_access_reachable,resource_audience_enforced"
@@ -96,7 +98,7 @@ PROOFS=(
 	# --- token_exchange ---
 	"token_exchange/token_exchange_security.spthy:"
 	"token_exchange_scope_subset,token_exchange_preserves_audience_and_client,"
-	"token_exchange_preserves_sender_binding"
+	"token_exchange_preserves_sender_binding,token_exchange_reachable"
 
 	# --- federation ---
 	"federation/rp_brokering.spthy:"
@@ -147,20 +149,21 @@ PROOFS=(
 	# --- management ---
 	"management/policy_downgrade.spthy:"
 	"policy_monotonicity,no_silent_downgrade,"
-	"downgrade_requires_registered_admin,upgrade_always_allowed"
+	"downgrade_requires_registered_admin,upgrade_always_allowed,policy_upgrade_reachable"
 	"management/key_rotation_race.spthy:"
 	"always_one_active_key,rotation_single_use,env_key_was_activated,"
-	"rotation_preserves_environment,key_provenance"
+	"rotation_preserves_environment,key_provenance,key_rotation_reachable"
 	"management/policy_enforcement_monotonicity.spthy:"
 	"fallback_monotonicity,child_cannot_weaken_parent,global_pkce_enforced,"
 	"timed_exception_auto_expire,exception_requires_admin,"
-	"resolution_preserves_global,effective_policy_deterministic"
+	"resolution_preserves_global,effective_policy_deterministic,policy_resolution_reachable"
 
 	# --- device_auth (RFC 8628) ---
 	"device_auth/device_authorization_security.spthy:"
 	"no_token_without_user_approval,device_code_single_use,"
 	"user_code_device_binding,no_token_after_expiry,device_code_not_in_network,"
-	"environment_isolation,polling_requires_valid_code,no_token_after_denial"
+	"environment_isolation,polling_requires_valid_code,no_token_after_denial,"
+	"device_token_reachable"
 
 	# --- introspection (RFC 9701 JWT) ---
 	"introspection/jwt_introspection_security.spthy:"
@@ -177,12 +180,14 @@ PROOFS=(
 	# --- sd_jwt (RFC 9901 Selective Disclosure) ---
 	"sd_jwt/sd_jwt_selective_disclosure.spthy:"
 	"disclosure_non_forgeability,selective_privacy,binding_integrity,"
-	"no_disclosure_without_key,salt_uniqueness,no_disclosure_without_salt"
+	"no_disclosure_without_key,salt_uniqueness,no_disclosure_without_salt,"
+	"presentation_verified_reachable"
 
 	# --- dcr (RFC 7591/7592 Dynamic Client Registration Management) ---
 	"dcr/dcr_management_security.spthy:"
 	"registration_token_binding,no_unauthorized_update,client_identity_integrity,"
-	"registration_access_token_secrecy,no_unauthorized_delete,rat_rotation_on_update"
+	"registration_access_token_secrecy,no_unauthorized_delete,rat_rotation_on_update,"
+	"client_registration_reachable"
 
 )
 

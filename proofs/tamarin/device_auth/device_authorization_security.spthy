@@ -259,4 +259,9 @@ lemma no_token_after_denial:
                Token_Issued_Device_Hash(AS, env, client, user, token, dc_hash)@j &
                #i < #j)"
 
+lemma device_token_reachable:
+  exists-trace
+  "Ex AS env client user tok dc #i.
+     Token_Issued_Device(AS, env, client, user, tok, dc) @ i"
+
 end

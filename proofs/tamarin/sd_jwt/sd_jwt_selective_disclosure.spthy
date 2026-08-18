@@ -327,4 +327,8 @@ lemma no_disclosure_without_salt:
      Withheld(Holder, <salt, name, value>)@i
      ==> not(Ex #j. K(salt)@j)"
 
+lemma presentation_verified_reachable:
+  exists-trace
+  "Ex issuer jwt disc #i. Verified_Presentation(issuer, jwt, disc) @ i"
+
 end

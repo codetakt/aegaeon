@@ -132,4 +132,8 @@ lemma key_provenance:
      ==> (Ex #j. Env_Created(env, pk)@j & #j = #i)
          | (Ex old_pk #j. Key_Rotated_Mgmt(env, old_pk, pk)@j & #j = #i)"
 
+lemma key_rotation_reachable:
+  exists-trace
+  "Ex env old_pk new_pk #i. Key_Rotated_Mgmt(env, old_pk, new_pk) @ i"
+
 end

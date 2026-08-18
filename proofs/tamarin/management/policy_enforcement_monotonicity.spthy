@@ -259,4 +259,8 @@ lemma effective_policy_deterministic:
      ==> Ex pid scope #j.
            Resolution_Input(env, pid, scope)@j & #j = #i"
 
+lemma policy_resolution_reachable:
+  exists-trace
+  "Ex env pkce auth mode #i. Policy_Resolved(env, pkce, auth, mode) @ i"
+
 end

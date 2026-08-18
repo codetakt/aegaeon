@@ -79,4 +79,8 @@ lemma jwt_bearer_no_replay:
      & JwtBearerTokenIssued(as, client, sub2, jti)@j
      ==> #i = #j"
 
+lemma jwt_bearer_grant_reachable:
+  exists-trace
+  "Ex AS client sub jti #i. JwtBearerAccepted(AS, client, sub, jti) @ i"
+
 end

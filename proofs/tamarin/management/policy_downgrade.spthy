@@ -159,4 +159,8 @@ lemma upgrade_always_allowed:
      Policy_Upgraded(env, pid, old, new)@i
      ==> Ex #j. Policy_State_Set(env, pid, old)@j & #j < #i"
 
+lemma policy_upgrade_reachable:
+  exists-trace
+  "Ex env pid old new #i. Policy_Upgraded(env, pid, old, new) @ i"
+
 end

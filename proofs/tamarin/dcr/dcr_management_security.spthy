@@ -260,4 +260,8 @@ lemma rat_rotation_on_update:
      ==> Ex #j. RAT_Consumed(AS, env, client_id, old_rat)@j &
          not(old_rat = new_rat)"
 
+lemma client_registration_reachable:
+  exists-trace
+  "Ex AS env client admin #i. Client_Registered(AS, env, client, admin) @ i"
+
 end

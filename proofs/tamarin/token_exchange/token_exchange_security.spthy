@@ -67,4 +67,9 @@ lemma token_exchange_preserves_sender_binding:
      Token_Exchanged(c, sub, out, aud, req, sub_scope, bind_in, bind_out) @ #i
      ==> bind_in = bind_out"
 
+lemma token_exchange_reachable:
+  exists-trace
+  "Ex client sub tok aud rs gs ib ob #i.
+     Token_Exchanged(client, sub, tok, aud, rs, gs, ib, ob) @ i"
+
 end

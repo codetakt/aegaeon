@@ -124,4 +124,8 @@ lemma request_object_overrides_form_in_par:
     RequestObjectProvided(sid, ro_details) @ j &
     FormProvided(sid, form_details) @ k ==> par_details = ro_details"
 
+lemma authorization_details_reachable:
+  exists-trace
+  "Ex sid details #i. AuthDetailsSelected(sid, details) @ i"
+
 end
