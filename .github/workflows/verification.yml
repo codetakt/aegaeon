@@ -27,6 +27,9 @@ jobs:
   fstar:
     name: F* Verification
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
@@ -35,6 +38,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Run F* Verification (Nix)
         run: |
@@ -55,6 +60,9 @@ jobs:
   everparse-dcr:
     name: EverParse DCR Artefacts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
@@ -65,6 +73,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Regenerate EverParse artefacts
         run: |
@@ -122,6 +131,9 @@ jobs:
   lowstar-extraction:
     name: Low* Extraction Parity
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
@@ -130,6 +142,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Verify Low* artefacts
         run: |
@@ -153,6 +166,9 @@ jobs:
   verified-core-wasm:
     name: Verified Core WASM
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
@@ -163,6 +179,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Build verified-core-wasm
         run: |
@@ -208,6 +225,9 @@ jobs:
   verified-core-equivalence:
     name: Verified Core Equivalence
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: verified-core-wasm
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
@@ -215,6 +235,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Build verified-core-wasm
         run: nix build .#verified-core-wasm -L
@@ -233,6 +255,9 @@ jobs:
   dudect:
     name: Constant-Time (dudect, HACL*)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     needs: fstar
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
@@ -240,6 +265,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Run dudect-check (Nix)
         run: |
@@ -250,6 +277,9 @@ jobs:
   tamarin:
     name: Tamarin Protocol Verification
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
@@ -258,6 +288,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          enable-flakehub-cache: "true"
 
       - name: Run Tamarin verification (Nix)
         run: |
@@ -442,6 +473,9 @@ jobs:
   jose-vectors:
     name: JOSE RFC Test Vectors
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
@@ -467,6 +501,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Run JOSE JSON/TLV compatibility tests
         run: |
@@ -811,6 +847,9 @@ jobs:
   verified-reqs:
     name: VerifiedReqs Integrity
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
@@ -819,6 +858,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Run VerifiedReqs checks (Nix)
         run: |
@@ -834,6 +875,9 @@ jobs:
   verify-ffi-contracts:
     name: FFI Contract Drift Detection
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
@@ -842,6 +886,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Run FFI contract checks (Nix)
         run: |
