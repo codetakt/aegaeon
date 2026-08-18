@@ -42,9 +42,9 @@ PROOFS=(
 
 	# --- introspection ---
 	"introspection/introspection_security.spthy:"
-	"introspection_requires_authz,introspection_active_claim_sound,"
+	"introspection_requires_authz,introspection_active_was_issued,"
 	"introspection_inactive_claim_sound,introspection_confidentiality,"
-	"introspection_cache_control,token_owner_privacy"
+	"introspection_cache_control,token_owner_privacy,introspection_response_reachable"
 
 	# --- jwt_bearer ---
 	"jwt_bearer/jwt_bearer_security.spthy:"
@@ -165,7 +165,7 @@ PROOFS=(
 	# --- introspection (RFC 9701 JWT) ---
 	"introspection/jwt_introspection_security.spthy:"
 	"response_unforgeability,audience_binding,issuer_binding,no_token_swap,"
-	"jti_replay_prevention,cross_tenant_isolation"
+	"jti_replay_prevention,cross_tenant_isolation,jwt_introspection_response_reachable"
 
 	# --- federation OP ---
 	"federation/op_entity_configuration.spthy:"

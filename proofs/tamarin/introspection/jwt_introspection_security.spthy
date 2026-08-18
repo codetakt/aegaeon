@@ -120,6 +120,12 @@ rule Issue_Token:
   [ !Token($AS, $Client, ~token, env_id),
     Token_State(~token, 'active') ]
 
+// The client presents its issued bearer token to a resource server.
+rule Client_Present_Token:
+  [ !Token($AS, $Client, token, env_id) ]
+  --[ Token_Presented($Client, token, env_id) ]->
+  [ Out(token) ]
+
 // Token revocation
 rule Revoke_Token:
   [ Token_State(token, 'active') ]
@@ -273,5 +279,10 @@ lemma cross_tenant_isolation:
             RS_Registered(AS, RS, env, tenant)@j &
             Token_Issued(AS, client_id, token, env)@k &
             #j < #i & #k < #i)"
+
+lemma jwt_introspection_response_reachable:
+  exists-trace
+  "Ex AS RS token client env jwt #i.
+     JWT_Introspection_Active(AS, RS, token, client, env, jwt) @ i"
 
 end

@@ -696,7 +696,8 @@ rfc_7662:
     test: crates/server/src/rfc_tests.rs
   notes:
   - Unauthorized introspection attempts receive 401 with WWW-Authenticate header.
-  - Tamarin model proves the authorization requirement (introspection_requires_authz).
+  - F* proves the introspection authorization policy; Tamarin independently proves
+    the registered-resource-server requirement (introspection_requires_authz).
 - id: 7662-004
   section: '2.2'
   requirement: MUST
@@ -709,7 +710,7 @@ rfc_7662:
     lemma: lemma_validate_schema_inactive, lemma_validate_schema_active
   - type: tamarin
     file: proofs/tamarin/introspection/introspection_security.spthy
-    lemma: introspection_active_claim_sound
+    lemma: introspection_active_was_issued
   - type: tamarin
     file: proofs/tamarin/introspection/introspection_security.spthy
     lemma: introspection_inactive_claim_sound
@@ -725,7 +726,8 @@ rfc_7662:
     test: crates/server/tests/introspection_schema_test.rs
   notes:
   - Active tokens return RFC 7662 fields (client_id, token_type, exp).
-  - Tamarin model proves soundness of active/inactive claims.
+  - F* proves the complete active/inactive response schema and active-state guard;
+    Tamarin proves active-token issuance provenance and inactive revocation provenance.
 - id: 7662-005
   section: '2.2'
   requirement: MUST

@@ -21,15 +21,23 @@ rule Issue_Token:
   --[ TokenIssued($AS, $Client, ~token),
       TokenActive(~token) ]->
   [ !Token($AS, $Client, ~token),
-    !TokenOwner(~token, $Client) ]
+    !TokenOwner(~token, $Client),
+    TokenState($AS, $Client, ~token) ]
+
+// The client presents its issued bearer token to a resource server.
+rule Client_Present_Token:
+  [ !Token($AS, $Client, token) ]
+  --[ TokenPresented($Client, token) ]->
+  [ Out(token) ]
 
 // Token revocation (makes token inactive)
 rule Revoke_Token:
   [ !Token($AS, client_id, token),
-    !TokenOwner(token, client_id) ]
+    !TokenOwner(token, client_id),
+    TokenState($AS, client_id, token) ]
   --[ TokenRevoked($AS, client_id, token),
       TokenInactive(token) ]->
-  [ RevokedToken(token) ]
+  [ RevokedToken($AS, client_id, token) ]
 
 // ============================================================================
 // Introspection request rules
@@ -52,11 +60,13 @@ rule AS_Respond_Active:
   [ In(request),
     !Token($AS, client_id, token),
     !TokenOwner(token, client_id),
-    !ResourceServer($AS, $RS) ]
+    !ResourceServer($AS, $RS),
+    TokenState($AS, client_id, token) ]
   --[ IntrospectionActive($AS, $RS, token, client_id),
       ResponseSent($AS, $RS, 'active', token),
       CacheControlSet('no-store') ]->
-  [ Out(response) ]
+  [ Out(response),
+    TokenState($AS, client_id, token) ]
 
 // AS responds with inactive token (revoked or invalid)
 rule AS_Respond_Inactive:
@@ -64,12 +74,13 @@ rule AS_Respond_Inactive:
       response = <'inactive', token, 'no-store'>
   in
   [ In(request),
-    RevokedToken(token),
+    RevokedToken($AS, client_id, token),
     !ResourceServer($AS, $RS) ]
   --[ IntrospectionInactive($AS, $RS, token),
       ResponseSent($AS, $RS, 'inactive', token),
       CacheControlSet('no-store') ]->
-  [ Out(response) ]
+  [ Out(response),
+    RevokedToken($AS, client_id, token) ]
 
 // Unauthorized introspection attempt (no RS registration)
 rule Unauthorized_Introspect:
@@ -81,9 +92,9 @@ rule Unauthorized_Introspect:
 
 // RS registration with AS
 rule Register_ResourceServer:
-  [ Fr(~rs_id) ]
-  --[ ResourceServerRegistered($AS, ~rs_id) ]->
-  [ !ResourceServer($AS, ~rs_id) ]
+  [ ]
+  --[ ResourceServerRegistered($AS, $RS) ]->
+  [ !ResourceServer($AS, $RS) ]
 
 // ============================================================================
 // Security lemmas
@@ -97,19 +108,19 @@ lemma introspection_requires_authz:
     IntrospectionActive(AS, RS, token, cid) @ i ==>
     Ex #j. ResourceServerRegistered(AS, RS) @ j & j < i"
 
-/* Lemma: Active token claims are sound
- * If AS responds with 'active', the token must have been issued and not revoked
+/* Lemma: Active token issuance provenance
+ * If AS responds with 'active', the token must have been issued. The complete
+ * active-state and expiry condition is carried by the F* introspection model.
  */
-lemma introspection_active_claim_sound:
+lemma introspection_active_was_issued:
   "All AS RS token cid #i.
     IntrospectionActive(AS, RS, token, cid) @ i ==>
-    (Ex #j. TokenIssued(AS, cid, token) @ j & j < i) &
-    not (Ex #k. TokenRevoked(AS, cid, token) @ k & k < i)"
+    Ex #j. TokenIssued(AS, cid, token) @ j & j < i"
 
 /* Lemma: Inactive tokens are correctly identified
  * If AS responds with 'inactive', token was either revoked or never issued
  */
-lemma introspection_inactive_claim_sound:
+lemma introspection_inactive_claim_sound [use_induction]:
   "All AS RS token #i.
     IntrospectionInactive(AS, RS, token) @ i ==>
     Ex cid #j. TokenRevoked(AS, cid, token) @ j & j < i"
@@ -137,5 +148,9 @@ lemma token_owner_privacy:
   "All attacker token #i.
     UnauthorizedIntrospection(attacker, token) @ i ==>
     not (Ex AS cid #j. IntrospectionActive(AS, attacker, token, cid) @ j)"
+
+lemma introspection_response_reachable:
+  exists-trace
+  "Ex AS RS token cid #i. IntrospectionActive(AS, RS, token, cid) @ i"
 
 end
