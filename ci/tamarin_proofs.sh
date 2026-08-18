@@ -38,7 +38,9 @@ PROOFS=(
 	"pkjwt_unforgeability,pkjwt_no_replay,token_issued_reachable"
 
 	# --- dpop ---
-	"dpop/dpop_replay.spthy:dpop_resource_grant_reachable,dpop_replay_impossible"
+	"dpop/dpop_replay.spthy:"
+	"dpop_resource_grant_reachable,dpop_replay_impossible,"
+	"dpop_authentication,dpop_injective_agreement,dpop_freshness_guaranteed"
 
 	# --- introspection ---
 	"introspection/introspection_security.spthy:"
