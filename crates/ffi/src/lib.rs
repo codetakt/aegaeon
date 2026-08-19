@@ -1105,7 +1105,7 @@ struct DpopHeader {
     typ: Option<String>,
 }
 
-/// Validate the exact DPoP JWT type header required by RFC 9449 and the F* model.
+/// Validate the exact `DPoP` JWT type header required by RFC 9449 and the F* model.
 #[must_use]
 pub fn validate_dpop_typ(typ: &str) -> bool {
     typ == "dpop+jwt"
