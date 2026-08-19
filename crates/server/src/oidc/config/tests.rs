@@ -21,6 +21,51 @@ type TestResult = std::result::Result<(), Box<dyn StdError>>;
 const TEST_RSA_PRIVATE_KEY_PEM: &str =
     include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem");
 
+#[test]
+fn from_rsa_pkcs8_der_signs_verifiable_rs256() -> TestResult {
+    let parsed = pem::parse(TEST_RSA_PRIVATE_KEY_PEM)?;
+    let signing =
+        OidcSigningKey::from_rsa_pkcs8_der("pkcs8-signing-test".to_string(), parsed.contents())?;
+    let claims = serde_json::json!({
+        "sub": "subject-123",
+        "aud": "client-123",
+    });
+
+    let token = signing.sign_rs256_jwt(&claims)?;
+    let header = jsonwebtoken::decode_header(&token)?;
+    assert_eq!(header.alg, jsonwebtoken::Algorithm::RS256);
+    assert_eq!(header.kid.as_deref(), Some("pkcs8-signing-test"));
+
+    let jwk = signing
+        .jwks()
+        .keys
+        .into_iter()
+        .next()
+        .ok_or_else(|| io::Error::other("signing key did not expose a public JWK"))?;
+    let modulus = URL_SAFE_NO_PAD.decode(
+        jwk.n
+            .as_deref()
+            .ok_or_else(|| io::Error::other("public JWK is missing RSA modulus"))?,
+    )?;
+    let exponent = URL_SAFE_NO_PAD.decode(
+        jwk.e
+            .as_deref()
+            .ok_or_else(|| io::Error::other("public JWK is missing RSA exponent"))?,
+    )?;
+    let payload = aegaeon_jose::verify_compact_with_context(
+        &token,
+        aegaeon_jose::VerificationKey::RsaPkcs1Sha256 {
+            modulus: &modulus,
+            exponent: &exponent,
+        },
+        &aegaeon_jose::JoseContext::default(),
+    )?;
+    let verified_claims: serde_json::Value = serde_json::from_slice(&payload)?;
+    assert_eq!(verified_claims, claims);
+
+    Ok(())
+}
+
 struct EnvVarGuard {
     key: &'static str,
     previous: Option<std::ffi::OsString>,

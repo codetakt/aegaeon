@@ -124,7 +124,10 @@ impl OidcSigningKey {
     ) -> Result<Self, OidcConfigError> {
         validate_kid(&kid)?;
 
-        let encoding_key = jsonwebtoken::EncodingKey::from_rsa_der(private_der);
+        // jsonwebtoken's DER entrypoint expects PKCS#1, while managed keys are PKCS#8.
+        // Its PEM decoder performs the required PKCS#8-to-PKCS#1 unwrap before signing.
+        let pkcs8_pem = pem::encode(&pem::Pem::new("PRIVATE KEY", private_der.to_vec()));
+        let encoding_key = jsonwebtoken::EncodingKey::from_rsa_pem(pkcs8_pem.as_bytes())?;
         let public_jwk = rsa_public_jwk_from_private_der(&kid, private_der)?;
 
         Ok(Self {
