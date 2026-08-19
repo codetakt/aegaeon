@@ -22,7 +22,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [dependencies]
 ffi = { path = "../ffi", version = "0.9.0-beta" }
-aegaeon-pure = { path = "../pure" }
+aegaeon-pure = { path = "../pure", version = "0.1.0" }
 aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
 http = "1.1"
 base64 = "0.22"

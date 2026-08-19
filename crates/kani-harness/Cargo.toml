@@ -5,7 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-aegaeon-pure = { path = "../pure" }
+aegaeon-pure = { path = "../pure", version = "0.1.0" }
 
 [features]
 kani-bytestring-utils = []
