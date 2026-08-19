@@ -69,9 +69,9 @@ If they reappear, record the new upstream revision and keep the gate non-blockin
 The initial high-risk backlog is now audited and recorded in `supply-chain/audits.toml`.
 Keep these helpers up to date when reviewing new high-risk crates:
 
-- Inspection links (diff.rs): `artifacts/security/latest/vet/inspect/summary.md`.
+- Inspection links (diff.rs): generated as **summary.md** under `artifacts/security/latest/vet/inspect/`.
   - Generate with `scripts/security/vet_inspect_links.sh` (non-interactive).
-- Source triage (unsafe/build.rs/proc-macro counts): `artifacts/security/latest/vet/inspect/source_triage.md`.
+- Source triage (unsafe/build.rs/proc-macro counts): generated as **source_triage.md** under `artifacts/security/latest/vet/inspect/`.
   - Generate with `scripts/security/vet_source_triage.sh`.
 
 ## Current cargo-vet Findings (Triage Log, 2026-02-13)

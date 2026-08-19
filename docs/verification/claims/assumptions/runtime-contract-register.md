@@ -43,8 +43,8 @@ unpredictability:
 - Logout JWT identifiers (`jti` and `logout_jti`) require collision resistance
   under RFC 7519 section 4.1.7, not unpredictability.
 - Management-console session identifiers under `web/management/` are outside
-  the formal claim boundary documented in `CLAUDE.md` and are managed
-  separately.
+  the formal claim boundary documented under `docs/verification/claims/` and are
+  managed separately.
 
 OIDC and authorization session identifiers (`sid`) and step-up challenge
 identifiers, which do require unpredictability, use the DRBG surface. Argon2
