@@ -1,5 +1,6 @@
 {
   pkgs,
+  isLinux,
   craneLib,
   src,
   cargoArtifacts,
@@ -111,8 +112,10 @@ in
   inherit
     verifyFstar
     verifyTamarin
-    verifyKani
     verifyDudect
     verifyJose
     ;
+}
+// pkgs.lib.optionalAttrs isLinux {
+  inherit verifyKani;
 }

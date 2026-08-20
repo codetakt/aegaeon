@@ -169,4 +169,4 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run strict Rust package lint
-        run: nix develop .#ci --command bash ./scripts/flake/lint_rust_strict_packages.sh
+        run: nix build .#checks.x86_64-linux.rust-strict-packages -L --no-link

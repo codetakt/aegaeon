@@ -160,7 +160,7 @@ run_devtool_cargo_deny() {
 	fi
 	(
 		cd "$tool_dir"
-		cargo deny check --config "$ROOT/deny.toml" "$@"
+		cargo deny --config "$ROOT/deny.toml" check "$@"
 	)
 }
 
@@ -208,7 +208,7 @@ run_fuzz_cargo_deny() {
 	fi
 	(
 		cd "$tool_dir"
-		cargo deny check --config "$ROOT/deny.toml" "$@"
+		cargo deny --config "$ROOT/deny.toml" check "$@"
 	)
 }
 

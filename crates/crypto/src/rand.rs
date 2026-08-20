@@ -60,6 +60,15 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
     result
 }
 
+/// Generate a fixed-size array of cryptographically secure random bytes.
+#[must_use]
+pub fn random_array<const N: usize>() -> [u8; N] {
+    let output = random_bytes(N);
+    let mut bytes = [0u8; N];
+    bytes.copy_from_slice(&output);
+    bytes
+}
+
 /// Generate `byte_len` random bytes and return as base64url (no padding).
 #[must_use]
 pub fn random_base64url(byte_len: usize) -> String {
@@ -91,6 +100,13 @@ mod tests {
     #[test]
     fn random_bytes_not_all_zero() {
         let bytes = random_bytes(32);
+        assert!(bytes.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn random_array_has_requested_length_and_entropy() {
+        let bytes = random_array::<16>();
+        assert_eq!(bytes.len(), 16);
         assert!(bytes.iter().any(|&b| b != 0));
     }
 

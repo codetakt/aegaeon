@@ -1,5 +1,7 @@
 {
   mkLightVerification,
+  lib,
+  isLinux,
   craneLib,
   src,
   cargoArtifacts,
@@ -44,7 +46,6 @@ in
 
   verify-fstar = verifyFstar;
   verify-tamarin = verifyTamarin;
-  verify-kani = verifyKani;
   verify-dudect = verifyDudect;
   dudect-check = dudectCheck;
   verify-jose = verifyJose;
@@ -99,7 +100,6 @@ in
   inherit
     verifyFstar
     verifyTamarin
-    verifyKani
     verifyDudect
     verifyJose
     verifyFstarAbstract
@@ -111,5 +111,8 @@ in
   evercrypt = evercryptLib;
   "evercrypt-dist" = evercryptDist;
 
-  inherit kani';
+}
+// lib.optionalAttrs isLinux {
+  verify-kani = verifyKani;
+  inherit verifyKani kani';
 }

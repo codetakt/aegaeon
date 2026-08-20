@@ -78,7 +78,6 @@ ring = "0.17"
 [dev-dependencies]
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 sha2 = "0.10"
 getrandom = "0.2"

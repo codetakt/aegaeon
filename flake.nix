@@ -3,6 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    verification-nixpkgs = {
+      url = "github:nixos/nixpkgs/c6245e83d836d0433170a16eb185cefe0572f8b8";
+      flake = false;
+    };
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -21,6 +25,7 @@
     inputs@{
       self,
       nixpkgs,
+      verification-nixpkgs,
       flake-utils,
       crane,
       rust-overlay,
@@ -29,7 +34,8 @@
       steel,
       ...
     }:
-    flake-utils.lib.eachDefaultSystem (
+    # nixpkgs 26.11 no longer supports x86_64-darwin.
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (
       system:
       let
         overlays = [
@@ -69,6 +75,7 @@
           };
         };
         inherit (pkgs) lib;
+        inherit (pkgs.stdenv.hostPlatform) isLinux;
 
         rustToolchainConfig = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustChannel = rustToolchainConfig.toolchain.channel;
@@ -83,7 +90,12 @@
 
         # Use LLVM stdenv explicitly
         llvmPackages = pkgs.llvmPackages_20;
-        stdenv = pkgs.stdenvAdapters.useMoldLinker (pkgs.overrideCC pkgs.stdenv llvmPackages.clang);
+        clangStdenv = pkgs.overrideCC pkgs.stdenv llvmPackages.clang;
+        stdenv =
+          if pkgs.stdenv.hostPlatform.isDarwin then
+            clangStdenv
+          else
+            pkgs.stdenvAdapters.useMoldLinker clangStdenv;
 
         rustToolchain = pkgs.rust-bin.nightly.${rustNightlyDate}.default.override {
           extensions = rustExtensions;
@@ -113,7 +125,9 @@
         evercryptLib = evercrypt.source;
         evercryptDist = evercrypt.dist;
 
+        wasiTarget = pkgs.pkgsCross.wasi32.stdenv.hostPlatform.config;
         wasiClang = pkgs.pkgsCross.wasi32.buildPackages.clang;
+        wasiClangBin = "${wasiClang}/bin/${wasiTarget}-clang";
         wasiLibc = pkgs.pkgsCross.wasi32.libc;
         wasiLibcDev = pkgs.pkgsCross.wasi32.libc.dev;
         wasiSysroot = pkgs.runCommand "wasi-sysroot" { } ''
@@ -122,18 +136,28 @@
           ln -s ${wasiLibc}/lib "$out/lib"
         '';
 
-        karamel = pkgs.callPackage ./nix/karamel.nix {
-          inherit (pkgs) fstar;
+        verificationPkgs = import verification-nixpkgs { inherit system; };
+        verificationOcamlPackages = verificationPkgs.ocaml-ng.ocamlPackages_5_3;
+        verificationFstar = verificationPkgs.fstar;
+        verificationZ3 = verificationPkgs.z3;
+
+        karamel = verificationPkgs.callPackage ./nix/karamel.nix {
+          fstar = verificationFstar;
+          ocamlPackages = verificationOcamlPackages;
         };
-        everparse = pkgs.callPackage ./nix/everparse.nix {
+        everparse = verificationPkgs.callPackage ./nix/everparse.nix {
           inherit karamel;
-          inherit (pkgs) fstar;
+          z3 = verificationZ3;
+          fstar = verificationFstar;
+          ocamlPackages = verificationOcamlPackages;
         };
 
         verifiedCoreWasm = pkgs.callPackage ./nix/verified-core-wasm.nix {
           inherit karamel everparse haclStar;
-          inherit (pkgs) fstar;
+          fstar = verificationFstar;
           inherit wasiClang;
+          inherit wasiClangBin;
+          inherit wasiTarget;
           inherit wasiSysroot;
           evercrypt = evercryptLib;
           inherit (pkgs) openssl;
@@ -150,7 +174,7 @@
           '';
         });
 
-        kani' = pkgs.callPackage ./nix/kani { };
+        kani' = if isLinux then pkgs.callPackage ./nix/kani { } else null;
 
         generatedOrLegacyFormatExcludes = [
           "^artifacts/"
@@ -242,7 +266,8 @@
             check-yaml.enable = true;
             markdownlint = {
               enable = true;
-              settings.configuration = builtins.fromJSON (builtins.readFile ./.markdownlint.json);
+              package = pkgs.markdownlint-cli2;
+              entry = "${pkgs.markdownlint-cli2}/bin/markdownlint-cli2";
             };
             docs-structure = {
               enable = true;
@@ -324,6 +349,7 @@
               types = [ "python" ];
               language = "system";
               pass_filenames = true;
+              require_serial = true;
               files = "^(scripts/validation/.*\\.py|ci/validate_slos\\.py)$";
             };
             ts-lint = {
@@ -402,17 +428,19 @@
             unset __aeg_repo_top __aeg_repo_name
           '';
 
-        verificationTools = with pkgs; [
-          z3
-          fstar
+        verificationTools = [
+          verificationZ3
+          verificationFstar
           karamel
           everparse
+        ]
+        ++ (with pkgs; [
           tamarin-prover'
           maude
           evercryptLib
           evercryptDist
           ripgrep
-        ];
+        ]);
 
         python' = pkgs.python3.withPackages (
           ps: with ps; [
@@ -449,7 +477,7 @@
             cargo-geiger
             cargo-udeps
             commitlint
-            nodePackages.markdownlint-cli2
+            markdownlint-cli2
             ruff
             mypy
             python'
@@ -501,14 +529,14 @@
           export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
           export STEEL_PATH=${steel}
           export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
-          export WASI_CLANG=${wasiClang}/bin/wasm32-unknown-wasi-clang
+          export WASI_CLANG=${wasiClangBin}
           export WASI_SYSROOT=${wasiSysroot}
           export AEG_HOST_CC=${llvmPackages.clang}/bin/clang
           export AEG_HOST_CXX=${llvmPackages.clang}/bin/clang++
           export AEG_HOST_BIN="$(dirname "$AEG_HOST_CC")"
           export AEG_HOST_AR=${pkgs.binutils}/bin/ar
           export AEG_HOST_LD=${llvmPackages.bintools}/bin/ld.lld
-          export PATH="${karamel}/bin:${pkgs.fstar}/bin:${everparse}/bin:${pkgs.z3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
+          export PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationZ3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
           if [[ "${"CC:-"}" == *"wasm32-unknown-wasi"* ]]; then
             unset CC
           fi
@@ -551,7 +579,7 @@
           fi
         '';
 
-        kaniShellHook = ''
+        kaniShellHook = lib.optionalString isLinux ''
           export PATH=${kani'}/bin:${kani'}/toolchain/bin:$PATH
         '';
 
@@ -627,10 +655,12 @@
             dockerRuntimeInputs
             rustToolchain
             kani'
+            verificationFstar
             karamel
             everparse
             python'
             ;
+          inherit verificationZ3;
         };
 
         src = lib.cleanSourceWith {
@@ -767,8 +797,8 @@
           pkgs.runCommand "verify-fstar"
             {
               nativeBuildInputs = [
-                pkgs.fstar
-                pkgs.z3
+                verificationFstar
+                verificationZ3
                 pkgs.bash
                 pkgs.coreutils
                 pkgs.findutils
@@ -826,34 +856,38 @@
           mkVerification "verify-fstar-abstract" ./scripts/flake/verify_fstar_abstract.sh
             [ ];
 
-        verifyKani = craneLib.mkCargoDerivation {
-          pname = "verify-kani";
-          version = "0.0.0";
-          inherit src cargoArtifacts;
-          stdenv = p: stdenv;
-          cargoToml = ./Cargo.toml;
-          cargoLock = ./Cargo.lock;
-          nativeBuildInputs = [
-            kani'
-            rustToolchain
-            pkgs.python3
-            pkgs.fstar
-            pkgs.z3
-            karamel
-            everparse
-            llvmPackages.clang
-            llvmPackages.bintools
-          ];
-          buildPhaseCargoCommand = ''
-            ${pkgs.bash}/bin/bash ${./scripts/flake/verify_kani_check.sh}
-          '';
-          checkPhaseCargoCommand = "";
-          installPhaseCommand = ''
-            mkdir -p $out
-            touch $out/success
-          '';
-          doInstallCargoArtifacts = false;
-        };
+        verifyKani =
+          if isLinux then
+            craneLib.mkCargoDerivation {
+              pname = "verify-kani";
+              version = "0.0.0";
+              inherit src cargoArtifacts;
+              stdenv = p: stdenv;
+              cargoToml = ./Cargo.toml;
+              cargoLock = ./Cargo.lock;
+              nativeBuildInputs = [
+                kani'
+                rustToolchain
+                pkgs.python3
+                verificationFstar
+                verificationZ3
+                karamel
+                everparse
+                llvmPackages.clang
+                llvmPackages.bintools
+              ];
+              buildPhaseCargoCommand = ''
+                ${pkgs.bash}/bin/bash ${./scripts/flake/verify_kani_check.sh}
+              '';
+              checkPhaseCargoCommand = "";
+              installPhaseCommand = ''
+                mkdir -p $out
+                touch $out/success
+              '';
+              doInstallCargoArtifacts = false;
+            }
+          else
+            null;
 
         aegaeon-workspace = craneLib.buildPackage {
           inherit src cargoArtifacts;
@@ -914,6 +948,8 @@
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             mkLightVerification
+            lib
+            isLinux
             craneLib
             src
             cargoArtifacts
@@ -941,6 +977,7 @@
         flakeChecks = import ./nix/flake/checks.nix {
           inherit
             pkgs
+            isLinux
             craneLib
             src
             cargoArtifacts
@@ -974,6 +1011,8 @@
             haclStar
             karamel
             everparse
+            verificationFstar
+            verificationZ3
             asanRuntimeLibDir
             ;
         };
@@ -982,7 +1021,9 @@
       {
         packages = flakePackages;
 
-        apps = lib.mapAttrs mkAppFromSpec appSpecs;
+        apps = lib.mapAttrs mkAppFromSpec (
+          lib.removeAttrs appSpecs (lib.optional (!isLinux) "verify-kani")
+        );
 
         checks = flakeChecks;
 

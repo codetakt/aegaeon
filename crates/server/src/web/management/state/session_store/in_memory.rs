@@ -43,13 +43,9 @@ pub(super) fn create_in_memory_session(
     if now_epoch_secs.checked_add(ttl_secs).is_none() {
         return Ok(None);
     }
-    let sid = uuid::Builder::from_random_bytes(
-        aegaeon_crypto::rand::random_bytes(16)
-            .try_into()
-            .expect("random_bytes(16) yields exactly 16 bytes"),
-    )
-    .into_uuid()
-    .to_string();
+    let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+        .into_uuid()
+        .to_string();
     let session = ManagementSession::human(administrator_id, now_epoch_secs);
     let Ok(mut map) = sessions.write() else {
         return Err("management session store lock poisoned".to_string());
