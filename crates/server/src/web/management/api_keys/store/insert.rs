@@ -6,7 +6,7 @@ use crate::web::management::error_response;
 
 use super::model::ApiKeyInsertInput;
 
-pub(in crate::web::management::api_keys) async fn insert_api_key_row(
+pub(in crate::web::management) async fn insert_api_key_row(
     tx: &mut Transaction<'_, Postgres>,
     input: &ApiKeyInsertInput<'_>,
     request_id: &str,

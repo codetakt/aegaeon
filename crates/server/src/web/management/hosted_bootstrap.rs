@@ -8,6 +8,7 @@ use crate::management::types::PolicyDocument;
 mod input;
 mod kms_runtime;
 mod model;
+mod observability_seed;
 
 use super::configuration_documents::{
     default_policy_document, parse_activated_environment_configuration,
@@ -19,6 +20,9 @@ use input::normalize_input;
 use kms_runtime::insert_oidc_kms_runtime_key;
 use model::{ExistingBootstrap, NormalizedHostedBootstrapInput};
 pub use model::{HostedBootstrapInput, HostedBootstrapOutput, HostedBootstrapStatus};
+pub use observability_seed::{
+    seed_observability_environment, ObservabilitySeedOutput, ObservabilitySeedStatus,
+};
 
 const BOOTSTRAP_LOCK_ID: i64 = 724_617_524;
 
@@ -254,8 +258,30 @@ async fn insert_active_configuration(
     input: &NormalizedHostedBootstrapInput,
 ) -> Result<Uuid> {
     let document = initial_configuration_document(input);
-    let prepared =
-        prepare_configuration_document(&document, "hosted-bootstrap").map_err(response_error)?;
+    insert_active_configuration_document(
+        tx,
+        environment_id,
+        administrator_id,
+        input,
+        document,
+        "hosted-bootstrap",
+        "Hosted bootstrap initial configuration",
+    )
+    .await
+}
+
+async fn insert_active_configuration_document(
+    tx: &mut Transaction<'_, Postgres>,
+    environment_id: Uuid,
+    administrator_id: Uuid,
+    input: &NormalizedHostedBootstrapInput,
+    document: serde_json::Value,
+    request_id: &str,
+    comment: &str,
+) -> Result<Uuid> {
+    let prepared = prepare_configuration_document(&document, request_id)
+        .map_err(response_error)
+        .context("bootstrap configuration document validation failed")?;
     let configuration_version_id = sqlx::query_scalar(
         r"
 INSERT INTO aegaeon.configuration_versions (
@@ -277,7 +303,7 @@ RETURNING id
     .bind(prepared.hash)
     .bind(prepared.document)
     .bind(administrator_id)
-    .bind("Hosted bootstrap initial configuration")
+    .bind(comment)
     .fetch_one(&mut **tx)
     .await
     .context("failed to create hosted bootstrap configuration version")?;
@@ -286,18 +312,20 @@ RETURNING id
         document,
         &input.issuer_host,
         &input.issuer_url,
-        "hosted-bootstrap",
+        request_id,
     )
-    .map_err(response_error)?;
+    .map_err(response_error)
+    .context("bootstrap activated configuration validation failed")?;
     persist_environment_configuration_state(
         tx,
         environment_id,
         configuration_version_id,
         &activated.state,
-        "hosted-bootstrap",
+        request_id,
     )
     .await
-    .map_err(response_error)?;
+    .map_err(response_error)
+    .context("bootstrap configuration projection persistence failed")?;
 
     Ok(configuration_version_id)
 }
@@ -357,6 +385,9 @@ WHERE id = $2
     .context("failed to activate hosted bootstrap environment configuration")
 }
 
-fn response_error(_response: Response) -> anyhow::Error {
-    anyhow!("management hosted bootstrap validation failed")
+fn response_error(response: Response) -> anyhow::Error {
+    anyhow!(
+        "management bootstrap validation failed with status {}",
+        response.status()
+    )
 }

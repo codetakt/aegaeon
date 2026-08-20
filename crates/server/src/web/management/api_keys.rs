@@ -9,6 +9,8 @@ mod handlers;
 mod input;
 mod store;
 
+pub(in crate::web::management) use store::{insert_api_key_row, ApiKeyInsertInput};
+
 use handlers::{create_api_key, list_api_keys, revoke_api_key};
 
 pub(super) fn routes() -> Router<AppState> {
