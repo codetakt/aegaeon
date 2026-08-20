@@ -65,13 +65,16 @@ impl TlsValidator {
     }
 
     /// Returns a rustls `ClientConfig` with the configured root store.
-    #[must_use]
-    pub fn into_client_config(self) -> ClientConfig {
-        ClientConfig::builder_with_provider(crypto_provider())
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the crypto provider cannot supply the safe default protocol versions.
+    pub fn into_client_config(self) -> Result<ClientConfig, TlsValidationError> {
+        Ok(ClientConfig::builder_with_provider(crypto_provider())
             .with_safe_default_protocol_versions()
-            .expect("ring provider supports the default protocol versions")
+            .map_err(|e| TlsValidationError::CertificateParse(format!("protocol versions: {e}")))?
             .with_root_certificates(self.root_store)
-            .with_no_client_auth()
+            .with_no_client_auth())
     }
 
     /// Establishes an in-memory TLS handshake against a provided server configuration.
@@ -88,7 +91,7 @@ impl TlsValidator {
     ) -> Result<(), TlsValidationError> {
         let config = ClientConfig::builder_with_provider(crypto_provider())
             .with_safe_default_protocol_versions()
-            .expect("ring provider supports the default protocol versions")
+            .map_err(|e| TlsValidationError::CertificateParse(format!("protocol versions: {e}")))?
             .with_root_certificates(self.root_store.clone())
             .with_no_client_auth();
 
