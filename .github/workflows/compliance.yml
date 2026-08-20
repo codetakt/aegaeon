@@ -145,7 +145,7 @@ jobs:
       # For private repos, we skip attestation but still generate and validate SBOM
       - name: Generate SBOM attestation
         if: github.event.repository.private == false
-        uses: actions/attest-sbom@v1
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: target/release/aegaeon-server
           sbom-path: artifacts/sbom/aegaeon-sbom.json
