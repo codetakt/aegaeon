@@ -64,13 +64,9 @@ impl RedisOidcSessionBackend {
     ) -> Result<String, OidcSessionStorageError> {
         let auth_session_key = self.keyspace.auth_session_key(context.auth_session_id);
         let user_sessions_key = self.keyspace.user_sessions_key(context.user_id);
-        let sid = uuid::Builder::from_random_bytes(
-            aegaeon_crypto::rand::random_bytes(16)
-                .try_into()
-                .expect("random_bytes(16) yields exactly 16 bytes"),
-        )
-        .into_uuid()
-        .to_string();
+        let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+            .into_uuid()
+            .to_string();
         let mut conn = self.prepared_connection(now_epoch_secs, ttl_secs)?;
         redis::Script::new(scripts::GET_OR_CREATE_SESSION)
             .key(&auth_session_key)
@@ -101,13 +97,9 @@ impl RedisOidcSessionBackend {
         let sid = self
             .active_sid_for_auth_session(&auth_session_key, &user_sessions_key, context.user_id)?
             .unwrap_or_else(|| {
-                uuid::Builder::from_random_bytes(
-                    aegaeon_crypto::rand::random_bytes(16)
-                        .try_into()
-                        .expect("random_bytes(16) yields exactly 16 bytes"),
-                )
-                .into_uuid()
-                .to_string()
+                uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+                    .into_uuid()
+                    .to_string()
             });
 
         Ok(RedisOidcSessionGrantCommit {

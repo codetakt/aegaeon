@@ -169,13 +169,9 @@ impl AuthSessionStore {
         claim_release_policy: Option<UpstreamClaimReleasePolicy>,
         upstream_logout: Option<UpstreamLogoutSession>,
     ) -> Result<Option<String>, String> {
-        let sid = uuid::Builder::from_random_bytes(
-            aegaeon_crypto::rand::random_bytes(16)
-                .try_into()
-                .expect("random_bytes(16) yields exactly 16 bytes"),
-        )
-        .into_uuid()
-        .to_string();
+        let sid = uuid::Builder::from_random_bytes(aegaeon_crypto::rand::random_array())
+            .into_uuid()
+            .to_string();
         let Some(expires_at_epoch_secs) = times.created_at_epoch_secs.checked_add(self.ttl_secs)
         else {
             return Ok(None);
