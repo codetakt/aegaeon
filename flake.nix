@@ -989,6 +989,8 @@
             verifyKani
             verifyDudect
             verifyJose
+            karamel
+            evercryptDist
             ;
           inherit stdenv;
         };
