@@ -10,6 +10,8 @@
   dockerRuntimeInputs,
   rustToolchain,
   kani',
+  verificationFstar,
+  verificationZ3,
   karamel,
   everparse,
   python',
@@ -99,8 +101,8 @@ let
         kani'
         python3
         rustToolchain
-        pkgs.fstar
-        pkgs.z3
+        verificationFstar
+        verificationZ3
         karamel
         everparse
         llvmPackages.clang
