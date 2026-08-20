@@ -157,8 +157,29 @@ jobs:
       contents: read
       id-token: write
     env:
+      AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:8080"
       AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
       DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_NONCE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_JWKS_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_PAR_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_STEPUP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_TOKEN_STORE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_AUTH_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL: "redis://127.0.0.1:6379/0"
     services:
       postgres:
         image: postgres:18
@@ -170,6 +191,15 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U aegaeon -d aegaeon"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -210,29 +240,49 @@ jobs:
       - name: Apply database migrations
         run: |
           set -euo pipefail
-          nix develop .#ci --command bash -c 'atlas migrate apply --env local'
+          nix develop .#ci --command bash -c \
+            'atlas migrate apply --env local --revisions-schema public'
 
       - name: Build with telemetry
         run: nix develop .#ci --command cargo build --release --features telemetry
 
+      - name: Seed observability runtime configuration
+        run: |
+          set -euo pipefail
+          api_key="aeg_$(openssl rand -hex 32)"
+          echo "::add-mask::${api_key}"
+          echo "AEGAEON_OBSERVABILITY_API_KEY=${api_key}" >> "${GITHUB_ENV}"
+          AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
+            ./target/release/aegaeon-observability-seed
+
       - name: Start server with telemetry
         run: |
+          set -euo pipefail
           env -u BASE_URL \
           RUST_LOG=info \
-          AEGAEON_EXPOSE_METRICS_ON_MAIN=1 \
           OTEL_EXPORTER_JAEGER_ENDPOINT=http://localhost:14268/api/traces \
           ./target/release/aegaeon-server &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> "${GITHUB_ENV}"
-          # Wait for server to be ready
+          ready=0
           for i in {1..30}; do
             if curl -f http://localhost:8080/health 2>/dev/null; then
               echo "Server is ready"
+              ready=1
               break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              echo "Server exited before becoming ready"
+              wait "${SERVER_PID}" || true
+              exit 1
             fi
             echo "Waiting for server to start... ($i/30)"
             sleep 1
           done
+          if [[ "${ready}" -ne 1 ]]; then
+            echo "Server did not become ready within 30 seconds"
+            exit 1
+          fi
 
       - name: Generate traffic for metrics
         run: |
@@ -248,7 +298,10 @@ jobs:
 
       - name: Verify metrics exported
         run: |
-          curl -fsS http://localhost:8080/metrics > metrics.prom
+          curl -fsS \
+            -H 'Forwarded: for=127.0.0.1;proto=https' \
+            -H "Authorization: Bearer ${AEGAEON_OBSERVABILITY_API_KEY}" \
+            http://localhost:8080/api/v1/operations/metrics > metrics.prom
           grep -E "oauth_dpop_failure_rate|oauth_par_usage_rate|oauth_pkce_mismatch_rate" metrics.prom
 
           # Check health endpoint
