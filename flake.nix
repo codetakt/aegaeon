@@ -125,7 +125,9 @@
         evercryptLib = evercrypt.source;
         evercryptDist = evercrypt.dist;
 
+        wasiTarget = pkgs.pkgsCross.wasi32.stdenv.hostPlatform.config;
         wasiClang = pkgs.pkgsCross.wasi32.buildPackages.clang;
+        wasiClangBin = "${wasiClang}/bin/${wasiTarget}-clang";
         wasiLibc = pkgs.pkgsCross.wasi32.libc;
         wasiLibcDev = pkgs.pkgsCross.wasi32.libc.dev;
         wasiSysroot = pkgs.runCommand "wasi-sysroot" { } ''
@@ -137,14 +139,15 @@
         verificationPkgs = import verification-nixpkgs { inherit system; };
         verificationOcamlPackages = verificationPkgs.ocaml-ng.ocamlPackages_5_3;
         verificationFstar = verificationPkgs.fstar;
+        verificationZ3 = verificationPkgs.z3;
 
-        karamel = pkgs.callPackage ./nix/karamel.nix {
+        karamel = verificationPkgs.callPackage ./nix/karamel.nix {
           fstar = verificationFstar;
           ocamlPackages = verificationOcamlPackages;
         };
-        everparse = pkgs.callPackage ./nix/everparse.nix {
+        everparse = verificationPkgs.callPackage ./nix/everparse.nix {
           inherit karamel;
-          inherit (verificationPkgs) z3;
+          z3 = verificationZ3;
           fstar = verificationFstar;
           ocamlPackages = verificationOcamlPackages;
         };
@@ -153,6 +156,8 @@
           inherit karamel everparse haclStar;
           fstar = verificationFstar;
           inherit wasiClang;
+          inherit wasiClangBin;
+          inherit wasiTarget;
           inherit wasiSysroot;
           evercrypt = evercryptLib;
           inherit (pkgs) openssl;
@@ -424,7 +429,7 @@
           '';
 
         verificationTools = [
-          verificationPkgs.z3
+          verificationZ3
           verificationFstar
           karamel
           everparse
@@ -524,14 +529,14 @@
           export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
           export STEEL_PATH=${steel}
           export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
-          export WASI_CLANG=${wasiClang}/bin/wasm32-unknown-wasi-clang
+          export WASI_CLANG=${wasiClangBin}
           export WASI_SYSROOT=${wasiSysroot}
           export AEG_HOST_CC=${llvmPackages.clang}/bin/clang
           export AEG_HOST_CXX=${llvmPackages.clang}/bin/clang++
           export AEG_HOST_BIN="$(dirname "$AEG_HOST_CC")"
           export AEG_HOST_AR=${pkgs.binutils}/bin/ar
           export AEG_HOST_LD=${llvmPackages.bintools}/bin/ld.lld
-          export PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationPkgs.z3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
+          export PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationZ3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
           if [[ "${"CC:-"}" == *"wasm32-unknown-wasi"* ]]; then
             unset CC
           fi
@@ -655,7 +660,7 @@
             everparse
             python'
             ;
-          verificationZ3 = verificationPkgs.z3;
+          inherit verificationZ3;
         };
 
         src = lib.cleanSourceWith {
@@ -792,8 +797,8 @@
           pkgs.runCommand "verify-fstar"
             {
               nativeBuildInputs = [
-                pkgs.fstar
-                pkgs.z3
+                verificationFstar
+                verificationZ3
                 pkgs.bash
                 pkgs.coreutils
                 pkgs.findutils
@@ -865,7 +870,7 @@
                 rustToolchain
                 pkgs.python3
                 verificationFstar
-                verificationPkgs.z3
+                verificationZ3
                 karamel
                 everparse
                 llvmPackages.clang
@@ -1006,6 +1011,8 @@
             haclStar
             karamel
             everparse
+            verificationFstar
+            verificationZ3
             asanRuntimeLibDir
             ;
         };

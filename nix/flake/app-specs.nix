@@ -186,9 +186,9 @@ let
       description = "Run EverParse CLI.";
       runtimeInputs = [
         everparse
-        pkgs.fstar
+        verificationFstar
         karamel
-        pkgs.z3
+        verificationZ3
       ];
       script = ../../scripts/flake/everparse_cli.sh;
     };
@@ -197,8 +197,8 @@ let
       description = "Run KaRaMeL CLI.";
       runtimeInputs = [
         karamel
-        pkgs.fstar
-        pkgs.z3
+        verificationFstar
+        verificationZ3
       ];
       script = ../../scripts/flake/karamel_cli.sh;
     };

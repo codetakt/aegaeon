@@ -15,11 +15,13 @@
   haclStar,
   karamel,
   everparse,
+  verificationFstar,
+  verificationZ3,
   asanRuntimeLibDir,
 }:
 let
   toolPathShellHook = ''
-    export AEG_TOOL_PATH="${karamel}/bin:${pkgs.fstar}/bin:${everparse}/bin:${pkgs.z3}/bin"
+    export AEG_TOOL_PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationZ3}/bin"
     export AEG_TOOL_PATH="$AEG_TOOL_PATH:${llvmPackages.bintools}/bin:${llvmPackages.clang}/bin"
     export AEG_TOOL_PATH="$AEG_TOOL_PATH:${rustToolchain}/bin"
     export PATH="$AEG_TOOL_PATH:$PATH"

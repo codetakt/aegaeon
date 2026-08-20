@@ -5,6 +5,8 @@
   fstar,
   karamel,
   wasiClang,
+  wasiClangBin,
+  wasiTarget,
   wasiSysroot,
   haclStar,
   evercrypt,
@@ -237,7 +239,7 @@ stdenv.mkDerivation {
     hacl_sources=$(find "$TMPDIR/c/hacl" -maxdepth 1 -name '*.c' 2>/dev/null | sort)
 
     compile_flags=(
-      --target=wasm32-unknown-wasi
+      --target=${wasiTarget}
       --sysroot="${wasiSysroot}"
       -O2
       -flto
@@ -264,7 +266,7 @@ stdenv.mkDerivation {
       -Wl,--gc-sections
     )
 
-    ${wasiClang}/bin/wasm32-unknown-wasi-clang \
+    ${wasiClangBin} \
       "''${compile_flags[@]}" \
       $c_sources \
       $hacl_sources \
