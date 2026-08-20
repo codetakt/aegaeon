@@ -141,7 +141,11 @@ struct ExpectedAtlasRevision<'a> {
 
 impl ExpectedAtlasRevision<'_> {
     fn accepts_hash(&self, hash: &str) -> bool {
-        hash == self.file_hash || hash == self.atlas_sum_hash
+        let hash = hash.strip_prefix("h1:").unwrap_or(hash);
+        [self.file_hash, self.atlas_sum_hash]
+            .into_iter()
+            .filter_map(|expected| expected.strip_prefix("h1:"))
+            .any(|expected| hash == expected)
     }
 }
 
@@ -196,5 +200,8 @@ h1:sum
         assert_eq!(head.description, "verified_crypto_profile_only");
         assert!(head.accepts_hash("h1:file"));
         assert!(head.accepts_hash("h1:sum"));
+        assert!(head.accepts_hash("file"));
+        assert!(head.accepts_hash("sum"));
+        assert!(!head.accepts_hash("other"));
     }
 }
