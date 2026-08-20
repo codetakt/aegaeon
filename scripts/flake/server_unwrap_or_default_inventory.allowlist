@@ -5,4 +5,21 @@
 # need review because silent defaulting can hide persistence, protocol, or
 # security boundary bugs.
 
-# No reviewed `unwrap_or_default` call sites remain in `crates/server/src`.
+# Optional refresh and OIDC commit fields use empty payloads only when their
+# corresponding has_refresh/has_oidc_session discriminator is false.
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
+crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:            .unwrap_or_default();
+
+# These protocol collections define absence as an empty scope/key/session/filter set.
+crates/server/src/dcr/everparse.rs:        .unwrap_or_default();
+crates/server/src/federation/trust_chain/path_constraints.rs:        .unwrap_or_default()
+crates/server/src/oidc/session/standard/process_local.rs:            .unwrap_or_default()
+crates/server/src/web/management/account_link/read/filters.rs:        upstream_subject_hashes: upstream_subject_hashes.unwrap_or_default(),
