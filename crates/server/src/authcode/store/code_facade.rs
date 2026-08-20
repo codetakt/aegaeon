@@ -21,6 +21,10 @@ fn log_auth_code_storage_error(error: &AuthCodeStorageError, operation: &str) {
     tracing::error!(error = %error, operation, "authorization code store operation failed");
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "this function is an owned Result::map_err callback"
+)]
 fn auth_code_store_worker_error(error: tokio::task::JoinError) -> StoreCodeError {
     StoreCodeError::Storage(AuthCodeStorageError::BackendUnavailable(format!(
         "authorization code store worker failed: {error}"

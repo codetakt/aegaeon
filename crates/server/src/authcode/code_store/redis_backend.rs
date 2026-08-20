@@ -195,6 +195,10 @@ impl RedisAuthCodeBackend {
         Ok(())
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "owned inputs make the one-time authorization-code commit boundary explicit"
+    )]
     fn store_code_with_one_time_inputs_inner(
         &self,
         code: AuthorizationCode,
@@ -229,23 +233,19 @@ impl RedisAuthCodeBackend {
         let par_request_key = one_time_inputs
             .par
             .as_ref()
-            .map(|par| par.request_key.as_str())
-            .unwrap_or(placeholder.as_str());
+            .map_or(placeholder.as_str(), |par| par.request_key.as_str());
         let par_reservation_key = one_time_inputs
             .par
             .as_ref()
-            .map(|par| par.reservation_key.as_str())
-            .unwrap_or(placeholder.as_str());
+            .map_or(placeholder.as_str(), |par| par.reservation_key.as_str());
         let par_expected_continuation = one_time_inputs
             .par
             .as_ref()
-            .map(|par| par.expected_continuation.as_str())
-            .unwrap_or("");
+            .map_or("", |par| par.expected_continuation.as_str());
         let request_object_jti_key = one_time_inputs
             .request_object_jti
             .as_ref()
-            .map(|jti| jti.key.as_str())
-            .unwrap_or(placeholder.as_str());
+            .map_or(placeholder.as_str(), |jti| jti.key.as_str());
         let request_object_jti_ttl_ms = one_time_inputs
             .request_object_jti
             .as_ref()

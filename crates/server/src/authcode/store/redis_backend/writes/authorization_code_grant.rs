@@ -93,31 +93,38 @@ impl AuthorizationCodeGrantCommitPlan {
                 access: backend.keyspace.access_key(&access_token.token),
                 subject_access: backend.keyspace.subject_access_key(&access_token.user_id),
                 access_expiry: backend.keyspace.expiry_access_key(),
-                refresh: refresh_token
-                    .map(|token| backend.keyspace.refresh_key(&token.token))
-                    .unwrap_or_else(|| absent_refresh_key.clone()),
-                subject_refresh: refresh_token
-                    .map(|token| backend.keyspace.subject_refresh_key(&token.user_id))
-                    .unwrap_or_else(|| absent_refresh_key.clone()),
+                refresh: refresh_token.map_or_else(
+                    || absent_refresh_key.clone(),
+                    |token| backend.keyspace.refresh_key(&token.token),
+                ),
+                subject_refresh: refresh_token.map_or_else(
+                    || absent_refresh_key.clone(),
+                    |token| backend.keyspace.subject_refresh_key(&token.user_id),
+                ),
                 refresh_expiry: backend.keyspace.expiry_refresh_key(),
-                refresh_children: refresh_token
-                    .map(|token| backend.keyspace.refresh_children_key(&token.token))
-                    .unwrap_or_else(|| absent_refresh_key.clone()),
+                refresh_children: refresh_token.map_or_else(
+                    || absent_refresh_key.clone(),
+                    |token| backend.keyspace.refresh_children_key(&token.token),
+                ),
                 bearer: backend.keyspace.bearer_key(&meta.token_id),
                 subject_bearer: backend.keyspace.subject_bearer_key(&meta.user_id),
                 bearer_expiry: backend.keyspace.expiry_bearer_key(),
-                oidc_auth_session: oidc_session
-                    .map(|session| session.auth_session_key.clone())
-                    .unwrap_or_else(|| absent_oidc_key.clone()),
-                oidc_session: oidc_session
-                    .map(|session| session.session_key.clone())
-                    .unwrap_or_else(|| absent_oidc_key.clone()),
-                oidc_logged_out_expiries: oidc_session
-                    .map(|session| session.logged_out_expiries_key.clone())
-                    .unwrap_or_else(|| absent_oidc_key.clone()),
-                oidc_user_sessions: oidc_session
-                    .map(|session| session.user_sessions_key.clone())
-                    .unwrap_or_else(|| absent_oidc_key.clone()),
+                oidc_auth_session: oidc_session.map_or_else(
+                    || absent_oidc_key.clone(),
+                    |session| session.auth_session_key.clone(),
+                ),
+                oidc_session: oidc_session.map_or_else(
+                    || absent_oidc_key.clone(),
+                    |session| session.session_key.clone(),
+                ),
+                oidc_logged_out_expiries: oidc_session.map_or_else(
+                    || absent_oidc_key.clone(),
+                    |session| session.logged_out_expiries_key.clone(),
+                ),
+                oidc_user_sessions: oidc_session.map_or_else(
+                    || absent_oidc_key.clone(),
+                    |session| session.user_sessions_key.clone(),
+                ),
                 oidc_clients: oidc_session
                     .map(|session| session.clients_key.clone())
                     .unwrap_or(absent_oidc_key),

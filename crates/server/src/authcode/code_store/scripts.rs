@@ -57,6 +57,7 @@ end
 return 0
 ";
 
+#[derive(Clone, Copy)]
 pub(super) struct StoreCodeIfAbsentKeys<'a> {
     pub(super) code: &'a str,
     pub(super) state: &'a str,
@@ -69,6 +70,7 @@ pub(super) struct StoreCodeIfAbsentKeys<'a> {
     pub(super) request_object_jti: &'a str,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct StoreCodeIfAbsentArgs<'a> {
     pub(super) payload: &'a str,
     pub(super) marker_ttl_ms: i64,

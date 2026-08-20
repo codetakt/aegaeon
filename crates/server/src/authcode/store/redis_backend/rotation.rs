@@ -48,6 +48,10 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "existing atomic Redis orchestration; new oversized functions remain gated"
+    )]
     fn invoke_refresh_rotation_commit_once(
         &self,
         conn: &mut redis::Connection,

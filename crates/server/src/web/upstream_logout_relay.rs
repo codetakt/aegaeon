@@ -237,6 +237,10 @@ impl UpstreamLogoutRelayStore {
         self.ttl
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the in-memory backend consumes the state while Redis serializes it"
+    )]
     pub fn try_insert(
         &self,
         relay_token: &str,

@@ -38,6 +38,7 @@ pub struct ObservabilitySeedOutput {
     pub api_key_id: Uuid,
 }
 
+#[derive(Clone, Copy)]
 struct ExistingSeed {
     team_id: Uuid,
     tenant_id: Uuid,

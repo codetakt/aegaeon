@@ -56,6 +56,7 @@ When `policy.mtlsEnabled=true`, RFC 8705 fields are exposed in discovery metadat
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
+| `AEGAEON_OBSERVABILITY_API_KEY` | _unset_ | `development/test` | Required by `aegaeon-observability-seed` to create the managed API key used for authenticated metrics checks. It is not read by the server process. |
 | `AEGAEON_EXPOSE_METRICS_ON_MAIN` | _removed_ | `system` | Removed. Metrics are available only through the authenticated management endpoint `/api/v1/operations/metrics`. |
 
 ## JOSE policy knobs

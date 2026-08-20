@@ -42,10 +42,10 @@ fn validate_current_upstream_callback_connection(
             "upstream callback connection identifier is no longer current",
         ));
     }
-    if current.issuer_url != request.issuer
-        || current.client_id != request.client_id
-        || current.client_auth_method != request.client_auth_method
-    {
+    let issuer_changed = current.issuer_url != request.issuer;
+    let client_id_changed = current.client_id != request.client_id;
+    let client_auth_method_changed = current.client_auth_method != request.client_auth_method;
+    if issuer_changed || client_id_changed || client_auth_method_changed {
         return Err(stale_upstream_callback_connection_error(
             issuer_base,
             "upstream connection changed during authorization",

@@ -13,6 +13,8 @@
   verifyKani,
   verifyDudect,
   verifyJose,
+  karamel,
+  evercryptDist,
 }:
 let
   strictPackageClippyExtraArgs =
@@ -107,6 +109,15 @@ in
     version = "0.0.0";
     cargoToml = ../../Cargo.toml;
     cargoExtraArgs = "--workspace";
+    nativeBuildInputs = [
+      pkgs.pkg-config
+      karamel
+    ];
+    buildInputs = [
+      pkgs.mbedtls
+      pkgs.libsodium
+      evercryptDist
+    ];
   };
 
   inherit

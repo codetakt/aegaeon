@@ -55,6 +55,7 @@ pub(super) struct NormalizedHostedBootstrapInput {
     pub(super) kms_kid: String,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct ExistingBootstrap {
     pub(super) team_id: Uuid,
     pub(super) tenant_id: Uuid,

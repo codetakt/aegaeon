@@ -148,6 +148,7 @@ const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 17] = [
 const REFRESH_ROTATION_COMMIT_KEY_COUNT: usize = REFRESH_ROTATION_COMMIT_KEY_PLAN.len();
 const REFRESH_ROTATION_COMMIT_ARG_COUNT: usize = REFRESH_ROTATION_COMMIT_ARG_PLAN.len();
 
+#[derive(Clone, Copy)]
 pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitKeys<'a> {
     pub(in crate::authcode::store::redis_backend) mutation_barrier: &'a str,
     pub(in crate::authcode::store::redis_backend) previous_refresh: &'a str,
@@ -171,6 +172,7 @@ pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitKeys<'
     pub(in crate::authcode::store::redis_backend) version: &'a str,
 }
 
+#[derive(Clone, Copy)]
 pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitArgs<'a> {
     pub(in crate::authcode::store::redis_backend) now_epoch_secs: u64,
     pub(in crate::authcode::store::redis_backend) previous_refresh_token: &'a str,

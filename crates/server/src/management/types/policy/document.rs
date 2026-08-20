@@ -156,6 +156,10 @@ pub struct PolicyDocument {
 }
 
 impl Default for PolicyDocument {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "existing exhaustive default policy literal; new oversized functions remain gated"
+    )]
     fn default() -> Self {
         Self {
             pkce_required: true,

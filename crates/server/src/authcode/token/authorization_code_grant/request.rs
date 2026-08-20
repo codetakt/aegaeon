@@ -5,6 +5,10 @@ use super::validation::{self, ValidatedCodeGrantRequest};
 use crate::authcode::types::{AuthorizationCode, TokenRequest};
 
 impl TokenIssuer {
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the grant handler owns the parsed token request at this boundary"
+    )]
     pub(super) fn prepare_authorization_code_grant(
         &self,
         req: TokenRequest,
@@ -90,6 +94,10 @@ impl TokenIssuer {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "this function is an owned Result::map_err callback"
+)]
 pub(super) fn authorization_code_grant_exchange_lock_error(error: String) -> TokenExchangeError {
     TokenGrantError::server(format!(
         "authorization-code grant exchange lock unavailable: {error}"

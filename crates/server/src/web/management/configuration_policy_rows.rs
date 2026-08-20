@@ -12,6 +12,10 @@ use axum::response::Response;
 use decoder::PolicyRowDecoder;
 use sqlx::postgres::PgRow;
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing exhaustive database mapping; new oversized functions remain gated"
+)]
 pub(super) fn policy_document_from_environment_policy_row(
     row: &PgRow,
     request_id: &str,

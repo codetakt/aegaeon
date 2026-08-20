@@ -6,6 +6,7 @@ use aegaeon_jose::jwk::JwkSet;
 use crate::oidc::{IdToken, OidcDiscovery};
 use crate::upstream::UpstreamAuthRequest;
 
+#[derive(Clone, Copy)]
 pub(in crate::web) struct UpstreamIdTokenDecodeInput<'a> {
     pub(in crate::web) token: &'a str,
     pub(in crate::web) jwks: &'a JwkSet,

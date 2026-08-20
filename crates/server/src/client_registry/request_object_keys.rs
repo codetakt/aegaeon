@@ -228,11 +228,13 @@ pub(super) fn verify_private_key_jwt_rsa_promoted(
     Ok(claims)
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct PromotedRsaVerificationKey<'a> {
     pub(super) modulus: &'a [u8],
     pub(super) exponent: &'a [u8],
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct JwtBearerPromotedRsaValidation<'a> {
     pub(super) client_id: &'a str,
     pub(super) expected_token_aud: &'a str,

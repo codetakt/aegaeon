@@ -183,6 +183,10 @@ fn runtime_issuer_host(database_runtime_config: &DatabaseRuntimeConfiguration) -
     Arc::new(database_runtime_config.issuer_host.clone())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing server bootstrap orchestration; new oversized functions remain gated"
+)]
 async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
     let startup_issuer_host = startup_runtime_issuer_host()?;
     let bootstrap_config = BootstrapConfig::try_from_env()?;
