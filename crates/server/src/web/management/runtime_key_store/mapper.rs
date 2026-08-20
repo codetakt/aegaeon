@@ -50,8 +50,10 @@ fn public_runtime_key_provider_configuration(
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|region| !region.is_empty())
-            .map(|region| serde_json::json!({ "region": region }))
-            .unwrap_or_else(|| serde_json::json!({})),
+            .map_or_else(
+                || serde_json::json!({}),
+                |region| serde_json::json!({ "region": region }),
+            ),
         _ => serde_json::json!({}),
     }
 }

@@ -22,6 +22,10 @@ fn client_input_allows_redirect_flow(input: &ClientInput) -> bool {
         .any(|grant| grant == "authorization_code")
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing client validation workflow; new oversized functions remain gated"
+)]
 pub(super) fn validate_management_client_input(
     input: &mut ClientInput,
     request_id: &str,

@@ -17,6 +17,10 @@ pub(super) struct TokenEndpointPolicyContext {
     pub(super) refresh_grant_allowed: bool,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing token policy workflow; new oversized functions remain gated"
+)]
 pub(super) async fn token_resolve_policy(
     state: &AppState,
     client_id: &str,

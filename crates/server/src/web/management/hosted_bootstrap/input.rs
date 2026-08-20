@@ -45,12 +45,12 @@ pub(super) fn normalize_input(
         owner_email,
         owner_password: input.owner_password,
         team_name: non_empty(input.team_name, "team name")?,
-        team_slug: normalize_label(input.team_slug, "team slug")?,
+        team_slug: normalize_label(&input.team_slug, "team slug")?,
         tenant_name: non_empty(input.tenant_name, "tenant name")?,
-        tenant_slug: normalize_label(input.tenant_slug, "tenant slug")?,
-        tenant_region: normalize_label(input.tenant_region, "tenant region")?,
+        tenant_slug: normalize_label(&input.tenant_slug, "tenant slug")?,
+        tenant_region: normalize_label(&input.tenant_region, "tenant region")?,
         environment_name: non_empty(input.environment_name, "environment name")?,
-        environment_slug: normalize_label(input.environment_slug, "environment slug")?,
+        environment_slug: normalize_label(&input.environment_slug, "environment slug")?,
         kms_region: non_empty(input.kms_region, "KMS region")?,
         kms_key_id: non_empty(input.kms_key_id, "KMS key id")?,
         kms_kid: normalize_kid(input.kms_kid)?,
@@ -62,11 +62,15 @@ fn non_empty(value: String, label: &'static str) -> Result<String> {
     if trimmed.is_empty() {
         bail!("{label} must not be empty");
     }
-    Ok(trimmed.to_string())
+    if trimmed.len() == value.len() {
+        Ok(value)
+    } else {
+        Ok(trimmed.to_string())
+    }
 }
 
-fn normalize_label(value: String, label: &'static str) -> Result<String> {
-    normalize_dns_label(&value, label).map_err(|message| anyhow!(message))
+fn normalize_label(value: &str, label: &'static str) -> Result<String> {
+    normalize_dns_label(value, label).map_err(|message| anyhow!(message))
 }
 
 fn normalize_kid(value: String) -> Result<String> {
@@ -75,7 +79,11 @@ fn normalize_kid(value: String) -> Result<String> {
     {
         bail!("KMS runtime key kid must be non-empty ASCII without whitespace and <= 128 bytes");
     }
-    Ok(kid.to_string())
+    if kid.len() == value.len() {
+        Ok(value)
+    } else {
+        Ok(kid.to_string())
+    }
 }
 
 #[cfg(test)]

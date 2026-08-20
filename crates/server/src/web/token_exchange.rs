@@ -26,6 +26,10 @@ use response::token_exchange_success_response;
 use subject::resolve_token_exchange_subject;
 pub(super) use subject::validate_token_exchange_sender_binding;
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing token exchange workflow; new oversized functions remain gated"
+)]
 pub(super) async fn handle_token_exchange_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,

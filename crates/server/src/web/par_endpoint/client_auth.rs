@@ -18,6 +18,10 @@ pub(super) struct ParClientContext {
     pub(super) client_authenticated: bool,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing PAR authentication workflow; new oversized functions remain gated"
+)]
 pub(super) async fn authenticate_par_client(
     state: &AppState,
     headers: &HeaderMap,

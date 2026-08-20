@@ -269,6 +269,10 @@ fn authorize_one_time_input_commit_plan(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing authorization orchestration; new oversized functions remain gated"
+)]
 async fn issue_authorize_code_response(
     state: &AppState,
     ctx: AuthorizeRequestContext,

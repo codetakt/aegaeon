@@ -97,6 +97,10 @@ impl UpstreamAuthStore {
         self.ttl
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the in-memory backend consumes the request while Redis serializes it"
+    )]
     pub fn try_insert(&self, request: UpstreamAuthRequest) -> Result<(), String> {
         match &self.backend {
             #[cfg(test)]

@@ -59,6 +59,10 @@ pub(super) fn validate_auth_max_sessions_policy(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing declarative policy inventory; new oversized functions remain gated"
+)]
 fn numeric_policy_fields(policy: &PolicyDocument) -> Vec<NumericPolicyField> {
     vec![
         NumericPolicyField {

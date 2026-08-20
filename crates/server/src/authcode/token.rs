@@ -301,12 +301,13 @@ pub fn validate_pkce_binding_for_spec_oracle(
 }
 
 fn scope_contains(scope: Option<&str>, needle: &str) -> bool {
-    crate::oauth_scope::parse_optional_scope_string(scope)
-        .map(|scopes| scopes.iter().any(|scope| scope == needle))
-        .unwrap_or_else(|error| {
+    crate::oauth_scope::parse_optional_scope_string(scope).map_or_else(
+        |error| {
             tracing::error!(error = %error, "stored token scope failed strict membership parsing");
             false
-        })
+        },
+        |scopes| scopes.iter().any(|scope| scope == needle),
+    )
 }
 
 #[cfg(test)]

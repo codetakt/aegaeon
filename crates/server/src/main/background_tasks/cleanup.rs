@@ -63,6 +63,10 @@ async fn reconcile_stale_management_runtime_commands(
         .map_err(|err| err.to_string())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing cleanup scheduler orchestration; new oversized functions remain gated"
+)]
 pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
     let cleanup_issuer = state.tokens.issuer.clone();
     let cleanup_par = state.protocol.par_store.clone();

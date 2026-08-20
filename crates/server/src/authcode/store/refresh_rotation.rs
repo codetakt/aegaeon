@@ -177,6 +177,10 @@ impl TokenStore {
     ///
     /// This is the refresh-grant commit boundary: callers must complete all request
     /// validation and token signing before calling it.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "owned tokens make the atomic refresh rotation boundary explicit"
+    )]
     pub fn store_refreshed_grant(
         &self,
         previous_refresh: &str,

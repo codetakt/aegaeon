@@ -58,6 +58,10 @@ impl TokenStore {
     ///
     /// Returns an error if the supplied metadata is not bound to the access token or refresh
     /// parent being committed.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "owned tokens make the atomic grant commit boundary explicit"
+    )]
     pub fn store_issued_grant(
         &self,
         access_token: AccessToken,

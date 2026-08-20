@@ -118,6 +118,10 @@ async fn finalize_upstream_callback_response(
     response
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing upstream callback workflow; new oversized functions remain gated"
+)]
 pub(super) async fn upstream_callback(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,

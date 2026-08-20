@@ -189,6 +189,10 @@ SET password_hash = EXCLUDED.password_hash,
 ///
 /// Returns any `SQLx` error produced while redeeming the token or updating the
 /// password and recovery-token state.
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing credential mutation transaction; new oversized functions remain gated"
+)]
 pub async fn redeem_recovery_token(
     pool: &PgPool,
     issuer: &str,

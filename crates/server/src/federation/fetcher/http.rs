@@ -53,6 +53,10 @@ impl HttpFederationFetcher {
     /// # Errors
     ///
     /// Returns [`FederationError::Fetch`] if the HTTP client cannot be built.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the public constructor consistently accepts owned configuration"
+    )]
     pub fn try_with_allowed_domains(domains: Vec<String>) -> Result<Self, FederationError> {
         Self::try_build(Some(normalize_federation_outbound_allowed_domains(
             &domains,

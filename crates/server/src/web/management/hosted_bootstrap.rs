@@ -385,6 +385,10 @@ WHERE id = $2
     .context("failed to activate hosted bootstrap environment configuration")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "this function is an owned Result::map_err callback"
+)]
 fn response_error(response: Response) -> anyhow::Error {
     anyhow!(
         "management bootstrap validation failed with status {}",

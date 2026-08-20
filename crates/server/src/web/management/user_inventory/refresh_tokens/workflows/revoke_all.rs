@@ -9,6 +9,10 @@ use super::super::super::super::{
 use axum::response::Response;
 use uuid::Uuid;
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing transactional workflow; new oversized functions remain gated"
+)]
 pub(in crate::web::management::user_inventory::refresh_tokens) async fn revoke_user_refresh_tokens_inner(
     state: &AppState,
     context: &UserManagementContext,

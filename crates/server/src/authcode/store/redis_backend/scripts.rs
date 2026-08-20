@@ -234,6 +234,7 @@ const AUTHORIZATION_CODE_GRANT_COMMIT_KEY_COUNT: usize =
 const AUTHORIZATION_CODE_GRANT_COMMIT_ARG_COUNT: usize =
     AUTHORIZATION_CODE_GRANT_COMMIT_ARG_PLAN.len();
 
+#[derive(Clone, Copy)]
 pub(super) struct AuthorizationCodeGrantCommitKeys<'a> {
     pub(super) auth_code: &'a str,
     pub(super) auth_code_version: &'a str,
@@ -255,6 +256,7 @@ pub(super) struct AuthorizationCodeGrantCommitKeys<'a> {
     pub(super) oidc_clients: &'a str,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct AuthorizationCodeGrantCommitArgs<'a> {
     pub(super) access_payload: &'a str,
     pub(super) refresh_payload: &'a str,

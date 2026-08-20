@@ -16,6 +16,10 @@ pub(super) struct EndpointClientAuthContext {
     pub(super) client_auth_method: &'static str,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing endpoint authentication workflow; new oversized functions remain gated"
+)]
 pub(super) async fn introspection_requesting_client_id(
     state: &AppState,
     headers: &HeaderMap,
@@ -145,6 +149,10 @@ pub(super) async fn introspection_requesting_client_id(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "existing endpoint authentication workflow; new oversized functions remain gated"
+)]
 pub(super) async fn revocation_requesting_client_id(
     state: &AppState,
     headers: &HeaderMap,

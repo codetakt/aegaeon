@@ -40,17 +40,13 @@ pub(super) fn enforce_if_match<T: Serialize>(
     let current = representation_etag(current).map_err(|_| {
         super::management_internal_error(request_id, "Failed to construct resource ETag")
     })?;
-    let matches = if_match
-        .to_str()
-        .ok()
-        .map(|value| {
-            value.trim() == "*"
-                || value
-                    .split(',')
-                    .map(str::trim)
-                    .any(|candidate| candidate.as_bytes() == current.as_bytes())
-        })
-        .unwrap_or(false);
+    let matches = if_match.to_str().ok().is_some_and(|value| {
+        value.trim() == "*"
+            || value
+                .split(',')
+                .map(str::trim)
+                .any(|candidate| candidate.as_bytes() == current.as_bytes())
+    });
     if matches {
         Ok(())
     } else {

@@ -37,8 +37,10 @@ pub(in crate::web::management) fn management_bootstrap_rate_limit_keys_for_subje
     let token = bootstrap_token
         .map(str::trim)
         .filter(|token| !token.is_empty())
-        .map(|token| sha256_hex(token.as_bytes()))
-        .unwrap_or_else(|| "missing".to_string());
+        .map_or_else(
+            || "missing".to_string(),
+            |token| sha256_hex(token.as_bytes()),
+        );
     [
         format!("management-bootstrap:ip:{subject}"),
         format!("management-bootstrap:principal:{principal}"),

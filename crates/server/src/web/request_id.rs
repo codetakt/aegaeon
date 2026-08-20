@@ -10,8 +10,7 @@ pub(in crate::web) fn request_id_from_headers(headers: &HeaderMap) -> String {
             .to_str()
             .ok()
             .and_then(sanitize_request_id)
-            .map(ToString::to_string)
-            .unwrap_or_else(new_request_id),
+            .map_or_else(new_request_id, ToString::to_string),
         _ => new_request_id(),
     }
 }

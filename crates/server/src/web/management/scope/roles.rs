@@ -127,7 +127,7 @@ async fn load_principal_team_access(
         session,
         team_id,
         role,
-        administrator_kind,
+        &administrator_kind,
     ))
 }
 
@@ -147,7 +147,7 @@ async fn load_principal_team_access_in_transaction(
         session,
         team_id,
         role,
-        administrator_kind,
+        &administrator_kind,
     ))
 }
 
@@ -155,7 +155,7 @@ fn principal_team_access_for_session(
     session: &ManagementSession,
     team_id: Uuid,
     role: String,
-    administrator_kind: String,
+    administrator_kind: &str,
 ) -> Option<PrincipalTeamAccess> {
     if session.is_human_session() && administrator_kind == "HUMAN" {
         return Some(PrincipalTeamAccess::Human { role });
