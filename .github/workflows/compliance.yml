@@ -133,11 +133,24 @@ jobs:
             cargo cyclonedx --format json --spec-version 1.5
             mv aegaeon-server.cdx.json ../../artifacts/sbom/aegaeon-sbom.json
           '
+          # cargo-cyclonedx 0.5.9 omits the optional top-level CycloneDX `serialNumber`,
+          # which actions/attest's checkIsCycloneDX requires (bomFormat && serialNumber && specVersion).
+          # Inject a spec-valid urn:uuid BOM identifier so attestation recognizes the format.
+          # This adds a legitimate unique BOM id only; no SBOM content is altered.
+          sbom=artifacts/sbom/aegaeon-sbom.json
+          if [ "$(jq -r 'has("serialNumber")' "$sbom")" != "true" ]; then
+            serial="urn:uuid:$(cat /proc/sys/kernel/random/uuid)"
+            tmp="$(mktemp)"
+            jq --arg sn "$serial" '{bomFormat, serialNumber: $sn} + .' "$sbom" > "$tmp"
+            mv "$tmp" "$sbom"
+          fi
 
       - name: Validate SBOM
         run: |
-          if ! jq -e '.bomFormat and .specVersion and .components' artifacts/sbom/aegaeon-sbom.json > /dev/null; then
-            echo "::error::SBOM validation failed"
+          # Mirror actions/attest's checkIsCycloneDX (bomFormat && serialNumber && specVersion) plus a components
+          # sanity check, so a format actions/attest would reject fails here first.
+          if ! jq -e '(.bomFormat == "CycloneDX") and (.specVersion | type == "string") and (.serialNumber | test("^urn:uuid:")) and (.components | type == "array")' artifacts/sbom/aegaeon-sbom.json > /dev/null; then
+            echo "::error::SBOM validation failed: expected CycloneDX JSON with bomFormat, string specVersion, urn:uuid serialNumber, and a components array (the shape actions/attest requires)"
             exit 1
           fi
 
