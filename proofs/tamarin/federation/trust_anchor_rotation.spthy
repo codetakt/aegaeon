@@ -242,11 +242,11 @@ lemma anchor_key_authenticity:
 
 // 6. no_stale_anchor_cache: every cache hit corresponds to a TA key
 //    that was stored while the TA was current.
-lemma no_stale_anchor_cache:
+lemma no_stale_anchor_cache [use_induction]:
   "All ta pk epoch #i.
      Cache_Hit(ta, pk, epoch)@i
-     ==> Ex #j. Cache_Stored(ta, pk, epoch)@j & #j < #i
-         | Ex #j. Cache_Refreshed(ta, pk, epoch)@j & #j < #i"
+     ==> ( Ex #j. Cache_Stored(ta, pk, epoch)@j & #j < #i )
+         | ( Ex #j. Cache_Refreshed(ta, pk, epoch)@j & #j < #i )"
 
 // 7. rollback_prevention: a revoked TA cannot be used to resolve any
 //    chain, even if the attacker replays its old key.
@@ -259,5 +259,22 @@ lemma rollback_prevention:
      Chain_Resolved(leaf, ta, leaf_pk, old_pk)@j &
      #i < #j
      ==> F"
+
+// --- Non-vacuity witnesses (exists-trace) added for CI gating ---
+// W1: a trust anchor is created, resolves a chain, then rotates — exercises the
+//     antecedents of anchor_continuity / no_trust_gap_during_rotation /
+//     new_anchor_requires_admin / anchor_key_authenticity.
+lemma trust_anchor_rotation_reachable:
+  exists-trace
+  "Ex ta admin leaf leaf_pk pk1 pk2 #a #b #c.
+     TA_Created(ta, pk1, admin)@a & TA_Active(ta, pk1)@a &
+     Chain_Resolved(leaf, ta, leaf_pk, pk1)@b &
+     TA_Rotated(ta, pk1, pk2, admin)@c &
+     #a < #b & #b < #c"
+
+// W2: a cache hit is reachable — exercises the antecedent of no_stale_anchor_cache.
+lemma trust_anchor_cache_hit_reachable:
+  exists-trace
+  "Ex ta pk epoch #i. Cache_Hit(ta, pk, epoch)@i"
 
 end

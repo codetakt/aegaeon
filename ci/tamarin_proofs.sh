@@ -147,6 +147,17 @@ PROOFS=(
 	"federation/account_link_isolation.spthy:"
 	"cross_tenant_isolation,cross_env_denial,upstream_sub_binding,"
 	"environment_scoped_login,link_tenant_binding,isolated_fed_auth_reachable"
+	# --- federation trust anchor rotation ---
+	# 5 machine-checkable security lemmas + 2 non-vacuity witnesses.
+	# EXCLUDED under CI budget: revoked_anchor_no_trust, rollback_prevention.
+	# Both need unbounded rotation-chain backward search that does not converge
+	# (>550s wall, 44-47 GB RSS locally; OOM-guard killed; the reuse helper is
+	# itself non-convergent). Memory footprint alone exceeds hosted-runner RAM.
+	# Same budget-exclusion class as management/policy_downgrade (batch-F precedent).
+	"federation/trust_anchor_rotation.spthy:"
+	"anchor_continuity,no_trust_gap_during_rotation,new_anchor_requires_admin,"
+	"anchor_key_authenticity,no_stale_anchor_cache,"
+	"trust_anchor_rotation_reachable,trust_anchor_cache_hit_reachable"
 
 	# --- management ---
 	"management/policy_downgrade.spthy:"
