@@ -242,11 +242,11 @@ lemma anchor_key_authenticity:
 
 // 6. no_stale_anchor_cache: every cache hit corresponds to a TA key
 //    that was stored while the TA was current.
-lemma no_stale_anchor_cache:
+lemma no_stale_anchor_cache [use_induction]:
   "All ta pk epoch #i.
      Cache_Hit(ta, pk, epoch)@i
-     ==> Ex #j. Cache_Stored(ta, pk, epoch)@j & #j < #i
-         | Ex #j. Cache_Refreshed(ta, pk, epoch)@j & #j < #i"
+     ==> ( Ex #j. Cache_Stored(ta, pk, epoch)@j & #j < #i )
+         | ( Ex #j. Cache_Refreshed(ta, pk, epoch)@j & #j < #i )"
 
 // 7. rollback_prevention: a revoked TA cannot be used to resolve any
 //    chain, even if the attacker replays its old key.
