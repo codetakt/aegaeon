@@ -260,4 +260,21 @@ lemma rollback_prevention:
      #i < #j
      ==> F"
 
+// --- Non-vacuity witnesses (exists-trace) added for CI gating ---
+// W1: a trust anchor is created, resolves a chain, then rotates — exercises the
+//     antecedents of anchor_continuity / no_trust_gap_during_rotation /
+//     new_anchor_requires_admin / anchor_key_authenticity.
+lemma trust_anchor_rotation_reachable:
+  exists-trace
+  "Ex ta admin leaf leaf_pk pk1 pk2 #a #b #c.
+     TA_Created(ta, pk1, admin)@a & TA_Active(ta, pk1)@a &
+     Chain_Resolved(leaf, ta, leaf_pk, pk1)@b &
+     TA_Rotated(ta, pk1, pk2, admin)@c &
+     #a < #b & #b < #c"
+
+// W2: a cache hit is reachable — exercises the antecedent of no_stale_anchor_cache.
+lemma trust_anchor_cache_hit_reachable:
+  exists-trace
+  "Ex ta pk epoch #i. Cache_Hit(ta, pk, epoch)@i"
+
 end
