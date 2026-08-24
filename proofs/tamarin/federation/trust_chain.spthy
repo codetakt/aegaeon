@@ -78,7 +78,7 @@ rule Issue_Subordinate_Statement:
     Fr(~iat), Fr(~exp) ]
   --[ Subordinate_Statement_Issued($Superior, $Subordinate, sub_pk, $sub_policy),
       Policy_Constraint($Superior, $Subordinate, $sub_policy) ]->
-  [ !SubordinateStatement($Superior, $Subordinate, sub_stmt, sub_pk, $sub_policy),
+  [ !SubordinateStatement($Superior, $Subordinate, sub_stmt, sub_pk, $sub_policy, ~iat, ~exp),
     Out(sub_stmt) ]
 
 // Leaf entity publishes self-signed Entity Configuration
@@ -102,7 +102,7 @@ rule Resolve_Direct_Chain:
   in
   [ !TrustAnchor($TA, ta_pk, ta_policy),
     !Entity_PK($TA, ta_pk),
-    !SubordinateStatement($TA, $Leaf, sub_stmt, leaf_pk, sub_policy),
+    !SubordinateStatement($TA, $Leaf, sub_stmt, leaf_pk, sub_policy, iat, exp),
     !LeafConfig($Leaf, leaf_pk, leaf_metadata, leaf_config) ]
   --[ Eq(verify(sub_stmt, sub_stmt_claims, ta_pk), true),
       Chain_Resolved($Leaf, $TA, leaf_pk, sub_policy),
@@ -120,8 +120,10 @@ rule Resolve_Intermediate_Chain:
   [ !TrustAnchor($TA, ta_pk, ta_policy),
     !Entity_PK($TA, ta_pk),
     !Entity_PK($Intermediate, int_pk),
-    !SubordinateStatement($TA, $Intermediate, sub_stmt_ta, int_pk, int_policy),
-    !SubordinateStatement($Intermediate, $Leaf, sub_stmt_int, leaf_pk, leaf_policy),
+    !SubordinateStatement($TA, $Intermediate, sub_stmt_ta, int_pk, int_policy,
+                          iat1, exp1),
+    !SubordinateStatement($Intermediate, $Leaf, sub_stmt_int, leaf_pk, leaf_policy,
+                          iat2, exp2),
     !LeafConfig($Leaf, leaf_pk, leaf_metadata, leaf_config) ]
   --[ Eq(verify(sub_stmt_ta, sub_stmt_ta_claims, ta_pk), true),
       Eq(verify(sub_stmt_int, sub_stmt_int_claims, int_pk), true),
