@@ -98,6 +98,10 @@ rule UpstreamIdP_Issue_IDToken:
 
 /* ============ Broker Verification & Downstream Issuance ============ */
 
+// Reconstructed claim fields (exp, iat, us_nonce, auth_time) are determined by
+// Eq(verify(...)) over attacker-supplied In(id_token). Premise facts would
+// trivialize upstream_jwks_verification and nonce_chain_integrity;
+// ds_idtoken_verified_reachable demonstrates that the verification path is live.
 // Broker verifies upstream ID token signature against registered JWKS
 rule Broker_Verify_Upstream_IDToken:
   let id_token_claims = <'id_token', idp_issuer, broker_id, $User,
@@ -145,6 +149,9 @@ rule Broker_Issue_Downstream_IDToken:
 // broker's public key and the token from the network. It performs pure
 // signature verification. This makes security lemmas non-trivial because
 // the attacker controls the network and could inject forged tokens.
+// Unbound claim fields (ds_exp, ds_iat, ds_nonce, ds_auth_time, ds_at_hash,
+// rp_id) are intentionally determined only by Eq(verify(...));
+// ds_idtoken_verified_reachable demonstrates that this path is live.
 rule DownstreamRP_Verify:
   let ds_id_token_claims = <'id_token', claimed_issuer, rp_id, $User,
                              ds_exp, ds_iat, ds_nonce, ds_auth_time,
