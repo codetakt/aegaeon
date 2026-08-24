@@ -111,6 +111,9 @@ rule Environment_Register_TA:
 
 /* ============ Federation Fetcher (with verification) ============ */
 
+// entity_type and issuer are determined by Eq(verify(...)) over attacker-supplied
+// In(config). Premise facts would trivialize no_unverified_cache,
+// cache_entry_authenticity, and cache_hit_reachable.
 // Fetch entity configuration from network and verify JWS self-signature
 rule Fetch_And_Verify_Entity_Config:
   let config_claims = <'entity_config', entity_id, entity_pk, entity_type,
