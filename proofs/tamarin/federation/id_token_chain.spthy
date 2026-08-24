@@ -79,23 +79,29 @@ rule Broker_Register_JWKS:
 
 /* ============ Upstream ID Token Issuance ============ */
 
+// The issuer mints the nonce as fresh randomness in this abstraction.
+// Requester-side nonce echoing is outside this model; no lemma constrains its value.
 // Upstream IdP issues ID token with standard claims
 rule UpstreamIdP_Issue_IDToken:
   let id_token_claims = <'id_token', idp_issuer, $aud, $User,
-                          ~exp, ~iat, us_nonce, ~auth_time>
+                          ~exp, ~iat, ~us_nonce, ~auth_time>
       id_token = sign(id_token_claims, idp_sk)
       us_at_hash = h(~us_access_token)
   in
   [ !UpstreamIdP_SK($IdP, idp_sk, idp_issuer),
-    Fr(~exp), Fr(~iat), Fr(~auth_time), Fr(~us_access_token) ]
-  --[ US_IDToken_Issued($IdP, $aud, $User, id_token, us_nonce, idp_issuer),
-      Unique(<'us_idtoken', $IdP, $aud, us_nonce>) ]->
+    Fr(~exp), Fr(~iat), Fr(~auth_time), Fr(~us_access_token), Fr(~us_nonce) ]
+  --[ US_IDToken_Issued($IdP, $aud, $User, id_token, ~us_nonce, idp_issuer),
+      Unique(<'us_idtoken', $IdP, $aud, ~us_nonce>) ]->
   [ Out(id_token),
     US_AccessToken($IdP, ~us_access_token, $aud, $User),
-    !US_IDToken_Record($IdP, id_token, $aud, $User, us_nonce, idp_issuer) ]
+    !US_IDToken_Record($IdP, id_token, $aud, $User, ~us_nonce, idp_issuer) ]
 
 /* ============ Broker Verification & Downstream Issuance ============ */
 
+// Reconstructed claim fields (exp, iat, us_nonce, auth_time) are determined by
+// Eq(verify(...)) over attacker-supplied In(id_token). Premise facts would
+// trivialize upstream_jwks_verification and nonce_chain_integrity;
+// ds_idtoken_verified_reachable demonstrates that the verification path is live.
 // Broker verifies upstream ID token signature against registered JWKS
 rule Broker_Verify_Upstream_IDToken:
   let id_token_claims = <'id_token', idp_issuer, broker_id, $User,
@@ -110,11 +116,13 @@ rule Broker_Verify_Upstream_IDToken:
   [ Broker_Verified_Upstream(broker_id, $IdP, $User, us_nonce,
                               idp_issuer, id_token) ]
 
+// The issuer mints the nonce as fresh randomness in this abstraction.
+// Requester-side nonce echoing is outside this model; no lemma constrains its value.
 // Broker maps upstream sub to downstream sub and issues downstream ID token
 rule Broker_Issue_Downstream_IDToken:
   let ds_at_hash = h(~ds_access_token)
       ds_id_token_claims = <'id_token', broker_issuer, $RP, $User,
-                             ~ds_exp, ~ds_iat, ds_nonce, ~ds_auth_time,
+                             ~ds_exp, ~ds_iat, ~ds_nonce, ~ds_auth_time,
                              ds_at_hash>
       ds_id_token = sign(ds_id_token_claims, broker_sk)
   in
@@ -122,18 +130,18 @@ rule Broker_Issue_Downstream_IDToken:
                               idp_issuer, us_id_token),
     !Broker_SK(broker_id, broker_sk, broker_issuer),
     Fr(~ds_access_token), Fr(~ds_exp), Fr(~ds_iat), Fr(~ds_auth_time),
-    Fr(~session_id) ]
-  --[ DS_IDToken_Issued(broker_id, $RP, $User, ds_id_token, ds_nonce,
+    Fr(~session_id), Fr(~ds_nonce) ]
+  --[ DS_IDToken_Issued(broker_id, $RP, $User, ds_id_token, ~ds_nonce,
                          broker_issuer, ~session_id),
       DS_ATHash_Computed(ds_at_hash, ~ds_access_token),
       Chain_Binding(ds_id_token, us_id_token, broker_id, $IdP, $User),
-      Nonce_Chain(ds_nonce, us_nonce, ~session_id),
+      Nonce_Chain(~ds_nonce, us_nonce, ~session_id),
       Issuer_Rewritten(broker_issuer, idp_issuer, ds_id_token),
       Claims_Provenance($User, $IdP, broker_id, ds_id_token),
       Unique(<'ds_idtoken', ~session_id>) ]->
   [ Out(ds_id_token),
     !DS_IDToken_Record(ds_id_token, broker_id, $RP, $User, broker_issuer,
-                       ds_nonce, ds_at_hash, us_id_token),
+                       ~ds_nonce, ds_at_hash, us_id_token),
     DS_AccessToken(~ds_access_token, broker_id, $RP, $User) ]
 
 // Downstream RP verifies the downstream ID token CRYPTOGRAPHICALLY.
@@ -141,6 +149,9 @@ rule Broker_Issue_Downstream_IDToken:
 // broker's public key and the token from the network. It performs pure
 // signature verification. This makes security lemmas non-trivial because
 // the attacker controls the network and could inject forged tokens.
+// Unbound claim fields (ds_exp, ds_iat, ds_nonce, ds_auth_time, ds_at_hash,
+// rp_id) are intentionally determined only by Eq(verify(...));
+// ds_idtoken_verified_reachable demonstrates that this path is live.
 rule DownstreamRP_Verify:
   let ds_id_token_claims = <'id_token', claimed_issuer, rp_id, $User,
                              ds_exp, ds_iat, ds_nonce, ds_auth_time,

@@ -197,6 +197,8 @@ rule Upstream_IdP_Send_ID_Token:
 // F-1 fix: us_id_token is received via In(...), so the Dolev-Yao
 // attacker can inject forged tokens. The Eq(verify(...)) check ensures
 // only tokens signed by the cached IdP key are accepted.
+// auth_time is determined by Eq(verify(...)) over attacker-supplied In(us_id_token);
+// it appears in no lemma, and callback_processed_reachable shows the path is live.
 rule Broker_Callback_Process:
   let us_id_token_claims = <'id_token', idp_issuer, broker_id, $User,
                              us_nonce, auth_time>
