@@ -414,6 +414,19 @@ fn verify_rsa_pss_sha256(
     }
 }
 
+/// Whether the verified RSASSA-PSS (PS256) backend is linked into this build.
+///
+/// When this returns `false`, PS256 verification remains fail-closed and
+/// rejects every signature.
+///
+/// ```
+/// let _available = aegaeon_jose::verified_rsa_pss_backend_available();
+/// ```
+#[must_use]
+pub fn verified_rsa_pss_backend_available() -> bool {
+    ::ffi::rsa_pss_verified_backend_available()
+}
+
 #[doc(hidden)]
 pub fn __verify_rsa_pss_sha256_for_tests(
     modulus: &[u8],
