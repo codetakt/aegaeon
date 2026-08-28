@@ -169,6 +169,11 @@ fn should_skip_native_build() -> bool {
 
 fn emit_fallback_cfg() {
     println!("cargo:rustc-cfg=no_mbedtls");
+    println!(
+        "cargo:warning=native mbedtls/evercrypt not found: building without the \
+         verified RSASSA-PSS (PS256) backend; PS256 signature verification will \
+         fail closed (all PS256 verifications rejected)."
+    );
 }
 
 fn probe_native_deps() -> BuildResult<Option<NativeDeps>> {
