@@ -685,7 +685,10 @@ fn jws_ed25519_verify(
     }
 }
 
-#[cfg(any(kani, test, no_mbedtls))]
+// Kani model-checking abstraction only: the RSA-PSS verifier is modeled as an
+// accepting oracle so downstream harnesses can reason about a sound verifier.
+// This is never a runtime code path. Preserve this historical behavior.
+#[cfg(kani)]
 fn jws_rsa_verify(
     alg: JwsAlg,
     key: KeyBuf,
@@ -701,6 +704,22 @@ fn jws_rsa_verify(
     } else {
         JwsRc::ErrUnsupportedAlg
     }
+}
+
+// Fail closed when the verified native RSA-PSS backend is unavailable. Unit
+// tests share this path so they cannot accidentally rely on accepting stubs.
+#[cfg(all(any(test, no_mbedtls), not(kani)))]
+fn jws_rsa_verify(
+    alg: JwsAlg,
+    key: KeyBuf,
+    key_len: usize,
+    msg: MsgBuf,
+    msg_len: usize,
+    sig: SigBuf,
+    sig_len: usize,
+) -> JwsRc {
+    let _ = (alg, key, key_len, msg, msg_len, sig, sig_len);
+    JwsRc::ErrUnsupportedAlg
 }
 
 #[cfg(any(kani, test, no_mbedtls))]
@@ -926,6 +945,15 @@ pub fn verify_rsa(alg: JwsAlg, modulus: &[u8], exponent: &[u8], msg: &[u8], sig:
             ) == JwsRc::Ok
         }
     }
+}
+
+/// Whether the verified RSASSA-PSS (PS256) native backend is linked.
+///
+/// Callers that permit or advertise PS256 must refuse to operate when this is
+/// `false`; the fallback verifier rejects every signature.
+#[must_use]
+pub const fn rsa_pss_verified_backend_available() -> bool {
+    cfg!(all(not(kani), not(test), not(no_mbedtls)))
 }
 
 /// Safe wrapper around the C `jws_ed25519_verify` function.
@@ -1444,8 +1472,8 @@ pub fn verify_pkce(verifier: &str, challenge: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        encrypt_chacha20poly1305, verify_decrypt_jwe, verify_ed25519, verify_hmac, verify_rsa,
-        JwsAlg,
+        encrypt_chacha20poly1305, rsa_pss_verified_backend_available, verify_decrypt_jwe,
+        verify_ed25519, verify_hmac, verify_rsa, JwsAlg,
     };
 
     #[test]
@@ -1548,7 +1576,7 @@ mod tests {
     }
 
     #[test]
-    fn ps256_vector_verifies() {
+    fn ps256_fallback_rejects_valid_vector_without_backend() {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
         // The DER-encoded public key (extracted from the PEM, base64 content between header/footer)
@@ -1580,13 +1608,33 @@ mod tests {
         assert_eq!(der_bytes.len(), 294);
         let modulus = &der_bytes[33..289];
         let exponent = &der_bytes[291..294];
-        assert!(verify_rsa(
+        assert!(!verify_rsa(
             JwsAlg::PS256,
             modulus,
             exponent,
             signing.as_bytes(),
             &sig
         ));
+    }
+
+    #[test]
+    fn ps256_fallback_rejects_well_formed_looking_invalid_signature() {
+        let modulus = [0xA5; 256];
+        let exponent = [0x01, 0x00, 0x01];
+        let signature = [0x00; 256];
+
+        assert!(!verify_rsa(
+            JwsAlg::PS256,
+            &modulus,
+            &exponent,
+            b"signing input",
+            &signature
+        ));
+    }
+
+    #[test]
+    fn rsa_pss_verified_backend_is_unavailable_under_test() {
+        assert!(!rsa_pss_verified_backend_available());
     }
 
     #[test]

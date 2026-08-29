@@ -1,7 +1,12 @@
 use aegaeon_jose::algorithms::{Algorithm, CryptoProfile};
 
 pub(crate) fn alg_allowed_with_promoted_rsa(name: &str, crypto_profile: CryptoProfile) -> bool {
-    if matches!(name, "RS256" | "PS256") {
+    if name == "PS256" {
+        // PS256 verification requires the verified RSASSA-PSS backend. Builds
+        // without it reject PS256, so their metadata must not advertise it.
+        return aegaeon_jose::verified_rsa_pss_backend_available();
+    }
+    if name == "RS256" {
         return true;
     }
     // Client-auth and request-object surfaces dispatch non-promoted

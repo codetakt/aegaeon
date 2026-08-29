@@ -47,6 +47,8 @@ jobs:
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
 
       - name: Build verified core artefact (wasm + manifest)
         run: |

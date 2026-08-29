@@ -3,7 +3,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 use aegaeon_observability::metrics::OAuthMetrics;
 use prometheus::Registry;
@@ -183,6 +183,26 @@ fn runtime_issuer_host(database_runtime_config: &DatabaseRuntimeConfiguration) -
     Arc::new(database_runtime_config.issuer_host.clone())
 }
 
+fn validate_explicit_ps256_policy(
+    private_key_jwt_enabled: bool,
+    client_jwt_allowed_algs: &[String],
+    verified_backend_available: bool,
+    issuer: &str,
+) -> Result<()> {
+    let explicit_ps256_declared = private_key_jwt_enabled
+        && client_jwt_allowed_algs
+            .iter()
+            .any(|algorithm| algorithm.eq_ignore_ascii_case("PS256"));
+    if explicit_ps256_declared && !verified_backend_available {
+        anyhow::bail!(
+            "issuer {issuer} explicitly enables PS256 private_key_jwt client authentication, \
+             but the verified RSASSA-PSS backend is not linked; refusing to start to avoid \
+             silently rejecting every PS256 client assertion"
+        );
+    }
+    Ok(())
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "existing server bootstrap orchestration; new oversized functions remain gated"
@@ -196,6 +216,24 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
         RuntimeStateNamespace::from_environment_id(database_runtime_config.environment_id);
     let base_url = database_runtime_config.issuer_url.clone();
     let database_runtime_policy = &database_runtime_config.state.policy;
+    let verified_rsa_pss_backend_available = aegaeon_jose::verified_rsa_pss_backend_available();
+    validate_explicit_ps256_policy(
+        database_runtime_policy.private_key_jwt_enabled,
+        &database_runtime_policy.client_jwt_allowed_algs,
+        verified_rsa_pss_backend_available,
+        &base_url,
+    )?;
+    if !verified_rsa_pss_backend_available {
+        warn!(
+            target: "runtime_capability",
+            issuer = %base_url,
+            algorithm = "PS256",
+            backend = "verified_rsassa_pss",
+            verification = "fail_closed",
+            metadata = "suppressed",
+            "verified PS256 backend is unavailable; PS256 verification remains fail-closed and PS256 metadata advertising is suppressed"
+        );
+    }
     let authority = runtime_authority(
         &server_config,
         &database_runtime_config,
