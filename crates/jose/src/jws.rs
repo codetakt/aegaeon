@@ -1,7 +1,7 @@
 // JWS (JSON Web Signature) implementation
 // RFC 7515 compliant
 
-use crate::algorithms::{Algorithm, AlgorithmError, CryptoProfile, RsaPssSigner, RsaPssVerifier};
+use crate::algorithms::{Algorithm, AlgorithmError, CryptoProfile, RsaPssSigner};
 use crate::policy::{JoseContext, KID_MAX_LEN};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
@@ -588,47 +588,6 @@ impl Jws {
 
         // Create compact serialization
         Ok(format!("{header_b64}.{payload_b64}.{signature_b64}"))
-    }
-
-    /// Verify a JWS with RSA-PSS signature
-    ///
-    /// # Errors
-    ///
-    /// Returns [`JwsError`] if the compact form is invalid, the header does not
-    /// advertise `PS256`, or signature verification fails.
-    pub fn verify_rsa_pss(
-        jws: &str,
-        verifier: &RsaPssVerifier,
-        public_key_der: &[u8],
-    ) -> Result<Vec<u8>, JwsError> {
-        // Parse compact serialization
-        let parts: Vec<&str> = jws.split('.').collect();
-        if parts.len() != 3 {
-            return Err(JwsError::InvalidFormat);
-        }
-
-        let header_b64 = parts[0];
-        let payload_b64 = parts[1];
-        let signature_b64 = parts[2];
-
-        // Decode header and validate algorithm
-        let header_json = URL_SAFE_NO_PAD.decode(header_b64)?;
-        let header = parse_header_bytes(&header_json)?;
-        if header.algorithm()? != JwsAlgorithm::Ps256 {
-            return Err(JwsError::AlgorithmMismatch);
-        }
-
-        // Decode signature
-        let signature = URL_SAFE_NO_PAD.decode(signature_b64)?;
-
-        // Create signing input and verify
-        let signing_input = format!("{header_b64}.{payload_b64}");
-        verifier
-            .verify_with_public_key(signing_input.as_bytes(), &signature, public_key_der)
-            .map_err(|_| JwsError::VerificationFailed)?;
-
-        // Return payload
-        Ok(URL_SAFE_NO_PAD.decode(payload_b64)?)
     }
 
     /// Parse a JWS from compact serialization

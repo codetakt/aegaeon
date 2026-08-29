@@ -112,54 +112,6 @@ impl RsaPssSigner {
     }
 }
 
-/// RSA-PSS verification key wrapper
-pub struct RsaPssVerifier {
-    _algorithm: Algorithm,
-}
-
-impl RsaPssVerifier {
-    /// Create a new RSA-PSS verifier
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AlgorithmError::Unsupported`] when `algorithm` is not an
-    /// RSA-PSS variant.
-    pub fn new(algorithm: Algorithm) -> Result<Self, AlgorithmError> {
-        match algorithm {
-            Algorithm::PS256 | Algorithm::PS384 | Algorithm::PS512 => Ok(Self {
-                _algorithm: algorithm,
-            }),
-            _ => Err(AlgorithmError::Unsupported(format!(
-                "{} is not an RSA-PSS algorithm",
-                algorithm.as_str()
-            ))),
-        }
-    }
-
-    /// Verify a signature using public key DER
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AlgorithmError::VerificationFailed`] when the provided inputs
-    /// are empty.
-    pub fn verify_with_public_key(
-        &self,
-        message: &[u8],
-        signature: &[u8],
-        public_key_der: &[u8],
-    ) -> Result<(), AlgorithmError> {
-        // Basic validation
-        if signature.is_empty() || public_key_der.is_empty() || message.is_empty() {
-            return Err(AlgorithmError::VerificationFailed);
-        }
-
-        // This is a placeholder that accepts valid-looking signatures
-        // A production implementation would use RsaPublicKeyComponents with proper parsing
-        // The signing test will still work since we're testing the signing path primarily
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,43 +147,43 @@ dXhxpIsS9twuhYpCdx9IlS32
 -----END PRIVATE KEY-----";
 
     #[test]
-    fn test_rsa_pss_sign_verify() -> Result<(), Box<dyn std::error::Error>> {
-        // Test PS256
+    fn test_rsa_pss_signs_ps256() -> Result<(), Box<dyn std::error::Error>> {
         let signer = RsaPssSigner::from_pem(TEST_RSA_PRIVATE_KEY, Algorithm::PS256)?;
         let message = b"test message";
         let signature = signer.sign(message)?;
 
-        // Get public key for verification
-        let public_key_der = signer.public_key_der();
-
-        let verifier = RsaPssVerifier::new(Algorithm::PS256)?;
-        verifier.verify_with_public_key(message, &signature, &public_key_der)?;
+        // Independent signing-correctness oracle: aws-lc-rs pure-Rust PSS verify
+        // over the signer's own SPKI. This checks the signing path only; it is
+        // NOT the production HACL verification path
+        // (jws.rs verify_rsa_pss_sha256 -> ffi::verify_rsa(PS256)).
+        let spki = signer.public_key_der();
+        aegaeon_crypto::signature::verify_rsa_pss_sha256(&spki, message, &signature)
+            .expect("PS256 signature must verify against the signer's own public key");
         Ok(())
     }
 
     #[test]
-    fn test_rsa_pss_algorithms() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_rsa_pss_signs_ps384_ps512() -> Result<(), Box<dyn std::error::Error>> {
         let message = b"test message for all algorithms";
 
-        // Test PS384
+        // No pure-Rust PS384/PS512 verify oracle exists, so assert the RSA
+        // signature-length invariant instead: a 2048-bit key yields a 256-byte
+        // signature regardless of the PSS hash variant.
         let signer = RsaPssSigner::from_pem(TEST_RSA_PRIVATE_KEY, Algorithm::PS384)?;
         let signature = signer.sign(message)?;
-        let public_key_der = signer.public_key_der();
+        assert_eq!(
+            signature.len(),
+            256,
+            "PS384 over a 2048-bit key yields a 256-byte signature"
+        );
 
-        let verifier = RsaPssVerifier::new(Algorithm::PS384)?;
-        assert!(verifier
-            .verify_with_public_key(message, &signature, &public_key_der)
-            .is_ok());
-
-        // Test PS512
         let signer = RsaPssSigner::from_pem(TEST_RSA_PRIVATE_KEY, Algorithm::PS512)?;
         let signature = signer.sign(message)?;
-        let public_key_der = signer.public_key_der();
-
-        let verifier = RsaPssVerifier::new(Algorithm::PS512)?;
-        assert!(verifier
-            .verify_with_public_key(message, &signature, &public_key_der)
-            .is_ok());
+        assert_eq!(
+            signature.len(),
+            256,
+            "PS512 over a 2048-bit key yields a 256-byte signature"
+        );
         Ok(())
     }
 
@@ -239,6 +191,5 @@ dXhxpIsS9twuhYpCdx9IlS32
     fn test_invalid_algorithm() {
         // Should fail with non-PSS algorithm
         assert!(RsaPssSigner::from_pem(TEST_RSA_PRIVATE_KEY, Algorithm::RS256).is_err());
-        assert!(RsaPssVerifier::new(Algorithm::ES256).is_err());
     }
 }
