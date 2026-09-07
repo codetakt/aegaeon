@@ -37,7 +37,11 @@ def report(member):
         "packages": [
             {
                 "package": {"id": identity(member)},
-                "unsafety": {"used": counters, "unused": counters, "forbids_unsafe": False},
+                "unsafety": {
+                    "used": counters,
+                    "unused": copy.deepcopy(counters),
+                    "forbids_unsafe": False,
+                },
             }
         ],
         "packages_without_metrics": [],
@@ -112,11 +116,15 @@ class GeigerTests(unittest.TestCase):
         assert result["dependency_files_not_scanned"] == ["/external/generated.rs"]
 
     def test_invalid_counter_and_missing_collection_are_rejected(self):
-        for invalid in (-1, True, "0"):
-            data = copy.deepcopy(self.report)
-            data["packages"][0]["unsafety"]["used"]["exprs"]["safe"] = invalid
-            with self.subTest(invalid=invalid), pytest.raises(ValueError, match="count"):
-                self.validate(data)
+        for group in ("used", "unused"):
+            for invalid in (-1, True, "0"):
+                data = copy.deepcopy(self.report)
+                data["packages"][0]["unsafety"][group]["exprs"]["safe"] = invalid
+                with (
+                    self.subTest(group=group, invalid=invalid),
+                    pytest.raises(ValueError, match="count"),
+                ):
+                    self.validate(data)
         del self.report["used_but_not_scanned_files"]
         with pytest.raises(KeyError):
             self.validate()

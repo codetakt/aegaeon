@@ -1,23 +1,26 @@
 # Client / RP Assurance Case
 
-Last updated: 2026-03-10
+Last updated: 2026-09-07
 
-Status: current implementation baseline
+Status: snapshot
 
 Owner: Verification
 
 Audience: verification reviewers, maintainers
 
-> **Status note (2026-03-10):** This is the pre-release assurance boundary for the
-> future client / RP track. It records the completed P1 client-core baseline. It
-> does **not** by itself create a released client-product claim; use
-> `docs/product-positioning.md` for outward-facing wording and
-> `docs/verification/claims/assurance-case/claim-definition.md` for the current released formal claim.
+> **Status note (2026-09-07):** This records the historical P1 client-core evidence
+> boundary, not completion of the SDK implementation guarantee. The
+> [SDK assurance contract](sdk-assurance/assurance-contract.md) and
+> [standards/output baseline](sdk-assurance/standards-baseline.md) now define the
+> obligations. The [qualified SDK claim is inactive](sdk-assurance/contract-status.md).
+> Existing promotion records and this snapshot cannot activate it.
 
 ## Purpose
 
-This document records what the repository can now defend about the **client-core**
-track after closing P1 in `docs/program-management/roadmaps/active/verified-oidc-server-client-backlog.md`.
+This document records the **client-core** evidence inventory from P1 in
+`docs/program-management/roadmaps/active/verified-oidc-server-client-backlog.md`.
+Its component results need reconciliation with current code, audited assumptions,
+and the actual distributed outputs before use in a new release claim.
 
 It exists to prevent two failure modes:
 
@@ -123,7 +126,10 @@ The P1 baseline is supported by the following repository evidence:
 
 ## Trust Boundary
 
-The current client-core boundary remains assumption-qualified.
+The recorded client-core boundary was assumption-qualified. The assumptions below
+are an inventory to audit. Under the SDK contract, external primitive/platform
+behavior may remain an explicit premise; SDK-owned parsing, preverification glue,
+handle handling, store coordination, and callbacks require implementation proof.
 
 ### In scope for this pre-release baseline
 
@@ -140,7 +146,7 @@ The current client-core boundary remains assumption-qualified.
 - compact-parser behaviour
 - handle registration / resolution contracts across the WASM boundary
 
-### Still out of scope
+### Not established by the historical P1 evidence
 
 - published `@aegaeon/runtime-node` / `@aegaeon/runtime-web` packages
 - `@aegaeon/issuer-spa`, `@aegaeon/rp-core`, and management client product surfaces
@@ -152,30 +158,20 @@ The current client-core boundary remains assumption-qualified.
 
 ## Interpretation
 
-The correct reading of the current state is:
+The interpretation of this evidence inventory is:
 
-- **yes** — the repository now contains a defensible, tested, client-core verification baseline
+- **yes** — the repository contains client-core verification assets and adapter tests
 - **no** — this does not yet justify a released standalone client / RP product claim
 
-The current released wording therefore remains server-side, as defined in
+Current public wording and separate server/SDK activation criteria are defined in
 `docs/product-positioning.md`.
 
 ## Exit Criteria For A Released Client Claim
 
-Before Aegaeon can safely claim a released client / RP product boundary, all of
-the following still need to be closed:
-
-1. move the staged runtime adapters and packaging flow into the real separate SDK repository
-2. promote browser-capable CI and diagnostics lanes to required release gates
-3. add real upstream IdP end-to-end coverage
-4. generate managed commercial-provider evidence that satisfies `spec/managed-provider-evidence.schema.json`
-5. generate admin-console SDK evidence that satisfies `spec/admin-sdk-evidence.schema.json`
-   from an admin-console build that also passes `spec/admin-auth-boundary.current.json`
-6. fix production signing / attestation / release custody for the distributed artefacts
-7. satisfy the frozen promotion gate in `spec/client-claim-promotion.current.json` against both managed-provider and admin-console evidence before widening any released wording
-8. build and validate the released-client claim report from `spec/released-client-claim.current.json` and clear its publication-org blockers
-9. pass the source-managed released-client activation gate before any released wording is switched on
-10. promote the source-managed pre-release client boundary into a released client claim only after the corresponding evidence bundle and release custody are in place
-
-Until those items are complete, this document is a **pre-release assurance note**
-for engineering and planning, not a change to the released product claim.
+Use [the SDK activation backlog](sdk-assurance/contract-status.md). Closure now
+requires all applicable SDK requirements and C-01 through C-20, including emitted
+JavaScript/WASM correspondence, adapters, orchestration, packed-output testing,
+and release-specific evidence. The earlier browser/provider/admin evidence,
+publication custody, and promotion gates remain additional controls. Their
+evaluators must be reconciled with the new contract before stronger wording is
+enabled. This snapshot is evidence input, not the release decision.

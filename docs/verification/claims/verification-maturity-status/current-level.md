@@ -11,6 +11,10 @@ Audience: verification reviewers, maintainers
 > **Status note (2026-07-08):** Snapshot of the current verification maturity assessment; rerun the evidence checks before using it for a new release review.
 
 This document is part of the split verification maturity-status snapshot.
+Its Level numbers belong only to the [verification maturity model](../verification-maturity-model.md).
+The separately named connection milestones in the
+[boundary workplan](../../workplans/verification-boundary-roadmap.md) measure linkage,
+not implementation-proof closure or release assurance.
 
 ## 2. Current Assessed Level
 

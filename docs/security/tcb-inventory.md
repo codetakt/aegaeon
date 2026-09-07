@@ -333,6 +333,7 @@ cargo kani --package aegaeon-server
 ```
 
 ### C. Emergency Contacts
-- Security Team: <security@aegaeon.example>
-- On-call: +1-555-AEGAEON
-- Incident Response: <incident@aegaeon.example>
+
+Use the private vulnerability-reporting channels in
+[SECURITY.md](../../SECURITY.md#reporting-a-vulnerability).
+Deployment operators must supply their own operational escalation and on-call contacts.

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "claim_target": "enterprise-readiness",
   "claim_active": false,
-  "current_public_wording": "feature-complete beta / phase-release baseline with formal server-side assurance and constrained management UI",
+  "current_public_wording": "beta server with verification assets; foundation and enterprise claims inactive",
   "future_allowed_wording": "enterprise-ready identity platform with audited release custody, regulated-operation runbooks, hardened deployment guidance, real managed-provider evidence, and KMS/HSM deployment classification",
   "required_evidence": [
     {

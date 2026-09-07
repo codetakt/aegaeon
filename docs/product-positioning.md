@@ -1,6 +1,6 @@
 # Product Positioning
 
-Last updated: 2026-07-23
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -10,158 +10,103 @@ Audience: contributors, maintainers
 
 ## Purpose
 
-This document is the canonical source for outward-facing product wording for Aegaeon.
-It translates the formal claim, security evidence, and active roadmaps into safe
-release / marketing language.
+This is the public presentation index. The normative meaning, finalized English
+wording, required release disclosures, and composition rules live in
+the [public assurance statement specification](verification/claims/assurance-statement.md).
+That specification defines what may be said; the
+[server assurance contract](verification/claims/assurance-case/assurance-contract.md)
+and its [standards baseline](verification/claims/assurance-case/standards-baseline.md)
+define the target obligations; [contract status](verification/claims/assurance-case/contract-status.md)
+controls whether the foundation wording is available. Matrix labels, roadmaps,
+historical proof counts, and slice promotions do not activate it.
 
-If this document conflicts with
-`docs/verification/claims/assurance-case/claim-definition.md`,
-`docs/verification/claims/assumptions/current-register.md`,
-`docs/verification/claims/assumptions/runtime-contract-register.md`,
-`docs/verification/claims/crypto-allowlist.md`, or `spec/compliance-matrix.yaml`,
-those documents win.
-
-## Scope
-
-- current claimable server positioning
-- statements that are still too strong today
-- next target positions gated on explicit verification-boundary closure
-- separation between the current server product and the planned client / SDK track
+The separate [SDK assurance contract](verification/claims/sdk-assurance/assurance-contract.md)
+and [standards/output baseline](verification/claims/sdk-assurance/standards-baseline.md)
+govern distributed client/RP and management-client implementations. Its
+[activation status](verification/claims/sdk-assurance/contract-status.md) is
+independent of server completion and older client-core promotion reports.
 
 ## Claimable Today
 
-- **Primary statement**: Aegaeon is an assumption-qualified formally verified and
-  security-tested OIDC 1.0 / OAuth 2.0/2.1 identity-provider server, with OpenID Connect Federation runtime support.
-- **OIDC nuance**: that server claim is now supported by the promoted OIDC
-  `RS256 Required Slice` and `RS256 Interop Slice`; broader RSA remains compat.
-- **Input-boundary nuance**: claim-bearing raw JSON surfaces are promoted
-  surface-by-surface. Current promoted surfaces are enumerated in
-  `docs/verification/jose/raw-json-boundary.md`; the residual `generic-object`
-  surface remains compat-only.
-- **Server-side RP nuance**: Aegaeon includes server-side OIDC RP / brokering runtime
-  capability, but that does not create a formally verified standalone client / RP product claim.
-- **Verified Core nuance**: Verified Core extraction and WASM distribution support a future
-  SDK / client track, but the current released formal claim remains server-side.
-- **Admin-console nuance**: the first-party management console is currently positioned as a
-  control-plane UI constrained by `@aegaeon/management-client`, the admin SDK boundary,
-  and the source-managed management-session auth boundary; it is not itself part of the
-  released formal verification claim. A bounded admin control-plane security-boundary assurance
-  case and checked model now exist for future claim activation, but hosted runtime evidence and
-  Phase 4 activation remain incomplete.
+**Aegaeon is an OAuth/OIDC server with formal-verification assets and security-test
+tooling; completion of its published server assurance contract is pending.**
 
-## Current Evidence Baseline
+**The Aegaeon SDK has client-core verification assets and security-test tooling.
+Completion of its published SDK assurance contract for distributed implementations
+is pending.**
 
-- **Freshness status (2026-03-10)**: the current released server claim has been
-  re-established against a fresh claim-supporting verification / security baseline.
-- **Claim-supporting lanes re-run fresh**:
-  - `nix build .#verify-fstar -L`
-  - `nix build .#verify-jose -L`
-  - `nix build .#verify-dudect -L`
-  - `nix build .#verify-tamarin -L`
-  - `nix build .#verify-kani -L`
-  - `nix run .#security-suite`
-  - `python3 scripts/validation/validate_compliance_matrix.py`
-- **Interpretation**: this re-confirms the existing assumption-qualified,
-  server-side claim. It does not widen the claim to cover client / SDK surfaces
-  or broad RSA beyond the promoted OIDC `RS256` slices.
+Individual component results may be described using the exact checked property,
+model/program, bounds, assumptions, dated evidence and runtime relationship.
+Do not turn component results into an assertion that the server implementation
+or current release satisfies the whole contract.
+
+Runtime capability descriptions remain separate: the server includes OIDC RP /
+brokering and Federation trust-chain consumer paths. Public Federation OP
+publication is deferred, as specified in
+[the runtime specification](specs/openid-federation-spec.md).
+Standalone client/SDK and admin-UI claims remain separately gated. Server-side
+management/session boundaries that can affect foundation guarantees are part of
+the foundation obligations even though browser rendering is not.
+
+## Finalized Target Wording
+
+Use the matching template in section 7 of the
+[assurance statement specification](verification/claims/assurance-statement.md):
+
+- Server foundation: section 7.1.
+- Client/RP SDK: section 7.2, identifying Node and/or browser output profiles.
+- Management API client: section 7.3, with its own operation/output scope.
+- Combined server/SDK foundation: section 7.4, requiring both contracts and
+  compatible, verified interface/composition conditions.
+- Short descriptions and badges: section 7.5, with a release/profile identifier
+  and a link to the release assurance record.
+
+Each template is complete as a wording specification; it becomes a release claim
+only after its bracketed fields are filled from a qualified release assurance
+record meeting sections 5 and 6. No template applies to an unassessed release.
+Use section 8 for wording before qualification.
+
+Specification conformance, implementation proof, symbolic security proof,
+empirical testing, and certification remain distinct. Fixed draft/errata editions,
+external primitive correctness assumptions, own-code obligations, and target/output
+limits follow the contracts. A verified core does not establish a verified SDK;
+neither contract certifies an admin UI, arbitrary IdP, or another language output.
 
 ## Statements To Avoid Today
 
-| Statement | Why it is too strong today | What must happen first |
-|---|---|---|
-| `formally verified OIDC/OAuth server and client` | The current assurance case explicitly scopes the released formal claim to server-side protocol handling only, and the new combined server/client claim gate is inactive. | Complete `spec/server-client-formal-assurance-claim.current.json`, activate the released-client claim, close hosted / publication evidence, and keep TCB-qualified wording adjacent to any broad shorthand. |
-| `formally verified client SDK` | Client SDK / WASM / runtime-adapter work is still draft / roadmap material. | Ship the SDK track with its own verification boundary and release evidence. |
-| `formally verified admin console` | The admin console is currently justified as a first-party control-plane UI constrained by SDK and auth-boundary audits, not as a formally verified UI surface. | Keep the current admin boundary posture, or define a separate formal/admin assurance claim if stronger wording is required. |
-| `verified OIDC interoperability` | This wording implies a broader interoperability claim than the promoted `RS256` Request Object / `request_uri` / `private_key_jwt` slices and would blur unsupported or compat-only OIDC surfaces. | Define and verify the broader interoperability surface you want to claim. |
-| `OAuth 2.1 / OIDC 1.0 Core is fully verified` | MUST-level verified coverage is partial; see the MUST-Level Coverage section of the verification scope for current counts. | Bring every MUST-level entry for the claimed specification to `verified`. |
-| `each OIDC Core requirement is individually verified` | The `openid_core` matrix uses roll-up entries rather than one ID per discrete OIDC Core requirement. | Disaggregate the OIDC Core roll-ups and verify every resulting requirement entry. |
-| `completely security-proven OIDC/OAuth implementation` | This implies the project proves OS entropy, external hosts/storage, third-party dependencies, deployment integrity, and cryptographic hardness from first principles. Those are explicit assumptions or TCB boundaries. | Use assumption-qualified / boundary-explicit wording tied to the assurance case and assumption register. |
+| Statement | Required basis |
+| --- | --- |
+| `assumption-qualified formally verified and security-tested foundation` | Complete the server contract and activate it for the actual artifact/configuration |
+| `all MUST requirements verified` / `fully verified OAuth/OIDC` | Complete every role-applicable clause in the selected baseline; matrix roll-ups and labels are insufficient |
+| `security-tested release` | Identify tests/results for that release and resolve findings under G-18 |
+| `verified OIDC interoperability` | Name the exact surfaces, configurations, test results and formal properties |
+| `OpenID Federation OP support` | Deliver and assess the currently deferred publication endpoints |
+| `cryptographic hardness is the only assumption` | Eliminate or disclose unverified primitive implementations and all other external trust contracts |
+| `verified SDK` | Discharge the SDK contract for the named profiles and actual distributed outputs, and satisfy the reconciled client release gates |
+| `formally verified server and client` | Activate both contracts and the combined gates with compatible interface assumptions |
+| `formally verified admin UI` | Activate the bounded admin assurance gate; no browser/rendering assurance is implied |
+| `certified` | Name the certification target and provide its active gate and actual listing/evidence |
 
-## Target Position Ladder
+## Adjacent Gates
 
-1. **Current released position**
-   - assumption-qualified formally verified and security-tested OIDC 1.0 / OAuth 2.1 server, with OIDC Federation runtime support
-2. **After separate SDK / client assurance work**
-   - released client / SDK wording, but only under a separately documented released-client policy and evidence report
-3. **After combined server/client formal-assurance closure**
-   - assumption-qualified formally verified server plus verified client/RP core wording, only under `spec/server-client-formal-assurance-claim.current.json` and with explicit runtime-adapter / external-dependency TCB disclosure
-4. **After enterprise-readiness closure**
-   - enterprise-ready identity platform wording, only after the source-managed enterprise-readiness gate is active and backed by publication-org, managed-provider, KMS/HSM, regulated-runbook, hardened-deployment, release-custody, and SLO evidence
-5. **After named certification closure**
-   - certified wording only for the exact certification target whose gate is active; do not use `fully certified` without naming the OIDF/OAuth/FAPI/SOC2/ISO target and linking archived evidence or public listing
-6. **After bounded admin-UI assurance closure**
-   - bounded admin control-plane security-boundary assurance wording, only after a separate admin UI assurance case, checked model, contract drift gates, and hosted runtime evidence exist
+These gates add obligations; they do not establish foundation completion:
 
-## Future-Gated Claim Targets
+- `spec/released-client-claim.current.json`
+- `spec/server-client-formal-assurance-claim.current.json`
+- `spec/enterprise-readiness-claim.current.json`
+- `spec/certification-claim.current.json`
+- `spec/admin-ui-assurance-claim.current.json`
 
-These are not claimable today. They are source-managed target contracts for
-future release reviews.
-
-| Future phrase | Required gate | Safe target wording after closure |
-|---|---|---|
-| `fully enterprise-ready` | `spec/enterprise-readiness-claim.current.json` must set `claim_active: true` with all required evidence complete. | `Enterprise-ready identity platform with audited release custody, regulated-operation runbooks, hardened deployment guidance, real managed-provider evidence, and KMS/HSM deployment classification.` |
-| `fully certified` | `spec/certification-claim.current.json` must set `claim_active: true` for a named certification scope. | `Certified for <named scope>`; examples: `OIDF Certified OP for <plan set>` or `FAPI <profile> conformance certified`. |
-| `formally verified server and client` | `spec/server-client-formal-assurance-claim.current.json` must set `claim_active: true`, and the released-client claim plus publication / hosted evidence gates must be active or complete as required. | `Assumption-qualified formally verified OIDC/OAuth server with a released client/RP SDK containing a verified client core and explicit runtime-adapter and external-dependency TCB boundaries.` |
-| `formally verified UI included` | `spec/admin-ui-assurance-claim.current.json` must set `claim_active: true` for the bounded admin security boundary. | `Admin control-plane security boundary with formally specified and mechanically checked authorization/session state-machine invariants.` |
-
-Do not use the broad literal wording if the active gate is narrower. In
-particular, a bounded admin UI assurance claim must not imply that React,
-browser rendering, CSS, browser extensions, OS UI behaviour, or every possible
-visual interaction is formally verified.
-
-## Japanese Wording Examples (Non-Normative)
-
-These examples are convenience translations only. The canonical claim boundary
-still lives in the English documents referenced above.
-
-- **Current safe server wording**
-  - `Aegaeon は、前提仮定付きの形式検証済み・セキュリティ検査済み OIDC 1.0 / OAuth 2.0/2.1 アイデンティティプロバイダサーバであり、OpenID Connect Federation のランタイムサポートを備える。`
-- **Current safe SDK wording**
-  - `Aegaeon SDK は、検証済みサーバ / コア境界を前提とした pre-release SDK 実装であり、released client claim はまだ有効化していない。`
-- **Current safe admin-console wording**
-  - `Aegaeon Admin Console は、@aegaeon/management-client と management-session 境界に拘束された first-party control-plane UI であり、UI 自体を形式検証済みとは主張しない。`
-- **Future wording after publication-org blockers close**
-  - `Aegaeon は、前提仮定付きの形式検証済み・セキュリティ検査済みサーバ実装を中核に持ち、released-client policy に従う SDK / client 実装を提供する。`
-- **Future bounded server/client formal-assurance wording**
-  - `Aegaeon は、前提仮定付きの形式検証済み OIDC/OAuth サーバと、検証済み client core を含む released client/RP SDK を提供する。ただし runtime adapter と外部依存は明示された TCB 境界に従う。`
-
-## Short Public Copy (Non-Normative)
-
-Use these only as short-form copies of the canonical wording above.
-
-### English
-
-- **Website / landing page**
-  - `Assumption-qualified formally verified and security-tested OIDC 1.0 / OAuth 2.0/2.1 server, with OpenID Connect Federation runtime support.`
-- **SDK status**
-  - `Aegaeon SDK is a pre-release SDK track with a source-managed client boundary and hosted readiness gates; a released client claim is not enabled yet.`
-- **Admin-console status**
-  - `Aegaeon Admin Console is a first-party control-plane UI constrained by SDK and management-session boundary audits; it is not claimed as a formally verified UI surface.`
-
-### Japanese
-
-- **Website / landing page**
-  - `Aegaeon は、前提仮定付きの形式検証済み・セキュリティ検査済み OIDC 1.0 / OAuth 2.0/2.1 サーバであり、OpenID Connect Federation のランタイムサポートを備える。`
-- **SDK status**
-  - `Aegaeon SDK は、source-managed な client boundary と hosted readiness gate を備える pre-release SDK track であり、released client claim はまだ有効化していない。`
-- **Admin-console status**
-  - `Aegaeon Admin Console は、SDK 境界と management-session 境界監査に拘束された first-party control-plane UI であり、形式検証済み UI とは主張しない。`
-
-## Source Documents
-
-- **Formal claim / boundary**: `docs/verification/claims/assurance-case/claim-definition.md`, `docs/verification/claims/assumptions/current-register.md`, `docs/verification/claims/crypto-allowlist.md`
-- **Implementation-closure ladder**: `docs/verification/claims/verification-maturity-model.md`
-- **Boundary-closure plans**: `docs/verification/workplans/verification-boundary-roadmap.md`, `docs/program-management/roadmaps/active/current-execution-plan.md`, `docs/program-management/roadmaps/active/oidc-spec-coverage-roadmap.md`
-- **Runtime / security evidence**: `docs/security/security-review/README.md`, `docs/releases/evidence/beta-conformance.md`, and fresh artefacts under `artifacts/`
-- **Future client / SDK track**: `docs/verification/claims/client-rp-assurance-case.md`, `docs/program-management/initiatives/sdk/client-sdk-architecture.md`, `docs/specs/verified-core-wasm.md`, `docs/program-management/roadmaps/active/management-platform-follow-on-plan.md`
-- **Future server/client formal-assurance track**: `docs/program-management/roadmaps/active/verified-server-client-formal-claim-roadmap.md`, `spec/server-client-formal-assurance-claim.current.json`
-- **Admin-console control-plane boundary**: `../aegaeon-admin-console/spec/admin-sdk-boundary.current.json`, `../aegaeon-admin-console/spec/admin-auth-boundary.current.json`
-- **Admin UI assurance boundary**: `docs/verification/claims/admin-ui-assurance-case.md`, `spec/admin-ui-security-state-machine.current.json`, `docs/releases/evidence/admin-ui-assurance-phase3-internal-bundle.json`
-- **Future claim gates**: `spec/enterprise-readiness-claim.current.json`, `spec/certification-claim.current.json`, `spec/admin-ui-assurance-claim.current.json`, `spec/server-client-formal-assurance-claim.current.json`
+Existing records of March 2026 verification and beta OIDF conformance are dated
+snapshots. They cannot attest a new baseline, artifact or configuration without
+reconciliation. Use [the contract status](verification/claims/assurance-case/contract-status.md)
+for the current foundation backlog and the individual gates for adjacent work.
+The [SDK backlog](verification/claims/sdk-assurance/contract-status.md) also applies;
+the older gates do not yet evaluate its full requirements or output correspondence.
 
 ## Update Rule
 
-When a new outward-facing phrase is needed, update this document and ensure the
-supporting boundary / evidence documents already justify it. Roadmaps and draft
-specs may describe future capability, but they do not change the current released
-product statement by themselves.
+Update contract obligations and obtain the required evidence before widening
+public wording. An evidence-status change cannot silently remove an obligation.
+The current claimable wording applies until a reviewed release attestation
+satisfies the contract's activation criteria.

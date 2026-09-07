@@ -1,6 +1,6 @@
 # Release Security Evidence Archive
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: snapshot
 
@@ -8,7 +8,10 @@ Owner: Release Engineering
 
 Audience: release managers, maintainers
 
-> **Status note (2026-07-08):** Point-in-time release evidence; rerun the named validator before using it for a new release decision.
+> **Status note (2026-09-07):** Historical archive procedure. The named validator
+> checks archive structure; it does not establish qualified server/SDK assurance.
+> The [public statement specification](../../verification/claims/assurance-statement.md)
+> defines the additional release-record, result-review and activation requirements.
 
 ## Scope
 
@@ -29,6 +32,10 @@ release flow.
 It is a release-evidence procedure, not proof that the enterprise-readiness
 claim is active. The claim remains inactive until every activation-required item
 in the claim gate is marked `complete` and validated in the same change set.
+For the qualified server/SDK statement, those labels are insufficient: the
+individual requirement inventory, actual successful results, implementation/output
+correspondence, audited assumptions, and reviewed release record must also satisfy
+the public statement specification. Archive validation does not perform that review.
 
 ## Fixed claim posture
 

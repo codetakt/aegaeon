@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/server-assurance-contract.schema.json",
+  "title": "Server assurance contract register (not a release attestation)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "contract_id",
+    "adoption_state",
+    "normative_document",
+    "standards_document",
+    "status_document",
+    "source_retrieved_at",
+    "profile",
+    "guarantee_ids",
+    "supporting_source_ids",
+    "sources",
+    "matrix_groups",
+    "additional_role_bindings",
+    "identifier_migrations",
+    "contract_revision",
+    "evaluation_document",
+    "guarantee_ids_semantics",
+    "statement_document",
+    "document_revisions"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://aegaeon.dev/spec/server-assurance-contract.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "contract_id": {
+      "const": "aegaeon-server-assurance-v1"
+    },
+    "adoption_state": {
+      "const": "specified-not-attested"
+    },
+    "normative_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "standards_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_retrieved_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "roles",
+        "required_capabilities",
+        "forbidden_grants",
+        "dynamic_op_relationships"
+      ],
+      "properties": {
+        "id": {
+          "const": "server-foundation-v1"
+        },
+        "roles": {
+          "$ref": "#/$defs/identifiers"
+        },
+        "required_capabilities": {
+          "$ref": "#/$defs/identifiers"
+        },
+        "forbidden_grants": {
+          "$ref": "#/$defs/identifiers"
+        },
+        "dynamic_op_relationships": {
+          "const": "requires-separate-resolved-profile"
+        }
+      }
+    },
+    "guarantee_ids": {
+      "$ref": "#/$defs/guarantees"
+    },
+    "supporting_source_ids": {
+      "$ref": "#/$defs/identifiers"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "edition",
+          "uri",
+          "sha256"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/identifier"
+          },
+          "edition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uri": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "matrix_groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "matrix_key",
+          "source_ids",
+          "role",
+          "applicability",
+          "trigger",
+          "guarantee_ids"
+        ],
+        "properties": {
+          "matrix_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "applicability": {
+            "enum": [
+              "base",
+              "conditional",
+              "guidance",
+              "deferred",
+              "project"
+            ]
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "guarantee_ids": {
+            "$ref": "#/$defs/guarantees"
+          }
+        }
+      }
+    },
+    "additional_role_bindings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source_ids",
+          "role",
+          "trigger",
+          "guarantee_ids"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/identifier"
+          },
+          "source_ids": {
+            "$ref": "#/$defs/identifiers"
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "guarantee_ids": {
+            "$ref": "#/$defs/guarantees"
+          }
+        }
+      }
+    },
+    "identifier_migrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "old_group",
+          "old_id",
+          "new_group",
+          "new_id",
+          "reason"
+        ],
+        "properties": {
+          "old_group": {
+            "type": "string",
+            "minLength": 1
+          },
+          "old_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "new_group": {
+            "type": "string",
+            "minLength": 1
+          },
+          "new_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "contract_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "evaluation_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "guarantee_ids_semantics": {
+      "const": "minimum-cross-references"
+    },
+    "statement_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "normative_document",
+        "standards_document",
+        "status_document",
+        "evaluation_document",
+        "statement_document"
+      ],
+      "properties": {
+        "normative_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "standards_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "status_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "evaluation_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "statement_document": {
+          "$ref": "#/$defs/revision"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "identifiers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "guarantees": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^G-[0-9]{2}$"
+      }
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-r[1-9][0-9]*$"
+    }
+  }
+}

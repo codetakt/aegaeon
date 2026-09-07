@@ -1,6 +1,6 @@
 # OAuth Formal Verification Definition Catalog (F* + Tamarin)
 
-Last updated: 2026-01-23
+Last updated: 2026-09-07
 
 Status: active plan
 
@@ -298,7 +298,7 @@ Some RFCs are primarily guidance/registries. They may still require documentatio
 do not necessarily introduce new proof obligations:
 
 - RFC 6755 (OAuth URN namespace), RFC 6819 (historical security considerations), RFC 8252 (native apps),
-  RFC 9123 (browser-based apps).
+  draft-ietf-oauth-browser-based-apps-27 (browser-based apps).
 
 ## Turning this plan into compliance matrix rows
 

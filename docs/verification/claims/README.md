@@ -1,6 +1,6 @@
 # Verification Claims Overview
 
-Last updated: 2026-07-24
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -22,7 +22,19 @@ the detailed registers for audit and evidence review.
 
 ## Canonical Documents
 
-- `[claim]` Released formal boundary:
+- `[spec]` [Public assurance statement specification](assurance-statement.md):
+  public claims, scope, release records and activation rules.
+- `[spec]` [Assurance evaluation rules](assurance-evaluation.md):
+  requirement closure, reviewer roles, model/test adequacy, composition and validity.
+- `[spec]` Fixed server obligations:
+  [Server assurance contract](assurance-case/assurance-contract.md),
+  [Standards baseline](assurance-case/standards-baseline.md), and
+  [Activation status](assurance-case/contract-status.md).
+- `[spec]` Fixed SDK and distributed-output obligations:
+  [SDK assurance contract](sdk-assurance/assurance-contract.md),
+  [Standards/output baseline](sdk-assurance/standards-baseline.md), and
+  [SDK activation status](sdk-assurance/contract-status.md).
+- `[claim]` Evidence interpretation:
   [Formal claim overview](formal-claim-overview.md),
   [Detailed assurance case](assurance-case/README.md), and
   [Claim index](claim-index.md).
@@ -44,7 +56,7 @@ the detailed registers for audit and evidence review.
 
 ## Reading Rule of Thumb
 
-1. Start with the two overview documents for navigation and claim-boundary triage.
+1. Start with the public statement specification and the relevant server/SDK contract; both release claims remain inactive until release-specific activation.
 2. Use the detailed assurance case and assumption register directories for audit decisions.
 3. Check the crypto allowlist before changing algorithm or runtime wording.
 4. Check model fidelity before citing an F* module from a verified matrix row.

@@ -1,6 +1,6 @@
 # SDK Initiative Overview
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: active plan
 
@@ -24,6 +24,9 @@ CI, publish runbooks, or operational release procedures.
 
 ## Canonical Documents
 
+- `[spec]` [SDK assurance contract](../../../verification/claims/sdk-assurance/assurance-contract.md)
+  and [standards/output baseline](../../../verification/claims/sdk-assurance/standards-baseline.md)
+- `[snapshot]` [SDK activation backlog](../../../verification/claims/sdk-assurance/contract-status.md)
 - `[design]` [Client SDK architecture](client-sdk-architecture.md)
 - `[plan]` [SDK repository boundary plan](sdk-repository-plan.md)
 - `[plan]` [SDK CI companion plan](sdk-ci-plan.md)

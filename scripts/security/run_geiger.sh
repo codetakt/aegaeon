@@ -41,7 +41,7 @@ fi
 # Cargo's normal configuration (including Nix vendoring) remains authoritative.
 # Do not create a private CARGO_HOME or force a fresh crates.io git index.
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for tool in cargo-geiger jq python3; do
+for tool in cargo cargo-geiger jq python3; do
 	command -v "$tool" >/dev/null || {
 		echo "$tool not installed" >&2
 		exit 1

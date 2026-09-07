@@ -1,6 +1,6 @@
 # Current F* Assumption Register
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -9,6 +9,17 @@ Owner: Verification
 Audience: verification reviewers, maintainers
 
 This document is part of the split F* assumption register.
+
+## Contract Qualification
+
+This is an inventory of existing assumptions and their historical rationale,
+not an accepted set of premises for foundation activation. The
+[server contract](../assurance-case/assurance-contract.md) requires a soundness
+audit. In particular, the concrete SHA-256 injectivity assumptions, the
+`ensures True` Ed25519 statement, and the different-key JWS assumption must be
+repaired and their dependent proofs reassessed. Historical descriptions below
+as "honest" or "permanent" do not discharge that obligation. See
+[contract status](../assurance-case/contract-status.md).
 
 ## 1. Introduction
 

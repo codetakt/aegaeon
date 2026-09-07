@@ -1,6 +1,6 @@
-# OAuth Doc-Only RFC Posture (6755 / 6819 / 8252 / 9123)
+# OAuth Supporting Standards and Client Guidance
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -15,7 +15,10 @@ Audience: contributors, maintainers
 This document records Aegaeon’s **standards-first, fail-closed** posture for RFCs that are
 primarily *guidance* and/or *identifier registries* rather than requiring new protocol endpoints.
 
-The authoritative tracker remains `spec/compliance-matrix.yaml`.
+The [server standards baseline](../verification/claims/assurance-case/standards-baseline.md)
+defines editions and role applicability; `spec/compliance-matrix.yaml` indexes
+evidence. Guidance may contain applicable server requirements even when it adds
+no endpoint. This document does not attest completed conformance.
 
 ## RFC 6755 — OAuth URN Sub-Namespace
 
@@ -53,11 +56,17 @@ as supporting context.
 This posture is evidenced by the BCP and flow-level coverage in `spec/compliance-matrix.yaml`
 (notably RFC 9700 / RFC 7636 / RFC 9449 / RFC 9126 entries) and their referenced tests/proofs.
 
-## RFC 8176 — Ambiguity of Uppercase vs Lowercase in RFCs (BCP 14)
+## RFC 8174 — Requirement Keyword Interpretation (BCP 14)
 
-RFC 8176 clarifies that the requirement keywords defined by BCP 14 (MUST/SHOULD/MAY/etc.) are
-case-insensitive. Aegaeon treats all OAuth/OIDC RFC requirement keywords using RFC 8176 semantics
-and does not introduce any additional protocol surface.
+RFC 8174 updates RFC 2119: only UPPERCASE uses have the defined special meanings.
+The former statement that RFC 8176 made keywords case-insensitive was incorrect.
+
+## RFC 8176 — Authentication Method Reference Values
+
+RFC 8176 defines `amr` values. Emitted and consumed values must represent the
+actual authentication methods under the server assurance contract's G-09.
+The previous `8176-001` not-applicable classification was incorrect; evidence
+reconciliation is now planned. A configurable ACR label does not prove MFA.
 
 ## RFC 8252 — OAuth 2.0 for Native Apps (Client Guidance)
 
@@ -74,7 +83,11 @@ Aegaeon supports native-app-friendly best practices without weakening defaults:
   default redirect validation policy, because they are commonly deployed incorrectly and hard to
   audit safely without an explicit allow-list model.
 
-## RFC 9123 — OAuth 2.0 for Browser-Based Applications (Client Guidance)
+## Browser-Based Applications — draft-ietf-oauth-browser-based-apps-27
+
+The baseline pins draft-27 (2026-07-06). The former RFC 9123 attribution was
+incorrect; `browser-apps-001` replaces `9123-001`. Server-facing requirements
+must be inventoried separately from assumptions about external client code.
 
 Aegaeon’s default posture matches modern browser guidance:
 

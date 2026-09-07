@@ -4,7 +4,7 @@
   "current_state": {
     "claim_phase": "pre-release-client-baseline",
     "released_client_claim_active": false,
-    "canonical_statement": "Published packages and a released client claim do not exist yet."
+    "canonical_statement": "The SDK assurance contract and public statement specification are defined; the qualified SDK release claim remains inactive."
   },
   "target_state": {
     "claim_phase": "released-client-claim",

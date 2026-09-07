@@ -1,5 +1,7 @@
 {
   mkLightVerification,
+  assuranceStandards,
+  verifiedReqs,
   lib,
   isLinux,
   craneLib,
@@ -51,7 +53,8 @@ in
   dudect-check = dudectCheck;
   verify-jose = verifyJose;
   verify-abstract = verifyFstarAbstract;
-  verified-reqs = mkLightVerification "verify-reqs" ../../scripts/flake/verify_reqs.sh [ ];
+  assurance-standards = assuranceStandards;
+  verified-reqs = verifiedReqs;
   ffi-contracts =
     mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
       [ ];
