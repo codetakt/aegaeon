@@ -562,7 +562,7 @@ run_sbom_stage() {
 }
 
 run_geiger_stage() {
-	warn_step "cargo geiger" run_geiger
+	run_step "cargo geiger scan completeness" run_geiger
 }
 
 run_udeps_stage() {
