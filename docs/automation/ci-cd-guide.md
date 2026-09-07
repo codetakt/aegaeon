@@ -1,6 +1,6 @@
 # Automation & CI/CD (GitHub Actions + Nix flake)
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -50,7 +50,7 @@ Across `aegaeon`, `aegaeon-sdk`, and `aegaeon-admin-console`, use the following 
 PRE_COMMIT_HOME=/tmp/pre-commit-aegaeon nix develop . --command bash -lc 'pre-commit run --all-files'
 
 # Workflow inventory audit (explicit CI drift gate)
-nix develop .#default --command node tests/verified_core_wasm/workflow_inventory_policy_test.mjs
+nix develop .#default --command node --experimental-strip-types tests/verified_core_wasm/workflow_inventory_policy_test.ts
 
 # Documentation structure audit
 python3 scripts/validation/check_docs_structure.py
@@ -128,17 +128,18 @@ combination so the source-managed OIDC Low* runtime artefacts stay buildable.
 
 ## GitHub Actions workflows (summary)
 
-All workflows live under `.github/workflows/`. The source of truth for their file names and top-level display names is `spec/workflow-inventory.current.json`; audit it with `nix develop .#default --command node tests/verified_core_wasm/workflow_inventory_policy_test.mjs`.
+All workflows live under `.github/workflows/`. The source of truth for their file names and top-level display names is `spec/workflow-inventory.current.json`; audit it with `nix develop .#default --command node --experimental-strip-types tests/verified_core_wasm/workflow_inventory_policy_test.ts`.
 
 | Workflow | File | When it runs | What it does | Local equivalent |
 | --- | --- | --- | --- | --- |
-| Core CI | `ci.yml` | push/PR `main`, manual | `nix flake check`, OpenAPI drift check, build server, extra clippy, generated-artefact drift check, dependency policy gate (`cargo deny`) | `cargo xtask openapi --check` + `nix flake check` + `nix build .#server` |
-| Formal verification | `verification.yml` | push `main`, PR `main` (non-draft), manual | F\* (container), EverParse artefact drift check, Low\* parity, Tamarin, Kani, JOSE vectors, dudect, merge guard | `nix flake check` + `nix build .#verify-fstar` + `nix build .#verify-tamarin` + `nix run .#verify-kani` |
-| Security suite | `security.yml` | push/PR `main`, weekly | `nix run .#security-suite` (+ drift check) | `nix run .#security-suite` |
-| Performance | `performance.yml` | push `main`, daily, manual (PR: note only) | observability smoke + coverage on `push`; scheduled/manual runs also execute `perf-load` public smoke and OIDC-backed `policy-mixed` smoke | `nix run .#perf-coverage` + `nix run .#perf-load` + `nix run .#perf-load -- --scenario policy-mixed` |
-| Compliance | `compliance.yml` | push `main`, PR (RFC MUST only), daily, manual | RFC MUST checks, JOSE vectors, `cargo audit`, SBOM generation, container scan; OIDF/OAuth conformance is local-only | `./scripts/validation/test_rfc_compliance.sh` + `nix run .#security-sbom` |
-| F* compatibility stub | `verify-fstar-ci.yml` | push/PR `main`, manual | Preserves the historical `F* Verification / verify-fstar` check name; the real F* execution lives in `verification.yml` | None (compatibility-only) |
-| Docker image | `docker-build.yml` | push, tags, PR (Docker-related paths only), manual | Builds and (on non-PR) pushes `ghcr.io/.../aegaeon-server` | `nix run .#docker-build` (local build) |
+| PR validation | `pr.yml` | every PR `main`, including drafts | Select checks and require their successful completion; see [PR validation](pr-validation.md) | `nix develop .#docs` + selected checks |
+| Core CI | `ci.yml` | push `main`, full-scope PR call, manual | `nix flake check`, OpenAPI drift check, build server, extra clippy, generated-artefact drift check, dependency policy gate (`cargo deny`) | `cargo xtask openapi --check` + `nix flake check` + `nix build .#server` |
+| Formal verification | `verification.yml` | push `main`, full-scope PR call, manual | F\* (container), EverParse artefact drift check, Low\* parity, Tamarin, Kani, JOSE vectors, dudect, merge guard | `nix flake check` + `nix build .#verify-fstar` + `nix build .#verify-tamarin` + `nix run .#verify-kani` |
+| Security suite | `security.yml` | push `main`, full-scope PR call, weekly | `nix run .#security-suite` (+ drift check) | `nix run .#security-suite` |
+| Performance | `performance.yml` | push `main`, daily, manual | observability smoke + coverage on `push`; scheduled/manual runs also execute `perf-load` public smoke and OIDC-backed `policy-mixed` smoke | `nix run .#perf-coverage` + `nix run .#perf-load` + `nix run .#perf-load -- --scenario policy-mixed` |
+| Compliance | `compliance.yml` | push `main`, full-scope PR call (RFC MUST only), daily, manual | RFC MUST checks, JOSE vectors, `cargo audit`, SBOM generation, container scan; OIDF/OAuth conformance is local-only | `./scripts/validation/test_rfc_compliance.sh` + `nix run .#security-sbom` |
+| F* compatibility stub | `verify-fstar-ci.yml` | push `main`, manual | Preserves the historical `F* Verification / verify-fstar` check name; the real F* execution lives in `verification.yml` | None (compatibility-only) |
+| Docker image | `docker-build.yml` | push, tags, full-scope PR call, manual | Builds and (on non-PR) pushes `ghcr.io/.../aegaeon-server` | `nix run .#docker-build` (local build) |
 | Release | `release.yml` | tags, manual | Packages binaries + SBOM + RFC smoke and publishes GitHub release | Prefer `nix flake check` + `nix build .#server` + `nix run .#security-sbom` before tagging |
 | Dependency watch | `check-dependency-updates.yml` | weekly, manual | Checks for important dependency updates and files issues | `cargo search …` + `gh issue create` |
 | OIDF suite (bootstrap) | `oidf-conformance.yml` | manual | Starts suite + exports `/api/plan/available`; full run is gated off | Use `scripts/oidf_conformance/` for real HTTPS runs |

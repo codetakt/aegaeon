@@ -28,6 +28,32 @@ let
   '';
 in
 {
+  docs = pkgs.mkShellNoCC {
+    packages = [
+      (pkgs.python3.withPackages (pythonPackages: [
+        pythonPackages.pyyaml
+        pythonPackages.pytest
+      ]))
+      pkgs.markdownlint-cli2
+      pkgs.commitlint
+      pkgs.gitMinimal
+      pkgs.bash
+    ];
+  };
+
+  integrity = pkgs.mkShellNoCC {
+    packages = [
+      (pkgs.python3.withPackages (ps: [
+        ps.pyyaml
+        ps.jsonschema
+        ps.pytest
+        ps.pyjwt
+      ]))
+      pkgs.ruff
+      pkgs.mypy
+    ];
+  };
+
   ci = pkgs.mkShell {
     inputsFrom = [ cargoArtifacts ];
     CC = "${pkgs.stdenv.cc}/bin/cc";

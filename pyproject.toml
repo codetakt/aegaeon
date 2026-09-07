@@ -160,6 +160,8 @@ known-first-party = ["aegaeon"]
   "PLR0912",  # branch-heavy CLI validation
   "PLR0915",  # statement-heavy CLI validation
 ]
+# Git-facing CI helpers use explicit argv (never shell evaluation) and CLI errors.
+"scripts/ci/*.py" = ["EM", "TRY003", "S603", "S607", "PLR2004", "PLR0911"]
 "scripts/validation/*.py" = [
   "ANN",      # annotations not required in validation scripts
   "BLE",      # broad exception handling acceptable for CLI tools
@@ -186,7 +188,7 @@ known-first-party = ["aegaeon"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["scripts/validation", "ci/validate_slos.py"]
+files = ["scripts/validation", "scripts/ci", "ci/validate_slos.py"]
 warn_return_any = true
 warn_unused_configs = true
 warn_unreachable = true

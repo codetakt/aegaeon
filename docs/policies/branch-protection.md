@@ -1,6 +1,6 @@
 # Branch Protection Rules
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -18,16 +18,21 @@ To keep `main` healthy, configure GitHub branch protection with the following se
 
 ### Required Status Checks
 
-| Status Check | Why it matters |
-|--------------|----------------|
-| `verify-all` | Runs `nix flake check --print-build-logs` (covers workspace fmt/clippy/tests + merge guard) |
-| `fstar` | Containerised F* proof verification |
-| `tamarin` | Protocol proof suite |
-| `kani` | Bounded model checking harnesses |
-| `jose-vectors` | JOSE / RFC conformance vectors |
-| `dudect` | Constant-time statistical analysis |
+| Status check | Why it matters |
+| --- | --- |
+| `PR Validation / Required checks` | Requires successful classification and success of every selected check or reusable workflow in the current PR run |
 
-Only `verify-all` is strictly required, but enabling the additional checks keeps regressions visible to reviewers.
+Configure the job named **Required checks** from the **PR Validation** workflow.
+Confirm the displayed name in a completed hosted run when selecting the check in
+GitHub settings. This document specifies the intended configuration; editing it
+does not enable repository protection.
+
+The aggregate runs for documentation-only PRs as well as implementation changes.
+See [PR validation](../automation/pr-validation.md) for selection and failure rules.
+Individual conditional lanes should not be required independently, because an
+intentional skip must remain acceptable. The historical `verify-all` / **Unified
+Verification** and **F* Verification** compatibility jobs are passthroughs and do
+not establish that any verification succeeded.
 
 ### GitHub Settings
 
@@ -37,15 +42,15 @@ Only `verify-all` is strictly required, but enabling the additional checks keeps
    - Require a pull request before merging
    - Require status checks to pass before merging
    - Require branches to be up to date before merging
-4. Add the checks from the table above in the desired order
+4. Require the aggregate check above after its first successful hosted run
 
 ### Local Verification Before Pushing
 
 ```bash
-# Core checks run by verify-all
+# Core checks selected for implementation/shared-infrastructure changes
 nix flake check --print-build-logs
 
-# Optional deeper verification (matches individual jobs)
+# Formal checks selected by the full PR scope
 nix build .#verify-fstar
 nix build .#verify-tamarin
 nix build .#verify-kani

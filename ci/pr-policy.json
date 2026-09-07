@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "scopes": {
+    "docs": [
+      "docs"
+    ],
+    "integrity": [
+      "docs",
+      "integrity"
+    ],
+    "full": [
+      "docs",
+      "integrity",
+      "core",
+      "lint",
+      "security",
+      "verification",
+      "compliance",
+      "kms",
+      "container"
+    ]
+  },
+  "runtime_document_paths": [
+    "README.md",
+    "docs/performance/README.md",
+    "docs/program-management/roadmaps/summary/current-program-summary.md",
+    "docs/program-management/roadmaps/active/current-execution-plan.md",
+    "docs/program-management/roadmaps/summary/program-master-plan.md",
+    "docs/program-management/roadmaps/active/oidc-spec-coverage-roadmap.md",
+    "docs/program-management/roadmaps/future/external-conformance-and-beta-plan.md",
+    "docs/verification/runbooks/runtime-linkage.md",
+    "docs/verification/claims/assurance-case/README.md",
+    "docs/verification/claims/crypto-claim-mapping.md",
+    "docs/verification/claims/crypto-allowlist.md",
+    "docs/operations/runtime-configuration.md",
+    "docs/policies/jose-header-policy.md",
+    "docs/operations/monitoring/README.md"
+  ],
+  "runtime_document_prefixes": [
+    "docs/configurations/environment/"
+  ],
+  "documentation_paths": [
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
+  "integrity_prefixes": [
+    "docs/verification/",
+    "docs/specs/",
+    "docs/releases/evidence/"
+  ],
+  "integrity_paths": [
+    "docs/product-positioning.md",
+    "spec/compliance-matrix.yaml",
+    "spec/server-assurance-contract.v1.json",
+    "spec/server-assurance-contract.schema.json",
+    "spec/sdk-assurance-contract.v1.json",
+    "spec/sdk-assurance-contract.schema.json",
+    "docs/operations/hardened-reference-deployment.md",
+    "docs/operations/kms-hsm-deployment-classification.md",
+    "docs/operations/management-platform-regulated-environment.md",
+    "docs/performance/enterprise-slo-baselines.md",
+    "docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md",
+    "docs/releases/runbooks/phase1-evidence-acquisition.md"
+  ]
+}

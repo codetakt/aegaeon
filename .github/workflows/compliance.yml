@@ -2,11 +2,13 @@ name: Standards Compliance
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
   schedule:
     - cron: '0 3 * * *'  # Daily at 3 AM UTC (12 PM JST)
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: compliance-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -20,6 +22,9 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      id-token: write
     name: Build Release Binary
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
@@ -44,6 +49,9 @@ jobs:
           retention-days: 1
 
   rfc7520-vectors:
+    permissions:
+      contents: read
+      id-token: write
     needs: build
     name: RFC 7520 JOSE Test Vectors
     runs-on: ubuntu-latest
@@ -73,6 +81,9 @@ jobs:
           path: rfc7520-results.json
 
   security-audit:
+    permissions:
+      contents: read
+      id-token: write
     name: Security Audit
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
@@ -176,6 +187,10 @@ jobs:
   rfc-must-requirements:
     name: RFC MUST Requirements Validation
     runs-on: ubuntu-latest
+    # This is the only PR lane; do not inherit non-PR reporting permissions.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -206,6 +221,7 @@ jobs:
           path: compliance-report.md
 
   oauth2-conformance:
+    permissions: {}
     needs: build
     name: OAuth 2.0 Conformance (local only)
     runs-on: ubuntu-latest
@@ -219,6 +235,9 @@ jobs:
           echo "  - OIDF official suite: scripts/oidf_conformance/README.md"
 
   compliance-monitor:
+    permissions:
+      contents: read
+      issues: write
     name: RFC Compliance Monitor
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
@@ -252,6 +271,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -324,6 +344,7 @@ jobs:
           path: "*.intoto.jsonl"
 
   oidf-conformance:
+    permissions: {}
     name: OpenID Foundation Conformance (local only)
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}

@@ -1,0 +1,197 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  plan:
+    name: Select checks
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify using the base revision
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          trusted="$RUNNER_TEMP/pr-policy"
+          mkdir -p "$trusted"
+          if git cat-file -e "$PR_BASE_SHA:scripts/ci/pr_plan.py" &&
+             git cat-file -e "$PR_BASE_SHA:ci/pr-policy.json"; then
+            git show "$PR_BASE_SHA:scripts/ci/pr_plan.py" > "$trusted/pr_plan.py"
+            git show "$PR_BASE_SHA:ci/pr-policy.json" > "$trusted/policy.json"
+            python3 "$trusted/pr_plan.py" --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" \
+              --policy "$trusted/policy.json" --output ci-plan.json
+          else
+            echo 'scope=full' >> "$GITHUB_OUTPUT"
+            python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          Path('ci-plan.json').write_text(json.dumps({
+              'scope': 'full', 'fallback': 'base revision has no PR classification policy',
+              'base': os.environ['PR_BASE_SHA'], 'head': os.environ['PR_HEAD_SHA'],
+          }, indent=2) + '\n')
+          PY
+          fi
+      - name: Preserve classification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-ci-plan
+          path: ci-plan.json
+          if-no-files-found: error
+
+  docs:
+    name: Documentation
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix-ci
+      - name: Check documentation and PR metadata
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: nix develop .#docs --command bash scripts/ci/run_docs.sh
+
+  integrity:
+    name: Assurance integrity
+    needs: plan
+    if: needs.plan.outputs.scope == 'integrity' || needs.plan.outputs.scope == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix-ci
+        with:
+          enable-flakehub-cache: "true"
+      - name: Validate proof references, claims and FFI contracts
+        run: |
+          nix build .#verified-reqs .#ffi-contracts --no-link -L
+      - name: Check Python validators
+        run: |
+          nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py
+          nix develop .#integrity --command mypy scripts/validation scripts/ci ci/validate_slos.py
+
+  core:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+
+  lint:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/lint.yml
+
+  security:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/security.yml
+
+  verification:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/verification.yml
+
+  compliance:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      # GitHub checks permissions of every nested job, even non-PR jobs.
+      security-events: write
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/compliance.yml
+
+  kms:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/oidc-kms-parity.yml
+
+  container:
+    needs: plan
+    if: needs.plan.outputs.scope == 'full'
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/docker-build.yml
+
+  required:
+    name: Required checks
+    if: ${{ always() }}
+    needs: [plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Require success of every selected check
+        env:
+          PR_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          if [ -f scripts/ci/check_pr_results.py ] && [ -f ci/pr-policy.json ]; then
+            python3 scripts/ci/check_pr_results.py --policy ci/pr-policy.json
+          else
+            # First adoption cannot use a checker that is absent from the base.
+            # It must succeed in every lane, including all reusable workflows.
+            python3 - <<'PY'
+          import json
+          import os
+          needs = json.loads(os.environ['PR_NEEDS_JSON'])
+          expected = {'plan', 'docs', 'integrity', 'core', 'lint', 'security',
+                      'verification', 'compliance', 'kms', 'container'}
+          if (set(needs) != expected or
+              needs['plan'].get('outputs', {}).get('scope') != 'full' or
+              any(job.get('result') != 'success' for job in needs.values())):
+              raise SystemExit('Bootstrap PR requires every check to succeed')
+          print('All bootstrap PR checks passed.')
+          PY
+          fi
