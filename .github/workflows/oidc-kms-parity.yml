@@ -5,9 +5,7 @@ on:
     branches: [ main ]
     tags:
       - "v*"
-  pull_request:
-    branches: [ main ]
-    types: [ opened, ready_for_review, synchronize, reopened ]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -24,7 +22,6 @@ jobs:
   oidc-kms-parity:
     name: OIDC AWS KMS Parity
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     permissions:
       contents: read
       id-token: write

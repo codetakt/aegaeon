@@ -1,14 +1,12 @@
 # Performance Testing: Owns load tests, observability verification, code coverage, and KPI validation.
 # Schedule (daily 2 AM UTC): load tests + observability + coverage + KPI validation.
 # Push to main: observability + coverage (no load tests).
-# PR: deferred (summary note only).
+# PR: performance remains deferred; PR applicability is owned by pr.yml.
 # Manual dispatch: set run_load_tests=true to include load tests + KPI validation.
 name: Performance Testing
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
   schedule:
     # Daily regression: load tests + observability + coverage + KPI validation
@@ -34,25 +32,6 @@ env:
   SLO_MAX_ERROR_RATE: "0.01"
 
 jobs:
-  pr-note:
-    name: PR Performance Gate (deferred)
-    if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Summary
-        run: |
-          {
-            echo "## Performance (PR)"
-            echo ""
-            echo "Load tests, observability, and coverage run on \`push main\`,"
-            echo "daily schedule (2 AM UTC), and manual \`workflow_dispatch\`."
-            echo ""
-            echo "Run locally:"
-            echo "- \`nix run .#perf-load\`"
-            echo "- \`nix run .#perf-load -- --scenario policy-mixed\`"
-            echo "- \`nix run .#perf-coverage\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   # Load Testing
   load-test:
     name: Load Testing

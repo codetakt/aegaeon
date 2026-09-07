@@ -3,8 +3,7 @@ name: CI - Lint
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -142,12 +141,12 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run Ruff checks
-        run: nix develop .#ci --command ruff check scripts/validation ci/validate_slos.py
+        run: nix develop .#ci --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py
 
       - name: Run mypy checks
         run: |
           nix develop .#ci --command \
-            mypy scripts/validation ci/validate_slos.py
+            mypy scripts/validation scripts/ci ci/validate_slos.py
 
   rust-strict-lint:
     name: Rust Strict Lint

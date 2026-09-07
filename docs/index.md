@@ -80,7 +80,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/policies/README.md` | index | Policies Overview | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/audit-policy.md` | policy | Audit Policy — Strong Audit Baseline (AS/OP + Upstream OIDC RP) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
-| `docs/policies/branch-protection.md` | policy | Branch Protection Rules | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
+| `docs/policies/branch-protection.md` | policy | Branch Protection Rules | current implementation baseline | 2026-09-07 | Governance | contributors, maintainers |
 | `docs/policies/dcr-everparse-self-check.md` | policy | DCR EverParse Runtime Posture (Self-Check) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/dcr-policy.md` | policy | Dynamic Client Registration (DCR) — BCP Policy Gates | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/dependency-policy.md` | policy | Dependency Policy & Supply-Chain Checks | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
@@ -96,8 +96,9 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/automation/README.md` | index | Automation Overview | current implementation baseline | 2026-07-07 | CI / Automation | CI maintainers, contributors |
-| `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-07-07 | CI / Automation | CI maintainers, contributors |
+| `docs/automation/README.md` | index | Automation Overview | current implementation baseline | 2026-09-07 | CI / Automation | CI maintainers, contributors |
+| `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-09-07 | CI / Automation | CI maintainers, contributors |
+| `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-09-07 | CI / Automation | contributors, reviewers, repository administrators |
 
 ## Program Management
 

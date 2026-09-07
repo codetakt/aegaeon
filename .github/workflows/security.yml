@@ -3,8 +3,7 @@ name: Security Suite
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_call:
   schedule:
     - cron: '0 0 * * 0'
 

@@ -1,6 +1,6 @@
 # Automation Overview
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -20,6 +20,8 @@ merge-guard reproduction, and artefact-generation workflows.
 ## Canonical Documents
 
 - `[runbook]` [CI/CD guide](ci-cd-guide.md) — authoritative GitHub Actions / Nix flake / artefact policy reference
+
+- `[policy]` [PR validation](pr-validation.md) — change selection, aggregate gate and lightweight reproduction
 
 ## Reading Rule of Thumb
 

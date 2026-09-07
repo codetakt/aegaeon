@@ -7,9 +7,7 @@ name: Formal Verification
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
-    types: [ opened, ready_for_review, synchronize, reopened ]
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +28,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
@@ -63,7 +60,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
@@ -134,7 +130,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -169,7 +164,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
@@ -229,7 +223,6 @@ jobs:
       contents: read
       id-token: write
     needs: verified-core-wasm
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -259,7 +252,6 @@ jobs:
       contents: read
       id-token: write
     needs: fstar
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -280,7 +272,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -321,7 +312,6 @@ jobs:
   kani-pure:
     name: Kani (Pure Harness)
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust nightly
@@ -391,7 +381,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AEG_KANI_RUN_SERVER: "1"
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -476,7 +465,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -850,7 +838,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
@@ -878,7 +865,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
@@ -901,7 +887,6 @@ jobs:
   validation-scripts:
     name: Validation Scripts
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -923,7 +908,6 @@ jobs:
   verify-all:
     name: Unified Verification
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     steps:
       - name: Passthrough
         run: |
@@ -949,7 +933,7 @@ jobs:
       - verified-core-wasm
       - verified-core-equivalence
       - verify-all
-    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    if: ${{ always() }}
     steps:
       - name: Generate summary
         run: |
