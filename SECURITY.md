@@ -10,9 +10,15 @@
 
 **Do not open public issues for security vulnerabilities.**
 
-Please report security vulnerabilities through
-[GitHub Security Advisories](https://github.com/conceptual-systems/aegaeon/security/advisories/new).
-This provides a private channel for responsible disclosure.
+Report security vulnerabilities privately using either channel:
+
+- Email: [security.aegaeon@codetakt.com](mailto:security.aegaeon@codetakt.com),
+  handled by the **Aegaeon Security Reports** group.
+- [GitHub private vulnerability reporting](https://github.com/codetakt/aegaeon/security/advisories/new).
+
+Private vulnerability reporting is enabled for this repository. GitHub reports
+are visible to the reporter and the repository's security advisory collaborators
+until disclosure.
 
 ### What to include
 
@@ -99,6 +105,9 @@ PKCE requirements, token lifetimes, and allowed signing algorithms.
 
 ## Contact
 
-For security matters, use
-[GitHub Security Advisories](https://github.com/conceptual-systems/aegaeon/security/advisories/new).
-For general questions, use [GitHub Discussions](https://github.com/conceptual-systems/aegaeon/discussions).
+For security matters, use the channels in [Reporting a Vulnerability](#reporting-a-vulnerability).
+For Code of Conduct concerns, use
+[conduct.aegaeon@codetakt.com](mailto:conduct.aegaeon@codetakt.com), as described in
+the [Code of Conduct](CODE_OF_CONDUCT.md#enforcement).
+For general questions and non-security bugs, use
+[GitHub Issues](https://github.com/codetakt/aegaeon/issues).

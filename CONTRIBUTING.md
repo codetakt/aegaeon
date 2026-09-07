@@ -147,8 +147,13 @@ xtask/       # Small task runner (cargo xtask)
 
 ## Security reporting
 
-Do not open public issues for security vulnerabilities. Use GitHub Security
-Advisories for private reporting and coordinated disclosure.
+Do not open public issues for security vulnerabilities. Report them to
+[security.aegaeon@codetakt.com](mailto:security.aegaeon@codetakt.com) or use GitHub
+private vulnerability reporting, as described in [SECURITY.md](SECURITY.md#reporting-a-vulnerability).
+
+For Code of Conduct concerns, contact
+[conduct.aegaeon@codetakt.com](mailto:conduct.aegaeon@codetakt.com).
+See the [Code of Conduct](CODE_OF_CONDUCT.md#enforcement) for reporting and enforcement.
 
 ## Documentation
 
