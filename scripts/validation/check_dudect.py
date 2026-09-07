@@ -21,7 +21,7 @@ Environment overrides:
 * ``DUDECT_WARN_THRESHOLD`` - p-value warning threshold (default: 0.05)
 * ``DUDECT_TAU_FAIL`` - |tau| failure threshold (default: 4.5)
 * ``DUDECT_TAU_WARN`` - |tau| warning threshold (default: 3.5)
-* ``DUDECT_MIN_TRACES`` - minimum acceptable trace count (default: 100000)
+* ``DUDECT_MIN_TRACES`` - minimum acceptable trace count (default: 16000)
 
 Any parsing failure or missing output is treated as a CI failure so that the
 team notices immediately when dudect stops producing usable evidence.
@@ -30,6 +30,7 @@ team notices immediately when dudect stops producing usable evidence.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -220,9 +221,12 @@ def get_threshold(env_name: str, default: float) -> float:
     if raw is None:
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError as exc:
         raise ValueError(f"Invalid float for {env_name}: {raw}") from exc
+    if not math.isfinite(value):
+        raise ValueError(f"Non-finite threshold for {env_name}: {raw}")
+    return value
 
 
 def get_min_traces() -> int:
@@ -235,43 +239,33 @@ def get_min_traces() -> int:
         raise ValueError(f"Invalid integer for DUDECT_MIN_TRACES: {raw}") from exc
 
 
-def get_tau_threshold(env_name: str, default: float) -> float:
-    raw = os.environ.get(env_name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise ValueError(f"Invalid float for {env_name}: {raw}") from exc
-
-
 def main() -> int:
     fail_threshold = get_threshold("DUDECT_FAIL_THRESHOLD", 0.01)
     warn_threshold = get_threshold("DUDECT_WARN_THRESHOLD", 0.05)
-    if warn_threshold < fail_threshold:
-        print(
-            f"⚠️ WARN threshold ({warn_threshold}) is lower than FAIL threshold "
-            f"({fail_threshold}); adjusting warn threshold to fail threshold.",
-            file=sys.stderr,
-        )
-        warn_threshold = fail_threshold
+    if not 0 < fail_threshold < warn_threshold <= 1:
+        raise ValueError("Require 0 < DUDECT_FAIL_THRESHOLD < DUDECT_WARN_THRESHOLD <= 1")
 
-    tau_fail = get_tau_threshold("DUDECT_TAU_FAIL", 4.5)
-    tau_warn = get_tau_threshold("DUDECT_TAU_WARN", 3.5)
-    if tau_warn < tau_fail:
-        print(
-            f"⚠️ TAU warn threshold ({tau_warn}) below fail threshold ({tau_fail}); adjusting.",
-            file=sys.stderr,
-        )
-        tau_warn = tau_fail
+    tau_fail = get_threshold("DUDECT_TAU_FAIL", 4.5)
+    tau_warn = get_threshold("DUDECT_TAU_WARN", 3.5)
+    if not 0 < tau_warn < tau_fail:
+        raise ValueError("Require 0 < DUDECT_TAU_WARN < DUDECT_TAU_FAIL")
 
     min_traces = get_min_traces()
+    if min_traces <= 0:
+        raise ValueError("DUDECT_MIN_TRACES must be positive")
 
     try:
         metrics = load_dudect_results()
     except FileNotFoundError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 1
+
+    if metrics.p_value is not None and (
+        not math.isfinite(metrics.p_value) or not 0 <= metrics.p_value <= 1
+    ):
+        raise ValueError("dudect p-value must be finite and between 0 and 1")
+    if metrics.tau is not None and not math.isfinite(metrics.tau):
+        raise ValueError("dudect tau must be finite")
 
     status_messages = [
         f"p-value={metrics.p_value if metrics.p_value is not None else 'n/a'}",
