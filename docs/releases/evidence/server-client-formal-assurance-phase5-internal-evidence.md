@@ -1,6 +1,6 @@
 # Server / Client Formal Assurance Phase 5 Internal Evidence
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: snapshot
 
@@ -14,7 +14,24 @@ This document records the internal Phase 5 closure baseline for combined
 server/client formal-assurance wording. It is not a public
 `formally verified server and client` claim.
 
-## Status
+## Status of this historical record
+
+The text below records the earlier bounded Phase 5 assessment. Its original
+[bundle](https://github.com/codetakt/aegaeon/blob/a8dcb13ec6c636f294782db7bc747082247d67c8/docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json)
+and [claim gate](https://github.com/codetakt/aegaeon/blob/a8dcb13ec6c636f294782db7bc747082247d67c8/spec/server-client-formal-assurance-claim.current.json)
+are fixed at that commit. The approval labels in those records apply only to
+those historical inputs; they do not approve the assurance contracts adopted later.
+
+As of 2026-09-07, the working-tree bundle at the legacy filename is a **new,
+unapproved preflight inventory** with a distinct bundle ID. Its generator records
+pending reviews and includes unsatisfied obligations from the current claim gate.
+The current gate remains inactive at `phase5-planned`. Regeneration refreshes
+input identities and inventory only; it does not rerun proofs or security tests,
+issue approval, or implement the new release-assurance evaluator. Use the
+[assurance statement](../../verification/claims/assurance-statement.md) and its
+linked contract status documents for current public claims.
+
+## Historical status
 
 - Internal Phase 5 status: complete for the bounded claim gate, TCB boundary,
   validator, generated evidence bundle, and internal engineering review scopes.

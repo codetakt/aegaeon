@@ -9,7 +9,9 @@ import pathlib
 import tempfile
 from collections.abc import Callable  # noqa: TC003
 from typing import Any, cast
+from unittest.mock import patch
 
+import collect_server_client_formal_assurance_phase5_evidence as collector
 import validate_server_client_formal_assurance as validator
 from jsonschema import ValidationError
 
@@ -101,6 +103,33 @@ def bundle_fixture(claim_path: pathlib.Path) -> dict[str, Any]:
 
 def main() -> int:
     validator.validate_claim(SOURCE_CLAIM)
+
+    generated = collector.build_bundle(
+        collector.DEFAULT_CLAIM, collector.DEFAULT_OUTPUT, "2026-09-07T00:00:00Z"
+    )
+    assert generated["release_stage"] == "internal-preflight"
+    assert generated["public_claim_ready"] is False
+    assert all(review["status"] == "pending" for review in generated["review_passes"])
+
+    current_claim = load_source_claim()
+    current_claim["required_evidence"].append(
+        {
+            "id": "new-contract-obligation",
+            "description": "A current obligation beyond the historical snapshot.",
+            "status": "planned",
+            "required_for_activation": True,
+        }
+    )
+    with patch.object(
+        collector,
+        "load_json",
+        return_value={
+            "all_non_public_blockers_closed": True,
+            "activation_blockers": [],
+        },
+    ):
+        blockers = collector.collect_blockers(current_claim)
+    assert any(item.startswith("new-contract-obligation:") for item in blockers)
 
     with tempfile.TemporaryDirectory() as raw_tmp:
         root = pathlib.Path(raw_tmp)

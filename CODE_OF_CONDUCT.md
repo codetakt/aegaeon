@@ -36,7 +36,15 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement via [GitHub Discussions](https://github.com/conceptual-systems/aegaeon/discussions). All complaints will be reviewed and investigated promptly and fairly.
+Report abusive, harassing, or otherwise unacceptable behavior to
+[conduct.aegaeon@codetakt.com](mailto:conduct.aegaeon@codetakt.com).
+The **Aegaeon Conduct Reports** group handles these reports privately. Do not post
+sensitive incident details in public issues.
+All complaints will be reviewed and investigated promptly and fairly.
+
+For abuse or harassment on GitHub, you may also use
+[GitHub's abuse-reporting process](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
+Reports submitted through that process are handled by GitHub.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

@@ -8,6 +8,7 @@
   pre-commit-check,
   mkVerification,
   mkLightVerification,
+  verifiedReqs,
   verifyFstar,
   verifyTamarin,
   verifyKani,
@@ -44,7 +45,7 @@ in
     mkVerification "verify-compliance-matrix" ../../scripts/flake/verify_compliance_matrix.sh
       [ ];
 
-  verified-reqs = mkLightVerification "verify-reqs" ../../scripts/flake/verify_reqs.sh [ ];
+  verified-reqs = verifiedReqs;
 
   ffi-contracts =
     mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh

@@ -1,6 +1,6 @@
 # Formal Claim Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -8,36 +8,34 @@ Owner: Verification
 
 Audience: verification reviewers, maintainers
 
-This overview is the short reader entrypoint for the formal verification claim.
-The authoritative detailed record remains the [assurance case details](assurance-case/README.md).
-
 ## Scope
 
-- current server-side formal claim boundary
-- where runtime, host, and deployment assumptions enter the claim
-- which documents control public wording and evidence review
+This is the entrypoint for the public assurance statement, server and SDK
+contracts, standards/output baselines, and current evidence/activation status.
 
 ## Claim Summary
 
-Aegaeon may claim an assumption-qualified formally verified and security-tested
-OIDC 1.0 / OAuth 2.0/2.1 identity-provider server when requirements are marked
-`verified` in `spec/compliance-matrix.yaml` and backed by the evidence classes
-listed in the assurance case.
-
-The released claim is server-side. Client/RP SDK, admin UI, external host
-behaviour, deployment integrity, and cryptographic hardness remain bounded by
-their explicit TCB and assumption documents unless separately promoted.
+The target is an assumption-qualified formally verified and security-tested
+OAuth/OIDC foundation and separately identified SDK profiles. The statement and
+contracts are specified; the release claims are
+**inactive** until a particular artifact/configuration satisfies all applicable
+obligations. Existing `verified` matrix rows inventory component/model evidence
+and do not determine the contract's scope or completion.
 
 ## Canonical Documents
 
-- `[index]` [Detailed assurance case](assurance-case/README.md)
-- `[claim]` [Assumption boundary overview](assumption-boundary-overview.md)
-- `[claim]` [Assumption register](assumptions/current-register.md)
-- `[policy]` [Product positioning](../../product-positioning.md)
+- `[spec]` [Public assurance statement and release disclosures](assurance-statement.md)
+- `[spec]` [Server assurance contract](assurance-case/assurance-contract.md)
+- `[spec]` [SDK assurance contract and output profiles](sdk-assurance/README.md)
+- `[spec]` [Standards and applicability](assurance-case/standards-baseline.md)
+- `[snapshot]` [Activation backlog](assurance-case/contract-status.md)
+- `[claim]` [Evidence interpretation](assurance-case/claim-definition.md)
+- `[reference]` [Assumption register](assumptions/current-register.md)
+- `[policy]` [Public wording](../../product-positioning.md)
 - `[reference]` [Compliance matrix](../../../spec/compliance-matrix.yaml)
 
 ## Reading Rule of Thumb
 
-1. Use this overview for a quick claim-boundary check.
-2. Use [assurance-case/README.md](assurance-case/README.md) for audit, evidence, and section-level detail.
-3. Use [product-positioning.md](../../product-positioning.md) before changing public wording.
+1. Read the contract and pinned standards to determine obligations.
+2. Read contract status and evidence interpretation before making a release claim.
+3. Use the matrix and proof/assumption registers to locate evidence and open work.

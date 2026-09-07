@@ -1,6 +1,6 @@
 # Verification Ops Guide
 
-Last updated: 2026-07-24
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -38,10 +38,12 @@ Every formal proof block on a verified entry must be grounded. A row no longer
 passes because one sibling block resolves while another F*, Tamarin, Kani,
 EverParse, Low*, or HACL block floats.
 
-**Why this matters:** The project's formal verification claim
-([claim-definition.md &sect;0.2](../claims/assurance-case/claim-definition.md#02-claim-scope)) applies
-*only* to VerifiedReqs. An entry incorrectly marked `verified` without a proof
-reference inflates the claim and misrepresents the verification posture.
+**Why this matters:** VerifiedReqs is the legacy evidence inventory described in
+[claim-definition.md &sect;0.2](../claims/assurance-case/claim-definition.md#02-claim-scope).
+The [server contract](../claims/assurance-case/assurance-contract.md) defines
+obligations independently of row status. Incorrectly marked rows misrepresent
+available evidence; correctly grounded rows still do not activate the foundation
+claim or remove unproved requirements from its scope.
 
 **Crypto profile boundary:** The strong‑constraint claim applies only to
 instances configured with the **verified allowlist** (see
@@ -263,3 +265,175 @@ matrix and liveness classification.
 | `scripts/validation/check_runtime_liveness.py` | Liveness classification of runtime-linked files |
 | `scripts/validation/check_runtime_drift.py` | Drift detection for runtime-linked files |
 | `scripts/validation/check_keygen_rng.py` | Key generation RNG boundary guard (SystemRandom usage) |
+
+---
+
+## 10. Assurance review packets and document revisions
+
+This procedure maintains review inputs for the
+[assurance statement](../claims/assurance-statement.md) and
+[evaluation rules](../claims/assurance-evaluation.md). Packet integrity checks
+establish reproducible review inputs; they do not activate release assurance.
+
+### Preparing a self-contained review packet
+
+Preserve repository-relative paths inside the packet. For contract revision
+`2026-09-07-r3`, the `contract-integrity` category contains these seven files:
+
+```text
+spec/server-assurance-contract.schema.json
+spec/sdk-assurance-contract.schema.json
+scripts/validation/validate_server_assurance_contract.py
+scripts/validation/validate_sdk_assurance_contract.py
+scripts/validation/test_server_assurance_contract.py
+scripts/validation/test_sdk_assurance_contract.py
+scripts/validation/assurance_document_integrity.py
+```
+
+Both validators import the shared helper. Include any new local dependencies
+when the validators or tests change; copying only their entry points is insufficient.
+Also include both contract registers, their referenced documents, the compliance
+matrix, the client boundary and legacy policy files, and every SDK
+`reference_source_paths` and `project_sources` file. Preserve pinned project
+source bytes, including generated OpenAPI, without regenerating them for the packet.
+Archive the external standards under `standards/` using each pinned URI's basename
+and the exact bytes identified by its SHA-256.
+
+Record the review ID, base commit, working-tree scope, file categories and
+SHA-256 digests in the packet manifest. Record the Python environment and dependency
+versions (`jsonschema` and `PyYAML`), commands, exit statuses and outputs with the
+preparation results. From the copied packet's root, run:
+
+```bash
+python3 scripts/validation/validate_server_assurance_contract.py --source-dir standards
+python3 scripts/validation/validate_sdk_assurance_contract.py --source-dir standards
+python3 scripts/validation/test_server_assurance_contract.py
+python3 scripts/validation/test_sdk_assurance_contract.py
+```
+
+Use the copied scripts and inputs, with no source-checkout imports, symlinks or
+sibling-repository dependencies. If the review also checks an SDK workspace,
+include that workspace and pass its packet-local path to `--sdk-workspace`.
+Verify the final manifest's digests inside the packet before handing it over.
+Keep earlier packets and reports unchanged; issue a new identified packet for
+changed inputs and distinguish preparation checks from reviewer findings.
+
+### Updating document revision pins
+
+Each register's `document_revisions` maps five document fields to independently
+versioned revisions: `normative_document`, `standards_document`, `status_document`,
+`evaluation_document` and `statement_document`.
+
+1. Update the changed document's single `Document revision:` declaration before
+   `Status:` and update its corresponding entry in every register that references it.
+2. When changing either shared document (the assurance statement or evaluation rules),
+   update the applicable pin in **both** server and SDK registers in the same change.
+   Changing a server-only document does not itself require an SDK document revision.
+3. Keep `contract_revision` equal to the normative contract document's revision.
+   Independently revised companion documents do not require renumbering an
+   unchanged contract or its other companions.
+4. Run both validators and regression suites. Refresh any affected project-source
+   pins only after reviewing the source changes, then create a new packet manifest
+   when distributing the revised inputs.
+
+The shared helper checks distinct paths and revision declarations. It does not
+detect changed bytes under an unchanged revision or establish semantic consistency;
+the manifest and substantive review remain necessary. Preparing a review packet
+does not change contract revisions or activate release assurance; the obligation
+registers retain their `specified-not-attested` state.
+
+## 11. Pinned standards acquisition and recovery
+
+### Acquisition and CI
+
+The two contract registers are the only source inventory. Their current union
+contains 55 external originals: all 55 server sources and the SDK's subset of 52.
+The SDK additionally pins three project sources, whose bytes are checked in the
+checkout regardless of `--source-dir`. External standards are not checked into Git.
+
+```bash
+nix build .#assurance-standards --out-link result-assurance-standards -L
+nix develop .#ci --command python3 scripts/validation/validate_server_assurance_contract.py \
+  --source-dir result-assurance-standards
+nix develop .#ci --command python3 scripts/validation/validate_sdk_assurance_contract.py \
+  --source-dir result-assurance-standards
+nix build .#verified-reqs -L
+```
+
+`nix/assurance-sources.nix` reads both registers and fetches each original from its
+pinned URI with `pkgs.fetchurl` and its exact SHA-256. Shared entries must agree on
+ID, edition, URI and digest; conflicting IDs, URIs or flat archive filenames fail
+evaluation. Pure inventory regression checks run during derivation evaluation.
+The resulting archive uses each URI's basename and contains `manifest.json` with
+both register digests and the deduplicated source inventory. Files retain their
+original bytes, including HTML and all notices; no HTML normalization, errata
+application or conversion occurs.
+
+The package and flake check share a single `verified-reqs` derivation. It sets
+`AEGAEON_ASSURANCE_SOURCE_DIR` to the acquired store path; the wrapper requires
+that variable and passes `--source-dir` to both validators. Missing files or hash
+mismatches fail the gate. The network is used by fixed-output fetches before
+sandboxed validation, never by the Python validators. Standalone validators report
+explicitly when external bytes were not checked.
+
+The existing `setup-nix-ci` action enables the FlakeHub cache for the core CI and
+VerifiedReqs jobs. Fixed-output source store paths can be reused across jobs and
+unrelated repository revisions. Cache reuse is an optimization: a clean runner
+fetches missing originals and verifies the same pinned digests. Cache outages do
+not authorize bypassing hash checks. Cache availability and successful retrieval
+are not conformance or release-assurance evidence.
+
+### Preservation and review packets
+
+Keep the successful archive reachable through an output link or another Nix GC
+root until its sources have been archived for the release/review. To prepare the
+self-contained packet described in section 10, copy dereferenced files into its
+`standards/` directory, including the generated manifest. Do not leave packet
+symlinks pointing into the preparer's Nix store. Hash the copied bytes in the packet
+manifest, retain both source registers, and run both packet-local validators with
+`--source-dir standards`. The archive manifest describes inputs, not an attestation.
+
+The standards retain their own copyright and license terms; Aegaeon's Apache-2.0
+license does not relicense them. RFCs and IETF drafts identify authors, the IETF
+Trust and the applicable Trust Legal Provisions/BCP 78 in their notices. Preserve
+those notices and comply with the terms applicable to each adopted document when
+copying it. OIDF specifications carry OpenID Foundation notices; for example,
+OIDC Core Appendix C permits reproduction and distribution for specification
+and implementation purposes with OIDF attribution and without implying endorsement.
+Preserve each document's complete notice and review its own terms before sharing
+a cache or packet. Do not replace notices with project copyright or claim OIDF
+endorsement. No standards bytes are bundled into the server or SDK packages by
+this derivation.
+
+### Failed fetches and changed original bytes
+
+An unavailable origin or a fixed-output hash mismatch blocks source acquisition.
+OIDF HTML includes presentation bytes: upstream re-rendering can therefore cause
+a mismatch even when the visible normative prose appears unchanged. This is an
+intentional stop for review, not a reason to accept the newly observed hash.
+
+1. Record the source ID, adopted edition/URI, expected digest, failure log and
+   observed digest, if available. Keep newly retrieved bytes separately from the
+   adopted archive; preserve the old register and successful archive.
+2. Retry transient retrieval failures or restore the exact adopted bytes from a
+   retained, trusted archive/cache. Check their SHA-256 before import. Restoring
+   identical bytes does not change the baseline and needs no repin.
+3. If upstream bytes changed, compare complete originals and review normative
+   clauses, dependencies, errata and notices, as well as presentation changes.
+   Record whether obligations or evidence are affected. A visual comparison alone
+   cannot establish that every change is presentational.
+4. Adopt changed bytes only in a reviewed, versioned baseline revision. Update
+   the source entry and retrieval date in every register that shares it, the
+   affected standards documents and their revision pins. If requirements or
+   applicability change, revise the affected contracts/profiles and assess release
+   evidence under the evaluation rules. A presentation-only change still requires
+   a documented review and baseline revision; never silently refresh a digest.
+5. Rebuild the archive and run both byte-checking validators, regression suites
+   and `.#verified-reqs`. Create a new identified packet or release record as
+   appropriate; retain earlier records. Do not remove `--source-dir`, substitute
+   an unversioned URL or waive the mismatch to make CI pass.
+
+If the old bytes cannot be recovered and changed bytes have not been reviewed,
+the gate remains failed. Mechanical checks establish references, revisions and
+byte identity. Humans still review public wording, applicability and substantive
+standards changes.

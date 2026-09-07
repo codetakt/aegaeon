@@ -1,6 +1,6 @@
 # OAuth RFC Coverage Roadmap (AS/OP + OAuth Client)
 
-Last updated: 2026-03-08
+Last updated: 2026-09-07
 
 Status: active plan
 
@@ -50,7 +50,7 @@ For each RFC, we use the following levels:
 - **Verified**: OIDC-1-009 (OIDC RP upstream token refresh — F\* `UpstreamRefresh.fst` with 17 lemmas,
   e2e tests with mock IdP, promoted to `verified` in Phase 7).
 - **Tracking / doc-only**: RFC 6755 (OAuth Privacy Considerations), RFC 6819 (OAuth Threat Model),
-  RFC 8176 (Authentication Method Reference Values), RFC 9123 (OAuth 2.0 for Browser-Based Apps)
+  RFC 8176 (Authentication Method Reference Values), draft-ietf-oauth-browser-based-apps-27 (OAuth 2.0 for Browser-Based Applications)
   — informational/BCP RFCs with no protocol surface; tracked for posture alignment.
 
 ## RFC 7592 — implemented (Phase 8b)
@@ -301,7 +301,7 @@ The OAuth WG RFC list used by this roadmap (35 RFCs):
 - 7591, 7592, 7636, 7662,
 - 7800, 8176, 8252, 8414,
 - 8628, 8693, 8705, 8707, 8725,
-- 9068, 9101, 9123, 9126, 9207, 9278, 9396, 9449, 9470,
+- 9068, 9101, browser-based-apps draft-27, 9126, 9207, 9278, 9396, 9449, 9470,
 - 9700, 9701, 9728, 9901
 
 Related RFCs used by Aegaeon features (non-exhaustive):

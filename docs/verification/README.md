@@ -1,6 +1,6 @@
 # Verification Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -12,11 +12,10 @@ This directory is the authoritative home for Aegaeon verification claims,
 assumptions, runbooks, and future proof work. For CI entrypoints and local
 reproduction details, start with [Verification runbooks](runbooks/README.md).
 
-**Formal boundary note:** In realistic von Neumann systems with I/O, the project
-cannot formally prove computational hardness except as theorem premises,
-OS/device entropy sources except as external contracts, or external host/storage
-behaviour except as explicit interface contracts or TCB boundaries. These remain
-outside the formal claim.
+The [server assurance contract](claims/assurance-case/assurance-contract.md)
+fixes obligations independently of evidence status. The foundation claim is
+currently inactive. External hardness, entropy, toolchain and platform contracts
+must be disclosed; own-code use of those interfaces remains a verification target.
 
 ## Scope
 
@@ -36,6 +35,10 @@ outside the formal claim.
   tool- or protocol-specific notes.
 
 ## Quick Status
+
+- Contract v1: [standards baseline](claims/assurance-case/standards-baseline.md)
+  fixes source editions and applicability; [contract status](claims/assurance-case/contract-status.md)
+  records the release-activation backlog.
 
 - Strong-constraint crypto posture: `docs/verification/claims/crypto-allowlist.md`
   is the canonical allowlist and claim boundary source.

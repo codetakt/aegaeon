@@ -1,6 +1,6 @@
 # SDK Release Handoff Runbook (Backend Companion)
 
-Last updated: 2026-03-15
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -13,6 +13,14 @@ Audience: operators, maintainers
 ## 1. Scope
 
 This runbook applies to the backend repository only.
+
+The [SDK assurance contract](../verification/claims/sdk-assurance/assurance-contract.md)
+now defines the target distributed-implementation guarantee. Handoff and release
+evidence must archive the adopted contract/register revision and source pins and
+bind both backend/core and SDK revisions to actual package outputs. Existing
+handoff validation does not prove those obligations. The
+[SDK activation backlog](../verification/claims/sdk-assurance/contract-status.md)
+tracks evaluator reconciliation and adoption by the separate SDK repository.
 
 It covers:
 

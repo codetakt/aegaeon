@@ -1,41 +1,37 @@
 # Aegaeon
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1151%2B%20passing-brightgreen.svg)](spec/compliance-matrix.yaml)
-[![F*](https://img.shields.io/badge/F%2A-155%20modules%20%7C%200%20admit-blueviolet.svg)](fstar/)
-[![Tamarin](https://img.shields.io/badge/Tamarin-248%20lemmas%20verified-blueviolet.svg)](proofs/tamarin/)
+[![F*](https://img.shields.io/badge/F%2A-verification%20assets-blueviolet.svg)](fstar/)
+[![Tamarin](https://img.shields.io/badge/Tamarin-protocol%20models-blueviolet.svg)](proofs/tamarin/)
 
-Aegaeon is an assumption-qualified formally verified and security-tested
-OIDC 1.0 / OAuth 2.0/2.1 identity-provider server, with OpenID Connect Federation
-runtime support. See the [Assumption Boundary Overview](docs/verification/claims/assumption-boundary-overview.md)
-for the explicit trust boundary.
+Aegaeon is an OAuth/OIDC identity-provider server with formal-verification
+assets and security-test tooling. Completion of its published
+[server assurance contract](docs/verification/claims/assurance-case/assurance-contract.md)
+is pending; see the [activation backlog](docs/verification/claims/assurance-case/contract-status.md).
 The project prioritizes security posture (OAuth 2.0 Security BCP / sender-constrained
 tokens) and maintains formal verification artefacts (F*, Tamarin, Kani) alongside
 the Rust implementation.
 The official claim definition and boundary conditions are specified in the
 [claim definition](docs/verification/claims/assurance-case/claim-definition.md).
-The first-party admin console is a constrained control-plane UI built on
-`@aegaeon/management-client`; it is intentionally outside the released formal claim.
-Canonical outward-facing wording lives in
-[`docs/product-positioning.md`](docs/product-positioning.md).
+The first-party admin console uses `@aegaeon/management-client`. Browser rendering
+has a separate assurance boundary; server-side management and session operations
+that affect foundation guarantees are included in the contract.
+Public wording is indexed in
+[`docs/product-positioning.md`](docs/product-positioning.md); its scope, finalized
+public wording and release-record requirements are fixed by the
+[assurance statement specification](docs/verification/claims/assurance-statement.md).
+Standalone SDK packages have a separate
+[SDK assurance contract](docs/verification/claims/sdk-assurance/assurance-contract.md)
+covering client/RP behavior and distributed JavaScript/WASM implementations.
+Its [qualified claim remains inactive](docs/verification/claims/sdk-assurance/contract-status.md).
 
-**Formal boundary note:** In realistic von Neumann systems with I/O, the
-following cannot be proven inside the project’s formal system and are treated
-as explicit assumptions outside the formal claim: (1) computational hardness
-(EUF‑CMA, collision resistance) stated as theorem premises, (2) OS/device
-entropy sources modeled as external contracts (e.g., min‑entropy), and (3)
-external host/storage behaviour modeled as explicit interface contracts or
-TCB boundaries.
-
-Formal claim (short): the verification covers **VerifiedReqs** — the subset of
-`spec/compliance-matrix.yaml` entries with `status: verified` and a formal proof reference
-(F\*/Low\*/HACL\*, Tamarin, Kani, or EverParse) — guaranteed **in their respective
-models** under the 12 documented [assumptions](docs/verification/claims/assumptions/current-register.md)
-(6 crypto hardness, 2 HACL* linkage, 2 OIDC hash runtime linkage,
-1 EverParse linkage, 1 WASM host), for binaries
-produced by the pinned Nix toolchain and configured per the documented `AEGAEON_*` policy gates.
-Everything else is outside the claim.
-See [Assurance Case §0.2](docs/verification/claims/assurance-case/claim-definition.md#02-claim-scope) for the full definition.
+The contract fixes obligations before proof completion. Matrix `verified` rows
+are an evidence inventory, not a complete server or release attestation. External
+cryptography, entropy, toolchain and platform assumptions must be disclosed;
+own-code input validation, state transitions and adapter behavior remain
+verification obligations. The [standards baseline](docs/verification/claims/assurance-case/standards-baseline.md)
+pins specification editions and distinguishes mandatory, conditional and deferred
+capabilities. Adopting that baseline does not assert current conformance to it.
 
 ## Scope
 
@@ -43,7 +39,7 @@ See [Assurance Case §0.2](docs/verification/claims/assurance-case/claim-definit
 - OpenID Connect Provider: ID Token, discovery, userinfo, back-channel logout
 - Dynamic Client Registration (RFC 7591) and Management (RFC 7592)
 - Device Authorization (RFC 8628), Token Revocation (RFC 7009), Introspection (RFC 7662)
-- OpenID Connect Federation 1.0: Entity Configuration, Subordinate Statements, Trust Marks
+- OpenID Federation trust-chain consumer and upstream brokering; public OP publication is deferred
 - Authorization Server Metadata (RFC 8414) and Security BCP guidance (RFC 9700)
 
 For detailed coverage and evidence, see `spec/compliance-matrix.yaml` and `docs/`.
@@ -154,7 +150,10 @@ policy is loaded from PostgreSQL by default. See `docs/configurations/environmen
 
 ## Standards
 
-See `spec/compliance-matrix.yaml` for 308 tracked requirements across 48+ RFC/OIDC specifications, and `nix flake check` for current gates.
+See the [standards baseline](docs/verification/claims/assurance-case/standards-baseline.md)
+for pinned editions and role applicability, `spec/compliance-matrix.yaml` for
+existing evidence, and `nix flake check` for current gates. Contract completion
+requires all applicable clauses, including those not yet individually indexed.
 
 ## Development Environment
 
@@ -196,7 +195,7 @@ nix build .#verify-kani -L
 nix build .#verify-jose -L
 ```
 
-## OCI Image (No Dockerfile)
+## OCI Image with Nix
 
 ```bash
 # Build the OCI image tarball (dockerTools)
@@ -224,12 +223,12 @@ git diff -- generated/everparse generated/lowstar artifacts/karamel
 
 - `crates/`: Rust crates (server, JOSE, observability, FFI, ...)
 - `examples/`: sample applications (minimal RP)
-- `fstar/`: F* sources (155 modules, 0 admit, 12 assume vals across 8 files)
+- `fstar/`: F* specifications, implementations, and proof sources
 - `generated/`: committed generated artefacts (EverParse wrappers, extracted Low* C, ...)
-- `proofs/`: protocol-level models (54 Tamarin files, 248 lemmas)
+- `proofs/`: protocol-level models and their verification tooling
 - `nix/`: pinned toolchains and packaging (incl. OCI image)
 - `scripts/`: verification runners and local tooling
-- `spec/`: compliance matrix + schema (308 entries)
+- `spec/`: compliance matrix, assurance contracts, and schemas
 - `tests/`: integration and conformance harnesses
 
 ## License

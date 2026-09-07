@@ -1,12 +1,42 @@
 # Verified Core WASM Extraction
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
 Owner: Product / Engineering
 
 Audience: implementers, reviewers
+
+## Current raw ABI trust boundary
+
+As of 2026-09-07, `SIGNATURE_PREVERIFIED` is a raw ABI assertion by an admitted
+trusted runtime adapter. It is not a verification capability available to an
+untrusted public SDK caller. Before setting it, the adapter must have verified
+the exact signed bytes, signature, key, algorithm and policy for that operation;
+the subsequently checked claims must come from the same signed bytes. Mutable
+objects, handles, asynchronous execution and restored state must preserve that
+binding or cause rejection.
+
+The current F* runtime selects `CRYPTO_VALID` when the bit is set instead of
+calling `try_verify_signature`; it does not authenticate the assertion's origin.
+The C shim preserves raw ABI flags. Thus the trust boundary described here is
+an obligation on the adapter and its callers, not an enforced property supplied
+by the flag or a newly proved precondition of the runtime.
+
+Under [SDK C-06/C-15](../verification/claims/sdk-assurance/assurance-contract.md),
+public SDK options must reject or remove reserved authority bits; verified-result
+provenance and any admitted raw ABI use must be isolated and proved across the
+declared host/caller boundary. This is an internal trust restriction, not a claim
+that WASM exports are inaccessible. A low-level component contract must identify
+its trusted-caller preconditions rather than advertise unconditional authentication.
+
+Reference SDK adapter isolation and high-level authenticated-session admission
+remain unfulfilled obligations. Completing them requires implementation changes,
+source/output correspondence and negative tests on packed/installed outputs.
+The comments clarified with this section change no executable behavior and do
+not attest the historical WASM outputs or a released SDK. The snapshot below
+records earlier extraction work under its stated scope and date.
 
 > **Status (2026-03-10)**
 > `scripts/extraction/package_verified_core.sh` を実行すると、`VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` に加えて **claims 入力版**（`VerifiedCore_dpop_verify_claims_v1`, `VerifiedCore_jwt_verify_claims_v1`）もエクスポートする `verified_core.wasm` が生成される。claims exports はもはや一律スタブではなく、Verified WASM path では **EdDSA** に対して意味のある status を返し、`jwt_verify_claims_v1` は optional な expected `iss` / `aud` 制約も処理する。`ES256` / `RS256` は引き続き **WASM 内部署名検証**としては unsupported だが、`SIGNATURE_PREVERIFIED` flags を通じて Node/Web reference adapters が host crypto で署名を事前検証し、その後の claims / time / replay enforcement を Verified Core claims exports に委譲できるようになった。`tests/verified_core_wasm/test_instantiate.mjs` は preverified `RS256` accept と non-preverified reject の両方を検証し、`runtime_{node,web}_reference_test.mjs` は adapter-side `RS256` / `ES256` coverage を提供する。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect Phase 5 server/client formal-assurance internal evidence."""
+"""Collect an unapproved server/client assurance preflight; retain the legacy CLI."""
 
 from __future__ import annotations
 
@@ -16,53 +16,16 @@ DEFAULT_OUTPUT = (
 )
 PRE_PUBLIC_BLOCKER_REPORT = REPO_ROOT / "docs/releases/evidence/phase5-pre-public-blockers.json"
 
-INTERNAL_APPROVED_REVIEWS = [
-    {
-        "id": "claim-wording-review",
-        "scope": "claim-wording",
-        "reviewer": "aegaeon-engineering",
-        "status": "approved",
-        "evidence_uri": "docs/product-positioning.md",
-    },
-    {
-        "id": "formal-boundary-review",
-        "scope": "formal-boundary",
-        "reviewer": "aegaeon-engineering",
-        "status": "approved",
-        "evidence_uri": "spec/server-client-formal-assurance-claim.current.json",
-    },
-    {
-        "id": "server-implementation-review",
-        "scope": "server-implementation",
-        "reviewer": "aegaeon-engineering",
-        "status": "approved",
-        "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md",
-    },
-    {
-        "id": "sdk-adapter-boundary-review",
-        "scope": "sdk-adapter",
-        "reviewer": "aegaeon-engineering",
-        "status": "approved",
-        "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md",
-    },
-]
-
-PUBLIC_BLOCKER_REVIEWS = [
-    {
-        "id": "release-custody-review",
-        "scope": "release-custody",
-        "reviewer": "aegaeon-release",
-        "status": "pending",
-        "evidence_uri": "docs/releases/evidence/publication-org-rollout.md",
-    },
-    {
-        "id": "external-security-review",
-        "scope": "external-security",
-        "reviewer": "external-reviewer",
-        "status": "pending",
-        "evidence_uri": None,
-    },
-]
+# Generation inventories review obligations; it cannot issue approvals or carry
+# approvals over from a different contract, wording or implementation revision.
+REVIEW_SCOPES = (
+    "claim-wording",
+    "formal-boundary",
+    "server-implementation",
+    "sdk-adapter",
+    "release-custody",
+    "external-security",
+)
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -117,7 +80,9 @@ def collect_evidence_items(
                     "path": repo_relative(output_path),
                     "fresh": True,
                     "sha256": None,
-                    "notes": "Self-reference to this Phase 5 internal completion bundle.",
+                    "notes": (
+                        "Self-reference to this generated preflight inventory; no review approval."
+                    ),
                 },
             )
             continue
@@ -205,19 +170,20 @@ def dependent_gate_snapshot(gate: dict[str, Any]) -> dict[str, Any]:
 
 
 def collect_blockers(claim: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
     if PRE_PUBLIC_BLOCKER_REPORT.exists():
         report = load_json(PRE_PUBLIC_BLOCKER_REPORT)
-        if report.get("all_non_public_blockers_closed") is True:
-            return [
-                f"{item['id']}: {item['required_next_evidence']}"
-                for item in cast("list[dict[str, Any]]", report["activation_blockers"])
-            ]
+        blockers.extend(
+            f"{item['id']}: {item['required_next_evidence']}"
+            for item in cast("list[dict[str, Any]]", report["activation_blockers"])
+        )
 
-    blockers: list[str] = []
+    # A historical closure report cannot hide obligations added to the current gate.
     for item in cast("list[dict[str, Any]]", claim["required_evidence"]):
         if item.get("required_for_activation") is True and item.get("status") != "complete":
             blockers.append(f"{item['id']}: {item['description']}")
-    return blockers
+    blockers.append("Current inputs require review; generation does not issue approvals.")
+    return list(dict.fromkeys(blockers))
 
 
 def build_bundle(
@@ -231,19 +197,28 @@ def build_bundle(
             "https://aegaeon.dev/spec/server-client-formal-assurance-evidence-bundle.schema.json"
         ),
         "schema_version": 1,
-        "bundle_id": "phase5-server-client-formal-assurance-internal-2026-05-20",
+        "bundle_id": "server-client-assurance-preflight-2026-09-07",
         "generated_at": generated_at,
         "claim_target": "server-client-formal-assurance",
         "claim_gate_path": repo_relative(claim_path),
         "claim_gate_sha256": sha256_file(claim_path),
-        "release_stage": "internal-complete",
+        "release_stage": "internal-preflight",
         "public_claim_ready": False,
         "dependent_gate_snapshots": [
             dependent_gate_snapshot(gate)
             for gate in cast("list[dict[str, Any]]", claim["dependent_gates"])
         ],
         "evidence_items": collect_evidence_items(claim, output_path),
-        "review_passes": INTERNAL_APPROVED_REVIEWS + PUBLIC_BLOCKER_REVIEWS,
+        "review_passes": [
+            {
+                "id": f"{scope}-review",
+                "scope": scope,
+                "reviewer": "unassigned",
+                "status": "pending",
+                "evidence_uri": None,
+            }
+            for scope in REVIEW_SCOPES
+        ],
         "blockers": collect_blockers(claim),
     }
 
@@ -255,7 +230,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     parser.add_argument(
         "--generated-at",
-        default="2026-07-30T00:00:00Z",
+        default="2026-09-07T08:39:47Z",
         help="Timestamp to embed in the generated bundle.",
     )
     args = parser.parse_args()

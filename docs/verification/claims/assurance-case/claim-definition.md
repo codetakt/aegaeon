@@ -1,6 +1,6 @@
 # Formal Verification Claim Definition
 
-Last updated: 2026-07-24
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -8,211 +8,117 @@ Owner: Verification
 
 Audience: verification reviewers, maintainers
 
-This document is part of the split formal verification assurance case.
+## Authority
 
-## Evidence Freshness Baseline
+The [public assurance statement specification](../assurance-statement.md) defines
+the release claim's meaning and mandatory public record for server and SDK
+profiles. This document retains the server-specific evidence interpretation.
 
-- Released wording in `docs/product-positioning.md` is supported only when the
-  claim-supporting verification and security lanes are fresh.
-- The current fixed baseline was re-established on **2026-03-10** by a fresh
-  rerun of:
-  - `nix build .#verify-fstar -L`
-  - `nix build .#verify-jose -L`
-  - `nix build .#verify-dudect -L`
-  - `nix build .#verify-tamarin -L`
-  - `nix build .#verify-kani -L`
-  - `nix run .#security-suite`
-  - `python3 scripts/validation/validate_compliance_matrix.py`
-- This freshness rule re-confirms the current claim boundary; it does not
-  promote additional compat surfaces into scope.
+The [server assurance contract](assurance-contract.md) defines the fixed target
+obligations. The [standards baseline](standards-baseline.md) fixes specifications
+and applicability. This document defines how evidence supports that contract.
+[Contract status](contract-status.md) records that the foundation claim is
+inactive. Historical slice promotions and matrix labels are not release activation.
 
-### Matrix Sufficiency Note
-
-- `spec/compliance-matrix.yaml` is the **authoritative evidence register** for
-  the released server claim.
-- For the current server-side wording, the matrix is **sufficient when read
-  together with** this assurance case,
-  `docs/verification/claims/assumptions/current-register.md`, and the freshness
-  gates above.
-- The key reason is structural: the released claim is intentionally limited to
-  requirements whose matrix rows are `status: verified` and which carry formal
-  proof references. In that sense, the matrix is not a marketing summary; it is
-  the normative map from released wording to proof-bearing requirements.
-- The matrix is **not sufficient by itself** for broader claims outside the
-  released server boundary. In particular, client / RP release gating,
-  publication-org rollout, and admin-console boundary evidence remain tracked by
-  their own source-managed policies and reports.
-
----
-
-## 0. Formal Claim Definition (Official)
-
-This section defines the **exact, assumption‑qualified claim** that Aegaeon can
-make, with mathematical precision and explicit scope.
+## 0. Formal Claim Definition
 
 ### 0.1 System Definition
 
-Let **S** be the Aegaeon server built from this repository using the pinned
-toolchain in `flake.lock`, via `nix build .#server`, and executed under the
-documented runtime configuration in `docs/configurations/environment/README.md`.
+A claimed system is a particular artifact B, release configuration C, and profile
+P = `server-foundation-v1`, identified by source, lockfile, toolchain/target,
+features, generated-code and artifact digests, providers, policy and storage
+parameters. The intended release path uses the pinned Nix build. The current
+existence of `nix build .#server` is not evidence that its output satisfies P.
 
 ### 0.2 Claim Scope
 
-The formal claim applies **only** to protocol requirements tracked in
-`spec/compliance-matrix.yaml` whose `status: verified` and which have a
-corresponding **formal proof reference**.
+The contract defines R(C), the role-applicable normative requirements of the
+pinned specifications, plus its G-01 through G-18 guarantee obligations. Scope
+is determined before proof completion and includes all required and triggered
+capabilities. Unproved own-code transitions remain open obligations.
 
-Define the verified requirement set:
+The legacy evidence selector remains useful for reports:
 
 ```text
-VerifiedReqs = { r ∈ compliance-matrix
-               | r.status = verified
-               ∧ ∃ p ∈ r.proof : p.type ∈ {fstar, tamarin, kani, everparse, lowstar, hacl} }
+VerifiedReqs = { r in compliance-matrix
+              | r.status = verified
+              and r has a formal proof reference }
 ```
 
-The six proof types correspond to four verification frameworks (F\*, Tamarin, Kani, EverParse; with `lowstar` and `hacl` as sub-types of F\*):
+`VerifiedReqs` is an evidence inventory, not R(C), a release gate, or the
+contract's completion denominator. A requirement does not leave R(C) when it
+has no proof, no matrix row, or a status other than `verified`. Existing OIDC
+roll-ups require clause-level expansion before contract activation.
 
-| Proof type | Framework | Evidence |
-|---|---|---|
-| `fstar` | F\* type system | `file` points to a verified `.fst`/`.fsti` module |
-| `lowstar` | F\* + KaRaMeL extraction (Low\*) | `file` points to a verified Low\* module or extracted C code |
-| `hacl` | HACL\* (F\*-verified crypto library) | `file` points to the Aegaeon integration module |
-| `tamarin` | Tamarin Prover (symbolic Dolev-Yao) | `file` points to a verified `.spthy` model |
-| `kani` | Kani (bounded model checking for Rust) | `file` points to a Kani harness Rust file |
-| `everparse` | EverParse (parser verification) | `file` points to a `.3d` schema or generated validator |
+### 0.3 Claim Statement (Assumption-Qualified)
 
-A "formal reference" is a `proof[]` entry whose `type` is one of the above and
-whose `file` or evidence field identifies the corresponding verified artifact.
+After activation for B/C/P, the permitted statement is that the specified
+implementation invariants/refinement obligations and symbolic protocol
+properties have been formally checked under disclosed assumptions and bounds,
+and B/C has passed the required security tests with findings resolved under the
+contract. This does not assert computational security of real cryptography,
+correctness of every external dependency, or absence of unknown vulnerabilities.
 
-> **Note:** `dudect` (constant-time testing) is classified as *empirical*
-> evidence, not a formal proof. It does not qualify an entry for
-> `status: verified` on its own. See
-> [§1.6](verification-scope.md#16-proof-quality-classification).
+The following evidence meanings MUST remain separate:
 
-Anything not marked `verified` (for example `implemented`, `partial`,
-`planned`, `in_progress`, `blocked`, or `not_applicable`) is **outside the
-formal claim**.
-
-For `aegaeon_jose::raw_json`, the current released claim boundary is
-surface-specific. Promoted surfaces begin at raw JSON bytes through the
-source-managed `verified-structural-v1` backend and typed per-surface decoders;
-the residual `generic-object` surface remains at the duplicate-preserving
-top-level object-member interface via `SerdeCompat`. See
-`docs/verification/jose/raw-json-boundary.md`.
-
-**Formal boundary note:** In realistic von Neumann systems with I/O, the
-following cannot be proven inside the project’s formal system and are treated
-as explicit assumptions outside the formal claim: (1) computational hardness
-(EUF‑CMA, collision resistance) stated as theorem premises, (2) OS/device
-entropy sources modeled as external contracts (e.g., min‑entropy), and (3)
-external host/storage behaviour modeled as explicit interface contracts or
-TCB boundaries.
-
-### 0.3 Claim Statement (Assumption‑Qualified)
-
-For every requirement **r** in `VerifiedReqs`:
-
-1. **F\***: If r is proven in F\*, then r holds in the F\* logic for the
-   corresponding specification module under the stated preconditions.
-2. **Tamarin**: If r is proven in Tamarin, then r holds in the symbolic
-   Dolev‑Yao model (perfect cryptography, adversarial network).
-3. **Kani**: If r is proven by Kani, then r holds for all executions within the
-   bounded input domain of the harness.
-4. **EverParse**: If r is tied to an EverParse schema, then r holds for the
-   generated parser with respect to the `.3d` grammar.
-5. **Low\*/HACL\***: If r is proven via Low\* or HACL\*, then r holds in the F\*
-   logic and the verification extends to the extracted C implementation (for
-   code that is actually linked into the build).
-6. **dudect**: If r is checked by dudect, then r passes constant-time testing
-   under the documented test parameters. This is an empirical check, not a
-   mathematical proof.
-
-These claims are **qualified by the Assumption Register**
-(`docs/verification/claims/assumptions/current-register.md`), by the
-[Runtime Contract Register](../assumptions/runtime-contract-register.md)
-(RC-1 through RC-7), and by the explicit trust boundary listed in §4. The 12 `assume val` declarations in hand-written F\* specification modules
-(`fstar/`) are the only unproved axioms: 6 cryptographic hardness boundaries,
-2 HACL\* linkage assumptions (verified foreign code), 1 EverParse linkage
-assumption, 2 OIDC hash runtime linkage assumptions, and 1 WASM host import.
-Test modules (`tests/fstar/`) and generated modules (`generated/`)
-are excluded from the assume val count. Generated modules that are referenced by
-`VerifiedReqs` entries (e.g., EverParse-generated validators under
-`generated/everparse/`) remain within the formal claim.
-
-**Strong-constraint policy:** cryptographic hardness is modeled as honest
-theorem premises. Remaining crypto-hardness `assume val` entries are lemmas
-only. Function-shaped assumptions are documented linkage contracts to verified
-foreign code, generated validators, local C runtime shims, or host boundaries;
-they are not claims that the project proves third-party or host behaviour from
-first principles.
+| Evidence | Meaning and necessary qualification |
+| --- | --- |
+| F* | The named property holds for the specified program/model under audited premises; connection to runtime requires refinement/extraction evidence |
+| Low*/HACL* | The checked implementation property applies only to the extracted/linked path, with compilation, linkage and integration contracts disclosed |
+| EverParse | Generated parser properties relative to the exact grammar; schema validity does not alone establish all protocol semantics or runtime invocation |
+| Tamarin | The property holds in the stated adversarial symbolic model; adequacy, reachability and composition must be assessed |
+| Kani | The selected code/model satisfies the property within the checked bounds; substituted models and production code must be distinguished |
+| Runtime, fuzz, sanitizer, dudect and conformance tests | Empirical results for identified executions/configurations; they do not replace formal implementation correspondence |
 
 ### 0.4 Configuration Conditions
 
-The claim is conditioned on the following:
+The contract requires a release configuration with explicit capabilities,
+algorithm/provider directions, bounds, lifetimes, replay domain and retention,
+time tolerance, durability and recovery semantics. PostgreSQL-backed active
+policy remains the current runtime configuration authority; environment-variable
+shortcuts do not alter the contract. Startup and dynamic changes must preserve
+its guarantees. Invalid/unsupported changes must fail closed.
 
-- **Runtime policy fields**: Requirements gated by environment policy are only
-  in scope when the corresponding active PostgreSQL policy field is enabled:
-  - `policy.oidcEnabled` — OIDC Core, Discovery, Logout, Form Post, JAR
-  - `policy.jwtAccessTokensEnabled` — RFC 9068 JWT Access Tokens
-  - `policy.dpopRequireNonce` — RFC 9449 §5 DPoP Nonce
-  When disabled, requirements gated by that policy field are out of scope.
-- **Operational configuration**: Policies enforced by the active PostgreSQL
-  Environment policy and OAuth profiles are assumed to match the proofs and
-  policy documents. Misconfiguration is outside the formal claim. Startup
-  `AEGAEON_*` policy toggles are not a supported runtime authority for
-  `aegaeon-server`; the process fails closed if they are present.
-- **Crypto profile (per instance)**: The strong‑constraint claim applies only
-  to IdP/RP/trust‑chain instances configured with the **verified allowlist**
-  defined in `docs/verification/claims/crypto-allowlist.md`. Instances using a
-  broader compat allowlist are **out of scope** for the formal claim.
-  The promoted RS256 slices are in scope for **protocol logic and boundary
-  conditions only**; the underlying `aws-lc-rs` RSA PKCS#1 v1.5 SHA-256
-  verifier is unverified TCB (RC-7 in the
-  [Runtime Contract Register](../assumptions/runtime-contract-register.md)).
-- **Boundary-closure exceptions**: If a compat runtime surface must be promoted
-  into the formal claim, that exception must be recorded in
-  `docs/verification/claims/crypto-allowlist.md`,
-  `docs/verification/workplans/verification-boundary-roadmap.md`, and
-  `spec/compliance-matrix.yaml`. The OIDC `RS256 Required Slice`
-  (`OIDC-1-010`) and `RS256 Interop Slice` (`OIDC-5-002`, `7523-116`, `7523-402`) are the
-  currently promoted server-claim exceptions; broad RSA and non-`RS256`
-  interoperability remain outside the released claim.
-- **Build channel**: Only binaries produced by the pinned Nix build are covered.
-  Ad‑hoc builds, alternative toolchains, or patched dependencies are out of scope.
+The [crypto allowlist](../crypto-allowlist.md) and
+[runtime contracts](../assumptions/runtime-contract-register.md) inventory the
+current implementation. Promoted RS256 slices still depend on the unverified
+provider's correctness; they are not proof of RSA implementation correctness.
+Mandatory OP algorithm support cannot be excluded solely for lacking a proof.
 
 ### 0.5 Implementation Refinement Scope
 
-F\* proofs are **specification‑level** unless the verified implementation is
-actually used in production:
+For contract activation, the relevant raw-input interpretation, authentication,
+policy decisions, state transitions, own storage/crypto adapters, FFI and response
+construction require a checked relationship to the specifications. A handwritten
+oracle, HTTP guard, file/symbol reference or refinement trace is supporting
+evidence, not a refinement proof. Current extraction and runtime linkage are
+recorded in the runbooks; their existence does not close the activation backlog.
 
-- **In scope**: Extracted Low\*/EverParse code that is linked and used in the
-  runtime path.
-- **Out of scope**: Rust‑only implementations that are not proven to refine the
-  F\* specification.
+### 0.6 Out of Scope (Non-Goals)
 
-See `docs/verification/runbooks/extraction-status.md` for the current extraction
-coverage.
+External primitive, entropy, compiler, OS, network and storage implementations
+may enter through precise disclosed trust contracts. Own-code use of those
+interfaces remains a verification obligation. Cryptographic hardness and symbolic
+to computational security are not proved by listing assumptions. Unsupported
+features require evidence of rejection and non-interference with shared state.
 
-Phase E refinement traces are tracked in
-`docs/verification/runbooks/runtime-linkage.md`. The current state is a refinement
-**stub** for core endpoints (runtime_link evidence only); full proofs are
-pending.
+Standalone client/SDK behavior has its own
+[SDK assurance contract](../sdk-assurance/assurance-contract.md). Browser rendering
+and named certifications need separate assurance. Server-side upstream RP,
+authentication/session management,
+control-plane authorization and recovery remain in scope when they influence
+foundation guarantees. A generic exclusion for misconfiguration or middleware
+cannot discharge G-02, G-09, G-10 or G-13.
 
-### 0.6 Out of Scope (Non‑Goals)
+## Evidence freshness and release decision
 
-The following items are **explicitly excluded** from the formal claim:
+The March 2026 verification/security reports and beta conformance summaries are
+historical snapshots. An activation record must bind the pinned contract and
+R(C) inventory to B/C, audited assumptions, successful formal results and security
+tests, reviewed exceptions, and an approved decision. A changed artifact or
+configuration requires impact review and refreshed affected evidence.
 
-| Exclusion | Reason |
-|---|---|
-| Requirements not in `VerifiedReqs` | Outside the formal claim by definition (status != `verified` or missing proof reference). |
-| Misconfiguration of `AEGAEON_*` policy gates | Formal claims assume documented configuration; operational errors are out of scope. |
-| Raw-byte top-level JSON admission for `generic-object` | The residual generic surface remains compat-only at the `aegaeon_jose::raw_json` top-level object-member interface; promoted surfaces are enumerated in `docs/verification/jose/raw-json-boundary.md`. |
-| Non‑Nix or unpinned builds | The claim applies only to binaries built via the pinned Nix toolchain. |
-| External runtime dependencies | `aws-lc-rs`, `ring`, pure-Rust compat crypto, OS, DB, and networking stack are not formally verified here. |
-| Compat-profile crypto surfaces | Algorithms outside the verified allowlist are outside the formal claim unless a narrower promoted slice is explicitly recorded (for example, the OIDC `RS256 Required Slice` or `RS256 Interop Slice`). |
-| Supply chain and deployment integrity | CI artifacts, container images, and deployment pipelines are assumed, not proven. |
-| Side channels beyond stated scope | Only explicitly verified constant‑time paths are in scope (e.g., dudect‑checked). |
-| Client / RP behavior | The released claim covers server‑side protocol handling only. The pre-release client / RP boundary is tracked separately in `docs/verification/claims/client-rp-assurance-case.md`. |
-| Admin-console UI behavior | The released claim does not treat the first-party management console as a formally verified UI surface. Instead, the console is constrained by `../aegaeon-admin-console/spec/admin-sdk-boundary.current.json` and `../aegaeon-admin-console/spec/admin-auth-boundary.current.json`, plus hosted and compose-backed evidence. |
-| Base64url input validation | F\* models Base64url encode/decode with concrete implementations and proved roundtrip/injectivity lemmas (formerly `assume val`, now proved). The model does NOT verify that the Rust `base64` crate correctly rejects all malformed Base64url strings; runtime rejection is delegated to the Rust layer. |
-| Non-ASCII string encoding | `bytes_of_string` is used as a proxy for UTF-8. All callers (PKCE, JWK thumbprint, SD-JWT) operate on ASCII-only inputs per their respective RFCs. This assumption is documented but not enforced by F\* type refinements. |
+The ordinary evidence-manifest validator checks archive structure. A successful
+archive validation, signed SBOM, or successful reference check cannot establish
+this release decision. The implementation of that complete decision gate is
+tracked in [contract status](contract-status.md).
