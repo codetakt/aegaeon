@@ -39,6 +39,7 @@ in
       pkgs.gitMinimal
       pkgs.bash
       pkgs.jq
+      pkgs.ripgrep
     ];
   };
 
@@ -53,6 +54,7 @@ in
       pkgs.ruff
       pkgs.mypy
       pkgs.jq
+      pkgs.ripgrep
     ];
   };
 

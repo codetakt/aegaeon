@@ -122,10 +122,7 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          nix develop .#ci --command cargo clippy --workspace --all-targets -- \
-            -W clippy::suspicious \
-            -D clippy::suspicious_else_formatting \
-            -D clippy::suspicious_operation_groupings
+          nix build .#lint-supplemental-clippy --no-link -L
 
       - name: Run server clippy inventory gate
         run: |
@@ -134,7 +131,7 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          nix develop .#ci --command bash scripts/flake/lint_server_clippy_inventory.sh
+          nix build .#lint-server-clippy-inventory-dev --no-link -L
 
       # EverParse/Low* artefact verification removed (Phase 9 CI deduplication).
       # Now handled by verification.yml: everparse-dcr + lowstar-extraction jobs.

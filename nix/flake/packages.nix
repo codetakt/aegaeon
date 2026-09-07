@@ -5,6 +5,7 @@
   craneLib,
   src,
   cargoArtifacts,
+  cargoLintChecks,
   stdenv,
   aegaeonWorkspace,
   aegaeonDockerImage,
@@ -79,18 +80,10 @@ in
     doInstallCargoArtifacts = false;
   };
 
-  lint-server-clippy-inventory = craneLib.cargoClippy {
-    inherit src cargoArtifacts;
-    stdenv = _: stdenv;
-    pname = "aegaeon-server-clippy-inventory";
-    version = "0.0.0";
-    cargoToml = ../../Cargo.toml;
-    cargoExtraArgs = "-p aegaeon-server --lib --bin aegaeon-server --no-deps";
-    cargoClippyExtraArgs =
-      "-- -D clippy::map_unwrap_or -D clippy::ref_option "
-      + "-D clippy::needless_pass_by_value -D clippy::too_many_lines "
-      + "-D clippy::too_many_arguments";
-  };
+  lint-server-clippy-inventory = cargoLintChecks.serverInventory;
+  lint-server-clippy-inventory-dev = cargoLintChecks.serverInventoryDev;
+  lint-supplemental-clippy = cargoLintChecks.supplemental;
+  cargo-lint-artifacts = cargoLintChecks.devArtifacts;
 
   toolchain-nightly = rustToolchain;
   toolchain-nightly-asan = asanRustToolchain;
