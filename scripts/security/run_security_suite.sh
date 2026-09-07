@@ -32,6 +32,13 @@ done
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export ROOT
+# Preserve the caller's configuration, anchoring a relative Cargo home before
+# build tools change directory. A private relative home can pollute crate trees.
+if [[ -n ${CARGO_HOME:-} ]]; then
+	mkdir -p "$CARGO_HOME"
+	CARGO_HOME="$(cd "$CARGO_HOME" && pwd)"
+	export CARGO_HOME
+fi
 cd "$ROOT"
 
 # The dev shell exports WASI tooling for verified-core extraction. Some environments
@@ -61,10 +68,6 @@ LOG_DIR="$ARTIFACT_BASE/summary"
 LOG_FILE="$LOG_DIR/security.log"
 mkdir -p "$LOG_DIR"
 : >"$LOG_FILE"
-
-CARGO_HOME="${SECURITY_ARTIFACT_DIR}/cargo-home"
-mkdir -p "$CARGO_HOME"
-export CARGO_HOME
 
 # Keep Rust build outputs in a dedicated target directory so we can prune it
 # between phases in CI to avoid exhausting runner disk.
