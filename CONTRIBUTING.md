@@ -164,10 +164,11 @@ See the [Code of Conduct](CODE_OF_CONDUCT.md#enforcement) for reporting and enfo
 
 ## Getting Help
 
-- Check existing issues and discussions
+- Check existing [GitHub Issues](https://github.com/codetakt/aegaeon/issues)
 - Review AGENTS.md for architectural context
 - See `docs/README.md` for the canonical list of `nix` entry points
-- Ask in discussions for clarification
+- Open an issue for general questions or clarification; use the private reporting
+  channels above for security vulnerabilities and sensitive conduct reports
 
 ## License
 
