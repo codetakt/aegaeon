@@ -350,7 +350,7 @@
               language = "system";
               pass_filenames = true;
               require_serial = true;
-              files = "^(scripts/validation/.*\\.py|ci/validate_slos\\.py)$";
+              files = "^(scripts/(validation|ci)/.*\\.py|ci/validate_slos\\.py)$";
             };
             ts-lint = {
               enable = true;
@@ -706,10 +706,15 @@
             );
         };
 
+        buildSrc = import ./nix/build-source.nix {
+          inherit lib;
+          source = src;
+        };
+
         cargoArtifacts = craneLib.buildDepsOnly {
           pname = "aegaeon-cargo-artifacts";
           version = "0.0.0";
-          inherit src;
+          src = buildSrc;
           stdenv = p: stdenv;
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
@@ -890,7 +895,8 @@
             null;
 
         aegaeon-workspace = craneLib.buildPackage {
-          inherit src cargoArtifacts;
+          inherit cargoArtifacts;
+          src = buildSrc;
           stdenv = p: stdenv;
           pname = "aegaeon-workspace";
           version = "0.0.0";

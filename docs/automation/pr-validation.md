@@ -84,6 +84,16 @@ URL availability, heading anchors, or every renderer extension. Existing broken
 links remain visible debt but do not block an unrelated change. Markdown lint and
 document structure checks apply to the current tree.
 
+## Build inputs and cache behavior
+
+`nix/build-source.nix` removes the root Markdown files and `docs/` from production
+compilation inputs. Rust sources, manifests, migrations, C/extraction outputs,
+verification fixtures and other existing build inputs remain present. Rust test and
+verification derivations retain the complete source, including document fixtures.
+Consequently, a prose-only edit does not change the production server derivation;
+checks which consume that prose can still change and run. Nix/build policy changes
+always select the full PR suite.
+
 The `docs` and `integrity` shells contain only the tools needed by their checks and
 have no Rust build inputs or development-shell hooks. Formal proof and security
 execution remain in the full workflows. Integrity validation establishes consistency
