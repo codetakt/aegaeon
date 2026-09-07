@@ -1,6 +1,6 @@
 # Management Plane Endpoint Reference
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -9,6 +9,12 @@ Owner: Product / Engineering
 Audience: implementers, reviewers
 
 ## Management API endpoint skeleton (Phase 1)
+
+This is a non-exhaustive Phase 1 overview, not the complete current operation
+inventory. The generated OpenAPI, actual server routes and SDK exports must be
+reconciled for each release under the [SDK assurance contract](../../verification/claims/sdk-assurance/assurance-contract.md).
+An operation omitted here is not excluded from that contract. Generated OpenAPI
+describes interfaces; it does not independently prove their correctness.
 
 All identifiers are UUIDv4 unless otherwise stated.
 

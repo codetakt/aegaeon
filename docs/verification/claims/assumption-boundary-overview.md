@@ -1,6 +1,6 @@
 # Assumption Boundary Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -23,9 +23,13 @@ The project does not prove external host behaviour, OS entropy, third-party
 storage, computational hardness, or every runtime dependency from first
 principles. These are explicit assumptions or TCB boundaries.
 
-The remaining assumption set is intentionally narrow: cryptographic hardness and
-selected host/linkage contracts are documented as assumptions; eliminated FFI,
-encoding, and runtime stubs are tracked historically in the detailed register.
+The [server assurance contract](assurance-case/assurance-contract.md) requires
+auditing these premises before activation. Some current entries combine
+cryptographic hardness with unverified implementation correctness; some crypto
+axioms require repair. Own-code FFI, encoding, configuration and state
+orchestration remain verification obligations even when they use external
+interfaces. The detailed registers inventory current premises and historical
+reductions, not an already accepted foundation trust boundary.
 
 ## Canonical Documents
 

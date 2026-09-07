@@ -5,7 +5,7 @@
   "generated_at": "2026-09-07T08:39:47Z",
   "claim_target": "server-client-formal-assurance",
   "claim_gate_path": "spec/server-client-formal-assurance-claim.current.json",
-  "claim_gate_sha256": "1480b4bbb43f850f1dc918beed17e418ca5b84880c6ac0616530dd44f742aa28",
+  "claim_gate_sha256": "05bb53ea0ed28b9cfa1bc5b54c1f05565ee971d8e37df956d207a1e372dfc025",
   "release_stage": "internal-preflight",
   "public_claim_ready": false,
   "dependent_gate_snapshots": [
@@ -44,16 +44,16 @@
       "status": "complete",
       "path": "docs/verification/claims/assurance-case/claim-definition.md",
       "fresh": true,
-      "sha256": "55834e6cf85f235c4247500b9e2ca21a81fe2017a181fb8d411374ad97555d5b",
-      "notes": "Server assurance baseline supports the server claim."
+      "sha256": "8aad6f86917616b88f6986b9d3ed8c1f657f9f7a7533c13b6150535ba4e0c189",
+      "notes": "Server contract documentation is available; release-specific contract closure is a separate obligation."
     },
     {
       "id": "client-rp-assurance-case",
       "status": "complete",
       "path": "docs/verification/claims/client-rp-assurance-case.md",
       "fresh": true,
-      "sha256": "d886ec0a337198584d36b6f6d242488d203188b7328efaf01533128928333b09",
-      "notes": "Client/RP assurance records core and adapter boundaries."
+      "sha256": "1abd3fbf17adddd7e57529395d5bf31a94b4630aded62e2d0e5993e909caad7f",
+      "notes": "Historical client-core evidence inventory is available; it does not establish SDK contract closure."
     },
     {
       "id": "client-boundary-policy",
@@ -125,15 +125,39 @@
       "path": "docs/releases/evidence/phase5-pre-public-blockers.json",
       "fresh": true,
       "sha256": "8edd36d884f9eba0dbdc86454df15d8c1b059167419654a06ba818adca5afbba",
-      "notes": "Non-public blocker closure report is complete."
+      "notes": "Historical Phase 5 closure report is retained; it does not close the current assurance contracts."
     },
     {
       "id": "positioning-scope-update",
       "status": "complete",
       "path": "docs/product-positioning.md",
       "fresh": true,
-      "sha256": "c6715a98a62b3ad1aa1606e47c70d88ca1fd902f7fe0b2d1548931a4a6820412",
+      "sha256": "f5c591f5bf0b238c1ed464e0fb90b94d44e64958e24662ea70ce57f8a7ba1197",
       "notes": "Product positioning preserves future-gated TCB wording."
+    },
+    {
+      "id": "sdk-assurance-contract-closure",
+      "status": "blocked",
+      "path": "docs/verification/claims/sdk-assurance/contract-status.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Complete SDK requirements, own-code proof, distributed-output correspondence and security testing under C-01 through C-20."
+    },
+    {
+      "id": "server-assurance-contract-closure",
+      "status": "blocked",
+      "path": "docs/verification/claims/assurance-case/contract-status.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "Complete server requirements, implementation/state proof, symbolic security, artifact binding and security testing under G-01 through G-18."
+    },
+    {
+      "id": "server-sdk-composition-closure",
+      "status": "blocked",
+      "path": "docs/verification/claims/assurance-statement.md",
+      "fresh": false,
+      "sha256": null,
+      "notes": "A qualified combined release record under aegaeon-assurance-statement-v1 establishes compatible interfaces, counterpart assumptions and composition evidence."
     }
   ],
   "review_passes": [
@@ -192,6 +216,9 @@
     "publication-custody: Publication custody and provenance must be complete.",
     "release-security-evidence: Release security archive must bind required outputs.",
     "multi-review-signoff: Internal and external reviews must approve the wording.",
+    "sdk-assurance-contract-closure: Complete SDK requirements, own-code proof, distributed-output correspondence and security testing under C-01 through C-20.",
+    "server-assurance-contract-closure: Complete server requirements, implementation/state proof, symbolic security, artifact binding and security testing under G-01 through G-18.",
+    "server-sdk-composition-closure: A qualified combined release record under aegaeon-assurance-statement-v1 establishes compatible interfaces, counterpart assumptions and composition evidence.",
     "Current inputs require review; generation does not issue approvals."
   ]
 }

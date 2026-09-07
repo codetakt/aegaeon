@@ -10,6 +10,12 @@
  *   - Byte comparison done via memcmp (no host_bytes_eq callback)
  *   - Only host_replay_store_check_and_store remains as F*-declared callback
  *
+ * Raw ABI trust boundary: SIGNATURE_PREVERIFIED is an assertion by an admitted
+ * trusted adapter over the exact signed inputs/key/algorithm/policy. This shim
+ * forwards the assertion; it does not authenticate its source. Public SDK
+ * options must not manufacture that authority. Adapter isolation and provenance
+ * remain open SDK C-06/C-15 obligations; see docs/specs/verified-core-wasm.md.
+ *
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -560,8 +566,9 @@ uint32_t VerifiedCore_jwt_verify_v1(
   }
 
   /* Build flags for claims verification based on what's present.
-   * Preserve caller-supplied flags such as the adapter-side
-   * SIGNATURE_PREVERIFIED contract bit. */
+   * Preserve the raw ABI flags, including the trusted-adapter assertion
+   * SIGNATURE_PREVERIFIED. This forwarding does not verify provenance or make
+   * untrusted public flags safe; SDK adapter isolation is required separately. */
   uint32_t claims_flags = input->flags;
   if (parsed.hasExp) {
     claims_flags |= 1; /* REQUIRE_EXP */

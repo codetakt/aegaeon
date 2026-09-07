@@ -1,6 +1,6 @@
 # Releases Overview
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -20,6 +20,8 @@ evidence in `evidence/`.
 
 ## Canonical Documents
 
+- `[spec]` [Public assurance statement and release record](../verification/claims/assurance-statement.md)
+  defines the qualified server/SDK wording and its release-specific evidence requirements.
 - `[index]` [Release runbooks](runbooks/README.md)
 - `[index]` [Release evidence](evidence/README.md)
 - `[index]` [KMS/HSM classification manifests](evidence/kms-hsm-classifications/README.md)

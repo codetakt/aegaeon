@@ -7,16 +7,24 @@ module VerifiedCore.Api.Claims.Runtime
  * It operates on raw buffer inputs (pointers + lengths) without opaque handles.
  *
  * Crypto operations (SHA-256, Ed25519 verify) are performed directly via HACL*
- * functions compiled into the WASM binary, eliminating host callback boundaries.
+ * functions compiled into the WASM binary on the internal EdDSA verification path.
  *
  * The ONLY remaining host callback is host_replay_store_check_and_store,
  * which requires host-side state (an atomic replay detection store).
  *
  * For adapter-promoted compatibility algorithms (for example OIDC's RS256
- * required slice on the client track), callers may set a dedicated
- * "signature preverified" flag. This means the host/runtime adapter has
- * already verified the signature and the Verified Core should continue with
- * claims/time/replay validation without re-running crypto in the WASM body.
+ * required slice on the client track), the raw ABI accepts a dedicated
+ * "signature preverified" flag as an assertion by an admitted trusted adapter.
+ * That adapter is responsible for successful verification of the exact signed
+ * bytes, signature, key, algorithm and policy used by this call, with the claims
+ * bound to those bytes. Public caller options are not verification authority.
+ *
+ * This runtime does not authenticate the assertion: the flag selects
+ * CRYPTO_VALID instead of try_verify_signature, including on an EdDSA input.
+ * Qualified SDKs must isolate this raw ABI from untrusted flag input and prove
+ * the adapter's preconditions and result provenance (SDK C-06/C-15). Current
+ * reference adapters have not discharged that obligation. This comment does
+ * not add a check or a machine-proved precondition to the functions below.
  *)
 
 (** ========== FFI Contract Summary ==========

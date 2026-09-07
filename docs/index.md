@@ -17,7 +17,7 @@ Audience: contributors, maintainers
 | `docs/README.md` | index | Aegaeon Documentation Hub | current implementation baseline | 2026-07-08 | Documentation | contributors, maintainers |
 | `docs/documentation-style-guide.md` | doc | Documentation Style Guide | current implementation baseline | 2026-07-08 | Documentation | contributors, maintainers |
 | `docs/index.md` | index | Documentation Index | current implementation baseline | 2026-07-08 | Documentation | contributors, maintainers |
-| `docs/product-positioning.md` | doc | Product Positioning | current implementation baseline | 2026-07-23 | Documentation | contributors, maintainers |
+| `docs/product-positioning.md` | doc | Product Positioning | current implementation baseline | 2026-09-07 | Documentation | contributors, maintainers |
 
 ## Architecture
 
@@ -31,13 +31,13 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/specs/README.md` | index | Specifications Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/README.md` | index | Specifications Overview | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -47,7 +47,7 @@ Audience: contributors, maintainers
 | `docs/specs/primary-authority-local-credential-plane.md` | spec | Primary Authority Local Credential Plane Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-user-management.md` | spec | Primary Authority User Management Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot（v1） | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
-| `docs/specs/verified-core-wasm.md` | spec | Verified Core WASM Extraction | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/verified-core-wasm.md` | spec | Verified Core WASM Extraction | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 
 ## Design
 
@@ -87,7 +87,7 @@ Audience: contributors, maintainers
 | `docs/policies/jose-header-policy.md` | policy | JOSE Protected Header Length Policy | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/jwt-bearer-policy.md` | policy | JWT Bearer Grant Policy (RFC 7523) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/management-platform-quality-profile.md` | policy | Management Platform Quality Profile | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
-| `docs/policies/oauth-doc-only-rfcs.md` | policy | OAuth Doc-Only RFC Posture (6755 / 6819 / 8252 / 9123) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
+| `docs/policies/oauth-doc-only-rfcs.md` | policy | OAuth Supporting Standards and Client Guidance | current implementation baseline | 2026-09-07 | Governance | contributors, maintainers |
 | `docs/policies/saml-facade-policy.md` | policy | SAML Facade Policy (RFC 7522) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/unsafe-code-policy.md` | policy | Unsafe Code Policy | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/verified-crypto-policy.md` | policy | Verified Crypto Policy | current implementation baseline | 2026-07-08 | Governance | contributors, maintainers |
@@ -134,23 +134,23 @@ Audience: contributors, maintainers
 | `docs/program-management/initiatives/jose/raw-json-optimal-architecture-plan.md` | initiative | Raw JSON to Greenfield-Optimal Architecture Plan | active plan | 2026-07-08 | Program Management | maintainers, planning contributors |
 | `docs/program-management/initiatives/jose/status.md` | summary | JOSE Initiative Status and Milestones | active plan | 2026-07-08 | Program Management | maintainers, planning contributors |
 | `docs/program-management/initiatives/oauth/README.md` | index | OAuth Coverage Initiative | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
-| `docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md` | initiative | OAuth Formal Verification Definition Catalog (F* + Tamarin) | active plan | 2026-01-23 | Program Management | maintainers, planning contributors |
+| `docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md` | initiative | OAuth Formal Verification Definition Catalog (F* + Tamarin) | active plan | 2026-09-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/initiatives/oauth/oauth-profile-system-plan.md` | initiative | OAuth Profile System Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/initiatives/quality/README.md` | index | Quality Initiative Overview | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/initiatives/quality/polyglot-quality-profile-rollout.md` | initiative | Polyglot Quality Profile Rollout | active plan | 2026-05-12 | Program Management | maintainers, planning contributors |
-| `docs/program-management/initiatives/sdk/README.md` | index | SDK Initiative Overview | active plan | 2026-07-07 | Program Management / Engineering | implementation contributors, maintainers |
+| `docs/program-management/initiatives/sdk/README.md` | index | SDK Initiative Overview | active plan | 2026-09-07 | Program Management / Engineering | implementation contributors, maintainers |
 | `docs/program-management/initiatives/sdk/client-sdk-architecture.md` | design | Aegaeon Client & Federation Architecture (Draft) | draft | 2026-07-08 | Engineering | implementation contributors, maintainers |
 | `docs/program-management/initiatives/sdk/sdk-ci-plan.md` | plan | Aegaeon SDK CI Companion Plan | active plan | 2026-03-15 | Engineering | implementation contributors, maintainers |
 | `docs/program-management/initiatives/sdk/sdk-implementation-guide.md` | guide | SDK Implementation Guide | active plan | 2026-03-11 | Engineering | implementation contributors, maintainers |
 | `docs/program-management/initiatives/sdk/sdk-repository-plan.md` | plan | Aegaeon SDK Repository Boundary Plan | active plan | 2026-03-15 | Engineering | implementation contributors, maintainers |
-| `docs/program-management/initiatives/sdk/sdk-source-language-plan.md` | workplan | SDK Source Language Plan | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
+| `docs/program-management/initiatives/sdk/sdk-source-language-plan.md` | workplan | SDK Source Language Plan | active plan | 2026-09-07 | Engineering | implementation contributors, maintainers |
 | `docs/program-management/roadmaps/README.md` | index | Roadmaps (Future And Active Plans) | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/README.md` | index | Active Roadmaps Overview | active plan | 2026-07-08 | Program Management | maintainers, implementation contributors |
 | `docs/program-management/roadmaps/active/compliance-matrix-action-plan.md` | roadmap | Compliance Matrix Hardening Notes | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/current-execution-plan.md` | roadmap | Current Execution Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md` | roadmap | Enterprise Readiness, Certification, and Verified UI Claim Plan | active plan | 2026-05-20 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/management-platform-follow-on-plan.md` | roadmap | Management Platform Follow-on Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
-| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-03-08 | Program Management | maintainers, planning contributors |
+| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-09-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/oidc-spec-coverage-roadmap.md` | roadmap | OIDC Spec Coverage Roadmap (OP + OIDC RP) | active plan | 2026-03-30 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/proofs-roadmap.md` | roadmap | Proofs Roadmap | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/verified-oidc-server-client-backlog.md` | roadmap | Verified OIDC Server / Client Implementation Backlog | active plan | 2026-03-16 | Program Management | maintainers, planning contributors |
@@ -202,7 +202,7 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/releases/README.md` | index | Releases Overview | current implementation baseline | 2026-07-07 | Release Engineering | release managers, maintainers |
+| `docs/releases/README.md` | index | Releases Overview | current implementation baseline | 2026-09-07 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/README.md` | index | Release Evidence | current implementation baseline | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/admin-ui-assurance-phase3-internal-evidence.md` | evidence | Admin UI Assurance Phase 3 Internal Evidence | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/beta-conformance.md` | evidence | Beta Conformance Summary | snapshot | 2026-07-07 | Release Engineering | release managers, maintainers |
@@ -212,8 +212,8 @@ Audience: contributors, maintainers
 | `docs/releases/evidence/managed-provider-evidence.md` | evidence | Managed Provider Evidence | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/phase4-claim-activation-preflight.md` | evidence | Phase 4 Claim Activation Preflight | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/publication-org-rollout.md` | evidence | Publication Organization Rollout Evidence | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
-| `docs/releases/evidence/release-security-evidence.md` | evidence | Release Security Evidence Archive | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
-| `docs/releases/evidence/server-client-formal-assurance-phase5-internal-evidence.md` | evidence | Server / Client Formal Assurance Phase 5 Internal Evidence | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
+| `docs/releases/evidence/release-security-evidence.md` | evidence | Release Security Evidence Archive | snapshot | 2026-09-07 | Release Engineering | release managers, maintainers |
+| `docs/releases/evidence/server-client-formal-assurance-phase5-internal-evidence.md` | evidence | Server / Client Formal Assurance Phase 5 Internal Evidence | snapshot | 2026-09-07 | Release Engineering | release managers, maintainers |
 | `docs/releases/runbooks/README.md` | index | Release Runbooks | current implementation baseline | 2026-07-07 | Release Engineering | release managers, maintainers |
 | `docs/releases/runbooks/beta-deployment.md` | runbook | Beta Deployment Validation | snapshot | 2026-07-07 | Release Engineering | release managers, maintainers |
 | `docs/releases/runbooks/phase1-evidence-acquisition.md` | runbook | Phase 1 Evidence Acquisition Runbook | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
@@ -234,29 +234,38 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/verification/README.md` | index | Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
-| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-07-24 | Verification | verification reviewers, maintainers |
+| `docs/verification/README.md` | index | Verification Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, contributors |
+| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/admin-ui-assurance-case.md` | claim | Admin UI Assurance Case | current implementation baseline | 2026-05-20 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumption-boundary-overview.md` | claim | Assumption Boundary Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumption-boundary-overview.md` | claim | Assumption Boundary Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/README.md` | index | F* Assumption Register Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/current-register.md` | claim | Current F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/current-register.md` | claim | Current F* Assumption Register | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/historical-reductions.md` | claim | F* Assumption Historical Reductions | historical record | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/mitigation-and-audit.md` | claim | F* Assumption Mitigation And Audit Checklist | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-08-05 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions.md` | claim | F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-07-24 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Confidence Summary | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/assurance-contract.md` | claim | Server Assurance Contract | current implementation baseline | 2026-09-07 | Verification / Security | implementers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-09-07 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/security-property-mapping.md` | claim | Formal Verification Security Property Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB And Out-of-Scope Boundaries | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/verification-scope.md` | claim | Formal Verification Scope And Proof Quality | current implementation baseline | 2026-07-27 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-09-07 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
+| `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB and Out-of-Scope Boundaries | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/verification-scope.md` | claim | Formal Verification Scope And Proof Quality | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-evaluation.md` | claim | Assurance Evaluation Rules | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | contract reviewers, evidence producers, release decision makers |
+| `docs/verification/claims/assurance-statement.md` | claim | Aegaeon Technical Assurance Statement Specification | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | users, adoption reviewers, implementers, verification and release owners |
 | `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-08-03 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | current implementation baseline | 2026-03-10 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | snapshot | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-08-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-08-05 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |
+| `docs/verification/claims/sdk-assurance/standards-baseline.md` | claim | SDK Standards and Output Baseline | current implementation baseline | 2026-09-07 | Verification / Protocol Engineering / SDK Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/verification-maturity-model.md` | claim | Verification Maturity Model | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/README.md` | index | Verification Maturity Status Details | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/current-level.md` | claim | Verification Maturity Current Level | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -294,7 +303,7 @@ Audience: contributors, maintainers
 | `docs/verification/runbooks/hacl-integration.md` | runbook | HACL* Integration Documentation | current implementation baseline | 2026-03-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
-| `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-07-24 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-09-07 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/README.md` | index | Verification Workplan Analysis | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/blockers.md` | verification | Verification blockers and upstream dependency analysis | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
@@ -335,7 +344,7 @@ Audience: contributors, maintainers
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
-| `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-03-15 | Operations | operators, maintainers |
+| `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |
 
 ## Security
@@ -344,7 +353,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/security/README.md` | index | Security Overview | current implementation baseline | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/key-inventory.md` | security | Key Inventory — Verified Core & SDK Artefacts | current implementation baseline | 2026-07-08 | Security | security reviewers, maintainers |
-| `docs/security/security-review/README.md` | index | Security Review Details | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
+| `docs/security/security-review/README.md` | index | Security Review Details | snapshot | 2026-09-07 | Security | security reviewers, maintainers |
 | `docs/security/security-review/risk-certification-and-appendices.md` | security | Security Review Risk, Certification, And Appendices | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review/runtime-hardening-and-testing.md` | security | Security Review Runtime Hardening And Testing | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review/threat-vulnerability-and-formal-review.md` | security | Security Review Threat, Vulnerability, And Formal Review | snapshot | 2026-07-08 | Security | security reviewers, maintainers |

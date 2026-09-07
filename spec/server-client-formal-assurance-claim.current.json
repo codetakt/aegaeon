@@ -4,9 +4,9 @@
   "claim_target": "server-client-formal-assurance",
   "claim_active": false,
   "claim_stage": "phase5-planned",
-  "current_public_wording": "verified OIDC/OAuth server; client/RP SDK claim inactive",
-  "future_allowed_wording": "assumption-qualified server plus released SDK with TCBs",
-  "minimum_qualified_wording": "Shorthand must disclose assumptions, client-core scope, and TCBs.",
+  "current_public_wording": "OAuth/OIDC server and SDK with verification assets and security-test tooling; qualified release assurance inactive",
+  "future_allowed_wording": "assumption-qualified formally verified and security-tested server and SDK for the profiles and artifacts identified in a qualified release assurance record",
+  "minimum_qualified_wording": "State activated profiles, artifacts, assumptions/bounds, TCBs, and the release assurance record under aegaeon-assurance-statement-v1; core evidence alone is insufficient.",
   "prohibited_wording": [
     "completely security-proven OIDC/OAuth implementation",
     "fully formally verified server and client without assumptions",
@@ -43,9 +43,9 @@
     },
     {
       "id": "released-client-rp-sdk",
-      "description": "Released client/RP SDK evidence remains gated.",
+      "description": "SDK implementation/output assurance requires C-01 through C-20 and reconciled release gates.",
       "assurance_level": "release-gated",
-      "evidence_uri": "spec/released-client-claim.current.json"
+      "evidence_uri": "docs/verification/claims/sdk-assurance/assurance-contract.md"
     }
   ],
   "excluded_tcb_boundaries": [
@@ -66,7 +66,7 @@
     },
     {
       "id": "runtime-adapter-signature-preverification",
-      "description": "Adapter-side signature preverification is a TCB.",
+      "description": "External signature primitives may be TCB; SDK-owned preverification glue requires C-06/C-14/C-16 proof.",
       "required_disclosure": true
     },
     {
@@ -76,7 +76,7 @@
     },
     {
       "id": "client-storage-and-callback-hosting",
-      "description": "Client storage and callback hosting are app/runtime TCB.",
+      "description": "External storage/hosting have explicit contracts; SDK coordination and callback validation remain proof obligations.",
       "required_disclosure": true
     },
     {
@@ -123,7 +123,7 @@
   "required_evidence": [
     {
       "id": "server-assurance-baseline",
-      "description": "Server assurance baseline supports the server claim.",
+      "description": "Server contract documentation is available; release-specific contract closure is a separate obligation.",
       "status": "complete",
       "required_for_activation": true,
       "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md",
@@ -131,7 +131,7 @@
     },
     {
       "id": "client-rp-assurance-case",
-      "description": "Client/RP assurance records core and adapter boundaries.",
+      "description": "Historical client-core evidence inventory is available; it does not establish SDK contract closure.",
       "status": "complete",
       "required_for_activation": true,
       "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md",
@@ -195,7 +195,7 @@
     },
     {
       "id": "phase5-internal-evidence-bundle",
-      "description": "Phase 5 internal bundle records gate and blockers.",
+      "description": "Generated preflight inventories the current gate and blockers; it does not establish review approval.",
       "status": "complete",
       "required_for_activation": false,
       "evidence_uri": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
@@ -203,7 +203,7 @@
     },
     {
       "id": "pre-public-blocker-closure",
-      "description": "Non-public blocker closure report is complete.",
+      "description": "Historical Phase 5 closure report is retained; it does not close the current assurance contracts.",
       "status": "complete",
       "required_for_activation": false,
       "evidence_uri": "docs/releases/evidence/phase5-pre-public-blockers.json",
@@ -216,6 +216,30 @@
       "required_for_activation": true,
       "evidence_uri": "docs/product-positioning.md",
       "owner": "aegaeon"
+    },
+    {
+      "id": "sdk-assurance-contract-closure",
+      "description": "Complete SDK requirements, own-code proof, distributed-output correspondence and security testing under C-01 through C-20.",
+      "status": "planned",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/sdk-assurance/contract-status.md",
+      "owner": "aegaeon-sdk"
+    },
+    {
+      "id": "server-assurance-contract-closure",
+      "description": "Complete server requirements, implementation/state proof, symbolic security, artifact binding and security testing under G-01 through G-18.",
+      "status": "planned",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/assurance-case/contract-status.md",
+      "owner": "aegaeon"
+    },
+    {
+      "id": "server-sdk-composition-closure",
+      "description": "A qualified combined release record under aegaeon-assurance-statement-v1 establishes compatible interfaces, counterpart assumptions and composition evidence.",
+      "status": "planned",
+      "required_for_activation": true,
+      "evidence_uri": "docs/verification/claims/assurance-statement.md",
+      "owner": "aegaeon / aegaeon-sdk"
     }
   ]
 }

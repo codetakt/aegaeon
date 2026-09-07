@@ -15,7 +15,8 @@ metadata:
   - 'RFC 7636: PKCE'
   - 'RFC 7662: Token Introspection'
   - 'RFC 7800: Proof-of-Possession Key Semantics for JWTs'
-  - 'RFC 8176: Ambiguity of Uppercase vs Lowercase in RFCs'
+  - 'RFC 8174: Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words'
+  - 'RFC 8176: Authentication Method Reference Values'
   - 'RFC 8252: OAuth 2.0 for Native Apps'
   - 'RFC 8414: Authorization Server Metadata'
   - 'RFC 8628: Device Authorization Grant'
@@ -25,7 +26,7 @@ metadata:
   - 'RFC 8725: JWT Best Current Practices'
   - 'RFC 9068: JWT Profile for Access Tokens'
   - 'RFC 9101: JWT-Secured Authorization Request (JAR)'
-  - 'RFC 9123: OAuth 2.0 for Browser-Based Apps'
+  - 'draft-ietf-oauth-browser-based-apps-27: OAuth 2.0 for Browser-Based Applications'
   - 'RFC 9126: Pushed Authorization Requests (PAR)'
   - 'RFC 9207: Authorization Server Issuer Identifier in Authorization Response'
   - 'RFC 9278: JWK Thumbprint URI'
@@ -36,10 +37,12 @@ metadata:
   - 'RFC 9701: Introspection Response in JWT format'
   - 'RFC 9728: OAuth 2.0 Protected Resource Metadata'
   - 'RFC 9901: SD-JWT'
-  - 'draft-ietf-oauth-v2-1: OAuth 2.1'
-  - OpenID Connect Core 1.0
-  - OpenID Connect Discovery 1.0
-  - OpenID Connect Dynamic Client Registration 1.0
+  - 'draft-ietf-oauth-v2-1-16: OAuth 2.1 (target baseline; evidence reconciliation pending)'
+  - OpenID Connect Core 1.0 incorporating errata set 2
+  - OpenID Connect Discovery 1.0 incorporating errata set 2
+  - OpenID Connect Dynamic Client Registration 1.0 incorporating errata set 2
+  assurance_contract: spec/server-assurance-contract.v1.json
+  evidence_note: Matrix statuses index existing evidence and do not attest conformance to the pinned assurance contract.
 rfc_6749:
 - id: 6749-001
   section: 1.3.1
@@ -2670,13 +2673,13 @@ rfc_7800:
 rfc_8176:
 - id: 8176-001
   requirement: TRACKING
-  description: Track RFC 8176 applicability in the OAuth/OIDC posture and document any required behaviours.
+  description: Reconcile emitted and consumed amr values with RFC 8176 Authentication Method Reference Values and actual authentication evidence.
   module: docs/policies/oauth-doc-only-rfcs.md
-  status: not_applicable
+  status: planned
   applies_to:
-  - doc_only
+  - op
   notes:
-  - "RFC 8176 clarifies BCP 14 requirement language; Aegaeon treats OAuth/OIDC RFCs using RFC 8176 semantics with no additional protocol surface."
+  - "Corrected the former BCP 14 misclassification. RFC 8174 defines uppercase keyword semantics; RFC 8176 defines amr values. No AMR assurance completion is asserted by this tracking row."
 
 rfc_8252:
 - id: 8252-001
@@ -3735,15 +3738,18 @@ rfc_9068:
   - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata includes access_token_signing_alg_values_supported: [EdDSA]."
   - "Opaque-vs-JWT switching verified in jwt_access_token_test.rs."
 
-rfc_9123:
-- id: 9123-001
+draft_oauth_browser_based_apps:
+- id: browser-apps-001
   requirement: TRACKING
-  description: Track RFC 9123 (OAuth 2.0 for Browser-Based Applications) posture and document recommended client patterns.
+  description: Track draft-ietf-oauth-browser-based-apps-27 posture and assign server-facing requirements separately from external client guidance.
   module: docs/policies/oauth-doc-only-rfcs.md
-  status: not_applicable
+  status: planned
   applies_to:
+  - as
   - client
   - doc_only
+  notes:
+  - "Replaces the incorrect RFC label rfc_9123 / 9123-001. Clause-level applicability and existing evidence must be reconciled with the pinned draft before claim activation."
 
 rfc_9207:
 - id: 9207-001
