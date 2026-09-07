@@ -105,15 +105,10 @@ Result: PASSED (12/12 tests)
 
 ## Security Contacts
 
-### Incident Response Team
-- **Primary**: <security@aegaeon.example>
-- **Escalation**: <ciso@aegaeon.example>
-- **On-call**: Available via PagerDuty
-
-### Vulnerability Disclosure
-- **Email**: <security@aegaeon.example>
-- **PGP Key**: [Published in security.txt]
-- **Bug Bounty**: [Planned for GA]
+Use the private reporting channels published in
+[SECURITY.md](../../../SECURITY.md#reporting-a-vulnerability).
+Deployment-specific escalation and on-call contacts must be documented by the
+operator. This snapshot does not establish a published PGP key or bug-bounty program.
 
 ## Approval Sign-offs
 
