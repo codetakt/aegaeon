@@ -12,27 +12,31 @@ This roadmap describes the work needed to **cross the crypto / FFI / RNG / WASM-
 so the system can credibly claim “formally verified” with a minimized TCB.
 It is intentionally high‑effort and multi‑phase.
 
-## Implementation Connection Maturity Ladder
+## Implementation Connection Milestones
 
 This ladder defines the implementation-connection claim for this roadmap. It
 does not widen the released claim by itself; released wording remains governed
 by `docs/verification/claims/assurance-case/claim-definition.md` and
 `docs/product-positioning.md`.
 
-| Level | Meaning | Attainment command |
+| Connection milestone | Meaning | Evidence command |
 |---|---|---|
-| Level 1 | Current baseline: specification proofs plus `runtime_link` file references, Kani bounded checks, and limited extracted C linkage. | `python3 scripts/validation/verify_verified_reqs.py --strict` |
-| Level 1.5 | Machine-auditable connection: `runtime_link` can be checked at `path#symbol` granularity, and `spec_oracle_test` is green in CI for the pilot surfaces. | `python3 scripts/validation/verify_verified_reqs.py --strict` and `cargo test -p aegaeon-server --test spec_oracle_test` |
-| Level 2 | Refinement traces exist for MUST-level `VerifiedReqs`, mapping F* specification functions to Rust implementation functions for the selected feature surface. | `python3 scripts/validation/verify_verified_reqs.py --strict --require-trace-must` |
-| Level 3 | Direct extracted-code linkage covers most claim-bearing decision kernels, with compatibility paths excluded from the claim boundary. | `nix build .#verify-fstar -L` and claim-bearing profile tests for the extracted runtime path |
-| Level 4 | Direct extracted-code linkage covers the full claim-bearing security kernel; remaining dependencies are explicit TCB elements. | `nix build .#verify-fstar -L && nix run .#security-suite` with the Level 4 claim gate active |
+| File linkage | Specification proofs plus `runtime_link` file references, Kani bounded checks, and limited extracted C linkage. | `python3 scripts/validation/verify_verified_reqs.py --strict` |
+| Symbol and oracle linkage | `runtime_link` can be checked at `path#symbol` granularity, and `spec_oracle_test` is green in CI for the pilot surfaces. | `python3 scripts/validation/verify_verified_reqs.py --strict` and `cargo test -p aegaeon-server --test spec_oracle_test` |
+| MUST trace coverage | Refinement traces map F* specification functions to Rust implementation functions for the selected MUST-level `VerifiedReqs`. | `python3 scripts/validation/verify_verified_reqs.py --strict --require-trace-must` |
+| Broad extracted linkage | Direct extracted-code linkage covers most claim-bearing decision kernels, with compatibility paths excluded. | `nix build .#verify-fstar -L` and tests for the extracted runtime path |
+| Full kernel linkage | Direct extracted-code linkage covers the full claim-bearing security kernel; remaining dependencies are explicit TCB elements. | Extraction and runtime correspondence evidence for the full kernel; linkage alone does not activate assurance |
 
-Level 1.5 was the original pre-release target for this roadmap. As of
-2026-07-29, **Level 2 is attained**: all 161 MUST-level `VerifiedReqs` carry a
+Symbol and oracle linkage was the original pre-release target for this roadmap.
+The historical 2026-07-29 snapshot reports **MUST trace coverage**: all 161
+MUST-level `VerifiedReqs` carried a
 validated refinement trace (`Refinement Trace: 161/161`, oracle=11,
 structural=2, guard=109, exempt=39) and the attainment command
-(`--require-trace-must`) is enforced in CI via `.#verified-reqs`. Levels 3-4
-(extracted-C linkage) remain future work.
+(`--require-trace-must`) is enforced in CI via `.#verified-reqs`. Broad and full
+extracted linkage remain future work. These milestones replace this workplan's
+former Level 1/1.5/2/3/4 terminology; they are not the levels of the separate
+verification maturity model. This editorial clarification does not rerun or
+promote the historical evidence, and trace coverage is not a refinement proof.
 
 ## 0. Scope and Success Criteria
 
@@ -252,7 +256,7 @@ Full refinement traces are still pending.
 - Migrate RS256 verification from the current `aws-lc-rs` intermediate backend
   to a verified HACL* `rsapss` path when the required integration and evidence
   are available.
-- Expand the Level 2 refinement-trace pilot from PKCE / DPoP to the full
+- Expand the MUST trace-coverage pilot from PKCE / DPoP to the full
   authorization-code and token surfaces.
 
 ---

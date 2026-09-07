@@ -1,6 +1,6 @@
 # SDK Source Language Plan
 
-Last updated: 2026-07-07
+Last updated: 2026-09-07
 
 Status: active plan
 
@@ -23,7 +23,10 @@ The goal is to converge on:
 
 ## Non-goals
 
-- This plan does **not** move the verified claim boundary above the existing WASM core.
+- This language migration alone does **not** prove behavior above the WASM core.
+  The [SDK assurance contract](../../../verification/claims/sdk-assurance/assurance-contract.md)
+  separately requires proofs for SDK-owned adapters/orchestration and correspondence
+  to actual emitted JavaScript/WASM before the qualified SDK claim is activated.
 - This plan does **not** require HTML, Nix, YAML, shell, or Docker definitions to move into TypeScript.
 - This plan does **not** by itself activate released client wording.
 

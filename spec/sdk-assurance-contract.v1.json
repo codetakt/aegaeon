@@ -1,0 +1,1241 @@
+{
+  "$schema": "https://aegaeon.dev/spec/sdk-assurance-contract.schema.json",
+  "schema_version": 1,
+  "contract_id": "aegaeon-sdk-assurance-v1",
+  "adoption_state": "specified-not-attested",
+  "contract_revision": "2026-09-07-r3",
+  "evaluation_document": "docs/verification/claims/assurance-evaluation.md",
+  "guarantee_ids_semantics": "minimum-cross-references",
+  "normative_document": "docs/verification/claims/sdk-assurance/assurance-contract.md",
+  "standards_document": "docs/verification/claims/sdk-assurance/standards-baseline.md",
+  "status_document": "docs/verification/claims/sdk-assurance/contract-status.md",
+  "source_retrieved_at": "2026-09-07",
+  "guarantee_ids": [
+    "C-01",
+    "C-02",
+    "C-03",
+    "C-04",
+    "C-05",
+    "C-06",
+    "C-07",
+    "C-08",
+    "C-09",
+    "C-10",
+    "C-11",
+    "C-12",
+    "C-13",
+    "C-14",
+    "C-15",
+    "C-16",
+    "C-17",
+    "C-18",
+    "C-19",
+    "C-20"
+  ],
+  "supporting_source_ids": [
+    "rfc2119",
+    "rfc8174",
+    "rfc3986",
+    "rfc4648",
+    "rfc8259",
+    "rfc8176"
+  ],
+  "sources": [
+    {
+      "id": "oauth-browser-apps-27",
+      "edition": "draft-ietf-oauth-browser-based-apps-27; 2026-07-06",
+      "uri": "https://www.ietf.org/archive/id/draft-ietf-oauth-browser-based-apps-27.txt",
+      "sha256": "ea575e8318acfff352f641b278b0d2e998d655a043e34891f7d01010cf6ea11a"
+    },
+    {
+      "id": "oauth-form-post",
+      "edition": "1.0; 2015-04-27",
+      "uri": "https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html",
+      "sha256": "5c776e43611a8fb03f673b121ebadab504f5372cb3c15dc020a9bd867a3a02dc"
+    },
+    {
+      "id": "oauth21-16",
+      "edition": "draft-ietf-oauth-v2-1-16; 2026-09-03",
+      "uri": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt",
+      "sha256": "c27a60f631fc0bc0e4809426ee9fc26f695ec586191215d775c12e4b8171fa12"
+    },
+    {
+      "id": "oidc-back-logout",
+      "edition": "1.0 incorporating errata set 1; 2023-12-15",
+      "uri": "https://openid.net/specs/openid-connect-backchannel-1_0-errata1.html",
+      "sha256": "3b5c933d5269047b39a65166d5c4d8ff6852b06451f54ed2531b8f97299fdc50"
+    },
+    {
+      "id": "oidc-core",
+      "edition": "1.0 incorporating errata set 2; 2023-12-15",
+      "uri": "https://openid.net/specs/openid-connect-core-1_0-errata2.html",
+      "sha256": "4d016752a645e8a3c259baa4173b5a90cb6c82898ce868fc8444adde262a5aed"
+    },
+    {
+      "id": "oidc-discovery",
+      "edition": "1.0 incorporating errata set 2; 2023-12-15",
+      "uri": "https://openid.net/specs/openid-connect-discovery-1_0-errata2.html",
+      "sha256": "0401a07b35de50e914e195aa2c3c64cc4f6542464381c885d24a2623fbf75ec2"
+    },
+    {
+      "id": "oidc-front-logout",
+      "edition": "1.0; 2022-09-12",
+      "uri": "https://openid.net/specs/openid-connect-frontchannel-1_0.html",
+      "sha256": "8b89f9f5a9386474b424a20dd24994763137d14d5f13915a9dd4e6cb71f9061b"
+    },
+    {
+      "id": "oidc-registration",
+      "edition": "1.0 incorporating errata set 2; 2023-12-15",
+      "uri": "https://openid.net/specs/openid-connect-registration-1_0-errata2.html",
+      "sha256": "c151a4abab7704f2efa9b00530dcfeeefb3de6acbdbdf5ba05c9903f1de2a318"
+    },
+    {
+      "id": "oidc-rp-logout",
+      "edition": "1.0; 2022-09-12",
+      "uri": "https://openid.net/specs/openid-connect-rpinitiated-1_0.html",
+      "sha256": "246432dafaa5556d896fa9b9ae4284b213ff6921b33478ed3b46bd6bd4aab804"
+    },
+    {
+      "id": "openid-federation",
+      "edition": "1.0; 2026-02-17",
+      "uri": "https://openid.net/specs/openid-federation-1_0.html",
+      "sha256": "4a71afdfbed5755d6704d6a089f450f10aa9914204b283eae5fadee2897d1911"
+    },
+    {
+      "id": "rfc2119",
+      "edition": "RFC 2119 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc2119.txt",
+      "sha256": "3c2ceb7bfc84cd34720f4a5271338ab9d8280d34bdd1eb250c64306202f2ed8b"
+    },
+    {
+      "id": "rfc3986",
+      "edition": "RFC 3986 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc3986.txt",
+      "sha256": "3102dae4b68cebe40337730312fcb612297b8928547267e8b3d1ee6002b2d683"
+    },
+    {
+      "id": "rfc4648",
+      "edition": "RFC 4648 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc4648.txt",
+      "sha256": "84e14418f795d503be5f34bf23ce4ebaa119e9ec7c9f667d8caeb111385b178f"
+    },
+    {
+      "id": "rfc6749",
+      "edition": "RFC 6749 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc6749.txt",
+      "sha256": "f204fc8661d6c92d2ec6e0b54808f961a9ad26e792f57f312d9528335519bd71"
+    },
+    {
+      "id": "rfc6750",
+      "edition": "RFC 6750 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc6750.txt",
+      "sha256": "9dc385cf4ecdd85024e5a95e447ede9230e11700bf35251906b25b37557d604b"
+    },
+    {
+      "id": "rfc6819",
+      "edition": "RFC 6819 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc6819.txt",
+      "sha256": "7130b62c2861e8f8a7a28aa1af9d12b6dd49e9f1353f51a84314026fbcf9dd08"
+    },
+    {
+      "id": "rfc7009",
+      "edition": "RFC 7009 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7009.txt",
+      "sha256": "b2f346d5a87ba9d7f09047901257a65f7ac0b26352095969c25821afab447829"
+    },
+    {
+      "id": "rfc7515",
+      "edition": "RFC 7515 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7515.txt",
+      "sha256": "ecbf84674118e62526511c1237e1deaa86aada86d25b247623a2a7e04ae62e40"
+    },
+    {
+      "id": "rfc7516",
+      "edition": "RFC 7516 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7516.txt",
+      "sha256": "722cfcddc15f58e746891ba4b846853d3711153a774e4dd55ad6db100474a21f"
+    },
+    {
+      "id": "rfc7517",
+      "edition": "RFC 7517 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7517.txt",
+      "sha256": "681c19b92a85068716b7e89c5815aa821bd3f11c755ff1c641b40ae9851bb33c"
+    },
+    {
+      "id": "rfc7518",
+      "edition": "RFC 7518 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7518.txt",
+      "sha256": "9a9ae524b09ea700ad3f189bac115df95ba69af84b26ffdbe3cdfb8d2152b1fc"
+    },
+    {
+      "id": "rfc7519",
+      "edition": "RFC 7519 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7519.txt",
+      "sha256": "fecd930e9ccf2276b95c0017c6c4ff5d09352e4bc3c7629946447894e0f97248"
+    },
+    {
+      "id": "rfc7521",
+      "edition": "RFC 7521 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7521.txt",
+      "sha256": "d5d97b3e691c9bbc495c277cc2cd79316b82486991468fc346a96ab59ba4b3c8"
+    },
+    {
+      "id": "rfc7523",
+      "edition": "RFC 7523 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7523.txt",
+      "sha256": "ae24f77a8fc4338903c805c6ace38def1f23d40194aea87b123b13c5b3d2d915"
+    },
+    {
+      "id": "rfc7591",
+      "edition": "RFC 7591 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7591.txt",
+      "sha256": "f9cd8b8eefdb2d1b1bd5734310f246926db0abb4ec1b2f933f358d58327964e3"
+    },
+    {
+      "id": "rfc7592",
+      "edition": "RFC 7592 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7592.txt",
+      "sha256": "6e59ce6f2f7cd98bfe849f643a55ddb45fc0278a43c49b2cf0d947ca604ccaee"
+    },
+    {
+      "id": "rfc7636",
+      "edition": "RFC 7636 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7636.txt",
+      "sha256": "1972e5d81cbaba7066cfd46374207bc2b4546b085ed5dd9b034e79e023e0ca31"
+    },
+    {
+      "id": "rfc7638",
+      "edition": "RFC 7638 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7638.txt",
+      "sha256": "98b29ab9652070e6a5fec748d43e221bbedc66b6b22e05903fb5366c04ef3110"
+    },
+    {
+      "id": "rfc7662",
+      "edition": "RFC 7662 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7662.txt",
+      "sha256": "2b7d688cb849f093e860557ac97e6cddac2556d69a4386561b22cdf97bf13657"
+    },
+    {
+      "id": "rfc7800",
+      "edition": "RFC 7800 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc7800.txt",
+      "sha256": "051514a781038027c2ac07c26ebe8533556012b2353cdaec8f3baeac53a7c919"
+    },
+    {
+      "id": "rfc8037",
+      "edition": "RFC 8037 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8037.txt",
+      "sha256": "f14347f9d8eead78ef6e7a1ea3d795d35d664033095a76a80fcd567904aaedaa"
+    },
+    {
+      "id": "rfc8174",
+      "edition": "RFC 8174 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8174.txt",
+      "sha256": "5ca0e2f90be0bc5928ee465f76518fee316dfa775aed885658a29a419cc293b7"
+    },
+    {
+      "id": "rfc8176",
+      "edition": "RFC 8176 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8176.txt",
+      "sha256": "1ce9b7b6b8af9871b6e03c03c59537c17e10f678546cd2742efbee8a5aa116da"
+    },
+    {
+      "id": "rfc8252",
+      "edition": "RFC 8252 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8252.txt",
+      "sha256": "4233c0650ec7e7918c20e0fde2dc565f85e2aa2d4c18123e3cd834295c2f68d0"
+    },
+    {
+      "id": "rfc8259",
+      "edition": "RFC 8259 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8259.txt",
+      "sha256": "61a5378f4255c720beb2a4b4a63b29540147c140f36988bf086291989b4cd2d7"
+    },
+    {
+      "id": "rfc8414",
+      "edition": "RFC 8414 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8414.txt",
+      "sha256": "16c816e4e0fdbffb7e910ff3017867bf39debe9cb7f52f5cbc508a052ed660e8"
+    },
+    {
+      "id": "rfc8628",
+      "edition": "RFC 8628 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8628.txt",
+      "sha256": "ebd3c37415aa665b55b412fccd9571943e8dbd3f2bf0b18fee4924264252decd"
+    },
+    {
+      "id": "rfc8693",
+      "edition": "RFC 8693 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8693.txt",
+      "sha256": "358d658014738bf4dc56c8aae2094ce716ede23b6d5a80488a7dc8e8d72da609"
+    },
+    {
+      "id": "rfc8705",
+      "edition": "RFC 8705 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8705.txt",
+      "sha256": "6e45a1ee94c6a6a177a4cb077fe67d74bd70c1218c9362f2db2f153239612414"
+    },
+    {
+      "id": "rfc8707",
+      "edition": "RFC 8707 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8707.txt",
+      "sha256": "3b89844a938b9219571931b664ed4a7b380555a4dda1df4e9445a2f72188e76b"
+    },
+    {
+      "id": "rfc8725",
+      "edition": "RFC 8725 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc8725.txt",
+      "sha256": "737b7013a2495dcfd5481cf4c57c87e2455d537c4cec1140c9096a71fcef0812"
+    },
+    {
+      "id": "rfc9068",
+      "edition": "RFC 9068 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9068.txt",
+      "sha256": "68d3ff3910c0f2340fd7b93b430e00053da845b6eebe095ebef0c8bfda5e14c5"
+    },
+    {
+      "id": "rfc9101",
+      "edition": "RFC 9101 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9101.txt",
+      "sha256": "a1400b5b8d27cfabb127325458a88415f83bb04b2ff9e6facbe50b8ef4ea2b60"
+    },
+    {
+      "id": "rfc9126",
+      "edition": "RFC 9126 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9126.txt",
+      "sha256": "a79d0e30fcc24a22b79c8e18aa82362f6e63a7b8a5d58b480e746360e97388db"
+    },
+    {
+      "id": "rfc9207",
+      "edition": "RFC 9207 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9207.txt",
+      "sha256": "c9c17b9824315aca9bda5c0b5e3627cb24aa28d54324292f3761006209b705fd"
+    },
+    {
+      "id": "rfc9396",
+      "edition": "RFC 9396 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9396.txt",
+      "sha256": "d6a8f032d8a585daae1c33a8c7b6e539d199f886ec8cc1c7898436f7f2eed29c"
+    },
+    {
+      "id": "rfc9449",
+      "edition": "RFC 9449 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9449.txt",
+      "sha256": "3842c58e1f6043389416023b9bb8d765048266024982fbbd90640e05943f4e13"
+    },
+    {
+      "id": "rfc9470",
+      "edition": "RFC 9470 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9470.txt",
+      "sha256": "02d742f49cc0a03fb09197563c436b6f38928a71b0d8e41cde9cfe0362363e56"
+    },
+    {
+      "id": "rfc9700",
+      "edition": "RFC 9700 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9700.txt",
+      "sha256": "9919d061d40a97886ca866b51c69389b6c81c65cd4b979056c14fdbebfcf622a"
+    },
+    {
+      "id": "rfc9701",
+      "edition": "RFC 9701 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9701.txt",
+      "sha256": "5969f0d8c514469285271949fa7b35eec52e1458ebc50778659610ede37cf923"
+    },
+    {
+      "id": "rfc9728",
+      "edition": "RFC 9728 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9728.txt",
+      "sha256": "b65bcd0d9daf90fd7006a42cf48e0ac3ba24b7f5637d5197f2de41c6b91c8a89"
+    },
+    {
+      "id": "rfc9901",
+      "edition": "RFC 9901 published text; no implicit errata overlay",
+      "uri": "https://www.rfc-editor.org/rfc/rfc9901.txt",
+      "sha256": "fd4cb79184162fa7ef95f4f63abab8ee6d03c9a04c19b8f83758946464b284eb"
+    }
+  ],
+  "project_sources": [
+    {
+      "id": "management-api-auth",
+      "path": "docs/specs/management-plane/api-auth.md",
+      "edition": "Project specification snapshot; 2026-09-07",
+      "sha256": "ca738f1d69f113ca7ea0dff8e546f871fbb3c3a3793a91954c976f5bfa04f7db"
+    },
+    {
+      "id": "management-endpoints",
+      "path": "docs/specs/management-plane/endpoint-reference.md",
+      "edition": "Project specification snapshot; 2026-09-07",
+      "sha256": "bb2b66008e3d91dab3f57006f3fb77c0e7eda62f4c016038fcff9284db760afd"
+    },
+    {
+      "id": "management-openapi",
+      "path": "generated/openapi/aegaeon-management-api.v1.json",
+      "edition": "Generated interface snapshot; 2026-09-07; reconciliation and independent semantics required",
+      "sha256": "06225a8ae7cdd753e768b05f43b21ec50e243af85d2964bdeaadf7691a6cd7b4"
+    }
+  ],
+  "specification_groups": [
+    {
+      "id": "oauth-client",
+      "source_ids": [
+        "rfc6749",
+        "rfc6750",
+        "rfc9700",
+        "oauth21-16"
+      ],
+      "role": "OAuth client and protected-resource caller",
+      "applicability": "base",
+      "trigger": "RP profiles; code exchange, token handling, required client protections.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-04",
+        "C-05",
+        "C-07",
+        "C-08",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "pkce",
+      "source_ids": [
+        "rfc7636"
+      ],
+      "role": "Authorization Code client",
+      "applicability": "base",
+      "trigger": "RP profiles; S256 generation and verifier/transaction binding.",
+      "guarantee_ids": [
+        "C-02",
+        "C-04",
+        "C-05",
+        "C-14"
+      ]
+    },
+    {
+      "id": "response-issuer",
+      "source_ids": [
+        "rfc9207"
+      ],
+      "role": "authorization-response consumer",
+      "applicability": "base",
+      "trigger": "RP callback issuer/mix-up protection.",
+      "guarantee_ids": [
+        "C-03",
+        "C-04",
+        "C-05"
+      ]
+    },
+    {
+      "id": "oidc-rp",
+      "source_ids": [
+        "oidc-core",
+        "oidc-discovery"
+      ],
+      "role": "OIDC RP and metadata/key consumer",
+      "applicability": "base",
+      "trigger": "RP profiles; Code Flow, discovery, ID Token admission; UserInfo when consumed.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-10",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "jose",
+      "source_ids": [
+        "rfc7515",
+        "rfc7517",
+        "rfc7518",
+        "rfc7519",
+        "rfc8725",
+        "rfc8037",
+        "rfc7638"
+      ],
+      "role": "JWS/JWT/JWK producer or verifier as exported",
+      "applicability": "base",
+      "trigger": "Admitted token operations; algorithm, token class, key purpose and direction enumerated.",
+      "guarantee_ids": [
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-09",
+        "C-14",
+        "C-15",
+        "C-16"
+      ]
+    },
+    {
+      "id": "jwe",
+      "source_ids": [
+        "rfc7516"
+      ],
+      "role": "JWE producer or consumer",
+      "applicability": "conditional",
+      "trigger": "JWE accepted, produced, configured or advertised.",
+      "guarantee_ids": [
+        "C-02",
+        "C-06",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-18"
+      ]
+    },
+    {
+      "id": "dpop",
+      "source_ids": [
+        "rfc9449",
+        "rfc7800"
+      ],
+      "role": "DPoP producer or verifier as exported",
+      "applicability": "conditional",
+      "trigger": "Callable DPoP APIs, negotiation, sender-constrained token use or advertised support.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-06",
+        "C-08",
+        "C-09",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "mtls",
+      "source_ids": [
+        "rfc8705"
+      ],
+      "role": "mTLS client and certificate-bound token user",
+      "applicability": "conditional",
+      "trigger": "Admitted mTLS transport or token use.",
+      "guarantee_ids": [
+        "C-08",
+        "C-09",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "token-lifecycle",
+      "source_ids": [
+        "rfc6749",
+        "rfc7009",
+        "rfc7662"
+      ],
+      "role": "refresh/revocation client; authorized introspection caller if exposed",
+      "applicability": "conditional",
+      "trigger": "Refresh credentials stored/used or lifecycle/introspection operations exported.",
+      "guarantee_ids": [
+        "C-01",
+        "C-05",
+        "C-07",
+        "C-08",
+        "C-11",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "metadata",
+      "source_ids": [
+        "rfc8414",
+        "rfc9728"
+      ],
+      "role": "AS/resource metadata consumer",
+      "applicability": "conditional",
+      "trigger": "Metadata consumed to choose endpoints or security policy.",
+      "guarantee_ids": [
+        "C-02",
+        "C-03",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "registration",
+      "source_ids": [
+        "rfc7591",
+        "rfc7592",
+        "oidc-registration"
+      ],
+      "role": "registering client and registration-management caller",
+      "applicability": "conditional",
+      "trigger": "Dynamic registration/update/delete or registration credential handling exposed.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "par-jar",
+      "source_ids": [
+        "rfc9126",
+        "rfc9101",
+        "oidc-core"
+      ],
+      "role": "PAR client; Request Object producer/consumer as exposed",
+      "applicability": "conditional",
+      "trigger": "Pushed or protected authorization request operations enabled/exported.",
+      "guarantee_ids": [
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "rp-initiated-logout",
+      "source_ids": [
+        "oidc-rp-logout"
+      ],
+      "role": "RP logout initiator",
+      "applicability": "base",
+      "trigger": "RP profile logout request construction and local session lifecycle.",
+      "guarantee_ids": [
+        "C-03",
+        "C-07",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "received-logout",
+      "source_ids": [
+        "oidc-front-logout",
+        "oidc-back-logout"
+      ],
+      "role": "RP logout receiver",
+      "applicability": "conditional",
+      "trigger": "Front-channel or back-channel logout receiver accepted/advertised.",
+      "guarantee_ids": [
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-07",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "form-post",
+      "source_ids": [
+        "oauth-form-post"
+      ],
+      "role": "authorization-response receiver/callback host",
+      "applicability": "conditional",
+      "trigger": "form_post response mode accepted by admitted profile.",
+      "guarantee_ids": [
+        "C-02",
+        "C-04",
+        "C-05",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "assertions",
+      "source_ids": [
+        "rfc7521",
+        "rfc7523"
+      ],
+      "role": "client-authentication/assertion producer or consumer",
+      "applicability": "conditional",
+      "trigger": "JWT client authentication or assertion grant helpers enabled/exported.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-05",
+        "C-06",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "device",
+      "source_ids": [
+        "rfc8628"
+      ],
+      "role": "device authorization client",
+      "applicability": "conditional",
+      "trigger": "Device grant exposed or advertised; explicit extension admission required.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-07",
+        "C-11",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "token-exchange",
+      "source_ids": [
+        "rfc8693"
+      ],
+      "role": "token-exchange client",
+      "applicability": "conditional",
+      "trigger": "Token exchange exposed or advertised; subject/actor semantics specified.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "resource-rar",
+      "source_ids": [
+        "rfc8707",
+        "rfc9396"
+      ],
+      "role": "authorization client",
+      "applicability": "conditional",
+      "trigger": "Resource indicators or rich authorization details generated/consumed.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-18"
+      ]
+    },
+    {
+      "id": "step-up",
+      "source_ids": [
+        "rfc9470",
+        "rfc8176"
+      ],
+      "role": "step-up challenge consumer and RP",
+      "applicability": "conditional",
+      "trigger": "Step-up negotiation or authentication method/strength assertions consumed.",
+      "guarantee_ids": [
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-07",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "additional-tokens",
+      "source_ids": [
+        "rfc9068",
+        "rfc9701",
+        "rfc9901"
+      ],
+      "role": "token/response verifier or SD-JWT holder/verifier as admitted",
+      "applicability": "conditional",
+      "trigger": "JWT access/introspection or SD-JWT structure interpreted; opaque token use alone does not trigger verifier role.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-07",
+        "C-09",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "federation",
+      "source_ids": [
+        "openid-federation"
+      ],
+      "role": "Federation RP/trust-chain consumer",
+      "applicability": "conditional",
+      "trigger": "Trust-chain, anchor or metadata-policy operations performed; generic OIDC login naming is insufficient.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-07",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-18"
+      ]
+    },
+    {
+      "id": "browser-context",
+      "source_ids": [
+        "oauth-browser-apps-27",
+        "rfc6819"
+      ],
+      "role": "browser OAuth client and explicit application/host boundary",
+      "applicability": "guidance",
+      "trigger": "Browser RP profile and browser-exposed package functions; role-specific duties retained.",
+      "guarantee_ids": [
+        "C-01",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-07",
+        "C-08",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "native-context",
+      "source_ids": [
+        "rfc8252"
+      ],
+      "role": "native-app client/context",
+      "applicability": "guidance",
+      "trigger": "Native embedding considered; native output profile remains deferred pending admission.",
+      "guarantee_ids": [
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-12",
+        "C-18"
+      ]
+    },
+    {
+      "id": "management-api",
+      "source_ids": [
+        "management-api-auth",
+        "management-endpoints",
+        "management-openapi"
+      ],
+      "role": "management API client",
+      "applicability": "project",
+      "trigger": "Management profile and its exported operations, including generic helpers.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-11",
+        "C-12",
+        "C-13",
+        "C-16",
+        "C-18"
+      ]
+    },
+    {
+      "id": "output-assurance",
+      "source_ids": [],
+      "role": "SDK implementation and package producer",
+      "applicability": "project",
+      "trigger": "Every admitted package, output, loader, declaration and dependency.",
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "id": "verified-core",
+      "npm_name": "@aegaeon/verified-core",
+      "role": "Core loader and verified component interface",
+      "reference_source_paths": [
+        "scripts/sdk/stage_reference_sdk_workspace.ts",
+        "scripts/extraction/package_verified_core.sh"
+      ],
+      "outputs": [
+        "JavaScript package/node/web exports",
+        "verified_core.wasm and ABI",
+        "TypeScript declarations",
+        "manifest and shipped support assets"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-06",
+        "C-09",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "runtime-node",
+      "npm_name": "@aegaeon/runtime-node",
+      "role": "Node adapter",
+      "reference_source_paths": [
+        "scripts/sdk/runtime_node_reference.ts"
+      ],
+      "outputs": [
+        "JavaScript index/reference exports",
+        "TypeScript declarations"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-09",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "runtime-web",
+      "npm_name": "@aegaeon/runtime-web",
+      "role": "Browser/WebCrypto adapter",
+      "reference_source_paths": [
+        "scripts/sdk/runtime_web_reference.ts"
+      ],
+      "outputs": [
+        "JavaScript index/reference/browser-smoke exports where shipped",
+        "TypeScript declarations"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-06",
+        "C-09",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "rp-core",
+      "npm_name": "@aegaeon/rp-core",
+      "role": "RP transaction/session orchestration",
+      "reference_source_paths": [
+        "scripts/sdk/rp_core_reference.ts"
+      ],
+      "outputs": [
+        "JavaScript package exports",
+        "TypeScript declarations"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-09",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "issuer-spa",
+      "npm_name": "@aegaeon/issuer-spa",
+      "role": "Browser login/session/logout orchestration",
+      "reference_source_paths": [
+        "scripts/sdk/issuer_spa_reference.ts"
+      ],
+      "outputs": [
+        "JavaScript package exports",
+        "TypeScript declarations"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-09",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "management-client",
+      "npm_name": "@aegaeon/management-client",
+      "role": "Management API transport and operation client",
+      "reference_source_paths": [
+        "scripts/sdk/management_client_reference.ts",
+        "scripts/sdk/management_client_reference.d.ts"
+      ],
+      "outputs": [
+        "JavaScript package exports",
+        "Public TypeScript declarations and operation metadata"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-11",
+        "C-12",
+        "C-13",
+        "C-14",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "sdk-rp-node-v1",
+      "package_ids": [
+        "verified-core",
+        "runtime-node",
+        "rp-core"
+      ],
+      "roles": [
+        "OAuth client",
+        "OIDC RP"
+      ],
+      "required_capabilities": [
+        "authorization-code",
+        "pkce-s256",
+        "transaction-state-nonce",
+        "discovery-jwks",
+        "rs256-id-token-validation",
+        "validated-session",
+        "rp-initiated-logout"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-09",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "sdk-rp-web-v1",
+      "package_ids": [
+        "verified-core",
+        "runtime-web",
+        "rp-core",
+        "issuer-spa"
+      ],
+      "roles": [
+        "public OAuth client",
+        "browser OIDC RP"
+      ],
+      "required_capabilities": [
+        "authorization-code",
+        "pkce-s256",
+        "transaction-state-nonce",
+        "discovery-jwks",
+        "rs256-id-token-validation",
+        "validated-session",
+        "rp-initiated-logout"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-04",
+        "C-05",
+        "C-06",
+        "C-07",
+        "C-08",
+        "C-09",
+        "C-10",
+        "C-11",
+        "C-12",
+        "C-14",
+        "C-15",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    },
+    {
+      "id": "sdk-management-v1",
+      "package_ids": [
+        "management-client"
+      ],
+      "roles": [
+        "management API client"
+      ],
+      "required_capabilities": [
+        "api-operation-correspondence",
+        "explicit-authority-context",
+        "session-csrf-origin",
+        "configuration-version-preconditions"
+      ],
+      "guarantee_ids": [
+        "C-01",
+        "C-02",
+        "C-11",
+        "C-12",
+        "C-13",
+        "C-14",
+        "C-16",
+        "C-17",
+        "C-18",
+        "C-19",
+        "C-20"
+      ]
+    }
+  ],
+  "crypto_selectors": [
+    {
+      "id": "verified-core",
+      "jwt_algorithms": [
+        "EdDSA"
+      ],
+      "dpop_algorithms": [
+        "EdDSA"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core"
+      },
+      "disposition": "component-only"
+    },
+    {
+      "id": "aegaeon-rs256",
+      "jwt_algorithms": [
+        "EdDSA",
+        "RS256"
+      ],
+      "dpop_algorithms": [
+        "EdDSA"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core",
+        "RS256": "adapter-preverified"
+      },
+      "disposition": "rp-target-not-attested"
+    },
+    {
+      "id": "compat-interop",
+      "jwt_algorithms": [
+        "EdDSA",
+        "RS256",
+        "ES256"
+      ],
+      "dpop_algorithms": [
+        "EdDSA",
+        "ES256"
+      ],
+      "signature_models": {
+        "EdDSA": "verified-core",
+        "RS256": "adapter-preverified",
+        "ES256": "adapter-preverified"
+      },
+      "disposition": "compat-not-attested"
+    }
+  ],
+  "deferred_output_targets": [
+    "rust",
+    "ruby",
+    "php",
+    "python",
+    "java",
+    "go",
+    "dotnet",
+    "native-app"
+  ],
+  "legacy_policy_documents": [
+    "spec/client-claim-boundary.current.json",
+    "spec/client-claim-promotion.current.json",
+    "spec/released-client-claim.current.json",
+    "spec/server-client-formal-assurance-claim.current.json"
+  ],
+  "reference_source_status": "unattested-development-reference",
+  "statement_document": "docs/verification/claims/assurance-statement.md",
+  "document_revisions": {
+    "normative_document": "2026-09-07-r3",
+    "standards_document": "2026-09-07-r4",
+    "status_document": "2026-09-07-r4",
+    "evaluation_document": "2026-09-07-r3",
+    "statement_document": "2026-09-07-r4"
+  }
+}

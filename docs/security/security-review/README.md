@@ -1,6 +1,6 @@
 # Security Review Details
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: snapshot
 
@@ -8,7 +8,12 @@ Owner: Security
 
 Audience: security reviewers, maintainers
 
-> **Status note (2026-07-08):** Snapshot security review; refresh evidence before using it for a new release decision.
+> **Status note (2026-09-07):** Historical review material includes assertions
+> requiring reconciliation with actual test/conformance reports. It is not
+> foundation-release evidence. Follow the
+> [server contract](../../verification/claims/assurance-case/assurance-contract.md)
+> and [activation backlog](../../verification/claims/assurance-case/contract-status.md)
+> before reusing any security, audit or certification statement.
 
 This directory contains the split security-review snapshot.
 

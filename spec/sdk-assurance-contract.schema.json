@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.dev/spec/sdk-assurance-contract.schema.json",
+  "title": "SDK assurance obligation register; not a release attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "contract_id",
+    "adoption_state",
+    "normative_document",
+    "standards_document",
+    "status_document",
+    "source_retrieved_at",
+    "guarantee_ids",
+    "supporting_source_ids",
+    "sources",
+    "project_sources",
+    "specification_groups",
+    "packages",
+    "profiles",
+    "crypto_selectors",
+    "deferred_output_targets",
+    "legacy_policy_documents",
+    "contract_revision",
+    "evaluation_document",
+    "guarantee_ids_semantics",
+    "reference_source_status",
+    "statement_document",
+    "document_revisions"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://aegaeon.dev/spec/sdk-assurance-contract.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "contract_id": {
+      "const": "aegaeon-sdk-assurance-v1"
+    },
+    "adoption_state": {
+      "const": "specified-not-attested"
+    },
+    "normative_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "standards_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_retrieved_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "guarantee_ids": {
+      "$ref": "#/$defs/guarantees"
+    },
+    "supporting_source_ids": {
+      "$ref": "#/$defs/ids"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "project_sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/projectSource"
+      }
+    },
+    "specification_groups": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/package"
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/profile"
+      }
+    },
+    "crypto_selectors": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/selector"
+      }
+    },
+    "deferred_output_targets": {
+      "$ref": "#/$defs/ids"
+    },
+    "legacy_policy_documents": {
+      "$ref": "#/$defs/strings"
+    },
+    "contract_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "evaluation_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "guarantee_ids_semantics": {
+      "const": "minimum-cross-references"
+    },
+    "reference_source_status": {
+      "const": "unattested-development-reference"
+    },
+    "statement_document": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "normative_document",
+        "standards_document",
+        "status_document",
+        "evaluation_document",
+        "statement_document"
+      ],
+      "properties": {
+        "normative_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "standards_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "status_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "evaluation_document": {
+          "$ref": "#/$defs/revision"
+        },
+        "statement_document": {
+          "$ref": "#/$defs/revision"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "strings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "guarantees": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^C-[0-9]{2}$"
+      }
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "edition",
+        "uri",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "edition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "projectSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "edition",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_ids",
+        "role",
+        "applicability",
+        "trigger",
+        "guarantee_ids"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 0,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "applicability": {
+          "enum": [
+            "base",
+            "conditional",
+            "guidance",
+            "project"
+          ]
+        },
+        "trigger": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guarantee_ids": {
+          "$ref": "#/$defs/guarantees"
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "npm_name",
+        "role",
+        "reference_source_paths",
+        "outputs",
+        "guarantee_ids"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "npm_name": {
+          "type": "string",
+          "pattern": "^@aegaeon/[a-z][a-z0-9-]*$"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_source_paths": {
+          "$ref": "#/$defs/strings"
+        },
+        "outputs": {
+          "$ref": "#/$defs/strings"
+        },
+        "guarantee_ids": {
+          "$ref": "#/$defs/guarantees"
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "package_ids",
+        "roles",
+        "required_capabilities",
+        "guarantee_ids"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "package_ids": {
+          "$ref": "#/$defs/ids"
+        },
+        "roles": {
+          "$ref": "#/$defs/strings"
+        },
+        "required_capabilities": {
+          "$ref": "#/$defs/ids"
+        },
+        "guarantee_ids": {
+          "$ref": "#/$defs/guarantees"
+        }
+      }
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "jwt_algorithms",
+        "dpop_algorithms",
+        "signature_models",
+        "disposition"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "jwt_algorithms": {
+          "$ref": "#/$defs/strings"
+        },
+        "dpop_algorithms": {
+          "$ref": "#/$defs/strings"
+        },
+        "signature_models": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "disposition": {
+          "enum": [
+            "component-only",
+            "rp-target-not-attested",
+            "compat-not-attested"
+          ]
+        }
+      }
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-r[1-9][0-9]*$"
+    }
+  }
+}

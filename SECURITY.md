@@ -60,42 +60,30 @@ The following are **not** security issues (please use regular issues):
 
 ## Security Posture
 
-Aegaeon employs multi-layer formal verification to minimize the attack surface
-(modulo the 12 documented proof assumptions and the runtime contracts — see the
-[Assumption Register](docs/verification/claims/assumptions/current-register.md)
-and the
-[Runtime Contract Register](docs/verification/claims/assumptions/runtime-contract-register.md)):
-the official verification claim and boundary conditions are defined in
-[`docs/verification/claims/assurance-case.md`](docs/verification/claims/assurance-case.md).
+Aegaeon maintains formal-verification assets and security-test tooling. Its
+[server assurance contract](docs/verification/claims/assurance-case/assurance-contract.md)
+fixes requirements for an assumption-qualified formally verified and security-tested
+foundation. The [foundation claim is inactive](docs/verification/claims/assurance-case/contract-status.md)
+until the obligations are closed for an identified release artifact/configuration.
 
-The claim covers **VerifiedReqs** — the subset of compliance matrix entries with `status: verified`
-and a formal proof reference (F\*/Low\*/HACL\*, Tamarin, Kani, or EverParse) — and applies
-only to artifacts built with the pinned Nix toolchain; misconfiguration and out-of-scope
-requirements are explicitly excluded.
-See [Assurance Case §0.2](docs/verification/claims/assurance-case/claim-definition.md#02-claim-scope) for the full definition.
+The separate SDK contract also remains pending. The
+[public assurance statement specification](docs/verification/claims/assurance-statement.md)
+defines the four distinct claims (specification, implementation/state, symbolic
+security, and security testing), required release disclosures, and correction or
+withdrawal rules. Finalized wording does not activate either release guarantee.
 
-**Formal boundary note:** In realistic von Neumann systems with I/O, the
-following cannot be proven inside the project’s formal system and are treated
-as explicit assumptions outside the formal claim:
+Matrix `verified` rows are component/model evidence, not a release attestation.
+The contract requires implementation correspondence, adversarial model adequacy,
+durable state semantics, and release-specific test results. External cryptography,
+entropy, toolchain, OS/network/storage contracts must be disclosed; own-code
+validation, configuration and orchestration remain verification obligations.
 
-1. computational hardness (EUF‑CMA, collision resistance) stated as theorem
-   premises
-2. OS/device entropy sources modeled as external contracts (for example,
-   min‑entropy)
-3. external host/storage behaviour modeled as explicit interface contracts or
-   TCB boundaries
-
-- **F\*** -- 155 specification modules with 0 `admit()` calls and 12
-  `assume val` declarations across 8 files (6 crypto hardness, 2 HACL\*
-  linkage, 1 EverParse linkage, 2 OIDC hash runtime linkage, 1 WASM host --
-  see [Assumption Register](docs/verification/claims/assumptions/current-register.md))
-- **Tamarin Prover** -- 54 protocol models with 248 verified lemmas (symbolic Dolev-Yao model)
-- **Kani** -- 139 bounded model-checking harnesses for Rust code
-- **Supply chain** -- `cargo deny`, `cargo audit`, `cargo vet`, SBOM generation,
-  and Trivy container scanning in CI
-
-All dependencies are policy-gated, and CI enforces `clippy -D warnings` plus
-the full verification suite on every pull request.
+Existing F*/Low*/HACL*, EverParse, Tamarin and Kani assets have distinct evidence
+meanings and bounds. See [evidence interpretation](docs/verification/claims/assurance-case/claim-definition.md)
+and the [assumption inventory](docs/verification/claims/assumptions/current-register.md).
+Dependency review, audit, fuzzing, sanitizers and SBOM tooling provide empirical
+evidence when actually run for the identified target; their presence alone does
+not mean a release passed security review or is free of vulnerabilities.
 
 ## Security-Related Configuration
 

@@ -1,39 +1,32 @@
-# Formal Verification Evidence Confidence Summary
+# Formal Verification Evidence Assessment
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
-Owner: Verification
+Owner: Verification / Security
 
 Audience: verification reviewers, maintainers
 
-This document is part of the split formal verification assurance case.
+## 5. Assessment Rule
 
-## 5. Verification Confidence Summary
+The [server assurance contract](assurance-contract.md) requires evidence by
+obligation and release. The [foundation claim is inactive](contract-status.md).
+This document replaces the previous blanket confidence labels and stale counts;
+no new proof or security execution is attested by that documentation change.
 
-| Layer | Tool | Confidence | Key caveat |
-|---|---|---|---|
-| Protocol design | Tamarin (248 lemmas) | **High** | Symbolic model — real crypto may have implementation flaws |
-| Specification logic | F\* (155 unique modules, 0 admit) | **High** | 12 assume vals: 6 crypto + 2 HACL\* linkage + 1 EverParse linkage + 2 OIDC hash runtime linkage + 1 WASM host (see [Assumption Register](../assumptions/current-register.md)) |
-| Rust memory safety | Kani (139 harnesses) | **Medium** | Bounded inputs only; HashMap paths excluded due to CBMC limits |
-| Binary parsing | EverParse (7/7 verified) | **High** | Defense-in-depth layer only; Dpop verified as DpopSchema (renamed copy) |
-| Promoted OIDC `RS256 Required Slice` and `RS256 Interop Slice` | F* + EverParse + Tamarin + Kani + runtime tests | **Included by exception** | Narrow OIDC ID Token, signed Request Object / `request_uri`, JWT bearer, and `private_key_jwt` `RS256` surfaces only; not a general RSA reclassification |
-| Runtime compat crypto | aws-lc-rs / ring / pure-Rust compat crypto | **External** | Remaining compat crypto surfaces stay outside the current strong-constraint claim |
-| Infrastructure | axum, PostgreSQL, OS | **Assumed** | Industry-standard, no formal verification |
-| Assumption boundary | 12 assume vals (see [Register](../assumptions/current-register.md)) | **Documented** | 6 crypto (A), 2 HACL\* linkage (B'), 1 EverParse linkage (B''), 2 OIDC hash runtime linkage (B'''), 1 WASM host (C). Categories B (FFI) and E (encoding) fully eliminated. |
+| Evidence layer | Assessment required before activation |
+| --- | --- |
+| F* specifications | Named nontrivial properties, valid premises, source/version and successful selected runs |
+| Symbolic protocol models | Relevant attacker actions, reachability, defense mutations, composition and completed lemmas |
+| Extracted code and FFI | Correspondence to the actual linked path, ownership/encoding/bounds and adapter correctness |
+| Kani | Production code versus substituted model, checked input/unwinding bounds and selected successful harnesses |
+| Storage and runtime orchestration | Legal concurrent transitions, partial-failure semantics, durability, time and recovery |
+| Crypto/other external dependencies | Exact provider and interface assumptions, tested integration and dependent guarantees |
+| Security tests | Identified artifact/configuration, threat coverage, executed results and reviewed findings/skips |
+| Distribution | Build/proof/test correspondence, evidence integrity and an approved release-specific decision |
 
-**Bottom line:** Aegaeon's verification establishes high confidence that the
-OAuth/OIDC *protocol logic* and *specification-level algorithms* are correct and
-secure. The verification does NOT cover broad runtime cryptographic
-implementations, network handling, database operations, or third-party
-dependencies. The explicit exceptions are the OIDC `RS256 Required Slice` and
-server-side `RS256 Interop Slice`, which are promoted into the claim as narrow
-boundary-closure items rather than as a general RSA reclassification. The 12
-`assume val` declarations form the
-explicit, auditable trust boundary between verified specifications and
-unverified runtime components: 6 are honest cryptographic hardness assumptions
-on HACL\* specs, 2 are HACL\* linkage assumptions, 1 is an EverParse linkage
-assumption, 2 are OIDC hash runtime linkage assumptions, and 1 is a WASM host
-import contract. See [Assumption Register](../assumptions/current-register.md) for the complete
-list.
+The [claim index](../claim-index.md) and runbooks locate existing assets. Their
+counts measure an inventory; they do not establish model adequacy, standards
+completeness or implementation refinement. Confidence in a release must follow
+from the contract's closed obligations and evidence, not a total lemma/module count.

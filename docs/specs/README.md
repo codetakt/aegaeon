@@ -1,6 +1,6 @@
 # Specifications Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
@@ -26,6 +26,15 @@ implementation-facing designs, use `../design/README.md`. For SDK/client
 handoff planning, use `../program-management/initiatives/sdk/README.md`.
 
 ## Canonical Documents
+
+- `[spec]` [Public assurance statement](../verification/claims/assurance-statement.md)
+  fixes public wording and required release disclosures.
+- `[spec]` [Server assurance contract](../verification/claims/assurance-case/assurance-contract.md)
+  and [standards baseline](../verification/claims/assurance-case/standards-baseline.md)
+  define the obligations and specification editions for the target foundation claim.
+- `[spec]` [SDK assurance contract](../verification/claims/sdk-assurance/assurance-contract.md)
+  and [standards/output baseline](../verification/claims/sdk-assurance/standards-baseline.md)
+  define client/RP, management-client, and distributed-output obligations.
 
 - `[index]` [Management plane](management-plane/README.md) - Phase 1 product,
   API, configuration, database, operations, and endpoint details.

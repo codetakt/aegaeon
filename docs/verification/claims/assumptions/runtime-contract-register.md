@@ -1,12 +1,19 @@
 # Runtime Contract Register
 
-Last updated: 2026-08-05
+Last updated: 2026-09-07
 
 Status: current implementation baseline
 
 Owner: Verification
 
 Audience: verification reviewers, maintainers
+
+The [server assurance contract](../assurance-case/assurance-contract.md)
+requires these existing runtime premises to be reconciled with the actual
+artifact/configuration. RC-3 and RC-7 include unverified primitive implementation
+correctness, not only hardness. Own-code seed use, adapter behavior, replay
+orchestration, retention and supported recovery remain obligations; listing them
+here does not permanently exclude them from implementation verification.
 
 This register enumerates the runtime and TCB contracts that the formal claim
 **presupposes in addition to** the 12 F\*-logic axioms in
