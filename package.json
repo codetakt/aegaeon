@@ -2,6 +2,7 @@
   "name": "aegaeon",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "packageManager": "npm@10.9.7",
   "description": "Aegaeon identity provider (Rust backend). TypeScript SDK lives in the separate aegaeon-sdk repository.",
   "scripts": {

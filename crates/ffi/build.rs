@@ -159,7 +159,6 @@ fn generate_cbindgen_header(manifest_dir: &Path) -> BuildResult {
         .map_err(|error| other_error(format!("Unable to generate FFI header: {error}")))?;
     bindings.write_to_file(&output);
 
-    println!("cargo:warning=Generated {}", output.display());
     Ok(())
 }
 
