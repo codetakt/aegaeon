@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: ${{ matrix.timeout }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -151,7 +151,7 @@ jobs:
 
       - name: Upload security metrics
         if: always() && matrix.stage != 'sbom'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
           path: |
@@ -161,7 +161,7 @@ jobs:
 
       - name: Upload SBOM metrics
         if: always() && matrix.stage == 'sbom'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
           path: |
