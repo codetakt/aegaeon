@@ -793,6 +793,13 @@
               touch "$out/success"
             '';
 
+        assuranceStandards = import ./nix/assurance-sources.nix { inherit pkgs; };
+        verifiedReqs =
+          (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [ ]).overrideAttrs
+            (_: {
+              AEGAEON_ASSURANCE_SOURCE_DIR = assuranceStandards;
+            });
+
         verifyFstar =
           pkgs.runCommand "verify-fstar"
             {
@@ -948,6 +955,8 @@
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             mkLightVerification
+            assuranceStandards
+            verifiedReqs
             lib
             isLinux
             craneLib
@@ -984,6 +993,7 @@
             pre-commit-check
             mkVerification
             mkLightVerification
+            verifiedReqs
             verifyFstar
             verifyTamarin
             verifyKani

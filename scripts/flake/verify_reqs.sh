@@ -5,6 +5,10 @@
 # drift detection (warning mode).
 set -euo pipefail
 
+# The Nix derivation supplies the pinned archive. An unset path must never turn
+# a CI invocation into the validators' metadata-only mode.
+: "${AEGAEON_ASSURANCE_SOURCE_DIR:?pinned assurance standards archive is required}"
+
 LOG="${OUT_DIR:+${OUT_DIR}/verify.log}"
 
 {
@@ -13,6 +17,13 @@ LOG="${OUT_DIR:+${OUT_DIR}/verify.log}"
 
 	echo "--- Schema validation ---"
 	python3 scripts/validation/validate_compliance_matrix.py --check
+
+	python3 scripts/validation/test_server_assurance_contract.py
+	python3 scripts/validation/validate_server_assurance_contract.py \
+		--source-dir "$AEGAEON_ASSURANCE_SOURCE_DIR"
+	python3 scripts/validation/test_sdk_assurance_contract.py
+	python3 scripts/validation/validate_sdk_assurance_contract.py \
+		--source-dir "$AEGAEON_ASSURANCE_SOURCE_DIR"
 
 	echo ""
 	echo "--- Future claim-gate validation ---"
