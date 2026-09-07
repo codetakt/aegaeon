@@ -1,12 +1,12 @@
 {
   "$schema": "https://aegaeon.dev/spec/server-client-formal-assurance-evidence-bundle.schema.json",
   "schema_version": 1,
-  "bundle_id": "phase5-server-client-formal-assurance-internal-2026-05-20",
-  "generated_at": "2026-07-30T00:00:00Z",
+  "bundle_id": "server-client-assurance-preflight-2026-09-07",
+  "generated_at": "2026-09-07T08:39:47Z",
   "claim_target": "server-client-formal-assurance",
   "claim_gate_path": "spec/server-client-formal-assurance-claim.current.json",
-  "claim_gate_sha256": "59d1592072ba29ddf79abb9f72c498311dfeee2550585a4e061e44f2e1f2e5c9",
-  "release_stage": "internal-complete",
+  "claim_gate_sha256": "1480b4bbb43f850f1dc918beed17e418ca5b84880c6ac0616530dd44f742aa28",
+  "release_stage": "internal-preflight",
   "public_claim_ready": false,
   "dependent_gate_snapshots": [
     {
@@ -117,7 +117,7 @@
       "path": "docs/releases/evidence/server-client-formal-assurance-phase5-internal-bundle.json",
       "fresh": true,
       "sha256": null,
-      "notes": "Self-reference to this Phase 5 internal completion bundle."
+      "notes": "Self-reference to this generated preflight inventory; no review approval."
     },
     {
       "id": "pre-public-blocker-closure",
@@ -140,42 +140,42 @@
     {
       "id": "claim-wording-review",
       "scope": "claim-wording",
-      "reviewer": "aegaeon-engineering",
-      "status": "approved",
-      "evidence_uri": "docs/product-positioning.md"
+      "reviewer": "unassigned",
+      "status": "pending",
+      "evidence_uri": null
     },
     {
       "id": "formal-boundary-review",
       "scope": "formal-boundary",
-      "reviewer": "aegaeon-engineering",
-      "status": "approved",
-      "evidence_uri": "spec/server-client-formal-assurance-claim.current.json"
+      "reviewer": "unassigned",
+      "status": "pending",
+      "evidence_uri": null
     },
     {
       "id": "server-implementation-review",
       "scope": "server-implementation",
-      "reviewer": "aegaeon-engineering",
-      "status": "approved",
-      "evidence_uri": "docs/verification/claims/assurance-case/claim-definition.md"
+      "reviewer": "unassigned",
+      "status": "pending",
+      "evidence_uri": null
     },
     {
-      "id": "sdk-adapter-boundary-review",
+      "id": "sdk-adapter-review",
       "scope": "sdk-adapter",
-      "reviewer": "aegaeon-engineering",
-      "status": "approved",
-      "evidence_uri": "docs/verification/claims/client-rp-assurance-case.md"
+      "reviewer": "unassigned",
+      "status": "pending",
+      "evidence_uri": null
     },
     {
       "id": "release-custody-review",
       "scope": "release-custody",
-      "reviewer": "aegaeon-release",
+      "reviewer": "unassigned",
       "status": "pending",
-      "evidence_uri": "docs/releases/evidence/publication-org-rollout.md"
+      "evidence_uri": null
     },
     {
       "id": "external-security-review",
       "scope": "external-security",
-      "reviewer": "external-reviewer",
+      "reviewer": "unassigned",
       "status": "pending",
       "evidence_uri": null
     }
@@ -186,6 +186,12 @@
     "release-security-archive: Archive fresh release-candidate security evidence.",
     "release-custody-review: Approve release custody using publication-org evidence.",
     "external-security-review: Complete independent security review.",
-    "public-wording-release: Publish final wording change only after gates are active."
+    "public-wording-release: Publish final wording change only after gates are active.",
+    "released-client-claim-gate: Released client claim gate is not active yet.",
+    "hosted-real-provider-evidence: Hosted real-provider evidence must be fresh.",
+    "publication-custody: Publication custody and provenance must be complete.",
+    "release-security-evidence: Release security archive must bind required outputs.",
+    "multi-review-signoff: Internal and external reviews must approve the wording.",
+    "Current inputs require review; generation does not issue approvals."
   ]
 }

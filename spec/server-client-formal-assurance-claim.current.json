@@ -3,7 +3,7 @@
   "schema_version": 1,
   "claim_target": "server-client-formal-assurance",
   "claim_active": false,
-  "claim_stage": "phase5-internal-complete",
+  "claim_stage": "phase5-planned",
   "current_public_wording": "verified OIDC/OAuth server; client/RP SDK claim inactive",
   "future_allowed_wording": "assumption-qualified server plus released SDK with TCBs",
   "minimum_qualified_wording": "Shorthand must disclose assumptions, client-core scope, and TCBs.",
