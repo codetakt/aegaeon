@@ -71,3 +71,41 @@ nix develop .#integrity --command python3 -m unittest discover \
 The tests exercise command failures, stale success removal, missing and malformed
 reports, package identity, incomplete source metrics, single-scan execution, and
 Cargo configuration preservation through the suite and direct runner.
+
+## Cacheable Cargo lint checks
+
+The Core workflow uses Nix build outputs for supplemental Clippy and the server
+inventory gate. `nix/cargo-lint-checks.nix` defines the derivations shared by the
+package entry points and `nix flake check`:
+
+| Package | Flake check | Profile |
+| --- | --- | --- |
+| `lint-supplemental-clippy` | `supplemental-clippy` | dev |
+| `lint-server-clippy-inventory-dev` | `server-clippy-inventory-dev` | dev |
+| `lint-server-clippy-inventory` | `server-clippy-inventory` | release |
+
+The dev checks retain the profiles and target selection of the previous direct
+Cargo commands. The existing release-profile inventory check is also retained.
+Both inventory derivations invoke the complete shell gate, including the exact
+`unwrap_or_default` call-site inventory comparison. A Clippy pass alone does not
+satisfy that gate.
+
+The dev checks share `cargo-lint-artifacts`, which builds dependency metadata in
+the same dev profile. Release checks continue using the existing release
+artifacts. Source, Cargo.lock, lint scripts, inventory policy, native libraries,
+and the pinned toolchain remain derivation inputs. Test and verification source
+fixtures are retained. No cache key based only on branch or commit names is used.
+
+```bash
+nix build .#lint-supplemental-clippy .#lint-server-clippy-inventory-dev \
+  .#lint-server-clippy-inventory --no-link -L
+```
+
+Because the package and check aliases resolve to identical derivations, invoking
+the named workflow steps after `nix flake check` reuses the realized outputs.
+FlakeHub can also reuse these outputs on another runner when all inputs match.
+An uncached run must also build the dev dependency metadata. Measure initial
+builds and cache reuse separately; a local cached repeat does not establish a
+hosted CI speedup.
+This does not cache network-dependent advisory freshness or replace a security
+evaluation of a release.

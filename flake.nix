@@ -958,6 +958,18 @@
           '';
         };
 
+        cargoLintChecks = import ./nix/cargo-lint-checks.nix {
+          inherit
+            pkgs
+            craneLib
+            src
+            cargoArtifacts
+            stdenv
+            karamel
+            evercryptDist
+            ;
+        };
+
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             mkLightVerification
@@ -968,6 +980,7 @@
             craneLib
             src
             cargoArtifacts
+            cargoLintChecks
             stdenv
             verifiedCoreWasm
             verifyFstar
@@ -996,6 +1009,7 @@
             craneLib
             src
             cargoArtifacts
+            cargoLintChecks
             pre-commit-check
             mkVerification
             mkLightVerification

@@ -4,6 +4,7 @@
   craneLib,
   src,
   cargoArtifacts,
+  cargoLintChecks,
   stdenv,
   pre-commit-check,
   mkVerification,
@@ -81,18 +82,9 @@ in
     doInstallCargoArtifacts = false;
   };
 
-  server-clippy-inventory = craneLib.cargoClippy {
-    inherit src cargoArtifacts;
-    stdenv = _: stdenv;
-    pname = "aegaeon-server-clippy-inventory";
-    version = "0.0.0";
-    cargoToml = ../../Cargo.toml;
-    cargoExtraArgs = "-p aegaeon-server --lib --bin aegaeon-server --no-deps";
-    cargoClippyExtraArgs =
-      "-- -D clippy::map_unwrap_or -D clippy::ref_option "
-      + "-D clippy::needless_pass_by_value -D clippy::too_many_lines "
-      + "-D clippy::too_many_arguments";
-  };
+  server-clippy-inventory = cargoLintChecks.serverInventory;
+  server-clippy-inventory-dev = cargoLintChecks.serverInventoryDev;
+  supplemental-clippy = cargoLintChecks.supplemental;
 
   clippy = craneLib.cargoClippy {
     inherit src cargoArtifacts;

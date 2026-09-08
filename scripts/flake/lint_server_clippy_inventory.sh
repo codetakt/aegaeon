@@ -10,6 +10,7 @@ cd "$repo_root"
 
 cargo clippy \
 	--locked \
+	--profile "${CARGO_PROFILE:-dev}" \
 	-p aegaeon-server \
 	--lib \
 	--bin aegaeon-server \
@@ -21,4 +22,4 @@ cargo clippy \
 	-D clippy::too_many_lines \
 	-D clippy::too_many_arguments
 
-"$script_dir/lint_server_unwrap_or_default_inventory.sh"
+bash "$script_dir/lint_server_unwrap_or_default_inventory.sh"
