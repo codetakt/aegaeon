@@ -2,6 +2,15 @@
 
 Last updated: 2026-03-10
 
+> **Status note (2026-09-08):** The counts and exclusion notes below are a
+> historical snapshot. The current required selection is `ci/tamarin_proofs.sh`,
+> and results are admitted per requested lemma by
+> `scripts/validation/admit_tamarin_lemmas.py` (see
+> `docs/verification/runbooks/tamarin-evidence-admission.md`). Six selected
+> theories carry registered wellformedness exceptions recorded in
+> `spec/tamarin-evidence.json`; `no_token_after_revocation` in
+> `authcode/refresh_token_rotation.spthy` now quantifies `new_rt` and `count`.
+
 ## Summary
 
 - **54 total `.spthy` files** in `proofs/tamarin/`

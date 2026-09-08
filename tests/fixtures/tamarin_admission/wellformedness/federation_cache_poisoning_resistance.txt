@@ -1,0 +1,369 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Federation_Cache_Poisoning_Resistance] Theory loaded
+[Theory Federation_Cache_Poisoning_Resistance] Theory translated
+[Theory Federation_Cache_Poisoning_Resistance] Derivation checks started
+[Theory Federation_Cache_Poisoning_Resistance] Derivation checks ended
+[Theory Federation_Cache_Poisoning_Resistance] Theory closed
+theory Federation_Cache_Poisoning_Resistance
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction Inequality:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  */
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Entity_Keygen:
+   [ Fr( ~sk ) ]
+  --[ Entity_Key( $Entity, pk(~sk) ), Honest_Key( $Entity, pk(~sk) ) ]->
+   [
+   !Entity_SK( $Entity, ~sk ), !Entity_PK( $Entity, pk(~sk) ),
+   Out( pk(~sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Entity_Compromise:
+   [ !Entity_SK( A, sk ) ] --[ Compromised( A ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Trust_Anchor_Init:
+   [ !Entity_SK( $TA, ta_sk ) ]
+  --[ TA_Established( $TA, pk(ta_sk) ), Unique( <'ta', $TA> ) ]->
+   [
+   !TrustAnchor( $TA, pk(ta_sk) ),
+   Out( sign(<'entity_config', $TA, pk(ta_sk), 'trust_anchor'>, ta_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TA_Issue_Subordinate:
+   [ !Entity_SK( $TA, ta_sk ), !Entity_PK( $Entity, entity_pk ) ]
+  --[ Subordinate_Issued( $TA, $Entity, entity_pk ) ]->
+   [
+   !SubStmt( $TA, $Entity,
+             sign(<'subordinate_statement', $TA, $Entity, entity_pk>, ta_sk),
+             entity_pk
+   ),
+   Out( sign(<'subordinate_statement', $TA, $Entity, entity_pk>, ta_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Entity_Publish_Config:
+   [ !Entity_SK( $Entity, entity_sk ) ]
+  --[
+  Config_Published( $Entity, pk(entity_sk), $issuer ),
+  Unique( <'config', $Entity> )
+  ]->
+   [
+   !EntityConfig( $Entity, pk(entity_sk), $issuer,
+                  sign(<'entity_config', $Entity, pk(entity_sk), $entity_type, $issuer>,
+                       entity_sk)
+   ),
+   Out( sign(<'entity_config', $Entity, pk(entity_sk), $entity_type, $issuer
+             >,
+             entity_sk)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Environment_Register_TA:
+   [ !TrustAnchor( $TA, ta_pk ) ]
+  --[ Env_TA_Registered( $Env, $TA, ta_pk ) ]->
+   [ !EnvTrustAnchor( $Env, $TA, ta_pk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Fetch_And_Verify_Entity_Config:
+   [ In( config ), !Entity_PK( entity_id, entity_pk ) ]
+  --[
+  Eq( verify(config,
+             <'entity_config', entity_id, entity_pk, entity_type, issuer>, entity_pk),
+      true
+  ),
+  Config_JWS_Verified( $Env, entity_id, config, entity_pk )
+  ]->
+   [ Verified_Config( $Env, entity_id, entity_pk, issuer, config ) ]
+
+  /*
+  rule (modulo AC) Fetch_And_Verify_Entity_Config:
+     [ In( config ), !Entity_PK( entity_id, entity_pk ) ]
+    --[
+    Eq( z, true ), Config_JWS_Verified( $Env, entity_id, config, entity_pk )
+    ]->
+     [ Verified_Config( $Env, entity_id, entity_pk, issuer, config ) ]
+    variants (modulo AC)
+    1. config
+             = config.8
+       entity_id
+             = entity_id.8
+       entity_pk
+             = entity_pk.8
+       entity_type
+             = entity_type.8
+       issuer
+             = issuer.8
+       z     = verify(config.8,
+                      <'entity_config', entity_id.8, entity_pk.8, entity_type.8, issuer.8>,
+                      entity_pk.8)
+    
+    2. config
+             = sign(<'entity_config', x.8, pk(x.9), x.10, x.11>, x.9)
+       entity_id
+             = x.8
+       entity_pk
+             = pk(x.9)
+       entity_type
+             = x.10
+       issuer
+             = x.11
+       z     = true
+  */
+
+rule (modulo E) Resolve_And_Verify_Chain:
+   [
+   Verified_Config( $Env, entity_id, entity_pk, issuer, config ),
+   !EnvTrustAnchor( $Env, $TA, ta_pk ), !Entity_PK( $TA, ta_pk ),
+   !SubStmt( $TA, entity_id, sub_stmt, entity_pk )
+   ]
+  --[
+  Eq( verify(sub_stmt,
+             <'subordinate_statement', $TA, entity_id, entity_pk>, ta_pk),
+      true
+  ),
+  Chain_Verified( $Env, entity_id, $TA, entity_pk, issuer ),
+  Both_JWS_Verified( $Env, entity_id, config, sub_stmt )
+  ]->
+   [ Chain_Ready_To_Cache( $Env, entity_id, $TA, entity_pk, issuer ) ]
+
+  /*
+  rule (modulo AC) Resolve_And_Verify_Chain:
+     [
+     Verified_Config( $Env, entity_id, entity_pk, issuer, config ),
+     !EnvTrustAnchor( $Env, $TA, ta_pk ), !Entity_PK( $TA, ta_pk ),
+     !SubStmt( $TA, entity_id, sub_stmt, entity_pk )
+     ]
+    --[
+    Eq( z, true ), Chain_Verified( $Env, entity_id, $TA, entity_pk, issuer ),
+    Both_JWS_Verified( $Env, entity_id, config, sub_stmt )
+    ]->
+     [ Chain_Ready_To_Cache( $Env, entity_id, $TA, entity_pk, issuer ) ]
+    variants (modulo AC)
+    1. $TA   = $TA.10
+       entity_id
+             = entity_id.10
+       entity_pk
+             = entity_pk.10
+       sub_stmt
+             = sub_stmt.10
+       ta_pk = ta_pk.10
+       z     = verify(sub_stmt.10,
+                      <'subordinate_statement', $TA.10, entity_id.10, entity_pk.10>, ta_pk.10)
+    
+    2. $TA   = $x.10
+       entity_id
+             = x.12
+       entity_pk
+             = x.13
+       sub_stmt
+             = sign(<'subordinate_statement', $x.10, x.12, x.13>, x.15)
+       ta_pk = pk(x.15)
+       z     = true
+  */
+
+rule (modulo E) Cache_Write:
+   [ Chain_Ready_To_Cache( $Env, entity_id, $TA, entity_pk, issuer ) ]
+  --[
+  Cache_Entry_Written( $Env, entity_id, $TA, entity_pk, issuer ),
+  Unique( <'cache', $Env, entity_id, $TA> )
+  ]->
+   [ !CachedEntity( $Env, entity_id, $TA, entity_pk, issuer ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Cache_Read:
+   [ !CachedEntity( $Env, entity_id, $TA, entity_pk, issuer ) ]
+  --[ Cache_Hit( $Env, entity_id, entity_pk, issuer ) ]->
+   [ Cache_Result( $Env, entity_id, entity_pk, issuer ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Attacker_Publish_Fake_Config:
+   [ Fr( ~atk_sk ) ]
+  --[ Attacker_Config( $Attacker, pk(~atk_sk), $fake_issuer ) ]->
+   [
+   Out( sign(<'entity_config', $Attacker, pk(~atk_sk), 'openid_provider', 
+              $fake_issuer>,
+             ~atk_sk)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+lemma no_unverified_cache:
+  all-traces
+  "∀ env entity ta pk issuer #i.
+    (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i) ⇒
+    (∃ config sub_stmt #j.
+      (Both_JWS_Verified( env, entity, config, sub_stmt ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env entity ta pk issuer #i.
+  (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i)
+ ∧
+  ∀ config sub_stmt #j.
+   (Both_JWS_Verified( env, entity, config, sub_stmt ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma attacker_cannot_poison:
+  all-traces
+  "∀ env entity ta pk issuer #i.
+    (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i) ⇒
+    (((∃ #j. Honest_Key( entity, pk ) @ #j) ∨
+      (∃ #c. Compromised( entity ) @ #c)) ∨
+     (∃ #c. Compromised( ta ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env entity ta pk issuer #i.
+  (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i)
+ ∧
+  (∀ #j. (Honest_Key( entity, pk ) @ #j) ⇒ ⊥) ∧
+  (∀ #c. (Compromised( entity ) @ #c) ⇒ ⊥) ∧
+  (∀ #c. (Compromised( ta ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma environment_isolation:
+  all-traces
+  "∀ env entity pk issuer #i.
+    (Cache_Hit( env, entity, pk, issuer ) @ #i) ⇒
+    (∃ ta #j.
+      (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env entity pk issuer #i.
+  (Cache_Hit( env, entity, pk, issuer ) @ #i)
+ ∧
+  ∀ ta #j.
+   (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma cache_entry_authenticity:
+  all-traces
+  "∀ env entity ta pk issuer #i.
+    (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i) ⇒
+    (∃ #j. (Chain_Verified( env, entity, ta, pk, issuer ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env entity ta pk issuer #i.
+  (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i)
+ ∧
+  ∀ #j. (Chain_Verified( env, entity, ta, pk, issuer ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma no_stale_key_cache:
+  all-traces
+  "∀ env entity ta pk issuer #i.
+    (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i) ⇒
+    (∃ #j. (Subordinate_Issued( ta, entity, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env entity ta pk issuer #i.
+  (Cache_Entry_Written( env, entity, ta, pk, issuer ) @ #i)
+ ∧
+  ∀ #j. (Subordinate_Issued( ta, entity, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma cache_hit_reachable:
+  exists-trace
+  "∃ env entity key meta #i. Cache_Hit( env, entity, key, meta ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ env entity key meta #i. (Cache_Hit( env, entity, key, meta ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Unbound variables
+=================
+
+  rule `Fetch_And_Verify_Entity_Config' has unbound variables: 
+    entity_type, issuer
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Fetch_And_Verify_Entity_Config: 
+Failed to derive Variable(s): entity_type, issuer
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: federation/cache_poisoning_resistance.spthy
+
+  processing time: 0.39s
+  
+  WARNING: 2 wellformedness check failed!
+  
+  no_unverified_cache (all-traces): analysis incomplete (1 steps)
+  attacker_cannot_poison (all-traces): analysis incomplete (1 steps)
+  environment_isolation (all-traces): analysis incomplete (1 steps)
+  cache_entry_authenticity (all-traces): analysis incomplete (1 steps)
+  no_stale_key_cache (all-traces): analysis incomplete (1 steps)
+  cache_hit_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

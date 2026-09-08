@@ -307,6 +307,7 @@ Audience: contributors, maintainers
 | `docs/verification/runbooks/hacl-integration.md` | runbook | HACL* Integration Documentation | current implementation baseline | 2026-03-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/tamarin-evidence-admission.md` | runbook | Tamarin Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-09-07 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/README.md` | index | Verification Workplan Analysis | active plan | 2026-07-08 | Verification | verification contributors, maintainers |

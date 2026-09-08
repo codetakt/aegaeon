@@ -1,93 +1,45 @@
 #!/usr/bin/env bash
+# Required Tamarin gate: every selected (theory, lemma) must be admitted by
+# scripts/validation/admit_tamarin_lemmas.py from this run's own records.
 set -euo pipefail
 
 : "${OUT_DIR:?OUT_DIR not set}"
 
 ROOT_DIR="$(pwd -P)"
 PROOFS_ROOT="$ROOT_DIR/proofs/tamarin"
-PROOFS_FILE="$ROOT_DIR/ci/tamarin_proofs.sh"
+# The override exists for controlled-tool regression tests only; the Nix and
+# hosted paths always use the shared CI selection.
+PROOFS_FILE="${TAMARIN_PROOFS_FILE:-$ROOT_DIR/ci/tamarin_proofs.sh}"
+REGISTRY="$ROOT_DIR/spec/tamarin-evidence.json"
+ADMIT="$ROOT_DIR/scripts/validation/admit_tamarin_lemmas.py"
 
-if [ ! -d "$PROOFS_ROOT" ]; then
-	echo "proofs/tamarin directory not found" >&2
-	exit 1
-fi
-
-if [ ! -f "$PROOFS_FILE" ]; then
-	echo "Tamarin proof list not found: $PROOFS_FILE" >&2
-	exit 1
-fi
+for required in "$PROOFS_ROOT" "$PROOFS_FILE" "$REGISTRY" "$ADMIT"; do
+	if [ ! -e "$required" ]; then
+		echo "[FAIL] required input not found: $required" >&2
+		exit 1
+	fi
+done
 
 # shellcheck source=/dev/null
 source "$PROOFS_FILE"
 normalize_tamarin_proofs
+if [ "${#TAMARIN_PROOF_SPECS[@]}" -eq 0 ]; then
+	echo "[FAIL] the Tamarin selection is empty" >&2
+	exit 1
+fi
+
+# The admission regressions run before the real prover; tests that drive this
+# script with a controlled tool set AEG_TAMARIN_SELFTEST=0 to avoid recursion.
+if [ "${AEG_TAMARIN_SELFTEST:-1}" != "0" ]; then
+	(cd "$ROOT_DIR" && python3 -m unittest discover -s tests/ci -p 'test_tamarin_admission.py')
+fi
 
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
-TAMARIN_TIMEOUT_DEFAULT=600
-TAMARIN_DERIVCHECK_TIMEOUT_DEFAULT=180
-
-tamarin_timeout="${TAMARIN_TIMEOUT:-$TAMARIN_TIMEOUT_DEFAULT}"
-tamarin_deriv_timeout="${TAMARIN_DERIVCHECK_TIMEOUT:-$TAMARIN_DERIVCHECK_TIMEOUT_DEFAULT}"
-
-log="$OUT_DIR/verify-tamarin.log"
-rm -f "$log"
-
-TEMP_DIR="$OUT_DIR/tamarin_proofs"
-mkdir -p "$TEMP_DIR"
-
-PASSED=0
-FAILED=0
-TOTAL=0
-
-for PROOF_SPEC in "${TAMARIN_PROOF_SPECS[@]}"; do
-	IFS=':' read -r FILE LEMMAS <<<"$PROOF_SPEC"
-	PROOF_PATH="$PROOFS_ROOT/$FILE"
-
-	if [ ! -f "$PROOF_PATH" ]; then
-		echo "[FAIL] Missing proof file: $FILE" | tee -a "$log"
-		FAILED=$((FAILED + 1))
-		TOTAL=$((TOTAL + 1))
-		continue
-	fi
-
-	IFS=',' read -ra LEMMA_LIST <<<"$LEMMAS"
-	for LEMMA in "${LEMMA_LIST[@]}"; do
-		TOTAL=$((TOTAL + 1))
-		echo "=> Proving $FILE:$LEMMA" | tee -a "$log"
-		LOG_NAME=$(echo "$FILE" | sed 's|/|_|g' | sed 's|\.spthy||')
-		PROOF_LOG="$TEMP_DIR/${LOG_NAME}_${LEMMA}.log"
-
-		if timeout "$tamarin_timeout" \
-			tamarin-prover \
-			--prove="$LEMMA" \
-			--derivcheck-timeout="$tamarin_deriv_timeout" \
-			"$PROOF_PATH" >"$PROOF_LOG" 2>&1; then
-			if grep -q "verified" "$PROOF_LOG"; then
-				echo "[OK] $FILE:$LEMMA" | tee -a "$log"
-				PASSED=$((PASSED + 1))
-			elif grep -q "falsified" "$PROOF_LOG"; then
-				echo "[FAIL] $FILE:$LEMMA (falsified)" | tee -a "$log"
-				FAILED=$((FAILED + 1))
-				cat "$PROOF_LOG" | head -50 >>"$log"
-			else
-				echo "[FAIL] $FILE:$LEMMA (inconclusive)" | tee -a "$log"
-				FAILED=$((FAILED + 1))
-				cat "$PROOF_LOG" | head -50 >>"$log"
-			fi
-		else
-			echo "[FAIL] $FILE:$LEMMA (error/timeout)" | tee -a "$log"
-			FAILED=$((FAILED + 1))
-			cat "$PROOF_LOG" | head -50 >>"$log"
-		fi
-	done
-
-done
-
-echo "=== Summary ===" | tee -a "$log"
-echo "Lemmas verified: $PASSED/$TOTAL" | tee -a "$log"
-echo "Lemmas failed: $FAILED/$TOTAL" | tee -a "$log"
-
-if [ "$FAILED" -ne 0 ]; then
-	exit 1
-fi
+python3 "$ADMIT" run \
+	--out-dir "$OUT_DIR" \
+	--proofs-root "$PROOFS_ROOT" \
+	--registry "$REGISTRY" \
+	--tool "${TAMARIN_TOOL:-tamarin-prover}" \
+	-- "${TAMARIN_PROOF_SPECS[@]}"

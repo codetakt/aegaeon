@@ -1,0 +1,4 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+tamarin-prover: models/missing.spthy: openFile: does not exist (No such file or directory)

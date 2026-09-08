@@ -281,31 +281,19 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run Tamarin verification (Nix)
-        run: |
-          mkdir -p artifacts/tamarin
-          nix build .#verify-tamarin -L
-          cp -f result/verify-tamarin.log artifacts/tamarin/tamarin_results.txt
+        env:
+          TAMARIN_CI_ARTIFACT_DIR: ${{ runner.temp }}/tamarin-evidence
+        run: bash scripts/verify/verify_tamarin_ci.sh
 
-      - name: Verify all proofs passed
-        run: |
-          if [ -f "artifacts/tamarin/tamarin_results.txt" ]; then
-            grep -Eq "Lemmas failed: 0/[0-9]+" artifacts/tamarin/tamarin_results.txt || {
-              echo "Tamarin proofs failed"
-              cat artifacts/tamarin/tamarin_results.txt
-              exit 1
-            }
-          else
-            echo "No Tamarin results file found"
-            exit 1
-          fi
-          echo "✅ All Tamarin proofs verified"
-
-      - name: Upload Tamarin results
+      - name: Upload Tamarin evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tamarin-results
-          path: artifacts/tamarin/
+          path: |
+            ${{ runner.temp }}/tamarin-evidence/
+            !${{ runner.temp }}/tamarin-evidence/**/result/**
+          if-no-files-found: error
 
   # Kani Bounded Model Checking
   kani-pure:

@@ -1,0 +1,105 @@
+{
+  "contract": "tamarin-1.12.0-summary-v1",
+  "schema_version": 1,
+  "tamarin_version": "1.12.0",
+  "maude_version": "3.5.1",
+  "timeout_seconds": 600,
+  "derivcheck_timeout_seconds": 180,
+  "notes": [
+    "Result lines are admitted only from the final 'summary of summaries' block of the invocation that requested the lemma; rc 0 and log grep are not evidence.",
+    "A theory with a wellformedness warning is admitted only when every warning section matches an exception below for the theory's exact SHA-256; such requests are labelled accepted-with-registered-exception and remain open model-adequacy obligations.",
+    "The '--prove/--lemma arguments' warning class must never be registered; unmatched selections are rejected before execution."
+  ],
+  "wellformedness_exceptions": [
+    {
+      "theory": "federation/id_token_chain.spthy",
+      "sha256": "5e8187e0f698e7b2b709b985f79d1fa9170ea7d409f026fd589477781e7b2e37",
+      "sections": [
+        {
+          "title": "Unbound variables",
+          "sha256": "65159a90a23bb7d3273ad28468af779a02cf84f462c7af5abd6753dc584786cb"
+        },
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "c52cb98c009c19a3f16d64e0bef1f9a0b4cddf1e388e69f8884d97d676aaebc0"
+        }
+      ],
+      "reason": "Claim variables of the verifying rules are bound only through Eq(verify(...)); the source documents this as intentional. Rewriting the verification idiom is model-adequacy work.",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    },
+    {
+      "theory": "federation/federation_key_rotation.spthy",
+      "sha256": "c7237e5bc14494478b4bb1dc0c97fc081125698c345930c7a24cf781bafc2eac",
+      "sections": [
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "e5cb808dd6af8a008c20ba30e583db092ecc96f3acd7b71f156c9b4a47fd5831"
+        }
+      ],
+      "reason": "Broker_Verify pattern-matches sign(<...>, sk) against a registered pk(sk); Tamarin flags the intended pattern matching as a derivation check.",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    },
+    {
+      "theory": "federation/rp_authorize_callback.spthy",
+      "sha256": "9b5fbba3cec9f6e4d4b1c6130eb825004637fc1e00d44248d04a2cc6444ce75b",
+      "sections": [
+        {
+          "title": "Unbound variables",
+          "sha256": "e15f5c211dbe9d68b8ba59c7f526ebd0880fb8c5df09f30eebe01033ef301bc5"
+        },
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "63c89a80b3fa3961159ff6aacb9fd8e34f8e8194595fef7e79f05d58a200e21f"
+        }
+      ],
+      "reason": "auth_time in Broker_Callback_Process is bound only through Eq(verify(...)), the same documented idiom as id_token_chain.",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    },
+    {
+      "theory": "federation/cache_poisoning_resistance.spthy",
+      "sha256": "cba44a8472b0956460f505a1eddbec12c8bea9b16b6ca3b15ecdfa27db3cf343",
+      "sections": [
+        {
+          "title": "Unbound variables",
+          "sha256": "0ab6b3dcec0b3d34d8edf3ad01ae48b243717e3af0eec3fdb85565d8f1670eb3"
+        },
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "2c48825299c0b5e2155f10b312a83ef65ef97c498af281a69b24ec04e04187c6"
+        }
+      ],
+      "reason": "entity_type and issuer in Fetch_And_Verify_Entity_Config are bound only through Eq(verify(...)).",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    },
+    {
+      "theory": "management/policy_downgrade.spthy",
+      "sha256": "067c087b7f7b567bfdb0de18c9e061de1059963fa60eb6d8e418d67cba590d47",
+      "sections": [
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "be93b6ff007bfc99a68df2c1b4a78190ae897d5b72cd7ee66aa60934014b08c6"
+        }
+      ],
+      "reason": "Policy_Downgrade pattern-matches sign(ack_msg, admin_sk) against a registered pk(admin_sk); intended pattern matching.",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    },
+    {
+      "theory": "sd_jwt/sd_jwt_selective_disclosure.spthy",
+      "sha256": "5cba1befe8871c440c0c962ee7a3ce1eb0e349a1e287c61f79ff4848cc99742f",
+      "sections": [
+        {
+          "title": "Message Derivation Checks",
+          "sha256": "653b5568d52e42c40a546742120490930bc66e56c61d23b64a780af9b8b404d9"
+        }
+      ],
+      "reason": "Verifier_Accept_Slot_A/B pattern-match issuer and holder signatures; intended pattern matching.",
+      "handoff": "T25 model adequacy: bind the variables in premises or annotate the intended pattern matching after review; re-register only if the warning text or theory changes.",
+      "recorded": "2026-09-08 from tamarin-prover 1.12.0 output (T04 handoff work/probes/wf)"
+    }
+  ]
+}

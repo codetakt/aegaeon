@@ -1,0 +1,531 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Federation_IDToken_Chain] Theory loaded
+[Theory Federation_IDToken_Chain] Theory translated
+[Theory Federation_IDToken_Chain] Derivation checks started
+[Theory Federation_IDToken_Chain] Derivation checks ended
+[Theory Federation_IDToken_Chain] Theory closed
+theory Federation_IDToken_Chain
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: adec/2, aenc/2, fst/1, h/1, pair/2, pk/1, sign/2, snd/1,
+           true/0, verify/3
+equations:
+    adec(aenc(x.1, pk(x.2)), x.2) = x.1,
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Reveal_ltk:
+   [ !Ltk( A, sk ) ] --[ Reveal( A ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) UpstreamIdP_Setup:
+   [ Fr( ~idp_sk ) ]
+  --[ UpstreamIdP_Key( $IdP, $idp_issuer, pk(~idp_sk) ) ]->
+   [
+   !UpstreamIdP_SK( $IdP, ~idp_sk, $idp_issuer ),
+   !UpstreamIdP_JWKS( $IdP, pk(~idp_sk), $idp_issuer ),
+   !Ltk( $IdP, ~idp_sk ), !Pk( $IdP, pk(~idp_sk) ), Out( pk(~idp_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Setup:
+   [ Fr( ~broker_sk ) ]
+  --[ Broker_Key( $Broker, $broker_issuer, pk(~broker_sk) ) ]->
+   [
+   !Broker_SK( $Broker, ~broker_sk, $broker_issuer ),
+   !Ltk( $Broker, ~broker_sk ), !Pk( $Broker, pk(~broker_sk) ),
+   Out( pk(~broker_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Register_JWKS:
+   [ !UpstreamIdP_JWKS( $IdP, idp_pk, idp_issuer ) ]
+  --[ JWKS_Registered( $Broker, $IdP, idp_pk, idp_issuer ) ]->
+   [ !Broker_Trusted_JWKS( $Broker, $IdP, idp_pk, idp_issuer ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) UpstreamIdP_Issue_IDToken:
+   [
+   !UpstreamIdP_SK( $IdP, idp_sk, idp_issuer ), Fr( ~exp ), Fr( ~iat ),
+   Fr( ~auth_time ), Fr( ~us_access_token ), Fr( ~us_nonce )
+   ]
+  --[
+  US_IDToken_Issued( $IdP, $aud, $User,
+                     sign(<'id_token', idp_issuer, $aud, $User, ~exp, ~iat, ~us_nonce, 
+                           ~auth_time>,
+                          idp_sk),
+                     ~us_nonce, idp_issuer
+  ),
+  Unique( <'us_idtoken', $IdP, $aud, ~us_nonce> )
+  ]->
+   [
+   Out( sign(<'id_token', idp_issuer, $aud, $User, ~exp, ~iat, ~us_nonce, 
+              ~auth_time>,
+             idp_sk)
+   ),
+   US_AccessToken( $IdP, ~us_access_token, $aud, $User ),
+   !US_IDToken_Record( $IdP,
+                       sign(<'id_token', idp_issuer, $aud, $User, ~exp, ~iat, ~us_nonce, 
+                             ~auth_time>,
+                            idp_sk),
+                       $aud, $User, ~us_nonce, idp_issuer
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Verify_Upstream_IDToken:
+   [
+   In( id_token ),
+   !Broker_Trusted_JWKS( broker_id, $IdP, idp_pk, idp_issuer ),
+   !Pk( $IdP, idp_pk )
+   ]
+  --[
+  Eq( verify(id_token,
+             <'id_token', idp_issuer, broker_id, $User, exp, iat, us_nonce, auth_time
+             >,
+             idp_pk),
+      true
+  ),
+  US_Signature_Verified( broker_id, $IdP, id_token, idp_pk, idp_issuer ),
+  US_Claims_Extracted( broker_id, $IdP, $User, us_nonce, idp_issuer )
+  ]->
+   [
+   Broker_Verified_Upstream( broker_id, $IdP, $User, us_nonce, idp_issuer,
+                             id_token
+   )
+   ]
+
+  /*
+  rule (modulo AC) Broker_Verify_Upstream_IDToken:
+     [
+     In( id_token ),
+     !Broker_Trusted_JWKS( broker_id, $IdP, idp_pk, idp_issuer ),
+     !Pk( $IdP, idp_pk )
+     ]
+    --[
+    Eq( z, true ),
+    US_Signature_Verified( broker_id, $IdP, id_token, idp_pk, idp_issuer ),
+    US_Claims_Extracted( broker_id, $IdP, $User, us_nonce, idp_issuer )
+    ]->
+     [
+     Broker_Verified_Upstream( broker_id, $IdP, $User, us_nonce, idp_issuer,
+                               id_token
+     )
+     ]
+    variants (modulo AC)
+    1. $User = $User.12
+       auth_time
+             = auth_time.12
+       broker_id
+             = broker_id.12
+       exp   = exp.12
+       iat   = iat.12
+       id_token
+             = id_token.12
+       idp_issuer
+             = idp_issuer.12
+       idp_pk
+             = idp_pk.12
+       us_nonce
+             = us_nonce.12
+       z     = verify(id_token.12,
+                      <'id_token', idp_issuer.12, broker_id.12, $User.12, exp.12, iat.12, 
+                       us_nonce.12, auth_time.12>,
+                      idp_pk.12)
+    
+    2. $User = $x.12
+       auth_time
+             = x.13
+       broker_id
+             = x.14
+       exp   = x.15
+       iat   = x.16
+       id_token
+             = sign(<'id_token', x.17, x.14, $x.12, x.15, x.16, x.18, x.13>, x.19)
+       idp_issuer
+             = x.17
+       idp_pk
+             = pk(x.19)
+       us_nonce
+             = x.18
+       z     = true
+  */
+
+rule (modulo E) Broker_Issue_Downstream_IDToken:
+   [
+   Broker_Verified_Upstream( broker_id, $IdP, $User, us_nonce, idp_issuer,
+                             us_id_token
+   ),
+   !Broker_SK( broker_id, broker_sk, broker_issuer ),
+   Fr( ~ds_access_token ), Fr( ~ds_exp ), Fr( ~ds_iat ),
+   Fr( ~ds_auth_time ), Fr( ~session_id ), Fr( ~ds_nonce )
+   ]
+  --[
+  DS_IDToken_Issued( broker_id, $RP, $User,
+                     sign(<'id_token', broker_issuer, $RP, $User, ~ds_exp, ~ds_iat, 
+                           ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+                          broker_sk),
+                     ~ds_nonce, broker_issuer, ~session_id
+  ),
+  DS_ATHash_Computed( h(~ds_access_token), ~ds_access_token ),
+  Chain_Binding( sign(<'id_token', broker_issuer, $RP, $User, ~ds_exp, 
+                       ~ds_iat, ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+                      broker_sk),
+                 us_id_token, broker_id, $IdP, $User
+  ),
+  Nonce_Chain( ~ds_nonce, us_nonce, ~session_id ),
+  Issuer_Rewritten( broker_issuer, idp_issuer,
+                    sign(<'id_token', broker_issuer, $RP, $User, ~ds_exp, ~ds_iat, 
+                          ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+                         broker_sk)
+  ),
+  Claims_Provenance( $User, $IdP, broker_id,
+                     sign(<'id_token', broker_issuer, $RP, $User, ~ds_exp, ~ds_iat, 
+                           ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+                          broker_sk)
+  ),
+  Unique( <'ds_idtoken', ~session_id> )
+  ]->
+   [
+   Out( sign(<'id_token', broker_issuer, $RP, $User, ~ds_exp, ~ds_iat, 
+              ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+             broker_sk)
+   ),
+   !DS_IDToken_Record( sign(<'id_token', broker_issuer, $RP, $User, 
+                             ~ds_exp, ~ds_iat, ~ds_nonce, ~ds_auth_time, h(~ds_access_token)>,
+                            broker_sk),
+                       broker_id, $RP, $User, broker_issuer, ~ds_nonce, h(~ds_access_token),
+                       us_id_token
+   ),
+   DS_AccessToken( ~ds_access_token, broker_id, $RP, $User )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) DownstreamRP_Verify:
+   [ In( ds_id_token ), !Pk( broker_id, broker_pk ) ]
+  --[
+  Eq( verify(ds_id_token,
+             <'id_token', claimed_issuer, rp_id, $User, ds_exp, ds_iat, ds_nonce, 
+              ds_auth_time, ds_at_hash>,
+             broker_pk),
+      true
+  ),
+  DS_IDToken_Verified( rp_id, $User, ds_id_token, claimed_issuer, ds_nonce
+  )
+  ]->
+   [ RP_Authenticated( rp_id, $User, broker_id ) ]
+
+  /*
+  rule (modulo AC) DownstreamRP_Verify:
+     [ In( ds_id_token ), !Pk( broker_id, broker_pk ) ]
+    --[
+    Eq( z, true ),
+    DS_IDToken_Verified( rp_id, $User, ds_id_token, claimed_issuer, ds_nonce
+    )
+    ]->
+     [ RP_Authenticated( rp_id, $User, broker_id ) ]
+    variants (modulo AC)
+    1. $User = $User.13
+       broker_pk
+             = broker_pk.13
+       claimed_issuer
+             = claimed_issuer.13
+       ds_at_hash
+             = ds_at_hash.13
+       ds_auth_time
+             = ds_auth_time.13
+       ds_exp
+             = ds_exp.13
+       ds_iat
+             = ds_iat.13
+       ds_id_token
+             = ds_id_token.13
+       ds_nonce
+             = ds_nonce.13
+       rp_id = rp_id.13
+       z     = verify(ds_id_token.13,
+                      <'id_token', claimed_issuer.13, rp_id.13, $User.13, ds_exp.13, 
+                       ds_iat.13, ds_nonce.13, ds_auth_time.13, ds_at_hash.13>,
+                      broker_pk.13)
+    
+    2. $User = $x.13
+       broker_pk
+             = pk(x.15)
+       claimed_issuer
+             = x.16
+       ds_at_hash
+             = x.17
+       ds_auth_time
+             = x.18
+       ds_exp
+             = x.19
+       ds_iat
+             = x.20
+       ds_id_token
+             = sign(<'id_token', x.16, x.21, $x.13, x.19, x.20, x.22, x.18, x.17>,
+                    x.15)
+       ds_nonce
+             = x.22
+       rp_id = x.21
+       z     = true
+  */
+
+lemma chain_binding:
+  all-traces
+  "∀ ds_token us_token broker idp user #i.
+    (Chain_Binding( ds_token, us_token, broker, idp, user ) @ #i) ⇒
+    (∃ idp_pk idp_issuer #j.
+      (US_Signature_Verified( broker, idp, us_token, idp_pk, idp_issuer
+       ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ ds_token us_token broker idp user #i.
+  (Chain_Binding( ds_token, us_token, broker, idp, user ) @ #i)
+ ∧
+  ∀ idp_pk idp_issuer #j.
+   (US_Signature_Verified( broker, idp, us_token, idp_pk, idp_issuer ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma upstream_jwks_verification:
+  all-traces
+  "∀ broker idp token pk issuer #i.
+    (US_Signature_Verified( broker, idp, token, pk, issuer ) @ #i) ⇒
+    (∃ #j. (JWKS_Registered( broker, idp, pk, issuer ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp token pk issuer #i.
+  (US_Signature_Verified( broker, idp, token, pk, issuer ) @ #i)
+ ∧
+  ∀ #j. (JWKS_Registered( broker, idp, pk, issuer ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma nonce_chain_integrity:
+  all-traces
+  "∀ ds_nonce us_nonce session_id #i.
+    (Nonce_Chain( ds_nonce, us_nonce, session_id ) @ #i) ⇒
+    (∃ broker idp user idp_issuer #j.
+      (US_Claims_Extracted( broker, idp, user, us_nonce, idp_issuer ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ ds_nonce us_nonce session_id #i.
+  (Nonce_Chain( ds_nonce, us_nonce, session_id ) @ #i)
+ ∧
+  ∀ broker idp user idp_issuer #j.
+   (US_Claims_Extracted( broker, idp, user, us_nonce, idp_issuer ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma at_hash_downstream_only:
+  all-traces
+  "∀ at_hash token #i.
+    (DS_ATHash_Computed( at_hash, token ) @ #i) ⇒ (at_hash = h(token))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ at_hash token #i.
+  (DS_ATHash_Computed( at_hash, token ) @ #i) ∧ ¬(at_hash = h(token))"
+*/
+by sorry
+
+lemma claims_provenance:
+  all-traces
+  "∀ user idp broker ds_token #i.
+    (Claims_Provenance( user, idp, broker, ds_token ) @ #i) ⇒
+    (∃ us_nonce issuer #j.
+      (US_Claims_Extracted( broker, idp, user, us_nonce, issuer ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ user idp broker ds_token #i.
+  (Claims_Provenance( user, idp, broker, ds_token ) @ #i)
+ ∧
+  ∀ us_nonce issuer #j.
+   (US_Claims_Extracted( broker, idp, user, us_nonce, issuer ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma issuer_rewriting_integrity:
+  all-traces
+  "∀ rp user ds_token claimed_iss nonce #i.
+    (DS_IDToken_Verified( rp, user, ds_token, claimed_iss, nonce ) @ #i) ⇒
+    ((∃ broker pk #j. Broker_Key( broker, claimed_iss, pk ) @ #j) ∨
+     (∃ A #c. Reveal( A ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user ds_token claimed_iss nonce #i.
+  (DS_IDToken_Verified( rp, user, ds_token, claimed_iss, nonce ) @ #i)
+ ∧
+  (∀ broker pk #j. (Broker_Key( broker, claimed_iss, pk ) @ #j) ⇒ ⊥) ∧
+  (∀ A #c. (Reveal( A ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma no_downstream_without_upstream:
+  all-traces
+  "∀ broker rp user ds_token nonce issuer session #i.
+    (DS_IDToken_Issued( broker, rp, user, ds_token, nonce, issuer, session
+     ) @ #i) ⇒
+    (∃ idp us_token us_pk us_issuer #j.
+      (US_Signature_Verified( broker, idp, us_token, us_pk, us_issuer ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker rp user ds_token nonce issuer session #i.
+  (DS_IDToken_Issued( broker, rp, user, ds_token, nonce, issuer, session
+   ) @ #i)
+ ∧
+  ∀ idp us_token us_pk us_issuer #j.
+   (US_Signature_Verified( broker, idp, us_token, us_pk, us_issuer ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma downstream_token_unforgeability:
+  all-traces
+  "∀ rp user ds_token claimed_iss nonce #i.
+    (DS_IDToken_Verified( rp, user, ds_token, claimed_iss, nonce ) @ #i) ⇒
+    ((∃ broker idp us_token #j.
+       (Chain_Binding( ds_token, us_token, broker, idp, user ) @ #j) ∧
+       (#j < #i)) ∨
+     (∃ A #c. Reveal( A ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user ds_token claimed_iss nonce #i.
+  (DS_IDToken_Verified( rp, user, ds_token, claimed_iss, nonce ) @ #i)
+ ∧
+  (∀ broker idp us_token #j.
+    (Chain_Binding( ds_token, us_token, broker, idp, user ) @ #j)
+   ⇒
+    ¬(#j < #i)) ∧
+  (∀ A #c. (Reveal( A ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma end_to_end_authentication:
+  all-traces
+  "∀ rp user ds_token broker_iss nonce #i.
+    (DS_IDToken_Verified( rp, user, ds_token, broker_iss, nonce ) @ #i) ⇒
+    ((∃ broker idp us_token us_pk idp_iss #j.
+       (US_Signature_Verified( broker, idp, us_token, us_pk, idp_iss ) @ #j) ∧
+       (#j < #i)) ∨
+     (∃ A #c. Reveal( A ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ rp user ds_token broker_iss nonce #i.
+  (DS_IDToken_Verified( rp, user, ds_token, broker_iss, nonce ) @ #i)
+ ∧
+  (∀ broker idp us_token us_pk idp_iss #j.
+    (US_Signature_Verified( broker, idp, us_token, us_pk, idp_iss ) @ #j)
+   ⇒
+    ¬(#j < #i)) ∧
+  (∀ A #c. (Reveal( A ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma ds_idtoken_verified_reachable:
+  exists-trace
+  "∃ rp user tok nonce iss #i.
+    DS_IDToken_Verified( rp, user, tok, nonce, iss ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ rp user tok nonce iss #i.
+  (DS_IDToken_Verified( rp, user, tok, nonce, iss ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Unbound variables
+=================
+
+  rule `Broker_Verify_Upstream_IDToken' has unbound variables: 
+    auth_time, exp, iat, us_nonce
+  
+  rule `DownstreamRP_Verify' has unbound variables: 
+    claimed_issuer, ds_at_hash, ds_auth_time, ds_exp, ds_iat, ds_nonce,
+    rp_id
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Broker_Verify_Upstream_IDToken: 
+Failed to derive Variable(s): auth_time, exp, iat, us_nonce
+
+Rule DownstreamRP_Verify: 
+Failed to derive Variable(s): claimed_issuer, ds_at_hash, ds_auth_time, ds_exp, ds_iat, ds_nonce, rp_id
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: federation/id_token_chain.spthy
+
+  processing time: 0.98s
+  
+  WARNING: 3 wellformedness check failed!
+  
+  chain_binding (all-traces): analysis incomplete (1 steps)
+  upstream_jwks_verification (all-traces): analysis incomplete (1 steps)
+  nonce_chain_integrity (all-traces): analysis incomplete (1 steps)
+  at_hash_downstream_only (all-traces): analysis incomplete (1 steps)
+  claims_provenance (all-traces): analysis incomplete (1 steps)
+  issuer_rewriting_integrity (all-traces): analysis incomplete (1 steps)
+  no_downstream_without_upstream (all-traces): analysis incomplete (1 steps)
+  downstream_token_unforgeability (all-traces): analysis incomplete (1 steps)
+  end_to_end_authentication (all-traces): analysis incomplete (1 steps)
+  ds_idtoken_verified_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================
