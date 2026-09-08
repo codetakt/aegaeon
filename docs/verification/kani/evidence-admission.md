@@ -37,7 +37,8 @@ The last harness selects `AAA.BBB.CCC`, `AA.BB`, `AA.BB.`, `.AA.BB`,
 `A=A.BB.CC`, and `AA-.BB_.CC0`. It does not quantify over every string below
 that length. Its deliberately unreachable `unexpected canonicalisation error`
 assertion is pinned by identity and description; changing or losing that guard
-requires review. Other named assertions must remain reachable and successful.
+requires review. Other assertions directly belonging to the selected harness
+must remain reachable and successful.
 
 ## Acceptance and ongoing execution
 
@@ -51,11 +52,21 @@ Kani package, compiler and solver as local verification. The separate legacy
 
 The adapter requires the exact compiled package, source and harness identity;
 zero exit status; a complete, consecutively numbered property report; matching
-property counts; no failed or undetermined property; reviewed reachability;
+property counts; no failed or undetermined property; reviewed reachability of
+the selected harness's own assertions;
 and exactly one completed harness per invocation. A success string, source
 declaration, compilation-only run or empty selection is insufficient. The
 adapter rejects unknown report formats. Ordinary safety and unwinding checks
 remain enabled. Resource exhaustion and timeout reject admission.
+
+The reachability allowlist applies to property IDs beginning with the selected
+harness name followed by `.assertion.`. Assertions in callees and libraries may
+be `UNREACHABLE` without an individual allowlist entry. Every property is still
+retained and must be `SUCCESS` or `UNREACHABLE`; its counts must agree with the
+same invocation's summary. Counts are not pinned across executions. An
+unreachable callee assertion gives no evidence about inputs or paths outside
+the declared fixture domain. Broader reachability review and changes to this
+policy require separate evidence-admission work.
 
 Each invocation gets a fresh target directory. The record retains policy,
 source digests, tool identity, commands, full output, compiled metadata and

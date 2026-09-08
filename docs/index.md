@@ -281,7 +281,7 @@ Audience: contributors, maintainers
 | `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/README.md` | index | JOSE Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/json-lowstar-ffi-contracts.md` | verification | JSON Low*/FFI Contract Summary | current implementation baseline | 2025-11-16 | Verification | verification reviewers, contributors |
-| `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
+| `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | historical record | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, maintainers |

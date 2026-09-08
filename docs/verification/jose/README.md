@@ -20,7 +20,7 @@ records.
 ## Canonical Documents
 
 - `[claim]` [Raw JSON claim boundary](raw-json-boundary.md)
-- `[snapshot]` [Phase 4 verification summary](phase4-verification-summary.md)
+- `[historical]` [Phase 4 verification summary](phase4-verification-summary.md)
 - `[runbook]` [JSON Low*/FFI contract summary](json-lowstar-ffi-contracts.md)
 
 ## Reading Rule of Thumb
