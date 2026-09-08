@@ -13,6 +13,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ADMIT = ROOT / "scripts/validation/admit_fstar_modules.py"
+sys.path.insert(0, str(ADMIT.parent))
+from admit_fstar_modules import reconcile, resolve_unrequested  # noqa: E402 - path set above
+
 FIXTURES = ROOT / "tests/fixtures/fstar_admission"
 HOSTED = FIXTURES / "hosted-34200194649"
 PROBES = FIXTURES / "tool-probes"
@@ -374,7 +377,7 @@ class ControlledMutationTests(unittest.TestCase):
         assert "no known source" in self.case.reasons()
 
     def test_resolvable_dependency_result_is_recorded_but_not_credited(self) -> None:
-        dep = self.case.source("deps/Gamma.fst")
+        dep = self.case.source("Gamma.fst")
         output = COMPLETE.replace(
             "Verified module: Beta\n", "Verified module: Gamma\nVerified module: Beta\n"
         )
@@ -383,7 +386,7 @@ class ControlledMutationTests(unittest.TestCase):
             output,
             local_context=[
                 {"path": str(self.case.src / m), "sha256": sha256(self.case.src / m)}
-                for m in ("Alpha.fst", "Beta.fst", "deps/Gamma.fst")
+                for m in ("Alpha.fst", "Beta.fst", "Gamma.fst")
             ],
         )
         assert self.case.admit().returncode == 0, self.case.reasons()
@@ -397,6 +400,24 @@ class ControlledMutationTests(unittest.TestCase):
                 "sha256": sha256(dep),
             }
         ]
+
+    def test_dependency_in_an_unsearched_subdirectory_is_not_a_known_source(self) -> None:
+        # F* does not search subdirectories of the working directory (search-scope probe d).
+        self.case.source("deps/Gamma.fst")
+        output = COMPLETE.replace(
+            "Verified module: Beta\n", "Verified module: Gamma\nVerified module: Beta\n"
+        )
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            output,
+            local_context=[
+                {"path": str(self.case.src / m), "sha256": sha256(self.case.src / m)}
+                for m in ("Alpha.fst", "Beta.fst", "deps/Gamma.fst")
+            ],
+        )
+        assert self.case.admit().returncode != 0
+        assert "no Gamma.fst in the searched directories" in self.case.reasons()
+        assert self.case.modules()["unrequested"][0]["classification"] == "unclassified"
 
     def test_contradictory_interface_line_for_paired_interface(self) -> None:
         self.case.source("Alpha.fsti", "module Alpha\nval x : int\n")
@@ -570,6 +591,181 @@ class ReviewFollowUpTests(unittest.TestCase):
             "share the same inputs_sha256" in r for e in events for r in e.get("reasons", [])
         )
         assert not (self.case.out / "admission.json").exists()
+
+    def dependency_output(self) -> str:
+        return COMPLETE.replace(
+            "Verified module: Beta\n", "Verified module: Dpop\nVerified module: Beta\n"
+        )
+
+    def context(self, *paths: Path) -> list[dict[str, str]]:
+        return [{"path": str(p), "sha256": sha256(p)} for p in paths]
+
+    def test_dependency_outside_the_searched_directories_is_rejected(self) -> None:
+        # R18-04: a same-named module in the recorded local context but outside
+        # cwd and the include directories is not a source F* could have used.
+        outside = self.case.source("not-in-search-path/Dpop.fst", "module Dpop\nlet o = 11\n")
+        included = self.case.src / "included"
+        included.mkdir()
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            options=("--query_stats", "--include", str(included)),
+            include_paths=[str(included)],
+            local_context=self.context(outside, alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "no Dpop.fst in the searched directories" in self.case.reasons()
+        entry = self.case.modules()["unrequested"][0]
+        assert entry["classification"] == "unclassified"
+        assert entry["source"] is None
+
+    def test_dependency_binding_does_not_depend_on_context_order(self) -> None:
+        # R18-04: with an outside file and an included file of the same name,
+        # the included one is bound whichever is listed first.
+        outside = self.case.source("not-in-search-path/Dpop.fst", "module Dpop\nlet o = 11\n")
+        included = self.case.src / "included"
+        included.mkdir()
+        allowed = included / "Dpop.fst"
+        allowed.write_text("module Dpop\nlet o = 22\n")
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        for order in ((outside, allowed), (allowed, outside)):
+            with self.subTest(first=order[0].parent.name):
+                shutil.rmtree(self.case.out)
+                self.case.directory.mkdir(parents=True)
+                self.case.record(
+                    ["Alpha.fst", "Beta.fst"],
+                    self.dependency_output(),
+                    options=("--query_stats", "--include", str(included)),
+                    include_paths=[str(included)],
+                    local_context=self.context(*order, alpha, beta),
+                )
+                assert self.case.admit().returncode == 0, self.case.reasons()
+                entry = self.case.modules()["unrequested"][0]
+                assert entry["source"] == str(allowed)
+                assert entry["sha256"] == sha256(allowed)
+                assert self.case.verify().returncode == 0
+
+    def test_same_named_sources_in_two_searched_directories_are_ambiguous(self) -> None:
+        # Precedence between cwd and include directories is the verifier's
+        # business (search-scope probes a, b, b'); the gate does not guess.
+        included = self.case.src / "included"
+        included.mkdir()
+        (included / "Dpop.fst").write_text("module Dpop\nlet o = 22\n")
+        local = self.case.source("Dpop.fst", "module Dpop\nlet o = 11\n")
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            options=("--query_stats", "--include", str(included)),
+            include_paths=[str(included)],
+            local_context=self.context(local, included / "Dpop.fst", alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "Dpop.fst is ambiguous across" in self.case.reasons()
+
+    def test_result_kind_must_match_the_source_kind(self) -> None:
+        # An implementation line is bound to <name>.fst only, an interface
+        # line to <name>.fsti only.
+        iface = self.case.source("Dpop.fsti", "module Dpop\nval o : int\n")
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            local_context=self.context(iface, alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "no Dpop.fst in the searched directories" in self.case.reasons()
+        shutil.rmtree(self.case.out)
+        self.case.directory.mkdir(parents=True)
+        output = COMPLETE.replace(
+            "Verified module: Beta\n",
+            "Verified i'face (or impl+i'face): Dpop\nVerified module: Beta\n",
+        )
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"], output, local_context=self.context(iface, alpha, beta)
+        )
+        assert self.case.admit().returncode == 0, self.case.reasons()
+        entry = self.case.modules()["unrequested"][0]
+        assert (entry["kind"], entry["source"]) == ("interface", str(iface))
+
+    def test_candidate_must_declare_the_module_and_match_the_recorded_context(self) -> None:
+        wrong = self.case.source("Dpop.fst", "module Other\nlet o = 1\n")
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            local_context=self.context(wrong, alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "declares module Other, not Dpop" in self.case.reasons()
+        shutil.rmtree(self.case.out)
+        self.case.directory.mkdir(parents=True)
+        wrong.write_text("module Dpop\nlet o = 1\n")
+        stale = [{"path": str(wrong), "sha256": "ab" * 32}]
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            local_context=stale + self.context(alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "differs from the recorded local context" in self.case.reasons()
+        shutil.rmtree(self.case.out)
+        self.case.directory.mkdir(parents=True)
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            local_context=self.context(alpha, beta),
+        )
+        assert self.case.admit().returncode != 0
+        assert "is not in the recorded local context" in self.case.reasons()
+
+    def test_replay_rejects_a_recorded_source_outside_the_search_scope(self) -> None:
+        # admission.json binds every modules.json digest, so a tampered record
+        # already fails --verify-records; the replay rule itself is checked by
+        # replaying a record whose resolution points outside the search scope.
+        dep = self.case.source("Dpop.fst", "module Dpop\nlet o = 1\n")
+        alpha, beta = self.case.src / "Alpha.fst", self.case.src / "Beta.fst"
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            self.dependency_output(),
+            local_context=self.context(dep, alpha, beta),
+        )
+        assert self.case.admit().returncode == 0, self.case.reasons()
+        assert self.case.verify().returncode == 0
+        inputs = json.loads((self.case.directory / "inputs.json").read_text())
+        result = json.loads((self.case.directory / "result.json").read_text())
+        output = (self.case.directory / "output.log").read_text()
+        recorded = self.case.modules()
+        replay = reconcile("2b", inputs, result, output, None, recorded=recorded)
+        assert replay["status"] == "accepted", replay["reasons"]
+        for source, needle in (
+            (str(self.case.src / "elsewhere" / "Dpop.fst"), "outside the searched directories"),
+            (str(self.case.src / "Dpop.fsti"), "is not Dpop.fst"),
+        ):
+            with self.subTest(source=source):
+                tampered = json.loads(json.dumps(recorded))
+                tampered["unrequested"][0]["source"] = source
+                replay = reconcile("2b", inputs, result, output, None, recorded=tampered)
+                assert replay["status"] == "rejected"
+                assert any(needle in r for r in replay["reasons"]), replay["reasons"]
+                assert replay["unrequested"][0]["classification"] == "unclassified"
+        record = self.case.directory / "modules.json"
+        text = record.read_text()
+        record.write_text(
+            text.replace(json.dumps(str(dep)), json.dumps(str(self.case.src / "x" / "Dpop.fst")))
+        )
+        assert self.case.verify().returncode != 0
+
+    def test_hosted_fixture_resolution_is_order_independent(self) -> None:
+        # Reviewer's case 3: reversing the recorded local context of the real
+        # hosted pass must not change how an unrequested Dpop would resolve.
+        fixture = json.loads((HOSTED / "pass-1" / "inputs.json").read_text())
+        root = self.root / "no-such-tree"
+        first = resolve_unrequested("Dpop", "implementation", fixture, root)
+        fixture["local_context"] = list(reversed(fixture["local_context"]))
+        second = resolve_unrequested("Dpop", "implementation", fixture, root)
+        assert first == second == (None, "no Dpop.fst in the searched directories")
 
     def test_dependency_from_absolute_include_replays_without_the_provider(self) -> None:
         dependency = self.provider / "Gamma.fst"

@@ -22,13 +22,15 @@
     "tool-probes/mismatch.out": "206c5ea0ac348f9d1f5a739de4f946ffa65694b702f399f48dcb1e6f029239d1",
     "tool-probes/ok_then_bad.out": "1a0a4bcf7ec498a7b2a235ef932a5ff8d2614498c6b72767d40b24411eae39d5",
     "tool-probes/probe_querystats.out": "2d807f00c7b9a6867c1ccf808b8c65b1a1492b50774204465f1c1eb784b6477e",
+    "tool-probes/search_scope.out": "a272cd361dac0bff894b502e36ebd90f3afe64709af40d58188584db88b55fe3",
+    "tool-probes/search_scope.txt": "f46686940484c5124a4ca2ed077ae425f99f84030e9ccf61e33cd4b07283140c",
     "tool-probes/silent.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "note": "Invocation outputs are stored as output.txt because *.log is git-ignored; tests copy them to output.log.",
   "origins": {
     "hosted-34200194649/pass-1": "Hosted run https://github.com/codetakt/aegaeon/actions/runs/34200194649 (PR #16 head 9fd54d624), F* Verification job artifact, invocation pass 1; sources are the four requested modules at that head.",
     "injected-lemma": "Maintainer-local impossible-lemma probe (T03/review-candidate-negative, exit 1 with a Verified module line).",
-    "tool-probes": "Direct fstar.exe probes recorded in the module-admission handoff (work/fstar-probes/PROBES.log)."
+    "tool-probes": "Direct fstar.exe probes recorded in the module-admission handoff (work/fstar-probes/PROBES.log). search_scope.txt (the probe script, stored as text) / search_scope.out: dependency search-scope probe of the same fstar.exe (PR #18 follow-up R18-04, 2026-09-08); the scratch directory prefix is written as $PROBE."
   },
   "purpose": "Real F* evidence fixtures for tests/ci/test_fstar_admission.py; copied verbatim, never edited.",
   "tool": "F* 2025.10.06~dev"

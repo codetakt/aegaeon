@@ -166,22 +166,83 @@ def include_directories(inputs: dict[str, Any], source_root: Path) -> list[Path]
     return directories
 
 
-def resolve_unrequested(
-    name: str, inputs: dict[str, Any], source_root: Path
-) -> dict[str, str] | None:
-    """Find a known source for a result that was not requested, with its digest."""
-    candidates = {f"{name}.fst", f"{name}.fsti"}
-    for item in inputs.get("local_context", []):
-        if Path(item["path"]).name in candidates:
-            return {"source": str(item["path"]), "sha256": str(item["sha256"])}
-    for directory in include_directories(inputs, source_root):
-        for candidate in candidates:
-            if (directory / candidate).is_file():
-                return {
-                    "source": str(directory / candidate),
-                    "sha256": digest_file(directory / candidate),
-                }
+def search_directories(inputs: dict[str, Any], source_root: Path) -> list[tuple[Path, Path]]:
+    """The directories F* searches for a dependency, as (recorded form, local form).
+
+    The pinned verifier resolves a module name in the working directory and the
+    ``--include`` directories only; it does not search a source's own directory
+    or any subdirectory (tool probes ``search-scope``). The recorded form is
+    built from the invocation's recorded working directory so that records read
+    the same wherever they are replayed; the local form is read here.
+    """
+    cwd = Path(str(inputs["cwd"]))
+    directories: list[tuple[Path, Path]] = [(cwd, source_root)]
+    for include in inputs.get("include_paths", []):
+        directory = Path(str(include))
+        if directory.is_absolute():
+            pair = (directory, directory)
+        else:
+            pair = (cwd / directory, source_root / directory)
+        if pair not in directories:
+            directories.append(pair)
+    return directories
+
+
+def outside_search_scope(name: str, kind: str, source: str, inputs: dict[str, Any]) -> str | None:
+    """Why a recorded dependency source is not one F* could have used, or None."""
+    suffix = ".fst" if kind == "implementation" else ".fsti"
+    path = Path(source)
+    if path.name != f"{name}{suffix}":
+        return f"recorded source {source} is not {name}{suffix}"
+    cwd = Path(str(inputs["cwd"]))
+    searched = [cwd]
+    for include in inputs.get("include_paths", []):
+        directory = Path(str(include))
+        searched.append(directory if directory.is_absolute() else cwd / directory)
+    if path.parent not in searched:
+        return f"recorded source {source} is outside the searched directories"
     return None
+
+
+def resolve_unrequested(
+    name: str, kind: str, inputs: dict[str, Any], source_root: Path
+) -> tuple[dict[str, str] | None, str]:
+    """Bind a result that was not requested to the one source F* could have used.
+
+    The candidate must be the single ``<name>.fst`` (implementation result) or
+    ``<name>.fsti`` (interface result) across the searched directories, must
+    declare ``name``, and, when it lies in the recorded local context, must
+    carry the recorded digest. Several candidates are ambiguous and reject the
+    pass; the recorded local context is never searched by file name.
+    """
+    suffix = ".fst" if kind == "implementation" else ".fsti"
+    found: list[tuple[Path, Path]] = []
+    for recorded_dir, local_dir in search_directories(inputs, source_root):
+        if (local_dir / f"{name}{suffix}").is_file():
+            found.append((recorded_dir / f"{name}{suffix}", local_dir / f"{name}{suffix}"))
+    if not found:
+        return None, f"no {name}{suffix} in the searched directories"
+    if len(found) > 1:
+        return None, f"{name}{suffix} is ambiguous across {[str(r) for r, _ in found]}"
+    recorded_path, local_path = found[0]
+    try:
+        declared = declared_module(local_path.read_text(errors="replace"))
+    except (AdmissionError, OSError, UnicodeError) as error:
+        return None, f"{recorded_path}: {error}"
+    if declared != name:
+        return None, f"{recorded_path} declares module {declared}, not {name}"
+    digest = digest_file(local_path)
+    context = {
+        Path(str(item["path"])).resolve(): str(item["sha256"])
+        for item in inputs.get("local_context", [])
+    }
+    resolved = local_path.resolve()
+    if resolved in context:
+        if context[resolved] != digest:
+            return None, f"{recorded_path} differs from the recorded local context"
+    elif resolved.is_relative_to(source_root.resolve()):
+        return None, f"{recorded_path} is not in the recorded local context"
+    return {"source": str(recorded_path), "sha256": digest}, "resolved"
 
 
 def checked_candidates(
@@ -339,10 +400,11 @@ def reconcile(
             )
             if expected:
                 continue
+            note = None
             if recorded is None:
                 if source_root is None:
                     raise AdmissionError("source root is required to classify results")
-                identity = resolve_unrequested(name, inputs, source_root)
+                identity, note = resolve_unrequested(name, kind, inputs, source_root)
             else:
                 # Replay uses the resolution recorded at admission; the provider
                 # tree need not exist where the records are re-checked.
@@ -358,7 +420,16 @@ def reconcile(
                 if previous and previous.get("classification") == "dependency":
                     if previous.get("lines") != lines:
                         reasons.append(f"recorded lines for unrequested {name} differ from output")
-                    identity = {"source": previous.get("source"), "sha256": previous.get("sha256")}
+                    identity = {
+                        "source": str(previous.get("source")),
+                        "sha256": str(previous.get("sha256")),
+                    }
+            # A recorded source outside the directories F* searched, or of the
+            # wrong kind, is not evidence of the dependency, at admission or on replay.
+            if identity is not None:
+                note = outside_search_scope(name, kind, identity["source"], inputs)
+                if note is not None:
+                    identity = None
             unrequested.append(
                 {
                     "module": name,
@@ -370,7 +441,10 @@ def reconcile(
                 }
             )
             if identity is None:
-                reasons.append(f"unrequested {kind} result for {name} has no known source")
+                reasons.append(
+                    f"unrequested {kind} result for {name} has no known source"
+                    + (f": {note}" if note else "")
+                )
 
     # A .checked file for a requested module anywhere F* searches would let the
     # result line stand for cache reuse instead of a fresh check.

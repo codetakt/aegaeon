@@ -33,9 +33,14 @@ cases below; the recorded outputs are kept as fixtures under
 | `--cache_dir` with an existing `.checked` | 0 | `Verified module:` line printed on reuse |
 | `--already_cached <name>` | 0 | no line for the cached module |
 | `--silent` | 0 | no output |
+| dependency in the working directory, not on the command line | 0 | no result line for the dependency (`Verified module:` is printed for command-line sources only) |
+| same module in the working directory and in `--include` | 0 | the working directory's file is used |
+| same module in two `--include` directories | 0 / 1 | the later `--include` wins |
+| dependency only in the source's own directory or in a subdirectory | 1 | `Error 72` module not found (neither is searched) |
 
 The archived impossible-lemma probe likewise printed `Verified module` after
-three errors and exited 1. A result line therefore only shows that F* processed
+three errors and exited 1. The search-scope rows come from
+`tool-probes/search_scope.out` (script: `search_scope.txt`). A result line therefore only shows that F* processed
 the module; it does not show success and does not distinguish a fresh check
 from `.checked` reuse. There is no machine-readable result output, so the text
 grammar above is the supported interface, versioned as `fstar-2025.10.06-text-v1`
@@ -82,13 +87,22 @@ declaration line is an identity error.
 | any | `missing`, `duplicate`, `ambiguous`, `identity-error` | rejected |
 
 Result lines for names that were not requested are recorded as `dependency`
-when `<name>.fst`/`.fsti` exists in the recorded local context or include
-paths, with the resolved path and its digest, and cause rejection as
-`unclassified` otherwise. Replay uses that recorded resolution, so records can
-be re-checked where the provider tree does not exist. An unrequested result
-never satisfies a requested target. The same module selected in different
-passes (for example LowStar dependencies) is expected; duplicates are counted
-within one pass only.
+only when they bind to the one source F* could have used: the single
+`<name>.fst` (for a `Verified module:` line) or `<name>.fsti` (for an
+interface line) across the directories the verifier searches: the working
+directory and the `--include` directories — never a source's own directory, a
+subdirectory or the recorded local context by file name. The candidate must
+declare `<name>`; when it lies in the working directory it must appear in the
+recorded local context with the same digest. Several candidates are ambiguous
+(the verifier's precedence rules are not emulated), and any of these failures
+leaves the result `unclassified` and rejects the pass. The resolved path (in
+the invocation's recorded working-directory form) and digest are recorded;
+replay uses that record, so records can be re-checked where the provider tree
+does not exist, but replay still rejects a recorded source that is not of the
+result's kind or that lies outside the searched directories. An unrequested
+result never satisfies a requested target. The same module selected in
+different passes (for example LowStar dependencies) is expected; duplicates
+are counted within one pass only.
 
 ## Cache and option policy
 
@@ -130,7 +144,8 @@ covers a real hosted pass with its four sources, the real impossible-lemma
 probe, the tool probes above and controlled mutations (omitted, duplicated,
 wrong and unrequested results, interface pairs, identity ambiguity, changed
 digests, truncated output, forged status, denied options, checked files and
-tampered records); `tests/ci/test_fstar_runner.py` exercises the wired gate
+tampered records, dependency sources outside the searched directories,
+  same-named candidates, kind mismatches and context-order independence); `tests/ci/test_fstar_runner.py` exercises the wired gate
 with an omitted module at exit 0. Both run in the PR documentation lane and
 inside the proof derivation.
 

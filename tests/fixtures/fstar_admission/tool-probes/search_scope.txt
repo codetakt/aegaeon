@@ -1,0 +1,24 @@
+# Probe script (run with bash); stored as text so it is not a hook-linted executable.
+set -u
+FS=/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe
+[ -x "$FS" ] || FS=$(cd /home/claude/Workspaces/conceptual/aegaeon-fstar-module-admission && nix develop -c which fstar.exe 2>/dev/null | tail -1)
+echo "fstar: $FS"; "$FS" --version 2>&1 | head -1
+P=$(cd "$(dirname "$0")" && pwd)
+ORIGIN=$'module Dpop\nlet origin : int = 11\n'; OTHER=$'module Dpop\nlet other : int = 22\n'; MAIN=$'module Main\nlet y : int = Dpop.origin + 1\n'
+run() { local dir=$1; shift; (cd "$dir" && "$FS" "$@" 2>&1 | grep -E "Verified|Error|origin|other|not found|Unable|checked" | head -4; echo "  rc=${PIPESTATUS[0]}"); }
+mkdir -p "$P/a/inc1" "$P/a/inc2"; printf "%s" "$ORIGIN" > "$P/a/Dpop.fst"; printf "%s" "$OTHER" > "$P/a/inc1/Dpop.fst"; printf "%s" "$MAIN" > "$P/a/Main.fst"
+echo "== (a) cwd Dpop(origin) vs --include inc1 Dpop(other)"; run "$P/a" --include inc1 Main.fst
+mkdir -p "$P/b/inc1" "$P/b/inc2"; printf "%s" "$ORIGIN" > "$P/b/inc1/Dpop.fst"; printf "%s" "$OTHER" > "$P/b/inc2/Dpop.fst"; printf "%s" "$MAIN" > "$P/b/Main.fst"
+echo "== (b) --include inc1 Dpop(origin) --include inc2 Dpop(other)"; run "$P/b" --include inc1 --include inc2 Main.fst
+echo "== (b') --include inc2 Dpop(other) --include inc1 Dpop(origin)"; run "$P/b" --include inc2 --include inc1 Main.fst
+mkdir -p "$P/c/srcdir"; printf "%s" "$ORIGIN" > "$P/c/srcdir/Dpop.fst"; printf "%s" "$MAIN" > "$P/c/srcdir/Main.fst"
+echo "== (c) Dpop only in the source's own dir (not cwd, not include)"; run "$P/c" srcdir/Main.fst
+mkdir -p "$P/d/sub"; printf "%s" "$ORIGIN" > "$P/d/sub/Dpop.fst"; printf "%s" "$MAIN" > "$P/d/Main.fst"
+echo "== (d) Dpop only in cwd/sub (not included)"; run "$P/d" Main.fst
+mkdir -p "$P/e/inc1"; printf "%s" "$OTHER" > "$P/e/Dpop.fst"; printf 'module Dpop\nval origin : int\n' > "$P/e/inc1/Dpop.fsti"; printf "%s" "$ORIGIN" > "$P/e/inc1/Dpop.fst"; printf "%s" "$MAIN" > "$P/e/Main.fst"
+echo "== (e) cwd Dpop.fst(other) vs inc1 Dpop.fsti+Dpop.fst(origin)"; run "$P/e" --include inc1 Main.fst
+mkdir -p "$P/f/inc1"; printf 'module Dpop\nval origin : int\n' > "$P/f/Dpop.fsti"; printf "%s" "$ORIGIN" > "$P/f/inc1/Dpop.fst"; printf "%s" "$MAIN" > "$P/f/Main.fst"
+echo "== (f) cwd Dpop.fsti only, inc1 Dpop.fst: which result lines?"; run "$P/f" --include inc1 Main.fst
+mkdir -p "$P/g"; printf "%s" "$ORIGIN" > "$P/g/Dpop.fst"; printf "%s" "$MAIN" > "$P/g/Main.fst"
+echo "== (g) dependency in cwd: result lines printed for the dependency?"; run "$P/g" Main.fst
+echo "== (g') same with --already_cached / explicit both files"; run "$P/g" Dpop.fst Main.fst
