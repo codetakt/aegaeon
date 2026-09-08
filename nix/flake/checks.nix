@@ -122,4 +122,5 @@ in
 }
 // pkgs.lib.optionalAttrs isLinux {
   inherit verifyKani;
+  preview-review-contract = import ../../examples/preview-review/check.nix { inherit pkgs; };
 }

@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1787001381,
+        "narHash": "sha256-Ue1Yo8gfHdD4TMtNewhA4tkSYeFqXThju0nCyJc3ALo=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "ec2d622de0773551768cf98f3fc50cbcc003b9c5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "ec2d622de0773551768cf98f3fc50cbcc003b9c5",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "server-source": "server-source"
+      }
+    },
+    "server-source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788848567,
+        "narHash": "sha256-EospsV8oCnQA6M/yqt/bKltAAmE0iXavl708bgXsbgY=",
+        "owner": "codetakt",
+        "repo": "aegaeon",
+        "rev": "4f22252f8f0f1320d20c8ce90d6476cc670a3e45",
+        "type": "github"
+      },
+      "original": {
+        "owner": "codetakt",
+        "repo": "aegaeon",
+        "rev": "4f22252f8f0f1320d20c8ce90d6476cc670a3e45",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
