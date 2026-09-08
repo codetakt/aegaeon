@@ -28,15 +28,24 @@ WASM input for that work.
 
 ## Initial account setup
 
-Use the existing `codetakt/aegaeon` repository identity on FlakeHub. The account
-must support private flakes and FlakeHub Cache, with the GitHub repository
-connected. Initially grant the maintainer read access. Private visibility applies
-to FlakeHub; the existing GitHub repository remains public.
+Publish `codetakt-inc/aegaeon` in the FlakeHub organization `codetakt-inc`, with
+the GitHub source repository `codetakt/aegaeon` connected as its trusted publisher.
+The workflow sets these separately with `name` and `repository`. The account must
+support private flakes and FlakeHub Cache. Initially grant the maintainer read
+access. Private visibility applies to FlakeHub; the existing GitHub repository
+remains public.
 
 GitHub Actions uses OIDC through `id-token: write`. The workflow installs
 Determinate Nix and enables the FlakeHub cache with GitHub artifact-cache fallback
 disabled. No personal access token is embedded in the workflow. A separate consumer
 job runs after publication and the cache action's upload finalization.
+
+An authenticated workstation or successful cache job alone does not establish
+publication access. The first attempt used the GitHub organization as the
+FlakeHub namespace and reported `Organization codetakt not found`. The maintainer
+confirmed `codetakt-inc` as the FlakeHub organization. Retrying uses that namespace;
+successful OIDC authorization, private publication and cold retrieval still need
+to be demonstrated by the publication workflow.
 
 On the consuming workstation, install Determinate Nix and the FlakeHub CLI, then
 authenticate with:
@@ -72,17 +81,22 @@ parity, OCI image, and Performance Testing. Scheduled load-test runs and the leg
 F* passthrough are not used as substitutes. Missing, pending, cancelled, or failed
 runs stop publication; an earlier successful run does not override a later failure.
 
-The published version has the form `0.1.<commit-count>+rev-<full-commit-sha>` and
-identifies the publication recipe's commit. The manifest separately identifies
-the locked server source commit. Publishing a new recipe does not silently update
-that source. To select a newer main server revision, update the distribution lock,
-review its input changes, and merge the update before dispatching:
+The exact reference has the form
+`codetakt-inc/aegaeon/=0.1.<commit-count>+rev-<full-commit-sha>` and identifies the
+publication recipe's commit. The manifest's `repository` and `server_source`
+identify the GitHub repository and locked server commit separately from that
+publication reference. Publishing a new recipe does not silently update the
+server source. To select a newer main server revision, update the distribution
+lock, review its input changes, and merge the update before dispatching:
 
 ```sh
 nix flake update aegaeon --flake ./.flakehub
 ```
 
 The publisher registers the server output path with `include-output-paths: true`.
+Its tool binary is pinned with `source-revision`; `source-branch: ""` explicitly
+disables the action's default `main` branch, which would otherwise take precedence.
+The download log must select `/rev/<pinned-revision>/`, not `/branch/main/`.
 The producer also caches `fh` from the root lockfile's nixpkgs for the consumer.
 Both jobs use that Nix package and its runtime closure, rather than assuming a
 downloaded CLI executable is portable across Linux installations.
