@@ -243,16 +243,23 @@ def main() -> int:
     fail_threshold = get_threshold("DUDECT_FAIL_THRESHOLD", 0.01)
     warn_threshold = get_threshold("DUDECT_WARN_THRESHOLD", 0.05)
     if not 0 < fail_threshold < warn_threshold <= 1:
-        raise ValueError("Require 0 < DUDECT_FAIL_THRESHOLD < DUDECT_WARN_THRESHOLD <= 1")
+        raise ValueError(
+            "Require 0 < DUDECT_FAIL_THRESHOLD < DUDECT_WARN_THRESHOLD <= 1 "
+            f"(resolved DUDECT_FAIL_THRESHOLD={fail_threshold}, "
+            f"DUDECT_WARN_THRESHOLD={warn_threshold})"
+        )
 
     tau_fail = get_threshold("DUDECT_TAU_FAIL", 4.5)
     tau_warn = get_threshold("DUDECT_TAU_WARN", 3.5)
     if not 0 < tau_warn < tau_fail:
-        raise ValueError("Require 0 < DUDECT_TAU_WARN < DUDECT_TAU_FAIL")
+        raise ValueError(
+            "Require 0 < DUDECT_TAU_WARN < DUDECT_TAU_FAIL "
+            f"(resolved DUDECT_TAU_WARN={tau_warn}, DUDECT_TAU_FAIL={tau_fail})"
+        )
 
     min_traces = get_min_traces()
     if min_traces <= 0:
-        raise ValueError("DUDECT_MIN_TRACES must be positive")
+        raise ValueError(f"DUDECT_MIN_TRACES must be positive (resolved {min_traces})")
 
     try:
         metrics = load_dudect_results()

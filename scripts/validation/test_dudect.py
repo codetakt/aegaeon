@@ -39,9 +39,9 @@ class DudectThresholdTests(unittest.TestCase):
                     status, output = self.evaluate(
                         validator.Metrics(tau=tau * sign, num_traces=16_000)
                     )
-                    assert status == expected_status
-                    assert message in output
-                    assert "adjusting" not in output
+                    self.assertEqual(status, expected_status)
+                    self.assertIn(message, output)
+                    self.assertNotIn("adjusting", output)
 
     def test_p_value_bands_retain_the_opposite_direction(self) -> None:
         for p_value, expected_status, message in (
@@ -55,8 +55,8 @@ class DudectThresholdTests(unittest.TestCase):
                 status, output = self.evaluate(
                     validator.Metrics(p_value=p_value, num_traces=16_000)
                 )
-                assert status == expected_status
-                assert message in output
+                self.assertEqual(status, expected_status)
+                self.assertIn(message, output)
 
     def test_invalid_thresholds_cannot_be_silently_normalized(self) -> None:
         invalid = (
@@ -105,7 +105,7 @@ class DudectThresholdTests(unittest.TestCase):
         ):
             with self.subTest(metrics=metrics):
                 status, _ = self.evaluate(metrics)
-                assert status == 1
+                self.assertEqual(status, 1)
 
 
 if __name__ == "__main__":

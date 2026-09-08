@@ -180,6 +180,8 @@ known-first-party = ["aegaeon"]
   "PLC0415",  # local imports allowed in scripts
   "W293",     # whitespace-only lines tolerated in scripts
 ]
+# This suite runs with unittest directly; its assertions must survive Python -O.
+"scripts/validation/test_dudect.py" = ["PT009"]
 
 # ---------------------------------------------------------------------------
 # mypy — Type Checker
