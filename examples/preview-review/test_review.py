@@ -85,7 +85,7 @@ class ArtifactTests(unittest.TestCase):
                 "rev": SOURCE_REVISION,
                 "narHash": SOURCE_NAR_HASH,
             },
-            "flakeref_exact": "codetakt/aegaeon/=0.1.10+rev-" + "a" * 40,
+            "flakeref_exact": "codetakt-inc/aegaeon/=0.1.10+rev-" + "a" * 40,
         }
 
     def test_exact_publication_and_separate_source_identity(self):
@@ -96,9 +96,11 @@ class ArtifactTests(unittest.TestCase):
             ("version", 2),
             ("version", True),
             ("repository", "unknown/aegaeon"),
+            ("repository", "codetakt-inc/aegaeon"),
             ("attribute", "packages.x86_64-linux.default"),
             ("executable", "bin/other"),
-            ("flakeref_exact", "codetakt/aegaeon/0.1"),
+            ("flakeref_exact", "codetakt-inc/aegaeon/0.1"),
+            ("flakeref_exact", "codetakt/aegaeon/=0.1.10+rev-" + "a" * 40),
             ("revision", "c" * 40),
             ("binary_sha256", "not-a-digest"),
         ):
@@ -116,6 +118,10 @@ class ArtifactTests(unittest.TestCase):
             validate_manifest(self.manifest, "d" * 40)
         record["server_source"]["rev"] = SOURCE_REVISION
         record["server_source"]["narHash"] = "wrong hash"
+        with self.assertRaises(ValueError):
+            validate_manifest(record, SOURCE_REVISION)
+        record = copy.deepcopy(self.manifest)
+        record["server_source"]["owner"] = "codetakt-inc"
         with self.assertRaises(ValueError):
             validate_manifest(record, SOURCE_REVISION)
 

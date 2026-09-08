@@ -28,6 +28,7 @@ from werkzeug.serving import WSGIRequestHandler, make_server
 
 SOURCE_REVISION = "4f22252f8f0f1320d20c8ce90d6476cc670a3e45"
 SOURCE_NAR_HASH = "sha256-EospsV8oCnQA6M/yqt/bKltAAmE0iXavl708bgXsbgY="
+FLAKE_NAME = "codetakt-inc/aegaeon"
 REDIS_SURFACES = (
     "AUTH_CODE",
     "AUTH_SESSION",
@@ -97,7 +98,8 @@ def validate_manifest(record, source_revision):
         msg = "invalid revision or binary digest"
         raise ValueError(msg)
     if "flakeref_exact" in record and not re.fullmatch(
-        r"codetakt/aegaeon/=0\.1\.[0-9]+\+rev-" + record["revision"], record["flakeref_exact"]
+        re.escape(FLAKE_NAME) + r"/=0\.1\.[0-9]+\+rev-" + record["revision"],
+        record["flakeref_exact"],
     ):
         msg = "preview reference must pin the publication revision"
         raise ValueError(msg)

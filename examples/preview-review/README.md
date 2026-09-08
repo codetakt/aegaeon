@@ -61,6 +61,10 @@ loading its proof toolchain. `AEGAEON_REVIEW_MIGRATIONS` and
 configuration. A preview from another source revision is rejected until this
 kit's source pin, fixture compatibility and tests are updated together.
 
+The private FlakeHub reference uses `codetakt-inc/aegaeon`. The manifest's
+`repository` and `server_source` still identify the GitHub repository
+`codetakt/aegaeon`; the publication namespace does not replace that source identity.
+
 Atlas applies the source migrations with revision records in `public`. The
 isolated `review` database role uses `aegaeon, public` as its search path because
 the migration installs pgcrypto in `aegaeon`. The fixture creates a control-plane
