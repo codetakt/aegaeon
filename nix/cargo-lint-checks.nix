@@ -47,7 +47,7 @@ let
         CARGO_PROFILE = profile;
         cargoArtifacts = artifacts;
         buildPhaseCargoCommand = ''
-          ${pkgs.bash}/bin/bash ${script}
+          ${pkgs.bash}/bin/bash ${pkgs.lib.escapeShellArg script}
         '';
         checkPhaseCargoCommand = "";
         installPhaseCommand = ''
