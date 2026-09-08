@@ -21,7 +21,7 @@ import check_preview_ci as gate  # noqa: E402
 import preview_manifest as manifest  # noqa: E402
 
 REVISION = "a" * 40
-REFERENCE = f"codetakt/aegaeon/=0.1.42+rev-{REVISION}"
+REFERENCE = f"codetakt-inc/aegaeon/=0.1.42+rev-{REVISION}"
 SOURCE = {"type": "github", "owner": "codetakt", "repo": "aegaeon", "rev": "b" * 40}
 WORKFLOW = yaml.safe_load((ROOT / ".github/workflows/flakehub-preview.yml").read_text())
 
@@ -100,7 +100,8 @@ class PreviewGateTests(unittest.TestCase):
         publisher = next(s for s in steps if s.get("id") == "publish")
         assert publisher["with"]["visibility"] == "private"
         assert publisher["with"]["directory"] == ".flakehub"
-        assert publisher["with"]["name"] == "codetakt/aegaeon"
+        assert publisher["with"]["name"] == "codetakt-inc/aegaeon"
+        assert publisher["with"]["repository"] == "codetakt/aegaeon"
         assert publisher["with"]["include-output-paths"] is True
         assert publisher["with"]["source-branch"] == ""
         assert publisher["with"]["source-revision"] == publisher["uses"].split("@")[1]
@@ -148,9 +149,15 @@ class PreviewManifestTests(unittest.TestCase):
         assert self.record["tooling_lock_sha256"] == manifest.digest(self.root / "flake.lock")
         assert self.record["distribution_lock_sha256"] == manifest.digest(self.source_lock)
         assert self.record["server_source"] == SOURCE
+        assert self.record["repository"] == "codetakt/aegaeon"
 
     def test_source_repository_and_revision_are_pinned(self):
-        for change in ({"repo": "other"}, {"rev": "main"}, {"type": "path"}):
+        for change in (
+            {"repo": "other"},
+            {"owner": "codetakt-inc"},
+            {"rev": "main"},
+            {"type": "path"},
+        ):
             data = json.loads(self.source_lock.read_text())
             data["nodes"]["aegaeon"]["locked"] = SOURCE | change
             self.source_lock.write_text(json.dumps(data))
@@ -161,8 +168,9 @@ class PreviewManifestTests(unittest.TestCase):
         for reference in (
             REFERENCE.replace("/=", "/"),
             REFERENCE.replace(REVISION, "b" * 40),
-            REFERENCE.replace("codetakt", "other"),
-            "codetakt/aegaeon/*",
+            REFERENCE.replace("codetakt-inc", "other"),
+            REFERENCE.replace("codetakt-inc", "codetakt"),
+            "codetakt-inc/aegaeon/*",
         ):
             with self.subTest(reference=reference), pytest.raises(ValueError, match="exact"):
                 manifest.bind_publication(self.record, reference)
@@ -174,6 +182,7 @@ class PreviewManifestTests(unittest.TestCase):
             {"closure": {str(self.output): "sha256-other"}},
             {"closure": {str(self.output): "sha256-fixture"}},
             {"attribute": "packages.x86_64-linux.verified-core-wasm"},
+            {"repository": "codetakt-inc/aegaeon"},
             {"distribution": "release-assurance"},
         )
         for change in changes:
