@@ -385,16 +385,17 @@ class GroundingValidator:
     def _ground_kani(self, proof: dict[str, Any]) -> dict[str, Any]:
         raw_file = proof.get("file") if isinstance(proof.get("file"), str) else None
         raw_harness = proof.get("harness")
-        if raw_file is None and not isinstance(raw_harness, str):
-            return self._result(proof, False, "file or harness is required for Kani evidence")
+        if not isinstance(raw_harness, str) or not _split_identifiers(raw_harness):
+            return self._result(
+                proof,
+                False,
+                "named harness is required for Kani evidence; counts and files are insufficient",
+            )
 
         candidates, error = self._kani_candidates(raw_file)
         resolved = candidates[0] if raw_file is not None and candidates else None
         if error is not None:
             return self._result(proof, False, error, resolved)
-        if not isinstance(raw_harness, str):
-            return self._result(proof, True, f"Kani evidence file exists: {raw_file}", resolved)
-
         missing = []
         found_paths: set[pathlib.Path] = set()
         for harness in _split_identifiers(raw_harness):

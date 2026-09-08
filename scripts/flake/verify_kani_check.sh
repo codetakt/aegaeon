@@ -10,4 +10,5 @@ export AEG_KANI_SUITE="${AEG_KANI_SUITE:-regression}"
 export AEG_KANI_RUN_SERVER="${AEG_KANI_RUN_SERVER:-1}"
 
 chmod +x scripts/kani/run_kani.sh
+python3 scripts/validation/run_kani_evidence.py
 exec bash ./scripts/kani/run_kani.sh

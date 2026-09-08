@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
 from typing import TYPE_CHECKING
 
 import pytest
 import verify_verified_reqs
+import yaml
 
 if TYPE_CHECKING:
-    import pathlib
     from typing import Any
 
 
@@ -17,6 +19,40 @@ def _write(root: pathlib.Path, relative: str, content: str = "") -> pathlib.Path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return path
+
+
+@pytest.mark.parametrize("harness", [None, "", " , "])
+def test_kani_count_or_file_cannot_replace_named_harness(
+    repo: pathlib.Path,
+    harness: str | None,
+) -> None:
+    _write(repo, "crates/example/src/kani.rs", "#[kani::proof]\nfn actual() {}\n")
+    proof = {"type": "kani", "file": "crates/example/src/kani.rs", "count": 1, "harness": harness}
+    _, result = _validate(repo, _entry([proof]))
+    assert result["verdict"] == "fail"
+
+
+def test_admitted_kani_selection_covers_its_matrix_citations() -> None:
+    root = pathlib.Path(__file__).resolve().parents[2]
+    registry = json.loads((root / "spec/kani-evidence.json").read_text())
+    matrix = yaml.safe_load((root / "spec/compliance-matrix.yaml").read_text())
+    admitted_rows = {"7515-007", "OIDC-1-007", "OIDC-1-010"}
+    citations = {
+        (row["id"], proof["file"], proof["harness"])
+        for rows in matrix.values()
+        if isinstance(rows, list)
+        for row in rows
+        if isinstance(row, dict) and row.get("id") in admitted_rows
+        for proof in row["proof"]
+        if proof["type"] == "kani"
+    }
+    selected = {
+        (row, harness["file"], harness["name"].rsplit("::", 1)[-1])
+        for harness in registry["harnesses"]
+        for row in harness["rows"]
+    }
+    assert citations
+    assert selected == citations
 
 
 def _entry(

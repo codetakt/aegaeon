@@ -1,6 +1,6 @@
 # Kani Verification (Status + How to Run)
 
-Last updated: 2026-07-08
+Last updated: 2026-09-08
 
 Status: current implementation baseline
 
@@ -23,6 +23,7 @@ For deeper RCA of the NixOS packaging fixes, see `docs/verification/kani/kani-ni
 
 ## Canonical Documents
 
+- `[policy]` [Kani evidence admission](evidence-admission.md)
 - `[index]` [Kani NixOS fix](kani-nixos-fix/README.md)
 - `[reference]` [HashMap ICE reproducer](hashmap-ice-repro.md)
 - `[runbook]` [Kani troubleshooting](troubleshooting.md)
