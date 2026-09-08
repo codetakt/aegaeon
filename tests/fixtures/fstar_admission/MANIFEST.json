@@ -1,0 +1,35 @@
+{
+  "files": {
+    "hosted-34200194649/pass-1/inputs.json": "0bb90eea1833ac8e9fccca2a9436bc9057e14521089d535089b7de9d449727a3",
+    "hosted-34200194649/pass-1/output.txt": "993596f9854926adf76f7bc26af41ccc80c62843cf7744e6db1ce31b928a313e",
+    "hosted-34200194649/pass-1/result.json": "5b1a1d2e238df5c3e45fc6b7b27519a742829e017090b0a24ad45476bd91a1ca",
+    "hosted-34200194649/sources/jose/Jose.Federation.Policy.Lemmas.fst": "37af9b7eada6783ed8d3996c6891e22dd552f989fa1e7432084038a5f83594e7",
+    "hosted-34200194649/sources/jose/Jose.Federation.Policy.Merge.fst": "ab56d552334e2836b9530409fe714a5d3be393652c5f64ee9a111fe405303c3a",
+    "hosted-34200194649/sources/jose/Jose.Federation.Policy.Order.fst": "13013c261e68bf12cef43f5f8c29deb1c74e797227566c37d43603868ef5ff71",
+    "hosted-34200194649/sources/jose/Jose.Federation.Policy.Types.fst": "03a1577068d260fbbc915d00e7ddc64e1f64fcfdce8f3b2fb433574fbc2f699f",
+    "injected-lemma/InjectedFailure.fst": "55cb50a146eef06eec90c7b4cb14d87445773751bbcdc819a2d0816632e2b67b",
+    "injected-lemma/inputs.json": "8d614fa1ec1fd81f75867ddfb20b2a92faa44e3981f679e4d27d48e92f14d9a0",
+    "injected-lemma/output.txt": "bfc4ded2fa3fe87e130489a5757ac6b94467b56b7d966abba9096e3ccb607521",
+    "injected-lemma/result.json": "553fc6cccad17dbb8c29f0e5d3bee072818b10f664c48c7b5efde0adf90252f9",
+    "tool-probes/VERSION.txt": "f0c5446e8f3817d89c17d757a8f4575ddf07ef5021ef0b299e5a5c60016fcc8e",
+    "tool-probes/already_cached.out": "cfd8f5c3bb437ab35e4a635fc37547a900c95dc83885b561fc38bee8e7004886",
+    "tool-probes/bad_alone.out": "6c11c12b86f2562159c2c3c190ca9172207cd1e6965b969176160f2d83ade17a",
+    "tool-probes/bad_then_ok.out": "7309c230e00394a20c08cb68921772f04c6bbf8ca62f93e598bbaed5e92f5f23",
+    "tool-probes/cache_reuse.out": "7926cb854c237944e5470fe29c4bfe8f42b865b7b7bd6c155254206d27dfe13f",
+    "tool-probes/iface_only.out": "7a9b76986092d85f94b34cbd313c55813b10006e1b47ab9a827ae6f444db960d",
+    "tool-probes/iface_pair.out": "5c6187b7e221b577933fb65be04591705562f3fcfa5c9846fb1a78f133de8abc",
+    "tool-probes/json_format.out": "7926cb854c237944e5470fe29c4bfe8f42b865b7b7bd6c155254206d27dfe13f",
+    "tool-probes/mismatch.out": "206c5ea0ac348f9d1f5a739de4f946ffa65694b702f399f48dcb1e6f029239d1",
+    "tool-probes/ok_then_bad.out": "1a0a4bcf7ec498a7b2a235ef932a5ff8d2614498c6b72767d40b24411eae39d5",
+    "tool-probes/probe_querystats.out": "2d807f00c7b9a6867c1ccf808b8c65b1a1492b50774204465f1c1eb784b6477e",
+    "tool-probes/silent.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "note": "Invocation outputs are stored as output.txt because *.log is git-ignored; tests copy them to output.log.",
+  "origins": {
+    "hosted-34200194649/pass-1": "Hosted run https://github.com/codetakt/aegaeon/actions/runs/34200194649 (PR #16 head 9fd54d624), F* Verification job artifact, invocation pass 1; sources are the four requested modules at that head.",
+    "injected-lemma": "Maintainer-local impossible-lemma probe (T03/review-candidate-negative, exit 1 with a Verified module line).",
+    "tool-probes": "Direct fstar.exe probes recorded in the module-admission handoff (work/fstar-probes/PROBES.log)."
+  },
+  "purpose": "Real F* evidence fixtures for tests/ci/test_fstar_admission.py; copied verbatim, never edited.",
+  "tool": "F* 2025.10.06~dev"
+}

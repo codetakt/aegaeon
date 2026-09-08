@@ -50,8 +50,9 @@ and `2b` (remaining selected modules). Any unsuccessful invocation, signal,
 missing selected file/tool, or evidence-write failure makes the target fail.
 Failed production invocations also print a `[FAIL] Pass <id>` diagnostic with
 the runner's exit status, while preserving the structured completion record.
-The target runs `tests/ci/test_fstar_runner.py` before invoking the real verifier;
-the same controlled-tool tests run in the PR documentation lane.
+The target runs `tests/ci/test_fstar_runner.py` and `tests/ci/test_fstar_admission.py`
+before invoking the real verifier; the same controlled-tool and fixture tests
+run in the PR documentation lane.
 
 The build output contains `verify.log` and, under `invocations/<pass-id>/`:
 
@@ -83,11 +84,15 @@ Neither their presence nor a zero exit status proves their soundness. This gate
 does not establish complete module/lemma coverage, model adequacy, implementation
 refinement, or release assurance.
 
-Acceptance currently operates at invocation level. A follow-up must bind each
-requested module/interface to a versioned per-module result, reject missing or
-duplicate results, and retain nonzero process status as fatal even when output
-contains a `Verified module` line. Reviewed positive and negative fixtures must
-cover skipped modules and mixed results before this becomes an admission gate.
+After the fifth invocation the target runs `scripts/validation/admit_fstar_modules.py`,
+which binds every requested implementation and interface to exactly one result
+under the pinned output contract and rejects missing, duplicate, contradictory
+or unclassified results, reported errors, denied cache options and changed
+source digests, even when the process exited 0 and printed `Verified module`
+lines. It writes `invocations/<pass-id>/modules.json` and, only when all five
+passes are accepted, `admission.json`; the hosted wrapper replays those records
+before it reports success. See [F\* per-module admission](module-admission.md)
+for the contract, dispositions, cache policy and record formats.
 
 `nix build .#verify-abstract` is a separate exploratory target. Its five generated
 PAR experiments retain individual results and return failure if any experiment

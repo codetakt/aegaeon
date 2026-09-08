@@ -30,6 +30,7 @@ class FstarRunnerTests(unittest.TestCase):
         for path in (
             "scripts/flake/verify_fstar.sh",
             "scripts/validation/run_fstar_invocation.py",
+            "scripts/validation/admit_fstar_modules.py",
             "scripts/verify/verify_fstar_ci.sh",
             "scripts/verify/verify_fstar_abstract.sh",
             "scripts/flake/verify_fstar_abstract.sh",
@@ -37,15 +38,17 @@ class FstarRunnerTests(unittest.TestCase):
             target = self.root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, target)
-        # Only filenames matter for the mock verifier; no proof tool runs here.
+        # Each fixture declares its own module name; no proof tool runs here.
         for directory in ("fstar", "generated/everparse", "tests/fstar"):
             for path in (ROOT / directory).rglob("*.fst*"):
                 target = self.root / path.relative_to(ROOT)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("module Fixture\n")
+                target.write_text(f"module {path.name.rsplit('.', 1)[0]}\n")
         (self.root / "fstar/Steel.Effect.fst").write_text("module Steel.Effect\n")
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        # The mock reproduces the pinned F* result grammar: one result line per
+        # requested source, the completion marker and the argv echo.
         self.install_tool(
             "fstar.exe",
             """
@@ -60,6 +63,19 @@ if len(entries) == int(os.environ.get('FAIL_AT', '0')):
     if os.environ.get('KILL_TOOL'):
         os.kill(os.getpid(), signal.SIGTERM)
     sys.exit(23)
+sources = [a for a in sys.argv[1:] if a.endswith(('.fst', '.fsti'))]
+stems = {pathlib.Path(s).name.rsplit('.', 1)[0] for s in sources if s.endswith('.fst')}
+omit = os.environ.get('OMIT_MODULE')
+for source in sources:
+    stem = pathlib.Path(source).name.rsplit('.', 1)[0]
+    if stem == omit:
+        continue
+    if source.endswith('.fst'):
+        print(f'Verified module: {stem}', flush=True)
+    elif stem not in stems:
+        print(f"Verified i'face (or impl+i'face): {stem}", flush=True)
+print('All verification conditions discharged successfully', flush=True)
+print('TOTAL TIME 1 ms: ' + ' '.join(sys.argv), flush=True)
 """,
         )
         self.output = self.root / "output"
@@ -148,6 +164,48 @@ if len(entries) == int(os.environ.get('FAIL_AT', '0')):
         assert "--expose_interfaces" in calls[1]
         assert "oidc/IdToken.fst" in calls[-1]
         assert "All five required" in result.stderr
+        assert "Every requested F* module was admitted" in result.stderr
+        self.assert_admission_records()
+
+    def assert_admission_records(self):
+        admission = json.loads((self.output / "admission.json").read_text())
+        assert admission["status"] == "accepted"
+        assert sorted(admission["passes"]) == sorted(PASS_IDS)
+        for pass_id in PASS_IDS:
+            path = self.output / "invocations" / pass_id / "modules.json"
+            record = json.loads(path.read_text())
+            assert record["status"] == "accepted"
+            assert {e["disposition"] for e in record["requested"]} <= {
+                "verified",
+                "paired-interface",
+            }
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            assert admission["passes"][pass_id]["modules_sha256"] == digest
+
+    def test_omitted_module_result_is_fatal_despite_zero_exit(self):
+        result = self.invoke(OMIT_MODULE="Jose.Federation.Policy.Merge")
+        assert result.returncode != 0
+        assert len(json.loads((self.root / "calls.json").read_text())) == len(PASS_IDS)
+        assert "All five required" in result.stderr
+        assert "[FAIL] Per-module admission rejected the F* evidence" in result.stderr
+        assert "Every requested F* module was admitted" not in result.stderr
+        record = json.loads((self.output / "invocations/1/modules.json").read_text())
+        assert record["status"] == "rejected"
+        assert [e["disposition"] for e in record["requested"]] == [
+            "verified",
+            "missing",
+            "verified",
+            "verified",
+        ]
+        assert not (self.output / "admission.json").exists()
+        events = [
+            json.loads(line.removeprefix("FSTAR-ADMISSION "))
+            for line in result.stdout.splitlines()
+            if line.startswith("FSTAR-ADMISSION ")
+        ]
+        assert events[0]["pass_id"] == "1"  # noqa: S105 - pass identifier, not a secret
+        assert events[0]["dispositions"] == {"verified": 3, "missing": 1}
+        assert events[-1]["status"] == "rejected"
 
     def test_signal_termination_is_not_success(self):
         result = self.invoke(FAIL_AT="5", KILL_TOOL="1")
@@ -235,8 +293,9 @@ sys.exit(status)
 """,
         )
         store = self.root / "store"
-        store.mkdir()
-        (store / "verify.log").write_text("current proof output\n")
+        # The mock build output is a real production-script run over the mock
+        # verifier, so it carries invocation and admission records.
+        assert self.invoke(OUT_DIR=str(store)).returncode == 0
         return {
             "FSTAR_CI_ARTIFACT_DIR": str(self.root / "hosted"),
             "NIX_OUTPUT": str(store),
@@ -256,7 +315,22 @@ sys.exit(status)
         result = self.invoke("scripts/verify/verify_fstar_ci.sh", **self.setup_nix())
         assert result.returncode == 0, result.stderr
         run = next((self.root / "hosted").iterdir())
-        assert (run / "verified-output/verify.log").read_text() == "current proof output\n"
+        assert "All five required" in (run / "verified-output/verify.log").read_text()
+        assert (run / "verified-output/admission.json").exists()
+        assert "[OK] pass 2b:" in result.stdout
+
+    def test_hosted_wrapper_rejects_output_without_replayable_admission(self):
+        environment = self.setup_nix()
+        store = self.root / "store"
+        output = store / "invocations/2b/output.log"
+        output.write_text(output.read_text().replace("Verified module: Bearer\n", "", 1))
+        result = self.invoke("scripts/verify/verify_fstar_ci.sh", **environment)
+        assert result.returncode != 0
+        assert "F* build and evidence capture succeeded" not in result.stdout
+        assert "output.log digest differs" in result.stderr
+        (store / "admission.json").unlink()
+        result = self.invoke("scripts/verify/verify_fstar_ci.sh", **environment)
+        assert result.returncode != 0
 
     def test_hosted_log_capture_failure_blocks_successful_build(self):
         environment = self.setup_nix()

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "fstar.exe",
+    "--detail_errors",
+    "InjectedFailure.fst"
+  ],
+  "cwd": "/home/claude/Workspaces/conceptual/aegaeon/.local-issue-notes/2026-09-08-assurance-execution/T03/negative-source",
+  "inputs_sha256": "8d614fa1ec1fd81f75867ddfb20b2a92faa44e3981f679e4d27d48e92f14d9a0",
+  "output_sha256": "bfc4ded2fa3fe87e130489a5757ac6b94467b56b7d966abba9096e3ccb607521",
+  "pass_id": "injected",
+  "returncode": 1,
+  "schema_version": 1,
+  "status": "failed"
+}
