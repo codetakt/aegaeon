@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -104,9 +105,10 @@ class GeigerTests(unittest.TestCase):
                 self.validate(data)
 
     def test_unused_workspace_parse_failure_is_rejected(self):
-        diagnostics = f"Failed to parse file: {self.manifest.parent}/unused.rs, Parse(error)\n"
-        with pytest.raises(ValueError, match="not scanned"):
-            self.validate(diagnostics=diagnostics)
+        for filename in ("unused.rs", "artifacts/cargo-home/registry/dependency/src/lib.rs"):
+            diagnostics = f"Failed to parse file: {self.manifest.parent}/{filename}, Parse(error)\n"
+            with self.subTest(filename=filename), pytest.raises(ValueError, match="not scanned"):
+                self.validate(diagnostics=diagnostics)
 
     def test_incomplete_dependency_inventory_remains_visible(self):
         self.report["packages_without_metrics"] = [{"name": "external"}]
@@ -143,6 +145,8 @@ import sys
 root = pathlib.Path(os.environ['GEIGER_FIXTURE'])
 with (root / 'calls').open('a') as out:
     out.write(json.dumps(sys.argv[1:]) + '\\n')
+with (root / 'cargo-homes').open('a') as out:
+    out.write(json.dumps(os.environ.get('CARGO_HOME')) + '\\n')
 if sys.argv[1] == 'metadata':
     print((root / 'metadata.json').read_text())
 elif sys.argv[1] == 'geiger':
@@ -153,11 +157,16 @@ elif sys.argv[1] == 'geiger':
         cargo.chmod(0o755)
         (self.root / "cargo-geiger").symlink_to(cargo)
 
-    def run_gate(self, exit_code="0", *args):
+    def run_gate(self, exit_code="0", *args, suite=False, cwd=None):
+        script = "run_geiger.sh"
+        if suite:
+            (self.root / "scripts").symlink_to(ROOT / "scripts", target_is_directory=True)
+            script = "run_security_suite.sh"
+            args = ("--stage", "geiger", *args)
         # Execute only the repository runner and controlled fixture commands.
         return subprocess.run(  # noqa: S603
-            ["bash", str(ROOT / "scripts/security/run_geiger.sh"), *args],  # noqa: S607
-            cwd=self.root,
+            ["bash", str(ROOT / "scripts/security" / script), *args],  # noqa: S607
+            cwd=cwd or self.root,
             env={
                 **os.environ,
                 "PATH": f"{self.root}:{os.environ['PATH']}",
@@ -169,6 +178,32 @@ elif sys.argv[1] == 'geiger':
             text=True,
             check=False,
         )
+
+    def test_suite_preserves_caller_cargo_configuration(self):
+        self.install_cargo_fixture()
+        cache = self.root / "caller-cache"
+        cache.mkdir()
+        (cache / "config.toml").write_text("[net]\noffline = true\n")
+        with patch.dict(os.environ, {"CARGO_HOME": str(cache)}):
+            result = self.run_gate(suite=True)
+        assert result.returncode == 0, result.stderr
+        homes = [json.loads(line) for line in (self.root / "cargo-homes").read_text().splitlines()]
+        assert homes == [str(cache), str(cache)]
+        assert not (self.root / "artifacts/security/latest/cargo-home").exists()
+
+    def test_relative_cargo_home_is_resolved_before_scanning(self):
+        self.install_cargo_fixture()
+        caller = self.root / "caller"
+        caller.mkdir()
+        git = self.root / "git"
+        git.write_text(f"#!{sys.executable}\nimport os\nprint(os.environ['GEIGER_FIXTURE'])\n")
+        git.chmod(0o755)
+        with patch.dict(os.environ, {"CARGO_HOME": "caller-cache"}):
+            result = self.run_gate(cwd=caller)
+        assert result.returncode == 0, result.stderr
+        expected = str(caller / "caller-cache")
+        homes = [json.loads(line) for line in (self.root / "cargo-homes").read_text().splitlines()]
+        assert homes == [expected, expected]
 
     def test_one_scan_supplies_both_reports(self):
         self.install_cargo_fixture()
