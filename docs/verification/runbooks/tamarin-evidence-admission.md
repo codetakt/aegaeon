@@ -62,8 +62,10 @@ the admission tool writes `requests.json`: for each request the theory path
 (relative to `proofs/tamarin`), its SHA-256, the lemma name and the trace
 quantifier read from the comment-stripped source (`exists-trace` or the default
 `all-traces`). Before any run it rejects an empty selection, an empty lemma
-name, a duplicate `(theory, lemma)`, a theory that is not a `.spthy` file, and
-a lemma that is not declared exactly once in the theory. Results are keyed by
+name, a duplicate `(theory, lemma)`, a theory path that is absolute, contains
+`..`, is not in normalised relative form or resolves (through a symlink)
+outside the proofs root, a theory that is not a `.spthy` file, and a lemma that
+is not declared exactly once in the theory. Results are keyed by
 `(theory, lemma)`; fifteen lemma names recur across the selected theories.
 No selected theory uses `#include`, so a run's input is the theory file and the
 tool; both identities are recorded.
@@ -74,6 +76,11 @@ One invocation per request, from `proofs/tamarin`: `timeout --kill-after=10
 <timeout_seconds> tamarin-prover --prove=<lemma> --derivcheck-timeout=<n> <theory>`.
 A request is `accepted` only when all of the following hold:
 
+- the invocation record is the run made for this request: it names the request
+  id, its argv carries exactly `--prove=<lemma>` as the only proof selector and
+  the request's theory as the only theory argument, and the theory digest
+  before the run equals the request's (a relabelled copy of another request's
+  records, which may legitimately report this lemma `verified` too, is rejected);
 - the process exited 0 (a budget timeout, signal or other status is recorded and
   rejects even when the log contains a `verified` line);
 - the theory digest is unchanged after the run;

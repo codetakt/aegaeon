@@ -208,6 +208,33 @@ def registered_exceptions(
     return pairs
 
 
+def identity_reasons(request: dict[str, Any], invocation: dict[str, Any]) -> list[str]:
+    """Why the invocation record is not the run made for this request, if it is not.
+
+    A relabelled copy of another request's records carries that request's id,
+    ``--prove`` selector, theory argument and input digest; each must equal the
+    request being decided, at admission and on replay.
+    """
+    reasons: list[str] = []
+    recorded = invocation.get("request_id")
+    if recorded != request["id"]:
+        reasons.append(f"invocation records request {recorded!r}, not {request['id']!r}")
+    argv = invocation.get("argv")
+    if not isinstance(argv, list):
+        reasons.append("invocation record lacks the executed argv")
+    else:
+        words = [str(word) for word in argv]
+        selectors = [w for w in words if w.startswith(("--prove", "--lemma"))]
+        if selectors != [f"--prove={request['lemma']}"]:
+            reasons.append(f"argv proof selectors {selectors} are not --prove={request['lemma']}")
+        theories = [w for w in words if w.endswith(".spthy")]
+        if theories != [request["theory"]]:
+            reasons.append(f"argv theory arguments {theories} are not {request['theory']!r}")
+    if invocation.get("theory_sha256_before") != request["theory_sha256"]:
+        reasons.append("theory digest before the invocation differs from the request")
+    return reasons
+
+
 def reconcile(
     request: dict[str, Any],
     invocation: dict[str, Any],
@@ -215,7 +242,7 @@ def reconcile(
     registry: dict[str, Any],
 ) -> dict[str, Any]:
     """Decide one request from its retained records."""
-    reasons: list[str] = []
+    reasons: list[str] = identity_reasons(request, invocation)
     parsed = parse_log(text)
     status = invocation.get("returncode")
     if invocation.get("timed_out"):
@@ -319,9 +346,21 @@ def build_requests(proofs_root: Path, specs: list[str]) -> list[dict[str, Any]]:
         theory, separator, lemmas = spec.partition(":")
         if not separator or not theory or not lemmas.strip(","):
             raise AdmissionError(f"malformed selection {spec!r}")
+        candidate = Path(theory)
+        if (
+            candidate.is_absolute()
+            or ".." in candidate.parts
+            or candidate.as_posix() != theory
+            or theory.startswith("./")
+        ):
+            raise AdmissionError(
+                f"theory {theory} must be a normalised path inside the proofs root"
+            )
         path = proofs_root / theory
         if not path.is_file() or path.suffix != ".spthy":
             raise AdmissionError(f"theory {theory} is not a .spthy file under the proofs root")
+        if not path.resolve().is_relative_to(proofs_root.resolve()):
+            raise AdmissionError(f"theory {theory} resolves outside the proofs root")
         declared = declared_lemmas(path.read_text(errors="replace"))
         sha256 = digest_file(path)
         for lemma in lemmas.split(","):
@@ -575,6 +614,17 @@ def verify_records(directory: Path, registry_path: Path) -> int:
             raise AdmissionError(f"{request['id']}: result.json digest differs from admission.json")
         result = load_json(result_path)
         command = load_json(invocation_dir / "command.json")
+        for field in ("request_id", "theory", "lemma", "quantifier"):
+            expected = request["id"] if field == "request_id" else request[field]
+            if result.get(field) != expected:
+                raise AdmissionError(
+                    f"{request['id']}: result.json records {field} {result.get(field)!r}, "
+                    f"not {expected!r}"
+                )
+        if command.get("request_id") != request["id"]:
+            raise AdmissionError(
+                f"{request['id']}: command.json records request {command.get('request_id')!r}"
+            )
         if digest_file(invocation_dir / "command.json") != result["command_sha256"]:
             raise AdmissionError(f"{request['id']}: command.json digest differs from result.json")
         if digest_file(invocation_dir / "output.log") != result["output_sha256"]:

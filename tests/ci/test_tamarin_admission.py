@@ -92,7 +92,7 @@ for name, quantifier in lemmas:
     quantifier = quantifier or "all-traces"
     if name == os.environ.get("MOCK_OMIT_LEMMA"):
         continue
-    if name in prove:
+    if name in prove or name in os.environ.get("MOCK_ALSO_VERIFIED", "").split(","):
         failed = name == os.environ.get("MOCK_FAIL_LEMMA")
         status = "falsified - found trace" if failed else "verified"
     else:
@@ -192,11 +192,30 @@ def request(
     }
 
 
-def invocation(returncode: int = 0, timed_out: bool = False, sha: str = "ab" * 32) -> dict:
+def invocation(
+    req: dict | None = None,
+    *,
+    returncode: int = 0,
+    timed_out: bool = False,
+    sha: str = "ab" * 32,
+) -> dict:
+    """A command record made for ``req`` (default: the default request)."""
+    req = req or request()
     return {
+        "request_id": req["id"],
+        "argv": [
+            "timeout",
+            "--kill-after=10",
+            "600",
+            "tamarin-prover",
+            f"--prove={req['lemma']}",
+            "--derivcheck-timeout=180",
+            req["theory"],
+        ],
         "returncode": returncode,
         "timed_out": timed_out,
         "timeout_seconds": 600,
+        "theory_sha256_before": req["theory_sha256"],
         "theory_sha256_after": sha,
     }
 
@@ -226,8 +245,13 @@ class FixtureIntegrityTests(unittest.TestCase):
                 / "wellformedness"
                 / (entry["theory"].replace("/", "_").removesuffix(".spthy") + ".txt")
             )
-            recorded = {s["sha256"] for s in warning_sections(fixture.read_text(errors="replace"))}
-            assert {s["sha256"] for s in entry["sections"]} == recorded, entry["theory"]
+            recorded = {
+                (s["title"], s["sha256"])
+                for s in warning_sections(fixture.read_text(errors="replace"))
+            }
+            assert {(s["title"], s["sha256"]) for s in entry["sections"]} == recorded, entry[
+                "theory"
+            ]
 
 
 class RealOutputTests(unittest.TestCase):
@@ -245,7 +269,7 @@ class RealOutputTests(unittest.TestCase):
         text = self.probe("p4_malformed_refresh")
         assert "rotation_reachable (exists-trace): verified" in text
         req = request("models/refresh_token_rotation.spthy", "rotation_reachable", "exists-trace")
-        result = reconcile(req, invocation(), text, registry())
+        result = reconcile(req, invocation(req), text, registry())
         assert result["status"] == "rejected"
         assert any(
             "unregistered wellformedness warning" in r and "Formula terms" in r
@@ -254,11 +278,11 @@ class RealOutputTests(unittest.TestCase):
         text = self.probe("p11_malformed_ntar")
         assert "no_token_after_revocation (all-traces): verified (28 steps)" in text
         req = request("models/refresh_token_rotation.spthy", "no_token_after_revocation")
-        assert reconcile(req, invocation(), text, registry())["status"] == "rejected"
+        assert reconcile(req, invocation(req), text, registry())["status"] == "rejected"
 
     def test_quantified_refresh_theory_is_admitted(self) -> None:
         req = request("models/refresh_token_rotation_fixed.spthy", "no_token_after_revocation")
-        result = reconcile(req, invocation(), self.probe("p12_fixed_ntar"), registry())
+        result = reconcile(req, invocation(req), self.probe("p12_fixed_ntar"), registry())
         assert result["status"] == "accepted", result["reasons"]
         assert result["parsed"]["summary"]["lemmas"][5]["steps"] == 28
         for name, quantifier in (
@@ -267,17 +291,20 @@ class RealOutputTests(unittest.TestCase):
         ):
             req = request("models/refresh_token_rotation_fixed.spthy", name, quantifier)
             assert (
-                reconcile(req, invocation(), self.probe("p13_fixed_all"), registry())["status"]
+                reconcile(req, invocation(req), self.probe("p13_fixed_all"), registry())["status"]
                 == "accepted"
             )
 
     def test_falsified_and_prove_argument_warning_are_rejected(self) -> None:
         req = request("models/code_replay_persistent_without_unique.spthy")
-        result = reconcile(req, invocation(), self.probe("p6_falsified"), registry())
+        result = reconcile(req, invocation(req), self.probe("p6_falsified"), registry())
         assert result["status"] == "rejected"
         assert any("falsified" in r for r in result["reasons"])
         result = reconcile(
-            request(lemma="code_single"), invocation(), self.probe("p2_prefix_nostar"), registry()
+            (req := request(lemma="code_single")),
+            invocation(req),
+            self.probe("p2_prefix_nostar"),
+            registry(),
         )
         assert result["status"] == "rejected"
         assert any("--prove/--lemma" in r for r in result["reasons"])
@@ -290,7 +317,10 @@ class RealOutputTests(unittest.TestCase):
         assert any("exited with 1" in r for r in result["reasons"])
         assert any("summary block" in r for r in result["reasons"])
         result = reconcile(
-            request(lemma="code_freshness"), invocation(), self.probe("p10_two_exact"), registry()
+            (req := request(lemma="code_freshness")),
+            invocation(req),
+            self.probe("p10_two_exact"),
+            registry(),
         )
         assert result["status"] == "accepted"
 
@@ -306,7 +336,8 @@ class ControlledMutationTests(unittest.TestCase):
     def decide(
         self, text: str, req: dict | None = None, inv: dict | None = None, reg: dict | None = None
     ) -> dict:
-        return reconcile(req or request(self.THEORY), inv or invocation(), text, reg or registry())
+        req = req or request(self.THEORY)
+        return reconcile(req, inv or invocation(req), text, reg or registry())
 
     def test_complete_positive(self) -> None:
         assert self.decide(make_log(self.THEORY, self.LEMMAS))["status"] == "accepted"
@@ -358,9 +389,9 @@ class ControlledMutationTests(unittest.TestCase):
     def test_nonzero_exit_signal_and_timeout_override_verified_lines(self) -> None:
         text = make_log(self.THEORY, self.LEMMAS)
         for inv, needle in (
-            (invocation(returncode=1), "exited with 1"),
-            (invocation(returncode=-9), "exited with -9"),
-            (invocation(returncode=124, timed_out=True), "budget"),
+            (invocation(request(self.THEORY), returncode=1), "exited with 1"),
+            (invocation(request(self.THEORY), returncode=-9), "exited with -9"),
+            (invocation(request(self.THEORY), returncode=124, timed_out=True), "budget"),
         ):
             with self.subTest(needle=needle):
                 result = self.decide(text, inv=inv)
@@ -371,7 +402,9 @@ class ControlledMutationTests(unittest.TestCase):
         text = make_log(self.THEORY, self.LEMMAS)
         assert any(
             "digest changed" in r
-            for r in self.decide(text, inv=invocation(sha="cd" * 32))["reasons"]
+            for r in self.decide(text, inv=invocation(request(self.THEORY), sha="cd" * 32))[
+                "reasons"
+            ]
         )
         text = make_log(self.THEORY, self.LEMMAS, versions=("1.8.0", "3.5.1"))
         assert any("contract" in r for r in self.decide(text)["reasons"])
@@ -412,6 +445,34 @@ class ControlledMutationTests(unittest.TestCase):
         )
         silent = text.replace("  WARNING: 1 wellformedness check failed!\n", "")
         assert self.decide(silent, reg=registry([entry]))["status"] == "rejected"
+
+    def test_records_of_another_request_are_not_this_request(self) -> None:
+        # R20-05: a real run of one lemma also reports other lemmas verified;
+        # its records must not serve as evidence for those other requests.
+        both = [(n, q, "verified") for n, q, _ in self.LEMMAS]
+        text = make_log(self.THEORY, self.LEMMAS[:1] + both[1:])
+        target = request(self.THEORY, lemma="code_freshness")
+        other = invocation(request(self.THEORY))  # the code_single_use run
+        assert self.decide(text)["status"] == "accepted"
+        result = self.decide(text, req=target, inv=other)
+        assert result["status"] == "rejected"
+        assert any("records request" in r for r in result["reasons"]), result["reasons"]
+        assert any("proof selectors" in r for r in result["reasons"])
+        own = invocation(target)
+        assert self.decide(text, req=target, inv=own)["status"] == "accepted"
+        for mutate, needle in (
+            (lambda inv: inv["argv"].append("--prove=code_single_use"), "proof selectors"),
+            (lambda inv: inv["argv"].__setitem__(4, "--lemma=code_freshness"), "proof selectors"),
+            (lambda inv: inv["argv"].__setitem__(-1, "authcode/other.spthy"), "theory arguments"),
+            (lambda inv: inv.__setitem__("theory_sha256_before", "cd" * 32), "digest before"),
+            (lambda inv: inv.pop("argv"), "lacks the executed argv"),
+        ):
+            with self.subTest(needle=needle):
+                inv = invocation(target)
+                mutate(inv)
+                result = self.decide(text, req=target, inv=inv)
+                assert result["status"] == "rejected"
+                assert any(needle in r for r in result["reasons"]), result["reasons"]
 
     def exception_case(self) -> tuple[str, list[str], dict]:
         block = "\n".join(
@@ -487,7 +548,7 @@ class ControlledMutationTests(unittest.TestCase):
             "lemma": "ds_idtoken_verified_reachable",
             "quantifier": "exists-trace",
         }
-        inv = invocation(sha=entry["sha256"])
+        inv = invocation(req, sha=entry["sha256"])
         baseline = reconcile(req, inv, text, reg)
         assert baseline["status"] == "accepted-with-registered-exception", baseline["reasons"]
         first = warning_sections(text)[0]["title"]
@@ -531,6 +592,27 @@ class RequestValidationTests(unittest.TestCase):
         ]
         assert requests[0]["theory_sha256"] == sha256(self.root / "x/alpha.spthy")
         assert requests[0]["id"] == "x_alpha__alpha_one"
+
+    def test_theory_paths_outside_the_proofs_root_are_rejected(self) -> None:
+        # R20-06: absolute paths, parent references, unnormalised forms and
+        # symlinks that leave the root are refused before any run.
+        # The proofs root is self.root; the outside file lives in a sibling directory.
+        outside = Path(self.enterContext(tempfile.TemporaryDirectory())) / "outside.spthy"
+        outside.write_text(ALPHA_THEORY)
+        (self.root / "x/linked.spthy").symlink_to(outside)
+        for selection in (
+            f"{outside}:alpha_one",
+            f"../{outside.parent.name}/outside.spthy:alpha_one",
+            "x/../x/alpha.spthy:alpha_one",
+            "./x/alpha.spthy:alpha_one",
+            "x//alpha.spthy:alpha_one",
+            "x/linked.spthy:alpha_one",
+        ):
+            with self.subTest(selection=selection), self.assertRaises(AdmissionError):
+                build_requests(self.root, [selection])
+        assert (
+            build_requests(self.root, ["x/alpha.spthy:alpha_one"])[0]["theory"] == "x/alpha.spthy"
+        )
 
     def test_invalid_selections_are_rejected_before_execution(self) -> None:
         for spec, needle in (
@@ -694,6 +776,42 @@ class ControlledToolTests(unittest.TestCase):
         assert "output_tail" in result.stdout
         accepted = [e for e in events if e.get("event") == "request" and e["status"] != "rejected"]
         assert all("output_tail" not in e for e in accepted)
+
+    def test_copied_records_of_another_request_fail_replay(self) -> None:
+        # R20-05 (reviewer's probe): copy one request's real records over
+        # another request of the same theory, keep the inner files byte-identical
+        # and rewrite only the outer digest; replay must still reject.
+        result = self.invoke(MOCK_ALSO_VERIFIED="alpha_one,alpha_reach")
+        assert result.returncode == 0, result.stdout + result.stderr
+        registry_path = self.root / "spec/tamarin-evidence.json"
+        assert self.replay(registry_path).returncode == 0
+        source = self.output / "invocations" / "x_alpha__alpha_one"
+        target = self.output / "invocations" / "x_alpha__alpha_reach"
+        shutil.rmtree(target)
+        shutil.copytree(source, target)
+        admission = json.loads((self.output / "admission.json").read_text())
+        admission["results"]["x_alpha__alpha_reach"]["result_sha256"] = sha256(
+            target / "result.json"
+        )
+        (self.output / "admission.json").write_text(json.dumps(admission, indent=2) + "\n")
+        replay = self.replay(registry_path)
+        assert replay.returncode != 0
+        assert "records request_id 'x_alpha__alpha_one'" in replay.stderr, replay.stderr
+
+    def replay(self, registry_path: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(  # noqa: S603 - fixed script and fixture paths
+            [
+                sys.executable,
+                str(self.root / "scripts/validation/admit_tamarin_lemmas.py"),
+                "verify-records",
+                str(self.output),
+                "--registry",
+                str(registry_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
     def test_tool_identity_hashes_the_executable_with_fixed_arguments(self) -> None:
         # R20-02: the resolved executable is digested whatever fixed arguments follow.
