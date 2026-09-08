@@ -81,7 +81,8 @@ A request is `accepted` only when all of the following hold:
 - exactly one summary block exists, it is closed, its `analyzed:` path is the
   invoked theory, and every line in it is recognised;
 - the theory is reported wellformed, or every warning section is a registered
-  exception (below);
+  exception (below), matched by section title and body digest together, and no
+  section belongs to the never-registrable `--prove`/`--lemma` class;
 - the requested lemma has exactly one summary line, with the declared quantifier
   and status `verified`;
 - no summary line is `falsified`.
@@ -115,9 +116,14 @@ lemmas verify under `--quit-on-warning`.
 ## Cache and tool policy
 
 Tamarin has no proof cache between invocations; each request is a fresh run.
-The Docker image used by the manual runner ships 1.8.0, whose output is not the
-supported contract; the tool identity check rejects it explicitly instead of
-reporting `Verified`. Budgets (`timeout_seconds`, `derivcheck_timeout_seconds`)
+The tool identity records the resolved first word of `--tool` with its SHA-256
+whatever fixed arguments follow, the reported version, and the Maude path and
+digest; for a launcher such as `docker` the digest identifies the launcher, not
+the verifier inside the image. The Docker image used by the manual runner ships
+1.8.0, whose output is not the supported contract; the tool identity check
+rejects it explicitly instead of reporting `Verified`. The manual runner quotes
+every word of the tool string for the admitter's `shlex` split, so a checkout
+path with spaces or quotes survives. Budgets (`timeout_seconds`, `derivcheck_timeout_seconds`)
 come from the registry; the `TAMARIN_TIMEOUT` and `TAMARIN_DERIVCHECK_TIMEOUT`
 overrides are recorded when used.
 
@@ -129,7 +135,7 @@ overrides are recorded when used.
   before and after, raw log digest, the parsed summary, the decision and reasons.
   Existing invocation directories are refused.
 - `admission.json`: written atomically only when every request is accepted or
-  accepted-with-registered-exception, removed at the start of each run; it binds
+  accepted-with-registered-exception, removed at the start of each run before any input (registry, selection, tool) is validated, so a failed run never leaves a stale acceptance; it binds
   the registry digest, `requests.json` and every `result.json`.
 - `verify-tamarin.log`: the human `=> Proving`, `[OK]`/`[FAIL]` lines, the
   `Lemmas verified/failed` totals, and `TAMARIN-ADMISSION` JSON lines that also

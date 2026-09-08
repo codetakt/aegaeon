@@ -50,6 +50,10 @@ SEPARATOR = "=" * 78
 WELLFORMED_OK = "/* All wellformedness checks were successful. */"
 WELLFORMED_WARNING = "WARNING: the following wellformedness checks failed!"
 SUMMARY_WARNING = re.compile(r"^  WARNING: (\d+) wellformedness checks? failed!$")
+# Warning classes that can never be registered as an exception: a --prove name
+# that matches no lemma leaves every lemma unanalysed, so it is never a
+# modelling decision.
+FORBIDDEN_WARNING_MARKERS = ("--prove", "--lemma")
 VERSION_LINE = re.compile(r"^(Tamarin|Maude) version (\S+)$", re.MULTILINE)
 
 
@@ -185,13 +189,23 @@ def parse_log(text: str) -> dict[str, Any]:
     }
 
 
-def registered_exceptions(registry: dict[str, Any], theory: str, sha256: str) -> set[str]:
-    """Section digests registered for exactly this theory content."""
-    digests: set[str] = set()
+def forbidden_warning_class(title: str) -> bool:
+    """True for a warning section that can never be covered by an exception."""
+    return any(marker in title for marker in FORBIDDEN_WARNING_MARKERS)
+
+
+def registered_exceptions(
+    registry: dict[str, Any], theory: str, sha256: str
+) -> set[tuple[str, str]]:
+    """(title, body digest) pairs registered for exactly this theory content."""
+    pairs: set[tuple[str, str]] = set()
     for entry in registry.get("wellformedness_exceptions", []):
         if entry.get("theory") == theory and entry.get("sha256") == sha256:
-            digests.update(section["sha256"] for section in entry.get("sections", []))
-    return digests
+            pairs.update(
+                (str(section["title"]), str(section["sha256"]))
+                for section in entry.get("sections", [])
+            )
+    return pairs
 
 
 def reconcile(
@@ -227,12 +241,17 @@ def reconcile(
     exception_used = False
     if parsed["warning_sections"] or summary["warnings_failed"] or not parsed["wellformed"]:
         allowed = registered_exceptions(registry, request["theory"], request["theory_sha256"])
-        digests = [section["sha256"] for section in parsed["warning_sections"]]
-        if not digests or not parsed["warning_sections"]:
+        sections = [(s["title"], s["sha256"]) for s in parsed["warning_sections"]]
+        forbidden = [title for title, _ in sections if forbidden_warning_class(title)]
+        unregistered = [title for title, digest in sections if (title, digest) not in allowed]
+        if not sections:
             reasons.append("theory is not reported wellformed and no warning block was found")
-        elif any(digest not in allowed for digest in digests):
-            titles = [s["title"] for s in parsed["warning_sections"] if s["sha256"] not in allowed]
-            reasons.append(f"unregistered wellformedness warning(s): {titles}")
+        elif forbidden:
+            reasons.append(f"wellformedness warning class can never be registered: {forbidden}")
+        elif unregistered:
+            # A section is matched by its title and its body digest together;
+            # a renamed section is a different warning until it is re-reviewed.
+            reasons.append(f"unregistered wellformedness warning(s): {unregistered}")
         elif not summary["warnings_failed"]:
             # Tamarin counts individual failed checks, not sections; the summary
             # must still acknowledge the warning block it printed.
@@ -277,6 +296,18 @@ def load_registry(path: Path) -> dict[str, Any]:
     registry = load_json(path)
     if registry.get("contract") != CONTRACT:
         raise AdmissionError(f"registry contract {registry.get('contract')!r} is not {CONTRACT}")
+    for entry in registry.get("wellformedness_exceptions", []):
+        for section in entry.get("sections", []):
+            title = section.get("title")
+            if not isinstance(title, str) or not isinstance(section.get("sha256"), str):
+                raise AdmissionError(
+                    f"registry entry for {entry.get('theory')!r} lacks a title/digest"
+                )
+            if forbidden_warning_class(title):
+                raise AdmissionError(
+                    f"registry entry for {entry.get('theory')!r} registers a warning class "
+                    f"that can never be registered: {title!r}"
+                )
     return registry
 
 
@@ -327,7 +358,9 @@ def tool_identity(command: list[str]) -> dict[str, Any]:
     return {
         "argv": command,
         "path": executable,
-        "sha256": digest_file(Path(executable)) if len(command) == 1 else None,
+        # The resolved first argv element is always digested. For a launcher
+        # such as docker this identifies the launcher, not the verifier inside.
+        "sha256": digest_file(Path(executable)),
         "reported_version": match[1] if match else None,
         "maude_path": maude,
         "maude_sha256": digest_file(Path(maude)) if maude else None,
@@ -400,12 +433,14 @@ def run(args: argparse.Namespace) -> int:
     out_dir: Path = args.out_dir.resolve()
     proofs_root: Path = args.proofs_root.resolve()
     registry_path: Path = args.registry.resolve()
-    registry = load_registry(registry_path)
+    # A stale acceptance is invalidated before any input is validated, so a
+    # failure to load the registry or the selection cannot leave it behind.
     out_dir.mkdir(parents=True, exist_ok=True)
     admission = out_dir / "admission.json"
     admission.unlink(missing_ok=True)
     log = out_dir / "verify-tamarin.log"
     log.write_text("")
+    registry = load_registry(registry_path)
     requests = build_requests(proofs_root, args.spec)
     write_json_new(
         out_dir / "requests.json", {"schema_version": SCHEMA_VERSION, "requests": requests}

@@ -23,6 +23,15 @@ if [[ ${1:-} == "--docker" ]]; then
 	shift
 fi
 
+# Serialise words for shlex.split: single-quote each, escaping embedded quotes.
+shell_join() {
+	local word out=""
+	for word in "$@"; do
+		out+="'${word//\'/\'\\\'\'}' "
+	done
+	printf '%s' "${out% }"
+}
+
 echo "=== Tamarin Proof Verification ==="
 echo "Date: $(date -u +%FT%TZ)"
 
@@ -36,7 +45,9 @@ if [[ $USE_DOCKER == true ]]; then
 		echo "Pulling Tamarin Prover Docker image..."
 		docker pull "$IMAGE"
 	fi
-	TOOL="docker run --rm -v $PROOFS_ROOT:/workspace -w /workspace $IMAGE tamarin-prover"
+	# The tool string is split with Python's shlex; quote every word so a
+	# checkout path with spaces or quotes survives the round trip.
+	TOOL="$(shell_join docker run --rm -v "$PROOFS_ROOT:/workspace" -w /workspace "$IMAGE" tamarin-prover)"
 	echo "Using Docker image: $IMAGE (its output contract is not supported; expect rejection)"
 else
 	if ! command -v tamarin-prover >/dev/null 2>&1; then

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,9 @@ from admit_tamarin_lemmas import (  # noqa: E402 - path set above for the docs l
     AdmissionError,
     build_requests,
     declared_lemmas,
+    load_registry,
     reconcile,
+    tool_identity,
     warning_sections,
 )
 
@@ -410,6 +413,100 @@ class ControlledMutationTests(unittest.TestCase):
         silent = text.replace("  WARNING: 1 wellformedness check failed!\n", "")
         assert self.decide(silent, reg=registry([entry]))["status"] == "rejected"
 
+    def exception_case(self) -> tuple[str, list[str], dict]:
+        block = "\n".join(
+            [
+                "Message Derivation Checks",
+                "=" * 25,
+                "",
+                "  Rule X:",
+                "  Failed to derive Variable(s): sk",
+            ]
+        )
+        text = make_log(self.THEORY, self.LEMMAS, wellformed=False, warning_block=block)
+        digests = [s["sha256"] for s in warning_sections(text)]
+        entry = {
+            "theory": self.THEORY,
+            "sha256": "ab" * 32,
+            "sections": [{"title": "Message Derivation Checks", "sha256": digests[0]}],
+        }
+        return text, digests, entry
+
+    def test_exception_title_is_matched_and_forbidden_class_rejects(self) -> None:
+        text, digests, entry = self.exception_case()
+        # R20-01: a section is matched by title and body together; a renamed
+        # section is unregistered even though its body digest is unchanged.
+        renamed = text.replace("Message Derivation Checks\n", "Unreviewed warning category\n", 1)
+        assert [s["sha256"] for s in warning_sections(renamed)] == digests
+        result = self.decide(renamed, reg=registry([entry]))
+        assert result["status"] == "rejected"
+        assert any(
+            "unregistered wellformedness warning(s): ['Unreviewed" in r for r in result["reasons"]
+        )
+        forbidden_title = "Check presence of the --prove/--lemma arguments in theory"
+        forbidden = text.replace("Message Derivation Checks\n", forbidden_title + "\n", 1)
+        forbidden_entry = {
+            **entry,
+            "sections": [{"title": forbidden_title, "sha256": digests[0]}],
+        }
+        result = self.decide(forbidden, reg=registry([forbidden_entry]))
+        assert result["status"] == "rejected"
+        assert any("can never be registered" in r for r in result["reasons"])
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "registry.json"
+            path.write_text(json.dumps(registry([forbidden_entry])))
+            with self.assertRaises(AdmissionError):
+                load_registry(path)
+            path.write_text(json.dumps(registry([{**entry, "sections": [{"sha256": digests[0]}]}])))
+            with self.assertRaises(AdmissionError):
+                load_registry(path)
+            path.write_text(json.dumps(registry([entry])))
+            assert load_registry(path)["wellformedness_exceptions"] == [entry]
+
+    def test_real_exception_fixture_rejects_title_changes(self) -> None:
+        # Reviewer's probe on the real id_token_chain evidence: renaming the
+        # first warning section, or renaming it to the forbidden class, must
+        # reject even though every body digest is unchanged.
+        reg = json.loads(REGISTRY.read_text())
+        theory = "federation/id_token_chain.spthy"
+        entry = next(e for e in reg["wellformedness_exceptions"] if e["theory"] == theory)
+        # The fixture is the parse-only run that recorded the warning block; the
+        # requested lemma's summary line is set to verified so that only the
+        # warning sections decide the outcome.
+        incomplete = "  ds_idtoken_verified_reachable (exists-trace): analysis incomplete (1 steps)"
+        text = (FIXTURES / "wellformedness/federation_id_token_chain.txt").read_text(
+            errors="replace"
+        )
+        assert text.count(incomplete) == 1
+        text = text.replace(
+            incomplete, "  ds_idtoken_verified_reachable (exists-trace): verified (7 steps)"
+        )
+        req = {
+            **request(theory),
+            "theory_sha256": entry["sha256"],
+            "lemma": "ds_idtoken_verified_reachable",
+            "quantifier": "exists-trace",
+        }
+        inv = invocation(sha=entry["sha256"])
+        baseline = reconcile(req, inv, text, reg)
+        assert baseline["status"] == "accepted-with-registered-exception", baseline["reasons"]
+        first = warning_sections(text)[0]["title"]
+        for title, needle in (
+            ("Unreviewed warning category", "unregistered wellformedness warning(s)"),
+            (
+                "Check presence of the --prove/--lemma arguments in theory",
+                "can never be registered",
+            ),
+        ):
+            with self.subTest(title=title):
+                changed = text.replace(first + "\n", title + "\n", 1)
+                assert [s["sha256"] for s in warning_sections(changed)] == [
+                    s["sha256"] for s in warning_sections(text)
+                ]
+                result = reconcile(req, inv, changed, reg)
+                assert result["status"] == "rejected"
+                assert any(needle in r for r in result["reasons"]), result["reasons"]
+
 
 class RequestValidationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -597,6 +694,73 @@ class ControlledToolTests(unittest.TestCase):
         assert "output_tail" in result.stdout
         accepted = [e for e in events if e.get("event") == "request" and e["status"] != "rejected"]
         assert all("output_tail" not in e for e in accepted)
+
+    def test_tool_identity_hashes_the_executable_with_fixed_arguments(self) -> None:
+        # R20-02: the resolved executable is digested whatever fixed arguments follow.
+        tool = self.bin / "tamarin-prover"
+        plain = tool_identity([str(tool)])
+        with_args = tool_identity([str(tool), "--derivcheck-timeout=180"])
+        assert plain["sha256"] == with_args["sha256"] == sha256(tool)
+        assert with_args["argv"] == [str(tool), "--derivcheck-timeout=180"]
+        assert with_args["reported_version"] == "1.12.0"
+
+    def test_stale_acceptance_is_removed_before_the_registry_is_validated(self) -> None:
+        # R20-04: an old accepted admission.json in a reused output directory
+        # must not survive a run that fails while loading its inputs.
+        assert self.invoke().returncode == 0
+        marker = self.output / "admission.json"
+        assert json.loads(marker.read_text())["status"] == "accepted"
+        result = subprocess.run(  # noqa: S603 - fixed script and fixture paths
+            [
+                sys.executable,
+                str(self.root / "scripts/validation/admit_tamarin_lemmas.py"),
+                "run",
+                "--out-dir",
+                str(self.output),
+                "--proofs-root",
+                str(self.root / "proofs/tamarin"),
+                "--registry",
+                str(self.root / "missing-registry.json"),
+                "--tool",
+                str(self.bin / "tamarin-prover"),
+                "--",
+                "x/alpha.spthy:alpha_one",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "missing-registry.json" in result.stderr
+        assert not marker.exists()
+
+    def test_docker_tool_string_survives_paths_with_spaces(self) -> None:
+        # R20-03: the manual runner serialises the docker argv for shlex.split.
+        script = (ROOT / "proofs/tamarin/run_tamarin.sh").read_text()
+        function = script[
+            script.index("shell_join() {") : script.index("\n}\n", script.index("shell_join() {"))
+            + 3
+        ]
+        root = "/workspace/checkout with spaces/it's/proofs/tamarin"
+        call = 'shell_join docker run --rm -v "$1:/workspace" -w /workspace img tamarin-prover'
+        joined = subprocess.run(  # noqa: S603 - fixed shell function from the runner
+            ["bash", "-c", function + "\n" + call, "_", root],  # noqa: S607 - supported shell
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        argv = shlex.split(joined)
+        assert argv == [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{root}:/workspace",
+            "-w",
+            "/workspace",
+            "img",
+            "tamarin-prover",
+        ]
 
     def test_empty_selection_and_missing_inputs_fail_before_running(self) -> None:
         result = self.invoke(TAMARIN_PROOFS_FILE=str(self.root / "ci/empty.sh"))
