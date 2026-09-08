@@ -25,6 +25,8 @@ merge-guard reproduction, and artefact-generation workflows.
 
 - `[runbook]` [CI diagnostics and evidence](ci-diagnostics.md) — supported tools, evidence retention, timing thresholds, and remaining diagnostic boundaries
 
+- `[runbook]` [Private FlakeHub preview](flakehub-preview.md) — publish and retrieve the server for internal development
+
 ## Reading Rule of Thumb
 
 1. Start with `ci-cd-guide.md` for local reproduction of CI.
