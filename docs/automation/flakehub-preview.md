@@ -133,8 +133,10 @@ issuer selection, and the required Redis endpoints must already be configured.
 Follow [runtime configuration operations](../operations/runtime-configuration.md)
 and the [environment reference](../configurations/environment/README.md).
 The repository's `dev-server` app invokes Cargo and is not the binary-consumption
-entrypoint. A self-contained DB/Redis/login example and SDK integration are follow-up
-distribution work.
+entrypoint. The [local review kit](../../examples/preview-review/README.md) supplies
+an isolated PostgreSQL/Redis fixture, HTTPS and an Authorization Code + PKCE flow
+using the fetched binary. Its RP verifies signatures and claims before displaying
+them. SDK packaging and integration remain separate distribution work.
 
 ## Evidence and recovery
 
