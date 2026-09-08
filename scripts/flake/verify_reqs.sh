@@ -132,6 +132,7 @@ PY
 
 	echo ""
 	echo "--- dudect constant-time evidence (fail-close) ---"
+	python3 scripts/validation/test_dudect.py
 	if python3 scripts/validation/check_dudect.py 2>&1; then
 		echo "  dudect constant-time evidence passed."
 	else

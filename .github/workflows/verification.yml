@@ -31,7 +31,7 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Upload F* artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fstar-artifacts
           path: |
@@ -63,7 +63,7 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -117,7 +117,7 @@ jobs:
 
       - name: Upload EverParse artefacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: everparse-dcr
           path: |
@@ -131,7 +131,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload Low* logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: lowstar-extraction
           path: artifacts/lowstar/
@@ -167,7 +167,7 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload WASM artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verified-core-wasm
           path: artifacts/verified-core-wasm/
@@ -224,7 +224,7 @@ jobs:
       id-token: write
     needs: verified-core-wasm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -253,7 +253,7 @@ jobs:
       id-token: write
     needs: fstar
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -273,7 +273,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -303,7 +303,7 @@ jobs:
 
       - name: Upload Tamarin results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tamarin-results
           path: artifacts/tamarin/
@@ -313,10 +313,11 @@ jobs:
     name: Kani (Pure Harness)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@be39649afda95dbf70f87cce95f68b8d5797b296 # nightly; toolchain selected below
         with:
+          toolchain: nightly
           components: rust-src
       - name: Install Kani
         run: |
@@ -369,7 +370,7 @@ jobs:
           PY
       - name: Upload Kani logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kani-pure-artifacts
           path: |
@@ -382,11 +383,12 @@ jobs:
     env:
       AEG_KANI_RUN_SERVER: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@be39649afda95dbf70f87cce95f68b8d5797b296 # nightly; toolchain selected below
         with:
+          toolchain: nightly
           components: rust-src
 
       - name: Install Kani
@@ -452,7 +454,7 @@ jobs:
 
       - name: Upload Kani report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kani-report
           path: artifacts/kani/
@@ -466,7 +468,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Free disk space (GitHub hosted runner)
         run: |
@@ -824,7 +826,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: jose-test-results
           path: artifacts/jose/
@@ -841,7 +843,7 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -868,7 +870,7 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -888,7 +890,7 @@ jobs:
     name: Validation Scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Python dependencies
         run: pip install pyyaml

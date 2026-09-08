@@ -1,6 +1,6 @@
 # Automation Overview
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 Status: current implementation baseline
 
@@ -22,6 +22,8 @@ merge-guard reproduction, and artefact-generation workflows.
 - `[runbook]` [CI/CD guide](ci-cd-guide.md) — authoritative GitHub Actions / Nix flake / artefact policy reference
 
 - `[policy]` [PR validation](pr-validation.md) — change selection, aggregate gate and lightweight reproduction
+
+- `[runbook]` [CI diagnostics and evidence](ci-diagnostics.md) — supported tools, evidence retention, timing thresholds, and remaining diagnostic boundaries
 
 ## Reading Rule of Thumb
 

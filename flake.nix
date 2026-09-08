@@ -468,6 +468,7 @@
             cargo-deny
             cargo-audit
             nixfmt
+            nixfmt-tree
             statix
             deadnix
             actionlint

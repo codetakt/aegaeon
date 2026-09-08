@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -41,7 +41,7 @@ jobs:
         run: nix develop .#ci --command cargo build --release --package aegaeon-server
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-binary
           path: |
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rfc7520-test-results
           path: rfc7520-results.json
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -102,7 +102,7 @@ jobs:
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-audit-report
           path: audit-report.json
@@ -126,7 +126,7 @@ jobs:
       contents: read
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -135,7 +135,7 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-binary
           path: target/release/
@@ -173,13 +173,13 @@ jobs:
       # For private repos, we skip attestation but still generate and validate SBOM
       - name: Generate SBOM attestation
         if: github.event.repository.private == false
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: target/release/aegaeon-server
           sbom-path: artifacts/sbom/aegaeon-sbom.json
           
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
           path: artifacts/sbom/
@@ -192,7 +192,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload compliance report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rfc-compliance-report
           path: compliance-report.md
@@ -242,7 +242,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
       - name: Check for RFC updates
         id: check-rfc
@@ -252,7 +252,7 @@ jobs:
           
       - name: Create issue for RFC updates
         if: steps.check-rfc.outputs.updates_found == 'true'
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -273,7 +273,7 @@ jobs:
       security-events: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -297,7 +297,7 @@ jobs:
           
       - name: Upload Trivy results to GitHub Security
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           sarif_file: trivy-results.sarif
           
@@ -320,7 +320,7 @@ jobs:
       contents: read
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -331,17 +331,32 @@ jobs:
         run: nix develop .#default --command cargo build --release
           
       - name: Generate build provenance
-        uses: actions/attest-build-provenance@v1
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             target/release/aegaeon-server
             target/release/aegaeon-client
-            
+
+      - name: Verify provenance bundle against the built artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          test -s "$ATTESTATION_BUNDLE"
+          for artifact in target/release/aegaeon-server target/release/aegaeon-client; do
+            gh attestation verify "$artifact" \
+              --bundle "$ATTESTATION_BUNDLE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --predicate-type https://slsa.dev/provenance/v1
+          done
+
       - name: Upload provenance
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: slsa-provenance
-          path: "*.intoto.jsonl"
+          path: ${{ steps.provenance.outputs.bundle-path }}
+          if-no-files-found: error
 
   oidf-conformance:
     permissions: {}
@@ -365,7 +380,7 @@ jobs:
     needs: [rfc7520-vectors, security-audit, sbom-generation, oauth2-conformance, oidf-conformance]
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         
       - name: Generate summary report
         run: |
@@ -421,7 +436,7 @@ jobs:
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const fs = require('fs');

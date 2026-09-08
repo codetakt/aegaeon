@@ -32,11 +32,11 @@ jobs:
           - 4566:4566
         env:
           SERVICES: kms
-          EDGE_PORT: 4566
+          GATEWAY_LISTEN: "0.0.0.0:4566"
           AWS_DEFAULT_REGION: us-east-1
           EAGER_SERVICE_LOADING: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload OIDC KMS parity artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oidc-kms-parity
           path: artifacts/oidc-kms/
