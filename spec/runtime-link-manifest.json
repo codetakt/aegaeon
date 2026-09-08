@@ -1,8 +1,8 @@
 {
-  "generated": "2026-08-29T08:42:48.447852+00:00",
+  "generated": "2026-09-08T01:16:14.689881+00:00",
   "files": {
     "crates/ffi/build.rs": {
-      "sha256": "e1e1cea0d68837552e2ccba8cd7516cb5deae62eb617c1077f27faa19504932a",
+      "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
       "entries": [
         "global-004-everparse"
       ],
