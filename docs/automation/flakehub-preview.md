@@ -40,12 +40,15 @@ Determinate Nix and enables the FlakeHub cache with GitHub artifact-cache fallba
 disabled. No personal access token is embedded in the workflow. A separate consumer
 job runs after publication and the cache action's upload finalization.
 
-An authenticated workstation or successful cache job alone does not establish
-publication access. The first attempt used the GitHub organization as the
-FlakeHub namespace and reported `Organization codetakt not found`. The maintainer
-confirmed `codetakt-inc` as the FlakeHub organization. Retrying uses that namespace;
-successful OIDC authorization, private publication and cold retrieval still need
-to be demonstrated by the publication workflow.
+[Publication run 34240961397](https://github.com/codetakt/aegaeon/actions/runs/34240961397)
+confirmed hosted OIDC publication under `codetakt-inc/aegaeon` from the GitHub
+repository `codetakt/aegaeon`. Its separate consumer retrieved the server on a
+fresh runner with compilation disabled, matched the executable and all seven
+runtime paths, and successfully ran `--help`.
+
+The validated exact reference is
+`codetakt-inc/aegaeon/=0.1.142+rev-74ceda99d4a185eab946995a17effa2954bfcb3a`.
+Its locked server source is `4f22252f8f0f1320d20c8ce90d6476cc670a3e45`.
 
 On the consuming workstation, install Determinate Nix and the FlakeHub CLI, then
 authenticate with:
@@ -157,7 +160,7 @@ recorded build. Do not replace the failed retrieval with a local build or change
 visibility to make an authentication failure pass.
 
 The workflow is manual and does not publish on PR events. PR validation runs its
-gate and manifest regression tests through the Documentation job. The first real
-publication, cache access, and fresh-runner retrieval can only be confirmed after
-the workflow is on main. Retain the successful run's exact reference and evidence
-with the consuming project's experiment record.
+gate and manifest regression tests through the Documentation job. Each preview
+requires both publication and fresh-runner retrieval to succeed. Retain the
+successful run's exact reference and evidence with the consuming project's
+experiment record.
