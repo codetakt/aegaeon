@@ -13,8 +13,8 @@ from typing import Any
 
 from check_preview_ci import source_identity
 
-REPOSITORY = "codetakt/aegaeon"
-FLAKE_NAME = "codetakt-inc/aegaeon"
+REPOSITORY = "codetakt/aegaeon"  # GitHub source repository.
+FLAKE_NAME = "codetakt-inc/aegaeon"  # FlakeHub publication namespace.
 ATTRIBUTE = "packages.x86_64-linux.server"
 EXECUTABLE = "bin/aegaeon-server"
 
