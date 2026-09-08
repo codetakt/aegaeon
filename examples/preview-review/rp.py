@@ -49,7 +49,8 @@ class RelyingParty:
         if registration.status_code != 201:
             try:
                 error = registration.json()
-            except requests.exceptions.JSONDecodeError:
+            except ValueError:
+                # JSON decoding can also reject oversized integers.
                 error = {}
             detail = (
                 error.get("error_description", "registration rejected")

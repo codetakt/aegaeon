@@ -1,6 +1,7 @@
 """Run an isolated PostgreSQL/Redis/OIDC review of a prebuilt server preview."""
 
 import argparse
+import base64
 import hashlib
 import ipaddress
 import json
@@ -29,6 +30,7 @@ from werkzeug.serving import WSGIRequestHandler, make_server
 SOURCE_REVISION = "4f22252f8f0f1320d20c8ce90d6476cc670a3e45"
 SOURCE_NAR_HASH = "sha256-EospsV8oCnQA6M/yqt/bKltAAmE0iXavl708bgXsbgY="
 FLAKE_NAME = "codetakt-inc/aegaeon"
+STORE_PATH_PATTERN = re.compile(r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+")
 REDIS_SURFACES = (
     "AUTH_CODE",
     "AUTH_SESSION",
@@ -62,7 +64,70 @@ def write_json(path, data):
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def require_manifest_fields(record, fields, prefix):
+    if not isinstance(record, dict):
+        msg = f"{prefix} must be a JSON object"
+        raise ValueError(msg)  # noqa: TRY004 - Invalid JSON input, not a programming error.
+    for field, field_type in fields.items():
+        if field not in record:
+            msg = f"{prefix}.{field} is required"
+            raise ValueError(msg)
+        if type(record[field]) is not field_type:
+            msg = f"{prefix}.{field} must have type {field_type.__name__}"
+            raise ValueError(msg)
+
+
+def valid_nar_hash(value):
+    if not isinstance(value, str) or not value.startswith("sha256-"):
+        return False
+    try:
+        decoded = base64.b64decode(value[7:], validate=True)
+    except ValueError:
+        return False
+    return len(decoded) == 32 and base64.b64encode(decoded).decode("ascii") == value[7:]
+
+
+def validate_manifest_shape(record):
+    require_manifest_fields(
+        record,
+        {
+            "version": int,
+            "distribution": str,
+            "repository": str,
+            "attribute": str,
+            "executable": str,
+            "revision": str,
+            "binary_sha256": str,
+            "server_source": dict,
+            "store_path": str,
+            "closure": dict,
+        },
+        "manifest",
+    )
+    require_manifest_fields(
+        record["server_source"],
+        {"owner": str, "repo": str, "rev": str, "narHash": str},
+        "manifest.server_source",
+    )
+    if "flakeref_exact" in record:
+        require_manifest_fields(record, {"flakeref_exact": str}, "manifest")
+    if not STORE_PATH_PATTERN.fullmatch(record["store_path"]):
+        msg = "manifest.store_path must be a top-level Nix store path"
+        raise ValueError(msg)
+    if record["store_path"] not in record["closure"]:
+        msg = "manifest.closure must include the server store_path"
+        raise ValueError(msg)
+    for path, nar_hash in record["closure"].items():
+        if not isinstance(path, str) or not STORE_PATH_PATTERN.fullmatch(path):
+            msg = "manifest.closure keys must be top-level Nix store paths"
+            raise ValueError(msg)
+        if not valid_nar_hash(nar_hash):
+            msg = "manifest.closure values must be canonical SHA-256 SRI hashes"
+            raise ValueError(msg)
+
+
 def validate_manifest(record, source_revision):
+    validate_manifest_shape(record)
     identity = (
         record["version"],
         record["distribution"],
@@ -70,7 +135,7 @@ def validate_manifest(record, source_revision):
         record["attribute"],
         record["executable"],
     )
-    if type(record["version"]) is not int or identity != (
+    if identity != (
         1,
         "internal-preview",
         "codetakt/aegaeon",
@@ -535,8 +600,9 @@ def main():
         if evidence["status"] != "passed":
             raise SystemExit(130) from None
     except Exception as error:
-        evidence["status"] = "failed"
-        evidence["failure_type"] = type(error).__name__
+        evidence.update({"status": "failed", "failure_type": type(error).__name__})
+        if isinstance(error, ValueError):
+            parser.exit(1, f"Review failed: {error}\n")
         raise
     finally:
         evidence["finished_at"] = datetime.now(UTC).isoformat()

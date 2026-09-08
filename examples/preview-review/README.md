@@ -32,6 +32,9 @@ Use a new state directory for every invocation. The runner retrieves the exact
 FlakeHub reference in the manifest, compares the executable digest and the entire
 Nix runtime closure, then starts the reviewed binary. A failed fetch or identity
 check stops execution. It never invokes Cargo or builds an alternative server.
+Before fetching, the runner rejects missing or malformed manifest fields,
+store paths and closure hashes with an explicit diagnostic. A malformed manifest
+causes a nonzero exit and a failed `evidence.json` in the new state directory.
 The Nix shell supplies PostgreSQL, Redis, Atlas, Caddy and the Python dependencies;
 Nix may realize these helpers separately.
 

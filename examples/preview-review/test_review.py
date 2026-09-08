@@ -2,6 +2,7 @@
 
 import copy
 import io
+import json
 import tempfile
 import time
 import unittest
@@ -13,7 +14,7 @@ import requests
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.verification import PolicyBuilder, Store, VerificationError
-from review import SOURCE_NAR_HASH, SOURCE_REVISION, certificates, validate_manifest
+from review import SOURCE_NAR_HASH, SOURCE_REVISION, certificates, main, validate_manifest
 from rp import RelyingParty, create_app, validate_id_token
 from seed import b64
 
@@ -43,7 +44,7 @@ class TransportTests(unittest.TestCase):
                 {"review-ca.pem", "localhost.pem", "localhost-key.pem"},
             )
 
-    def test_registration_failure_preserves_status_for_non_json_responses(self):
+    def test_registration_failure_preserves_status_for_unusable_error_bodies(self):
         metadata = {"issuer": "https://localhost:4000"}
         for name in (
             "authorization_endpoint",
@@ -53,7 +54,12 @@ class TransportTests(unittest.TestCase):
             "userinfo_endpoint",
         ):
             metadata[name] = metadata["issuer"] + "/" + name
-        for body in (b"", b"<html>unavailable</html>", b"[]"):
+        for body in (
+            b"",
+            b"<html>unavailable</html>",
+            b"[]",
+            b'{"error":' + b"9" * 5000 + b"}",
+        ):
             with self.subTest(body=body):
                 response = requests.Response()
                 response.status_code = 503
@@ -71,6 +77,7 @@ class TransportTests(unittest.TestCase):
 
 class ArtifactTests(unittest.TestCase):
     def setUp(self):
+        store_path = "/nix/store/" + "0" * 32 + "-review-server"
         self.manifest = {
             "version": 1,
             "distribution": "internal-preview",
@@ -79,6 +86,8 @@ class ArtifactTests(unittest.TestCase):
             "executable": "bin/aegaeon-server",
             "revision": "a" * 40,
             "binary_sha256": "b" * 64,
+            "store_path": store_path,
+            "closure": {store_path: SOURCE_NAR_HASH},
             "server_source": {
                 "owner": "codetakt",
                 "repo": "aegaeon",
@@ -90,6 +99,124 @@ class ArtifactTests(unittest.TestCase):
 
     def test_exact_publication_and_separate_source_identity(self):
         validate_manifest(self.manifest, SOURCE_REVISION)
+
+    def test_local_manifest_may_omit_exact_reference(self):
+        record = {key: value for key, value in self.manifest.items() if key != "flakeref_exact"}
+        validate_manifest(record, SOURCE_REVISION)
+
+    def test_missing_manifest_fields_have_explicit_diagnostics(self):
+        for field in self.manifest.keys() - {"flakeref_exact"}:
+            with self.subTest(field=field):
+                record = copy.deepcopy(self.manifest)
+                del record[field]
+                with self.assertRaisesRegex(ValueError, rf"manifest\.{field} is required"):
+                    validate_manifest(record, SOURCE_REVISION)
+        for field in self.manifest["server_source"]:
+            with self.subTest(source_field=field):
+                record = copy.deepcopy(self.manifest)
+                del record["server_source"][field]
+                with self.assertRaisesRegex(
+                    ValueError, rf"manifest\.server_source\.{field} is required"
+                ):
+                    validate_manifest(record, SOURCE_REVISION)
+
+    def test_wrong_manifest_types_have_explicit_diagnostics(self):
+        for value in (None, [], True):
+            with (
+                self.subTest(record=value),
+                self.assertRaisesRegex(ValueError, "manifest must be a JSON object"),
+            ):
+                validate_manifest(value, SOURCE_REVISION)
+        for field in self.manifest:
+            with self.subTest(field=field):
+                record = {**self.manifest, field: None}
+                with self.assertRaisesRegex(ValueError, rf"manifest\.{field} must have type"):
+                    validate_manifest(record, SOURCE_REVISION)
+        for field in self.manifest["server_source"]:
+            with self.subTest(source_field=field):
+                record = copy.deepcopy(self.manifest)
+                record["server_source"][field] = None
+                with self.assertRaisesRegex(
+                    ValueError, rf"manifest\.server_source\.{field} must have type"
+                ):
+                    validate_manifest(record, SOURCE_REVISION)
+
+    def test_store_path_and_closure_must_describe_nix_outputs(self):
+        for path in (
+            "/opt/review-server",
+            "./result-server",
+            "/nix/store/not-a-store-output",
+            self.manifest["store_path"] + "/bin/aegaeon-server",
+            self.manifest["store_path"] + "\n",
+        ):
+            with (
+                self.subTest(store_path=path),
+                self.assertRaisesRegex(ValueError, "manifest.store_path"),
+            ):
+                validate_manifest({**self.manifest, "store_path": path}, SOURCE_REVISION)
+            with self.subTest(closure_path=path):
+                closure = {**self.manifest["closure"], path: SOURCE_NAR_HASH}
+                with self.assertRaisesRegex(ValueError, "manifest.closure keys"):
+                    validate_manifest({**self.manifest, "closure": closure}, SOURCE_REVISION)
+        for closure in ({}, {"/nix/store/" + "1" * 32 + "-other-output": SOURCE_NAR_HASH}):
+            with (
+                self.subTest(closure=closure),
+                self.assertRaisesRegex(ValueError, "closure must include the server"),
+            ):
+                validate_manifest({**self.manifest, "closure": closure}, SOURCE_REVISION)
+
+    def test_closure_hashes_must_be_canonical_sha256_sri(self):
+        for value in (
+            None,
+            42,
+            "",
+            "sha256-invalid",
+            "sha256-YQ==",
+            SOURCE_NAR_HASH.replace("sha256-", "sha512-"),
+            SOURCE_NAR_HASH[:-2] + "Z=",
+        ):
+            with self.subTest(nar_hash=value):
+                closure = {self.manifest["store_path"]: value}
+                with self.assertRaisesRegex(ValueError, "canonical SHA-256 SRI"):
+                    validate_manifest({**self.manifest, "closure": closure}, SOURCE_REVISION)
+
+    def test_malformed_manifest_cli_records_failure_before_fetch_or_startup(self):
+        for field in ("store_path", "closure", "server_source"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = root / "manifest.json"
+                record = {key: value for key, value in self.manifest.items() if key != field}
+                manifest.write_text(json.dumps(record))
+                state = root / "state"
+                with (
+                    patch(
+                        "sys.argv",
+                        ["review.py", "--manifest", str(manifest), "--state-dir", str(state)],
+                    ),
+                    patch.dict(
+                        "os.environ",
+                        {
+                            "AEGAEON_REVIEW_SOURCE_REVISION": SOURCE_REVISION,
+                            "AEGAEON_REVIEW_MIGRATIONS": str(root / "migrations"),
+                        },
+                    ),
+                    patch("review.os.umask"),
+                    patch("review.signal.signal"),
+                    patch("review.subprocess.run") as fetch,
+                    patch("review.prepare_local") as startup,
+                    patch("sys.stderr", new_callable=io.StringIO) as stderr,
+                ):
+                    with self.assertRaises(SystemExit) as raised:
+                        main()
+                    self.assertEqual(raised.exception.code, 1)
+                    self.assertIn(f"Review failed: manifest.{field} is required", stderr.getvalue())
+                    self.assertNotIn("Traceback", stderr.getvalue())
+                    fetch.assert_not_called()
+                    startup.assert_not_called()
+                evidence = json.loads((state / "evidence.json").read_text())
+                self.assertEqual(evidence["status"], "failed")
+                self.assertEqual(evidence["failure_type"], "ValueError")
+                self.assertEqual({path.name for path in state.iterdir()}, {"evidence.json"})
 
     def test_mutated_manifest_identity_is_rejected(self):
         for field, value in (
