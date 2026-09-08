@@ -133,7 +133,11 @@ overrides are recorded when used.
   the registry digest, `requests.json` and every `result.json`.
 - `verify-tamarin.log`: the human `=> Proving`, `[OK]`/`[FAIL]` lines, the
   `Lemmas verified/failed` totals, and `TAMARIN-ADMISSION` JSON lines that also
-  survive a failed Nix build in its log.
+  survive a failed Nix build in its log. A `[FAIL]` line is followed by the
+  return code, wall seconds and the last 40 lines of the raw prover output
+  (indented, `|`-prefixed lines), and the request event carries the same `returncode`,
+  `wall_seconds` and `output_tail`, because a failed derivation retains no
+  `output.log`.
 
 `scripts/flake/verify_tamarin.sh` runs the regressions in
 `tests/ci/test_tamarin_admission.py`, then the admission over the selection;

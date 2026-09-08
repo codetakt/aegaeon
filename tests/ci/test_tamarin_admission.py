@@ -576,6 +576,28 @@ class ControlledToolTests(unittest.TestCase):
                     else ""
                 )
 
+    def test_rejection_reports_the_prover_output_tail(self) -> None:
+        result = self.invoke(MOCK_EXIT="3")
+        assert result.returncode != 0
+        log = (self.output / "verify-tamarin.log").read_text()
+        events = [
+            json.loads(line.split(" ", 1)[1])
+            for line in log.splitlines()
+            if line.startswith("TAMARIN-ADMISSION ")
+        ]
+        rejected = [e for e in events if e.get("event") == "request" and e["status"] == "rejected"]
+        assert rejected
+        for payload in rejected:
+            assert payload["returncode"] == 3
+            assert isinstance(payload["wall_seconds"], float)
+            assert any(line.startswith("analyzed: ") for line in payload["output_tail"])
+            assert payload["output_tail"][-1] == "=" * 78
+        assert "    returncode=3 wall_seconds=" in log
+        assert "    | analyzed: " in log
+        assert "output_tail" in result.stdout
+        accepted = [e for e in events if e.get("event") == "request" and e["status"] != "rejected"]
+        assert all("output_tail" not in e for e in accepted)
+
     def test_empty_selection_and_missing_inputs_fail_before_running(self) -> None:
         result = self.invoke(TAMARIN_PROOFS_FILE=str(self.root / "ci/empty.sh"))
         assert result.returncode != 0

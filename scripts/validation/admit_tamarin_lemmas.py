@@ -31,6 +31,10 @@ from typing import Any
 
 CONTRACT = "tamarin-1.12.0-summary-v1"
 SCHEMA_VERSION = 1
+# Rejections reproduce the end of the raw prover output in the log and in the
+# request event, so a rejection inside a failed Nix build stays diagnosable.
+OUTPUT_TAIL_LINES = 40
+OUTPUT_TAIL_CHARS = 400
 DEFAULT_REGISTRY = Path("spec/tamarin-evidence.json")
 LEMMA_DECLARATION = re.compile(
     r"^[ \t]*lemma[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?:\[[^\]]*\])?[ \t]*:\s*"
@@ -330,6 +334,12 @@ def tool_identity(command: list[str]) -> dict[str, Any]:
     }
 
 
+def output_tail(text: str) -> list[str]:
+    """Last lines of a raw prover output, each clipped, for rejection diagnostics."""
+    lines = text.splitlines()[-OUTPUT_TAIL_LINES:]
+    return [line[:OUTPUT_TAIL_CHARS] for line in lines]
+
+
 def emit(log: Path, line: str) -> None:
     print(line, flush=True)
     with log.open("a") as target:
@@ -418,6 +428,8 @@ def run(args: argparse.Namespace) -> int:
         label = f"{request['theory']}:{request['lemma']}"
         emit(log, f"=> Proving {label}")
         directory = out_dir / "invocations" / request["id"]
+        invocation: dict[str, Any] = {}
+        text = ""
         try:
             invocation, text = run_one(request, directory, proofs_root, tool, budgets)
             result = reconcile(request, invocation, text, registry)
@@ -425,6 +437,8 @@ def run(args: argparse.Namespace) -> int:
             result["command_sha256"] = digest_file(directory / "command.json")
             write_json_new(directory / "result.json", result)
         except (AdmissionError, OSError) as error:
+            raw = directory / "output.log"
+            text = raw.read_text(errors="replace") if raw.is_file() else ""
             result = {
                 "schema_version": SCHEMA_VERSION,
                 "contract": CONTRACT,
@@ -444,21 +458,33 @@ def run(args: argparse.Namespace) -> int:
                 else None
             ),
         }
+        payload: dict[str, Any] = {
+            "event": "request",
+            "id": request["id"],
+            "status": result["status"],
+            "reasons": result["reasons"],
+        }
         if result["status"] == "rejected":
+            tail = output_tail(text)
             emit(log, f"[FAIL] {label} ({'; '.join(result['reasons'])})")
+            diagnostics = (
+                f"returncode={invocation.get('returncode')!r} "
+                f"wall_seconds={invocation.get('wall_seconds')!r} "
+                f"output_lines={len(text.splitlines())}"
+            )
+            emit(log, f"    {diagnostics}")
+            for line in tail:
+                emit(log, f"    | {line}")
+            payload.update(
+                {
+                    "returncode": invocation.get("returncode"),
+                    "wall_seconds": invocation.get("wall_seconds"),
+                    "output_tail": tail,
+                }
+            )
         else:
             emit(log, f"[OK] {label}")
-        emit(
-            log,
-            event(
-                {
-                    "event": "request",
-                    "id": request["id"],
-                    "status": result["status"],
-                    "reasons": result["reasons"],
-                }
-            ),
-        )
+        emit(log, event(payload))
     total = len(requests)
     emit(log, "=== Summary ===")
     emit(log, f"Lemmas verified: {total - counts['rejected']}/{total}")
