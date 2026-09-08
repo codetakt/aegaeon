@@ -54,9 +54,16 @@ A pass is accepted only when all of the following hold:
   `Detailed error report follows` line, exactly one completion marker, and,
   when `--query_stats` was requested, a `TOTAL TIME` line that echoes the
   executed argv;
-- every requested source has the disposition below, and the recorded local
-  context contains no `<name>.fst.checked` / `<name>.fsti.checked` for a
-  requested module.
+- every requested source has the disposition below, and no
+  `<name>.fst.checked` / `<name>.fsti.checked` for a requested module exists in
+  the recorded local context, in the source's own directory or in any include
+  directory of the invocation (F* reuses such a file without `--cache_dir`, and
+  the result line would then stand for cache reuse); the scanned directories
+  and candidates are recorded;
+- the invocation record belongs to the pass: `result.json` carries the pass id
+  of its directory and the same argv and working directory as `inputs.json`, and
+  no two passes share an input or output digest (a relabelled copy of another
+  pass's records is not that pass's evidence).
 
 Request identity: each requested `.fst` (implementation) or `.fsti` (interface)
 is re-read from the source tree, its SHA-256 must equal the invocation record,
@@ -76,7 +83,9 @@ declaration line is an identity error.
 
 Result lines for names that were not requested are recorded as `dependency`
 when `<name>.fst`/`.fsti` exists in the recorded local context or include
-paths, and cause rejection as `unclassified` otherwise. An unrequested result
+paths, with the resolved path and its digest, and cause rejection as
+`unclassified` otherwise. Replay uses that recorded resolution, so records can
+be re-checked where the provider tree does not exist. An unrequested result
 never satisfies a requested target. The same module selected in different
 passes (for example LowStar dependencies) is expected; duplicates are counted
 within one pass only.
@@ -103,8 +112,9 @@ grammar before it reports success.
 - `invocations/<pass-id>/modules.json` (schema 1): contract identifier, pass
   identifier, invocation input/output digests, tool identity, return code,
   the disposition and result line of every requested source, unrequested
-  results with their classification, diagnostics (error and warning counts,
-  completion marker lines, argv echo check), status and rejection reasons.
+  results with their classification and resolved source digest, the checked
+  file scan, diagnostics (error and warning counts, completion marker lines,
+  argv echo check), status and rejection reasons.
   An existing `modules.json` is never overwritten; evidence directories must be
   fresh.
 - `admission.json` (schema 1): the digest of every pass record, written

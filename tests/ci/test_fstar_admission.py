@@ -394,6 +394,7 @@ class ControlledMutationTests(unittest.TestCase):
                 "lines": [2],
                 "classification": "dependency",
                 "source": str(dep),
+                "sha256": sha256(dep),
             }
         ]
 
@@ -503,6 +504,90 @@ class ControlledMutationTests(unittest.TestCase):
         assert "already exists" in summary_events(completed.stdout)[0]["reasons"][0]
         assert self.case.modules()["status"] == "accepted"  # the earlier record is untouched
         assert not (self.case.out / "admission.json").exists()
+
+
+class ReviewFollowUpTests(unittest.TestCase):
+    """PR #18 review: cache candidates in include directories, pass identity, dependency replay."""
+
+    def setUp(self) -> None:
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.case = Case(self.root, "2b")
+        self.case.source("Alpha.fst")
+        self.case.source("Beta.fst")
+        self.provider = self.root / "provider"
+        self.provider.mkdir()
+
+    def test_checked_candidate_for_a_requested_module_rejects_wherever_fstar_searches(self) -> None:
+        cases = {
+            "absolute include": (self.provider / "Alpha.fst.checked", [str(self.provider)]),
+            "relative include": (self.case.src / "inc" / "Beta.fsti.checked", ["inc"]),
+            "source directory": (self.case.src / "Alpha.fst.checked", []),
+        }
+        for name, (cache, includes) in cases.items():
+            with self.subTest(case=name):
+                shutil.rmtree(self.case.directory, ignore_errors=True)
+                self.case.directory.mkdir()
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_bytes(b"stale checked module")
+                self.case.record(["Alpha.fst", "Beta.fst"], COMPLETE, include_paths=includes)
+                assert self.case.admit().returncode == 1
+                assert f"checked file for requested module found: {cache}" in self.case.reasons()
+                cache.unlink()
+
+    def test_checked_scan_is_recorded_and_replays_without_the_provider(self) -> None:
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"], COMPLETE, include_paths=[str(self.provider), "inc"]
+        )
+        assert self.case.admit().returncode == 0, self.case.reasons()
+        scan = self.case.modules()["checked_scan"]
+        assert scan["candidates"] == []
+        assert str(self.provider) in scan["directories"]
+        assert str(self.case.src / "inc") in scan["directories"]
+        assert str(self.case.src) in scan["directories"]
+        shutil.rmtree(self.provider)
+        assert self.case.verify().returncode == 0
+
+    def test_records_of_another_pass_are_not_this_pass(self) -> None:
+        self.case.record(["Alpha.fst", "Beta.fst"], COMPLETE)
+        other = self.case.out / "invocations" / "1"
+        shutil.copytree(self.case.directory, other)
+        completed = self.case.admit(["2b", "1"])
+        assert completed.returncode == 1
+        relabelled = json.loads((other / "modules.json").read_text())
+        assert "records pass '2b', not '1'" in "\n".join(relabelled["reasons"])
+        # Re-labelling result.json is not enough: the evidence is still the same invocation.
+        shutil.rmtree(self.case.out)
+        self.case.directory.mkdir(parents=True)
+        self.case.record(["Alpha.fst", "Beta.fst"], COMPLETE)
+        shutil.copytree(self.case.directory, other)
+        result = other / "result.json"
+        result.write_text(result.read_text().replace('"pass_id": "2b"', '"pass_id": "1"'))
+        completed = self.case.admit(["2b", "1"])
+        assert completed.returncode == 1
+        events = summary_events(completed.stdout)
+        assert any(e.get("event") == "cross-pass" for e in events)
+        assert any(
+            "share the same inputs_sha256" in r for e in events for r in e.get("reasons", [])
+        )
+        assert not (self.case.out / "admission.json").exists()
+
+    def test_dependency_from_absolute_include_replays_without_the_provider(self) -> None:
+        dependency = self.provider / "Gamma.fst"
+        dependency.write_text("module Gamma\nlet x = 1\n")
+        output = COMPLETE.replace(
+            "Verified module: Beta\n", "Verified module: Gamma\nVerified module: Beta\n"
+        )
+        self.case.record(["Alpha.fst", "Beta.fst"], output, include_paths=[str(self.provider)])
+        assert self.case.admit().returncode == 0, self.case.reasons()
+        entry = self.case.modules()["unrequested"][0]
+        assert entry["classification"] == "dependency"
+        assert entry["source"] == str(dependency)
+        assert entry["sha256"] == sha256(dependency)
+        shutil.rmtree(self.provider)
+        assert self.case.verify().returncode == 0
+        record = self.case.directory / "modules.json"
+        record.write_text(record.read_text().replace('"dependency"', '"unclassified"'))
+        assert self.case.verify().returncode != 0
 
 
 if __name__ == "__main__":

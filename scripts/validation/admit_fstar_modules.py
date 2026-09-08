@@ -157,21 +157,53 @@ def parse_output(text: str) -> dict[str, Any]:
     }
 
 
-def resolve_unrequested(name: str, inputs: dict[str, Any], source_root: Path | None) -> str | None:
-    """Find a known source for a result that was not requested, or None."""
+def include_directories(inputs: dict[str, Any], source_root: Path) -> list[Path]:
+    """Every directory F* may search: the include paths, relative to the source root."""
+    directories: list[Path] = []
+    for include in inputs.get("include_paths", []):
+        directory = Path(include)
+        directories.append(directory if directory.is_absolute() else source_root / directory)
+    return directories
+
+
+def resolve_unrequested(
+    name: str, inputs: dict[str, Any], source_root: Path
+) -> dict[str, str] | None:
+    """Find a known source for a result that was not requested, with its digest."""
     candidates = {f"{name}.fst", f"{name}.fsti"}
     for item in inputs.get("local_context", []):
         if Path(item["path"]).name in candidates:
-            return str(item["path"])
-    if source_root is not None:
-        for include in inputs.get("include_paths", []):
-            directory = Path(include)
-            if not directory.is_absolute():
-                directory = source_root / directory
-            for candidate in candidates:
-                if (directory / candidate).is_file():
-                    return str(directory / candidate)
+            return {"source": str(item["path"]), "sha256": str(item["sha256"])}
+    for directory in include_directories(inputs, source_root):
+        for candidate in candidates:
+            if (directory / candidate).is_file():
+                return {
+                    "source": str(directory / candidate),
+                    "sha256": digest_file(directory / candidate),
+                }
     return None
+
+
+def checked_candidates(
+    inputs: dict[str, Any], names: list[str], source_root: Path
+) -> dict[str, Any]:
+    """Scan every directory F* searches for a .checked file of a requested module."""
+    directories: list[Path] = []
+    for module in inputs.get("modules", []):
+        directory = (source_root / str(module["path"])).parent
+        if directory not in directories:
+            directories.append(directory)
+    for directory in include_directories(inputs, source_root):
+        if directory not in directories:
+            directories.append(directory)
+    found: list[str] = []
+    for directory in directories:
+        for name in names:
+            for suffix in (".fst.checked", ".fsti.checked"):
+                candidate = directory / f"{name}{suffix}"
+                if candidate.exists():
+                    found.append(str(candidate))
+    return {"directories": [str(d) for d in directories], "candidates": found}
 
 
 def reconcile(
@@ -180,11 +212,18 @@ def reconcile(
     result: dict[str, Any],
     output: str,
     source_root: Path | None,
-    recorded: list[dict[str, Any]] | None = None,
+    recorded: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Compute the per-module record; ``recorded`` replays identities without sources."""
+    """Compute the per-module record; ``recorded`` replays a modules.json without sources."""
     reasons: list[str] = []
     argv = list(inputs["argv"])
+    # The invocation record must be the one made for this pass, not a relabelled copy.
+    if result.get("pass_id") != pass_id:
+        reasons.append(f"result.json records pass {result.get('pass_id')!r}, not {pass_id!r}")
+    if result.get("argv") != argv or result.get("cwd") != inputs.get("cwd"):
+        reasons.append("result.json argv/cwd differ from inputs.json")
+    if recorded is not None and recorded.get("pass_id") != pass_id:
+        reasons.append(f"modules.json records pass {recorded.get('pass_id')!r}, not {pass_id!r}")
     denied = sorted(option for option in argv if option in DENIED_OPTIONS)
     if denied:
         reasons.append(f"denied options in argv: {' '.join(denied)}")
@@ -216,7 +255,7 @@ def reconcile(
         }
         try:
             if recorded is not None:
-                previous = recorded[index]
+                previous = recorded["requested"][index]
                 if previous["path"] != path or previous["sha256"] != module["sha256"]:
                     raise AdmissionError("recorded identity does not match the inputs record")
                 entry["module"] = previous["module"]
@@ -300,23 +339,53 @@ def reconcile(
             )
             if expected:
                 continue
-            known_source = resolve_unrequested(name, inputs, source_root)
+            if recorded is None:
+                if source_root is None:
+                    raise AdmissionError("source root is required to classify results")
+                identity = resolve_unrequested(name, inputs, source_root)
+            else:
+                # Replay uses the resolution recorded at admission; the provider
+                # tree need not exist where the records are re-checked.
+                previous = next(
+                    (
+                        e
+                        for e in recorded.get("unrequested", [])
+                        if e.get("module") == name and e.get("kind") == kind
+                    ),
+                    None,
+                )
+                identity = None
+                if previous and previous.get("classification") == "dependency":
+                    if previous.get("lines") != lines:
+                        reasons.append(f"recorded lines for unrequested {name} differ from output")
+                    identity = {"source": previous.get("source"), "sha256": previous.get("sha256")}
             unrequested.append(
                 {
                     "module": name,
                     "kind": kind,
                     "lines": lines,
-                    "classification": "dependency" if known_source else "unclassified",
-                    "source": known_source,
+                    "classification": "dependency" if identity else "unclassified",
+                    "source": identity["source"] if identity else None,
+                    "sha256": identity["sha256"] if identity else None,
                 }
             )
-            if known_source is None:
+            if identity is None:
                 reasons.append(f"unrequested {kind} result for {name} has no known source")
 
+    # A .checked file for a requested module anywhere F* searches would let the
+    # result line stand for cache reuse instead of a fresh check.
     checked = {Path(item["path"]).name for item in inputs.get("local_context", [])}
     for name in sorted(names):
         if f"{name}.fst.checked" in checked or f"{name}.fsti.checked" in checked:
             reasons.append(f"a checked file for requested module {name} was present")
+    if recorded is None:
+        if source_root is None:
+            raise AdmissionError("source root is required to scan for checked files")
+        scan = checked_candidates(inputs, sorted(names), source_root)
+    else:
+        scan = recorded.get("checked_scan") or {"directories": [], "candidates": ["<unrecorded>"]}
+    for candidate in scan["candidates"]:
+        reasons.append(f"checked file for requested module found: {candidate}")
 
     status = "accepted" if not reasons else "rejected"
     return {
@@ -329,6 +398,7 @@ def reconcile(
         "returncode": result.get("returncode"),
         "requested": requested,
         "unrequested": unrequested,
+        "checked_scan": scan,
         "diagnostics": {
             "errors": parsed["errors"],
             "warnings": parsed["warnings"],
@@ -364,6 +434,21 @@ def emit(out_dir: Path, line: str) -> None:
     if log.exists():
         with log.open("a") as target:
             target.write(line + "\n")
+
+
+def duplicate_evidence(statuses: dict[str, dict[str, Any]]) -> list[str]:
+    """Identical invocation records under two pass ids cannot both be that pass's evidence."""
+    reasons: list[str] = []
+    for field in ("inputs_sha256", "output_sha256"):
+        seen: dict[str, str] = {}
+        for pass_id, value in statuses.items():
+            digest = value.get(field)
+            if digest is None:
+                continue
+            if digest in seen:
+                reasons.append(f"passes {seen[digest]} and {pass_id} share the same {field}")
+            seen[digest] = pass_id
+    return reasons
 
 
 def load_pass(directory: Path) -> tuple[dict[str, Any], dict[str, Any], bytes]:
@@ -422,6 +507,18 @@ def admit(out_dir: Path, passes: list[str], source_root: Path) -> int:
             "output_sha256": record.get("output_sha256"),
         }
         accepted = accepted and record["status"] == "accepted"
+    duplicated = duplicate_evidence(statuses)
+    if duplicated:
+        accepted = False
+        emit(
+            out_dir,
+            "FSTAR-ADMISSION "
+            + json.dumps(
+                {"event": "cross-pass", "status": "rejected", "reasons": duplicated},
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
     overall = {
         "event": "summary",
         "status": "accepted" if accepted else "rejected",
@@ -449,6 +546,7 @@ def verify_records(out_dir: Path, passes: list[str]) -> int:
     admission = load_json(out_dir / "admission.json")
     if admission.get("status") != "accepted" or admission.get("contract") != CONTRACT:
         raise AdmissionError("admission.json is not an accepted record of this contract")
+    seen_digests: dict[str, dict[str, Any]] = {}
     for pass_id in passes:
         directory = out_dir / "invocations" / pass_id
         entry = admission.get("passes", {}).get(pass_id)
@@ -464,16 +562,25 @@ def verify_records(out_dir: Path, passes: list[str]) -> int:
             result.get("output_sha256"),
         ):
             raise AdmissionError(f"pass {pass_id}: modules.json is bound to different records")
-        replay = reconcile(
-            pass_id, inputs, result, output.decode(errors="replace"), None, record["requested"]
-        )
+        replay = reconcile(pass_id, inputs, result, output.decode(errors="replace"), None, record)
         if replay["status"] != "accepted":
             raise AdmissionError(f"pass {pass_id}: replay rejected: {'; '.join(replay['reasons'])}")
         if [e["disposition"] for e in replay["requested"]] != [
             e["disposition"] for e in record["requested"]
         ]:
             raise AdmissionError(f"pass {pass_id}: recorded dispositions differ from replay")
+        if [(e["module"], e["classification"]) for e in replay["unrequested"]] != [
+            (e["module"], e["classification"]) for e in record["unrequested"]
+        ]:
+            raise AdmissionError(f"pass {pass_id}: recorded classifications differ from replay")
+        seen_digests[pass_id] = {
+            "inputs_sha256": result.get("inputs_sha256"),
+            "output_sha256": result.get("output_sha256"),
+        }
         print(f"[OK] pass {pass_id}: {len(record['requested'])} requested sources admitted")
+    duplicated = duplicate_evidence(seen_digests)
+    if duplicated:
+        raise AdmissionError("; ".join(duplicated))
     return 0
 
 
