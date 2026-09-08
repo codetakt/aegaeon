@@ -49,6 +49,18 @@ reject a missing, empty, or non-file subject before upload or signing.
 `aegaeon-client` is a Rust library, not a standalone executable; neither provenance
 subjects nor release tarball packaging list a client binary.
 
+The required full PR lint lane runs `scripts/ci/check_release_subjects.py` against
+real `cargo metadata --no-deps --format-version 1 --locked` output. The workflow's
+explicit `RELEASE_PACKAGE`, `RELEASE_BIN`, and `RELEASE_PROFILE` select the approved
+target. The check derives its path from Cargo's target directory, then checks the
+declared subject, build flags, artifact handoff, attestation inputs and tag-package
+copy. It rejects library-only, unknown, ambiguous or feature-gated bins, additional
+or omitted subjects, output-path drift, and job/step overrides of the selection.
+Existing bootstrap/seed executables do not become approved subjects automatically.
+This policy covers the current native Linux release build with default features;
+cross targets, other profiles and feature selections require an explicit policy
+update. It does not describe SDK package contents or establish build refinement.
+
 The provenance job takes the attestation bundle from `actions/attest`'s
 `bundle-path` output. Before archiving it, `gh attestation verify` checks each built
 subject against that bundle, the repository identity, and the SLSA v1 predicate.
@@ -112,6 +124,7 @@ outside this repository's direct Action configuration.
 ```bash
 nix develop .#ci --command bash scripts/lint/lint_nix.sh
 nix develop .#ci --command actionlint
+nix develop .#ci --command python3 scripts/ci/check_release_subjects.py
 nix develop .#docs --command python3 -m unittest discover -s tests/ci -p 'test_provenance.py'
 nix develop .#integrity --command python3 scripts/validation/test_dudect.py
 nix build .#verified-reqs --no-link -L

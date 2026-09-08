@@ -19,6 +19,9 @@ env:
   RUST_BACKTRACE: 1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CARGO_INCREMENTAL: "0"
+  RELEASE_PACKAGE: aegaeon-server
+  RELEASE_BIN: aegaeon-server
+  RELEASE_PROFILE: release
   RELEASE_BINARY: target/release/aegaeon-server
 
 jobs:
@@ -39,7 +42,9 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Build release server
-        run: nix develop .#ci --command cargo build --release --locked --package aegaeon-server --bin aegaeon-server
+        run: >-
+          nix develop .#ci --command cargo build --locked
+          --profile "$RELEASE_PROFILE" --package "$RELEASE_PACKAGE" --bin "$RELEASE_BIN"
 
       - name: Validate release binary
         run: |

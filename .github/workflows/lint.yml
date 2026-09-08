@@ -85,6 +85,9 @@ jobs:
           nix develop .#ci --command node --experimental-strip-types \
             tests/verified_core_wasm/workflow_inventory_policy_test.ts
 
+      - name: Check release subjects against Cargo targets
+        run: nix develop .#ci --command python3 scripts/ci/check_release_subjects.py
+
   typescript-lint:
     name: TypeScript Lint
     runs-on: ubuntu-latest
