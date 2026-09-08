@@ -73,7 +73,6 @@ jobs:
         run: |
           mkdir -p release-artifacts
           cp target/release/aegaeon-server release-artifacts/
-          cp target/release/aegaeon-client release-artifacts/ || true
           tar czf aegaeon-${{ needs.validate-release.outputs.version }}-linux-amd64.tar.gz -C release-artifacts .
           
       - name: Upload artifacts
