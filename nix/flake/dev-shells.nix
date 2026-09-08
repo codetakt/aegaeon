@@ -38,6 +38,7 @@ in
       pkgs.commitlint
       pkgs.gitMinimal
       pkgs.bash
+      pkgs.jq
     ];
   };
 
@@ -51,6 +52,7 @@ in
       ]))
       pkgs.ruff
       pkgs.mypy
+      pkgs.jq
     ];
   };
 
