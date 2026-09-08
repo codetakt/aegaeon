@@ -47,7 +47,13 @@ def command_context(command: list[str]) -> dict[str, Any]:
     if tool is None:
         raise FileNotFoundError(f"Required verifier not found: {command[0]}")
     tool_path = Path(tool).absolute()
-    includes = [command[i + 1] for i, value in enumerate(command) if value == "--include"]
+    includes = []
+    for index, value in enumerate(command):
+        if value == "--include":
+            if index + 1 >= len(command):
+                # Record a malformed request as a failed invocation, not a crash.
+                raise ValueError("--include requires a directory argument")
+            includes.append(command[index + 1])
     modules = [value for value in command[1:] if value.endswith((".fst", ".fsti"))]
     if not modules:
         raise ValueError("F* invocation must name at least one source")
