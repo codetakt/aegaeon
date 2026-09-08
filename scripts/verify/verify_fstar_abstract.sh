@@ -1,7 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[INFO] Running F* (abstract experiment, no --expose_interfaces)..."
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(dirname "$(dirname "$SCRIPT_DIR")")
+if [ -n "${OUT_DIR:-}" ]; then
+	ART="$(realpath -m "$OUT_DIR")"
+	mkdir -p "$ART"
+else
+	# The runner refuses to reuse an invocation directory, so repeated local
+	# runs get a fresh directory instead of failing or overwriting evidence.
+	mkdir -p "$REPO_ROOT/artifacts/fstar/abstract"
+	ART="$(mktemp -d "$REPO_ROOT/artifacts/fstar/abstract/run.XXXXXX")"
+fi
+# Exploratory models are not required production evidence, but failures still
+# make this target fail. Keep all five case results for diagnosis.
+RUN_LOG="$ART/run.log"
+: >"$RUN_LOG"
+failed=0
+run_experiment() {
+	local case_id="$1"
+	shift
+	local status=0
+	python3 "$REPO_ROOT/scripts/validation/run_fstar_invocation.py" \
+		--out-dir "$ART" --pass-id "$case_id" -- fstar.exe "$@" || status=$?
+	if ((status != 0)); then
+		failed=1
+	fi
+	printf '[CASE %s] exit=%s (experimental; not production evidence)\n' \
+		"$case_id" "$status" | tee -a "$RUN_LOG"
+}
+echo "[INFO] Running F* abstract experiments..."
 work_dir="${AEG_FSTAR_ABSTRACT_TMPDIR:-}"
 if [ -n "${work_dir}" ]; then
 	rm -rf "${work_dir}"
@@ -9,7 +37,7 @@ if [ -n "${work_dir}" ]; then
 else
 	work_dir="$(mktemp -d "${TMPDIR:-/tmp}/aegaeon-fstar-abstract.XXXXXX")"
 fi
-cp -R fstar "${work_dir}/"
+cp -R "$REPO_ROOT/fstar" "${work_dir}/"
 cd "${work_dir}/fstar"
 
 cat >Par.fsti <<'EOF'
@@ -105,26 +133,9 @@ FSTAR_INCLUDES=()
 if [ -n "${HACL_FSTAR_PATH:-}" ]; then FSTAR_INCLUDES+=(--include "$HACL_FSTAR_PATH"); fi
 if [ -n "${STEEL_PATH:-}" ]; then FSTAR_INCLUDES+=(--include "$STEEL_PATH"); fi
 
-# No --expose_interfaces for this experiment
-set +e
-fstar.exe --use_hints --hint_dir . "${FSTAR_INCLUDES[@]}" "${FSTAR_SOURCES[@]}"
-STATUS=$?
-set -e
-if [ $STATUS -eq 0 ]; then
-	echo "[OK] Abstract experiment passed"
-else
-	echo "[WARN] Abstract experiment failed (expected during exploration)"
-fi
-#!/usr/bin/env bash
-set -euo pipefail
-
-set +e
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-REPO_ROOT=$(dirname "$(dirname "$SCRIPT_DIR")")
-ART="${OUT_DIR:-$REPO_ROOT}"
-RUN_LOG="$ART/artifacts/fstar/abstract/run.log"
-mkdir -p "$ART"/artifacts/fstar/abstract
-echo "[INFO] Running F* (abstract experiment matrix)..." | tee "$RUN_LOG"
+# No --expose_interfaces for this experiment.
+run_experiment original --use_hints --hint_dir . "${FSTAR_INCLUDES[@]}" "${FSTAR_SOURCES[@]}"
+cd "$REPO_ROOT"
 
 run_case() {
 	local CASE_ID="$1"
@@ -232,14 +243,7 @@ EOF
 	else
 		CMD=(fstar.exe --use_hints --hint_dir . "${FSTAR_INCLUDES[@]}" "${FSTAR_SOURCES[@]}")
 	fi
-	LOG="$ART/artifacts/fstar/abstract/case_${CASE_ID}_${GEN_IMPL}_${EXPOSE}.log"
-	echo "[CASE $CASE_ID] impl=$GEN_IMPL expose=$EXPOSE" | tee -a "$RUN_LOG"
-	"${CMD[@]}" >"$LOG" 2>&1
-	if [ $? -eq 0 ]; then
-		echo "  - PASS" | tee -a "$RUN_LOG"
-	else
-		echo "  - FAIL (see $(basename "${LOG##*/}"))" | tee -a "$RUN_LOG"
-	fi
+	run_experiment "case-${CASE_ID}-${GEN_IMPL}-${EXPOSE}" "${CMD[@]:1}"
 	cd "$REPO_ROOT" >/dev/null
 }
 
@@ -248,3 +252,4 @@ run_case 1 wrap on
 run_case 2 alias off
 run_case 2 alias on
 echo "[INFO] Abstract experiment matrix complete. See $ART." | tee -a "$RUN_LOG"
+exit "$failed"

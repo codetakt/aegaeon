@@ -10,7 +10,13 @@ import pathlib
 import tempfile
 import unittest
 
-from run_kani_evidence import accept_report, discover_metadata
+from run_kani_evidence import (
+    accept_report,
+    discover_metadata,
+    evidence_line,
+    log_tail,
+    rejection_reason,
+)
 
 HARNESS = "module::proof_example"
 REPORT = f"""Kani Rust Verifier 0.66.0 (cargo plugin)
@@ -91,6 +97,59 @@ class AcceptanceTests(unittest.TestCase):
     def test_multiline_description(self) -> None:
         report = REPORT.replace('"expected value"', '"expected\n                        value"')
         self.assertEqual(len(accept_report(report, HARNESS, 0)), 2)
+
+    def test_rejection_reason_names_budget_and_signal_causes(self) -> None:
+        budget = ValueError("Kani exited with 124")
+        self.assertEqual(
+            rejection_reason(124, budget, 600),
+            "wall-clock budget of 600s exceeded (timeout exit 124)",
+        )
+        signal = rejection_reason(-9, ValueError("Kani exited with -9"), 600)
+        self.assertIn("signal 9", signal)
+        parser = rejection_reason(1, ValueError("missing result summary"), 600)
+        self.assertEqual(parser, "missing result summary")
+        identity = rejection_reason(0, KeyError("proof_harnesses"), 600)
+        self.assertEqual(identity, "'proof_harnesses'")
+
+    def test_evidence_line_reports_exit_code_and_reason_without_bulk(self) -> None:
+        result = {
+            "harness": {"name": HARNESS, "file": "crates/ffi/src/kani_tests.rs"},
+            "status": "rejected",
+            "exit_code": 124,
+            "wall_seconds": 600.02,
+            "cpu_seconds": 41.5,
+            "budget_seconds": 600,
+            "log_sha256": "ab" * 32,
+            "reason": rejection_reason(124, ValueError("Kani exited with 124"), 600),
+            "properties": [{"id": f"{HARNESS}.assertion.{n}"} for n in range(1000)],
+        }
+        line = evidence_line(result)
+        self.assertTrue(line.startswith("KANI-EVIDENCE "))
+        self.assertNotIn("\n", line)
+        parsed = json.loads(line.removeprefix("KANI-EVIDENCE "))
+        self.assertEqual(parsed["harness"], HARNESS)
+        self.assertEqual(parsed["status"], "rejected")
+        self.assertEqual(parsed["exit_code"], 124)
+        self.assertEqual(parsed["budget_seconds"], 600)
+        self.assertIn("wall-clock budget", parsed["reason"])
+        self.assertNotIn("properties", parsed)
+        accepted = json.loads(
+            evidence_line(
+                {**result, "status": "accepted", "exit_code": 0, "reason": None}
+            ).removeprefix("KANI-EVIDENCE ")
+        )
+        self.assertIsNone(accepted["reason"])
+
+    def test_log_tail_is_bounded_and_tolerates_invalid_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "harness.log"
+            path.write_text("".join(f"line {n}\n" for n in range(500)))
+            tail = log_tail(path, max_lines=5, max_bytes=200)
+            self.assertLessEqual(len(tail.splitlines()), 5)
+            self.assertIn("line 499", tail)
+            self.assertNotIn("line 400", tail)
+            path.write_bytes(b"\xff\xfe before\nVERIFICATION:- FAILED\n")
+            self.assertIn("VERIFICATION:- FAILED", log_tail(path))
 
     def test_compiled_identity_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -59,6 +59,18 @@ declaration, compilation-only run or empty selection is insufficient. The
 adapter rejects unknown report formats. Ordinary safety and unwinding checks
 remain enabled. Resource exhaustion and timeout reject admission.
 
+The per-harness wall-clock budget (`timeout_seconds`, 600 s) and the
+address-space limit are operational bounds, not proof parameters; changing them
+does not change what a harness proves. The budget was set from measured hosted
+runs of the ID-token harness: 47 s and 66 s in the standalone `Kani (Pure
+Harness)` job, 109 s inside a concurrent `nix flake check` build, and one such
+build that exceeded the earlier 180 s budget and was rejected. Each result
+records wall seconds and the CPU seconds of waited descendants so contention can
+be distinguished from solver growth. Every harness result is also printed as a
+`KANI-EVIDENCE` JSON line with exit code and rejection reason, and a rejected
+harness prints the tail of its Kani output, because a failed Nix build discards
+the evidence directory and keeps only the build log.
+
 The reachability allowlist applies to property IDs beginning with the selected
 harness name followed by `.assertion.`. Assertions in callees and libraries may
 be `UNREACHABLE` without an individual allowlist entry. Every property is still
