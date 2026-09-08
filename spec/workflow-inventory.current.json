@@ -1,5 +1,6 @@
 {
   "required_workflows": [
+    { "path": ".github/workflows/flakehub-preview.yml", "name": "FlakeHub Preview" },
     { "path": ".github/workflows/pr.yml", "name": "PR Validation" },
     { "path": ".github/workflows/lint.yml", "name": "CI - Lint" },
     { "path": ".github/workflows/ci.yml", "name": "CI - Core" },
