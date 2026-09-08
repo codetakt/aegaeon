@@ -13,7 +13,8 @@ from typing import Any
 
 from check_preview_ci import source_identity
 
-REPOSITORY = "codetakt/aegaeon"
+REPOSITORY = "codetakt/aegaeon"  # GitHub source repository.
+FLAKE_NAME = "codetakt-inc/aegaeon"  # FlakeHub publication namespace.
 ATTRIBUTE = "packages.x86_64-linux.server"
 EXECUTABLE = "bin/aegaeon-server"
 
@@ -67,7 +68,7 @@ def record_build(build: list[dict[str, Any]], revision: str, root: Path) -> dict
 def bind_publication(record: dict[str, Any], reference: str) -> None:
     if re.fullmatch(r"[0-9a-f]{40}", record["revision"]) is None:
         raise ValueError("preview revision must be a full Git commit SHA")
-    expected = rf"{REPOSITORY}/=0\.1\.[0-9]+\+rev-{record['revision']}"
+    expected = rf"{re.escape(FLAKE_NAME)}/=0\.1\.[0-9]+\+rev-{record['revision']}"
     if re.fullmatch(expected, reference) is None:
         raise ValueError("publisher reference must pin the exact preview source revision")
     record["flakeref_exact"] = reference
