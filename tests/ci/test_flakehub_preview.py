@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -193,6 +194,51 @@ class PreviewManifestTests(unittest.TestCase):
         for build in ([], self.build * 2, [{"outputs": {"out": "one", "dev": "two"}}]):
             with self.subTest(build=build), pytest.raises(ValueError, match="one server"):
                 manifest.record_build(build, REVISION, self.root)
+
+
+class PreviewManifestCliTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.manifest = self.root / "manifest.json"
+        self.build_json = self.root / "build.json"
+        # Invalid contents demonstrate that usage checks precede input parsing.
+        self.manifest.write_text("existing manifest must remain untouched\n")
+        self.build_json.write_text("build JSON must not be read\n")
+
+    def assert_missing_argument(self, arguments, missing):
+        before = {path.name: path.read_bytes() for path in self.root.iterdir()}
+        result = subprocess.run(  # noqa: S603 - fixed CLI with temporary fixture arguments
+            [
+                sys.executable,
+                "-B",
+                str(ROOT / "scripts/ci/preview_manifest.py"),
+                *arguments,
+                "--manifest",
+                str(self.manifest),
+            ],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 2, result.stderr
+        assert "usage:" in result.stderr
+        assert f"{arguments[0]} requires {missing}" in result.stderr
+        assert "Traceback" not in result.stderr
+        assert result.stdout == ""
+        assert {path.name: path.read_bytes() for path in self.root.iterdir()} == before
+
+    def test_build_requires_build_json_before_reading_inputs(self):
+        self.assert_missing_argument(["build", "--revision", REVISION], "--build-json")
+
+    def test_build_requires_revision_before_reading_inputs(self):
+        self.assert_missing_argument(["build", "--build-json", str(self.build_json)], "--revision")
+
+    def test_publish_requires_reference_before_reading_manifest(self):
+        self.assert_missing_argument(["publish"], "--reference")
+
+    def test_verify_requires_link_before_reading_manifest(self):
+        self.assert_missing_argument(["verify"], "--link")
 
 
 class ClosureFormatTests(unittest.TestCase):

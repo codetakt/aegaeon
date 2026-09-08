@@ -98,6 +98,16 @@ def main() -> None:
     parser.add_argument("--reference")
     parser.add_argument("--link", type=Path)
     args = parser.parse_args()
+    required = {
+        "build": ("build_json", "revision"),
+        "publish": ("reference",),
+        "verify": ("link",),
+    }
+    missing = [
+        f"--{name.replace('_', '-')}" for name in required[args.mode] if getattr(args, name) is None
+    ]
+    if missing:
+        parser.error(f"{args.mode} requires {', '.join(missing)}")
     if args.mode == "build":
         record = record_build(
             json.loads(args.build_json.read_text()),
