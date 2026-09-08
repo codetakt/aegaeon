@@ -35,13 +35,14 @@ The Nix shell supplies PostgreSQL, Redis, Atlas, Caddy and the Python dependenci
 Nix may realize these helpers separately.
 
 All listeners bind to `127.0.0.1` on dynamically allocated ports. The runner prints
-the HTTPS RP URL, the certificate path and the path to the generated login details.
-Use the certificate in a temporary browser profile that trusts only this local
-review certificate, then open the printed RP URL and select **Login with Aegaeon**.
-The certificate covers `localhost` and `127.0.0.1`, expires after two days, and is
-not installed into the system trust store by the runner. Both the issuer and RP
-use HTTPS and Secure cookies. Automated HTTP checks verify the same certificate
-without disabling TLS verification.
+the HTTPS RP URL, the root certificate path and the path to the generated login
+details. Trust `review-ca.pem` in a temporary browser profile, then open the
+printed RP URL and select **Login with Aegaeon**. The root signs a separate server
+certificate for `localhost` and `127.0.0.1`; both expire after two days. The root
+signing key is not saved, and the server key cannot sign certificates. The runner
+does not install certificates into the system trust store. Both the issuer and RP
+use HTTPS and Secure cookies. Automated HTTP checks verify the certificate chain
+against the same root without disabling TLS verification.
 
 The generated account is `reviewer@example.com`; its fresh password is in
 `login.txt` inside the private state directory. Press Ctrl-C to stop the RP,

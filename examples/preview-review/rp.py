@@ -47,7 +47,15 @@ class RelyingParty:
             allow_redirects=False,
         )
         if registration.status_code != 201:
-            detail = registration.json().get("error_description", "registration rejected")
+            try:
+                error = registration.json()
+            except requests.exceptions.JSONDecodeError:
+                error = {}
+            detail = (
+                error.get("error_description", "registration rejected")
+                if isinstance(error, dict)
+                else "registration rejected"
+            )
             msg = f"DCR returned HTTP {registration.status_code}: {detail}"
             raise ValueError(msg)
         self.client_id = registration.json()["client_id"]

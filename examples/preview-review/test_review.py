@@ -1,15 +1,72 @@
 """Reject false artifact identities and invalid OIDC authentication results."""
 
 import copy
+import io
+import tempfile
 import time
 import unittest
-from unittest.mock import Mock
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 import jwt
+import requests
+from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
-from review import SOURCE_NAR_HASH, SOURCE_REVISION, validate_manifest
+from cryptography.x509.verification import PolicyBuilder, Store, VerificationError
+from review import SOURCE_NAR_HASH, SOURCE_REVISION, certificates, validate_manifest
 from rp import RelyingParty, create_app, validate_id_token
 from seed import b64
+
+
+class TransportTests(unittest.TestCase):
+    def test_local_leaf_chains_to_root_and_cannot_issue_certificates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            certificates(state)
+            ca = x509.load_pem_x509_certificate((state / "review-ca.pem").read_bytes())
+            leaf = x509.load_pem_x509_certificate((state / "localhost.pem").read_bytes())
+            policy = PolicyBuilder().store(Store([ca]))
+            self.assertEqual(
+                policy.build_server_verifier(x509.DNSName("localhost")).verify(leaf, []),
+                [leaf, ca],
+            )
+            with self.assertRaises(VerificationError):
+                policy.build_server_verifier(x509.DNSName("other.example")).verify(leaf, [])
+            self.assertFalse(
+                leaf.extensions.get_extension_for_class(x509.BasicConstraints).value.ca
+            )
+            self.assertFalse(
+                leaf.extensions.get_extension_for_class(x509.KeyUsage).value.key_cert_sign
+            )
+            self.assertEqual(
+                {path.name for path in state.iterdir()},
+                {"review-ca.pem", "localhost.pem", "localhost-key.pem"},
+            )
+
+    def test_registration_failure_preserves_status_for_non_json_responses(self):
+        metadata = {"issuer": "https://localhost:4000"}
+        for name in (
+            "authorization_endpoint",
+            "token_endpoint",
+            "jwks_uri",
+            "registration_endpoint",
+            "userinfo_endpoint",
+        ):
+            metadata[name] = metadata["issuer"] + "/" + name
+        for body in (b"", b"<html>unavailable</html>", b"[]"):
+            with self.subTest(body=body):
+                response = requests.Response()
+                response.status_code = 503
+                response.raw = io.BytesIO(body)
+                with (
+                    patch("rp.requests.Session") as session,
+                    patch.object(RelyingParty, "get_json", return_value=metadata),
+                ):
+                    session.return_value.post.return_value = response
+                    with self.assertRaisesRegex(ValueError, "DCR returned HTTP 503"):
+                        RelyingParty(
+                            metadata["issuer"], "https://localhost:5000/callback", "ca.pem"
+                        )
 
 
 class ArtifactTests(unittest.TestCase):
