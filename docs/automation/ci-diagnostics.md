@@ -14,10 +14,17 @@ Repository-wide Nix formatting uses `treefmt --ci` from the pinned
 `pkgs.nixfmt-tree` wrapper. Pre-commit can still pass individual Nix files to
 `nixfmt`; directory traversal belongs to the wrapper.
 
+All direct external Action references in repository workflows and local Actions
+are pinned to commit digests. Version comments identify the reviewed releases.
+Cosign and Codecov retain their existing major versions. The Rust toolchain Action
+is pinned separately from its explicit `stable` or `nightly` input; those compiler
+channels remain rolling. An Action digest fixes its code, not every tool or nested
+dependency it downloads.
+
 The JavaScript Actions used for checkout, artifacts, attestation, Nix installation,
-Docker metadata/login, release publication, issue creation, and SARIF upload use
-Node 24 releases pinned to commit digests. Version comments identify the reviewed
-releases. Hosted runners must support Node 24 (runner 2.327.1 or newer); authenticated
+Docker metadata/login, release publication, issue creation, SARIF upload, GitHub
+scripts, and Java setup use Node 24 releases.
+Hosted runners must support Node 24 (runner 2.327.1 or newer); authenticated
 Git operations inside container actions with the current checkout require 2.329.0
 or newer. Artifact downloads retain digest-mismatch failures and normal archive
 extraction. No opt-out from checkout's fork-PR protections is configured.
@@ -28,6 +35,11 @@ avoids Node reparsing unclassified TypeScript without changing the SDK's source
 contracts or introducing a second compilation step.
 
 ## Provenance and coverage evidence
+
+The deprecated `actions/attest-sbom` wrapper is replaced by `actions/attest`.
+Build provenance also uses the generic Action to share the attestation interface;
+the upstream `actions/attest-build-provenance` README does not currently mark that
+wrapper as deprecated.
 
 The provenance job takes the attestation bundle from `actions/attest`'s
 `bundle-path` output. Before archiving it, `gh attestation verify` checks each built

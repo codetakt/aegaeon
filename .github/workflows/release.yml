@@ -61,7 +61,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable; toolchain selected below
+        with:
+          toolchain: stable
 
       - name: Build release binaries
         run: |
@@ -96,7 +98,7 @@ jobs:
           cargo cyclonedx --format xml --spec-version 1.5 > aegaeon-${{ needs.validate-release.outputs.version }}-sbom.xml
           
       - name: Sign SBOM
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
       - run: |
           cosign sign-blob --yes \
             --output-signature aegaeon-${{ needs.validate-release.outputs.version }}-sbom.json.sig \
@@ -144,7 +146,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable; toolchain selected below
+        with:
+          toolchain: stable
 
       - name: Run RFC compliance tests
         run: |
@@ -256,7 +260,7 @@ jobs:
           docker push "$LATEST_TAG"
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
             
       - name: Sign container image
         run: |

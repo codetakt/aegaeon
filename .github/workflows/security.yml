@@ -91,7 +91,6 @@ jobs:
         if: always()
         run: |
           rm -rf target fuzz/target fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
-          rm -rf artifacts/security/latest/cargo-home || true
           rm -rf ~/.cache/trivy ~/.cache/grype || true
 
       - name: Record security status
