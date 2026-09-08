@@ -18,6 +18,7 @@ import resource
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -89,6 +90,36 @@ def accept_report(
     if ending is None:
         raise ValueError("missing or unrecognized completion record")
     return properties
+
+
+def rejection_reason(exit_code: int, error: Exception, budget_seconds: int) -> str:
+    """Name the operational cause when our own wrapper, not Kani, ended the run."""
+    if exit_code == 124:
+        return f"wall-clock budget of {budget_seconds}s exceeded (timeout exit 124)"
+    if exit_code < 0:
+        return f"terminated by signal {-exit_code}: {error}"
+    return str(error)
+
+
+def evidence_line(result: dict[str, Any]) -> str:
+    """One-line record for the build log; a failed Nix build discards evaluation.json."""
+    summary = {
+        "harness": result["harness"]["name"],
+        "status": result["status"],
+        "exit_code": result["exit_code"],
+        "wall_seconds": result.get("wall_seconds"),
+        "cpu_seconds": result.get("cpu_seconds"),
+        "budget_seconds": result.get("budget_seconds"),
+        "log_sha256": result["log_sha256"],
+        "reason": result.get("reason"),
+    }
+    return "KANI-EVIDENCE " + json.dumps(summary, separators=(",", ":"), sort_keys=True)
+
+
+def log_tail(path: pathlib.Path, max_lines: int = 60, max_bytes: int = 8192) -> str:
+    """Bounded tail of a harness log for diagnosis when the output tree is lost."""
+    data = path.read_bytes()[-max_bytes:]
+    return "\n".join(data.decode("utf-8", errors="replace").splitlines()[-max_lines:])
 
 
 def discover_metadata(target: pathlib.Path, harness: dict[str, Any]) -> dict[str, Any]:
@@ -194,6 +225,8 @@ def main() -> int:
             str(config["default_unwind"]),
         ]
         log_path = run / f"{index:02d}.log"
+        usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
+        started = time.monotonic()
         with log_path.open("w") as log:
             process = subprocess.run(
                 command,
@@ -204,10 +237,19 @@ def main() -> int:
                 preexec_fn=limits,
                 check=False,
             )
+        wall_seconds = time.monotonic() - started
+        usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+        # CPU time covers waited descendants only; a killed solver may be excluded.
+        cpu_seconds = (usage_after.ru_utime + usage_after.ru_stime) - (
+            usage_before.ru_utime + usage_before.ru_stime
+        )
         result: dict[str, Any] = {
             "harness": harness,
             "command": command,
             "exit_code": process.returncode,
+            "wall_seconds": round(wall_seconds, 3),
+            "cpu_seconds": round(cpu_seconds, 3),
+            "budget_seconds": config["timeout_seconds"],
             "log": str(log_path.relative_to(output)),
             "log_sha256": digest(log_path),
             "status": "rejected",
@@ -226,10 +268,18 @@ def main() -> int:
             result["compiled"] = compiled
             result["status"] = "accepted"
         except (ValueError, KeyError) as error:
-            result["reason"] = str(error)
+            result["reason"] = rejection_reason(
+                process.returncode, error, config["timeout_seconds"]
+            )
         record["results"].append(result)
         (run / "evaluation.json").write_text(json.dumps(record, indent=2) + "\n")
         print(f"{harness['name']}: {result['status']}", flush=True)
+        # The build log is the only record that survives a failed Nix build.
+        print(evidence_line(result), flush=True)
+        if result["status"] != "accepted":
+            print(f"--- last lines of {log_path.name} ---", flush=True)
+            print(log_tail(log_path), flush=True)
+            print(f"--- end of {log_path.name} ---", flush=True)
     accepted = all(r["status"] == "accepted" for r in record["results"])
     record.update(
         status="accepted" if accepted else "rejected", completed_at=datetime.now(UTC).isoformat()
