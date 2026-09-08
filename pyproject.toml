@@ -162,6 +162,10 @@ known-first-party = ["aegaeon"]
 ]
 # Git-facing CI helpers use explicit argv (never shell evaluation) and CLI errors.
 "scripts/ci/*.py" = ["EM", "TRY003", "S603", "S607", "PLR2004", "PLR0911"]
+# The review runner uses explicit argv for pinned tools and the digest-checked Nix output.
+"examples/preview-review/review.py" = ["S603", "S607"]
+# This standalone example check uses unittest discovery without a pytest dependency.
+"examples/preview-review/test_review.py" = ["PT009", "PT027"]
 "scripts/validation/*.py" = [
   "ANN",      # annotations not required in validation scripts
   "BLE",      # broad exception handling acceptable for CLI tools
