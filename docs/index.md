@@ -278,7 +278,7 @@ Audience: contributors, maintainers
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/store-entries-vc-resolution.md` | verification | Resolving `store_entries_into_buffer_aux` VC Failures | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/troubleshooting.md` | verification | F* / KaRaMeL Troubleshooting (Proof / Extraction Hygiene) | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
-| `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
+| `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/README.md` | index | JOSE Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/json-lowstar-ffi-contracts.md` | verification | JSON Low*/FFI Contract Summary | current implementation baseline | 2025-11-16 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | historical record | 2026-09-08 | Verification | verification reviewers, contributors |

@@ -833,6 +833,7 @@
               export EVERPARSE_FSTAR_PATH="${everparse}/share/everparse"
               export EVERPARSE_PRELUDE_PATH="${everparse}/share/everparse/prelude"
               export EVERPARSE_LOWPARSER_PATH="${everparse}/lib/lowparse"
+              python3 -m unittest discover -s tests/ci -p test_fstar_runner.py
               OUT_DIR="$out" ${pkgs.bash}/bin/bash ${./scripts/flake/verify_fstar.sh}
             '';
 

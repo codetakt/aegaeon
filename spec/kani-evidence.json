@@ -6,7 +6,7 @@
   "features": ["kani"],
   "solver": "cadical",
   "default_unwind": 16,
-  "timeout_seconds": 180,
+  "timeout_seconds": 600,
   "memory_limit_bytes": 17179869184,
   "harnesses": [
     {

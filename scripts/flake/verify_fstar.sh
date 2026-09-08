@@ -36,9 +36,34 @@ if [ ! -d "$FSTAR_DIR" ]; then
 	exit 1
 fi
 
+OUT_DIR="$(realpath -m "$OUT_DIR")"
+mkdir -p "$OUT_DIR"
+# Each run must have a fresh evidence directory. Never reuse successful records.
+mkdir "$OUT_DIR/invocations"
+LOG="$OUT_DIR/verify.log"
+: >"$LOG"
+
+run_pass() {
+	local pass_id="$1"
+	local pass_status
+	shift
+	if python3 "$REPO_ROOT/scripts/validation/run_fstar_invocation.py" \
+		--out-dir "$OUT_DIR" --pass-id "$pass_id" -- fstar.exe "$@"; then
+		return 0
+	else
+		pass_status=$?
+		printf '[FAIL] Pass %s: F* invocation failed (exit %s)\n' "$pass_id" "$pass_status" |
+			tee -a "$LOG" >&2
+		return "$pass_status"
+	fi
+}
+
 cd "$FSTAR_DIR"
 
+export FSTAR_LOOPS_ORIGIN=pre-existing
+
 if [ ! -f C.Loops.fst ]; then
+	export FSTAR_LOOPS_ORIGIN=builder-generated-assumptions
 	printf '%s\n' \
 		"module C.Loops" \
 		"" \
@@ -82,10 +107,6 @@ echo "--- C.Loops.fst (builder copy) ---" >&2
 sed -n '1,40p' C.Loops.fst >&2
 echo "----------------------------------" >&2
 
-mkdir -p "$OUT_DIR"
-LOG="$OUT_DIR/verify.log"
-rm -f "$LOG"
-
 # Set up environment
 export HACL_FSTAR_PATH
 export STEEL_PATH
@@ -95,30 +116,21 @@ export EVERPARSE_LOWPARSER_PATH
 export KRMLLIB_PATH
 
 # Build argument list for fstar.exe
-WARN_ERROR_FLAGS="\
-	--warn_error -241 \
-	--warn_error -242 \
-	--warn_error -252 \
-	--warn_error -328 \
-	--warn_error -274 \
-	--warn_error -285 \
-	--warn_error -333 \
-	--warn_error -276"
+WARN_ERROR_FLAGS=(
+	--warn_error -241 --warn_error -242 --warn_error -252 --warn_error -328
+	--warn_error -274 --warn_error -285 --warn_error -333 --warn_error -276
+)
 
-FSTAR_ARGS="--use_hints --hint_dir . --expose_interfaces"
-FSTAR_ARGS="$FSTAR_ARGS --include crypto --include $HACL_FSTAR_PATH"
-# HACL* subdirectories (Phase A: required for Spec.Ed25519 → Spec.Curve25519.Lemmas etc.)
+FSTAR_ARGS=(--use_hints --hint_dir . --expose_interfaces)
+FSTAR_ARGS+=(--include crypto --include "$HACL_FSTAR_PATH")
+# HACL* subdirectories (required by Spec.Ed25519 and Spec.Curve25519.Lemmas).
 for hacl_sub in "$HACL_FSTAR_PATH"/*/; do
-	[ -d "$hacl_sub" ] && FSTAR_ARGS="$FSTAR_ARGS --include $hacl_sub"
+	if [ -d "$hacl_sub" ]; then FSTAR_ARGS+=(--include "$hacl_sub"); fi
 done
-FSTAR_ARGS="$FSTAR_ARGS --include $KRMLLIB_PATH"
-FSTAR_ARGS="$FSTAR_ARGS --include $STEEL_PATH"
-FSTAR_ARGS="$FSTAR_ARGS --include $EVERPARSE_FSTAR_PATH"
-FSTAR_ARGS="$FSTAR_ARGS --include $EVERPARSE_PRELUDE_PATH"
-FSTAR_ARGS="$FSTAR_ARGS --include $EVERPARSE_PRELUDE_PATH/buffer"
-FSTAR_ARGS="$FSTAR_ARGS --include $EVERPARSE_PRELUDE_PATH/extern"
-FSTAR_ARGS="$FSTAR_ARGS --include $EVERPARSE_LOWPARSER_PATH"
-FSTAR_ARGS="$FSTAR_ARGS $WARN_ERROR_FLAGS"
+FSTAR_ARGS+=(--include "$KRMLLIB_PATH" --include "$STEEL_PATH")
+FSTAR_ARGS+=(--include "$EVERPARSE_FSTAR_PATH" --include "$EVERPARSE_PRELUDE_PATH")
+FSTAR_ARGS+=(--include "$EVERPARSE_PRELUDE_PATH/buffer" --include "$EVERPARSE_PRELUDE_PATH/extern")
+FSTAR_ARGS+=(--include "$EVERPARSE_LOWPARSER_PATH" "${WARN_ERROR_FLAGS[@]}")
 
 # =========================================================================
 # Pass 1: Federation Policy Algebra (separate invocation to avoid Z3 4.13 label encoding bug)
@@ -130,20 +142,14 @@ POLICY_MODULES="\
 	jose/Jose.Federation.Policy.Order.fst \
 	jose/Jose.Federation.Policy.Lemmas.fst"
 # Build minimal args for policy modules (no --expose_interfaces, minimal includes)
-POLICY_FSTAR_ARGS="--use_hints --hint_dir ."
-POLICY_FSTAR_ARGS="$POLICY_FSTAR_ARGS $WARN_ERROR_FLAGS"
+POLICY_FSTAR_ARGS=(--use_hints --hint_dir . "${WARN_ERROR_FLAGS[@]}")
 policy_count=$(echo "$POLICY_MODULES" | wc -w)
 echo "=> Pass 1: Verifying Policy modules ($policy_count files)" | tee "$LOG" >&2
 # shellcheck disable=SC2086
-if fstar.exe --detail_errors --query_stats \
-	$POLICY_FSTAR_ARGS \
-	$POLICY_MODULES \
-	2>&1 | tee -a "$LOG" >&2; then
-	echo "[OK] Pass 1: Policy verification succeeded" | tee -a "$LOG" >&2
-else
-	echo "[FAIL] Pass 1: Policy verification failed" | tee -a "$LOG" >&2
-	exit 1
-fi
+run_pass 1 --detail_errors --query_stats \
+	"${POLICY_FSTAR_ARGS[@]}" \
+	$POLICY_MODULES
+echo "[OK] Pass 1: F* invocation succeeded" | tee -a "$LOG" >&2
 
 # =========================================================================
 # Pass 1b: Jose.Federation (separate invocation to avoid Z3 4.13 label_1 bug
@@ -166,26 +172,20 @@ FED_MODULES="$FED_MODULES \
 	jose/Jose.Jws_serialization.fst \
 	jose/Jose.Jws.Verify.fst \
 	jose/Jose.Federation.fst"
-FED_FSTAR_ARGS="--use_hints --hint_dir . --expose_interfaces"
-# HACL* and KaRaMeL includes (needed by Jose.Jws.Verify → Verified.Crypto.Bridge)
-FED_FSTAR_ARGS="$FED_FSTAR_ARGS --include crypto --include $HACL_FSTAR_PATH"
+FED_FSTAR_ARGS=(--use_hints --hint_dir . --expose_interfaces)
+# HACL* and KaRaMeL includes (needed by Jose.Jws.Verify -> Verified.Crypto.Bridge).
+FED_FSTAR_ARGS+=(--include crypto --include "$HACL_FSTAR_PATH")
 for hacl_sub in "$HACL_FSTAR_PATH"/*/; do
-	[ -d "$hacl_sub" ] && FED_FSTAR_ARGS="$FED_FSTAR_ARGS --include $hacl_sub"
+	if [ -d "$hacl_sub" ]; then FED_FSTAR_ARGS+=(--include "$hacl_sub"); fi
 done
-FED_FSTAR_ARGS="$FED_FSTAR_ARGS --include $KRMLLIB_PATH"
-FED_FSTAR_ARGS="$FED_FSTAR_ARGS $WARN_ERROR_FLAGS"
+FED_FSTAR_ARGS+=(--include "$KRMLLIB_PATH" "${WARN_ERROR_FLAGS[@]}")
 fed_count=$(echo "$FED_MODULES" | wc -w)
 echo "=> Pass 1b: Verifying Federation module ($fed_count files)" | tee -a "$LOG" >&2
 # shellcheck disable=SC2086
-if fstar.exe --detail_errors --query_stats \
-	$FED_FSTAR_ARGS \
-	$FED_MODULES \
-	2>&1 | tee -a "$LOG" >&2; then
-	echo "[OK] Pass 1b: Federation verification succeeded" | tee -a "$LOG" >&2
-else
-	echo "[FAIL] Pass 1b: Federation verification failed" | tee -a "$LOG" >&2
-	exit 1
-fi
+run_pass 1b --detail_errors --query_stats \
+	"${FED_FSTAR_ARGS[@]}" \
+	$FED_MODULES
+echo "[OK] Pass 1b: F* invocation succeeded" | tee -a "$LOG" >&2
 
 # =========================================================================
 # Pass 2: All other modules
@@ -487,16 +487,11 @@ echo \
 	"=> Pass 2a-1: Verifying LowStar JSON Spec modules ($lowstar_spec_count files)" |
 	tee -a "$LOG" >&2
 # shellcheck disable=SC2086
-if fstar.exe --detail_errors --query_stats \
-	$FSTAR_ARGS \
+run_pass 2a-1 --detail_errors --query_stats \
+	"${FSTAR_ARGS[@]}" \
 	$LOWSTAR_DEPS \
-	$LOWSTAR_MODULES_SPEC \
-	2>&1 | tee -a "$LOG" >&2; then
-	echo "[OK] Pass 2a-1: LowStar JSON Spec verification succeeded" | tee -a "$LOG" >&2
-else
-	echo "[FAIL] Pass 2a-1: LowStar JSON Spec verification failed" | tee -a "$LOG" >&2
-	exit 1
-fi
+	$LOWSTAR_MODULES_SPEC
+echo "[OK] Pass 2a-1: F* invocation succeeded" | tee -a "$LOG" >&2
 
 # Pass 2a-2: Verify Jose.LowStar.Json.fst and Stack separately.
 # Spec.fst is listed as a dependency (checked but not reverified).
@@ -505,17 +500,12 @@ echo \
 	"=> Pass 2a-2: Verifying LowStar JSON main modules ($lowstar_json_count files)" |
 	tee -a "$LOG" >&2
 # shellcheck disable=SC2086
-if fstar.exe --detail_errors --query_stats \
-	$FSTAR_ARGS \
+run_pass 2a-2 --detail_errors --query_stats \
+	"${FSTAR_ARGS[@]}" \
 	$LOWSTAR_DEPS \
 	$LOWSTAR_MODULES_SPEC \
-	$LOWSTAR_MODULES_JSON \
-	2>&1 | tee -a "$LOG" >&2; then
-	echo "[OK] Pass 2a-2: LowStar JSON main verification succeeded" | tee -a "$LOG" >&2
-else
-	echo "[FAIL] Pass 2a-2: LowStar JSON main verification failed" | tee -a "$LOG" >&2
-	exit 1
-fi
+	$LOWSTAR_MODULES_JSON
+echo "[OK] Pass 2a-2: F* invocation succeeded" | tee -a "$LOG" >&2
 
 # =========================================================================
 # Pass 2b: All other modules
@@ -523,8 +513,7 @@ fi
 count=$(echo "$MODULES" | wc -w)
 echo "=> Pass 2b: Verifying remaining F* modules ($count files)" | tee -a "$LOG" >&2
 # shellcheck disable=SC2086 # intentional word-splitting for multi-arg strings
-if fstar.exe --detail_errors --query_stats $FSTAR_ARGS $MODULES 2>&1 | tee -a "$LOG" >&2; then
-	echo "[OK] Pass 2b: F* verification succeeded" | tee -a "$LOG" >&2
-else
-	echo "[WARN] Pass 2b: F* verification failed (other module issues)" | tee -a "$LOG" >&2
-fi
+run_pass 2b --detail_errors --query_stats "${FSTAR_ARGS[@]}" $MODULES
+echo "[OK] Pass 2b: F* invocation succeeded" | tee -a "$LOG" >&2
+
+echo "[OK] All five required F* invocations succeeded" | tee -a "$LOG" >&2
