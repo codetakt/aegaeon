@@ -39,20 +39,17 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run F* Verification (Nix)
-        run: |
-          nix build .#verify-fstar -L
-          if [ -L result ]; then
-            echo "=== F* Verification Log ==="
-            cat result/verify.log
-          fi
+        env:
+          FSTAR_CI_ARTIFACT_DIR: ${{ runner.temp }}/fstar-evidence
+        run: bash scripts/verify/verify_fstar_ci.sh
 
       - name: Upload F* artifacts
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fstar-artifacts
-          path: |
-            result/verify.log
-          if-no-files-found: warn
+          path: ${{ runner.temp }}/fstar-evidence/
+          if-no-files-found: error
 
   everparse-dcr:
     name: EverParse DCR Artefacts
