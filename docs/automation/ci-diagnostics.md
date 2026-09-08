@@ -41,12 +41,25 @@ Build provenance also uses the generic Action to share the attestation interface
 the upstream `actions/attest-build-provenance` README does not currently mark that
 wrapper as deprecated.
 
+The compliance workflow builds the explicit `aegaeon-server` binary target once.
+Its `release-binary` artifact supplies both the SBOM and provenance jobs, so their
+attestations refer to the same bytes. `RELEASE_BINARY` fixes the subject path used
+for upload, attestation, and verification. The producer and provenance consumer
+reject a missing, empty, or non-file subject before upload or signing.
+`aegaeon-client` is a Rust library, not a standalone executable; neither provenance
+subjects nor release tarball packaging list a client binary.
+
 The provenance job takes the attestation bundle from `actions/attest`'s
 `bundle-path` output. Before archiving it, `gh attestation verify` checks each built
 subject against that bundle, the repository identity, and the SLSA v1 predicate.
 An absent bundle, failed verification, or missing upload input fails the job.
+Download both `release-binary` and `slsa-provenance` from the same workflow run to
+repeat verification. Both use the repository's default artifact retention; the
+binary no longer expires after one day while its bundle remains available.
 An attestation records the stated build; it does not establish the product's
-release assurance contract or a SLSA certification level.
+release assurance contract or a SLSA certification level. This compliance build
+still uses Cargo's default features; the tag-release and strict Nix release paths
+remain separate and require their own artifact-bound evidence.
 
 The SBOM job uses the same supported attestation Action with an explicit
 `sbom-path`. Its SBOM predicate and subject remain separate from build provenance.
@@ -99,6 +112,7 @@ outside this repository's direct Action configuration.
 ```bash
 nix develop .#ci --command bash scripts/lint/lint_nix.sh
 nix develop .#ci --command actionlint
+nix develop .#docs --command python3 -m unittest discover -s tests/ci -p 'test_provenance.py'
 nix develop .#integrity --command python3 scripts/validation/test_dudect.py
 nix build .#verified-reqs --no-link -L
 nix develop .#ci --command npm run lint:ts
