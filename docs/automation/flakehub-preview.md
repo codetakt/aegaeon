@@ -1,6 +1,6 @@
 # Private FlakeHub server preview
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 Status: current implementation baseline
 
@@ -40,11 +40,14 @@ Determinate Nix and enables the FlakeHub cache with GitHub artifact-cache fallba
 disabled. No personal access token is embedded in the workflow. A separate consumer
 job runs after publication and the cache action's upload finalization.
 
+An authenticated workstation or a successful cache job alone does not establish
+publication access.
+
 [Publication run 34240961397](https://github.com/codetakt/aegaeon/actions/runs/34240961397)
 confirmed hosted OIDC publication under `codetakt-inc/aegaeon` from the GitHub
 repository `codetakt/aegaeon`. Its separate consumer retrieved the server on a
-fresh runner with compilation disabled, matched the executable and all seven
-runtime paths, and successfully ran `--help`.
+fresh runner with compilation disabled, matched the executable and the recorded
+runtime closure, and successfully ran `--help`.
 
 The validated exact reference is
 `codetakt-inc/aegaeon/=0.1.142+rev-74ceda99d4a185eab946995a17effa2954bfcb3a`.
