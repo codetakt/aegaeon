@@ -91,7 +91,10 @@ cover skipped modules and mixed results before this becomes an admission gate.
 
 `nix build .#verify-abstract` is a separate exploratory target. Its five generated
 PAR experiments retain individual results and return failure if any experiment
-fails; they are not production proof evidence. Fixing result propagation does
+fails; they are not production proof evidence. A direct run of
+`scripts/verify/verify_fstar_abstract.sh` without `OUT_DIR` writes each run to a
+fresh `artifacts/fstar/abstract/run.*` directory, because invocation records are
+never reused or overwritten. Fixing result propagation does
 not establish the validity of those experimental models.
 
 ## 4. Troubleshooting Cheatsheet

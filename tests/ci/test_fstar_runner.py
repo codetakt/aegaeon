@@ -211,6 +211,68 @@ if len(entries) == int(os.environ.get('FAIL_AT', '0')):
                 ]
                 assert sum(record["status"] == "failed" for record in records) == 1
 
+    def test_malformed_include_is_recorded_as_a_failed_invocation(self):
+        output = self.root / "malformed"
+        result = subprocess.run(  # noqa: S603 - fixed script and fixture environment
+            [  # noqa: S607 - supported interpreter lookup
+                "python3",
+                "scripts/validation/run_fstar_invocation.py",
+                "--out-dir",
+                str(output),
+                "--pass-id",
+                "probe",
+                "--",
+                "fstar.exe",
+                "fstar/jose/Jose.Federation.Policy.Types.fst",
+                "--include",
+            ],
+            cwd=self.root,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 1, result.stderr
+        assert "Traceback" not in result.stderr
+        assert not (self.root / "calls.json").exists()
+        record = json.loads((output / "invocations/probe/result.json").read_text())
+        assert record["status"] == "failed"
+        assert record["returncode"] is None
+        assert "--include" in record["error"]
+        events = [
+            json.loads(line.removeprefix("FSTAR-EVIDENCE "))
+            for line in result.stdout.splitlines()
+            if line.startswith("FSTAR-EVIDENCE ")
+        ]
+        assert [e["event"] for e in events] == ["request", "finish"]
+        assert events[-1]["status"] == "failed"
+
+    def test_experiments_rerun_without_out_dir_use_fresh_directories(self):
+        # The fixture environment sets OUT_DIR for the production script; the
+        # direct experiment script must also be repeatable without it.
+        environment = {
+            **{key: value for key, value in self.environment.items() if key != "OUT_DIR"},
+            "AEG_FSTAR_ABSTRACT_TMPDIR": str(self.root / "original"),
+            "AEG_FSTAR_ABSTRACT_TMP_BASE": str(self.root / "matrix"),
+        }
+        for attempt in range(2):
+            (self.root / "calls.json").unlink(missing_ok=True)
+            result = subprocess.run(
+                ["bash", "scripts/verify/verify_fstar_abstract.sh"],  # noqa: S607
+                cwd=self.root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, f"attempt {attempt}: {result.stdout}{result.stderr}"
+            assert len(json.loads((self.root / "calls.json").read_text())) == 5
+        runs = sorted((self.root / "artifacts/fstar/abstract").glob("run.*"))
+        assert len(runs) == 2
+        for run in runs:
+            assert (run / "invocations/original/result.json").exists()
+            assert (run / "run.log").exists()
+
     def test_experiments_can_succeed_without_claiming_production_evidence(self):
         self.output.mkdir()
         result = self.invoke(

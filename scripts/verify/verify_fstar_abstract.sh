@@ -3,8 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(dirname "$(dirname "$SCRIPT_DIR")")
-ART="$(realpath -m "${OUT_DIR:-$REPO_ROOT/artifacts/fstar/abstract}")"
-mkdir -p "$ART"
+if [ -n "${OUT_DIR:-}" ]; then
+	ART="$(realpath -m "$OUT_DIR")"
+	mkdir -p "$ART"
+else
+	# The runner refuses to reuse an invocation directory, so repeated local
+	# runs get a fresh directory instead of failing or overwriting evidence.
+	mkdir -p "$REPO_ROOT/artifacts/fstar/abstract"
+	ART="$(mktemp -d "$REPO_ROOT/artifacts/fstar/abstract/run.XXXXXX")"
+fi
 # Exploratory models are not required production evidence, but failures still
 # make this target fail. Keep all five case results for diagnosis.
 RUN_LOG="$ART/run.log"
