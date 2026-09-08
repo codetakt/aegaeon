@@ -4,6 +4,12 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export ROOT
+# Anchor the caller's Cargo home before any tool changes working directories.
+if [[ -n ${CARGO_HOME:-} ]]; then
+	mkdir -p "$CARGO_HOME"
+	CARGO_HOME="$(cd "$CARGO_HOME" && pwd)"
+	export CARGO_HOME
+fi
 cd "$ROOT"
 
 # Ensure native compiler for build scripts.

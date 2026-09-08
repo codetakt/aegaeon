@@ -52,8 +52,11 @@ the repository or organization's artifact retention settings without a workflow
 override. Archive evidence needed for a release or an ongoing investigation
 before the hosted artifacts expire; the runner's local filesystem is temporary.
 
-Cargo uses the caller's normal configuration, including Nix vendoring. The
-runner does not replace `CARGO_HOME` or force a crates.io Git-index download.
+Cargo uses the caller's normal configuration, including Nix vendoring. Neither
+the Security Suite nor the Geiger runner assigns a private `CARGO_HOME` or forces
+a crates.io Git-index download. Both resolve a supplied relative `CARGO_HOME`
+against the caller's working directory before changing directories. This keeps
+dependency downloads from being recreated inside workspace crates during builds.
 An optional `--offline` argument disables network access. Geiger itself cleans
 its compilation inputs, so a disposable target directory protects the caller's
 normal build outputs; sharing a normal Cargo target is not a safe optimization.
@@ -66,7 +69,8 @@ nix develop .#integrity --command python3 -m unittest discover \
 ```
 
 The tests exercise command failures, stale success removal, missing and malformed
-reports, package identity, incomplete source metrics, and single-scan execution.
+reports, package identity, incomplete source metrics, single-scan execution, and
+Cargo configuration preservation through the suite and direct runner.
 
 ## Cacheable Cargo lint checks
 
