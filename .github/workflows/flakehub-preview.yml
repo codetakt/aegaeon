@@ -74,6 +74,8 @@ jobs:
         id: publish
         uses: DeterminateSystems/flakehub-push@71f57208810a5d299fc6545350981de98fdbc860 # v6
         with:
+          # The action's default branch takes precedence over source-revision.
+          source-branch: ""
           source-revision: 71f57208810a5d299fc6545350981de98fdbc860
           visibility: private
           name: codetakt/aegaeon

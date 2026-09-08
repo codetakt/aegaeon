@@ -102,6 +102,7 @@ class PreviewGateTests(unittest.TestCase):
         assert publisher["with"]["directory"] == ".flakehub"
         assert publisher["with"]["name"] == "codetakt/aegaeon"
         assert publisher["with"]["include-output-paths"] is True
+        assert publisher["with"]["source-branch"] == ""
         assert publisher["with"]["source-revision"] == publisher["uses"].split("@")[1]
         checks = [s for s in steps if "check_preview_ci.py" in s.get("run", "")]
         assert len(checks) == 2

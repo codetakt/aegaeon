@@ -38,6 +38,11 @@ Determinate Nix and enables the FlakeHub cache with GitHub artifact-cache fallba
 disabled. No personal access token is embedded in the workflow. A separate consumer
 job runs after publication and the cache action's upload finalization.
 
+The organization must also be onboarded on FlakeHub. An authenticated workstation
+or successful cache job alone does not establish the publication namespace. If
+publication reports `Organization codetakt not found`, complete that organization
+setup before retrying with private visibility.
+
 On the consuming workstation, install Determinate Nix and the FlakeHub CLI, then
 authenticate with:
 
@@ -83,6 +88,9 @@ nix flake update aegaeon --flake ./.flakehub
 ```
 
 The publisher registers the server output path with `include-output-paths: true`.
+Its tool binary is pinned with `source-revision`; `source-branch: ""` explicitly
+disables the action's default `main` branch, which would otherwise take precedence.
+The download log must select `/rev/<pinned-revision>/`, not `/branch/main/`.
 The producer also caches `fh` from the root lockfile's nixpkgs for the consumer.
 Both jobs use that Nix package and its runtime closure, rather than assuming a
 downloaded CLI executable is portable across Linux installations.
