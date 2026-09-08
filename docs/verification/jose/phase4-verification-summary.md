@@ -1,12 +1,17 @@
 # Phase 4 - Verification & Testing Summary
 
-Last updated: 2026-07-07
+Last updated: 2026-09-08
 
-Status: current implementation baseline
+Status: historical record
 
 Owner: Verification
 
 Audience: verification reviewers, contributors
+
+This document records the original Phase 4 work. Its completion labels are
+historical, not a current assurance decision. The Kani section below has been
+reconciled with the [current evidence admission policy](../kani/evidence-admission.md);
+the other historical results have not been re-evaluated by this correction.
 
 ## Completed Work (2025-11-09)
 
@@ -29,53 +34,26 @@ Audience: verification reviewers, contributors
 
 ### 2. Kani (Model Checking for FFI Boundaries)
 
-**Completed**: Added 8 new Kani harnesses in `crates/ffi/src/kani_tests.rs`
+**Historical implementation**: Eight harnesses were added in
+`crates/ffi/src/kani_tests.rs`. Source presence does not establish accepted proof
+evidence. Their current dispositions are:
 
-**Coverage**:
+| Harness | Current evidence disposition |
+| --- | --- |
+| `verify_json_member_c_layout` | Admitted Rust size/alignment fixture on x86_64; C/Rust layout equivalence remains unproved. |
+| `verify_utf8_decode_null_safety` | Admitted two fixed null-pointer calls to the production helper. |
+| `verify_utf8_decode_valid_input` | Not admitted: the empty, `a`, and `test` fixtures exhausted the solver memory budget. |
+| `verify_free_string_null_safety` | Admitted null-pointer fixture; allocated-pointer ownership and cleanup remain outside its domain. |
+| `verify_jose_context_bounds` | Admitted default-context header-limit fixture. |
+| `verify_parse_json_entries_null_pointer` | Not admitted: the Kani stub returns `ParserUnavailable`, contradicting the expected `Internal` result. |
+| `verify_parse_json_entries_count_overflow` | Not admitted: the stub's unconditional error does not establish production count validation or memory safety. |
+| `verify_json_member_c_pointer_validity` | Admitted one fixed structure with known pointers. |
 
-1. **`verify_json_member_c_layout`**
-   - Verifies `JsonMemberC` structure is exactly 32 bytes
-   - Verifies 8-byte alignment (critical for FFI safety)
-   - Ensures Rust layout matches C layout from Low* extraction
-
-2. **`verify_utf8_decode_null_safety`**
-   - Verifies `aegaeon_ffi_decode_utf8` handles null `bytes` pointer
-   - Verifies `aegaeon_ffi_decode_utf8` handles null `out_string` pointer
-   - Both cases return `JSON_PARSE_ERROR_INTERNAL` (error code 6)
-
-3. **`verify_utf8_decode_valid_input`**
-   - Tests UTF-8 decoding with empty string, single char, and "test"
-   - Verifies successful decoding returns `JSON_PARSE_OK` (0)
-   - Verifies allocated string is non-null
-   - Verifies proper cleanup with `aegaeon_ffi_free_string`
-
-4. **`verify_free_string_null_safety`**
-   - Verifies `aegaeon_ffi_free_string` handles null pointer safely
-   - No panic or crash on null input
-
-5. **`verify_jose_context_bounds`**
-   - Verifies default context has positive max length
-   - Verifies max length fits in i32 (KaRaMeL constraint)
-
-6. **`verify_parse_json_entries_null_pointer`**
-   - Verifies `parse_json_entries` rejects null pointer
-   - Returns `JsonError::Internal` variant
-
-7. **`verify_parse_json_entries_count_overflow`**
-   - Verifies count > i64::MAX is rejected
-   - Prevents overflow when passing to C layer
-
-8. **`verify_json_member_c_pointer_validity`**
-   - Verifies `JsonMemberC` fields preserve their values
-   - Verifies key/value lengths are correct
-   - Verifies pointers are non-null for valid data
-
-**Safety Properties Verified**:
-- FFI structure layout correctness
-- Null pointer handling
-- Integer overflow prevention
-- UTF-8 validation
-- Memory cleanup safety
+These five admitted fixtures and the separate six-input ID-token framing
+harness form the current six-harness selection. They do not establish general
+FFI memory safety, UTF-8 validity, allocation ownership, or native parser safety.
+See the [admission policy](../kani/evidence-admission.md) for domains, execution
+requirements and the corresponding `partial` compliance-matrix rows.
 
 ---
 
@@ -117,11 +95,12 @@ cargo bench -p aegaeon-jose --bench json_parsing
 
 ## Summary
 
-**Phase 4 Verification Status**: COMPLETE
+**Historical Phase 4 work status**: implementation recorded; current proof
+admission is limited as described above.
 
 ✅ **Completed**:
 - dudect analysis (no action needed - existing coverage sufficient)
-- Kani FFI boundary harnesses (8 new proofs added)
+- Kani FFI boundary harnesses (eight source harnesses added; five currently admitted as limited fixtures)
 - Performance benchmarks (baseline established with criterion)
 - Documentation of verification approach
 
