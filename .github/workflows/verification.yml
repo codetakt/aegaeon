@@ -311,26 +311,19 @@ jobs:
   kani-pure:
     name: Kani (Pure Harness)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@be39649afda95dbf70f87cce95f68b8d5797b296 # nightly; toolchain selected below
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
         with:
-          toolchain: nightly
-          components: rust-src
-      - name: Install Kani
-        run: |
-          cargo install --locked kani-verifier --version 0.65.0
-          cargo kani setup
-      - name: Show Kani version
-        run: |
-          kani --version || true
-          cargo kani --version || true
+          enable-flakehub-cache: "true"
+      - name: Check admitted Kani evidence
+        run: nix develop .#verification --command python3 scripts/validation/run_kani_evidence.py
       - name: Run Kani (pure harness)
-        run: |
-          RUSTFLAGS="-C panic=abort -Z panic-abort-tests" \
-          KANI_LOG=info \
-          bash scripts/kani/run_kani.sh
+        run: nix develop .#verification --command bash scripts/kani/run_kani.sh
       - name: Summarize Kani run (pure harness)
         if: always()
         run: |
@@ -374,6 +367,7 @@ jobs:
           name: kani-pure-artifacts
           path: |
             artifacts/kani/
+            artifacts/kani-evidence/
             crates/kani-harness/target/kani*/
           if-no-files-found: warn
   kani:

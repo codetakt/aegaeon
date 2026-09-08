@@ -259,7 +259,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-evaluation.md` | claim | Assurance Evaluation Rules | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | contract reviewers, evidence producers, release decision makers |
 | `docs/verification/claims/assurance-statement.md` | claim | Aegaeon Technical Assurance Statement Specification | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | users, adoption reviewers, implementers, verification and release owners |
-| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-08-03 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | snapshot | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-08-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -281,9 +281,10 @@ Audience: contributors, maintainers
 | `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/README.md` | index | JOSE Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/json-lowstar-ffi-contracts.md` | verification | JSON Low*/FFI Contract Summary | current implementation baseline | 2025-11-16 | Verification | verification reviewers, contributors |
-| `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
+| `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | historical record | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
-| `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
+| `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
+| `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/hashmap-ice-repro.md` | verification | Kani HashMap ICE Reproducer | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/kani-nixos-fix/README.md` | index | Kani NixOS Fix Details | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/kani/kani-nixos-fix/alternatives-and-technical-details.md` | verification | Kani NixOS Alternatives And Technical Details | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |

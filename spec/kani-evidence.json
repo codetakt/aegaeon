@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "kani_version": "0.66.0",
+  "target": "x86_64-unknown-linux-gnu",
+  "package": "ffi",
+  "features": ["kani"],
+  "solver": "cadical",
+  "default_unwind": 16,
+  "timeout_seconds": 180,
+  "memory_limit_bytes": 17179869184,
+  "harnesses": [
+    {
+      "name": "kani_tests::verification::verify_json_member_c_layout",
+      "file": "crates/ffi/src/kani_tests.rs",
+      "rows": ["7515-007"],
+      "domain": "Rust JsonMemberC size 32 and alignment 8 on x86_64; no C layout equivalence proof."
+    },
+    {
+      "name": "kani_tests::verification::verify_utf8_decode_null_safety",
+      "file": "crates/ffi/src/kani_tests.rs",
+      "rows": ["7515-007"],
+      "domain": "Two fixed null-pointer calls to the production UTF-8 helper."
+    },
+    {
+      "name": "kani_tests::verification::verify_free_string_null_safety",
+      "file": "crates/ffi/src/kani_tests.rs",
+      "rows": ["7515-007"],
+      "domain": "One null-pointer call to the production free helper; no allocated-pointer ownership proof."
+    },
+    {
+      "name": "kani_tests::verification::verify_jose_context_bounds",
+      "file": "crates/ffi/src/kani_tests.rs",
+      "rows": ["7515-007"],
+      "domain": "Default JoseContext header limit is positive and fits i32."
+    },
+    {
+      "name": "kani_tests::verification::verify_json_member_c_pointer_validity",
+      "file": "crates/ffi/src/kani_tests.rs",
+      "rows": ["7515-007"],
+      "domain": "One fixed Rust struct preserves field values and non-null pointers; no arbitrary-pointer validity proof."
+    },
+    {
+      "name": "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic",
+      "file": "crates/ffi/src/id_token.rs",
+      "rows": ["OIDC-1-007", "OIDC-1-010"],
+      "unreachable_assertions": {
+        "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic.assertion.2": "unexpected canonicalisation error"
+      },
+      "domain": "Exactly six fixed compact-JWT strings of at most 11 bytes; production Rust framing only, no signature or native parser verification."
+    }
+  ]
+}

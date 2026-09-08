@@ -909,33 +909,31 @@ rfc_7515:
   module: crates/ffi/src/kani_tests.rs
   proof:
   - type: kani
+    file: crates/ffi/src/kani_tests.rs
     harness: verify_json_member_c_layout
   - type: kani
+    file: crates/ffi/src/kani_tests.rs
     harness: verify_utf8_decode_null_safety
   - type: kani
-    harness: verify_utf8_decode_valid_input
-  - type: kani
+    file: crates/ffi/src/kani_tests.rs
     harness: verify_free_string_null_safety
   - type: kani
+    file: crates/ffi/src/kani_tests.rs
     harness: verify_jose_context_bounds
   - type: kani
-    harness: verify_parse_json_entries_null_pointer
-  - type: kani
-    harness: verify_parse_json_entries_count_overflow
-  - type: kani
+    file: crates/ffi/src/kani_tests.rs
     harness: verify_json_member_c_pointer_validity
-  tests:
-  - crates/server/src/authcode/store/tests/sender_binding.rs
-  ci_check: cargo kani -p ffi
-  status: verified
-  runtime_link: crates/ffi/src/kani_tests.rs
+  tests: []
+  ci_check: kani-evidence
+  status: partial
+  runtime_link: crates/ffi/src/lib.rs
   trace:
     kind: exempt
     note: "Kani harness-level properties (crates/ffi/src/kani_tests.rs); FFI memory safety has no F* function-level counterpart."
   notes:
-  - "Phase 4: 8 Kani harnesses verify FFI boundary safety"
-  - "Covers: layout correctness, null safety, overflow prevention, UTF-8 validation"
-  - "FFI structure alignment: JsonMemberC is 32 bytes with 8-byte alignment"
+  - "Five admitted Kani checks cover only the documented layout, fixed-pointer and default-context cases; see docs/verification/kani/evidence-admission.md."
+  - "The UTF-8 allocation fixture is unadmitted after a bounded tool failure. JSON parser checks call a cfg(kani) stub and cannot establish native-boundary safety."
+  - "General validated-input FFI memory safety remains open; the row is partial."
 - id: 7515-008
   section: '4.1'
   requirement: SHOULD
@@ -4114,9 +4112,6 @@ rfc_9701:
   - type: fstar
     file: fstar/introspection/JwtIntrospection.fst
     invariant: build_jwt_introspection
-  - type: kani
-    file: crates/kani-harness/src/bounded_jwt_introspection.rs
-    harness: proof_combined_well_formed
   tests:
   - crates/server/tests/introspection_schema_test.rs
   ci_check: jwt-introspection-accept-header
@@ -4128,6 +4123,7 @@ rfc_9701:
     rust: crates/server/src/web/token_lifecycle/jwt_introspection.rs#build_jwt_introspection_response
     test: crates/server/tests/introspection_schema_test.rs
   notes:
+  - "The standalone Kani wrapper does not exercise HTTP content negotiation; its citation was removed. The remaining verified inventory status refers to the cited F* model, not implementation refinement."
   - Content negotiation via Accept header; opt-in per the active management policy `jwtIntrospectionEnabled`.
 - id: 9701-002
   section: '4'
@@ -4138,9 +4134,6 @@ rfc_9701:
   - type: fstar
     file: fstar/introspection/JwtIntrospection.fst
     invariant: has_distinct_typ
-  - type: kani
-    file: crates/kani-harness/src/bounded_jwt_introspection.rs
-    harness: proof_ji4_distinct_typ
   tests:
   - crates/server/tests/introspection_schema_test.rs
   ci_check: jwt-introspection-typ-header
@@ -4152,6 +4145,7 @@ rfc_9701:
     rust: crates/server/src/web/token_lifecycle/jwt_introspection.rs#build_jwt_introspection_response
     test: crates/server/tests/introspection_schema_test.rs
   notes:
+  - "The removed Kani citation checked only a stored type length, not the JOSE typ value. Remaining evidence is the cited F* model plus runtime tests/guard; no production-refinement proof is claimed."
   - Distinct from at+jwt (RFC 9068) and JWT to prevent confusion attacks.
 - id: 9701-003
   section: '4'
@@ -4204,16 +4198,14 @@ rfc_9701:
   - type: fstar
     file: fstar/introspection/JwtIntrospection.fst
     invariant: exp_within_bound
-  - type: kani
-    file: crates/kani-harness/src/bounded_jwt_introspection.rs
-    harness: proof_ji2_exp_bounded
   tests:
   - crates/server/tests/introspection_schema_test.rs
   ci_check: jwt-introspection-short-exp
   status: verified
   runtime_link: crates/server/src/web/mod.rs
   notes:
-  - Clamped to max 60 seconds regardless of configuration. F* and Kani verify bound.
+  - "F* models the lifetime bound. The separate Kani wrapper is not called by production and is no longer cited as requirement evidence. Implementation correspondence remains open."
+  - Runtime clamps the configured lifetime to at most 60 seconds.
 
 rfc_9728:
 - id: 9728-001
@@ -4261,9 +4253,6 @@ rfc_9901:
   - type: fstar
     file: fstar/jose/Jose.SdJwt.fst
     lemma: lemma_completeness, lemma_non_forgeability, lemma_soundness_subset, lemma_no_duplicate, lemma_reconstruction_subset
-  - type: kani
-    file: crates/kani-harness/src/lib.rs
-    count: 6
   - type: tamarin
     file: proofs/tamarin/sd_jwt/sd_jwt_selective_disclosure.spthy
     lemma: disclosure_non_forgeability, selective_privacy, binding_integrity, no_disclosure_without_key, salt_uniqueness, no_disclosure_without_salt
@@ -4279,10 +4268,10 @@ rfc_9901:
   - jose
   - server
   notes:
+  - "The six Kani identities and dispositions are recorded in docs/verification/kani/evidence-admission.md. Their fixed fixtures use encoded disclosures as idealized digests, not SHA-256 or the production issuer/holder/verifier. The count-only Kani citation is removed; remaining F*/Tamarin evidence retains its model-level meaning."
   - "SdJwtIssuer/SdJwtHolder/SdJwtVerifier implemented with 24 unit tests passing."
   - "Min 128-bit salt, max 256 disclosures, SHA-256 digest algorithm."
   - "F* specification (Jose.SdJwt.fst) completed: disclosure integrity, digest uniqueness, format serialization."
-  - "Kani harnesses (6): disclosure_roundtrip, digest_uniqueness, issuer_payload, verifier_reconstruction, holder_selection, format_parsing."
   - "Tamarin model (6 lemmas): disclosure non-forgeability, selective privacy, binding integrity, key/salt requirements."
 
 draft_oauth_v2_1:
@@ -5461,15 +5450,15 @@ openid_core:
     file: crates/ffi/src/id_token.rs
     harness: oidc_id_token_jwt_canonicalisation_no_panic
   tests: []
-  ci_check: verify-kani
-  status: verified
+  ci_check: kani-evidence
+  status: partial
   runtime_link: crates/ffi/src/id_token.rs
   trace:
     kind: exempt
     note: "Kani harness (crates/ffi/src/id_token.rs); panic/overflow safety has no F* function-level counterpart."
   notes:
-  - Verified by `nix build .#verify-kani` (Kani suite includes this harness).
-  - Covers segment count, base64url guardrails, and length-prefix framing for representative bounded inputs.
+  - "The admitted Kani gate exhaustively checks six fixed strings, not arbitrary bounded adversarial inputs; the broader safety obligation remains partial."
+  - "Selection, per-property acceptance and input bounds are fixed in spec/kani-evidence.json and enforced by scripts/validation/run_kani_evidence.py."
 - id: OIDC-1-008
   section: Constant-time monitoring
   requirement: SHOULD
@@ -5498,9 +5487,6 @@ openid_core:
   proof:
   - type: code_review
     detail: upstream_refresh/upstream_callback split handlers with id_token validation, token rotation, connection-current validation, and error handling
-  - type: kani
-    file: crates/kani-harness/src/bounded_upstream.rs
-    count: 3
   - type: fstar
     file: fstar/federation/UpstreamRefresh.fst
     detail: "21 lemmas: env_scoping, link_key_invariant, issuer_binding, rotation_persisted, generation_increases, generation_stable, stale_rejected, double_rotation, connection_issuer_change_rejected, callback_inactive_connection_rejected, callback_issuer_drift_rejected, callback_client_auth_drift_rejected, user_subject_preserved, invalid_bearer, unscoped_bearer, cross_tenant, invalid_sig, issuer_mismatch, alg_unsupported, bad_id_token, all_invariants"
@@ -5516,9 +5502,9 @@ openid_core:
   status: verified
   runtime_link: crates/server/src/web/upstream_refresh.rs
   notes:
+  - "The three Kani harnesses are defined in crates/kani-harness/src/lib.rs, not bounded_upstream.rs. Their fixed in-memory traces do not prove SQL/CAS behavior or upstream token invalidation; the count-only citation is removed. Remaining verified inventory status refers to the F* model, not runtime refinement."
   - "4 integration tests in upstream_refresh_test.rs (error paths)."
   - "12 e2e tests in upstream_e2e_test.rs (mock upstream IdP): callback happy-path, return_to redirect, state anti-replay, error cases, mock IdP validation."
-  - "Kani harnesses (3): upstream_refresh_token_rotation, requires_valid_link, token_single_use; bounded model includes account-link connection binding and generation/CAS semantics."
   - "F* spec (UpstreamRefresh.fst): 21 lemmas covering env scoping, link key invariant, issuer binding, rotation persistence, generation tracking, stale rejection, connection issuer immutability, callback current-row admission, user subject preservation, bearer validation, cross-tenant isolation, signature/algorithm checks, and composite invariant."
   - "Runtime implementation is split across `upstream_refresh.rs`, `upstream_refresh_links/query.rs`, `upstream_callback.rs`, and `upstream_callback_connection.rs`; `web/mod.rs` only wires these modules into the router."
   - "Connection lifecycle/identity invariants are enforced by the management API, `connections_issuer_url_immutable` DB trigger, active/current account-link target lookup, and callback current-row validation before token exchange."
@@ -5571,6 +5557,7 @@ openid_core:
     rust: crates/server/src/oidc/required_rs256/verification.rs#verify_required_id_token_claims
     test: crates/server/src/oidc/required_rs256/tests.rs
   notes:
+  - "The Kani citation covers six fixed Rust canonicalization inputs only and is continuously selected by spec/kani-evidence.json. It does not prove arbitrary-input safety, native parsing, RS256 cryptography or end-to-end closure; OIDC-1-007 remains partial. This legacy verified evidence inventory row does not activate the assurance contract."
   - "The general verified allowlist remains modern-only (`HS*`, `EdDSA`). This row records a promoted OIDC-specific exception rather than a reclassification of broad RSA."
   - "Runtime carve-out is centralized in `crates/server/src/oidc/required_rs256.rs` and wired into OP issuance plus shared upstream/brokering validation helpers."
   - "Cryptographic hardness (EUF-CMA) and the `aws-lc-rs` RS256 verifier backend remain explicit assumptions / compat boundaries; the verified claim for this row is limited to the mandatory OIDC RS256 slice."

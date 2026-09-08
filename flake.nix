@@ -896,6 +896,7 @@
               checkPhaseCargoCommand = "";
               installPhaseCommand = ''
                 mkdir -p $out
+                cp -r artifacts/kani-evidence $out/evidence
                 touch $out/success
               '';
               doInstallCargoArtifacts = false;

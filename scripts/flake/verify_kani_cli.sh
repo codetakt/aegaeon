@@ -21,4 +21,5 @@ else
 	exit 1
 fi
 
+python3 scripts/validation/run_kani_evidence.py
 exec bash scripts/kani/run_kani.sh
