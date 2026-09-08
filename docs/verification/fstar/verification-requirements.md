@@ -48,6 +48,8 @@ The production target requires all five ordered invocations: `1` (policy), `1b`
 (federation), `2a-1` (LowStar JSON specification), `2a-2` (LowStar JSON runtime),
 and `2b` (remaining selected modules). Any unsuccessful invocation, signal,
 missing selected file/tool, or evidence-write failure makes the target fail.
+Failed production invocations also print a `[FAIL] Pass <id>` diagnostic with
+the runner's exit status, while preserving the structured completion record.
 The target runs `tests/ci/test_fstar_runner.py` before invoking the real verifier;
 the same controlled-tool tests run in the PR documentation lane.
 
@@ -67,7 +69,9 @@ and the verifier output survive in the captured build log. The hosted wrapper
 saves `build.log` and both Nix/tee statuses under a fresh run directory in
 `$FSTAR_CI_ARTIFACT_DIR` (default `artifacts/fstar/ci`), copying successful output
 only from that run's dedicated result link. CI uploads these diagnostics on
-failure as well as success. Preserve failed/incomplete logs during investigation;
+failure as well as success. The upload excludes the `result` symlink's contents;
+the copied `verified-output` tree supplies one copy of the successful evidence.
+Preserve failed/incomplete logs during investigation;
 a cancellation or early infrastructure failure may leave no completion record.
 
 The dependency snapshot describes available context, not the effective import
@@ -78,6 +82,12 @@ identified as `builder-generated-assumptions` and included in the source snapsho
 Neither their presence nor a zero exit status proves their soundness. This gate
 does not establish complete module/lemma coverage, model adequacy, implementation
 refinement, or release assurance.
+
+Acceptance currently operates at invocation level. A follow-up must bind each
+requested module/interface to a versioned per-module result, reject missing or
+duplicate results, and retain nonzero process status as fatal even when output
+contains a `Verified module` line. Reviewed positive and negative fixtures must
+cover skipped modules and mixed results before this becomes an admission gate.
 
 `nix build .#verify-abstract` is a separate exploratory target. Its five generated
 PAR experiments retain individual results and return failure if any experiment

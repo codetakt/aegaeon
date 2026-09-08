@@ -45,9 +45,17 @@ LOG="$OUT_DIR/verify.log"
 
 run_pass() {
 	local pass_id="$1"
+	local pass_status
 	shift
-	python3 "$REPO_ROOT/scripts/validation/run_fstar_invocation.py" \
-		--out-dir "$OUT_DIR" --pass-id "$pass_id" -- fstar.exe "$@"
+	if python3 "$REPO_ROOT/scripts/validation/run_fstar_invocation.py" \
+		--out-dir "$OUT_DIR" --pass-id "$pass_id" -- fstar.exe "$@"; then
+		return 0
+	else
+		pass_status=$?
+		printf '[FAIL] Pass %s: F* invocation failed (exit %s)\n' "$pass_id" "$pass_status" |
+			tee -a "$LOG" >&2
+		return "$pass_status"
+	fi
 }
 
 cd "$FSTAR_DIR"

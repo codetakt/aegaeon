@@ -102,6 +102,9 @@ if len(entries) == int(os.environ.get('FAIL_AT', '0')):
                 assert record["status"] == "failed"
                 assert record["returncode"] == 23
                 assert "verifier stderr retained" in (output / "verify.log").read_text()
+                failure = f"[FAIL] Pass {pass_id}: F* invocation failed (exit 23)"
+                assert failure in result.stderr
+                assert failure in (output / "verify.log").read_text()
                 assert "All five required" not in result.stderr
 
     def test_success_records_exact_commands_sources_and_context(self):
