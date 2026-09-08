@@ -271,9 +271,17 @@ class QuietHandler(WSGIRequestHandler):
 
 
 def prepare_inputs(args, state, evidence):
+    source_revision = os.environ.get("AEGAEON_REVIEW_SOURCE_REVISION")
+    migration_directory = os.environ.get("AEGAEON_REVIEW_MIGRATIONS")
+    if not source_revision or not migration_directory:
+        msg = (
+            "AEGAEON_REVIEW_SOURCE_REVISION and AEGAEON_REVIEW_MIGRATIONS are required; "
+            "run nix develop in examples/preview-review before starting the review"
+        )
+        raise ValueError(msg)
     record = json.loads(args.manifest.read_text())
-    validate_manifest(record, os.environ.get("AEGAEON_REVIEW_SOURCE_REVISION"))
-    migrations = Path(os.environ["AEGAEON_REVIEW_MIGRATIONS"])
+    validate_manifest(record, source_revision)
+    migrations = Path(migration_directory)
     if not (migrations / "atlas.sum").is_file():
         msg = "pinned migration inventory is missing; enter this example's Nix shell"
         raise ValueError(msg)
