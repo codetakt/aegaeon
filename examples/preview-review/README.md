@@ -13,8 +13,9 @@ server, SDK or combined assurance claim.
 ## Run with a published preview
 
 First complete the [private preview publication](../../docs/automation/flakehub-preview.md)
-and its separate consumer check. Obtain `preview-manifest.json` from that trusted
-successful run's producer artifact; retain its run URL with your review record.
+and its separate consumer check. Obtain `manifest.json` from that trusted
+successful run's `server-preview-publication` artifact; retain its run URL with
+your review record.
 Authenticate to FlakeHub on the workstation as described in that runbook.
 
 From this directory:
@@ -22,7 +23,7 @@ From this directory:
 ```sh
 nix develop
 python3 review.py \
-  --manifest /absolute/path/to/preview-manifest.json \
+  --manifest /absolute/path/to/manifest.json \
   --state-dir .review/session-001 \
   --serve
 ```
