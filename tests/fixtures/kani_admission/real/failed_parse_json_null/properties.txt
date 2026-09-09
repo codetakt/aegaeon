@@ -1,0 +1,541 @@
+
+RESULTS:
+Check 1: std::ptr::drop_in_place::<std::vec::Vec<(std::string::String, std::string::String)>>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::vec::Vec<(std::string::String, std::string::String)>>
+
+Check 2: std::ptr::drop_in_place::<std::vec::Vec<(std::string::String, std::string::String)>>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::vec::Vec<(std::string::String, std::string::String)>>
+
+Check 3: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "call to foreign "Rust" function `_RNvCsfNd5Qxpi3D5_7___rustc17rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs:110:17 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 4: kani_tests::verification::verify_parse_json_entries_null_pointer.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Null pointer should return error"
+	 - Location: crates/ffi/src/kani_tests.rs:166:9 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 5: kani_tests::verification::verify_parse_json_entries_null_pointer.assertion.2
+	 - Status: FAILURE
+	 - Description: "Expected Internal error for null pointer"
+	 - Location: crates/ffi/src/kani_tests.rs:175:21 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 6: kani_tests::verification::verify_parse_json_entries_null_pointer.assertion.3
+	 - Status: UNREACHABLE
+	 - Description: "Null pointer should return Internal error"
+	 - Location: crates/ffi/src/kani_tests.rs:172:21 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 7: kani_tests::verification::verify_parse_json_entries_null_pointer.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: crates/ffi/src/kani_tests.rs:161:5 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 8: __rust_dealloc.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Alignment is power of two"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:83 in function __rust_dealloc
+
+Check 9: __rust_dealloc.assertion.2
+	 - Status: SUCCESS
+	 - Description: "rust_dealloc must be called on an object whose allocated size matches its layout"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:85 in function __rust_dealloc
+
+Check 10: std::panic::Location::<'_>::caller.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panic/location.rs:147:9 in function std::panic::Location::<'_>::caller
+
+Check 11: std::ptr::drop_in_place::<std::vec::Vec<u8>>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::vec::Vec<u8>>
+
+Check 12: std::ptr::drop_in_place::<std::vec::Vec<u8>>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::vec::Vec<u8>>
+
+Check 13: alloc::raw_vec::RawVecInner::deallocate.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:830:5 in function alloc::raw_vec::RawVecInner::deallocate
+
+Check 14: std::alloc::Layout::max_size_for_align.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "attempt to add with overflow"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:105:32 in function std::alloc::Layout::max_size_for_align
+
+Check 15: std::alloc::Layout::max_size_for_align.arithmetic_overflow.1
+	 - Status: SUCCESS
+	 - Description: "attempt to compute `unchecked_sub` which would overflow"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:105:18 in function std::alloc::Layout::max_size_for_align
+
+Check 16: std::ptr::drop_in_place::<alloc::raw_vec::RawVec<(std::string::String, std::string::String)>>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<alloc::raw_vec::RawVec<(std::string::String, std::string::String)>>
+
+Check 17: std::ptr::drop_in_place::<alloc::raw_vec::RawVec<(std::string::String, std::string::String)>>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<alloc::raw_vec::RawVec<(std::string::String, std::string::String)>>
+
+Check 18: std::alloc::Layout::is_size_align_valid.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:78:5 in function std::alloc::Layout::is_size_align_valid
+
+Check 19: core::num::<impl usize>::unchecked_mul.arithmetic_overflow.1
+	 - Status: SUCCESS
+	 - Description: "attempt to compute `unchecked_mul` which would overflow"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:1105:17 in function core::num::<impl usize>::unchecked_mul
+
+Check 20: std::ptr::drop_in_place::<alloc::raw_vec::RawVec<u8>>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<alloc::raw_vec::RawVec<u8>>
+
+Check 21: std::ptr::drop_in_place::<alloc::raw_vec::RawVec<u8>>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<alloc::raw_vec::RawVec<u8>>
+
+Check 22: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 23: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 24: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 25: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 26: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 27: alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<(std::string::String, std::string::String)>
+
+Check 28: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 29: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 30: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 31: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 32: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 33: std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<std::result::Result<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>>
+
+Check 34: std::ptr::drop_in_place::<JsonError>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 35: std::ptr::drop_in_place::<JsonError>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 36: std::ptr::drop_in_place::<JsonError>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 37: std::ptr::drop_in_place::<JsonError>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 38: std::ptr::drop_in_place::<JsonError>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 39: std::ptr::drop_in_place::<JsonError>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:805:1 in function std::ptr::drop_in_place::<JsonError>
+
+Check 40: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 41: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 42: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 43: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 44: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 45: std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:594:18 in function std::result::Result::<std::vec::Vec<(std::string::String, std::string::String)>, JsonError>::is_ok
+
+Check 46: std::ptr::Alignment::new.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:64:13 in function std::ptr::Alignment::new
+
+Check 47: std::alloc::Layout::size.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 48: std::alloc::Layout::size.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 49: std::alloc::Layout::size.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 50: std::alloc::Layout::size.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 51: std::alloc::Layout::size.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 52: std::alloc::Layout::size.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:150:9 in function std::alloc::Layout::size
+
+Check 53: std::alloc::Layout::align.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 54: std::alloc::Layout::align.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 55: std::alloc::Layout::align.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 56: std::alloc::Layout::align.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 57: std::alloc::Layout::align.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 58: std::alloc::Layout::align.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:162:9 in function std::alloc::Layout::align
+
+Check 59: kani_tests::verification::verify_parse_json_entries_null_pointer.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: crates/ffi/src/kani_tests.rs:168:25 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 60: kani_tests::verification::verify_parse_json_entries_null_pointer.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: crates/ffi/src/kani_tests.rs:179:5 in function kani_tests::verification::verify_parse_json_entries_null_pointer
+
+Check 61: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 62: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 63: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 64: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 65: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 66: <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<(std::string::String, std::string::String)> as std::ops::Drop>::drop
+
+Check 67: core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_const::<1>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/fmt/rt.rs:196:34 in function core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_const::<1>
+
+Check 68: std::alloc::Layout::is_size_align_valid.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:79:27 in function std::alloc::Layout::is_size_align_valid
+
+Check 69: alloc::raw_vec::RawVecInner::deallocate.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:832:38 in function alloc::raw_vec::RawVecInner::deallocate
+
+Check 70: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 71: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 72: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 73: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 74: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 75: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:523:39 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 76: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 77: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 78: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 79: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 80: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 81: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:531:67 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 82: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 83: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 84: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 85: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 86: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 87: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:533:23 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 88: alloc::raw_vec::RawVecInner::current_memory.pointer_dereference.19
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:524:13 in function alloc::raw_vec::RawVecInner::current_memory
+
+Check 89: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 90: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 91: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 92: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 93: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 94: alloc::raw_vec::RawVecInner::non_null::<u8>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:504:9 in function alloc::raw_vec::RawVecInner::non_null::<u8>
+
+Check 95: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 96: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 97: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 98: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 99: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 100: <std::vec::Vec<u8> as std::ops::Drop>::drop.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4047:81 in function <std::vec::Vec<u8> as std::ops::Drop>::drop
+
+Check 101: __rust_dealloc.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 102: __rust_dealloc.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 103: __rust_dealloc.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 104: __rust_dealloc.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 105: __rust_dealloc.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 106: __rust_dealloc.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: ../../../../../nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/kani-0.66.0/library/kani/kani_lib.c:87 in function __rust_dealloc
+
+
+SUMMARY:
+ ** 1 of 106 failed (2 unreachable)
+Failed Checks: Expected Internal error for null pointer
+ File: "crates/ffi/src/kani_tests.rs", line 175, in kani_tests::verification::verify_parse_json_entries_null_pointer
+
+VERIFICATION:- FAILED
+Verification Time: 0.1052721s
+

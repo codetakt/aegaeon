@@ -106,7 +106,7 @@ admission is limited as described above.
 
 **Next Steps**:
 1. Run Kani verification (CI-equivalent): `nix build .#verify-kani -L`
-2. Verify the harness set remains stable across toolchain bumps (`AEG_KANI_SUITE=regression`)
+2. Verify the harness set remains stable across toolchain bumps (`spec/kani-evidence.json` required groups)
 3. Integrate benchmarks into CI pipeline for regression detection
 4. Consider performance monitoring dashboard
 

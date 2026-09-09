@@ -36,7 +36,16 @@ def test_admitted_kani_selection_covers_its_matrix_citations() -> None:
     root = pathlib.Path(__file__).resolve().parents[2]
     registry = json.loads((root / "spec/kani-evidence.json").read_text())
     matrix = yaml.safe_load((root / "spec/compliance-matrix.yaml").read_text())
-    admitted_rows = {"7515-007", "OIDC-1-007", "OIDC-1-010"}
+    # Registry v2: evidence-grade harnesses live in required/evidence groups and name
+    # the matrix rows they support; every Kani citation of those rows must be one of them.
+    selected = {
+        (row, harness["file"], harness["name"].rsplit("::", 1)[-1])
+        for group in registry["groups"]
+        if group.get("class") == "required" and group.get("gating") == "evidence"
+        for harness in group["harnesses"]
+        for row in harness.get("rows", [])
+    }
+    admitted_rows = {row for row, _, _ in selected}
     citations = {
         (row["id"], proof["file"], proof["harness"])
         for rows in matrix.values()
@@ -45,11 +54,6 @@ def test_admitted_kani_selection_covers_its_matrix_citations() -> None:
         if isinstance(row, dict) and row.get("id") in admitted_rows
         for proof in row["proof"]
         if proof["type"] == "kani"
-    }
-    selected = {
-        (row, harness["file"], harness["name"].rsplit("::", 1)[-1])
-        for harness in registry["harnesses"]
-        for row in harness["rows"]
     }
     assert citations
     assert selected == citations

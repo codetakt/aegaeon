@@ -39,6 +39,7 @@ extend-exclude = [
     "proofs/tamarin/",
     "target/",
     "tests/constant_time/run.sh",
+    "tests/fixtures/kani_admission/real/",
     "test-results/",
     "tests/vectors/",
     "tests/verified_core_wasm/vectors/",

@@ -36,26 +36,17 @@ fi
 echo ""
 echo "2. Running Kani verification..."
 if command -v cargo-kani >/dev/null 2>&1 || [ -f "$HOME/.cargo/bin/cargo-kani" ]; then
-	echo "⇒ Running Kani with JSON report..."
-	mkdir -p artifacts/kani
-	# Run with timeout to prevent hanging
-	if timeout 120 cargo kani --json-output artifacts/kani/report.json --exit-status; then
+	echo "⇒ Running the Kani evidence runner (spec/kani-evidence.json)..."
+	if bash scripts/kani/run_kani.sh --scope full --output artifacts/kani-evidence; then
 		KANI_RESULT="PASSED"
-		echo "✅ Kani verification passed"
+		echo "✅ Kani admission passed (artifacts/kani-evidence/gate.json)"
 	else
-		# Check if it's a timeout or actual failure
-		if [ $? -eq 124 ]; then
-			KANI_RESULT="TIMEOUT"
-			echo "⚠️  Kani verification timeout"
-		else
-			KANI_RESULT="FAILED"
-			echo "❌ Kani verification failed (see artifacts/kani/report.json)"
-		fi
+		KANI_RESULT="FAILED"
+		echo "❌ Kani admission rejected (see artifacts/kani-evidence/run-*/evaluation.json)"
 	fi
 else
 	echo "⚠️  Kani not available, skipping"
 fi
-
 # 3. Tamarin Verification
 echo ""
 echo "3. Running Tamarin verification..."

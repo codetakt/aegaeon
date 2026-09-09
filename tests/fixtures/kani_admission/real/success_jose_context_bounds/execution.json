@@ -1,0 +1,36 @@
+{
+  "harness": "kani_tests::verification::verify_jose_context_bounds",
+  "group": "ffi",
+  "cwd": "/home/claude/Workspaces/conceptual/aegaeon-kani-triage",
+  "command": [
+    "/nix/store/6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0/bin/cargo-kani",
+    "kani",
+    "-p",
+    "ffi",
+    "--features",
+    "kani",
+    "--exact",
+    "--harness",
+    "kani_tests::verification::verify_jose_context_bounds",
+    "--solver",
+    "cadical",
+    "--default-unwind",
+    "16",
+    "--output-into-files",
+    "-Z",
+    "unstable-options"
+  ],
+  "environment": {
+    "RUSTFLAGS": "-C panic=abort -Z panic-abort-tests --cfg kani",
+    "CARGO_TARGET_DIR": "/tmp/aegaeon-t02-ffi-target"
+  },
+  "exit_code": 0,
+  "timeout": false,
+  "started_at": "2026-09-08T03:29:05.003985+00:00",
+  "elapsed_seconds": 1.078,
+  "memory_limit_bytes": 17179869184,
+  "files": [
+    "ffi-8077108c35eed694.kani-metadata.json"
+  ],
+  "log_sha256": "c67fa6b7e525a1b6ad105213f3f94ddac2545d98959dded05c6adbdd16dc9f66"
+}

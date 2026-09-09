@@ -1,0 +1,440 @@
+Kani Rust Verifier 0.66.0 (cargo plugin)
+   Compiling ffi v0.9.0-beta (/home/claude/Workspaces/conceptual/aegaeon-kani-triage/crates/ffi)
+warning: unnecessary `unsafe` block
+   --> crates/ffi/src/kani_tests.rs:129:17
+    |
+129 |                 unsafe {
+    |                 ^^^^^^ unnecessary `unsafe` block
+    |
+    = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused return value of `verify_hmac` that must be used
+    --> crates/ffi/src/lib.rs:1864:9
+     |
+1864 |         verify_hmac(JwsAlg::HS256, &key, &msg, &sig);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+     |
+1864 |         let _ = verify_hmac(JwsAlg::HS256, &key, &msg, &sig);
+     |         +++++++
+
+warning: unused return value of `verify_hmac` that must be used
+    --> crates/ffi/src/lib.rs:1878:9
+     |
+1878 | /         verify_hmac(
+1879 | |             JwsAlg::HS256,
+1880 | |             &key[..key_len],
+1881 | |             &msg[..msg_len],
+1882 | |             &sig[..sig_len],
+1883 | |         );
+     | |_________^
+     |
+help: use `let _ = ...` to ignore the resulting value
+     |
+1878 |         let _ = verify_hmac(
+     |         +++++++
+
+warning: unused return value of `verify_hmac` that must be used
+    --> crates/ffi/src/lib.rs:1891:9
+     |
+1891 |         verify_hmac(JwsAlg::HS256, &key, &msg, &sig);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: use `let _ = ...` to ignore the resulting value
+     |
+1891 |         let _ = verify_hmac(JwsAlg::HS256, &key, &msg, &sig);
+     |         +++++++
+
+warning: unused return value of `verify_rsa` that must be used
+    --> crates/ffi/src/lib.rs:1900:9
+     |
+1900 |         verify_rsa(JwsAlg::PS256, &modulus, &exponent, &msg, &sig);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: use `let _ = ...` to ignore the resulting value
+     |
+1900 |         let _ = verify_rsa(JwsAlg::PS256, &modulus, &exponent, &msg, &sig);
+     |         +++++++
+
+warning: unused return value of `verify_ed25519` that must be used
+    --> crates/ffi/src/lib.rs:1908:9
+     |
+1908 |         verify_ed25519(JwsAlg::EdDSA, &key, &msg, &sig);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+help: use `let _ = ...` to ignore the resulting value
+     |
+1908 |         let _ = verify_ed25519(JwsAlg::EdDSA, &key, &msg, &sig);
+     |         +++++++
+
+warning: Found the following unsupported constructs:
+             - caller_location (1)
+             - foreign function (3)
+         
+         Verification will fail if one or more of these constructs is reachable.
+         See https://model-checking.github.io/kani/rust-feature-support.html for more details.
+
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.98s
+Checking harness kani_tests::verification::verify_utf8_decode_valid_input...
+CBMC 6.10.0 (n/a)
+CBMC version 6.10.0 (n/a) 64-bit x86_64 linux
+Reading GOTO program from file /tmp/aegaeon-t02-ffi-target/kani/x86_64-unknown-linux-gnu/debug/deps/ffi-0f71aa85cd3fcd09__RNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs line 373 column 5 function std::alloc::Layout::repeat thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 835 column 15 function std::result::Result::<(std::alloc::Layout, usize), std::alloc::LayoutError>::map::<std::alloc::Layout, {closure@alloc::raw_vec::layout_array::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::map_err::<std::collections::TryReserveError, {closure@alloc::raw_vec::layout_array::{closure#1}}> thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function alloc::raw_vec::RawVecInner::try_allocate_in thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 419 column 15 function alloc::raw_vec::RawVecInner::with_capacity_in thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/collections/mod.rs line 93 column 10 function <std::collections::TryReserveErrorKind as std::clone::Clone>::clone thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 845 column 11 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 366 column 5 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 407 column 13 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 413 column 9 function std::alloc::handle_alloc_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 847 column 38 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 28 column 5 function alloc::raw_vec::capacity_overflow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 846 column 29 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 427 column 25 function alloc::raw_vec::RawVecInner::with_capacity_in thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.2 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 145 column 5 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.2 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 145 column 5 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.2 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 145 column 5 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.2 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 145 column 5 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 224 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.1 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 241 column 17 function core::str::validations::run_utf8_validation thread 0
+Not unwinding loop _ZN4core3str11validations19run_utf8_validation17hd54e85de8599aff7E.2 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/validations.rs line 145 column 5 function core::str::validations::run_utf8_validation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/str/converts.rs line 91 column 11 function std::str::from_utf8 thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/string.rs line 564 column 15 function std::string::String::from_utf8 thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Not unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs line 49 column 9 function core::slice::index::slice_index_fail::do_panic::runtime thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs line 2439 column 9 function core::slice::index::slice_index_fail::do_panic thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panic.rs line 178 column 9 function core::slice::index::slice_index_fail thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs line 68 column 5 function core::slice::index::slice_index_fail::do_panic::runtime thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs line 2439 column 9 function core::slice::index::slice_index_fail::do_panic thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panic.rs line 178 column 9 function core::slice::index::slice_index_fail thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs line 444 column 13 function <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Not unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _RNvNvNtNtCs2wnAmoI9uWn_4core5slice6memchr14memchr_aligned7runtimeCscGmmyAp1Grc_3ffi.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 81 column 13 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _RNvNvNtNtCs2wnAmoI9uWn_4core5slice6memchr14memchr_aligned7runtimeCscGmmyAp1Grc_3ffi.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 81 column 13 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _RNvNvNtNtCs2wnAmoI9uWn_4core5slice6memchr14memchr_aligned7runtimeCscGmmyAp1Grc_3ffi.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 81 column 13 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _RNvNvNtNtCs2wnAmoI9uWn_4core5slice6memchr14memchr_aligned7runtimeCscGmmyAp1Grc_3ffi.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 81 column 13 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Not unwinding loop _RNvNvNtNtCs2wnAmoI9uWn_4core5slice6memchr14memchr_aligned7runtimeCscGmmyAp1Grc_3ffi.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 81 column 13 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+Not unwinding loop _RNvNtNtCs2wnAmoI9uWn_4core5slice6memchr12memchr_naiveCscGmmyAp1Grc_3ffi.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/memchr.rs line 39 column 5 function core::slice::memchr::memchr_naive thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/intrinsics/mod.rs line 2427 column 9 function core::slice::memchr::memchr_aligned::runtime thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/ffi/c_str.rs line 264 column 23 function <std::string::String as std::ffi::CString::new::SpecNewImpl>::spec_new_impl thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs line 1337 column 15 function std::option::Option::<usize>::ok_or::<std::collections::TryReserveErrorKind> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<usize, std::collections::TryReserveErrorKind> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs line 373 column 5 function std::alloc::Layout::repeat thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 835 column 15 function std::result::Result::<(std::alloc::Layout, usize), std::alloc::LayoutError>::map::<std::alloc::Layout, {closure@alloc::raw_vec::layout_array::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::map_err::<std::collections::TryReserveError, {closure@alloc::raw_vec::layout_array::{closure#1}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::alloc::Layout, std::collections::TryReserveError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 745 column 26 function alloc::raw_vec::RawVecInner::finish_grow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function std::alloc::Global::grow_impl thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 207 column 9 function std::alloc::Global::grow_impl thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::ptr::NonNull<[u8]>, std::alloc::AllocError>::map_err::<std::collections::TryReserveError, {closure@alloc::raw_vec::RawVecInner::finish_grow::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs line 444 column 17 function core::panicking::assert_failed_inner thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs line 399 column 5 function core::panicking::assert_failed::<usize, usize> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/macros/mod.rs line 51 column 21 function alloc::raw_vec::RawVecInner::finish_grow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::collections::TryReserveError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function alloc::raw_vec::RawVecInner::grow_exact thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<(), std::collections::TryReserveError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 630 column 17 function alloc::raw_vec::RawVecInner::try_reserve_exact thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 610 column 5 function alloc::raw_vec::RawVecInner::reserve_exact thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/collections/mod.rs line 93 column 10 function <std::collections::TryReserveErrorKind as std::clone::Clone>::clone thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 845 column 11 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 366 column 5 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 407 column 13 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 413 column 9 function std::alloc::handle_alloc_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 847 column 38 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 28 column 5 function alloc::raw_vec::capacity_overflow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 846 column 29 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 613 column 13 function alloc::raw_vec::RawVecInner::reserve_exact thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs line 1337 column 15 function std::option::Option::<usize>::ok_or::<std::collections::TryReserveErrorKind> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<usize, std::collections::TryReserveErrorKind> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/alloc/layout.rs line 373 column 5 function std::alloc::Layout::repeat thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 835 column 15 function std::result::Result::<(std::alloc::Layout, usize), std::alloc::LayoutError>::map::<std::alloc::Layout, {closure@alloc::raw_vec::layout_array::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::map_err::<std::collections::TryReserveError, {closure@alloc::raw_vec::layout_array::{closure#1}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::alloc::Layout, std::collections::TryReserveError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 745 column 26 function alloc::raw_vec::RawVecInner::finish_grow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function std::alloc::Global::grow_impl thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 207 column 9 function std::alloc::Global::grow_impl thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::ptr::NonNull<[u8]>, std::alloc::AllocError>::map_err::<std::collections::TryReserveError, {closure@alloc::raw_vec::RawVecInner::finish_grow::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs line 444 column 17 function core::panicking::assert_failed_inner thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs line 399 column 5 function core::panicking::assert_failed::<usize, usize> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/macros/mod.rs line 51 column 21 function alloc::raw_vec::RawVecInner::finish_grow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::collections::TryReserveError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function alloc::raw_vec::RawVecInner::grow_amortized thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 575 column 5 function alloc::raw_vec::RawVecInner::grow_one thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/collections/mod.rs line 93 column 10 function <std::collections::TryReserveErrorKind as std::clone::Clone>::clone thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 845 column 11 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 366 column 5 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 407 column 13 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 413 column 9 function std::alloc::handle_alloc_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 847 column 38 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 28 column 5 function alloc::raw_vec::capacity_overflow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 846 column 29 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 578 column 13 function alloc::raw_vec::RawVecInner::grow_one thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 0 column 0 function <std::alloc::Global as std::alloc::Allocator>::shrink thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 308 column 9 function <std::alloc::Global as std::alloc::Allocator>::shrink thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 966 column 15 function std::result::Result::<std::ptr::NonNull<[u8]>, std::alloc::AllocError>::map_err::<std::collections::TryReserveErrorKind, {closure@alloc::raw_vec::RawVecInner::shrink_unchecked::{closure#0}}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs line 2168 column 15 function <std::result::Result<std::ptr::NonNull<[u8]>, std::collections::TryReserveErrorKind> as std::ops::Try>::branch thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 811 column 17 function alloc::raw_vec::RawVecInner::shrink_unchecked thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 769 column 9 function alloc::raw_vec::RawVecInner::shrink thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 647 column 5 function alloc::raw_vec::RawVecInner::shrink_to_fit thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/collections/mod.rs line 93 column 10 function <std::collections::TryReserveErrorKind as std::clone::Clone>::clone thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 845 column 11 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 366 column 5 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 407 column 13 function std::alloc::handle_alloc_error::rt_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/alloc.rs line 413 column 9 function std::alloc::handle_alloc_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 847 column 38 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 28 column 5 function alloc::raw_vec::capacity_overflow thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 846 column 29 function alloc::raw_vec::handle_error thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 649 column 13 function alloc::raw_vec::RawVecInner::shrink_to_fit thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 227 column 9 function alloc::raw_vec::RawVec::<u8>::into_box thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 1 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 2 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 3 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 4 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Not unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 5 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+aborting path on assume(false) at file crates/ffi/src/lib.rs line 49 column 1 function aegaeon_ffi_decode_utf8 thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs line 830 column 5 function alloc::raw_vec::RawVecInner::deallocate thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 1 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 2 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 3 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 4 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+Not unwinding loop _RINvNtCsaQfuA7NRv7L_4kani16rustc_intrinsics15size_of_val_rawShECscGmmyAp1Grc_3ffi.0 iteration 5 file /build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs line 433 column 13 function kani::rustc_intrinsics::size_of_val_raw::<[u8]> thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function <usize as kani::rustc_intrinsics::ToISize>::to_isize thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 285 column 13 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+Unwinding loop _RINvXs2E_NtNtCs2wnAmoI9uWn_4core5slice4iterINtB7_4IterhENtNtNtNtBb_4iter6traits8iterator8Iterator3allNCNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input0EB1J_.0 iteration 1 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 290 column 17 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 285 column 13 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+Unwinding loop _RINvXs2E_NtNtCs2wnAmoI9uWn_4core5slice4iterINtB7_4IterhENtNtNtNtBb_4iter6traits8iterator8Iterator3allNCNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input0EB1J_.0 iteration 2 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 290 column 17 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 285 column 13 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+Unwinding loop _RINvXs2E_NtNtCs2wnAmoI9uWn_4core5slice4iterINtB7_4IterhENtNtNtNtBb_4iter6traits8iterator8Iterator3allNCNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input0EB1J_.0 iteration 3 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 290 column 17 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 285 column 13 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+Unwinding loop _RINvXs2E_NtNtCs2wnAmoI9uWn_4core5slice4iterINtB7_4IterhENtNtNtNtBb_4iter6traits8iterator8Iterator3allNCNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input0EB1J_.0 iteration 4 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 290 column 17 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+aborting path on assume(false) at file /build/kani-0.66.0-patched-source/library/kani/src/lib.rs line 57 column 1 function kani::mem::cbmc::same_allocation thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 285 column 13 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+Not unwinding loop _RINvXs2E_NtNtCs2wnAmoI9uWn_4core5slice4iterINtB7_4IterhENtNtNtNtBb_4iter6traits8iterator8Iterator3allNCNvNtNtCscGmmyAp1Grc_3ffi10kani_tests12verification30verify_utf8_decode_valid_input0EB1J_.0 iteration 5 file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 290 column 17 function <std::slice::Iter<'_, u8> as std::iter::Iterator>::all::<{closure@crates/ffi/src/kani_tests.rs:120:47: 120:51}> thread 0
+aborting path on assume(false) at file /toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/alloc/src/ffi/c_str.rs line 406 column 17 function std::ffi::CString::from_raw thread 0
+Runtime Symex: 3.79532s
+size of program expression: 99306 steps
+slicing removed 72899 assignments
+Generated 4125 VCC(s), 2079 remaining after simplification
+Runtime Postprocess Equation: 0.133873s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.58528s
+Running propositional reduction
+Post-processing
+Solver ran out of memory during propositional reduction.
+Try reducing the problem size or increasing available memory.
+Runtime Solver: 38.4675s
+Runtime decision procedure: 39.0634s
+
+thread '<unnamed>' (3374866) panicked at kani-driver/src/cbmc_output_parser.rs:470:25:
+called `Result::unwrap()` on an `Err` value: Error("unknown variant `ERROR`, expected one of `FAILURE`, `COVERED`, `SATISFIED`, `SUCCESS`, `UNDETERMINED`, `UNKNOWN`, `UNREACHABLE`, `UNCOVERED`, `UNSATISFIABLE`", line: 46, column: 25)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

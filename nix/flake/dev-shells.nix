@@ -32,6 +32,7 @@ in
     packages = [
       (pkgs.python3.withPackages (pythonPackages: [
         pythonPackages.pyyaml
+        pythonPackages.jsonschema
         pythonPackages.pytest
       ]))
       pkgs.markdownlint-cli2
