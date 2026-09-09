@@ -2,6 +2,8 @@
 # Preserve diagnostic evidence even when Nix cannot produce a successful output.
 set -euo pipefail
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(dirname "$(dirname "$SCRIPT_DIR")")
 artifact_base="${FSTAR_CI_ARTIFACT_DIR:-artifacts/fstar/ci}"
 mkdir -p "$artifact_base"
 artifact_base="$(realpath "$artifact_base")"
@@ -23,5 +25,9 @@ fi
 
 # Use only this invocation's output link. Never collect an old ./result.
 cp -R "$evidence_dir/result/." "$evidence_dir/verified-output"
+# A substituted or cached build output is accepted only if its per-module
+# admission records are present, bound to the invocation digests and replayable.
+python3 "$REPO_ROOT/scripts/validation/admit_fstar_modules.py" \
+	--verify-records "$evidence_dir/verified-output"
 cat "$evidence_dir/verified-output/verify.log"
 echo "[OK] F* build and evidence capture succeeded"

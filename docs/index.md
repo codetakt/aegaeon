@@ -277,6 +277,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status/gaps-and-promotion-work.md` | claim | Verification Maturity Gaps And Promotion Work | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
+| `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/store-entries-vc-resolution.md` | verification | Resolving `store_entries_into_buffer_aux` VC Failures | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/troubleshooting.md` | verification | F* / KaRaMeL Troubleshooting (Proof / Extraction Hygiene) | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |

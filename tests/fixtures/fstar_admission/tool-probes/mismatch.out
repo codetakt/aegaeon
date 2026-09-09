@@ -1,0 +1,6 @@
+* Error 6 at Mismatch.fst(1,7-1,12):
+  - The module declaration "module Other" found in file Mismatch.fst does not
+    match its filename.
+  - Dependencies will be incorrect and the module will not be verified.
+
+1 error was reported (see above)

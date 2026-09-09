@@ -1,0 +1,7 @@
+Creating new z3proc (cmd=[("z3-4.13.3", ["-smt2", "-in"])], version=["4.13.3"])
+(Probe.fst(2,22-2,27))	Query-stats (Probe.f, 1)	succeeded in 20 milliseconds with fuel 2 and ifuel 1 and rlimit 5 (used rlimit 0.004)
+(Probe.fst(3,40-3,42))	Query-stats (Probe.lemma_f, 1)	succeeded in 2 milliseconds with fuel 2 and ifuel 1 and rlimit 5 (used rlimit 0.007)
+Killing old z3proc (ask_count=1, old_cmd=[("z3-4.13.3", ["-smt2", "-in"])])
+Verified module: Probe
+All verification conditions discharged successfully
+TOTAL TIME 133 ms: /nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe --query_stats Probe.fst

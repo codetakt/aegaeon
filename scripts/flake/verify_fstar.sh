@@ -517,3 +517,13 @@ run_pass 2b --detail_errors --query_stats "${FSTAR_ARGS[@]}" $MODULES
 echo "[OK] Pass 2b: F* invocation succeeded" | tee -a "$LOG" >&2
 
 echo "[OK] All five required F* invocations succeeded" | tee -a "$LOG" >&2
+
+# Exit status alone does not show that every requested implementation and
+# interface produced exactly one result under the pinned output contract.
+echo "=> Admitting per-module results for passes 1 1b 2a-1 2a-2 2b" | tee -a "$LOG" >&2
+if ! python3 "$REPO_ROOT/scripts/validation/admit_fstar_modules.py" \
+	--out-dir "$OUT_DIR" --passes 1 1b 2a-1 2a-2 2b --source-root "$FSTAR_DIR"; then
+	echo "[FAIL] Per-module admission rejected the F* evidence" | tee -a "$LOG" >&2
+	exit 1
+fi
+echo "[OK] Every requested F* module was admitted" | tee -a "$LOG" >&2
