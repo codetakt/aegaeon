@@ -167,7 +167,7 @@ lemma rotation_count_monotonicity:
 //    revoked family's tokens. Specifically: if a family is revoked
 //    and a token was cascade-revoked, that token cannot be rotated after.
 lemma no_token_after_revocation:
-  "All client user rt #i #j.
+  "All client user rt new_rt count #i #j.
      RT_Cascade_Revoked(client, user, rt)@i &
      Token_Rotated(client, user, rt, new_rt, count)@j
      ==> #j < #i"
