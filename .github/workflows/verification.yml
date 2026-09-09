@@ -320,137 +320,44 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           enable-flakehub-cache: "true"
-      - name: Check admitted Kani evidence
-        run: nix develop .#verification --command python3 scripts/validation/run_kani_evidence.py
-      - name: Run Kani (pure harness)
-        run: nix develop .#verification --command bash scripts/kani/run_kani.sh
-      - name: Summarize Kani run (pure harness)
+      - name: Admit the required Kani selection (full scope, pinned 0.66.0)
+        run: nix develop .#verification --command bash scripts/flake/verify_kani_check.sh
+      - name: Summarize Kani admission
         if: always()
-        run: |
-          python3 <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          report = Path('artifacts/kani/report.json')
-          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
-
-          if not report.exists():
-              print('⚠️ Kani summary not found at artifacts/kani/report.json')
-              if summary_path:
-                  with open(summary_path, 'a', encoding='utf-8') as fh:
-                      fh.write('### Kani (pure harness)\n')
-                      fh.write('⚠️ report.json not generated\n')
-              raise SystemExit(0)
-
-          data = json.loads(report.read_text(encoding='utf-8'))
-          status = data.get('status', 'unknown')
-          harnesses = data.get('harnesses', {})
-
-          print(f"Kani status: {status}")
-          for name, result in sorted(harnesses.items()):
-              print(f"  - {name}: {result}")
-
-          if summary_path:
-              with open(summary_path, 'a', encoding='utf-8') as fh:
-                  fh.write('### Kani (pure harness)\n')
-                  fh.write(f"Status: {status}\n")
-                  if harnesses:
-                      for name, result in sorted(harnesses.items()):
-                          fh.write(f"- {name}: {result}\n")
-                  fh.write('\n')
-          PY
-      - name: Upload Kani logs
+        run: python3 scripts/validation/summarize_kani_evidence.py artifacts/kani-evidence "Kani (pure harness, required + diagnostic)"
+      - name: Upload Kani evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kani-pure-artifacts
-          path: |
-            artifacts/kani/
-            artifacts/kani-evidence/
-            crates/kani-harness/target/kani*/
+          path: artifacts/kani-evidence/
           if-no-files-found: warn
+
   kani:
     name: Kani Model Checking
     runs-on: ubuntu-latest
-    env:
-      AEG_KANI_RUN_SERVER: "1"
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@be39649afda95dbf70f87cce95f68b8d5797b296 # nightly; toolchain selected below
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
         with:
-          toolchain: nightly
-          components: rust-src
-
-      - name: Install Kani
-        run: |
-          # Install Kani verifier 0.65.0
-          cargo +nightly install --locked kani-verifier --version 0.65.0
-          cargo +nightly kani setup
-
-      - name: Run Kani verification
-        run: |
-          RUSTFLAGS="-C panic=abort -Z panic-abort-tests" \
-          KANI_LOG=info \
-          bash scripts/kani/run_kani.sh
-
-      - name: Summarize Kani results
+          enable-flakehub-cache: "true"
+      # Diagnostic-only execution with the same pinned toolchain: results are recorded,
+      # never a gate (no gate.json), and never evidence for the compliance matrix.
+      - name: Run diagnostic Kani groups (pinned 0.66.0, no gate)
+        run: nix develop .#verification --command python3 scripts/validation/run_kani_evidence.py --scope diagnostic --output artifacts/kani-evidence-diagnostic
+      - name: Summarize diagnostic Kani run
         if: always()
-        run: |
-          python3 <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          report = Path('artifacts/kani/report.json')
-          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
-
-          if not report.exists():
-              print('⚠️ Kani summary not found at artifacts/kani/report.json')
-              if summary_path:
-                  with open(summary_path, 'a', encoding='utf-8') as fh:
-                      fh.write('### Kani (model checking)\n')
-                      fh.write('⚠️ report.json not generated\n')
-              raise SystemExit(1)
-
-          data = json.loads(report.read_text(encoding='utf-8'))
-          status = data.get('status', 'unknown')
-          harnesses = data.get('harnesses', {})
-          server_mode = data.get('server_run_mode', 'skipped')
-          server_harnesses = data.get('server_harnesses', {})
-
-          print(f"Kani status: {status}")
-          print(f"Server harness mode: {server_mode}")
-          for name, result in sorted(harnesses.items()):
-              print(f"  - {name}: {result}")
-          for name, result in sorted(server_harnesses.items()):
-              print(f"  - {name}: {result}")
-
-          if summary_path:
-              with open(summary_path, 'a', encoding='utf-8') as fh:
-                  fh.write('### Kani (model checking)\n')
-                  fh.write(f"Status: {status}\n")
-                  fh.write(f"Server harnesses: {server_mode}\n")
-                  if harnesses:
-                      for name, result in sorted(harnesses.items()):
-                          fh.write(f"- {name}: {result}\n")
-                  if server_harnesses:
-                      for name, result in sorted(server_harnesses.items()):
-                          fh.write(f"- {name}: {result}\n")
-                  fh.write('\n')
-
-          if status != 'success':
-              raise SystemExit(1)
-          PY
-
-      - name: Upload Kani report
+        run: python3 scripts/validation/summarize_kani_evidence.py artifacts/kani-evidence-diagnostic "Kani (model checking, diagnostic scope — not evidence)"
+      - name: Upload diagnostic Kani records
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kani-report
-          path: artifacts/kani/
+          path: artifacts/kani-evidence-diagnostic/
           if-no-files-found: warn
 
   # JOSE Test Vectors

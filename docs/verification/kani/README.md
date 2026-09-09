@@ -15,6 +15,16 @@ Audience: verification reviewers, contributors
 This document records the current Kani posture and the recommended entrypoints for Aegaeon.
 For deeper RCA of the NixOS packaging fixes, see `docs/verification/kani/kani-nixos-fix/README.md`.
 
+> **Runner change (2026-09-09).** The `kani.toml` suites and the `AEG_KANI_*` / `KANI_*`
+> environment knobs are retired. Every Kani execution now goes through
+> `scripts/validation/run_kani_evidence.py`, driven by the registry
+> `spec/kani-evidence.json` (required / diagnostic / excluded classes) and documented in
+> [evidence-admission.md](evidence-admission.md). `scripts/kani/run_kani.sh` is a thin
+> wrapper that rejects the retired knobs; `cargo xtask kani` calls it. Historical entries
+> below that mention `kani.toml`, `AEG_KANI_SUITE`, `AEG_KANI_RUN_SERVER` or
+> `artifacts/kani/report.json` describe runs made before this change and are kept as
+> history, not as current instructions.
+
 ## Scope
 
 - Kani package and sysroot posture

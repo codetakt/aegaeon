@@ -26,8 +26,8 @@ Audience: verification reviewers, contributors
    nix build ".#kani'" --out-link result-kani
    KANI_ROOT="$(readlink -f result-kani)"
    PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" \
-     AEG_KANI_SUITE=regression \
-     AEG_KANI_RUN_SERVER=1 \
+     # (2026-09-09) the suites and env knobs are retired; run the registry instead:
+     nix develop .#verification --command \
      ./scripts/kani/run_kani.sh
    ```
 
@@ -63,7 +63,7 @@ AEG_KANI_PANIC=unwind nix run .#verify-kani
 ## Logs and artefacts
 
 - Detailed run log: `artifacts/kani/run_<run_id>.log`
-- Machine-readable summary: `artifacts/kani/report.json`
+- Machine-readable records: `artifacts/kani-evidence/run-*/evaluation.json` (and `gate.json` for an accepted full-scope run)
 - Human summary log: `artifacts/kani/report.log`
 - XDG state/cache dirs: `artifacts/kani/xdg-state/`, `artifacts/kani/xdg-cache/`
 

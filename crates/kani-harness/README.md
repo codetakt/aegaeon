@@ -10,7 +10,7 @@ This crate contains Kani verification harnesses for Aegaeon's bounded stores and
 
 Evidence is recorded in:
 - `../../docs/verification/kani/README.md`
-- `../../artifacts/kani/report.json`
+- `../../artifacts/kani-evidence/run-*/evaluation.json` (runner records; see docs/verification/kani/evidence-admission.md)
 
 ## Running Harnesses
 
@@ -18,7 +18,7 @@ Evidence is recorded in:
 # CI-equivalent (runs inside a Nix build sandbox)
 nix build .#verify-kani -L
 
-# Local run (reads defaults from kani.toml; writes artifacts/kani/report.json + report.log)
+# Local run (selection from spec/kani-evidence.json; writes artifacts/kani-evidence/)
 nix build ".#kani'" --out-link result-kani
 PATH="$(readlink -f result-kani)/bin:$PATH" AEG_KANI_SUITE=regression ./scripts/kani/run_kani.sh
 

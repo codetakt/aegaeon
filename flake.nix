@@ -695,7 +695,6 @@
                 "Cargo.toml"
                 "Cargo.lock"
                 "deny.toml"
-                "kani.toml"
                 "rust-toolchain.toml"
               ];
             in
@@ -882,7 +881,7 @@
               nativeBuildInputs = [
                 kani'
                 rustToolchain
-                pkgs.python3
+                python'
                 verificationFstar
                 verificationZ3
                 karamel

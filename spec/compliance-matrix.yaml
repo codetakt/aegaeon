@@ -5618,11 +5618,11 @@ openid_jwks:
   - crates/server/src/oidc/config.rs
   - crates/server/src/authcode/token/tests/oidc_id_token.rs
   ci_check: oidc-jwks-rotation
-  status: verified
+  status: partial
   runtime_link: crates/server/src/oidc/config.rs
   notes:
-  - OIDC signing keys support overlap through ACTIVE/RETIRING runtime keys in `aegaeon.runtime_keys`; duplicate kid values fail closed.
-  - Runtime overlap validation is centralized in pure helper functions, bounded by dedicated Kani harnesses, and covered by `/jwks` endpoint tests.
+  - "OIDC signing keys support overlap through ACTIVE/RETIRING runtime keys in `aegaeon.runtime_keys`; duplicate kid values fail closed at runtime."
+  - "The two Kani harnesses check the cfg(kani) model of the pure JWKS helpers (crates/pure kani_impl: u8 identifiers, at most 5 keys, one symbolic bool per harness), not the production String/Vec implementation; correspondence to the runtime helper is not proved. They run as the diagnostic group `jwks-rotation-models` of spec/kani-evidence.json and are not admitted evidence; /jwks endpoint tests cover the runtime path."
 openid_logout:
 - id: OIDC-3-001
   section: RP-Initiated Logout
@@ -5730,13 +5730,14 @@ openid_logout:
     harness: kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries
   tests: []
   ci_check: verify-kani
-  status: verified
+  status: partial
   runtime_link: crates/server/src/oidc/session.rs
   trace:
     kind: exempt
     note: "Kani harnesses (crates/server/src/kani_test.rs); session-store safety has no F* function-level counterpart."
   notes:
-  - Verified by `nix build .#verify-kani` (server harnesses enabled).
+  - "The three cited Kani harnesses run fixed sequential traces against the cfg(kani) `BoundedKaniSessionStore` model (crates/server/src/oidc/session/kani.rs; 4 sessions / 4 clients), not the production session store, and none quantifies over adversarial inputs with kani::any(); correspondence to the runtime store is not proved."
+  - "They are executed as blocking model regressions in the required group `server-regressions` of spec/kani-evidence.json (`nix build .#verify-kani`); required execution is not a claim grade, so this row stays partial until a production-correspondence argument exists."
 oauth_form_post:
 - id: OIDC-4-001
   section: Form Post Response Mode
