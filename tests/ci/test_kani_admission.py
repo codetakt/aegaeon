@@ -598,6 +598,25 @@ class RegistryTests(unittest.TestCase):
                     ),
                     "does not exist",
                 ),
+                # Path traversal and absolute paths are rejected by the schema itself.
+                (
+                    lambda r: r["groups"][0]["harnesses"][0].__setitem__(
+                        "file", "../demo/src/lib.rs"
+                    ),
+                    "schema",
+                ),
+                (
+                    lambda r: r["groups"][0]["harnesses"][0].__setitem__(
+                        "file", "crates/demo/../demo/src/lib.rs"
+                    ),
+                    "schema",
+                ),
+                (
+                    lambda r: r["groups"][1]["sites"][0].__setitem__(
+                        "file", "/crates/demo/src/lib.rs"
+                    ),
+                    "schema",
+                ),
             ):
                 with self.subTest(needle=needle):
                     mutated = json.loads(json.dumps(base))

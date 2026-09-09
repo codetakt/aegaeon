@@ -79,33 +79,32 @@ Runner defaults (suite, timeouts, solver, etc.) live in `kani.toml`. Environment
 nix build .#verify-kani -L
 ```
 
-`verify-kani` runs `AEG_KANI_SUITE=regression` and `AEG_KANI_RUN_SERVER=1` by default (see `flake.nix`).
+`verify-kani` runs the full registry selection (required and diagnostic groups) and writes
+`artifacts/kani-evidence/` with `gate.json` only when every required request is accepted.
 
 Note: `cargo-kani` uses its bundled Rust toolchain/sysroot (not your `rustup` toolchains). Prefer
 the Nix entrypoints above for reproducibility.
 
-### Local run (writes `artifacts/kani/*`)
+### Local run (writes `artifacts/kani-evidence/`)
 
 ```bash
-# CI-equivalent local app; writes artifacts/kani/report.json and report.log.
+# CI-equivalent local app: full scope, replay and evidential citation check.
 nix run .#verify-kani
 
-# Direct runner with an explicit Kani package in PATH.
+# Direct runner with an explicit Kani package in PATH (full scope, or one group).
 nix build ".#kani'" --out-link result-kani
 KANI_ROOT="$(readlink -f result-kani)"
-PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" \
-  AEG_KANI_SUITE=regression \
-  AEG_KANI_RUN_SERVER=1 \
-  ./scripts/kani/run_kani.sh
+PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" ./scripts/kani/run_kani.sh
+PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" ./scripts/kani/run_kani.sh --scope partial --groups ffi-evidence
 ```
 
 ## What is verified today
 
-- Default (`scripts/kani/run_kani.sh`, `AEG_KANI_SUITE=smoke`): runs a small harness set in `crates/kani-harness` and writes:
-  - `artifacts/kani/report.json`
-  - `artifacts/kani/report.log`
-- Regression (`AEG_KANI_SUITE=regression`): adds toolchain regression harnesses (`proof_string_*`, `proof_level*`, etc.) to detect Kani/Rust-nightly drift early.
-- Server harnesses (opt-in): when `AEG_KANI_RUN_SERVER=1`, runs the `crates/server` harness shims and records results in the same report.
+- `ffi-evidence` (required / evidence): the six admitted `ffi` harnesses that compliance-matrix rows may cite.
+- `kani-harness-regressions` (required / regression): toolchain regression harnesses (`proof_string_*`, `proof_level*`, etc.) that detect Kani/Rust-nightly drift early; no matrix evidence value.
+- `server-regressions` (required / regression): bounded production-helper checks and the `BoundedKaniSessionStore` model regressions in `crates/server`.
+- `jwks-rotation-models` (diagnostic): executed and recorded, never counted and never a gate.
+- Every other proof site is listed as `excluded` with a reason; see `spec/kani-evidence.json` and [evidence-admission.md](evidence-admission.md).
 
 Best-effort note: Kani results are treated as **best-effort** until the upstream ICEs are resolved.
 ICE-reproducer harnesses are kept for upstream reporting but excluded from CI gating.
@@ -124,11 +123,11 @@ Kani-facing API free of sentinel success values.
 
 ### Soundness note (loop unwinding)
 
-- The default flags in `kani.toml` keep Kani's default unwinding checks enabled:
-  - `--unwind 16`
-- Claim-bearing server Kani evidence must use those strict defaults or stricter flags.
-- Diagnostic regression triage may override `KANI_EXTRA_FLAGS` to disable unwinding checks, but
-  those runs are regression smoke evidence only and must not be cited as strict proof evidence.
+- The registry fixes the effective unwind per group (`default_unwind`, `--default-unwind 16`
+  unless a harness entry overrides it) and keeps Kani's unwinding checks enabled; a successful
+  `unwind` property is accepted, a failing one rejects.
+- Claim-bearing evidence is only what the gate admits under those flags; there is no flag
+  override for diagnostic runs, and diagnostic results are never cited as evidence.
 
 ## Known limitations
 

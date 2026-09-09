@@ -61,7 +61,11 @@
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "qualifiedName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$" },
-    "rustFile": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.rs$" },
+    "rustFile": {
+      "type": "string",
+      "description": "Repository-relative .rs path: no leading slash and no .. segment.",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[A-Za-z0-9_./-]+\\.rs$"
+    },
     "rows": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
     "executableGroup": {
       "type": "object",

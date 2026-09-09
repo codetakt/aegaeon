@@ -23,12 +23,10 @@ Audience: verification reviewers, contributors
    nix run .#verify-kani
 
    # Or run the wrapper directly with an explicit Kani package:
+   # The suites and env knobs are retired: the wrapper runs the registry selection.
    nix build ".#kani'" --out-link result-kani
    KANI_ROOT="$(readlink -f result-kani)"
-   PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" \
-     # (2026-09-09) the suites and env knobs are retired; run the registry instead:
-     nix develop .#verification --command \
-     ./scripts/kani/run_kani.sh
+   PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" ./scripts/kani/run_kani.sh
    ```
 
 ## Common errors and fixes
@@ -53,21 +51,21 @@ manually with a mismatched rustc.
 Fix: run via `./scripts/kani/run_kani.sh` (it clears/sets the required flags) and avoid custom `cargo kani`
 invocations unless you know exactly what sysroot/toolchain is in use.
 
-### Experimenting with panic strategy
+### Panic strategy
 
-```bash
-AEG_KANI_PANIC=abort nix run .#verify-kani
-AEG_KANI_PANIC=unwind nix run .#verify-kani
-```
+The runner fixes `RUSTFLAGS` to `-C panic=abort -Z panic-abort-tests --cfg kani` for every
+request and rejects inherited overrides; there is no knob to switch strategies, and a run
+made with other flags is not admissible evidence.
 
 ## Logs and artefacts
 
-- Detailed run log: `artifacts/kani/run_<run_id>.log`
+- Per-request tool output: `artifacts/kani-evidence/run-*/requests/<NN>/output.log`
+  (with `command.json`, `kani-metadata.json` and `result.json` beside it)
+- Per-group discovery: `artifacts/kani-evidence/run-*/groups/<id>/discovery.log`
 - Machine-readable records: `artifacts/kani-evidence/run-*/evaluation.json` (and `gate.json` for an accepted full-scope run)
-- Human summary log: `artifacts/kani/report.log`
-- XDG state/cache dirs: `artifacts/kani/xdg-state/`, `artifacts/kani/xdg-cache/`
+- Stdout of the gate: one `KANI-EVIDENCE` line per request and a `KANI-ADMISSION` summary line
 
-If the issue persists, attach the relevant `run_<run_id>.log` when filing an issue.
+If the issue persists, attach the request's `output.log` and the run's `evaluation.json` when filing an issue.
 
 ## HashMap harnesses (practical limitation)
 

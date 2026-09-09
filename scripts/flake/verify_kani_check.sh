@@ -4,6 +4,10 @@
 # gate; a required rejection or a runner fault fails this derivation.
 set -euo pipefail
 
+# Outside a Nix build sandbox (nix run .#verify-kani) TMPDIR may be unset: use a private
+# temporary directory so the gate never touches the caller's home or caches.
+: "${TMPDIR:=$(mktemp -d)}"
+export TMPDIR
 export HOME="$TMPDIR"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-$TMPDIR/xdg/state}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$TMPDIR/xdg/cache}"

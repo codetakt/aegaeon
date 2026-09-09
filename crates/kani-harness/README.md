@@ -18,12 +18,12 @@ Evidence is recorded in:
 # CI-equivalent (runs inside a Nix build sandbox)
 nix build .#verify-kani -L
 
-# Local run (selection from spec/kani-evidence.json; writes artifacts/kani-evidence/)
+# Local run of the registry selection (spec/kani-evidence.json); writes artifacts/kani-evidence/
 nix build ".#kani'" --out-link result-kani
-PATH="$(readlink -f result-kani)/bin:$PATH" AEG_KANI_SUITE=regression ./scripts/kani/run_kani.sh
+PATH="$(readlink -f result-kani)/bin:$PATH" ./scripts/kani/run_kani.sh
 
-# Optional: run server harness shims too
-PATH="$(readlink -f result-kani)/bin:$PATH" AEG_KANI_SUITE=regression AEG_KANI_RUN_SERVER=1 ./scripts/kani/run_kani.sh
+# Only this crate's regression group (never writes gate.json)
+PATH="$(readlink -f result-kani)/bin:$PATH" ./scripts/kani/run_kani.sh --scope partial --groups kani-harness-regressions
 
 # Single harness (from this crate)
 cd crates/kani-harness
@@ -33,7 +33,7 @@ PATH="$(readlink -f ../../result-kani)/bin:$PATH" cargo kani --unwind 16 --no-un
 ## Notes
 
 - This crate intentionally avoids FFI-heavy dependencies to keep Kani runs fast and reproducible.
-- Server harnesses are not run by default; see `scripts/kani/run_kani.sh` and `AEG_KANI_RUN_SERVER=1`.
+- Server harnesses form the `server-regressions` group of the registry; run them alone with `./scripts/kani/run_kani.sh --scope partial --groups server-regressions` (never writes `gate.json`).
 
 ## References
 
