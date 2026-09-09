@@ -1,0 +1,31 @@
+{
+  "tool": "cargo-kani 0.66.0 (Nix store 6hwhn7h5zjwj19rjdpixlp26kyr7kq7x-kani-verifier-0.66.0), rustc 1.93.0-nightly (f15a7f385 2025-11-04), cbmc 6.10.0",
+  "origin": "Real cargo-kani 0.66.0 invocations recorded on 2026-09-08 during the harness triage that preceded this gate (see execution.json in each case for the exact argv, environment, exit code and timing; the recording machine's paths appear verbatim). run.txt = stdout+stderr (stored as run.txt.gz, gzip -n, where the recording exceeds the repository's 200 KB added-file limit; the decompressed digest is listed under compressed), properties.txt = the --output-into-files property report, kani-metadata.json as compiled.",
+  "files": {
+    "real/failed_parse_json_null/execution.json": "dc290aa20e71f083ff5e687759698a2856ceb49901a18a8220ddd3ab5fde6572",
+    "real/failed_parse_json_null/kani-metadata.json": "fc7400ce3c254e4be5d2c87688df5edc25bdf5b5e2c0b2f21582e2f341609f7d",
+    "real/failed_parse_json_null/properties.txt": "3eb7d2f8f487fd34c6b4291324c225df4eedf52df72e2a18b4b944496916e588",
+    "real/failed_parse_json_null/run.txt": "9fabf286d1e3df42fc59617d0fb39598760a741c40fe05ff7f59a85d4c08ba0d",
+    "real/oom_driver_panic_utf8_valid/execution.json": "73f787a44d8de63e793234f8dadbfac8559e13fc6b099c5295936e8e38213b88",
+    "real/oom_driver_panic_utf8_valid/kani-metadata.json": "5a28a665f2fb81dc3b28f0859832f8457fcc401946157903b65786ee468641b2",
+    "real/oom_driver_panic_utf8_valid/run.txt": "42ba5f1e82310c81dbd642420e29d1024938cbdae7f79b8387f8519d82a9a6fe",
+    "real/success_id_token_canonicalisation/execution.json": "ef898dd0031e81077c16988fcc90dd760de91e6015026f5b960226cea6fefcfc",
+    "real/success_id_token_canonicalisation/kani-metadata.json": "b28642859a9d70b8dd76985ad1a3f144a3651798b5bbc17803d7369330f9ebf4",
+    "real/success_id_token_canonicalisation/properties.txt": "1885d175c260c8e6abfecd2fc08874a6ea5e2c7a0a85ccae01419e7990704c81",
+    "real/success_id_token_canonicalisation/run.txt.gz": "a9f26402ff629f1ed7de782c4ae501abf1a150f06ae799ccf41958f5cb06abc6",
+    "real/success_jose_context_bounds/execution.json": "9b95e095317df213f6d5748ca49c74028781be8ceac62a78579db0798d529645",
+    "real/success_jose_context_bounds/kani-metadata.json": "42cea5911d643cfd5749ad5b012eec3f73fb02f9d4d7024a9914242e180cc0b7",
+    "real/success_jose_context_bounds/properties.txt": "f1edc6ea34534d71a618313cd4d4d2ec7a045cebc45714b65a7316e696133b19",
+    "real/success_jose_context_bounds/run.txt": "c67fa6b7e525a1b6ad105213f3f94ddac2545d98959dded05c6adbdd16dc9f66",
+    "real/undetermined_sd_jwt_roundtrip/execution.json": "7c9c595a2923b12e45998e928b2a57ebdcbb8987bba05c2b0b3236626ab074ed",
+    "real/undetermined_sd_jwt_roundtrip/kani-metadata.json": "2cd7f7342dd7684a38963a46c2e73c7cc82f7b030fb52eeeeff9262bd1765315",
+    "real/undetermined_sd_jwt_roundtrip/properties.txt": "51f80ec20d5f080d2e87ac8ffc88bc2d706bc3ece5ee7a77c1d46746f497e31d",
+    "real/undetermined_sd_jwt_roundtrip/run.txt": "cd4371107cd624585c7aa8066850689bda0bf954bee741f8a05da105c918d751"
+  },
+  "compressed": {
+    "real/success_id_token_canonicalisation/run.txt.gz": {
+      "encoding": "gzip -n -9",
+      "content_sha256": "7b195f1d4a56943e701172ca6d303f688e18a85280efef1d2ed96c142306ec5d"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+
+RESULTS:
+Check 1: std::result::Result::<usize, std::num::TryFromIntError>::unwrap_or.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/result.rs:1595:15 in function std::result::Result::<usize, std::num::TryFromIntError>::unwrap_or
+
+Check 2: kani_tests::verification::verify_jose_context_bounds.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Default context should have positive max length"
+	 - Location: crates/ffi/src/kani_tests.rs:152:9 in function kani_tests::verification::verify_jose_context_bounds
+
+Check 3: kani_tests::verification::verify_jose_context_bounds.assertion.2
+	 - Status: SUCCESS
+	 - Description: "Max length should fit in i32"
+	 - Location: crates/ffi/src/kani_tests.rs:156:9 in function kani_tests::verification::verify_jose_context_bounds
+
+Check 4: JoseContext::header_max_length.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+Check 5: JoseContext::header_max_length.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+Check 6: JoseContext::header_max_length.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+Check 7: JoseContext::header_max_length.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+Check 8: JoseContext::header_max_length.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+Check 9: JoseContext::header_max_length.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: crates/ffi/src/lib.rs:273:25 in function JoseContext::header_max_length
+
+
+SUMMARY:
+ ** 0 of 9 failed
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.061742734s
+

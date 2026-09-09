@@ -1,0 +1,1493 @@
+
+RESULTS:
+Check 1: harnesses::proof_sd_jwt_disclosure_roundtrip.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: src/lib.rs:879:9 in function harnesses::proof_sd_jwt_disclosure_roundtrip
+
+Check 2: harnesses::proof_sd_jwt_disclosure_roundtrip.assertion.2
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: src/lib.rs:878:9 in function harnesses::proof_sd_jwt_disclosure_roundtrip
+
+Check 3: harnesses::proof_sd_jwt_disclosure_roundtrip.assertion.3
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: src/lib.rs:877:9 in function harnesses::proof_sd_jwt_disclosure_roundtrip
+
+Check 4: harnesses::proof_sd_jwt_disclosure_roundtrip.assertion.4
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: src/lib.rs:875:9 in function harnesses::proof_sd_jwt_disclosure_roundtrip
+
+Check 5: core::slice::index::slice_index_fail::do_panic::runtime.assertion.2
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:68:5 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 6: memcmp.precondition.1
+	 - Status: UNDETERMINED
+	 - Description: "memcmp region 1 readable"
+	 - Location: <builtin-library-memcmp>:19 in function memcmp
+
+Check 7: memcmp.precondition.2
+	 - Status: UNDETERMINED
+	 - Description: "memcpy region 2 readable"
+	 - Location: <builtin-library-memcmp>:21 in function memcmp
+
+Check 8: std::option::unwrap_failed.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "called `Option::unwrap()` on a `None` value"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:2174:5 in function std::option::unwrap_failed
+
+Check 9: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+	 - Status: UNDETERMINED
+	 - Description: "call to foreign "Rust" function `_RNvCsfNd5Qxpi3D5_7___rustc17rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panicking.rs:110:17 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 10: <usize as kani::rustc_intrinsics::ToISize>::to_isize.safety_check.1
+	 - Status: UNDETERMINED
+	 - Description: "Offset value overflows isize"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function <usize as kani::rustc_intrinsics::ToISize>::to_isize
+
+Check 11: <usize as kani::rustc_intrinsics::ToISize>::to_isize.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "internal error: entered unreachable code"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function <usize as kani::rustc_intrinsics::ToISize>::to_isize
+
+Check 12: bounded_sd_jwt::BoundedDisclosure::encode.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:102:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 13: bounded_sd_jwt::BoundedDisclosure::encode.assertion.2
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:103:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 14: bounded_sd_jwt::BoundedDisclosure::encode.assertion.3
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 15: bounded_sd_jwt::BoundedDisclosure::encode.assertion.4
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:107:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 16: bounded_sd_jwt::BoundedDisclosure::encode.assertion.5
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:108:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 17: bounded_sd_jwt::BoundedDisclosure::encode.assertion.6
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:109:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 18: bounded_sd_jwt::BoundedDisclosure::encode.assertion.7
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:114:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 19: bounded_sd_jwt::BoundedDisclosure::encode.assertion.8
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:115:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 20: bounded_sd_jwt::BoundedDisclosure::encode.assertion.9
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 21: bounded_sd_jwt::BoundedDisclosure::encode.assertion.10
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:119:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 22: bounded_sd_jwt::BoundedDisclosure::encode.assertion.11
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:120:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 23: bounded_sd_jwt::BoundedDisclosure::encode.assertion.12
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:121:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 24: bounded_sd_jwt::BoundedDisclosure::encode.assertion.13
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:126:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 25: bounded_sd_jwt::BoundedDisclosure::encode.assertion.14
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:127:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 26: bounded_sd_jwt::BoundedDisclosure::encode.assertion.15
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 27: bounded_sd_jwt::BoundedDisclosure::encode.assertion.16
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:131:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 28: bounded_sd_jwt::BoundedDisclosure::encode.assertion.17
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:132:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 29: bounded_sd_jwt::BoundedDisclosure::encode.assertion.18
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:133:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 30: core::slice::index::slice_index_fail::do_panic::runtime.assertion.4
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:58:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 31: std::panic::Location::<'_>::caller.unsupported_construct.1
+	 - Status: UNDETERMINED
+	 - Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/panic/location.rs:147:9 in function std::panic::Location::<'_>::caller
+
+Check 32: kani::mem::cbmc::same_allocation.unsupported_construct.1
+	 - Status: UNDETERMINED
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::mem::cbmc::same_allocation
+
+Check 33: core::slice::index::slice_index_fail::do_panic::runtime.assertion.3
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:40:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 34: <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index.unreachable.1
+	 - Status: UNDETERMINED
+	 - Description: "unreachable code"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:436:5 in function <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index
+
+Check 35: <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index.safety_check.1
+	 - Status: UNDETERMINED
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:442:22 in function <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index
+
+Check 36: <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index.safety_check.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:442:22 in function <std::ops::Range<usize> as std::slice::SliceIndex<[u8]>>::index
+
+Check 37: kani::rustc_intrinsics::offset::<u8, *const u8, usize>.safety_check.1
+	 - Status: UNDETERMINED
+	 - Description: "Offset in bytes overflows isize"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::offset::<u8, *const u8, usize>
+
+Check 38: kani::rustc_intrinsics::offset::<u8, *const u8, usize>.safety_check.2
+	 - Status: UNDETERMINED
+	 - Description: "Offset result and original pointer must point to the same allocation"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::offset::<u8, *const u8, usize>
+
+Check 39: bounded_sd_jwt::BoundedDisclosure::decode.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 40: bounded_sd_jwt::BoundedDisclosure::decode.assertion.2
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:157:9 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 41: bounded_sd_jwt::BoundedDisclosure::decode.assertion.3
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:158:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 42: bounded_sd_jwt::BoundedDisclosure::decode.assertion.4
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:164:33 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 43: bounded_sd_jwt::BoundedDisclosure::decode.assertion.5
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 44: bounded_sd_jwt::BoundedDisclosure::decode.assertion.6
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:164:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 45: bounded_sd_jwt::BoundedDisclosure::decode.assertion.7
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:165:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 46: bounded_sd_jwt::BoundedDisclosure::decode.assertion.8
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:169:9 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 47: bounded_sd_jwt::BoundedDisclosure::decode.assertion.9
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 48: bounded_sd_jwt::BoundedDisclosure::decode.assertion.10
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:176:9 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 49: bounded_sd_jwt::BoundedDisclosure::decode.assertion.11
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:177:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 50: bounded_sd_jwt::BoundedDisclosure::decode.assertion.12
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:183:33 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 51: bounded_sd_jwt::BoundedDisclosure::decode.assertion.13
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 52: bounded_sd_jwt::BoundedDisclosure::decode.assertion.14
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:183:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 53: bounded_sd_jwt::BoundedDisclosure::decode.assertion.15
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:184:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 54: bounded_sd_jwt::BoundedDisclosure::decode.assertion.16
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:188:9 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 55: bounded_sd_jwt::BoundedDisclosure::decode.assertion.17
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 56: bounded_sd_jwt::BoundedDisclosure::decode.assertion.18
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:195:9 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 57: bounded_sd_jwt::BoundedDisclosure::decode.assertion.19
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:196:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 58: bounded_sd_jwt::BoundedDisclosure::decode.assertion.20
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:202:34 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 59: bounded_sd_jwt::BoundedDisclosure::decode.assertion.21
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 60: bounded_sd_jwt::BoundedDisclosure::decode.assertion.22
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:202:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 61: bounded_sd_jwt::BoundedDisclosure::decode.assertion.23
+	 - Status: UNDETERMINED
+	 - Description: "attempt to add with overflow"
+	 - Location: src/bounded_sd_jwt.rs:203:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 62: core::num::<impl usize>::checked_sub.arithmetic_overflow.1
+	 - Status: UNDETERMINED
+	 - Description: "attempt to compute `unchecked_sub` which would overflow"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:800:31 in function core::num::<impl usize>::checked_sub
+
+Check 63: core::slice::index::slice_index_fail::do_panic::runtime.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/slice/index.rs:49:9 in function core::slice::index::slice_index_fail::do_panic::runtime
+
+Check 64: core::num::<impl usize>::unchecked_add.arithmetic_overflow.1
+	 - Status: UNDETERMINED
+	 - Description: "attempt to compute `unchecked_add` which would overflow"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:717:17 in function core::num::<impl usize>::unchecked_add
+
+Check 65: bounded_stores::ByteString::store.unreachable.1
+	 - Status: UNDETERMINED
+	 - Description: "unreachable code"
+	 - Location: src/bounded_stores.rs:75:18 in function bounded_stores::ByteString::store
+
+Check 66: bounded_stores::ByteString::store.assertion.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 67: bounded_stores::ByteString::store.assertion.2
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 68: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::unwrap.unreachable.1
+	 - Status: UNDETERMINED
+	 - Description: "unreachable code"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:1013:15 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::unwrap
+
+Check 69: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::unwrap.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:1013:15 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::unwrap
+
+Check 70: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 71: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 72: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 73: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 74: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 75: std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/option.rs:635:18 in function std::option::Option::<bounded_sd_jwt::BoundedDisclosure>::is_some
+
+Check 76: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 77: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 78: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 79: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 80: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 81: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:145:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 82: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 83: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 84: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 85: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 86: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 87: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:145:30 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 88: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.13
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 89: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.14
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 90: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.15
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 91: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.16
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 92: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.17
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 93: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.18
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:149:21 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 94: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.19
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:154:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 95: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.20
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 96: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.21
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 97: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.22
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 98: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.23
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 99: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.24
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 100: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.25
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 101: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:156:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 102: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.26
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:159:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 103: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.27
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 104: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.28
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 105: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.29
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 106: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.30
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 107: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.31
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 108: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.32
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 109: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.2
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:164:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 110: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.3
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:164:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 111: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.33
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:173:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 112: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.34
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 113: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.35
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 114: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.36
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 115: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.37
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 116: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.38
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 117: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.39
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 118: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.4
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:175:24 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 119: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.40
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:178:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 120: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.41
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 121: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.42
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 122: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.43
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 123: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.44
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 124: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.45
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 125: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.46
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 126: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.5
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:183:28 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 127: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.6
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:183:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 128: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.47
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:192:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 129: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.48
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 130: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.49
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 131: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.50
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 132: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.51
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 133: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.52
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 134: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.53
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 135: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.7
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:194:25 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 136: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.54
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:197:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 137: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.55
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 138: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.56
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 139: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.57
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 140: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.58
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 141: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.59
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 142: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.60
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 143: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.8
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:202:29 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 144: bounded_sd_jwt::BoundedDisclosure::decode.array_bounds.9
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:202:13 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 145: bounded_sd_jwt::BoundedDisclosure::decode.pointer_dereference.61
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:146:20 in function bounded_sd_jwt::BoundedDisclosure::decode
+
+Check 146: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 147: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 148: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 149: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 150: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 151: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:95:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 152: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 153: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 154: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 155: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 156: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 157: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:102:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 158: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:102:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 159: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.13
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 160: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.14
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 161: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.15
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 162: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.16
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 163: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.17
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 164: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.18
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:106:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 165: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.19
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 166: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.20
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 167: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.21
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 168: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.22
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 169: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.23
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 170: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.24
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 171: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.2
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:107:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 172: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.3
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:107:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 173: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.25
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 174: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.26
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 175: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.27
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 176: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.28
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 177: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.29
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 178: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.30
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:114:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 179: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.4
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:114:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 180: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.31
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 181: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.32
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 182: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.33
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 183: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.34
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 184: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.35
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 185: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.36
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:118:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 186: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.37
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 187: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.38
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 188: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.39
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 189: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.40
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 190: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.41
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 191: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.42
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 192: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.5
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:119:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 193: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.6
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:119:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 194: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.43
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 195: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.44
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 196: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.45
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 197: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.46
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 198: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.47
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 199: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.48
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:126:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 200: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.7
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:126:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 201: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.49
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 202: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.50
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 203: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.51
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 204: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.52
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 205: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.53
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 206: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.54
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:130:19 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 207: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.55
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 208: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.56
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 209: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.57
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 210: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.58
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 211: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.59
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 212: bounded_sd_jwt::BoundedDisclosure::encode.pointer_dereference.60
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 213: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.8
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:131:29 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 214: bounded_sd_jwt::BoundedDisclosure::encode.array_bounds.9
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_sd_jwt.rs:131:13 in function bounded_sd_jwt::BoundedDisclosure::encode
+
+Check 215: bounded_stores::ByteString::store.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 216: bounded_stores::ByteString::store.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 217: bounded_stores::ByteString::store.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 218: bounded_stores::ByteString::store.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 219: bounded_stores::ByteString::store.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 220: bounded_stores::ByteString::store.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:76:28 in function bounded_stores::ByteString::store
+
+Check 221: bounded_stores::ByteString::store.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 222: bounded_stores::ByteString::store.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 223: bounded_stores::ByteString::store.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 224: bounded_stores::ByteString::store.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 225: bounded_stores::ByteString::store.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 226: bounded_stores::ByteString::store.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 227: bounded_stores::ByteString::store.array_bounds.1
+	 - Status: UNDETERMINED
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Location: src/bounded_stores.rs:76:13 in function bounded_stores::ByteString::store
+
+Check 228: bounded_stores::ByteString::store.pointer_dereference.13
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 229: bounded_stores::ByteString::store.pointer_dereference.14
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 230: bounded_stores::ByteString::store.pointer_dereference.15
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 231: bounded_stores::ByteString::store.pointer_dereference.16
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 232: bounded_stores::ByteString::store.pointer_dereference.17
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 233: bounded_stores::ByteString::store.pointer_dereference.18
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:78:9 in function bounded_stores::ByteString::store
+
+Check 234: bounded_stores::ByteString::store.pointer_dereference.19
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 235: bounded_stores::ByteString::store.pointer_dereference.20
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 236: bounded_stores::ByteString::store.pointer_dereference.21
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 237: bounded_stores::ByteString::store.pointer_dereference.22
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 238: bounded_stores::ByteString::store.pointer_dereference.23
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 239: bounded_stores::ByteString::store.pointer_dereference.24
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:79:9 in function bounded_stores::ByteString::store
+
+Check 240: bounded_stores::ByteString::equals.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 241: bounded_stores::ByteString::equals.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 242: bounded_stores::ByteString::equals.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 243: bounded_stores::ByteString::equals.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 244: bounded_stores::ByteString::equals.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 245: bounded_stores::ByteString::equals.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:94:13 in function bounded_stores::ByteString::equals
+
+Check 246: bounded_stores::ByteString::equals.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 247: bounded_stores::ByteString::equals.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 248: bounded_stores::ByteString::equals.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 249: bounded_stores::ByteString::equals.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 250: bounded_stores::ByteString::equals.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 251: bounded_stores::ByteString::equals.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:97:12 in function bounded_stores::ByteString::equals
+
+Check 252: bounded_stores::ByteString::equals.pointer_dereference.13
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 253: bounded_stores::ByteString::equals.pointer_dereference.14
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 254: bounded_stores::ByteString::equals.pointer_dereference.15
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 255: bounded_stores::ByteString::equals.pointer_dereference.16
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 256: bounded_stores::ByteString::equals.pointer_dereference.17
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 257: bounded_stores::ByteString::equals.pointer_dereference.18
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: src/bounded_stores.rs:100:21 in function bounded_stores::ByteString::equals
+
+Check 258: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 259: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 260: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 261: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 262: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 263: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:50 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 264: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 265: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 266: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 267: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 268: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 269: std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/cmp.rs:1903:59 in function std::cmp::impls::<impl std::cmp::PartialOrd for usize>::lt
+
+Check 270: core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_v1::<2, 2>.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/fmt/rt.rs:214:34 in function core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_v1::<2, 2>
+
+Check 271: core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_const::<1>.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/fmt/rt.rs:196:34 in function core::fmt::rt::<impl std::fmt::Arguments<'_>>::new_const::<1>
+
+Check 272: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 273: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 274: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 275: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 276: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 277: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:766:23 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 278: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 279: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 280: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 281: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 282: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 283: <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../../../toolchains/nightly-2025-11-05/lib/rustlib/src/rust/library/core/src/iter/range.rs:768:13 in function <std::ops::Range<usize> as std::iter::range::RangeIteratorImpl>::spec_next
+
+Check 284: memcmp.pointer_dereference.1
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 285: memcmp.pointer_dereference.2
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 286: memcmp.pointer_dereference.3
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 287: memcmp.pointer_dereference.4
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 288: memcmp.pointer_dereference.5
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 289: memcmp.pointer_dereference.6
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 290: memcmp.pointer_dereference.7
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 291: memcmp.pointer_dereference.8
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 292: memcmp.pointer_dereference.9
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 293: memcmp.pointer_dereference.10
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 294: memcmp.pointer_dereference.11
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 295: memcmp.pointer_dereference.12
+	 - Status: UNDETERMINED
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-memcmp>:27 in function memcmp
+
+Check 296: kani::rustc_intrinsics::size_of_val_raw::<[u8]>.unwind.0
+	 - Status: FAILURE
+	 - Description: "unwinding assertion loop 0"
+	 - Location: ../../../../../../../build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs:433:13 in function kani::rustc_intrinsics::size_of_val_raw::<[u8]>
+
+
+SUMMARY:
+ ** 1 of 296 failed (295 undetermined)
+Failed Checks: unwinding assertion loop 0
+ File: "/build/kani-0.66.0-patched-source/library/kani_core/src/lib.rs", line 433, in kani::rustc_intrinsics::size_of_val_raw::<[u8]>
+
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
+Verification Time: 0.7902994s
+
