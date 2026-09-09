@@ -5,7 +5,8 @@
 # drift detection (warning mode).
 set -euo pipefail
 
-python3 scripts/validation/test_kani_evidence.py
+python3 -m unittest discover -s tests/ci -p 'test_kani_*.py'
+python3 scripts/validation/check_kani_citations.py
 python3 -m pytest -q scripts/validation/test_verify_verified_reqs.py
 
 # The Nix derivation supplies the pinned archive. An unset path must never turn

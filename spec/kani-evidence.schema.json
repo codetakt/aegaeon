@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.codetakt.dev/spec/kani-evidence.schema.json",
+  "title": "Aegaeon Kani evidence selection (version 2)",
+  "description": "Versioned selection of Kani harnesses admitted by scripts/validation/run_kani_evidence.py. Required groups gate; diagnostic groups are executed and recorded only; excluded groups list every remaining source site with a reason. Nothing in this file asserts implementation refinement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "contract", "kani_version", "target", "solver", "budgets", "toolchain", "cargo_config", "groups"],
+  "properties": {
+    "version": { "const": 2 },
+    "contract": { "const": "kani-0.66.0-text-v1" },
+    "kani_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "target": { "const": "x86_64-unknown-linux-gnu" },
+    "solver": { "type": "string", "enum": ["cadical", "kissat", "minisat", "z3", "cvc5"] },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeout_seconds", "list_timeout_seconds", "memory_limit_bytes"],
+      "properties": {
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "list_timeout_seconds": { "type": "integer", "minimum": 1 },
+        "memory_limit_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rust_toolchain_toml_sha256"],
+      "properties": {
+        "rust_toolchain_toml_sha256": { "$ref": "#/$defs/sha256" },
+        "note": { "type": "string" }
+      }
+    },
+    "cargo_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registered_files"],
+      "description": "Cargo configuration files whose content is the only permitted rustflags/linker/env source; every other config file Cargo would read must be absent or contain only source/net/registry replacement.",
+      "properties": {
+        "registered_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256"],
+            "properties": { "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" } }
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [ { "$ref": "#/$defs/executableGroup" }, { "$ref": "#/$defs/excludedGroup" } ]
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "qualifiedName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$" },
+    "rustFile": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.rs$" },
+    "rows": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "executableGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class", "package", "crate", "features", "no_default_features", "cfg", "default_unwind", "harnesses"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "class": { "enum": ["required", "diagnostic"] },
+        "gating": { "enum": ["evidence", "regression"], "description": "Required groups only: evidence feeds compliance-matrix citations of verified rows; regression blocks CI without matrix evidence." },
+        "provisional": { "type": "string", "description": "Why this group's class is provisional and what review would change it." },
+        "package": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "manifest"],
+          "properties": { "name": { "type": "string", "minLength": 1 }, "manifest": { "type": "string", "pattern": "^[A-Za-z0-9_./-]+/Cargo\\.toml$" } }
+        },
+        "crate": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "Compiled lib target name, proven by compiled metadata crate_name." },
+        "features": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "no_default_features": { "type": "boolean" },
+        "cfg": { "type": "array", "items": { "const": "kani" }, "minItems": 1, "maxItems": 1 },
+        "default_unwind": { "type": "integer", "minimum": 1 },
+        "harnesses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "file", "domain"],
+            "properties": {
+              "name": { "$ref": "#/$defs/qualifiedName" },
+              "file": { "$ref": "#/$defs/rustFile" },
+              "rows": { "$ref": "#/$defs/rows" },
+              "domain": { "type": "string", "minLength": 1 },
+              "unwind": { "type": "integer", "minimum": 1 },
+              "unreachable_assertions": { "type": "object", "additionalProperties": { "type": "string" } },
+              "stubs": { "const": false }
+            }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "class": { "const": "required" } } }, "then": { "required": ["gating"] } },
+        { "if": { "properties": { "class": { "const": "diagnostic" } } }, "then": { "not": { "required": ["gating"] } } }
+      ]
+    },
+    "excludedGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class", "sites"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "class": { "const": "excluded" },
+        "sites": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "file", "reason"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "description": "Fully qualified name when compiled discovery knows it; otherwise the function name as written in source (kind: source-only)." },
+              "file": { "$ref": "#/$defs/rustFile" },
+              "kind": { "enum": ["compiled", "source-only"] },
+              "reason": { "type": "string", "minLength": 1 },
+              "evidence": { "type": "string" },
+              "rows": { "$ref": "#/$defs/rows" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,52 +1,1200 @@
 {
-  "version": 1,
+  "version": 2,
+  "contract": "kani-0.66.0-text-v1",
   "kani_version": "0.66.0",
   "target": "x86_64-unknown-linux-gnu",
-  "package": "ffi",
-  "features": ["kani"],
   "solver": "cadical",
-  "default_unwind": 16,
-  "timeout_seconds": 600,
-  "memory_limit_bytes": 17179869184,
-  "harnesses": [
+  "budgets": {
+    "timeout_seconds": 600,
+    "list_timeout_seconds": 1800,
+    "memory_limit_bytes": 17179869184
+  },
+  "toolchain": {
+    "rust_toolchain_toml_sha256": "4a5584412b769268fb5419ac4036a17b3df9f8b19fcb80fc69b459f4f1a19d20",
+    "note": "Kani's bundled rustc is recorded from rustc -vV at run time"
+  },
+  "cargo_config": {
+    "registered_files": [
+      {
+        "path": ".cargo/config.toml",
+        "sha256": "cc3851598f6f3e7f15bff15508fc23942222f896c176d52749e4f3ca7cb0d44d"
+      }
+    ]
+  },
+  "groups": [
     {
-      "name": "kani_tests::verification::verify_json_member_c_layout",
-      "file": "crates/ffi/src/kani_tests.rs",
-      "rows": ["7515-007"],
-      "domain": "Rust JsonMemberC size 32 and alignment 8 on x86_64; no C layout equivalence proof."
-    },
-    {
-      "name": "kani_tests::verification::verify_utf8_decode_null_safety",
-      "file": "crates/ffi/src/kani_tests.rs",
-      "rows": ["7515-007"],
-      "domain": "Two fixed null-pointer calls to the production UTF-8 helper."
-    },
-    {
-      "name": "kani_tests::verification::verify_free_string_null_safety",
-      "file": "crates/ffi/src/kani_tests.rs",
-      "rows": ["7515-007"],
-      "domain": "One null-pointer call to the production free helper; no allocated-pointer ownership proof."
-    },
-    {
-      "name": "kani_tests::verification::verify_jose_context_bounds",
-      "file": "crates/ffi/src/kani_tests.rs",
-      "rows": ["7515-007"],
-      "domain": "Default JoseContext header limit is positive and fits i32."
-    },
-    {
-      "name": "kani_tests::verification::verify_json_member_c_pointer_validity",
-      "file": "crates/ffi/src/kani_tests.rs",
-      "rows": ["7515-007"],
-      "domain": "One fixed Rust struct preserves field values and non-null pointers; no arbitrary-pointer validity proof."
-    },
-    {
-      "name": "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic",
-      "file": "crates/ffi/src/id_token.rs",
-      "rows": ["OIDC-1-007", "OIDC-1-010"],
-      "unreachable_assertions": {
-        "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic.assertion.2": "unexpected canonicalisation error"
+      "id": "ffi-evidence",
+      "class": "required",
+      "gating": "evidence",
+      "package": {
+        "name": "ffi",
+        "manifest": "crates/ffi/Cargo.toml"
       },
-      "domain": "Exactly six fixed compact-JWT strings of at most 11 bytes; production Rust framing only, no signature or native parser verification."
+      "crate": "ffi",
+      "features": [
+        "kani"
+      ],
+      "no_default_features": true,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 16,
+      "harnesses": [
+        {
+          "name": "kani_tests::verification::verify_json_member_c_layout",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "domain": "Rust JsonMemberC size 32 and alignment 8 on x86_64; no C layout equivalence proof.",
+          "rows": [
+            "7515-007"
+          ]
+        },
+        {
+          "name": "kani_tests::verification::verify_utf8_decode_null_safety",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "domain": "Two fixed null-pointer calls to the production UTF-8 helper.",
+          "rows": [
+            "7515-007"
+          ]
+        },
+        {
+          "name": "kani_tests::verification::verify_free_string_null_safety",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "domain": "One null-pointer call to the production free helper; no allocated-pointer ownership proof.",
+          "rows": [
+            "7515-007"
+          ]
+        },
+        {
+          "name": "kani_tests::verification::verify_jose_context_bounds",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "domain": "Default JoseContext header limit is positive and fits i32.",
+          "rows": [
+            "7515-007"
+          ]
+        },
+        {
+          "name": "kani_tests::verification::verify_json_member_c_pointer_validity",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "domain": "One fixed Rust struct preserves field values and non-null pointers; no arbitrary-pointer validity proof.",
+          "rows": [
+            "7515-007"
+          ]
+        },
+        {
+          "name": "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic",
+          "file": "crates/ffi/src/id_token.rs",
+          "domain": "Exactly six fixed compact-JWT strings of at most 11 bytes; production Rust framing only, no signature or native parser verification.",
+          "rows": [
+            "OIDC-1-007",
+            "OIDC-1-010"
+          ],
+          "unreachable_assertions": {
+            "id_token::kani_verification::oidc_id_token_jwt_canonicalisation_no_panic.assertion.2": "unexpected canonicalisation error"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kani-harness-regressions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 16,
+      "harnesses": [
+        {
+          "name": "harnesses::proof_trivial_arithmetic",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain smoke (1+1==2); no production domain"
+        },
+        {
+          "name": "harnesses::proof_parse_cache_control_no_panic",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "cfg(kani) table model parse_cache_control_case over 4 enumerated cases; no production parser",
+          "unwind": 16
+        },
+        {
+          "name": "harnesses::proof_nix_integration_check",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain smoke (any u8 <10, array index); no production domain"
+        },
+        {
+          "name": "harnesses::proof_level0_primitives_only",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain ICE regression (constants); no production domain"
+        },
+        {
+          "name": "harnesses::proof_bytestring_minimal_inline",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain ICE regression (inline [u8;64] struct); no production domain"
+        },
+        {
+          "name": "harnesses::proof_level6_bytestring_store",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain ICE regression (bounded_stores::ByteString store); model type only",
+          "unwind": 5
+        },
+        {
+          "name": "harnesses::proof_string_new_minimal",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain regression (String::new); no production domain"
+        },
+        {
+          "name": "harnesses::proof_string_from_minimal",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain regression (String::from); no production domain"
+        },
+        {
+          "name": "harnesses::proof_option_string_minimal",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "toolchain regression (Option<String>); no production domain"
+        }
+      ]
+    },
+    {
+      "id": "server-regressions",
+      "class": "required",
+      "gating": "regression",
+      "package": {
+        "name": "aegaeon-server",
+        "manifest": "crates/server/Cargo.toml"
+      },
+      "crate": "aegaeon_server",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 16,
+      "harnesses": [
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_idempotent_jti",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "rows": [
+            "OIDC-3-005"
+          ],
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_idempotent_jti.assertion.1": "bounded model has capacity for one session",
+            "kani_test::kani_tests::verify_oidc_logout_idempotent_jti.assertion.4": "initial logout must succeed",
+            "kani_test::kani_tests::verify_oidc_logout_idempotent_jti.assertion.5": "logout retry must succeed"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "rows": [
+            "OIDC-3-005"
+          ],
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout.assertion.1": "bounded model has capacity for initial session",
+            "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout.assertion.3": "bounded model has capacity for rotated session"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "rows": [
+            "OIDC-3-005"
+          ],
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries.assertion.1": "bounded model has capacity for one session"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_client_assertion_replay_window_bounds",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "production helper crate::config::valid_client_assertion_replay_window_secs over kani::any::<i64>() — bounded production check (candidate for evidence-grade admission later)"
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "production helper crate::oidc::session::normalize_logout_session_ttl_secs over kani::any::<u64>() — bounded production check"
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace (2 auth sessions) — model regression, not production correspondence",
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids.assertion.1": "bounded model has capacity for initial auth session",
+            "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids.assertion.2": "bounded model has capacity for second auth session",
+            "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids.assertion.3": "bounded model can reload initial auth session"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace — model regression",
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed.assertion.1": "bounded model has capacity for one session"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at capacity — model regression",
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.1": "first bounded session insert succeeds",
+            "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.2": "second bounded session insert succeeds",
+            "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.3": "third bounded session insert succeeds",
+            "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.4": "fourth bounded session insert succeeds"
+          }
+        },
+        {
+          "name": "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite",
+          "file": "crates/server/src/kani_test.rs",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at client capacity — model regression",
+          "unreachable_assertions": {
+            "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite.assertion.1": "bounded model has capacity for one session"
+          }
+        }
+      ]
+    },
+    {
+      "id": "jwks-rotation-models",
+      "class": "diagnostic",
+      "provisional": "2026-09-09: moved from the legacy blocking regression suite to diagnostic while OIDC-2-003 is corrected to partial; restoring required/regression is a separate review and does not re-verify the row.",
+      "package": {
+        "name": "aegaeon-kani-harness",
+        "manifest": "crates/kani-harness/Cargo.toml"
+      },
+      "crate": "aegaeon_kani_harness",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 16,
+      "harnesses": [
+        {
+          "name": "harnesses::proof_overlap_active_kid_conflict_rejected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "cfg(kani) model of the pure JWKS helpers (u8 identifiers, at most 5 keys, one symbolic bool); no production correspondence",
+          "rows": [
+            "OIDC-2-003"
+          ],
+          "unwind": 6
+        },
+        {
+          "name": "harnesses::proof_overlap_merge_keeps_active_first_and_unique_kids",
+          "file": "crates/kani-harness/src/lib.rs",
+          "domain": "cfg(kani) model of the pure JWKS helpers (u8 identifiers, at most 5 keys, one symbolic bool); no production correspondence",
+          "rows": [
+            "OIDC-2-003"
+          ],
+          "unwind": 8
+        }
+      ]
+    },
+    {
+      "id": "excluded",
+      "class": "excluded",
+      "sites": [
+        {
+          "name": "kani_simple_tests::simple_verification::verify_buffer_safety",
+          "file": "crates/ffi/src/kani_simple_tests.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "kani_simple_tests::simple_verification::verify_slice_bounds",
+          "file": "crates/ffi/src/kani_simple_tests.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "kani_tests::verification::verify_dpop_handles_empty_and_valid_inputs",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "kani_tests::verification::verify_parse_json_entries_count_overflow",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "kind": "compiled",
+          "reason": "passes only against the stub's unconditional error"
+        },
+        {
+          "name": "kani_tests::verification::verify_parse_json_entries_null_pointer",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "kind": "compiled",
+          "reason": "cfg(kani) stub returns ParserUnavailable; expectation fails",
+          "evidence": "tests/fixtures/kani_admission/real/failed_parse_json_null (recorded 0.66.0 run)"
+        },
+        {
+          "name": "kani_tests::verification::verify_pkce_edge_cases",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "kani_tests::verification::verify_utf8_decode_valid_input",
+          "file": "crates/ffi/src/kani_tests.rs",
+          "kind": "compiled",
+          "reason": "solver OOM + driver panic; unadmitted",
+          "evidence": "tests/fixtures/kani_admission/real/oom_driver_panic_utf8_valid (recorded 0.66.0 run)"
+        },
+        {
+          "name": "proofs::chacha20poly1305_rejects_bad_tag",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_decrypt_jwe_empty_slices_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_ed25519_empty_slices_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_ed25519_known_vector",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_hmac_empty_slices_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_hmac_fixed_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_hmac_known_vector",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_hmac_var_sizes_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "proofs::verify_rsa_empty_slices_no_ub",
+          "file": "crates/ffi/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_approve_only_pending",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_cleanup_removes_expired",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_client_binding",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da1_rate_limiting",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da2_user_code_entropy",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da4_device_code_entropy",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da5_single_use",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da6_explicit_expired_status",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da6_ttl_expiry",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_device_authz::proofs::proof_da7_environment_scoping",
+          "file": "crates/kani-harness/src/bounded_device_authz.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_combined_well_formed",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_ec1_self_signed",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-001"
+          ]
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_ec2_jwks_embedded",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-002"
+          ]
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_ec3_exp_bounded",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-003"
+          ]
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_ec4_iat_present",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_entity_config::proofs::proof_ec5_metadata_present",
+          "file": "crates/kani-harness/src/bounded_entity_config.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-005"
+          ]
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_combined_well_formed",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "standalone wrapper model (typ length predicate)"
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_ji1_aud_binding",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_ji2_exp_bounded",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "standalone wrapper model"
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_ji4_distinct_typ",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "standalone wrapper model"
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_ji5_revocation_window",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_jwt_introspection::proofs::proof_ji6_issuer_present",
+          "file": "crates/kani-harness/src/bounded_jwt_introspection.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_subordinate_stmt::proofs::proof_combined_subordinate",
+          "file": "crates/kani-harness/src/bounded_subordinate_stmt.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "bounded_subordinate_stmt::proofs::proof_ss1_iss_is_op",
+          "file": "crates/kani-harness/src/bounded_subordinate_stmt.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-006"
+          ]
+        },
+        {
+          "name": "bounded_subordinate_stmt::proofs::proof_ss2_sub_is_rp",
+          "file": "crates/kani-harness/src/bounded_subordinate_stmt.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-007"
+          ]
+        },
+        {
+          "name": "bounded_subordinate_stmt::proofs::proof_ss3_not_self_signed",
+          "file": "crates/kani-harness/src/bounded_subordinate_stmt.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-008"
+          ]
+        },
+        {
+          "name": "bounded_subordinate_stmt::proofs::proof_ss4_exp_bounded",
+          "file": "crates/kani-harness/src/bounded_subordinate_stmt.rs",
+          "kind": "compiled",
+          "reason": "planned federation rows cite this bounded model; execution admission is future work",
+          "evidence": "inventory/harness_sites.json (2026-09-09)",
+          "rows": [
+            "fed-op-009"
+          ]
+        },
+        {
+          "name": "harnesses::proof_authcode_single_use",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_chain_cache_consistency",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_client_identifier_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_client_redirect_uri_nonempty",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_client_soft_delete_frees_identifier",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_client_soft_delete_preserves_record",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_dpop_jti_cleanup_after_window",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_dpop_jti_replay_rejected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_duplicate_kid_detection",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_entity_cache_cleanup_soundness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_entity_cache_expired_returns_none",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_entity_cache_upsert_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_expired_access_token_rejected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_expired_authcode_rejected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_federation_tenant_isolation",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_for_loop_slice_copy",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_hashmap_basic",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_hashmap_string_keys",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_kid_reuse_violation_detected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_large_array_loop",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level10_store_construction",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level1_single_byte_struct",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level2_small_array",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level3_struct_small_array",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level4_struct_medium_array",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level5_bytestring_struct",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level7_bytestring_array_one",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level8_bytestring_array_two",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_level9_tuple_array_two",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_manual_byte_loop",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_nonce_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_option_loop",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_option_static_str",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_policy_no_downgrade",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_policy_resolution_precedence",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_refresh_token_rotation_boundary",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_refresh_token_single_use",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_revoked_access_token_rejected",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_revoked_key_excluded_from_jwks",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_authorize_rejects_invalid_ttl",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_issuer_matches_chain",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_nonce_binds_id_token",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_pkce_verifier_binding",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_session_ttl_enforced",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_single_use_state",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_rp_state_binds_callback",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_digest_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_disclosure_roundtrip",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)",
+          "evidence": "tests/fixtures/kani_admission/real/undetermined_sd_jwt_roundtrip (recorded 0.66.0 run)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_format_parsing",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_holder_selection",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_issuer_payload",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)"
+        },
+        {
+          "name": "harnesses::proof_sd_jwt_verifier_reconstruction",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed fixtures, no SHA-256/production issuer; 4 of 6 hit the size_of_val_raw intrinsic placeholder loop (UNDETERMINED)"
+        },
+        {
+          "name": "harnesses::proof_select_jwk_by_kid_or_first",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_sha256_hex_len_constant",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_signing_key_kid_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_signing_key_one_active_per_env",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_small_array_loop",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_state_uniqueness",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_test_primitives_early",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_token_ttl_expiration_boundary",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_token_ttl_positive",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_trust_chain_depth_bound",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_trust_chain_structure",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "not selected; no compliance-matrix citation; not executed by any CI path",
+          "evidence": "inventory/harness_sites.json (2026-09-09)"
+        },
+        {
+          "name": "harnesses::proof_upstream_refresh_requires_valid_link",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed sequential traces; intrinsic placeholder loop"
+        },
+        {
+          "name": "harnesses::proof_upstream_refresh_token_rotation",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed sequential traces; intrinsic placeholder loop"
+        },
+        {
+          "name": "harnesses::proof_upstream_refresh_token_single_use",
+          "file": "crates/kani-harness/src/lib.rs",
+          "kind": "compiled",
+          "reason": "fixed sequential traces; intrinsic placeholder loop"
+        },
+        {
+          "name": "snapshot_version_increments_on_update",
+          "file": "crates/server/kani-reproducers/kani_authcode_snapshot.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "verify_code_single_use",
+          "file": "crates/server/kani-reproducers/kani_authcode_verification.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "verify_expired_code_unusable",
+          "file": "crates/server/kani-reproducers/kani_authcode_verification.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "verify_state_uniqueness",
+          "file": "crates/server/kani-reproducers/kani_authcode_verification.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "verify_nonce_uniqueness",
+          "file": "crates/server/kani-reproducers/kani_authcode_verification.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "verify_concurrent_code_use",
+          "file": "crates/server/kani-reproducers/kani_authcode_verification.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "dpop_jti_replay_rejected",
+          "file": "crates/server/kani-reproducers/kani_dpop_jti.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "jwks_circuit_basic_invariants",
+          "file": "crates/server/kani-reproducers/kani_jwks_circuit.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "parse_cache_control_no_panic",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "sha256_hex_len_constant",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "duplicate_kid_detection",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "kid_reuse_violation_detected",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "select_jwk_by_kid_or_single_signature_key",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "select_jwk_without_kid_rejects_ambiguous_signature_keys",
+          "file": "crates/server/kani-reproducers/kani_jwks_input_guards.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "expired_access_token_rejected",
+          "file": "crates/server/kani-reproducers/kani_token_store.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "revoked_access_token_rejected",
+          "file": "crates/server/kani-reproducers/kani_token_store.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        },
+        {
+          "name": "refresh_token_rotation_bounds",
+          "file": "crates/server/kani-reproducers/kani_token_store.rs",
+          "kind": "source-only",
+          "reason": "kani-reproducers are not a compiled Cargo target; retained as reproducers per crates/server/kani-reproducers/README.md",
+          "evidence": "inventory/harness_sites.json"
+        }
+      ]
     }
   ]
 }
