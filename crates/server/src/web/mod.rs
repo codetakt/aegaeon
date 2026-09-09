@@ -3,9 +3,12 @@
 mod access_token_persistence;
 mod auth_session;
 mod auth_session_flow;
+#[cfg(test)]
+mod authorization_consent_tests;
 mod authorize_context;
 mod authorize_endpoint;
 mod authorize_login_redirect;
+mod authorize_reauthentication;
 mod authorize_request;
 mod authorize_validation;
 mod backchannel_logout;
@@ -43,6 +46,8 @@ mod shared;
 mod state;
 #[cfg(test)]
 mod test_prelude;
+#[cfg(test)]
+mod test_support;
 mod token_authorization_code;
 mod token_client_credentials;
 mod token_device_code;

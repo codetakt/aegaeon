@@ -21,6 +21,7 @@ fn stored_par_request() -> StoredParRequest {
         code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: Some("read".to_string()),
+        prompt: None,
         nonce: None,
         acr_values: None,
         max_age: None,

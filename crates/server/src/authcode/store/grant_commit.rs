@@ -58,9 +58,12 @@ impl TokenStore {
     ///
     /// Returns an error if the supplied metadata is not bound to the access token or refresh
     /// parent being committed.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "owned tokens make the atomic grant commit boundary explicit"
+    #[cfg_attr(
+        not(test),
+        expect(
+            clippy::needless_pass_by_value,
+            reason = "owned tokens make the atomic grant commit boundary explicit"
+        )
     )]
     pub fn store_issued_grant(
         &self,
@@ -144,9 +147,10 @@ impl TokenStore {
     /// Atomically consume an authorization code and store the issued grant.
     ///
     /// In Redis-backed production stores this is a single Lua script spanning
-    /// the authorization-code key and token-store keys. This prevents losing a
-    /// valid code after a token-store write failure and prevents observing a
-    /// partially issued grant.
+    /// the authorization-code key and token-store keys. After preflight checks,
+    /// the script retires the code before publishing tokens. Redis script errors
+    /// can leave partial writes; neither errors nor a lost reply restore the code.
+    /// A failed publication therefore requires a new authorization flow.
     pub(in crate::authcode) fn store_issued_authorization_code_grant(
         &self,
         commit: AuthorizationCodeGrantCommit,

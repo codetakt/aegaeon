@@ -71,7 +71,9 @@ But `libkani*.rlib` was built against the toolchain `std` and then copied into t
 
 ## How to run
 
-Runner defaults (suite, timeouts, solver, etc.) live in `kani.toml`. Environment variables passed to `scripts/kani/run_kani.sh` override the file (CI does this to enable the regression suite + server harnesses).
+The selection and per-group settings live in `spec/kani-evidence.json`.
+`scripts/kani/run_kani.sh` invokes the admission adapter; legacy suite and flag
+environment overrides are rejected.
 
 ### CI-equivalent (preferred)
 
@@ -103,6 +105,7 @@ PATH="$KANI_ROOT/bin:$KANI_ROOT/toolchain/bin:$PATH" ./scripts/kani/run_kani.sh 
 - `ffi-evidence` (required / evidence): the six admitted `ffi` harnesses that compliance-matrix rows may cite.
 - `kani-harness-regressions` (required / regression): toolchain regression harnesses (`proof_string_*`, `proof_level*`, etc.) that detect Kani/Rust-nightly drift early; no matrix evidence value.
 - `server-regressions` (required / regression): bounded production-helper checks and the `BoundedKaniSessionStore` model regressions in `crates/server`.
+- `authorization-grant-predicates` (required / evidence): two production guards for stored authorization-code identity and resource selection, over optional byte strings of length 0..64 with unwind 66. Parsing, serialization, storage and complete issuance are outside this bounded claim.
 - `jwks-rotation-models` (diagnostic): executed and recorded, never counted and never a gate.
 - Every other proof site is listed as `excluded` with a reason; see `spec/kani-evidence.json` and [evidence-admission.md](evidence-admission.md).
 

@@ -11,7 +11,7 @@ pub use access_token::{
     AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
 };
 pub use authorization_code::{AuthorizationCode, AuthorizationCodeInput};
-pub use refresh_token::{RefreshToken, RefreshTokenInput};
+pub use refresh_token::{RefreshTargetContext, RefreshToken, RefreshTokenInput};
 pub use requests::{AuthorizationRequest, TokenRequest, TokenResponse};
 
 fn system_time_after_secs(now: SystemTime, seconds: u64) -> Option<SystemTime> {

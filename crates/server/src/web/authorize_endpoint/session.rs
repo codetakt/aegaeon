@@ -147,7 +147,11 @@ pub(super) async fn authorize_decide_session(
     };
     let max_age_exceeded = match (max_age, current_session.as_ref()) {
         (Some(max_age_secs), Some(session)) => {
-            now.saturating_sub(session.auth_time_epoch_secs) >= max_age_secs
+            if max_age_secs == 0 {
+                !ctx.reauthenticated
+            } else {
+                now.saturating_sub(session.auth_time_epoch_secs) > max_age_secs
+            }
         }
         (Some(_), None) => true,
         _ => false,
@@ -171,7 +175,8 @@ pub(super) async fn authorize_decide_session(
             "step-up authentication required"
         );
     }
-    let needs_login = current_session.is_none() || prompt_has_login || stepup_required;
+    let needs_login =
+        current_session.is_none() || (prompt_has_login && !ctx.reauthenticated) || stepup_required;
     if prompt_has_none && needs_login {
         let description = if stepup_required {
             "prompt=none but step-up authentication is required"
@@ -236,9 +241,13 @@ fn authorize_session_satisfies_stepup(
         .as_deref()
         .is_none_or(|requested| session.session_acr.as_deref() == Some(requested));
     let max_age_satisfied = authorize_requested_max_age(&ctx.req).is_none_or(|max_age| {
-        u64::try_from(session.auth_time_epoch_secs)
-            .ok()
-            .is_some_and(|auth_time| decision.now.saturating_sub(auth_time) <= max_age)
+        if max_age == 0 {
+            ctx.reauthenticated
+        } else {
+            u64::try_from(session.auth_time_epoch_secs)
+                .ok()
+                .is_some_and(|auth_time| decision.now.saturating_sub(auth_time) <= max_age)
+        }
     });
     acr_satisfied && max_age_satisfied
 }
@@ -333,7 +342,12 @@ pub(super) fn authorize_stepup_gate(
     if !decision.stepup_required {
         return Ok(true);
     }
-    if decision.needs_login && authorize_session_satisfies_stepup(ctx, decision, session) {
+    // A completed legacy challenge cannot override the current session's ACR
+    // or freshness. It may have been completed before the positive age limit.
+    if !authorize_session_satisfies_stepup(ctx, decision, session) {
+        return Ok(false);
+    }
+    if decision.needs_login {
         crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
             metrics.record_stepup_event("fresh_login_satisfied");
         });

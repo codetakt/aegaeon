@@ -61,6 +61,7 @@ fn store_request_rejects_unrepresentable_expiry() -> TestResult {
         code_challenge: Some("challenge".to_string()),
         code_challenge_method: Some("S256".to_string()),
         scope: None,
+        prompt: None,
         nonce: None,
         acr_values: None,
         max_age: None,

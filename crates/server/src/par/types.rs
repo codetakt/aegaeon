@@ -9,6 +9,7 @@ pub struct ParRequest {
     pub client_id: String,
     pub redirect_uri: String,
     pub response_type: String,
+    /// AS recipient binding; independent of the issuer of a signed Request Object.
     #[serde(default)]
     pub iss: Option<String>,
     /// RFC 8707 Resource Indicators: requested target resource (single value).
@@ -22,6 +23,9 @@ pub struct ParRequest {
     pub code_challenge_method: Option<String>,
     #[serde(default)]
     pub scope: Option<String>,
+    /// OIDC prompt from the pushed request, never from the later outer query.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
     #[serde(default)]
     pub nonce: Option<String>,
     #[serde(default)]

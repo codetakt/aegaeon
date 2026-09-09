@@ -2,6 +2,9 @@
 mod process_local;
 mod redis_backend;
 mod scripts;
+mod stored_code;
+
+pub(in crate::authcode) use stored_code::StoredAuthorizationCode;
 
 #[cfg(test)]
 pub(super) use self::process_local::InMemoryAuthCodeBackend;
@@ -208,6 +211,10 @@ pub(super) trait AuthCodeBackend: Send + Sync {
     #[cfg(test)]
     fn snapshot(&self) -> Result<AuthCodeSnapshot, AuthCodeStorageError>;
     fn get_code(&self, code: &str) -> Result<Option<AuthorizationCode>, AuthCodeStorageError>;
+    fn get_code_for_exchange(
+        &self,
+        code: &str,
+    ) -> Result<Option<StoredAuthorizationCode>, AuthCodeStorageError>;
     fn store_code(&self, code: AuthorizationCode) -> Result<String, StoreCodeError>;
     fn store_code_with_one_time_inputs(
         &self,

@@ -91,6 +91,9 @@ impl ClientRegistry {
         let Some(verified) = self.verify_private_key_jwt_claims(input, &header)? else {
             return Ok(None);
         };
+        if super::request_object_used_as_assertion(&input.header, &verified.claims) {
+            return Ok(None);
+        }
         if !private_key_jwt_subject_policy_matches(input, &verified.claims) {
             return Ok(None);
         }

@@ -1,5 +1,8 @@
+mod consent;
 mod issue;
 mod session;
+
+pub(super) use consent::submit as consent_submit;
 
 use axum::{
     extract::{ConnectInfo, OriginalUri, State},
@@ -53,13 +56,22 @@ pub(super) async fn authorize(
         return resp;
     }
     let request_id = request_id_from_headers(&headers);
-    let ctx = match build_authorize_request_context(&state, &uri, issuer_base, request_id).await {
+    let mut ctx = match build_authorize_request_context(&state, &uri, issuer_base, request_id).await
+    {
         Ok(ctx) => ctx,
         Err(mut response) => {
             util::apply_no_cache_headers(&mut response);
             return response;
         }
     };
+    if let Err(response) = consent::validate_prompt(&state, &ctx) {
+        return response;
+    }
+    ctx.reauthenticated =
+        match super::authorize_reauthentication::resume(&state, &headers, &uri, &ctx).await {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     let decision = match authorize_decide_session(&state, &headers, &ctx, issuer_base).await {
         Ok(decision) => decision,
         Err(mut response) => {
@@ -68,7 +80,10 @@ pub(super) async fn authorize(
         }
     };
     let mut resolved_session = None;
-    if decision.stepup_required && decision.current_session.is_some() {
+    let active_auth_required = !ctx.reauthenticated
+        && (ctx.prompt.split_whitespace().any(|p| p == "login")
+            || authorize_requested_max_age(&ctx.req) == Some(0));
+    if decision.stepup_required && decision.current_session.is_some() && !active_auth_required {
         let session = match resolve_authorize_session_state(&decision, issuer_base).await {
             Ok(session) => session,
             Err(mut response) => {
@@ -123,21 +138,31 @@ pub(super) async fn authorize(
             return response;
         }
     }
-    let local_profile = match load_authorize_local_profile(&state, &session.user_id).await {
-        Ok(profile) => profile,
-        Err(_) => {
-            return authorize_error_response(
-                authorize_error_context(
-                    &state,
-                    &ctx.req,
-                    ctx.response_mode,
-                    issuer_base,
-                    ctx.state_for_echo.as_deref(),
-                ),
-                "server_error",
-                Some("failed to load local profile"),
-            );
-        }
+    match consent::prepare(&state, &mut ctx, &session, &uri).await {
+        Ok(Some(response)) | Err(response) => return response,
+        Ok(None) => {}
+    }
+    finish_authorization(&state, ctx, &session).await
+}
+
+async fn finish_authorization(
+    state: &AppState,
+    ctx: super::authorize_context::AuthorizeRequestContext,
+    session: &session::AuthorizeSessionState,
+) -> Response {
+    let issuer_base = state.issuer.as_str();
+    let Ok(local_profile) = load_authorize_local_profile(state, &session.user_id).await else {
+        return authorize_error_response(
+            authorize_error_context(
+                state,
+                &ctx.req,
+                ctx.response_mode,
+                issuer_base,
+                ctx.state_for_echo.as_deref(),
+            ),
+            "server_error",
+            Some("failed to load local profile"),
+        );
     };
-    commit_authorize_code_response(&state, ctx, &session, local_profile, issuer_base).await
+    commit_authorize_code_response(state, ctx, session, local_profile, issuer_base).await
 }

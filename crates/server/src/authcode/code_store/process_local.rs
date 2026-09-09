@@ -6,6 +6,7 @@ use tracing::info;
 
 use super::{
     AuthCodeBackend, AuthCodeSnapshot, AuthCodeStorageError, AuthorizationCode, StoreCodeError,
+    StoredAuthorizationCode,
 };
 
 #[derive(Default)]
@@ -63,6 +64,20 @@ impl InMemoryAuthCodeBackend {
 }
 
 impl AuthCodeBackend for InMemoryAuthCodeBackend {
+    fn get_code_for_exchange(
+        &self,
+        code_str: &str,
+    ) -> Result<Option<StoredAuthorizationCode>, AuthCodeStorageError> {
+        self.get_code(code_str)?
+            .map(|code| {
+                let payload = serde_json::to_string(&code)
+                    .map_err(|err| AuthCodeStorageError::Serialize(err.to_string()))?;
+                StoredAuthorizationCode::decode(code_str, payload)
+            })
+            .transpose()
+            .map(Option::flatten)
+    }
+
     #[cfg(test)]
     fn snapshot(&self) -> Result<AuthCodeSnapshot, AuthCodeStorageError> {
         let state = self.read_state()?;

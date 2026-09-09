@@ -436,7 +436,7 @@ fn refresh_grant_endpoint_uses_single_prepared_rotation_lookup() -> TestResult {
     );
     assert!(
         prepared_issuer_body.contains("previous_refresh_token.as_str() != refresh.token.as_str()")
-            && prepared_issuer_body.contains("Self::prepare_loaded_refresh_grant(")
+            && prepared_issuer_body.contains("self.prepare_loaded_refresh_grant(")
             && !prepared_issuer_body.contains("prepare_refresh_rotation")
             && !prepared_issuer_body.contains("prepare_refresh_grant_async"),
         "prepared issuer path must bind the loaded refresh token to the previous-token commit key without performing another lookup"

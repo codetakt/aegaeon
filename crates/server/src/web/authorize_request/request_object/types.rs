@@ -50,6 +50,8 @@ pub(in crate::web) enum RequestObjectReplayPolicy {
 
 #[derive(Debug)]
 pub(in crate::web) struct ResolvedAuthorizeRequestObject {
+    /// Recipient bound by JWT audience validation, distinct from the JWT issuer.
+    pub(in crate::web) authorization_server_issuer: String,
     pub(in crate::web) redirect_uri: String,
     pub(in crate::web) response_type: String,
     pub(in crate::web) scope: String,

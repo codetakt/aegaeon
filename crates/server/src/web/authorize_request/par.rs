@@ -13,6 +13,7 @@ use super::json_error_with_iss;
 
 pub(super) struct ParAuthorizeRequest {
     pub(super) request: AuthzReq,
+    pub(super) prompt: Option<String>,
     pub(super) continuation: String,
 }
 
@@ -112,10 +113,39 @@ pub(super) fn authorize_request_from_par(
             }
         })
         .map_err(|err| par_authorize_error_response(issuer_base, &err))?;
+    if par_req.request_object.is_some() || par_req.request_object_claims.is_some() {
+        // Stored requests may predate canonical AS audience validation. Never
+        // upgrade an old JWT-issuer value into a new recipient binding.
+        let current_binding = par_req.request_object.is_some()
+            && par_req.iss.as_deref() == Some(issuer_base)
+            && par_req
+                .request_object_claims
+                .as_ref()
+                .is_some_and(|claims| {
+                    claims.client_id.as_deref() == Some(client_id.as_str())
+                        && claims.aud.as_ref().is_some_and(|audiences| {
+                            audiences.iter().any(|audience| audience == issuer_base)
+                        })
+                });
+        if !current_binding {
+            return Err(par_authorize_error_response(
+                issuer_base,
+                &crate::par::ParError {
+                    error: "invalid_request".to_string(),
+                    error_description: Some(
+                        "Request Object recipient binding is obsolete; push a new request"
+                            .to_string(),
+                    ),
+                },
+            ));
+        }
+    }
+    let prompt = par_req.prompt.clone();
     let request = authz_req_from_par_request(request_uri, iss, par_req)
         .map_err(|err| par_authorize_error_response(issuer_base, &err))?;
     Ok(ParAuthorizeRequest {
         request,
+        prompt,
         continuation,
     })
 }

@@ -100,6 +100,7 @@ fn par_draft(
         code_challenge: code_challenge.map(ToString::to_string),
         code_challenge_method: code_challenge_method.map(ToString::to_string),
         scope: None,
+        prompt: None,
         nonce: None,
         acr_values: None,
         max_age: None,

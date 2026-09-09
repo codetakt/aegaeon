@@ -2,7 +2,8 @@ use super::super::TokenIssuer;
 use super::context::ValidatedAuthorizationCodeGrant;
 use super::error::{TokenExchangeError, TokenExchangeResult, TokenGrantError, TokenGrantErrorCode};
 use super::validation::{self, ValidatedCodeGrantRequest};
-use crate::authcode::types::{AuthorizationCode, TokenRequest};
+use crate::authcode::code_store::StoredAuthorizationCode;
+use crate::authcode::types::TokenRequest;
 
 impl TokenIssuer {
     #[expect(
@@ -21,7 +22,7 @@ impl TokenIssuer {
             openid_requested,
         } = validation::validate_code_grant_request(
             &req,
-            &code,
+            code.code(),
             authorization_code_grant_allowed,
             self.oidc.is_some(),
         )?;
@@ -47,7 +48,7 @@ impl TokenIssuer {
             openid_requested,
         } = validation::validate_code_grant_request(
             &req,
-            &code,
+            code.code(),
             authorization_code_grant_allowed,
             self.oidc.is_some(),
         )?;
@@ -62,8 +63,8 @@ impl TokenIssuer {
     fn load_authorization_code_for_exchange(
         &self,
         code_str: &str,
-    ) -> TokenExchangeResult<AuthorizationCode> {
-        match self.code_store.try_get_code(code_str) {
+    ) -> TokenExchangeResult<StoredAuthorizationCode> {
+        match self.code_store.try_get_code_for_exchange(code_str) {
             Ok(Some(code)) => Ok(code),
             Ok(None) => Err(TokenExchangeError::invalid_or_expired_code()),
             Err(err) => {
@@ -79,8 +80,12 @@ impl TokenIssuer {
     async fn load_authorization_code_for_exchange_async(
         &self,
         code_str: String,
-    ) -> TokenExchangeResult<AuthorizationCode> {
-        match self.code_store.try_get_code_async(code_str).await {
+    ) -> TokenExchangeResult<StoredAuthorizationCode> {
+        match self
+            .code_store
+            .try_get_code_for_exchange_async(code_str)
+            .await
+        {
             Ok(Some(code)) => Ok(code),
             Ok(None) => Err(TokenExchangeError::invalid_or_expired_code()),
             Err(err) => {
