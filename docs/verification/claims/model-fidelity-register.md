@@ -36,6 +36,20 @@ modules as grounding for `status: verified` entries.
 
 ## Review Rule
 
+`fstar/oidc/OIDC.AuthorizationTransactions.fst` is a simplified admission and
+retention slice. Serialized fresh counters bound capacity and a rolling insertion
+budget; completion does not refund the budget. Cleanup preserves live and foreign
+rows and removes expired local rows. The runtime fixes admission to READ COMMITTED
+so counts after its environment lock see earlier commits regardless of the pool
+default. SQL locking and isolation, measured byte sizes, database
+clock observations and cleanup scheduling remain test/review obligations, not
+machine-checked correspondence. It introduces no verified matrix claim.
+
+The effective-target slice also models same-grant access-token re-minting:
+a saved target takes precedence over legacy resource/client selection, just as
+for refresh. The saved-target success and incorrect client fallback rejection
+are separate obligations exercised against both token-store backends.
+
 `fstar/authcode/AuthCode.Snapshot.fst` is an initial, simplified migration design
 slice. Its public transition reads, validates and commits the same snapshot,
 including the two successful encoding witnesses. It proves single consumption

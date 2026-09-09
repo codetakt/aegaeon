@@ -15,12 +15,22 @@ pub(super) async fn create(
     token: &str,
     browser: &str,
 ) -> Result<(), Response> {
+    let request_snapshot = snapshot(ctx)?;
+    let mut tx = super::super::authorization_transactions::begin(
+        &state.db_pool,
+        state.environment_id,
+        super::super::authorization_transactions::Kind::Login,
+        uri,
+        &request_snapshot,
+    )
+    .await?;
     sqlx::query("INSERT INTO aegaeon.authorization_logins
-        (environment_id,issuer,client_id,token_sha256,browser_sha256,authorize_uri,request_snapshot,expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,now()+interval '5 minutes')")
+        (environment_id,issuer,client_id,token_sha256,browser_sha256,authorize_uri,request_snapshot,created_at,expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()+interval '5 minutes')")
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&ctx.req.client_id)
-        .bind(digest(token)).bind(digest(browser)).bind(uri).bind(snapshot(ctx)?)
-        .execute(&state.db_pool).await.map_err(|_| unavailable())?;
+        .bind(digest(token)).bind(digest(browser)).bind(uri).bind(request_snapshot)
+        .execute(&mut *tx).await.map_err(|_| unavailable())?;
+    tx.commit().await.map_err(|_| unavailable())?;
     Ok(())
 }
 

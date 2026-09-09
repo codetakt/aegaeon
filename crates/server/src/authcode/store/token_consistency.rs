@@ -46,6 +46,15 @@ pub(super) fn meta_scope_set(meta: &BearerTokenMeta) -> HashSet<&str> {
     meta.granted_scopes.iter().map(String::as_str).collect()
 }
 
+pub(super) fn refresh_parent_audience(parent: &RefreshToken) -> &str {
+    parent
+        .target_context
+        .as_ref()
+        .map(|context| context.audience.as_str())
+        .or(parent.resource.as_deref())
+        .unwrap_or(&parent.client_id)
+}
+
 pub(super) fn bearer_metadata_matches_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
@@ -96,12 +105,7 @@ pub(super) fn refresh_token_covers_access_token(
     {
         return Err("access token scope must be covered by the refresh token");
     }
-    let refresh_audience = refresh_token
-        .target_context
-        .as_ref()
-        .map(|context| context.audience.as_str())
-        .or(refresh_token.resource.as_deref())
-        .unwrap_or(&refresh_token.client_id);
+    let refresh_audience = refresh_parent_audience(refresh_token);
     if meta.audience.as_str() != refresh_audience {
         return Err("bearer metadata audience must match refresh token resource");
     }

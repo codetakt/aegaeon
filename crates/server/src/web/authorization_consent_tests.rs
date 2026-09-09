@@ -1,6 +1,8 @@
 //! Consent acquisition tests use real `PostgreSQL` and the public HTTP routes.
+mod admission;
 mod reauthentication;
 mod request_objects;
+mod retention;
 use super::test_support::{
     cleanup_test_environment, finish_test, sample_registered_client, setup_test_environment,
     test_app_state, test_pg_pool, TestEnvironment, TestResult,
@@ -132,6 +134,9 @@ async fn send(
     let status = response.status();
     if status != StatusCode::NOT_FOUND {
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    }
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        assert_eq!(response.headers()[header::RETRY_AFTER], "60");
     }
     if response
         .headers()

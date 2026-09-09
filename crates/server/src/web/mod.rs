@@ -5,6 +5,7 @@ mod auth_session;
 mod auth_session_flow;
 #[cfg(test)]
 mod authorization_consent_tests;
+mod authorization_transactions;
 mod authorize_context;
 mod authorize_endpoint;
 mod authorize_login_redirect;
@@ -91,6 +92,7 @@ use auth_session_flow::{
     create_auth_session_or_error_response_async, local_logout_redirect_target_with_policy,
     local_password_session_acr, normalized_acr, validate_return_to,
 };
+pub use authorization_transactions::cleanup_expired_authorization_transactions;
 use authorize_endpoint::authorize;
 use authorize_validation::{authorize_error_response, AuthorizeErrorContext};
 use dcr_registration::register;

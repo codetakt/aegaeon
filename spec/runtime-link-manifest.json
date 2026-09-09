@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-09T10:01:19.219280+00:00",
+  "generated": "2026-09-09T23:38:34.934299+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -341,7 +341,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "6a151c0b76976bc7af326ca37c9abea1b52826fd30ed147a3a81300ee312d90e",
+      "sha256": "b3650239a87ffd51126c3151368a7b29e6c3a7a4faca49db16925a505e94e938",
       "entries": [
         "6749-014",
         "7521-201",

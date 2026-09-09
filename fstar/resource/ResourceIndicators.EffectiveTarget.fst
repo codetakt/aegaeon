@@ -31,6 +31,37 @@ let resolve (p:profile) (r:request) : Tot string =
   | Some resource -> resource
   | None -> if p.oidc_enabled && r.openid_granted then p.userinfo else p.client_id
 
+(* Same-grant access re-minting must share saved-target precedence with refresh.
+   The legacy branch preserves the existing resource/client-only record policy;
+   it does not supply missing issuer evidence to a modern refresh request. *)
+let parent_target (saved:option string) (resource:option string) (client:string)
+  : Tot string =
+  match saved with
+  | Some target -> target
+  | None -> (match resource with | Some target -> target | None -> client)
+
+let remint_permitted (saved:option string) (resource:option string)
+  (client:string) (audience:string) : Tot bool =
+  audience = parent_target saved resource client
+
+let lemma_remint_preserves_saved_target (saved:string) (resource:option string)
+  (client:string) (audience:string)
+  : Lemma (remint_permitted (Some saved) resource client audience = (audience = saved))
+  = ()
+
+let lemma_remint_rejects_client_fallback (saved:string) (client:string)
+  : Lemma (requires (saved <> client))
+          (ensures (not (remint_permitted (Some saved) None client client)))
+  = ()
+
+let lemma_remint_oidc_target_reachable ()
+  : Lemma (remint_permitted (Some "issuer/userinfo") None "client" "issuer/userinfo")
+  = ()
+
+let lemma_remint_legacy_resource (resource:string) (client:string)
+  : Lemma (parent_target None (Some resource) client = resource)
+  = ()
+
 let initial (p:profile) (r:request) : Tot (string * grant_context) =
   let target = resolve p r in
   (target, {grant_issuer=p.issuer; grant_client=p.client_id;

@@ -4,7 +4,9 @@ module AuthCode.RedisGrant
    This models Redis command effects (including writes before runtime errors),
    not a refinement of Lua, cjson, numeric parsing, or the Rust key constructor.
    The fixture adapter supplies exact finite numeric and concatenation domains;
-   the comparator checks these against the actual strings sent to Redis.
+   the comparator checks resulting states against execution of the production
+   Redis script. Its frame digest binds fixture arguments; it does not prove
+   the Rust constructor emitted those strings for every production request.
    Expiry is observed as persistent/expiring: wall-clock scheduling is separate.
 *)
 open FStar.List.Tot

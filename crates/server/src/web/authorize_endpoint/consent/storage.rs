@@ -56,14 +56,23 @@ pub(super) async fn create(
     let mut entropy = [0u8; 32];
     aegaeon_crypto::rand::fill_random(&mut entropy).map_err(|_| unavailable())?;
     let token = URL_SAFE_NO_PAD.encode(entropy);
+    let mut tx = crate::web::authorization_transactions::begin(
+        &state.db_pool,
+        state.environment_id,
+        crate::web::authorization_transactions::Kind::Consent,
+        uri,
+        snapshot,
+    )
+    .await?;
     sqlx::query("INSERT INTO aegaeon.authorization_consents
-        (environment_id,issuer,subject,session_sha256,token_sha256,authorize_uri,request_snapshot,expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,now()+interval '5 minutes')")
+        (environment_id,issuer,subject,session_sha256,token_sha256,authorize_uri,request_snapshot,created_at,expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()+interval '5 minutes')")
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&session.user_id)
         .bind(digest(sid)).bind(digest(&token)).bind(uri).bind(snapshot)
-        .execute(&state.db_pool).await.map_err(|err| {
+        .execute(&mut *tx).await.map_err(|err| {
             tracing::error!(error=%err,"consent transaction could not be stored"); unavailable()
         })?;
+    tx.commit().await.map_err(|_| unavailable())?;
     Ok(token)
 }
 

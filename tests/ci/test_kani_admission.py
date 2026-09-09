@@ -1486,6 +1486,193 @@ class WrapperTests(unittest.TestCase):
                     path.write_bytes(data)
         assert self.replay().returncode == 0
 
+    def mutate_json(self, path: pathlib.Path, mutate: Any) -> None:
+        record = json.loads(path.read_text())
+        mutate(record)
+        path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+
+    def mutate_evaluation_and_records(self, run_dir: pathlib.Path, mutate: Any) -> None:
+        # Consistent adversary: edit the evaluation summary, re-declare the record digests and
+        # re-bind the gate to the rewritten evaluation.
+        self.mutate_json(run_dir / "evaluation.json", mutate)
+        self.rebind(run_dir)
+
+    def assert_all_entry_points_reject(self, gate: str, needle: str, label: str) -> None:
+        replay = self.replay()
+        assert replay.returncode != 0, label
+        assert "Traceback" not in replay.stderr, replay.stderr
+        assert needle in replay.stdout + replay.stderr, (label, replay.stdout, replay.stderr)
+        assert self.check_citations("--gate", gate).returncode != 0, label
+
+    def test_execution_conditions_are_reconstructed(self) -> None:
+        # Merge review R23-01: the recorded invocation must equal the command derived from the
+        # registry, the validated tool path and the recorded checkout root; effective settings
+        # come from that invocation, not from the registry alone.
+        self.write_matrix()
+        assert self.invoke().returncode == 0
+        run_dir = max(self.output.glob("run-*"))
+        gate = str(self.output / "gate.json")
+        command = run_dir / "requests/01/command.json"
+        discovery = run_dir / "groups/alpha/discovery.json"
+        kept = {
+            p: p.read_bytes()
+            for p in (
+                command,
+                discovery,
+                run_dir / "requests/01/result.json",
+                run_dir / "evaluation.json",
+                self.output / "gate.json",
+            )
+        }
+
+        def rebind_command() -> None:
+            digest = sha256(command)
+            self.mutate_json(
+                run_dir / "requests/01/result.json",
+                lambda r: r.__setitem__("command_sha256", digest),
+            )
+            self.mutate_evaluation_and_records(
+                run_dir, lambda e: e["results"][0].__setitem__("command_sha256", digest)
+            )
+
+        def set_unwind(value: str) -> Any:
+            def apply(c: dict[str, Any]) -> None:
+                c["argv"][c["argv"].index("--default-unwind") + 1] = value
+
+            return apply
+
+        for label, path, mutate in (
+            ("argv deleted", command, lambda c: c.pop("argv")),
+            ("default unwind lowered", command, set_unwind("1")),
+            (
+                "unwinding checks disabled",
+                command,
+                lambda c: c["argv"].append("--no-unwinding-checks"),
+            ),
+            (
+                "solver changed",
+                command,
+                lambda c: c["argv"].__setitem__(c["argv"].index("--solver") + 1, "minisat"),
+            ),
+            ("cwd changed", command, lambda c: c.__setitem__("cwd", "/elsewhere")),
+            ("budget changed", command, lambda c: c.__setitem__("budget_seconds", 1)),
+            (
+                "executable swapped",
+                command,
+                lambda c: c["argv"].__setitem__(3, "/usr/bin/cargo-kani"),
+            ),
+            (
+                "discovery without only-codegen",
+                discovery,
+                lambda d: d["argv"].remove("--only-codegen"),
+            ),
+        ):
+            with self.subTest(label=label):
+                try:
+                    self.mutate_json(path, mutate)
+                    if path is command:
+                        rebind_command()
+                    else:
+                        self.rebind(run_dir)
+                    self.assert_all_entry_points_reject(gate, "execution record", label)
+                finally:
+                    for p, data in kept.items():
+                        p.write_bytes(data)
+        assert self.replay().returncode == 0
+        evaluation = json.loads((run_dir / "evaluation.json").read_text())
+        assert evaluation["results"][0]["compiled"]["effective"] == {
+            "unwind": 16,
+            "solver": "cadical",
+        }
+        assert evaluation["root"] == str(self.root)
+
+    def test_tool_identity_record_is_required(self) -> None:
+        # Merge review R23-02: the tool identity is part of the evidence; an emptied,
+        # mistyped or policy-inconsistent record must not replay.
+        self.write_matrix()
+        assert self.invoke().returncode == 0
+        run_dir = max(self.output.glob("run-*"))
+        gate = str(self.output / "gate.json")
+        tools_path = run_dir / "tools.json"
+        kept = {
+            p: p.read_bytes()
+            for p in (tools_path, run_dir / "evaluation.json", self.output / "gate.json")
+        }
+
+        def both(mutate: Any) -> None:
+            self.mutate_json(tools_path, mutate)
+            self.mutate_evaluation_and_records(run_dir, lambda e: mutate(e["tools"]))
+
+        for label, mutate in (
+            ("emptied", lambda t: t.clear()),
+            ("other version", lambda t: t.__setitem__("reported_version", "cargo-kani 0.65.0")),
+            ("no rustc component", lambda t: t["components"].pop("toolchain/bin/rustc")),
+            ("no cbmc", lambda t: t["components"].pop("cbmc")),
+            ("no solver", lambda t: t["components"].pop("cadical")),
+            (
+                "foreign host",
+                lambda t: t.__setitem__(
+                    "rustc_vV",
+                    t["rustc_vV"].replace("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"),
+                ),
+            ),
+            (
+                "wrapper outside the store",
+                lambda t: t["cargo_kani"].__setitem__("path", "/usr/bin/cargo-kani"),
+            ),
+            ("digest not hex", lambda t: t["cargo_kani"].__setitem__("sha256", "nope")),
+        ):
+            with self.subTest(label=label):
+                try:
+                    both(mutate)
+                    self.assert_all_entry_points_reject(gate, "tool", label)
+                finally:
+                    for p, data in kept.items():
+                        p.write_bytes(data)
+        # The summary copy alone may not drift from the raw record either.
+        self.mutate_evaluation_and_records(
+            run_dir, lambda e: e["tools"].__setitem__("reported_version", "cargo-kani 0.66.1")
+        )
+        self.assert_all_entry_points_reject(gate, "tool", "summary drift")
+        for p, data in kept.items():
+            p.write_bytes(data)
+        assert self.replay().returncode == 0
+
+    def test_environment_record_is_validated(self) -> None:
+        self.write_matrix()
+        assert self.invoke().returncode == 0
+        run_dir = max(self.output.glob("run-*"))
+        gate = str(self.output / "gate.json")
+        env_path = run_dir / "environment.json"
+        kept = {
+            p: p.read_bytes()
+            for p in (env_path, run_dir / "evaluation.json", self.output / "gate.json")
+        }
+        for label, mutate_env, mutate_eval in (
+            (
+                "forbidden variable kept",
+                lambda e: e["kept"].append("RUSTC_WRAPPER"),
+                lambda e: e["environment"]["kept"].append("RUSTC_WRAPPER"),
+            ),
+            (
+                "cargo config override",
+                lambda e: e["cargo_config"]["effective"].__setitem__(
+                    "build", {"rustc-wrapper": "sccache"}
+                ),
+                lambda e: None,
+            ),
+            ("summary drift", lambda e: None, lambda e: e["environment"].__setitem__("kept", [])),
+        ):
+            with self.subTest(label=label):
+                try:
+                    self.mutate_json(env_path, mutate_env)
+                    self.mutate_evaluation_and_records(run_dir, mutate_eval)
+                    self.assert_all_entry_points_reject(gate, "environment", label)
+                finally:
+                    for p, data in kept.items():
+                        p.write_bytes(data)
+        assert self.replay().returncode == 0
+
     def test_discovery_fault_of_a_diagnostic_group_blocks_every_scope(self) -> None:
         # a runner fault is not a mathematical diagnostic failure.
         self.fake(mode="crash-discovery", crash_package="beta-pkg")

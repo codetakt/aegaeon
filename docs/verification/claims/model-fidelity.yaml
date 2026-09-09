@@ -147,6 +147,7 @@ modules:
   fstar/resource/ProtectedResourceMetadata.fst: faithful
   # Preserves refresh scope and rejects unrecorded code targets; parser/storage correspondence remains open.
   fstar/resource/ResourceIndicators.EffectiveTarget.fst: simplified
+  fstar/oidc/OIDC.AuthorizationTransactions.fst: simplified
   fstar/oidc/OIDC.Reauthentication.fst: simplified
   fstar/oidc/OIDC.OfflineConsent.fst: simplified
   fstar/oidc/OIDC.RequestObjectTarget.fst: simplified
