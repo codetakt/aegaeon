@@ -1,0 +1,9 @@
+* Error 19 at Bad.fst(2,36-2,38):
+  - Assertion failed
+  - The SMT solver could not prove the query. Use --query_stats for more
+    details.
+  - See also /nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/lib/fstar/ulib/Prims.fst(459,90-459,102)
+
+Verified module: Probe
+Verified module: Bad
+1 error was reported (see above)

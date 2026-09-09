@@ -20,6 +20,7 @@ small proof-support module inventory needed for Low\* bounds work.
 ## Canonical Documents
 
 - `[runbook]` [F\* verification requirements](verification-requirements.md)
+- `[policy]` [F\* per-module admission](module-admission.md)
 - `[runbook]` [F\* / KaRaMeL troubleshooting](troubleshooting.md)
 - `[runbook]` [Store-entry VC resolution](store-entries-vc-resolution.md)
 - `[index]` [Assumption register](../claims/assumptions/README.md)

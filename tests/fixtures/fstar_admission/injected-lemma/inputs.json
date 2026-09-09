@@ -1,0 +1,47 @@
+{
+  "argv": [
+    "fstar.exe",
+    "--detail_errors",
+    "InjectedFailure.fst"
+  ],
+  "cwd": "/home/claude/Workspaces/conceptual/aegaeon/.local-issue-notes/2026-09-08-assurance-execution/T03/negative-source",
+  "executed_argv": [
+    "/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe",
+    "--detail_errors",
+    "InjectedFailure.fst"
+  ],
+  "include_paths": [],
+  "local_context": [
+    {
+      "path": "/home/claude/Workspaces/conceptual/aegaeon/.local-issue-notes/2026-09-08-assurance-execution/T03/negative-source/InjectedFailure.fst",
+      "sha256": "55cb50a146eef06eec90c7b4cb14d87445773751bbcdc819a2d0816632e2b67b"
+    }
+  ],
+  "loops_origin": "not-specified",
+  "modules": [
+    {
+      "path": "InjectedFailure.fst",
+      "sha256": "55cb50a146eef06eec90c7b4cb14d87445773751bbcdc819a2d0816632e2b67b"
+    }
+  ],
+  "providers": {
+    "EVERPARSE_FSTAR_PATH": null,
+    "EVERPARSE_LOWPARSER_PATH": null,
+    "EVERPARSE_PRELUDE_PATH": null,
+    "HACL_FSTAR_PATH": "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+    "KRMLLIB_PATH": null,
+    "STEEL_PATH": "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source"
+  },
+  "recorder": {
+    "path": "/home/claude/Workspaces/conceptual/aegaeon-fstar-failure-propagation/scripts/validation/run_fstar_invocation.py",
+    "sha256": "e0c96f9d0fa67a001484e9042e43c8b976c9b1da0c58a08aa8a1c3d31532c2a9"
+  },
+  "solver": {
+    "path": "/nix/store/kc1d2kf2vlss6x6h6l5i231ipwkwzm6v-z3-4.15.4/bin/z3",
+    "sha256": "efa8d9a98d32c221400a7e116918e8b655f99fb624c307a1b3bedaccb9c2d1cf"
+  },
+  "tool": {
+    "path": "/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe",
+    "sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf"
+  }
+}

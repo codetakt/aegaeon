@@ -1,0 +1,20 @@
+Detailed error report follows for InjectedFailure.fst(2,34-2,36)
+Taking 5 seconds per proof obligation (1 proofs in total)
+1, * Error 276 at InjectedFailure.fst(2,0-2,36):
+  - Unexpected output from Z3:
+      "(error "line 5020 column 51: unknown constant label_1")"
+
+
+* Error 9 at InjectedFailure.fst(2,34-2,36):
+  - XX: proof obligation at Prims.fst(459,90-459,102) failed.
+  - Assertion failed
+  - See also /nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/lib/fstar/ulib/Prims.fst(459,90-459,102)
+
+* Error 19 at InjectedFailure.fst(2,34-2,36):
+  - Assertion failed
+  - The SMT solver could not prove the query. Use --query_stats for more
+    details.
+  - See also /nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/lib/fstar/ulib/Prims.fst(459,90-459,102)
+
+Verified module: InjectedFailure
+3 errors were reported (see above)

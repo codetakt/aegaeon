@@ -1,0 +1,42 @@
+fstar: /nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe
+F* 2025.10.06~dev
+== (a) cwd Dpop(origin) vs --include inc1 Dpop(other)
+  - Unable to load Dpop.fst.checked since checked file Dpop.fst.checked does not
+Verified module: Main
+  rc=0
+== (b) --include inc1 Dpop(origin) --include inc2 Dpop(other)
+  - Unable to load
+    $PROBE/b/inc2/Dpop.fst.checked
+    since checked file
+    $PROBE/b/inc2/Dpop.fst.checked
+  rc=1
+== (b') --include inc2 Dpop(other) --include inc1 Dpop(origin)
+  - Unable to load
+    $PROBE/b/inc1/Dpop.fst.checked
+    since checked file
+    $PROBE/b/inc1/Dpop.fst.checked
+  rc=0
+== (c) Dpop only in the source's own dir (not cwd, not include)
+* Error 72 at Main.fst(2,14-2,18):
+  rc=1
+== (d) Dpop only in cwd/sub (not included)
+* Error 72 at Main.fst(2,14-2,18):
+  rc=1
+== (e) cwd Dpop.fst(other) vs inc1 Dpop.fsti+Dpop.fst(origin)
+  - Unable to load
+    $PROBE/e/inc1/Dpop.fsti.checked
+    since checked file
+    $PROBE/e/inc1/Dpop.fsti.checked
+  rc=0
+== (f) cwd Dpop.fsti only, inc1 Dpop.fst: which result lines?
+  - Unable to load Dpop.fsti.checked since checked file Dpop.fsti.checked does
+Verified module: Main
+  rc=0
+== (g) dependency in cwd: result lines printed for the dependency?
+  - Unable to load Dpop.fst.checked since checked file Dpop.fst.checked does not
+Verified module: Main
+  rc=0
+== (g') same with --already_cached / explicit both files
+Verified module: Dpop
+Verified module: Main
+  rc=0
