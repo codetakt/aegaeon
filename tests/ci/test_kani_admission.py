@@ -748,9 +748,12 @@ class WrapperTests(unittest.TestCase):
             path.chmod(0o755)
         toolchain = store / "kani-0.66.0/toolchain/bin"
         toolchain.mkdir(parents=True)
-        (toolchain / "rustc").write_text(FAKE_RUSTC)
+        # The fake tools name the running interpreter explicitly: /usr/bin/env does not
+        # exist inside a Nix build sandbox, where the docs lane runs this suite.
+        shebang = f"#!{sys.executable}"
+        (toolchain / "rustc").write_text(FAKE_RUSTC.replace("#!/usr/bin/env python3", shebang, 1))
         (toolchain / "rustc").chmod(0o755)
-        (toolchain / "cargo").write_text(FAKE_KANI)
+        (toolchain / "cargo").write_text(FAKE_KANI.replace("#!/usr/bin/env python3", shebang, 1))
         (toolchain / "cargo").chmod(0o755)
         solver_dir = self.root / "store" / "fake-cadical-1.0" / "bin"
         cbmc_dir = self.root / "store" / "fake-cbmc-6.10.0" / "bin"
