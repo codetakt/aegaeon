@@ -1,0 +1,566 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Federation_RP_Authorize_Callback] Theory loaded
+[Theory Federation_RP_Authorize_Callback] Theory translated
+[Theory Federation_RP_Authorize_Callback] Derivation checks started
+[Theory Federation_RP_Authorize_Callback] Derivation checks ended
+[Theory Federation_RP_Authorize_Callback] Theory closed
+theory Federation_RP_Authorize_Callback
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction Inequality:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  */
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Entity_Keygen:
+   [ Fr( ~sk ) ]
+  --[ Entity_Key( $Entity, pk(~sk) ) ]->
+   [
+   !Entity_SK( $Entity, ~sk ), !Entity_PK( $Entity, pk(~sk) ),
+   Out( pk(~sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Entity_Compromise:
+   [ !Entity_SK( A, sk ) ] --[ Compromised( A ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Trust_Anchor_Init:
+   [ !Entity_SK( $TA, ta_sk ) ]
+  --[ Trust_Anchor_Established( $TA, pk(ta_sk) ), Unique( <'ta', $TA> ) ]->
+   [
+   !TrustAnchor( $TA, pk(ta_sk) ),
+   Out( sign(<'entity_config', $TA, pk(ta_sk), 'trust_anchor'>, ta_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Upstream_IdP_Entity_Config:
+   [ !Entity_SK( $IdP, idp_sk ) ]
+  --[
+  IdP_Config_Published( $IdP, pk(idp_sk), $idp_issuer ),
+  Unique( <'idp_config', $IdP> )
+  ]->
+   [
+   !IdP_Config( $IdP, pk(idp_sk), $idp_issuer,
+                sign(<'entity_config', $IdP, pk(idp_sk), 'openid_provider', $idp_issuer>,
+                     idp_sk)
+   ),
+   Out( sign(<'entity_config', $IdP, pk(idp_sk), 'openid_provider', 
+              $idp_issuer>,
+             idp_sk)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) TA_Issue_Subordinate_For_IdP:
+   [ !Entity_SK( $TA, ta_sk ), !Entity_PK( $IdP, idp_pk ) ]
+  --[ Subordinate_Issued( $TA, $IdP, idp_pk, $policy ) ]->
+   [
+   !SubordinateStmt( $TA, $IdP,
+                     sign(<'subordinate_statement', $TA, $IdP, idp_pk, $policy>, ta_sk),
+                     idp_pk, $policy
+   ),
+   Out( sign(<'subordinate_statement', $TA, $IdP, idp_pk, $policy>, ta_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Init:
+   [ Fr( ~broker_sk ) ]
+  --[ Broker_Initialized( $Broker, $broker_issuer, pk(~broker_sk) ) ]->
+   [ !Broker( $Broker, ~broker_sk, $broker_issuer ), Out( pk(~broker_sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Register_TA:
+   [
+   !Broker( $Broker, broker_sk, broker_issuer ), !TrustAnchor( $TA, ta_pk )
+   ]
+  --[ Broker_TA_Registered( $Broker, $TA, ta_pk ) ]->
+   [ !BrokerTrustAnchor( $Broker, $TA, ta_pk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Resolve_Chain:
+   [
+   !BrokerTrustAnchor( $Broker, $TA, ta_pk ), !Entity_PK( $TA, ta_pk ),
+   !SubordinateStmt( $TA, $IdP, sub_stmt, idp_pk, policy ),
+   !IdP_Config( $IdP, idp_pk, idp_issuer, idp_config )
+   ]
+  --[
+  Eq( verify(sub_stmt,
+             <'subordinate_statement', $TA, $IdP, idp_pk, policy>, ta_pk),
+      true
+  ),
+  Eq( verify(idp_config,
+             <'entity_config', $IdP, idp_pk, 'openid_provider', idp_issuer>, idp_pk),
+      true
+  ),
+  Chain_Resolved( $Broker, $IdP, $TA, idp_pk, idp_issuer ),
+  JWS_Verified_Before_Cache( $Broker, $IdP, sub_stmt, idp_config )
+  ]->
+   [ Chain_Fresh( $Broker, $IdP, $TA, idp_pk, idp_issuer, policy ) ]
+
+  /*
+  rule (modulo AC) Broker_Resolve_Chain:
+     [
+     !BrokerTrustAnchor( $Broker, $TA, ta_pk ), !Entity_PK( $TA, ta_pk ),
+     !SubordinateStmt( $TA, $IdP, sub_stmt, idp_pk, policy ),
+     !IdP_Config( $IdP, idp_pk, idp_issuer, idp_config )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ),
+    Chain_Resolved( $Broker, $IdP, $TA, idp_pk, idp_issuer ),
+    JWS_Verified_Before_Cache( $Broker, $IdP, sub_stmt, idp_config )
+    ]->
+     [ Chain_Fresh( $Broker, $IdP, $TA, idp_pk, idp_issuer, policy ) ]
+    variants (modulo AC)
+    1. $IdP  = $IdP.12
+       $TA   = $TA.12
+       idp_config
+             = idp_config.12
+       idp_issuer
+             = idp_issuer.12
+       idp_pk
+             = idp_pk.12
+       policy
+             = policy.12
+       sub_stmt
+             = sub_stmt.12
+       ta_pk = ta_pk.12
+       z     = verify(sub_stmt.12,
+                      <'subordinate_statement', $TA.12, $IdP.12, idp_pk.12, policy.12>,
+                      ta_pk.12)
+       z.1   = verify(idp_config.12,
+                      <'entity_config', $IdP.12, idp_pk.12, 'openid_provider', idp_issuer.12>,
+                      idp_pk.12)
+    
+    2. $IdP  = $x.12
+       $TA   = $x.13
+       idp_config
+             = idp_config.19
+       idp_issuer
+             = idp_issuer.19
+       idp_pk
+             = x.16
+       policy
+             = x.17
+       sub_stmt
+             = sign(<'subordinate_statement', $x.13, $x.12, x.16, x.17>, x.18)
+       ta_pk = pk(x.18)
+       z     = true
+       z.1   = verify(idp_config.19,
+                      <'entity_config', $x.12, x.16, 'openid_provider', idp_issuer.19>, x.16)
+    
+    3. $IdP  = $x.12
+       $TA   = $x.13
+       idp_config
+             = sign(<'entity_config', $x.12, pk(x.14), 'openid_provider', x.15>, x.14)
+       idp_issuer
+             = x.15
+       idp_pk
+             = pk(x.14)
+       policy
+             = x.16
+       sub_stmt
+             = sign(<'subordinate_statement', $x.13, $x.12, pk(x.14), x.16>, x.17)
+       ta_pk = pk(x.17)
+       z     = true
+       z.1   = true
+    
+    4. $IdP  = $x.12
+       $TA   = $TA.16
+       idp_config
+             = sign(<'entity_config', $x.12, pk(x.14), 'openid_provider', x.15>, x.14)
+       idp_issuer
+             = x.15
+       idp_pk
+             = pk(x.14)
+       policy
+             = policy.16
+       sub_stmt
+             = sub_stmt.16
+       ta_pk = ta_pk.16
+       z     = verify(sub_stmt.16,
+                      <'subordinate_statement', $TA.16, $x.12, pk(x.14), policy.16>, ta_pk.16)
+       z.1   = true
+  */
+
+rule (modulo E) Cache_Write_Chain:
+   [ Chain_Fresh( $Broker, $IdP, $TA, idp_pk, idp_issuer, policy ) ]
+  --[
+  Cache_Written( $Broker, $IdP, $TA, idp_pk, idp_issuer ),
+  Unique( <'cache_write', $Broker, $IdP, $TA> )
+  ]->
+   [ !CachedChain( $Broker, $IdP, $TA, idp_pk, idp_issuer, policy ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Authorize_Start:
+   [
+   !Broker( $Broker, broker_sk, broker_issuer ),
+   !CachedChain( $Broker, $IdP, $TA, idp_pk, idp_issuer, policy ),
+   Fr( ~session_id ), Fr( ~us_state ), Fr( ~us_nonce ), Fr( ~us_verifier )
+   ]
+  --[
+  Authorize_Started( $Broker, $IdP, ~session_id, ~us_state, ~us_nonce ),
+  Session_Created( $Broker, ~session_id, $IdP, ~us_state ),
+  Unique( <'session', ~session_id> )
+  ]->
+   [
+   Out( <'us_auth_req', $Broker, ~us_state, ~us_nonce, 
+         h(<'S256', ~us_verifier>)>
+   ),
+   Broker_Session( ~session_id, $Broker, $IdP, $TA, ~us_state, ~us_nonce,
+                   ~us_verifier, idp_pk, idp_issuer
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Upstream_IdP_Issue_Code:
+   [
+   In( <'us_auth_req', broker_id, us_state, us_nonce, us_code_challenge> ),
+   Fr( ~us_code )
+   ]
+  --[
+  US_Code_Issued( $IdP, ~us_code, broker_id, $User, us_nonce ),
+  Unique( <'us_code', ~us_code> )
+  ]->
+   [
+   Out( <'us_callback', ~us_code, us_state, $IdP> ),
+   US_AuthCode( $IdP, ~us_code, broker_id, $User, us_nonce,
+                us_code_challenge
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Upstream_IdP_Send_ID_Token:
+   [
+   !Entity_SK( $IdP, idp_sk ),
+   !IdP_Config( $IdP, pk(idp_sk), idp_issuer, idp_config ),
+   US_AuthCode( $IdP, us_code, broker_id, $User, us_nonce, us_code_challenge
+   ),
+   Fr( ~auth_time )
+   ]
+  --[
+  US_IDToken_Issued( $IdP,
+                     sign(<'id_token', idp_issuer, broker_id, $User, us_nonce, ~auth_time>,
+                          idp_sk),
+                     broker_id, $User, us_nonce, idp_issuer
+  ),
+  Unique( <'us_idtoken', $IdP, us_code> )
+  ]->
+   [
+   Out( sign(<'id_token', idp_issuer, broker_id, $User, us_nonce, ~auth_time
+             >,
+             idp_sk)
+   ),
+   US_Code_Consumed( $IdP, us_code, broker_id, $User )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Callback_Process:
+   [
+   In( <'us_callback', us_code, us_state, claimed_idp> ), In( us_id_token ),
+   Broker_Session( session_id, broker_id, $IdP, $TA, us_state, us_nonce,
+                   us_verifier, idp_pk, idp_issuer
+   ),
+   !CachedChain( broker_id, $IdP, $TA, idp_pk, idp_issuer, policy )
+   ]
+  --[
+  Eq( claimed_idp, $IdP ), Eq( idp_issuer, claimed_idp ),
+  Eq( verify(us_id_token,
+             <'id_token', idp_issuer, broker_id, $User, us_nonce, auth_time>, idp_pk),
+      true
+  ),
+  Eq( h(<'S256', us_verifier>), h(<'S256', us_verifier>) ),
+  Callback_Processed( broker_id, $IdP, session_id, us_code, $User ),
+  IDToken_Issuer_Verified( broker_id, $IdP, idp_issuer, claimed_idp ),
+  IDToken_Signature_Verified( broker_id, $IdP, us_id_token, idp_pk ),
+  Cache_Reused( broker_id, $IdP, $TA, session_id ),
+  State_Matched( broker_id, session_id, us_state ),
+  Unique( <'callback', session_id> )
+  ]->
+   [ Broker_Authenticated( broker_id, $IdP, $User, session_id, us_id_token )
+   ]
+
+  /*
+  rule (modulo AC) Broker_Callback_Process:
+     [
+     In( <'us_callback', us_code, us_state, claimed_idp> ), In( us_id_token ),
+     Broker_Session( session_id, broker_id, $IdP, $TA, us_state, us_nonce,
+                     us_verifier, idp_pk, idp_issuer
+     ),
+     !CachedChain( broker_id, $IdP, $TA, idp_pk, idp_issuer, policy )
+     ]
+    --[
+    Eq( claimed_idp, $IdP ), Eq( idp_issuer, claimed_idp ), Eq( z, true ),
+    Eq( h(<'S256', us_verifier>), h(<'S256', us_verifier>) ),
+    Callback_Processed( broker_id, $IdP, session_id, us_code, $User ),
+    IDToken_Issuer_Verified( broker_id, $IdP, idp_issuer, claimed_idp ),
+    IDToken_Signature_Verified( broker_id, $IdP, us_id_token, idp_pk ),
+    Cache_Reused( broker_id, $IdP, $TA, session_id ),
+    State_Matched( broker_id, session_id, us_state ),
+    Unique( <'callback', session_id> )
+    ]->
+     [ Broker_Authenticated( broker_id, $IdP, $User, session_id, us_id_token )
+     ]
+    variants (modulo AC)
+    1. $User = $User.29
+       auth_time
+             = auth_time.30
+       broker_id
+             = broker_id.31
+       idp_issuer
+             = idp_issuer.33
+       idp_pk
+             = idp_pk.34
+       us_id_token
+             = us_id_token.38
+       us_nonce
+             = us_nonce.39
+       z     = verify(us_id_token.38,
+                      <'id_token', idp_issuer.33, broker_id.31, $User.29, us_nonce.39, 
+                       auth_time.30>,
+                      idp_pk.34)
+    
+    2. $User = $User.58
+       auth_time
+             = auth_time.59
+       broker_id
+             = broker_id.60
+       idp_issuer
+             = idp_issuer.62
+       idp_pk
+             = pk(x.112)
+       us_id_token
+             = sign(<'id_token', idp_issuer.62, broker_id.60, $User.58, us_nonce.68, 
+                     auth_time.59>,
+                    x.112)
+       us_nonce
+             = us_nonce.68
+       z     = true
+  */
+
+lemma authorize_callback_binding:
+  all-traces
+  "∀ broker idp session_id code user #i.
+    (Callback_Processed( broker, idp, session_id, code, user ) @ #i) ⇒
+    (∃ state nonce #j.
+      (Authorize_Started( broker, idp, session_id, state, nonce ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp session_id code user #i.
+  (Callback_Processed( broker, idp, session_id, code, user ) @ #i)
+ ∧
+  ∀ state nonce #j.
+   (Authorize_Started( broker, idp, session_id, state, nonce ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma trust_chain_cache_soundness:
+  all-traces
+  "∀ broker idp ta pk issuer #i.
+    (Cache_Written( broker, idp, ta, pk, issuer ) @ #i) ⇒
+    (∃ sub_stmt config #j.
+      (JWS_Verified_Before_Cache( broker, idp, sub_stmt, config ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp ta pk issuer #i.
+  (Cache_Written( broker, idp, ta, pk, issuer ) @ #i)
+ ∧
+  ∀ sub_stmt config #j.
+   (JWS_Verified_Before_Cache( broker, idp, sub_stmt, config ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma id_token_issuer_verification:
+  all-traces
+  "∀ broker idp issuer claimed #i.
+    (IDToken_Issuer_Verified( broker, idp, issuer, claimed ) @ #i) ⇒
+    (issuer = claimed)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp issuer claimed #i.
+  (IDToken_Issuer_Verified( broker, idp, issuer, claimed ) @ #i)
+ ∧
+  ¬(issuer = claimed)"
+*/
+by sorry
+
+lemma no_callback_without_chain:
+  all-traces
+  "∀ broker idp session_id code user #i.
+    (Callback_Processed( broker, idp, session_id, code, user ) @ #i) ⇒
+    (∃ ta pk issuer #j.
+      (Chain_Resolved( broker, idp, ta, pk, issuer ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp session_id code user #i.
+  (Callback_Processed( broker, idp, session_id, code, user ) @ #i)
+ ∧
+  ∀ ta pk issuer #j.
+   (Chain_Resolved( broker, idp, ta, pk, issuer ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma cache_reuse_consistency:
+  all-traces
+  "∀ broker idp ta session_id #i.
+    (Cache_Reused( broker, idp, ta, session_id ) @ #i) ⇒
+    (∃ pk issuer #j.
+      (Cache_Written( broker, idp, ta, pk, issuer ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp ta session_id #i.
+  (Cache_Reused( broker, idp, ta, session_id ) @ #i)
+ ∧
+  ∀ pk issuer #j.
+   (Cache_Written( broker, idp, ta, pk, issuer ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma session_state_integrity:
+  all-traces
+  "∀ broker session_id state #i.
+    (State_Matched( broker, session_id, state ) @ #i) ⇒
+    (∃ idp nonce #j.
+      (Authorize_Started( broker, idp, session_id, state, nonce ) @ #j) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker session_id state #i.
+  (State_Matched( broker, session_id, state ) @ #i)
+ ∧
+  ∀ idp nonce #j.
+   (Authorize_Started( broker, idp, session_id, state, nonce ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma id_token_unforgeability:
+  all-traces
+  "∀ broker idp token pk #i.
+    (IDToken_Signature_Verified( broker, idp, token, pk ) @ #i) ⇒
+    ((∃ user nonce issuer #j.
+       (US_IDToken_Issued( idp, token, broker, user, nonce, issuer ) @ #j) ∧
+       (#j < #i)) ∨
+     (∃ A #c. Compromised( A ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp token pk #i.
+  (IDToken_Signature_Verified( broker, idp, token, pk ) @ #i)
+ ∧
+  (∀ user nonce issuer #j.
+    (US_IDToken_Issued( idp, token, broker, user, nonce, issuer ) @ #j)
+   ⇒
+    ¬(#j < #i)) ∧
+  (∀ A #c. (Compromised( A ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma callback_processed_reachable:
+  exists-trace
+  "∃ rp user state code sess #i.
+    Callback_Processed( rp, user, state, code, sess ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ rp user state code sess #i.
+  (Callback_Processed( rp, user, state, code, sess ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Unbound variables
+=================
+
+  rule `Broker_Callback_Process' has unbound variables: 
+    auth_time
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Broker_Callback_Process: 
+Failed to derive Variable(s): auth_time
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: federation/rp_authorize_callback.spthy
+
+  processing time: 1.47s
+  
+  WARNING: 2 wellformedness check failed!
+  
+  authorize_callback_binding (all-traces): analysis incomplete (1 steps)
+  trust_chain_cache_soundness (all-traces): analysis incomplete (1 steps)
+  id_token_issuer_verification (all-traces): analysis incomplete (1 steps)
+  no_callback_without_chain (all-traces): analysis incomplete (1 steps)
+  cache_reuse_consistency (all-traces): analysis incomplete (1 steps)
+  session_state_integrity (all-traces): analysis incomplete (1 steps)
+  id_token_unforgeability (all-traces): analysis incomplete (1 steps)
+  callback_processed_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

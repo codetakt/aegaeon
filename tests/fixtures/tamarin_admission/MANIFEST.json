@@ -1,0 +1,33 @@
+{
+  "files": {
+    "tool-probes/MODELS.sha256": "a54424258b8713a03ce81cc0a31577ce39091627c74794eef2311e6fe8d549b2",
+    "tool-probes/TOOL.txt": "1f5eba98a2d2ccf6546e03645b27dd987d2c488ff069e7687098c65a5aa8dec2",
+    "tool-probes/p10_two_exact.txt": "174e87b8096418cc12491085b26749be02b11e4ad44310b9f19690ab689a1003",
+    "tool-probes/p11_malformed_ntar.txt": "490f3e499329b1498bbec18acc02baf18b1f55ca55cf0389785198b43a1c1110",
+    "tool-probes/p12_fixed_ntar.txt": "8417ff259f5603cd91036545939c62ca5a44d3f758a012643f2882e49ce94cba",
+    "tool-probes/p13_fixed_all.txt": "0b95201c503cf054bb344108112ad360615341798caf7538b7615ea3f0205154",
+    "tool-probes/p1_exact.txt": "f5ec49e39c401dddbfb18bdd56d9db3866e41068bb65bde32f255d618bf22f7b",
+    "tool-probes/p2_prefix_nostar.txt": "ec983e9ba11a5d564d3f7fb18d3ac22068959ef565a7850d9ba5eda8b97892a8",
+    "tool-probes/p4_malformed_refresh.txt": "c5fb059cca1efcb48c4a9d68fbe78bba871ee927c3fff8d7c8f5ee8e03b3287b",
+    "tool-probes/p6_falsified.txt": "235fb799bb45292ab024f8f030bba5de8fbb8cd21318e7b7c8a3477f4fc72ec4",
+    "tool-probes/p8_missing_file.txt": "debd1daa63ee89883aa79643ae71e23750cdb164ab6da05995ad1c3236985471",
+    "wellformedness/federation_cache_poisoning_resistance.txt": "c6827f263b7264b7febda2d6565bd39cea17413564d7f768d3ae5ab062abf6eb",
+    "wellformedness/federation_federation_key_rotation.txt": "5510df9f6f124c7ca0d9b10a1bf398d19c1f53370f5160f0ed3f06a26a6d3ce6",
+    "wellformedness/federation_id_token_chain.txt": "83781f5566c89b1db41ce24e2ecf629801237a03a8aabee3c2fc8a507038ffaa",
+    "wellformedness/federation_rp_authorize_callback.txt": "af9c03af0c10b3aedbd73aa03450b30056bd536bd4589f51ddd7a82f5b9ece7a",
+    "wellformedness/management_policy_downgrade.txt": "0ea695bd507aed7ecce7dbd8aa547381276039bbb5d906ff2e7060a604eeaaa6",
+    "wellformedness/sd_jwt_sd_jwt_selective_disclosure.txt": "31506ca72f7725298625932435657722d015cdb99798c814a91710ea28194ced"
+  },
+  "origins": {
+    "tool-probes": "Direct probes of the pinned tool over copies of proofs/tamarin/authcode/code_replay.spthy, refresh_token_rotation.spthy (baseline 2b6396686), a persistent-state mutation of code_replay (cross-review reviewer-work), and a quantified copy of the refresh theory; commands in the T04 handoff work/probes/PROBES.log.",
+    "wellformedness": "tamarin-prover <theory> without --prove for the six selected theories that carry rule-level wellformedness warnings at baseline 2b6396686."
+  },
+  "purpose": "Real tamarin-prover 1.12.0 outputs for tests/ci/test_tamarin_admission.py; copied verbatim (stored as .txt because *.log is git-ignored).",
+  "tool": [
+    "maude tool: 'maude'",
+    " checking version: tamarin-prover 1.12.0, (C) David Basin, Cas Cremers, Jannik Dreier, Simon Meier, Ralf Sasse, Benedikt Schmidt, 2010-2023",
+    "3.5.1",
+    "/nix/store/zn28xx8w6vp660qmvhp0p3x495zpa13a-tamarin-prover-1.12.0/bin/tamarin-prover",
+    "/nix/store/8f9jyk9na05xx8dslf6ackcylzcipkhs-maude-3.5.1/bin/maude"
+  ]
+}

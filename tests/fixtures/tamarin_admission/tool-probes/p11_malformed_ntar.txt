@@ -1,0 +1,356 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Refresh_Token_Rotation] Theory loaded
+[Theory Refresh_Token_Rotation] Theory translated
+[Theory Refresh_Token_Rotation] Derivation checks started
+[Theory Refresh_Token_Rotation] Derivation checks ended
+[Theory Refresh_Token_Rotation] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory Refresh_Token_Rotation
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction Inequality:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  */
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) AS_Issue_Tokens:
+   [ Fr( ~at ), Fr( ~rt ) ]
+  --[
+  Tokens_Issued( $Client, $User, ~at, ~rt ),
+  RT_Active( $Client, $User, ~rt, '0' ), Unique( <'rt_issue', ~rt> )
+  ]->
+   [
+   Active_RT( $Client, $User, ~rt, '0' ),
+   !Grant_Family( $Client, $User, ~rt ), Client_Holds_RT( $Client, ~rt )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_Present_RT:
+   [ Client_Holds_RT( $Client, rt ) ]
+  --[ Client_Presented_RT( $Client, rt ) ]->
+   [ Out( <'refresh', $Client, rt> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Rotate:
+   [
+   In( <'refresh', client, rt> ), Active_RT( client, $User, rt, count ),
+   Fr( ~new_at ), Fr( ~new_rt )
+   ]
+  --[
+  Token_Rotated( client, $User, rt, ~new_rt, count ),
+  RT_Consumed( client, $User, rt ),
+  RT_Active( client, $User, ~new_rt, <count, '1'> ),
+  Unique( <'rt_rotate', rt> )
+  ]->
+   [
+   Consumed_RT( client, $User, rt ),
+   Active_RT( client, $User, ~new_rt, <count, '1'> ),
+   Client_Holds_RT( client, ~new_rt )
+   ]
+
+  // loop breaker: [1]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Detect_Replay:
+   [ In( <'refresh', client, rt> ), Consumed_RT( client, $User, rt ) ]
+  --[
+  RT_Replay_Detected( client, $User, rt ), Family_Revoked( client, $User )
+  ]->
+   [ Revoked_Family( client, $User ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_Cascade_Revoke:
+   [
+   Revoked_Family( $Client, $User ), Active_RT( $Client, $User, rt, count )
+   ]
+  --[ RT_Cascade_Revoked( $Client, $User, rt ) ]->
+   [ Revoked_Family( $Client, $User ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_RT_Leak:
+   [ Client_Holds_RT( $Client, rt ) ]
+  --[ RT_Leaked( $Client, rt ) ]->
+   [ Out( rt ), Client_Holds_RT( $Client, rt ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+lemma rotation_single_use:
+  all-traces
+  "∀ client user rt new1 new2 c1 c2 #i #j.
+    ((Token_Rotated( client, user, rt, new1, c1 ) @ #i) ∧
+     (Token_Rotated( client, user, rt, new2, c2 ) @ #j)) ⇒
+    (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user rt new1 new2 c1 c2 #i #j.
+  (Token_Rotated( client, user, rt, new1, c1 ) @ #i) ∧
+  (Token_Rotated( client, user, rt, new2, c2 ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+by sorry
+
+lemma replay_detection_and_revocation:
+  all-traces
+  "∀ client user rt #i.
+    (RT_Replay_Detected( client, user, rt ) @ #i) ⇒
+    ((∃ new_rt count #j.
+       (Token_Rotated( client, user, rt, new_rt, count ) @ #j) ∧ (#j < #i)) ∧
+     (∃ #k. Family_Revoked( client, user ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user rt #i.
+  (RT_Replay_Detected( client, user, rt ) @ #i)
+ ∧
+  ((∀ new_rt count #j.
+     (Token_Rotated( client, user, rt, new_rt, count ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ #k. (Family_Revoked( client, user ) @ #k) ⇒ ⊥))"
+*/
+by sorry
+
+lemma rotation_chain_integrity:
+  all-traces
+  "∀ client user rt count #i.
+    (RT_Active( client, user, rt, count ) @ #i) ⇒
+    ((∃ at. Tokens_Issued( client, user, at, rt ) @ #i) ∨
+     (∃ old_rt old_count.
+       Token_Rotated( client, user, old_rt, rt, old_count ) @ #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user rt count #i.
+  (RT_Active( client, user, rt, count ) @ #i)
+ ∧
+  (∀ at. (Tokens_Issued( client, user, at, rt ) @ #i) ⇒ ⊥) ∧
+  (∀ old_rt old_count.
+    (Token_Rotated( client, user, old_rt, rt, old_count ) @ #i) ⇒ ⊥)"
+*/
+by sorry
+
+lemma cross_client_isolation:
+  all-traces
+  "∀ c1 c2 user1 user2 at rt new_rt count #i #j.
+    ((Tokens_Issued( c1, user1, at, rt ) @ #i) ∧
+     (Token_Rotated( c2, user2, rt, new_rt, count ) @ #j)) ⇒
+    ((c1 = c2) ∧ (user1 = user2))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ c1 c2 user1 user2 at rt new_rt count #i #j.
+  (Tokens_Issued( c1, user1, at, rt ) @ #i) ∧
+  (Token_Rotated( c2, user2, rt, new_rt, count ) @ #j)
+ ∧
+  ((¬(c1 = c2)) ∨ (¬(user1 = user2)))"
+*/
+by sorry
+
+lemma rotation_count_monotonicity:
+  all-traces
+  "∀ client user old_rt new_rt count #i.
+    (Token_Rotated( client, user, old_rt, new_rt, count ) @ #i) ⇒
+    (∃ #j. RT_Active( client, user, new_rt, <count, '1'> ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user old_rt new_rt count #i.
+  (Token_Rotated( client, user, old_rt, new_rt, count ) @ #i)
+ ∧
+  ∀ #j. (RT_Active( client, user, new_rt, <count, '1'> ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma no_token_after_revocation:
+  all-traces
+  "∀ client user rt #i #j.
+    ((RT_Cascade_Revoked( client, user, rt ) @ #i) ∧
+     (Token_Rotated( client, user, rt, new_rt, count ) @ #j)) ⇒
+    (#j < #i)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ client user rt #i #j.
+  (RT_Cascade_Revoked( client, user, rt ) @ #i) ∧
+  (Token_Rotated( client, user, rt, new_rt, count ) @ #j)
+ ∧
+  ¬(#j < #i)"
+*/
+simplify
+solve( Active_RT( $Client, $User, rt, count ) ▶₁ #i )
+  case AS_Issue_Tokens
+  solve( !KU( ~rt ) @ #vk.4 )
+    case Client_Present_RT_case_1
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    qed
+  next
+    case Client_Present_RT_case_2
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    qed
+  next
+    case Client_RT_Leak
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~rt, count ) ▶₁ #j )
+    qed
+  qed
+next
+  case AS_Rotate
+  solve( !KU( ~new_rt ) @ #vk.6 )
+    case Client_Present_RT_case_1
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    qed
+  next
+    case Client_Present_RT_case_2
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    qed
+  next
+    case Client_RT_Leak
+    solve( Revoked_Family( $Client, $User ) ▶₀ #i )
+      case AS_Cascade_Revoke_case_1
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Cascade_Revoke_case_2
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    next
+      case AS_Detect_Replay
+      by solve( Active_RT( $Client, $User, ~new_rt, count.1 ) ▶₁ #j )
+    qed
+  qed
+qed
+
+lemma rotation_reachable:
+  exists-trace
+  "∃ client user rt new count #i.
+    Token_Rotated( client, user, rt, new, count ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ client user rt new count #i.
+  (Token_Rotated( client, user, rt, new, count ) @ #i)"
+*/
+by sorry
+
+lemma replay_detection_reachable:
+  exists-trace
+  "∃ client user rt #i. RT_Replay_Detected( client, user, rt ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ client user rt #i. (RT_Replay_Detected( client, user, rt ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Formula terms
+=============
+
+  Lemma `no_token_after_revocation' uses terms of the wrong form:
+    `Free new_rt', `Free count'
+  
+  The only allowed terms are public constants and bound node and
+  message variables. If you encounter free message variables, then
+  you might have forgotten a #-prefix. Sort prefixes can only be
+  dropped where this is unambiguous. Moreover, reducible function
+  symbols are disallowed.
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: models/refresh_token_rotation.spthy
+
+  processing time: 0.32s
+  
+  WARNING: 1 wellformedness check failed!
+           The analysis results might be wrong!
+  
+  rotation_single_use (all-traces): analysis incomplete (1 steps)
+  replay_detection_and_revocation (all-traces): analysis incomplete (1 steps)
+  rotation_chain_integrity (all-traces): analysis incomplete (1 steps)
+  cross_client_isolation (all-traces): analysis incomplete (1 steps)
+  rotation_count_monotonicity (all-traces): analysis incomplete (1 steps)
+  no_token_after_revocation (all-traces): verified (28 steps)
+  rotation_reachable (exists-trace): analysis incomplete (1 steps)
+  replay_detection_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

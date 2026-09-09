@@ -1,0 +1,243 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Federation_Key_Rotation] Theory loaded
+[Theory Federation_Key_Rotation] Theory translated
+[Theory Federation_Key_Rotation] Derivation checks started
+[Theory Federation_Key_Rotation] Derivation checks ended
+[Theory Federation_Key_Rotation] Theory closed
+theory Federation_Key_Rotation
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) IdP_Init:
+   [ Fr( ~sk ) ]
+  --[
+  IdP_Key_Created( $IdP, pk(~sk), 'initial' ), Key_Active( $IdP, pk(~sk) ),
+  Unique( <'idp_init', $IdP> )
+  ]->
+   [
+   !IdP_SK( $IdP, ~sk ), !IdP_PK( $IdP, pk(~sk) ),
+   IdP_Active_Key( $IdP, pk(~sk) ), Out( pk(~sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reveal_Key:
+   [ !IdP_SK( $IdP, sk ) ] --[ Revealed( $IdP ) ]-> [ Out( sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IdP_Rotate_Key:
+   [ IdP_Active_Key( $IdP, old_pk ), Fr( ~new_sk ) ]
+  --[
+  Key_Rotated( $IdP, old_pk, pk(~new_sk) ),
+  Key_Active( $IdP, pk(~new_sk) ), Key_Retired( $IdP, old_pk ),
+  IdP_Key_Created( $IdP, pk(~new_sk), 'rotation' ),
+  Unique( <'rotate', $IdP, pk(~new_sk)> )
+  ]->
+   [
+   !IdP_SK( $IdP, ~new_sk ), !IdP_PK( $IdP, pk(~new_sk) ),
+   IdP_Active_Key( $IdP, pk(~new_sk) ), Out( pk(~new_sk) )
+   ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IdP_Issue_Token:
+   [ !IdP_SK( $IdP, sk ), IdP_Active_Key( $IdP, pk(sk) ), Fr( ~nonce ) ]
+  --[
+  Token_Issued( $IdP, sign(<'id_token', $IdP, $aud, $User, ~nonce>, sk),
+                pk(sk), $User, ~nonce
+  ),
+  Signed_With_Key( $IdP, sign(<'id_token', $IdP, $aud, $User, ~nonce>, sk),
+                   pk(sk)
+  ),
+  IdP_Key_Used( $IdP, pk(sk) )
+  ]->
+   [
+   IdP_Active_Key( $IdP, pk(sk) ),
+   Out( sign(<'id_token', $IdP, $aud, $User, ~nonce>, sk) )
+   ]
+
+  // loop breaker: [1]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Register_JWKS:
+   [ !IdP_PK( $IdP, idp_pk ) ]
+  --[ JWKS_Registered( $Broker, $IdP, idp_pk ) ]->
+   [ !Broker_JWKS( $Broker, $IdP, idp_pk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Broker_Verify:
+   [
+   In( sign(<'id_token', $IdP, broker_id, $User, nonce>, sk) ),
+   !Broker_JWKS( broker_id, $IdP, pk(sk) )
+   ]
+  --[
+  Token_Verified( broker_id, $IdP,
+                  sign(<'id_token', $IdP, broker_id, $User, nonce>, sk), pk(sk), $User
+  )
+  ]->
+   [ Broker_Authenticated( broker_id, $IdP, $User ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma idp_key_was_active [reuse, use_induction]:
+  all-traces
+  "∀ idp pk #i.
+    (IdP_Key_Used( idp, pk ) @ #i) ⇒
+    (∃ #j. (Key_Active( idp, pk ) @ #j) ∧ ((#j < #i) ∨ (#j = #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ idp pk #i.
+  (IdP_Key_Used( idp, pk ) @ #i)
+ ∧
+  ∀ #j. (Key_Active( idp, pk ) @ #j) ⇒ (¬(#j < #i)) ∧ (¬(#j = #i))"
+*/
+by sorry
+
+lemma token_provenance:
+  all-traces
+  "∀ broker idp token pk user #i.
+    (Token_Verified( broker, idp, token, pk, user ) @ #i) ⇒
+    ((∃ nonce #j. Token_Issued( idp, token, pk, user, nonce ) @ #j) ∨
+     (∃ #c. Revealed( idp ) @ #c))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp token pk user #i.
+  (Token_Verified( broker, idp, token, pk, user ) @ #i)
+ ∧
+  (∀ nonce #j. (Token_Issued( idp, token, pk, user, nonce ) @ #j) ⇒ ⊥) ∧
+  (∀ #c. (Revealed( idp ) @ #c) ⇒ ⊥)"
+*/
+by sorry
+
+lemma verified_uses_registered_key:
+  all-traces
+  "∀ broker idp token pk user #i.
+    (Token_Verified( broker, idp, token, pk, user ) @ #i) ⇒
+    (∃ #j. (JWKS_Registered( broker, idp, pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp token pk user #i.
+  (Token_Verified( broker, idp, token, pk, user ) @ #i)
+ ∧
+  ∀ #j. (JWKS_Registered( broker, idp, pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma rotation_continuity:
+  all-traces
+  "∀ idp old_pk new_pk #i.
+    (Key_Rotated( idp, old_pk, new_pk ) @ #i) ⇒
+    (∃ #j. (Key_Active( idp, old_pk ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ idp old_pk new_pk #i.
+  (Key_Rotated( idp, old_pk, new_pk ) @ #i)
+ ∧
+  ∀ #j. (Key_Active( idp, old_pk ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma post_rotation_old_key_valid:
+  all-traces
+  "∀ broker idp token old_pk user #i #j.
+    (((Token_Verified( broker, idp, token, old_pk, user ) @ #i) ∧
+      (Key_Retired( idp, old_pk ) @ #j)) ∧
+     (#j < #i)) ⇒
+    (∃ #k. (JWKS_Registered( broker, idp, old_pk ) @ #k) ∧ (#k < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp token old_pk user #i #j.
+  (Token_Verified( broker, idp, token, old_pk, user ) @ #i) ∧
+  (Key_Retired( idp, old_pk ) @ #j)
+ ∧
+  (#j < #i) ∧
+  (∀ #k. (JWKS_Registered( broker, idp, old_pk ) @ #k) ⇒ ¬(#k < #i))"
+*/
+by sorry
+
+lemma registered_key_authenticity:
+  all-traces
+  "∀ broker idp pk #i.
+    (JWKS_Registered( broker, idp, pk ) @ #i) ⇒
+    (∃ method #j. (IdP_Key_Created( idp, pk, method ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ broker idp pk #i.
+  (JWKS_Registered( broker, idp, pk ) @ #i)
+ ∧
+  ∀ method #j. (IdP_Key_Created( idp, pk, method ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma token_verified_reachable:
+  exists-trace
+  "∃ idp rp tok key kid #i. Token_Verified( idp, rp, tok, key, kid ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ idp rp tok key kid #i.
+  (Token_Verified( idp, rp, tok, key, kid ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Broker_Verify: 
+Failed to derive Variable(s): nonce, sk
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: federation/federation_key_rotation.spthy
+
+  processing time: 0.16s
+  
+  WARNING: 1 wellformedness check failed!
+  
+  idp_key_was_active (all-traces): analysis incomplete (1 steps)
+  token_provenance (all-traces): analysis incomplete (1 steps)
+  verified_uses_registered_key (all-traces): analysis incomplete (1 steps)
+  rotation_continuity (all-traces): analysis incomplete (1 steps)
+  post_rotation_old_key_valid (all-traces): analysis incomplete (1 steps)
+  registered_key_authenticity (all-traces): analysis incomplete (1 steps)
+  token_verified_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

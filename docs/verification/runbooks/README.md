@@ -24,6 +24,7 @@ ownership, see `../../automation/ci-cd-guide.md`.
 - `[snapshot]` [Extraction status](extraction-status.md)
 - `[reference]` [Runtime linkage](runtime-linkage.md)
 - `[runbook]` [Verification operations guide](verification-ops.md)
+- `[policy]` [Tamarin evidence admission](tamarin-evidence-admission.md)
 - `[index]` [FFI contracts](ffi-contracts/README.md)
 - `[runbook]` [HACL* integration](hacl-integration.md)
 - `[runbook]` [Sanitizers guide](sanitizers.md)

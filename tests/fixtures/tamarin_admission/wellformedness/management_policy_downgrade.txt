@@ -1,0 +1,208 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory Management_Policy_Downgrade] Theory loaded
+[Theory Management_Policy_Downgrade] Theory translated
+[Theory Management_Policy_Downgrade] Derivation checks started
+[Theory Management_Policy_Downgrade] Derivation checks ended
+[Theory Management_Policy_Downgrade] Theory closed
+theory Management_Policy_Downgrade
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Register_Admin:
+   [ Fr( ~admin_id ), Fr( ~admin_sk ) ]
+  --[ Admin_Registered( ~admin_id ), Unique( <'admin', ~admin_id> ) ]->
+   [
+   !AdminRole( ~admin_id, ~admin_sk ), !AdminPK( ~admin_id, pk(~admin_sk) ),
+   Out( pk(~admin_sk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Create_Policy:
+   [ Fr( ~policy_id ) ]
+  --[
+  Policy_Created( $Env, ~policy_id, $security_level ),
+  Policy_State_Set( $Env, ~policy_id, $security_level ),
+  Unique( <'policy', ~policy_id> )
+  ]->
+   [ Policy( $Env, ~policy_id, $security_level ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Policy_Upgrade:
+   [ Policy( $Env, policy_id, $old_level ) ]
+  --[
+  Policy_Upgraded( $Env, policy_id, $old_level, $new_level ),
+  Policy_State_Set( $Env, policy_id, $new_level ),
+  Security_Strengthened( $Env, $old_level, $new_level )
+  ]->
+   [ Policy( $Env, policy_id, $new_level ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Policy_Downgrade:
+   [
+   Policy( $Env, policy_id, $old_level ),
+   In( sign(<'downgrade_ack', $Env, policy_id, $new_level, nonce>, admin_sk)
+   ),
+   !AdminPK( admin_id, pk(admin_sk) )
+   ]
+  --[
+  Policy_Downgraded( $Env, policy_id, $old_level, $new_level ),
+  Policy_State_Set( $Env, policy_id, $new_level ),
+  Downgrade_Acknowledged( $Env, policy_id, nonce ),
+  Downgrade_Verified( $Env, policy_id, admin_id ),
+  Security_Weakened( $Env, $old_level, $new_level ),
+  Unique( <'downgrade_use', nonce> )
+  ]->
+   [ Policy( $Env, policy_id, $new_level ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Admin_Generate_Ack:
+   [ !AdminRole( admin_id, admin_sk ), Fr( ~nonce ) ]
+  --[
+  Admin_Ack_Generated( admin_id, $Env, $policy_id, $new_level, ~nonce ),
+  Unique( <'ack', ~nonce> )
+  ]->
+   [
+   Out( sign(<'downgrade_ack', $Env, $policy_id, $new_level, ~nonce>,
+             admin_sk)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+lemma policy_monotonicity:
+  all-traces
+  "∀ env pid old new #i.
+    (Policy_Downgraded( env, pid, old, new ) @ #i) ⇒
+    (∃ nonce #j.
+      (Downgrade_Acknowledged( env, pid, nonce ) @ #j) ∧ (#j = #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env pid old new #i.
+  (Policy_Downgraded( env, pid, old, new ) @ #i)
+ ∧
+  ∀ nonce #j.
+   (Downgrade_Acknowledged( env, pid, nonce ) @ #j) ∧ (#j = #i) ⇒ ⊥"
+*/
+by sorry
+
+lemma no_silent_downgrade:
+  all-traces
+  "∀ env old new #i.
+    (Security_Weakened( env, old, new ) @ #i) ⇒
+    (∃ admin pid lvl nonce #j.
+      ((Downgrade_Acknowledged( env, pid, nonce ) @ #i) ∧
+       (Admin_Ack_Generated( admin, env, pid, lvl, nonce ) @ #j)) ∧
+      (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env old new #i.
+  (Security_Weakened( env, old, new ) @ #i)
+ ∧
+  ∀ admin pid lvl nonce #j.
+   (Downgrade_Acknowledged( env, pid, nonce ) @ #i) ∧
+   (Admin_Ack_Generated( admin, env, pid, lvl, nonce ) @ #j)
+  ⇒
+   ¬(#j < #i)"
+*/
+by sorry
+
+lemma downgrade_requires_registered_admin:
+  all-traces
+  "∀ admin env pid lvl nonce #i.
+    (Admin_Ack_Generated( admin, env, pid, lvl, nonce ) @ #i) ⇒
+    (∃ #j. (Admin_Registered( admin ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ admin env pid lvl nonce #i.
+  (Admin_Ack_Generated( admin, env, pid, lvl, nonce ) @ #i)
+ ∧
+  ∀ #j. (Admin_Registered( admin ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma upgrade_always_allowed:
+  all-traces
+  "∀ env pid old new #i.
+    (Policy_Upgraded( env, pid, old, new ) @ #i) ⇒
+    (∃ #j. (Policy_State_Set( env, pid, old ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ env pid old new #i.
+  (Policy_Upgraded( env, pid, old, new ) @ #i)
+ ∧
+  ∀ #j. (Policy_State_Set( env, pid, old ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma policy_upgrade_reachable:
+  exists-trace
+  "∃ env pid old new #i. Policy_Upgraded( env, pid, old, new ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ env pid old new #i. (Policy_Upgraded( env, pid, old, new ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Policy_Downgrade: 
+Failed to derive Variable(s): admin_sk, nonce
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: management/policy_downgrade.spthy
+
+  processing time: 0.18s
+  
+  WARNING: 1 wellformedness check failed!
+  
+  policy_monotonicity (all-traces): analysis incomplete (1 steps)
+  no_silent_downgrade (all-traces): analysis incomplete (1 steps)
+  downgrade_requires_registered_admin (all-traces): analysis incomplete (1 steps)
+  upgrade_always_allowed (all-traces): analysis incomplete (1 steps)
+  policy_upgrade_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

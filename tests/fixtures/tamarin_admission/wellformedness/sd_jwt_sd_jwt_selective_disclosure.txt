@@ -1,0 +1,310 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory SD_JWT_Selective_Disclosure_Security] Theory loaded
+[Theory SD_JWT_Selective_Disclosure_Security] Theory translated
+[Theory SD_JWT_Selective_Disclosure_Security] Derivation checks started
+[Theory SD_JWT_Selective_Disclosure_Security] Derivation checks ended
+[Theory SD_JWT_Selective_Disclosure_Security] Theory closed
+theory SD_JWT_Selective_Disclosure_Security
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction Inequality:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Neq( x, y ) @ #i) ⇒ (¬(x = y))"
+  */
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Issuer_Keygen:
+   [ Fr( ~isk ) ]
+  --[ Issuer_Key( $Issuer, pk(~isk) ), Unique( <'issuer_key', $Issuer> )
+  ]->
+   [
+   !Issuer_SK( $Issuer, ~isk ), !Issuer_PK( $Issuer, pk(~isk) ),
+   Out( pk(~isk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Holder_Keygen:
+   [ Fr( ~hsk ) ]
+  --[ Holder_Key( $Holder, pk(~hsk) ), Unique( <'holder_key', $Holder> )
+  ]->
+   [
+   !Holder_SK( $Holder, ~hsk ), !Holder_PK( $Holder, pk(~hsk) ),
+   Out( pk(~hsk) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Issuer_Issue:
+   [
+   !Issuer_SK( $Issuer, ~isk ), !Holder_PK( $Holder, holder_pk ),
+   Fr( ~salt_a ), Fr( ~salt_b ), Fr( ~value_a ), Fr( ~value_b )
+   ]
+  --[
+  Issued( $Issuer, $Holder,
+          sign(<'sd_jwt', h(<~salt_a, $name_a, ~value_a>), 
+                h(<~salt_b, $name_b, ~value_b>), holder_pk>,
+               ~isk),
+          <~salt_a, $name_a, ~value_a>, <~salt_b, $name_b, ~value_b>
+  ),
+  Issuer_Committed( $Issuer, $name_a, ~value_a,
+                    h(<~salt_a, $name_a, ~value_a>)
+  ),
+  Issuer_Committed( $Issuer, $name_b, ~value_b,
+                    h(<~salt_b, $name_b, ~value_b>)
+  ),
+  Salt_Fresh( ~salt_a ), Salt_Fresh( ~salt_b ),
+  Unique( <'salt', ~salt_a> ), Unique( <'salt', ~salt_b> )
+  ]->
+   [
+   Holder_Has_SdJwt( $Holder, $Issuer,
+                     sign(<'sd_jwt', h(<~salt_a, $name_a, ~value_a>), 
+                           h(<~salt_b, $name_b, ~value_b>), holder_pk>,
+                          ~isk),
+                     <~salt_a, $name_a, ~value_a>, <~salt_b, $name_b, ~value_b>
+   ),
+   !Issued_Digest( $Issuer, h(<~salt_a, $name_a, ~value_a>),
+                   <~salt_a, $name_a, ~value_a>
+   ),
+   !Issued_Digest( $Issuer, h(<~salt_b, $name_b, ~value_b>),
+                   <~salt_b, $name_b, ~value_b>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Holder_Present_A:
+   [
+   Holder_Has_SdJwt( $Holder, $Issuer, jwt, disc_a, disc_b ),
+   !Holder_SK( $Holder, ~hsk )
+   ]
+  --[
+  Presented( $Holder, $Issuer, jwt, disc_a ), Withheld( $Holder, disc_b )
+  ]->
+   [ Out( <jwt, disc_a, sign(<'kb_jwt', jwt, disc_a>, ~hsk)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Holder_Present_B:
+   [
+   Holder_Has_SdJwt( $Holder, $Issuer, jwt, disc_a, disc_b ),
+   !Holder_SK( $Holder, ~hsk )
+   ]
+  --[
+  Presented( $Holder, $Issuer, jwt, disc_b ), Withheld( $Holder, disc_a )
+  ]->
+   [ Out( <jwt, disc_b, sign(<'kb_jwt', jwt, disc_b>, ~hsk)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Verifier_Accept_Slot_A:
+   [
+   In( <sign(<'sd_jwt', h(<salt, name, value>), digest_b, holder_pk>, isk), 
+        <salt, name, value>, 
+        sign(<'kb_jwt', 
+              sign(<'sd_jwt', h(<salt, name, value>), digest_b, holder_pk>, isk), 
+              salt, name, value>,
+             hsk)
+       >
+   ),
+   !Issuer_PK( $Issuer, pk(isk) )
+   ]
+  --[
+  Eq( holder_pk, pk(hsk) ),
+  Verified_Claim( $Issuer, name, value, h(<salt, name, value>) ),
+  Verified_Presentation( $Issuer,
+                         sign(<'sd_jwt', h(<salt, name, value>), digest_b, holder_pk>, isk),
+                         <salt, name, value>
+  )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Verifier_Accept_Slot_B:
+   [
+   In( <sign(<'sd_jwt', digest_a, h(<salt, name, value>), holder_pk>, isk), 
+        <salt, name, value>, 
+        sign(<'kb_jwt', 
+              sign(<'sd_jwt', digest_a, h(<salt, name, value>), holder_pk>, isk), 
+              salt, name, value>,
+             hsk)
+       >
+   ),
+   !Issuer_PK( $Issuer, pk(isk) )
+   ]
+  --[
+  Eq( holder_pk, pk(hsk) ),
+  Verified_Claim( $Issuer, name, value, h(<salt, name, value>) ),
+  Verified_Presentation( $Issuer,
+                         sign(<'sd_jwt', digest_a, h(<salt, name, value>), holder_pk>, isk),
+                         <salt, name, value>
+  )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma disclosure_non_forgeability:
+  all-traces
+  "∀ Issuer name value digest #i.
+    (Verified_Claim( Issuer, name, value, digest ) @ #i) ⇒
+    (∃ #j.
+      (Issuer_Committed( Issuer, name, value, digest ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ Issuer name value digest #i.
+  (Verified_Claim( Issuer, name, value, digest ) @ #i)
+ ∧
+  ∀ #j.
+   (Issuer_Committed( Issuer, name, value, digest ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma selective_privacy:
+  all-traces
+  "∀ Holder disc_b #i.
+    (Withheld( Holder, disc_b ) @ #i) ⇒ (¬(∃ #j. K( disc_b ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ Holder disc_b #i.
+  (Withheld( Holder, disc_b ) @ #i) ∧ ∃ #j. (K( disc_b ) @ #j)"
+*/
+by sorry
+
+lemma binding_integrity:
+  all-traces
+  "∀ Issuer name1 value1 name2 value2 digest #i #j.
+    ((Verified_Claim( Issuer, name1, value1, digest ) @ #i) ∧
+     (Verified_Claim( Issuer, name2, value2, digest ) @ #j)) ⇒
+    ((name1 = name2) ∧ (value1 = value2))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ Issuer name1 value1 name2 value2 digest #i #j.
+  (Verified_Claim( Issuer, name1, value1, digest ) @ #i) ∧
+  (Verified_Claim( Issuer, name2, value2, digest ) @ #j)
+ ∧
+  ((¬(name1 = name2)) ∨ (¬(value1 = value2)))"
+*/
+by sorry
+
+lemma no_disclosure_without_key:
+  all-traces
+  "∀ Issuer jwt disc #i.
+    (Verified_Presentation( Issuer, jwt, disc ) @ #i) ⇒
+    (∃ Holder #j. (Presented( Holder, Issuer, jwt, disc ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ Issuer jwt disc #i.
+  (Verified_Presentation( Issuer, jwt, disc ) @ #i)
+ ∧
+  ∀ Holder #j. (Presented( Holder, Issuer, jwt, disc ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma salt_uniqueness:
+  all-traces
+  "∀ s #i #j.
+    ((Salt_Fresh( s ) @ #i) ∧ (Salt_Fresh( s ) @ #j)) ⇒ (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ s #i #j. (Salt_Fresh( s ) @ #i) ∧ (Salt_Fresh( s ) @ #j) ∧ ¬(#i = #j)"
+*/
+by sorry
+
+lemma no_disclosure_without_salt:
+  all-traces
+  "∀ Holder salt name value #i.
+    (Withheld( Holder, <salt, name, value> ) @ #i) ⇒
+    (¬(∃ #j. K( salt ) @ #j))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ Holder salt name value #i.
+  (Withheld( Holder, <salt, name, value> ) @ #i) ∧ ∃ #j. (K( salt ) @ #j)"
+*/
+by sorry
+
+lemma presentation_verified_reachable:
+  exists-trace
+  "∃ issuer jwt disc #i. Verified_Presentation( issuer, jwt, disc ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ issuer jwt disc #i. (Verified_Presentation( issuer, jwt, disc ) @ #i)"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Message Derivation Checks
+=========================
+
+  The variables of the following rule(s) are not derivable from their premises, you may be performing unintended pattern matching.
+
+Rule Verifier_Accept_Slot_A: 
+Failed to derive Variable(s): digest_b, holder_pk, hsk, isk
+
+Rule Verifier_Accept_Slot_B: 
+Failed to derive Variable(s): digest_a, holder_pk, hsk, isk
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-08-21 06:13:29.077947106 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: sd_jwt/sd_jwt_selective_disclosure.spthy
+
+  processing time: 0.58s
+  
+  WARNING: 1 wellformedness check failed!
+  
+  disclosure_non_forgeability (all-traces): analysis incomplete (1 steps)
+  selective_privacy (all-traces): analysis incomplete (1 steps)
+  binding_integrity (all-traces): analysis incomplete (1 steps)
+  no_disclosure_without_key (all-traces): analysis incomplete (1 steps)
+  salt_uniqueness (all-traces): analysis incomplete (1 steps)
+  no_disclosure_without_salt (all-traces): analysis incomplete (1 steps)
+  presentation_verified_reachable (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================
