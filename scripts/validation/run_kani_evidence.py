@@ -373,6 +373,193 @@ def _load_toml(path: pathlib.Path) -> dict[str, Any]:
 
 # ----------------------------------------------------------------------------- tools
 
+REQUIRED_COMPONENTS = (
+    "bin/kani-driver",
+    "bin/kani-compiler",
+    "toolchain/bin/rustc",
+    "toolchain/bin/cargo",
+    "cbmc",
+)
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+def is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and SHA256_HEX.match(value) is not None
+
+
+def validate_tools(tools: Any, registry: dict[str, Any]) -> dict[str, Any]:
+    """Typed, policy-consistent tool identity: the retained paths and digests are
+    provenance of what ran, not a requirement that the binaries exist at replay time."""
+    if not isinstance(tools, dict):
+        raise AdmissionError("tool identity record is not an object")
+    store = tools.get("store_path")
+    wrapper = tools.get("cargo_kani")
+    if not isinstance(store, str) or not store or not isinstance(wrapper, dict):
+        raise AdmissionError("tool identity record lacks the Kani store path or wrapper")
+    if wrapper.get("path") != f"{store}/bin/cargo-kani" or not is_sha256(wrapper.get("sha256")):
+        raise AdmissionError("tool identity record does not name the store's cargo-kani wrapper")
+    if tools.get("reported_version") != f"cargo-kani {registry['kani_version']}":
+        raise AdmissionError(
+            f"tool identity record reports {tools.get('reported_version')!r}, "
+            f"policy requires cargo-kani {registry['kani_version']}"
+        )
+    components = tools.get("components")
+    if not isinstance(components, dict):
+        raise AdmissionError("tool identity record lacks components")
+    for name in REQUIRED_COMPONENTS:
+        entry = components.get(name)
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("path"), str)
+            or not is_sha256(entry.get("sha256"))
+        ):
+            raise AdmissionError(f"tool identity record lacks component {name}")
+        # kani-driver/kani-compiler are files of the Kani store; the bundled toolchain
+        # resolves through symlinks into its own derivation, so only absoluteness is
+        # required there (the digest is the identity).
+        if name.startswith("bin/") and not entry["path"].startswith(f"{store}/"):
+            raise AdmissionError(f"tool component {name} lies outside the Kani store")
+        if not entry["path"].startswith("/"):
+            raise AdmissionError(f"tool component {name} is not an absolute path")
+    solver = components.get(registry["solver"])
+    if isinstance(solver, dict) and solver.get("builtin") == "cbmc":
+        if solver.get("cbmc_sha256") != components["cbmc"]["sha256"]:
+            raise AdmissionError("tool identity record's built-in solver does not bind cbmc")
+    elif not (
+        isinstance(solver, dict)
+        and isinstance(solver.get("path"), str)
+        and is_sha256(solver.get("sha256"))
+    ):
+        raise AdmissionError(f"tool identity record lacks solver {registry['solver']}")
+    if not isinstance(tools.get("cbmc_version"), str) or not tools["cbmc_version"]:
+        raise AdmissionError("tool identity record lacks the cbmc version")
+    rustc_v = tools.get("rustc_vV")
+    if not isinstance(rustc_v, str) or not re.search(
+        rf"^host: {re.escape(registry['target'])}$", rustc_v, re.MULTILINE
+    ):
+        raise AdmissionError(f"tool identity record's rustc host is not {registry['target']}")
+    if tools.get("cargo") != components["toolchain/bin/cargo"]["path"]:
+        raise AdmissionError("tool identity record's cargo is not the bundled toolchain cargo")
+    return tools
+
+
+def validate_environment(
+    environment: Any, cargo_config: Any, registry: dict[str, Any], root: str
+) -> None:
+    """The recorded build environment must itself satisfy the controlled-build policy."""
+    if not isinstance(environment, dict) or not isinstance(cargo_config, dict):
+        raise AdmissionError("environment record is not an object")
+    kept = environment.get("kept")
+    targets = environment.get("target_variables")
+    if not isinstance(kept, list) or not isinstance(targets, dict):
+        raise AdmissionError("environment record lacks kept variables")
+    for name in kept:
+        if not isinstance(name, str) or not (
+            name in ALLOWED_ENVIRONMENT or ALLOWED_TARGET_ENVIRONMENT.match(name)
+        ):
+            raise AdmissionError(
+                f"environment record keeps a variable outside the allowlist: {name}"
+            )
+    for name in targets:
+        if not ALLOWED_TARGET_ENVIRONMENT.match(str(name)):
+            raise AdmissionError(f"environment record carries a forbidden target variable: {name}")
+    effective = cargo_config.get("effective")
+    files = cargo_config.get("files")
+    if not isinstance(effective, dict) or not isinstance(files, list):
+        raise AdmissionError("environment record lacks the effective cargo configuration")
+    violations = [key for key in flatten(effective) if key in FORBIDDEN_CARGO_CONFIG]
+    if violations:
+        raise AdmissionError(
+            "environment record's cargo configuration overrides the build: " + ", ".join(violations)
+        )
+    registered = {
+        posixpath.join(root, e["path"]): e["sha256"]
+        for e in registry["cargo_config"]["registered_files"]
+    }
+    for entry in files:
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("path"), str)
+            or not is_sha256(entry.get("sha256"))
+            or not isinstance(entry.get("registered"), bool)
+        ):
+            raise AdmissionError("environment record's cargo config file entry is malformed")
+        if entry["registered"] and registered.get(entry["path"]) != entry["sha256"]:
+            raise AdmissionError(
+                f"environment record's registered cargo config {entry['path']} "
+                "differs from the registry"
+            )
+
+
+def expected_invocation(
+    tools: dict[str, Any],
+    registry: dict[str, Any],
+    group: dict[str, Any],
+    harness: dict[str, Any] | None,
+    root: str,
+) -> list[str]:
+    """The exact command the runner issues for a request (harness) or a discovery (None)."""
+    manifest = pathlib.PurePosixPath(root) / group["package"]["manifest"]
+    budget = registry["budgets"]["list_timeout_seconds" if harness is None else "timeout_seconds"]
+    command = kani_command(
+        tools["cargo_kani"]["path"],
+        group,
+        pathlib.Path(manifest),
+        registry,
+        harness,
+        harness is None,
+    )
+    return ["timeout", "--kill-after=10", str(budget), *command]
+
+
+def validate_invocation(
+    invocation: Any,
+    expected_argv: list[str],
+    registry: dict[str, Any],
+    root: str,
+    harness: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """A recorded invocation must be the approved command, run from the recorded root,
+    under the policy budgets; absent, extra, duplicated or weakened options reject."""
+    if not isinstance(invocation, dict):
+        raise AdmissionError("execution record is not an object")
+    if invocation.get("argv") != expected_argv:
+        raise AdmissionError("execution record's command differs from the approved command")
+    if invocation.get("cwd") != root:
+        raise AdmissionError("execution record did not run from the recorded checkout root")
+    budget = registry["budgets"]["list_timeout_seconds" if harness is None else "timeout_seconds"]
+    if (
+        invocation.get("budget_seconds") != budget
+        or invocation.get("memory_limit_bytes") != registry["budgets"]["memory_limit_bytes"]
+    ):
+        raise AdmissionError("execution record's budgets differ from the policy budgets")
+    if not is_int(invocation.get("exit_code")) or not is_sha256(invocation.get("log_sha256")):
+        raise AdmissionError("execution record lacks a typed exit code or log digest")
+    if harness is not None:
+        if invocation.get("harness") != harness["name"]:
+            raise AdmissionError("execution record names another harness")
+        if not is_int(invocation.get("new_metadata_files")) or invocation["new_metadata_files"] < 0:
+            raise AdmissionError("execution record lacks the compiled metadata count")
+    return invocation
+
+
+def effective_settings(
+    argv: list[str], attributes: dict[str, Any], harness: dict[str, Any]
+) -> dict[str, Any]:
+    """Effective solver/unwind from the validated invocation reconciled with the compiled
+    attributes, following kani-driver: CLI --unwind, else the attribute, else --default-unwind."""
+    solver = argv[argv.index("--solver") + 1]
+    default_unwind = int(argv[argv.index("--default-unwind") + 1])
+    if "--unwind" in argv:
+        unwind = int(argv[argv.index("--unwind") + 1])
+        if harness.get("unwind") != unwind:
+            raise AdmissionError("execution record's unwind override differs from the registry")
+    elif attributes["unwind_value"] is not None:
+        unwind = attributes["unwind_value"]
+    else:
+        unwind = default_unwind
+    return {"unwind": unwind, "solver": solver}
+
 
 def resolve_tools(env: dict[str, str], registry: dict[str, Any]) -> dict[str, Any]:
     kani = shutil.which("cargo-kani", path=env.get("PATH"))
@@ -446,7 +633,7 @@ def resolve_tools(env: dict[str, str], registry: dict[str, Any]) -> dict[str, An
     if cargo is None:
         raise AdmissionError("cargo is required for metadata")
     tools["cargo"] = cargo
-    return tools
+    return validate_tools(tools, registry)
 
 
 # ----------------------------------------------------------------------------- cargo metadata
@@ -890,6 +1077,7 @@ def bind_metadata(
     harness: dict[str, Any],
     registry: dict[str, Any],
     source_base: str,
+    argv: list[str] | None = None,
 ) -> dict[str, Any]:
     validate_metadata(metadata)
     if metadata.get("crate_name") != group["crate"]:
@@ -909,13 +1097,16 @@ def bind_metadata(
     if attributes["should_panic"] or attributes["stubs"] or attributes["verified_stubs"]:
         raise AdmissionError("unexpected panic expectation or proof substitution")
     # Kani resolves unwind as CLI, else attribute, else default, keeping an explicit 0.
-    if "unwind" in harness:
-        effective_unwind = harness["unwind"]
-    elif attributes["unwind_value"] is not None:
-        effective_unwind = attributes["unwind_value"]
+    if argv is not None:
+        effective = effective_settings(argv, attributes, harness)
     else:
-        effective_unwind = group["default_unwind"]
-    effective_solver = registry["solver"]
+        if "unwind" in harness:
+            effective_unwind = harness["unwind"]
+        elif attributes["unwind_value"] is not None:
+            effective_unwind = attributes["unwind_value"]
+        else:
+            effective_unwind = group["default_unwind"]
+        effective = {"unwind": effective_unwind, "solver": registry["solver"]}
     return {
         "mangled_name": proof.get("mangled_name"),
         "lines": [proof.get("original_start_line"), proof.get("original_end_line")],
@@ -925,14 +1116,15 @@ def bind_metadata(
             "source_base": source_base,
             "file": compiled_file,
         },
-        "effective": {"unwind": effective_unwind, "solver": effective_solver},
+        "effective": effective,
         "proven_by": {
             "crate_name/pretty_name/original_file/attributes": "compiled metadata",
             "file": "original_file joined onto the cargo metadata workspace root",
             "features/no_default_features/package/lib": "argv and cargo metadata",
             "target": "rustc -vV host and metadata path",
-            "solver": "argv (CLI overrides the attribute)",
-            "unwind": "registry/CLI override, else attribute, else group default",
+            "solver": "validated argv (the registry solver on the command line)",
+            "unwind": "validated argv --unwind, else compiled attribute, "
+            "else validated argv --default-unwind",
         },
     }
 
@@ -947,8 +1139,17 @@ def decide_request(
     metadata_count: int,
     discovery_entry: dict[str, Any] | None,
     source_base: str,
+    expected_argv: list[str] | None = None,
+    root: str | None = None,
 ) -> dict[str, Any]:
     reasons: list[str] = []
+    argv: list[str] | None = None
+    if expected_argv is not None and root is not None:
+        try:
+            validate_invocation(invocation, expected_argv, registry, root, request)
+            argv = expected_argv
+        except AdmissionError as error:
+            reasons.append(str(error))
     result: dict[str, Any] = {
         "record_version": RECORD_VERSION,
         "contract": CONTRACT,
@@ -979,7 +1180,7 @@ def decide_request(
     else:
         try:
             result["compiled"] = bind_metadata(
-                validate_metadata(metadata), group, request, registry, source_base
+                validate_metadata(metadata), group, request, registry, source_base, argv
             )
         except AdmissionError as error:
             reasons.append(str(error))
@@ -1210,6 +1411,7 @@ def run(args: argparse.Namespace) -> int:
     shutil.copy2(schema_path, run_dir / "schema.json")
     write_json_new(run_dir / "tools.json", tools)
     config_record = check_cargo_config(tools["cargo"], root, env, registry, root)
+    validate_environment(environment_record, config_record, registry, str(root))
     write_json_new(
         run_dir / "environment.json", {**environment_record, "cargo_config": config_record}
     )
@@ -1228,6 +1430,7 @@ def run(args: argparse.Namespace) -> int:
         "started_at": now(),
         "registry_sha256": digest_file(registry_path),
         "schema_sha256": digest_file(schema_path),
+        "root": str(root),
         "tools": tools,
         "environment": environment_record,
         "group_context": {g["id"]: {k: g.get(k) for k in ("cfg", "features")} for g in groups},
@@ -1298,9 +1501,8 @@ def run(args: argparse.Namespace) -> int:
             request_dir = run_dir / "requests" / f"{index:02d}"
             request_dir.mkdir(parents=True)
             before = metadata_files(target)
-            command = kani_command(
-                tools["cargo_kani"]["path"], group, manifest, registry, harness, False
-            )
+            approved = expected_invocation(tools, registry, group, harness, str(root))
+            command = approved[3:]  # run_process adds the timeout prefix back
             invocation = run_process(
                 command,
                 root,
@@ -1327,6 +1529,8 @@ def run(args: argparse.Namespace) -> int:
                 len(new_files),
                 discovery["harnesses"].get(harness["name"]),
                 meta["source_base"],
+                approved,
+                str(root),
             )
             result["command_sha256"] = digest_file(request_dir / "command.json")
             result["log_sha256"] = invocation["log_sha256"]
@@ -1454,6 +1658,26 @@ def check_anchors(
         raise AdmissionError(
             "evaluation was made by a different adapter (runner) than the caller's"
         )
+    if not isinstance(evaluation.get("root"), str) or not evaluation["root"]:
+        raise AdmissionError("evaluation does not record the checkout root")
+
+
+def check_execution_records(
+    run_dir: pathlib.Path, evaluation: dict[str, Any], registry: dict[str, Any]
+) -> dict[str, Any]:
+    """Tool identity and environment records must be typed, policy-consistent and equal to
+    their summary copies; they are provenance of what ran, not proof of installed binaries."""
+    tools = validate_tools(load_json(run_dir / "tools.json"), registry)
+    if evaluation.get("tools") != tools:
+        raise AdmissionError("tool identity summary differs from the retained tools.json")
+    environment = load_json(run_dir / "environment.json")
+    if not isinstance(environment, dict):
+        raise AdmissionError("environment record is not an object")
+    summary = evaluation.get("environment")
+    if summary != {k: environment.get(k) for k in ("kept", "dropped", "target_variables")}:
+        raise AdmissionError("environment summary differs from the retained environment.json")
+    validate_environment(environment, environment.get("cargo_config"), registry, evaluation["root"])
+    return tools
 
 
 def check_records(run_dir: pathlib.Path, evaluation: dict[str, Any]) -> dict[str, str]:
@@ -1472,13 +1696,24 @@ def check_records(run_dir: pathlib.Path, evaluation: dict[str, Any]) -> dict[str
 
 
 def reconstruct_discovery(
-    run_dir: pathlib.Path, group: dict[str, Any], recorded: dict[str, str]
+    run_dir: pathlib.Path,
+    group: dict[str, Any],
+    recorded: dict[str, str],
+    registry: dict[str, Any],
+    tools: dict[str, Any],
+    root: str,
 ) -> tuple[dict[str, dict[str, Any]], str]:
     """Re-derive a group's discovery from its raw metadata and check the stored summary."""
     group_dir = run_dir / "groups" / group["id"]
     label = f"groups/{group['id']}"
     cargo_meta = load_json(group_dir / "cargo-metadata.json")
     discovery = load_json(group_dir / "discovery.json")
+    try:
+        validate_invocation(
+            discovery, expected_invocation(tools, registry, group, None, root), registry, root, None
+        )
+    except AdmissionError as error:
+        raise AdmissionError(f"{label}: discovery {error}") from error
     if discovery.get("exit_code") != 0:
         raise AdmissionError(
             f"{label}: discovery exit code {discovery.get('exit_code')!r} is not success"
@@ -1506,6 +1741,8 @@ def reconstruct_request(
     registry: dict[str, Any],
     recorded: dict[str, str],
     discovery: tuple[dict[str, dict[str, Any]], str] | None,
+    registry_tools: dict[str, Any],
+    root: str,
 ) -> dict[str, Any]:
     request = f"requests/{index:02d}"
     request_dir = run_dir / request
@@ -1519,8 +1756,8 @@ def reconstruct_request(
         if f"{request}/{name}" not in recorded:
             raise AdmissionError(f"record {request}/{name} missing")
     invocation = load_json(request_dir / "command.json")
-    if invocation.get("harness") != harness["name"]:
-        raise AdmissionError(f"{request}: execution record names another harness")
+    if not isinstance(invocation, dict):
+        raise AdmissionError(f"{request}: execution record is not an object")
     if invocation.get("log_sha256") != recorded[f"{request}/output.log"]:
         raise AdmissionError(f"{request}: execution record does not bind its log")
     metadata_path = request_dir / "kani-metadata.json"
@@ -1543,6 +1780,8 @@ def reconstruct_request(
         int(invocation.get("new_metadata_files", -1)),
         harnesses.get(harness["name"]),
         source_base,
+        expected_invocation(registry_tools, registry, group, harness, root),
+        root,
     )
 
 
@@ -1572,6 +1811,8 @@ def reconstruct_run_records(
     evaluation = load_json(run_dir / "evaluation.json")
     check_anchors(run_dir, evaluation, registry_path, schema_path)
     recorded = check_records(run_dir, evaluation)
+    tools = check_execution_records(run_dir, evaluation, registry)
+    root_recorded = str(evaluation["root"])
     scope = evaluation.get("scope")
     groups = selected_groups(registry, scope, evaluation.get("groups_selected"))
     if [g["id"] for g in groups] != list(evaluation.get("groups_selected") or []):
@@ -1599,7 +1840,9 @@ def reconstruct_run_records(
     discoveries: dict[str, tuple[dict[str, dict[str, Any]], str]] = {}
     for group in groups:
         if f"groups/{group['id']}/fault.json" not in recorded:
-            discoveries[group["id"]] = reconstruct_discovery(run_dir, group, recorded)
+            discoveries[group["id"]] = reconstruct_discovery(
+                run_dir, group, recorded, registry, tools, root_recorded
+            )
     derived_results: list[dict[str, Any]] = []
     statuses: dict[tuple[str, str], str] = {}
     for index, (group, harness) in enumerate(expected_requests, 1):
@@ -1608,7 +1851,15 @@ def reconstruct_run_records(
             raise AdmissionError(f"record {request}/result.json missing")
         stored = load_json(run_dir / request / "result.json")
         derived = reconstruct_request(
-            run_dir, index, group, harness, registry, recorded, discoveries.get(group["id"])
+            run_dir,
+            index,
+            group,
+            harness,
+            registry,
+            recorded,
+            discoveries.get(group["id"]),
+            tools,
+            root_recorded,
         )
         expected = dict(derived)
         if derived["status"] != "fault":

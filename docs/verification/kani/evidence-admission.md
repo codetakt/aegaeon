@@ -120,8 +120,9 @@ copy), `schema.json`, `tools.json`, `environment.json`,
 discovery.json}` (or `groups/<id>/fault.json` when the group's preflight failed),
 `requests/<NN>/{command.json, output.log, kani-metadata.json, result.json}`,
 `unreachable_diff.json` (baseline comparison, report-only) and `evaluation.json`.
-The evaluation carries `inputs` (SHA-256 of the source snapshot the run depends
-on: registry, schema, runner and citation checker, compliance matrix,
+The evaluation carries the checkout `root`, the `tools` and `environment`
+summaries (equal to the retained records), `inputs` (SHA-256 of the source
+snapshot the run depends on: registry, schema, runner and citation checker, compliance matrix,
 `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `flake.lock`,
 `.cargo/config.toml`, `nix/kani/`, every selected package directory and every
 workspace path dependency reported by `cargo metadata`; taken before the first
@@ -141,15 +142,32 @@ line, so a failed Nix build keeps the reasons in its log.
 Reconstruction (`--verify-records <run-dir>`, and the evidential citation check)
 re-derives the run from its raw records under the caller's trust inputs and never
 from a stored status: the caller's registry, schema and runner must equal the
-recorded digests (and the retained `policy.json`/`schema.json` copies); every
-recorded file must exist with its digest and no unrecorded file may be present;
+recorded digests (and the retained `policy.json`/`schema.json` copies); the
+evaluation must record the checkout root; the retained `tools.json` must be a
+typed, policy-consistent tool identity (the store's `cargo-kani` wrapper,
+`kani-driver`, `kani-compiler`, the bundled `rustc` whose host is the policy
+target and `cargo`, `cbmc` and the configured solver, each with a SHA-256, and
+the policy version) equal to its summary copy — provenance of what ran, not a
+requirement that those binaries exist at replay time; the retained
+`environment.json` must keep only allowlisted variables, carry no forbidden
+Cargo overrides and equal its summary copy; every recorded file must exist
+with its digest and no unrecorded file may be present;
 the source snapshot recomputed from the caller's tree must equal the recorded
 `inputs`; every group's discovery is re-derived from its raw
 `discovery.kani-metadata.json` (typed validation, crate, unique names, file
 normalisation) and must equal the stored `discovery.json` summary, whose exit
 code must be 0 and whose metadata digest must name that raw file; the request
-set must be exactly the selected groups' harnesses in registry order; each request is re-decided from `command.json`, `output.log`,
-`kani-metadata.json` and the group's discovery (or reconstructed as a fault from
+set must be exactly the selected groups' harnesses in registry order; every
+discovery and request invocation record must equal the command derived from
+the registry, the validated wrapper path and the recorded root (`timeout`
+prefix, manifest, package, `--lib`, features, harness, solver,
+`--default-unwind`/`--unwind`; absent, extra, duplicated or weakened options
+reject), run from that root under the policy budgets, and the effective
+solver/unwind reported for a request come from that validated invocation
+reconciled with the compiled attributes (`--unwind`, else the attribute, else
+`--default-unwind`, as `kani-driver` resolves them); each request is
+re-decided from `command.json`, `output.log`, `kani-metadata.json` and the
+group's discovery (or reconstructed as a fault from
 `groups/<id>/fault.json`), and the stored `result.json` and the summary entry must
 equal the reconstruction in every field (group, class, gating, harness, status,
 reasons, properties, callee unreachable notes, compiled identity and the
