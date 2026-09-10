@@ -13,6 +13,7 @@ mod query;
 mod request_object;
 
 use par::authorize_request_from_par;
+#[cfg(test)]
 pub(super) use par::par_authorize_error_response;
 use plain::{authorize_request_from_plain_query, PlainAuthorizeInput};
 pub(super) use query::RawAuthzQuery;
@@ -38,7 +39,16 @@ struct AuthorizeRequestParsingRuntime<'a> {
 
 pub(super) struct ParsedAuthorizeRequest {
     pub(super) request: AuthzReq,
+    // Selected by request source. Wrapped absence never falls back to the query.
+    pub(super) prompt: Option<String>,
     pub(super) par_authorize_continuation: Option<String>,
+}
+
+pub(super) fn prompt_has_conflict(prompt: &str) -> bool {
+    prompt.split(' ').any(|value| value == "none")
+        && prompt
+            .split(' ')
+            .any(|value| !value.is_empty() && value != "none")
 }
 
 fn require_authorize_client_id(
@@ -59,7 +69,6 @@ fn require_authorize_client_id(
 struct RequestObjectAuthorizeInput {
     client_id: Option<String>,
     request_jwt: String,
-    iss: Option<String>,
 }
 
 fn authorize_request_from_request_object(
@@ -75,26 +84,21 @@ fn authorize_request_from_request_object(
             runtime.issuer_base,
         ));
     };
-    let authorize_audience = format!("{}/authorize", runtime.issuer_base);
     let resolved = resolve_authorize_request_object(
         deps,
         &client_id,
         &input.request_jwt,
-        &authorize_audience,
+        runtime.issuer_base,
         runtime.authorization_details_types_supported,
         RequestObjectReplayPolicy::Defer,
     )
     .map_err(|err| request_object_resolution_error_response(runtime.issuer_base, &err))?;
-    let iss = merge_authorize_request_object_issuer(
-        input.iss,
-        resolved.request_object_claims.iss.clone(),
-        runtime.issuer_base,
-    )?;
-
     Ok(AuthzReq {
         response_type: resolved.response_type,
         client_id,
-        iss,
+        // RFC 9101: use the admitted AS recipient, not JWT iss or an outer
+        // query parameter. The original signed issuer remains in claims.
+        iss: Some(resolved.authorization_server_issuer),
         redirect_uri: Some(resolved.redirect_uri),
         resource: resolved.resource,
         authorization_details: resolved.authorization_details,
@@ -109,21 +113,6 @@ fn authorize_request_from_request_object(
         acr_values: resolved.acr_values,
         max_age: resolved.max_age,
     })
-}
-
-fn merge_authorize_request_object_issuer(
-    outer_iss: Option<String>,
-    request_object_iss: Option<String>,
-    issuer_base: &str,
-) -> Result<Option<String>, Response> {
-    match (request_object_iss, outer_iss) {
-        (Some(signed), Some(outer)) if signed != outer => Err(invalid_authorize_request_response(
-            issuer_base,
-            "request object iss mismatch",
-        )),
-        (Some(signed), _) => Ok(Some(signed)),
-        (None, outer) => Ok(outer),
-    }
 }
 
 fn invalid_authorize_request_response(issuer_base: &str, description: &'static str) -> Response {
@@ -295,6 +284,7 @@ fn parse_authorize_request_with_runtime_inner(
         )?;
         return Ok(ParsedAuthorizeRequest {
             request: parsed.request,
+            prompt: parsed.prompt,
             par_authorize_continuation: Some(parsed.continuation),
         });
     }
@@ -304,12 +294,12 @@ fn parse_authorize_request_with_runtime_inner(
             RequestObjectAuthorizeInput {
                 client_id,
                 request_jwt,
-                iss,
             },
             &runtime,
         )?;
         return Ok(ParsedAuthorizeRequest {
             request,
+            prompt: None,
             par_authorize_continuation: None,
         });
     }
@@ -334,6 +324,7 @@ fn parse_authorize_request_with_runtime_inner(
     )?;
     Ok(ParsedAuthorizeRequest {
         request,
+        prompt,
         par_authorize_continuation: None,
     })
 }
@@ -406,54 +397,4 @@ pub(super) fn parse_authorize_request(
         None,
         false,
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::http::header;
-
-    #[test]
-    fn request_object_issuer_merge_prefers_signed_issuer() -> Result<(), String> {
-        let merged = merge_authorize_request_object_issuer(
-            None,
-            Some("https://signed-issuer.example".to_string()),
-            "https://issuer.example",
-        )
-        .map_err(|_| "signed issuer should be accepted".to_string())?;
-
-        assert_eq!(merged.as_deref(), Some("https://signed-issuer.example"));
-        Ok(())
-    }
-
-    #[test]
-    fn request_object_issuer_merge_rejects_conflict() -> Result<(), String> {
-        let err = merge_authorize_request_object_issuer(
-            Some("https://outer-issuer.example".to_string()),
-            Some("https://signed-issuer.example".to_string()),
-            "https://issuer.example",
-        )
-        .err()
-        .ok_or_else(|| "conflicting signed and outer issuers must fail closed".to_string())?;
-
-        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(
-            err.headers().get(header::CACHE_CONTROL),
-            Some(&axum::http::HeaderValue::from_static("no-store"))
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn request_object_issuer_merge_preserves_matching_outer_issuer() -> Result<(), String> {
-        let merged = merge_authorize_request_object_issuer(
-            Some("https://issuer.example".to_string()),
-            Some("https://issuer.example".to_string()),
-            "https://issuer.example",
-        )
-        .map_err(|_| "matching issuer values should be accepted".to_string())?;
-
-        assert_eq!(merged.as_deref(), Some("https://issuer.example"));
-        Ok(())
-    }
 }

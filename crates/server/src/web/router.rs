@@ -71,6 +71,10 @@ pub fn build_router(state: AppState) -> Router {
                 .post(local_auth_recovery::local_password_reset_post),
         )
         .route("/auth/logout", post(local_auth::local_logout_post))
+        .route(
+            "/auth/consent",
+            post(super::authorize_endpoint::consent_submit),
+        )
         .route("/authorize", get(super::authorize))
         .route("/token", post(super::token))
         .route("/par", post(super::par))

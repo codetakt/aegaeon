@@ -26,6 +26,7 @@ pub(super) struct AuthorizeRequestContext {
     pub(super) par_authorize_continuation: Option<String>,
     pub(super) response_mode: crate::form_post::ResponseMode,
     pub(super) prompt: String,
+    pub(super) reauthenticated: bool,
     pub(super) client_id_for_error: String,
     pub(super) state_for_echo: Option<String>,
     pub(super) redirect_uri_for_error: Option<String>,
@@ -135,7 +136,6 @@ async fn authorize_parse_request_context(
             issuer_base,
         )
     })?;
-    let prompt_raw = raw.prompt.clone();
     let response_mode_raw = raw.response_mode.clone();
     let parsed = parse_authorize_request_with_runtime_blocking(
         raw,
@@ -147,7 +147,7 @@ async fn authorize_parse_request_context(
     )
     .await?;
     let req = parsed.request;
-    let prompt = authorize_prompt_from_request(&req, prompt_raw, issuer_base)?;
+    let prompt = authorize_prompt_from_request(&req, parsed.prompt, issuer_base)?;
     let response_mode_source = req
         .request_object_claims
         .as_ref()
@@ -327,6 +327,7 @@ pub(super) async fn build_authorize_request_context(
         req,
         response_mode,
         prompt,
+        reauthenticated: false,
         pkce_required: policy.pkce_required,
         profile_pkce_required: policy.profile_pkce_required,
     })

@@ -89,6 +89,9 @@ impl ClientRegistry {
         let Some(verified) = self.verify_jwt_bearer_claims(input, &header)? else {
             return Ok(None);
         };
+        if super::request_object_used_as_assertion(&input.header, &verified.claims) {
+            return Ok(None);
+        }
         let Some(subject) = validate_jwt_bearer_subject_policy(input, &verified.claims) else {
             return Ok(None);
         };

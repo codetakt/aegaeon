@@ -13,6 +13,7 @@ pub(in crate::web) struct ParForm {
     pub(in crate::web) resource: Vec<String>,
     pub(super) authorization_details: Option<String>,
     pub(super) scope: Option<String>,
+    pub(super) prompt: Option<String>,
     pub(super) state: Option<String>,
     pub(super) nonce: Option<String>,
     pub(super) acr_values: Option<String>,
@@ -35,6 +36,27 @@ pub(in crate::web) fn parse_par_form(
     let params = form
         .map(|axum::extract::Form(params)| params)
         .map_err(|_| form_parse_error_response(issuer_base))?;
+    // RFC 9126 section 3 applies to all raw parameters, including extensions
+    // that are not represented in ParForm. Do not silently drop an outer claim.
+    if params.iter().any(|(key, _)| key == "request")
+        && params.iter().any(|(key, _)| {
+            !matches!(
+                key.as_str(),
+                "request"
+                    | "client_id"
+                    | "client_secret"
+                    | "client_assertion_type"
+                    | "client_assertion"
+            )
+        })
+    {
+        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("authorization parameters must not be supplied outside request"),
+            issuer_base,
+        ));
+    }
     Ok(ParForm {
         client_id: singleton_form_field(&params, "client_id", issuer_base)?,
         response_type: singleton_form_field(&params, "response_type", issuer_base)?,
@@ -47,6 +69,7 @@ pub(in crate::web) fn parse_par_form(
             .collect(),
         authorization_details: singleton_form_field(&params, "authorization_details", issuer_base)?,
         scope: singleton_form_field(&params, "scope", issuer_base)?,
+        prompt: singleton_form_field(&params, "prompt", issuer_base)?,
         state: singleton_form_field(&params, "state", issuer_base)?,
         nonce: singleton_form_field(&params, "nonce", issuer_base)?,
         acr_values: singleton_form_field(&params, "acr_values", issuer_base)?,

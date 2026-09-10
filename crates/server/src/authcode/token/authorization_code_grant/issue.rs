@@ -52,8 +52,7 @@ impl TokenIssuer {
             selected_resource,
             openid_requested,
         } = grant;
-        let authorization_code_commit_payload = serde_json::to_string(&code)
-            .map_err(|err| TokenGrantError::server(format!("authorization code encode: {err}")))?;
+        let (code, authorization_code_commit_payload) = code.into_parts();
 
         let expires_in = self.access_token_ttl_secs;
         let now = SystemTime::now();
@@ -105,6 +104,7 @@ impl TokenIssuer {
 
         let refresh_token_record = self.refresh_token_for_authorization_code_grant(
             &issue_context,
+            &audience,
             issue_refresh_tokens,
             sender_binding,
         );

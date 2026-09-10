@@ -222,6 +222,7 @@ mod tests {
                 code_challenge: Some("challenge".to_string()),
                 code_challenge_method: Some("S256".to_string()),
                 scope: None,
+                prompt: Some("consent".to_string()),
                 nonce: None,
                 acr_values: None,
                 max_age: None,
@@ -269,10 +270,11 @@ mod tests {
         store
             .insert(&request_uri, sample_stored_request(), ttl)
             .map_err(|err| format!("insert PAR request: {err}"))?;
-        assert!(store
+        let loaded = store
             .load(&request_uri)
             .map_err(|err| format!("load PAR request: {err}"))?
-            .is_some());
+            .ok_or("stored PAR request missing")?;
+        assert_eq!(loaded.request.prompt.as_deref(), Some("consent"));
         assert!(
             store
                 .reserve(&request_uri, "continuation", ttl)
@@ -292,13 +294,11 @@ mod tests {
                 .as_deref(),
             Some("continuation")
         );
-        assert!(
-            store
-                .consume(&request_uri)
-                .map_err(|err| format!("consume PAR request: {err}"))?
-                .is_some(),
-            "first consume should return the stored request"
-        );
+        let consumed = store
+            .consume(&request_uri)
+            .map_err(|err| format!("consume PAR request: {err}"))?
+            .ok_or("first consume should return the stored request")?;
+        assert_eq!(consumed.request.prompt.as_deref(), Some("consent"));
         assert!(
             store
                 .consume(&request_uri)

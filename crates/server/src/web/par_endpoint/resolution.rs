@@ -7,6 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::super::authorize_request::{
+    prompt_has_conflict, request_object_extra_string,
     request_object_resolution_error_json_response, resolve_authorize_request_object_blocking,
     OwnedRequestObjectAuthorizeDeps, RequestObjectReplayPolicy, ResolvedAuthorizeRequestObject,
 };
@@ -24,6 +25,7 @@ pub(in crate::web) struct ParResolvedParameters {
     pub(super) code_challenge: String,
     pub(super) code_challenge_method: String,
     pub(super) scope: Option<String>,
+    pub(super) prompt: Option<String>,
     pub(super) nonce: Option<String>,
     pub(super) acr_values: Option<String>,
     pub(super) max_age: Option<u64>,
@@ -41,6 +43,7 @@ pub(in crate::web) struct ParResolvedDraft {
     pub(in crate::web) code_challenge: Option<String>,
     pub(in crate::web) code_challenge_method: Option<String>,
     pub(in crate::web) scope: Option<String>,
+    pub(in crate::web) prompt: Option<String>,
     pub(in crate::web) nonce: Option<String>,
     pub(in crate::web) acr_values: Option<String>,
     pub(in crate::web) max_age: Option<u64>,
@@ -53,6 +56,14 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
     draft: ParResolvedDraft,
     issuer_base: &str,
 ) -> Result<ParResolvedParameters, Response> {
+    if prompt_has_conflict(draft.prompt.as_deref().unwrap_or("")) {
+        return Err(no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("prompt=none cannot be combined with other prompt values"),
+            issuer_base,
+        ));
+    }
     let Some(redirect_uri) = draft.redirect_uri else {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
@@ -99,6 +110,7 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
         code_challenge,
         code_challenge_method,
         scope: draft.scope,
+        prompt: draft.prompt,
         nonce: draft.nonce,
         acr_values: draft.acr_values,
         max_age: draft.max_age,
@@ -140,6 +152,7 @@ pub(super) async fn resolve_par_parameters(
     let mut response_type = form.response_type.clone();
     let mut iss = form.iss.clone();
     let mut scope = form.scope.clone();
+    let mut prompt = form.prompt.clone();
     let mut state_param = form.state.clone();
     let mut nonce = form.nonce.clone();
     let mut acr_values = form.acr_values.clone();
@@ -176,12 +189,11 @@ pub(super) async fn resolve_par_parameters(
         .await?;
         redirect_uri = Some(resolved.redirect_uri);
         response_type = Some(resolved.response_type);
-        iss = merge_par_request_object_issuer(
-            form.iss.clone(),
-            resolved.request_object_claims.iss.clone(),
-            issuer_base,
-        )?;
+        // Keep the signed JWT issuer in its claims; this field binds the AS.
+        iss = Some(resolved.authorization_server_issuer);
         scope = Some(resolved.scope);
+        prompt = request_object_extra_string(&resolved.request_object_claims, "prompt")
+            .map_err(|error| request_object_resolution_error_json_response(&error))?;
         state_param = resolved.state;
         nonce = resolved.nonce;
         acr_values = resolved.acr_values;
@@ -204,6 +216,7 @@ pub(super) async fn resolve_par_parameters(
             code_challenge,
             code_challenge_method,
             scope,
+            prompt,
             nonce,
             acr_values,
             max_age,
@@ -213,25 +226,6 @@ pub(super) async fn resolve_par_parameters(
         },
         issuer_base,
     )
-}
-
-fn merge_par_request_object_issuer(
-    form_iss: Option<String>,
-    request_object_iss: Option<String>,
-    issuer_base: &str,
-) -> Result<Option<String>, Response> {
-    match (form_iss, request_object_iss) {
-        (Some(form), Some(request_object)) if form != request_object => {
-            Err(no_cache_json_error_with_iss(
-                StatusCode::BAD_REQUEST,
-                "invalid_request",
-                Some("iss mismatch between PAR request and Request Object"),
-                issuer_base,
-            ))
-        }
-        (Some(form), _) => Ok(Some(form)),
-        (None, request_object) => Ok(request_object),
-    }
 }
 
 fn parse_par_authorization_details(
@@ -281,52 +275,14 @@ async fn resolve_par_request_object(
             .cfg
             .request_object_everparse_runtime_enabled,
     };
-    let authorize_audience = format!("{issuer_base}/authorize");
     resolve_authorize_request_object_blocking(
         request_object_deps,
         client_id.to_string(),
         request_jwt.to_string(),
-        authorize_audience,
+        issuer_base.to_string(),
         authorization_details_types_supported.to_vec(),
         RequestObjectReplayPolicy::Consume,
     )
     .await
     .map_err(|error| request_object_resolution_error_json_response(&error))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::http::header;
-
-    #[test]
-    fn merge_par_request_object_issuer_accepts_matching_values() -> Result<(), String> {
-        let iss = merge_par_request_object_issuer(
-            Some("https://issuer.example".to_string()),
-            Some("https://issuer.example".to_string()),
-            "https://server.example",
-        )
-        .map_err(|_| "matching iss values should be accepted".to_string())?;
-
-        assert_eq!(iss.as_deref(), Some("https://issuer.example"));
-        Ok(())
-    }
-
-    #[test]
-    fn merge_par_request_object_issuer_rejects_conflicting_values() -> Result<(), String> {
-        let response = merge_par_request_object_issuer(
-            Some("https://form-issuer.example".to_string()),
-            Some("https://request-object-issuer.example".to_string()),
-            "https://server.example",
-        )
-        .err()
-        .ok_or_else(|| "conflicting iss values must fail closed".to_string())?;
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(
-            response.headers().get(header::CACHE_CONTROL),
-            Some(&axum::http::HeaderValue::from_static("no-store"))
-        );
-        Ok(())
-    }
 }

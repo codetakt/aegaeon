@@ -5,6 +5,7 @@ use crate::authcode::code_store::InMemoryAuthCodeBackend;
 use crate::authcode::code_store::{
     AuthCodeBackend, AuthCodeExchangeLock, AuthCodeRedisCommitContext, AuthCodeStorageError,
     AuthorizationCodeOneTimeInputCommit, RedisAuthCodeBackend, StoreCodeError,
+    StoredAuthorizationCode,
 };
 use crate::authcode::types::AuthorizationCode;
 #[cfg(test)]
@@ -108,6 +109,28 @@ impl AuthCodeStore {
             log_auth_code_storage_error(&error, "get_code");
             message
         })
+    }
+
+    pub(in crate::authcode) fn try_get_code_for_exchange(
+        &self,
+        code_str: &str,
+    ) -> Result<Option<StoredAuthorizationCode>, String> {
+        self.backend
+            .get_code_for_exchange(code_str)
+            .map_err(|error| {
+                log_auth_code_storage_error(&error, "get_code_for_exchange");
+                error.to_string()
+            })
+    }
+
+    pub(in crate::authcode) async fn try_get_code_for_exchange_async(
+        &self,
+        code_str: String,
+    ) -> Result<Option<StoredAuthorizationCode>, String> {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || store.try_get_code_for_exchange(&code_str))
+            .await
+            .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
     /// Inspect an authorization code on the blocking worker pool.

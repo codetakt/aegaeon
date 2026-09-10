@@ -3,10 +3,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Authorization Request per RFC 6749
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AuthorizationRequest {
     pub response_type: String,
     pub client_id: String,
+    /// Internal AS recipient binding. Signed JWT `iss` remains in
+    /// `request_object_claims` and is never used as this target.
     #[serde(default)]
     pub iss: Option<String>,
     pub redirect_uri: Option<String>,

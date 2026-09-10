@@ -1,5 +1,7 @@
+#[cfg(test)]
+use super::token_consistency::scope_set;
 use super::token_consistency::{
-    bearer_metadata_matches_access_token, refresh_token_matches_issued_grant,
+    bearer_metadata_matches_access_token, refresh_token_covers_access_token,
 };
 #[cfg(test)]
 use super::token_storage_error_message;
@@ -177,9 +179,12 @@ impl TokenStore {
     ///
     /// This is the refresh-grant commit boundary: callers must complete all request
     /// validation and token signing before calling it.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "owned tokens make the atomic refresh rotation boundary explicit"
+    #[cfg_attr(
+        not(test),
+        expect(
+            clippy::needless_pass_by_value,
+            reason = "owned tokens make the atomic refresh rotation boundary explicit"
+        )
     )]
     pub fn store_refreshed_grant(
         &self,
@@ -189,7 +194,7 @@ impl TokenStore {
         meta: BearerTokenMeta,
     ) -> Result<(String, String), RefreshRotationError> {
         if bearer_metadata_matches_access_token(&access_token, &meta).is_err()
-            || refresh_token_matches_issued_grant(&new_refresh, &access_token, &meta).is_err()
+            || refresh_token_covers_access_token(&new_refresh, &access_token, &meta).is_err()
         {
             return Err(RefreshRotationError::InconsistentGrant);
         }
@@ -224,6 +229,10 @@ impl TokenStore {
                         state.refresh_successors.remove(previous_refresh);
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Expired), None)
+                    } else if scope_set(previous.scope.as_deref())
+                        != scope_set(new_refresh.scope.as_deref())
+                    {
+                        (Err(RefreshRotationError::InconsistentGrant), None)
                     } else {
                         if let Some(previous) = state.refresh_tokens.get_mut(previous_refresh) {
                             previous.rotated = true;

@@ -11,8 +11,9 @@ use super::AuthCodeSnapshot;
 use super::{
     remaining_ttl, ttl_millis_i64, AuthCodeBackend, AuthCodeExchangeLock,
     AuthCodeRedisCommitContext, AuthCodeStorageError, AuthorizationCode,
-    AuthorizationCodeOneTimeInputCommit, StoreCodeError, AUTH_CODE_EXCHANGE_LOCK_RETRIES,
-    AUTH_CODE_EXCHANGE_LOCK_RETRY_DELAY_MS, AUTH_CODE_EXCHANGE_LOCK_TTL_MS,
+    AuthorizationCodeOneTimeInputCommit, StoreCodeError, StoredAuthorizationCode,
+    AUTH_CODE_EXCHANGE_LOCK_RETRIES, AUTH_CODE_EXCHANGE_LOCK_RETRY_DELAY_MS,
+    AUTH_CODE_EXCHANGE_LOCK_TTL_MS,
 };
 use crate::config::{
     redis_store_urls_reference_same_endpoint, RuntimeRedisAtomicGroup, RuntimeStateNamespace,
@@ -371,17 +372,21 @@ impl AuthCodeBackend for RedisAuthCodeBackend {
     }
 
     fn get_code(&self, code_str: &str) -> Result<Option<AuthorizationCode>, AuthCodeStorageError> {
+        self.get_code_for_exchange(code_str)
+            .map(|stored| stored.map(|stored| stored.into_parts().0))
+    }
+
+    fn get_code_for_exchange(
+        &self,
+        code_str: &str,
+    ) -> Result<Option<StoredAuthorizationCode>, AuthCodeStorageError> {
         let mut conn = self.connection()?;
         let payload = redis::cmd("GET")
             .arg(self.keyspace.code(code_str))
             .query::<Option<String>>(&mut conn)
             .map_err(|err| AuthCodeStorageError::BackendUnavailable(err.to_string()))?;
         payload
-            .map(|payload| {
-                serde_json::from_str::<AuthorizationCode>(&payload)
-                    .map_err(|err| AuthCodeStorageError::Serialize(err.to_string()))
-                    .map(|code| (!code.used && !code.is_expired()).then_some(code))
-            })
+            .map(|payload| StoredAuthorizationCode::decode(code_str, payload))
             .transpose()
             .map(Option::flatten)
     }

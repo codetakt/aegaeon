@@ -249,6 +249,7 @@ pub(super) async fn par(
         code_challenge: Some(resolved.code_challenge),
         code_challenge_method: Some(resolved.code_challenge_method),
         scope: resolved.scope,
+        prompt: resolved.prompt,
         nonce: resolved.nonce,
         acr_values: resolved.acr_values,
         max_age: resolved.max_age,

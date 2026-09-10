@@ -31,6 +31,8 @@ class FstarRunnerTests(unittest.TestCase):
             "scripts/flake/verify_fstar.sh",
             "scripts/validation/run_fstar_invocation.py",
             "scripts/validation/admit_fstar_modules.py",
+            "scripts/validation/authcode_redis_fixtures.py",
+            "tests/fixtures/authcode-redis-grant.json",
             "scripts/verify/verify_fstar_ci.sh",
             "scripts/verify/verify_fstar_abstract.sh",
             "scripts/flake/verify_fstar_abstract.sh",
@@ -43,7 +45,12 @@ class FstarRunnerTests(unittest.TestCase):
             for path in (ROOT / directory).rglob("*.fst*"):
                 target = self.root / path.relative_to(ROOT)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(f"module {path.name.rsplit('.', 1)[0]}\n")
+                if path.name == "TestAuthCodeRedisGrant.fst":
+                    # Keep the generated-case drift preflight real. The mock
+                    # verifier still only reports requested module identities.
+                    shutil.copyfile(path, target)
+                else:
+                    target.write_text(f"module {path.name.rsplit('.', 1)[0]}\n")
         (self.root / "fstar/Steel.Effect.fst").write_text("module Steel.Effect\n")
         self.bin = self.root / "bin"
         self.bin.mkdir()

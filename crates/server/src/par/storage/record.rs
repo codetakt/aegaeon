@@ -63,6 +63,7 @@ mod tests {
                 code_challenge: Some("challenge".to_string()),
                 code_challenge_method: Some("S256".to_string()),
                 scope: None,
+                prompt: None,
                 nonce: None,
                 acr_values: None,
                 max_age: None,
@@ -88,6 +89,31 @@ mod tests {
 
         assert_eq!(decoded.client_id, "client");
         assert!(decoded.authorize_continuation.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn stored_record_preserves_prompt_and_accepts_legacy_absence(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let record = StoredParRequestRecord::try_from(sample_stored_request())?;
+        let mut value = serde_json::to_value(record)?;
+        value["request"]
+            .as_object_mut()
+            .ok_or("request missing")?
+            .remove("prompt");
+        let legacy: StoredParRequestRecord = serde_json::from_value(value.clone())?;
+        assert!(serde_json::to_value(legacy)?["request"]
+            .get("prompt")
+            .is_none());
+        for prompt in ["consent", "login consent", "none", ""] {
+            value["request"]["prompt"] = serde_json::json!(prompt);
+            let decoded: StoredParRequestRecord = serde_json::from_value(value.clone())?;
+            let stored = StoredParRequest::try_from(decoded)?;
+            let encoded = serde_json::to_value(StoredParRequestRecord::try_from(stored)?)?;
+            assert_eq!(encoded["request"]["prompt"], prompt);
+        }
+        value["request"]["prompt"] = serde_json::json!(["consent"]);
+        assert!(serde_json::from_value::<StoredParRequestRecord>(value).is_err());
         Ok(())
     }
 }
