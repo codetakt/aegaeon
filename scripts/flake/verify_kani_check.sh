@@ -4,13 +4,15 @@
 # gate; a required rejection or a runner fault fails this derivation.
 set -euo pipefail
 
-# Outside a Nix build sandbox (nix run .#verify-kani) TMPDIR may be unset: use a private
-# temporary directory so the gate never touches the caller's home or caches.
-: "${TMPDIR:=$(mktemp -d)}"
-export TMPDIR
-export HOME="$TMPDIR"
-export XDG_STATE_HOME="${XDG_STATE_HOME:-$TMPDIR/xdg/state}"
-export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$TMPDIR/xdg/cache}"
+# A private per-run temporary directory (under the caller's TMPDIR when set) keeps HOME
+# and the XDG state/cache away from shared locations, inside and outside a Nix build
+# sandbox; it is removed on exit. The evidence itself is written under OUTPUT.
+GATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/aegaeon-kani-gate.XXXXXX")"
+trap 'rm -rf "$GATE_TMP"' EXIT
+export TMPDIR="$GATE_TMP"
+export HOME="$GATE_TMP"
+export XDG_STATE_HOME="$GATE_TMP/xdg/state"
+export XDG_CACHE_HOME="$GATE_TMP/xdg/cache"
 OUTPUT="${AEG_KANI_EVIDENCE_DIR:-artifacts/kani-evidence}"
 
 status=0

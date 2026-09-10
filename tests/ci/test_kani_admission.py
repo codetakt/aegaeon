@@ -1743,8 +1743,9 @@ class WrapperTests(unittest.TestCase):
         older = self.output / "run-zzzzzzzz"  # lexically last, but older and without a gate
         shutil.copytree(self.output / gate_run, older)
         evaluation = json.loads((older / "evaluation.json").read_text())
+        # A naive timestamp (taken as UTC) must stay comparable with the aware ones.
         evaluation.update(
-            {"scope": "partial", "status": "recorded", "started_at": "2000-01-01T00:00:00Z"}
+            {"scope": "partial", "status": "recorded", "started_at": "2000-01-01T00:00:00"}
         )
         (older / "evaluation.json").write_text(json.dumps(evaluation, indent=2) + "\n")
 
@@ -1765,7 +1766,7 @@ class WrapperTests(unittest.TestCase):
         (self.output / "gate.json").unlink()
         assert f"run: {gate_run}" in summary()  # latest started_at wins without a gate
         (older / "evaluation.json").write_text(
-            json.dumps({**evaluation, "started_at": "2999-01-01T00:00:00Z"}, indent=2) + "\n"
+            json.dumps({**evaluation, "started_at": "2999-01-01T00:00:00"}, indent=2) + "\n"
         )
         assert "run: run-zzzzzzzz" in summary()
 
