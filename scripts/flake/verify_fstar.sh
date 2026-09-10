@@ -367,6 +367,7 @@ MODULES="$MODULES \
 # Management (Phase 4-5)
 MODULES="$MODULES \
 	management/Management.ClientLifecycle.fst \
+	management/Management.Initialization.fst \
 	management/Management.KeyRotation.fst \
 	management/Management.PolicyProfile.fst"
 # RAR

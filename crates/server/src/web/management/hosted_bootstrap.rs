@@ -15,7 +15,8 @@ use super::configuration_documents::{
     prepare_configuration_document,
 };
 use super::configuration_version_store::persist_environment_configuration_state;
-use super::{begin_management_transaction, commit_management_transaction, hash_password};
+use super::transactions::begin_bootstrap_transaction;
+use super::{commit_management_transaction, hash_password};
 use input::normalize_input;
 use kms_runtime::insert_oidc_kms_runtime_key;
 use model::{ExistingBootstrap, NormalizedHostedBootstrapInput};
@@ -24,22 +25,14 @@ pub use observability_seed::{
     seed_observability_environment, ObservabilitySeedOutput, ObservabilitySeedStatus,
 };
 
-const BOOTSTRAP_LOCK_ID: i64 = 724_617_524;
-
 pub async fn bootstrap_hosted_environment(
     pool: &PgPool,
     input: HostedBootstrapInput,
 ) -> Result<HostedBootstrapOutput> {
     let input = normalize_input(input)?;
-    let mut tx = begin_management_transaction(pool, "hosted-bootstrap")
+    let mut tx = begin_bootstrap_transaction(pool, "hosted-bootstrap")
         .await
         .map_err(response_error)?;
-
-    sqlx::query("SELECT pg_advisory_xact_lock($1)")
-        .bind(BOOTSTRAP_LOCK_ID)
-        .execute(&mut *tx)
-        .await
-        .context("failed to acquire hosted bootstrap advisory lock")?;
 
     if let Some(existing) = load_existing_bootstrap(&mut tx, &input.issuer_host).await? {
         commit_management_transaction(tx, "hosted-bootstrap")
@@ -339,7 +332,6 @@ fn initial_configuration_document(input: &NormalizedHostedBootstrapInput) -> ser
         "issuerUrl": input.issuer_url,
         "policy": policy,
         "scopeAllowlist": ["openid", "profile", "email"],
-        "clients": [],
         "keyStore": {
             "type": "databaseEncrypted",
             "configuration": {},
@@ -394,4 +386,33 @@ fn response_error(response: Response) -> anyhow::Error {
         "management bootstrap validation failed with status {}",
         response.status()
     )
+}
+
+#[cfg(test)]
+mod initial_document_tests {
+    use super::*;
+    #[test]
+    fn hosted_initial_document_is_strict() {
+        let input = NormalizedHostedBootstrapInput {
+            issuer_host: "issuer.example.com".into(),
+            issuer_url: "https://issuer.example.com".into(),
+            owner_email: "owner@example.com".into(),
+            owner_password: String::new(),
+            team_name: "Team".into(),
+            team_slug: "team".into(),
+            tenant_name: "Tenant".into(),
+            tenant_slug: "tenant".into(),
+            tenant_region: "aws".into(),
+            environment_name: "Production".into(),
+            environment_slug: "prod".into(),
+            kms_region: "ap-northeast-1".into(),
+            kms_key_id: "key".into(),
+            kms_kid: "kid".into(),
+        };
+        let document = initial_configuration_document(&input);
+        prepare_configuration_document(&document, "test")
+            .expect("hosted producer must match strict schema");
+        assert_eq!(document["policy"]["oidcEnabled"], true);
+        assert_eq!(document["policy"]["dpopStrict"], true);
+    }
 }

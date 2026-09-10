@@ -23,6 +23,24 @@ pub(super) async fn begin_management_transaction<'a>(
         .map_err(|_| management_internal_error(request_id, "Failed to start transaction"))
 }
 
+// Every first-owner/seed entry point must use the same lock. READ COMMITTED
+// gives a caller that waited for this lock a fresh status snapshot afterwards.
+pub(super) async fn begin_bootstrap_transaction<'a>(
+    pool: &'a PgPool,
+    request_id: &str,
+) -> Result<Transaction<'a, Postgres>, Response> {
+    let mut tx = begin_management_transaction(pool, request_id).await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| management_internal_error(request_id, "Failed to set bootstrap isolation"))?;
+    sqlx::query("SELECT pg_advisory_xact_lock(724617523)")
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| management_internal_error(request_id, "Failed to acquire bootstrap lock"))?;
+    Ok(tx)
+}
+
 pub(super) async fn commit_management_transaction(
     tx: Transaction<'_, Postgres>,
     request_id: &str,

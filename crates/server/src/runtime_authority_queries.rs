@@ -1,10 +1,12 @@
+// pgcrypto is installed in aegaeon by the baseline migration. Bind that
+// function explicitly, independently of the connection search_path.
 pub(crate) const ACTIVE_RUNTIME_AUTHORITY_REVISION_FOR_ISSUER_HOST: &str = r"
 SELECT
   rt.configuration_version_id AS active_configuration_version_id,
-  encode(digest(rt.configuration_document::text, 'sha256'), 'hex')
+  encode(aegaeon.digest(rt.configuration_document::text, 'sha256'), 'hex')
     AS active_configuration_document_fingerprint,
   encode(
-    digest(
+    aegaeon.digest(
       COALESCE((
         SELECT jsonb_agg(projected.row_json ORDER BY projected.usage, projected.status, projected.kid, projected.id)::text
         FROM (
@@ -23,7 +25,7 @@ SELECT
               'status', rk.status::text,
               'retiring_expires_at', rk.retiring_expires_at,
               'public_jwk', rk.public_jwk,
-              'key_handle_sha256', encode(digest(rk.key_handle, 'sha256'), 'hex'),
+              'key_handle_sha256', encode(aegaeon.digest(rk.key_handle, 'sha256'), 'hex'),
               'provider_configuration', rk.provider_configuration
             ) AS row_json
           FROM aegaeon.runtime_keys rk
@@ -39,7 +41,7 @@ SELECT
     'hex'
   ) AS active_runtime_key_set_fingerprint,
   encode(
-    digest(
+    aegaeon.digest(
       COALESCE((
         SELECT jsonb_build_object(
           'token_hash', bearer.token_hash,

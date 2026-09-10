@@ -43,6 +43,8 @@ mod host_validation;
 pub mod hosted_bootstrap;
 mod http_boundary;
 mod http_errors;
+#[doc(hidden)]
+pub mod initialization;
 mod key_stores;
 mod key_support;
 mod normalization;

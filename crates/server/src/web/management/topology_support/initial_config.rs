@@ -27,7 +27,6 @@ pub(in crate::web::management) fn build_initial_environment_configuration(
         "issuerUrl": issuer_url.clone(),
         "policy": default_policy_document(),
         "scopeAllowlist": ["openid", "profile"],
-        "clients": [],
         "keyStore": {
             "type": "databaseEncrypted",
             "configuration": {},
@@ -45,4 +44,34 @@ pub(in crate::web::management) fn build_initial_environment_configuration(
         prepared_document,
         state,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn initial_environment_document_is_strict_and_fail_closed() {
+        let scope = ManagementTenantScope {
+            team: uuid::Uuid::new_v4(),
+            tenant: uuid::Uuid::new_v4(),
+            slug: "primary".into(),
+            region: "local".into(),
+        };
+        let input = CreateEnvironmentInput {
+            name: "Development".into(),
+            slug: "dev".into(),
+        };
+        let initial =
+            build_initial_environment_configuration("aegaeon.test", &scope, &input, "test")
+                .expect("the server must generate its own valid strict v1 document");
+        assert_eq!(initial.issuer_host, "dev.primary.local.aegaeon.test");
+        assert_eq!(initial.issuer_url, "https://dev.primary.local.aegaeon.test");
+        let document: serde_json::Value =
+            serde_json::from_str(&initial.prepared_document.document).unwrap();
+        assert_eq!(document["policy"]["oidcEnabled"], false);
+        assert!(document.get("clients").is_none());
+        let mut invalid = document;
+        invalid["clients"] = serde_json::json!([]);
+        assert!(prepare_configuration_document(&invalid, "test").is_err());
+    }
 }

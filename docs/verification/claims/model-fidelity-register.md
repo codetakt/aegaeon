@@ -40,3 +40,14 @@ When adding a F* module or using a new module in `spec/compliance-matrix.yaml`,
 update `model-fidelity.yaml` in the same change. Do not cite a `toy-stub`
 module from a `verified` row; replace the block with a faithful or explicitly
 simplified model, or downgrade the row status.
+
+## Management initialization
+
+`Management.Initialization` is a simplified atomic transaction model. It proves
+first-owner immutability, complete initialization, rollback, and isolation of
+other environments under serialized fresh reads. Rust/SQL correspondence, input
+validation, password hashing and PostgreSQL locking remain separate obligations.
+The namespace-selection lemma assumes the managed digest function and proves
+independence from the caller's function; PostgreSQL name resolution and SHA-256
+implementation are outside that lemma. No compliance row is promoted on the
+strength of this model.
