@@ -56,12 +56,13 @@ pub(super) async fn create(
     let mut entropy = [0u8; 32];
     aegaeon_crypto::rand::fill_random(&mut entropy).map_err(|_| unavailable())?;
     let token = URL_SAFE_NO_PAD.encode(entropy);
-    let mut tx = crate::web::authorization_transactions::begin(
+    let mut tx = crate::web::authorization_transactions::begin_with_limits(
         &state.db_pool,
         state.environment_id,
         crate::web::authorization_transactions::Kind::Consent,
         uri,
         snapshot,
+        &state.cfg.database.authorization_admission,
     )
     .await?;
     sqlx::query("INSERT INTO aegaeon.authorization_consents

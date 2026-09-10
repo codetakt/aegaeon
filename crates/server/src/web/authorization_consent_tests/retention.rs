@@ -170,10 +170,9 @@ async fn pg_authorization_transactions_last_slot_has_one_winner() -> TestResult 
             statuses.iter().filter(|s| **s == StatusCode::FOUND).count(),
             1
         );
-        assert!(statuses.iter().all(|s| matches!(
-            *s,
-            StatusCode::FOUND | StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE
-        )));
+        assert!(statuses
+            .iter()
+            .all(|s| matches!(*s, StatusCode::FOUND | StatusCode::TOO_MANY_REQUESTS)));
         assert_eq!(rows(&state, true).await?, 4096);
         Ok(())
     }
