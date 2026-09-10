@@ -13,6 +13,8 @@ modules:
   fstar/Steel.Effect.fst: faithful
   fstar/auth/Pkjwt.fst: faithful
   fstar/authcode/AuthCode.Flow.fst: faithful
+  fstar/authcode/AuthCode.Snapshot.fst: simplified
+  fstar/authcode/AuthCode.RedisGrant.fst: simplified
   fstar/authcode/AuthCode.Store.fst: faithful
   fstar/authcode/AuthCode.Types.fst: faithful
   fstar/common/EqHelpers.fst: faithful
@@ -144,6 +146,12 @@ modules:
   fstar/pkce/Pkce.fst: simplified
   fstar/rar/Rar.AuthorizationDetails.fst: simplified
   fstar/resource/ProtectedResourceMetadata.fst: faithful
+  # Preserves refresh scope and rejects unrecorded code targets; parser/storage correspondence remains open.
+  fstar/resource/ResourceIndicators.EffectiveTarget.fst: simplified
+  fstar/oidc/OIDC.AuthorizationTransactions.fst: simplified
+  fstar/oidc/OIDC.Reauthentication.fst: simplified
+  fstar/oidc/OIDC.OfflineConsent.fst: simplified
+  fstar/oidc/OIDC.RequestObjectTarget.fst: simplified
   fstar/resource/ResourceIndicators.fst: simplified
   fstar/revocation/Revocation.fst: faithful
   fstar/stepup/StepUp.fst: simplified

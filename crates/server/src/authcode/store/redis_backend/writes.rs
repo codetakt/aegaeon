@@ -220,7 +220,7 @@ impl RedisTokenStoreBackend {
                     "refresh_parent owner must match the access token".to_string()
                 ));
             }
-            let parent_audience = parent.resource.as_deref().unwrap_or(&parent.client_id);
+            let parent_audience = super::super::token_consistency::refresh_parent_audience(&parent);
             if meta.audience != parent_audience {
                 return Ok(Err(
                     "bearer metadata audience must match refresh_parent resource".to_string(),

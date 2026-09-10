@@ -1,0 +1,86 @@
+theory SnapshotRedemption
+begin
+
+/* Successful compare-and-consume design slice. Requests use In/Out, including
+   disclosure of the verifier: replay safety must survive an informed requester.
+   A fresh code stands for a never-reused code generation. Raw bytes and their
+   decoded binding are immutable here. JSON decoding, complete Lua writes,
+   partial errors, recovery and wall-clock TTL are separate obligations.
+   Lease expiry is nondeterministic and does not cancel a previously read worker.
+   Acquisitions may overlap: this deliberately drops lease mutual exclusion,
+   overapproximating workers scheduled around timeout, expiry and retry. Safety
+   therefore relies on Code consumption, not on a lease liveness/exclusion proof.
+   Read may return any historical snapshot of this immutable generation, even
+   after consumption. This overapproximates stale reads; only Commit consumes
+   the current Code fact, independently of the lease or stale snapshot.
+   There are no restrictions encoding the security conclusions. */
+
+rule Issue_Code:
+  [ Fr(~code), Fr(~raw), Fr(~client), Fr(~subject), Fr(~verifier) ]
+  --[ Issued(~code, ~client, ~subject, ~verifier) ]->
+  [ Code(~code, ~raw), !CodeKnown(~code),
+    !Decoded(~code, ~raw, ~client, ~subject, ~verifier),
+    Out(<~code, ~client, ~subject, ~verifier>) ]
+
+rule Acquire_Lease:
+  [ !CodeKnown(code), In(<code, client, verifier>), Fr(~owner) ]
+  --[ Acquired(code, ~owner) ]->
+  [ Lease(code, ~owner), Worker(code, ~owner, client, verifier) ]
+
+rule Read_Snapshot:
+  [ Worker(code, owner, requested_client, requested_verifier),
+    !Decoded(code, raw, client, subject, verifier) ]
+  --[ Read(code, owner, raw) ]->
+  [ Snapshot(code, owner, raw, client, subject, verifier,
+             requested_client, requested_verifier) ]
+
+rule Validate_Snapshot:
+  [ Snapshot(code, owner, raw, client, subject, verifier, client, verifier) ]
+  --[ Validated(code, owner, raw, client, subject, verifier) ]->
+  [ Ready(code, owner, raw, client, subject, verifier) ]
+
+rule Lease_Expires:
+  [ Lease(code, owner) ]
+  --[ Expired(code, owner) ]->
+  [ ]
+
+rule Commit:
+  [ Ready(code, owner, raw, client, subject, verifier), Code(code, raw), Fr(~grant) ]
+  --[ Committed(code, owner, ~grant, client, subject, verifier) ]->
+  [ Out(~grant), ReleaseRequested(code, owner) ]
+
+rule Release_Owned_Lease:
+  [ ReleaseRequested(code, owner), Lease(code, owner) ]
+  --[ Released(code, owner) ]->
+  [ ]
+
+lemma redemption_reachable: exists-trace
+  "Ex code owner grant client subject verifier #i.
+     Committed(code, owner, grant, client, subject, verifier) @ i"
+
+lemma stale_worker_reachable: exists-trace
+  "Ex code raw old_owner new_owner grant client subject verifier #r #e #a #c.
+     Read(code, old_owner, raw) @ r
+     & Expired(code, old_owner) @ e
+     & Acquired(code, new_owner) @ a
+     & Committed(code, old_owner, grant, client, subject, verifier) @ c
+     & r < e & e < a & a < c & not (old_owner = new_owner)"
+
+lemma code_single_use:
+  "All code o1 o2 g1 g2 c1 c2 s1 s2 v1 v2 #i #j.
+     Committed(code, o1, g1, c1, s1, v1) @ i
+     & Committed(code, o2, g2, c2, s2, v2) @ j
+     ==> #i = #j"
+
+lemma request_binding:
+  "All code owner grant client subject verifier #i.
+     Committed(code, owner, grant, client, subject, verifier) @ i
+     ==> (Ex #j. Issued(code, client, subject, verifier) @ j & j < i)"
+
+lemma validation_before_commit:
+  "All code owner grant client subject verifier #i.
+     Committed(code, owner, grant, client, subject, verifier) @ i
+     ==> (Ex raw #j. Validated(code, owner, raw, client, subject, verifier) @ j
+                   & j < i)"
+
+end

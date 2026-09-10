@@ -21,7 +21,7 @@ fn issue_resource_request_token(
                 client_id: "client".to_string(),
                 iss: None,
                 redirect_uri: Some(redirect_uri.to_string()),
-                resource: None,
+                resource: requested_resource.clone(),
                 authorization_details: None,
                 scope: Some("read".to_string()),
                 state: Some("state".to_string()),

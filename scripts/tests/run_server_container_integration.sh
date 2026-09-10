@@ -16,6 +16,7 @@ usage: run_server_container_integration.sh [all|redis|postgres]
 Runs ignored aegaeon-server Redis/Postgres integration tests against the
 repository Docker Compose services. The positional scope overrides
 AEGAEON_SERVER_CONTAINER_TEST_SCOPE when both are set.
+Tests marked shared_redis_ require both services and run only in all scope.
 USAGE
 }
 
@@ -83,7 +84,18 @@ wait_for_redis() {
 
 run_redis_tests() {
 	echo "running Redis-backed aegaeon-server ignored tests"
-	cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1
+	cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_
+}
+
+run_mixed_tests() {
+	echo "running combined Postgres/Redis aegaeon-server ignored tests"
+	# The HTTP fixtures construct the production shared-store adapters. Always
+	# point all four stores at this test Redis, regardless of inherited settings.
+	AEGAEON_PAR_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_AUTH_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_TOKEN_STORE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1
 }
 
 run_postgres_tests() {
@@ -143,6 +155,7 @@ case "$SCOPE" in
 all)
 	run_redis_tests
 	run_postgres_tests
+	run_mixed_tests
 	;;
 redis)
 	run_redis_tests

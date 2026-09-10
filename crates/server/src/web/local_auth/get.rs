@@ -1,6 +1,6 @@
 use axum::extract::{OriginalUri, Query, State};
 use axum::response::Response;
-use http::StatusCode;
+use http::{HeaderMap, StatusCode};
 use serde::Deserialize;
 
 use super::super::{
@@ -21,6 +21,7 @@ pub(in crate::web) struct LocalLoginQuery {
 pub(in crate::web) async fn local_login_get(
     State(state): State<AppState>,
     OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
     Query(query): Query<LocalLoginQuery>,
 ) -> Response {
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, state.issuer.as_str()) {
@@ -49,6 +50,16 @@ pub(in crate::web) async fn local_login_get(
             Ok(token) => token,
             Err(response) => return response,
         };
+    if let Err(response) = super::super::authorize_reauthentication::bind_form(
+        &state,
+        &headers,
+        return_to.as_deref(),
+        &csrf_token,
+    )
+    .await
+    {
+        return response;
+    }
     local_auth_response_with_csrf_cookie(
         StatusCode::OK,
         render_local_login_form(

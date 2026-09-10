@@ -156,6 +156,7 @@ async fn test_prepared_refresh_invalid_resource_does_not_consume_refresh_token()
                 Some("https://api.example/b".to_string()),
                 None,
                 None,
+                None,
             )
             .await,
         "prepared refresh with invalid resource",
@@ -192,6 +193,7 @@ async fn test_prepared_refresh_rejects_mismatched_previous_token() -> TestResult
             .refresh_prepared_access_token_bound_async(
                 "different-refresh-token".to_string(),
                 prepared_refresh,
+                None,
                 None,
                 None,
                 None,

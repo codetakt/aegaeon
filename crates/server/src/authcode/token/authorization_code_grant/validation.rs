@@ -53,13 +53,14 @@ pub(super) fn select_authorized_resource(
     let requested = validate_optional_resource_indicator(requested_resource)
         .map_err(|err| error(TokenGrantErrorCode::InvalidTarget, err))?;
 
-    match (&stored, &requested) {
-        (Some(grant), Some(requested)) if grant != requested => Err(error(
-            TokenGrantErrorCode::InvalidTarget,
-            "requested resource is not permitted by the grant",
-        )),
-        _ => Ok(requested.or(stored)),
-    }
+    super::super::resource_selection::restrict_resource(stored.as_deref(), requested.as_deref())
+        .map(|selected| selected.map(str::to_owned))
+        .ok_or_else(|| {
+            error(
+                TokenGrantErrorCode::InvalidTarget,
+                "requested resource is not permitted by the grant",
+            )
+        })
 }
 
 pub(super) fn validate_request_object_binding(

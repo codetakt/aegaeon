@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Authorization-code, consent and refresh transitions](authorization-code-refresh-recovery.md) —
+  explicit offline consent, grant scope, resource binding and recovery.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —
   runtime authority, environment, and startup troubleshooting.
 - `[runbook]` [JWKS operations](jwks-operations.md) — key distribution,

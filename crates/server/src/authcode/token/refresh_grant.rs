@@ -13,6 +13,7 @@ use std::time::SystemTime;
 struct PreparedRefreshGrant {
     refresh: RefreshToken,
     selected_resource: Option<String>,
+    access_scope: Option<String>,
 }
 
 struct IssuedRefreshGrant {
@@ -25,6 +26,7 @@ struct IssuedRefreshGrant {
 
 struct RefreshGrantSuccess {
     access_token: String,
+    scope: Option<String>,
     refresh_token: Option<String>,
     expires_in: u64,
     authorization_details: Option<Value>,
@@ -77,6 +79,7 @@ impl TokenIssuer {
         let issued = match self.issue_refreshed_grant(
             &prepared.refresh,
             prepared.selected_resource.as_deref(),
+            prepared.access_scope.as_deref(),
             cnf,
             sender_binding,
         ) {
@@ -93,7 +96,7 @@ impl TokenIssuer {
             token_type: "Bearer".to_string(),
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
-            scope: None,
+            scope: success.scope,
             id_token: None,
             authorization_details: success.authorization_details,
         })
@@ -123,6 +126,7 @@ impl TokenIssuer {
         let issued = match self.issue_refreshed_grant(
             &prepared.refresh,
             prepared.selected_resource.as_deref(),
+            prepared.access_scope.as_deref(),
             cnf.as_ref(),
             sender_binding.as_ref(),
         ) {
@@ -142,7 +146,7 @@ impl TokenIssuer {
             token_type: "Bearer".to_string(),
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
-            scope: None,
+            scope: success.scope,
             id_token: None,
             authorization_details: success.authorization_details,
         })
@@ -161,19 +165,25 @@ impl TokenIssuer {
         previous_refresh_token: String,
         refresh: RefreshToken,
         resource: Option<String>,
+        requested_scope: Option<String>,
         cnf: Option<CnfClaim>,
         sender_binding: Option<SenderBinding>,
     ) -> Result<TokenResponse, String> {
         if previous_refresh_token.as_str() != refresh.token.as_str() {
             return server_error("prepared refresh token mismatch").into_result();
         }
-        let prepared = match Self::prepare_loaded_refresh_grant(refresh, resource.as_deref()) {
+        let prepared = match self.prepare_loaded_refresh_grant(
+            refresh,
+            resource.as_deref(),
+            requested_scope.as_deref(),
+        ) {
             Ok(prepared) => prepared,
             Err(err) => return err.into_result(),
         };
         let issued = match self.issue_refreshed_grant(
             &prepared.refresh,
             prepared.selected_resource.as_deref(),
+            prepared.access_scope.as_deref(),
             cnf.as_ref(),
             sender_binding.as_ref(),
         ) {
@@ -193,7 +203,7 @@ impl TokenIssuer {
             token_type: "Bearer".to_string(),
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
-            scope: None,
+            scope: success.scope,
             id_token: None,
             authorization_details: success.authorization_details,
         })
@@ -216,7 +226,7 @@ impl TokenIssuer {
                 | RefreshRotationError::InconsistentGrant,
             ) => return Err(RefreshGrantError::InvalidOrRotated),
         };
-        Self::prepare_loaded_refresh_grant(refresh, requested_resource)
+        self.prepare_loaded_refresh_grant(refresh, requested_resource, None)
     }
 
     async fn prepare_refresh_grant_async(
@@ -240,19 +250,35 @@ impl TokenIssuer {
                 | RefreshRotationError::InconsistentGrant,
             ) => return Err(RefreshGrantError::InvalidOrRotated),
         };
-        Self::prepare_loaded_refresh_grant(refresh, requested_resource)
+        self.prepare_loaded_refresh_grant(refresh, requested_resource, None)
     }
 
     fn prepare_loaded_refresh_grant(
+        &self,
         refresh: RefreshToken,
         requested_resource: Option<&str>,
+        requested_scope: Option<&str>,
     ) -> Result<PreparedRefreshGrant, RefreshGrantError> {
-        let selected_resource =
-            select_refresh_resource(refresh.resource.as_deref(), requested_resource)?;
+        let context = refresh.target_context.as_ref().ok_or_else(|| {
+            invalid_grant("refresh token has no original target context; authorize again")
+        })?;
+        if context.version != 1
+            || context.audience.is_empty()
+            || context.token_issuer != self.issuer
+            || context.oidc_issuer.as_deref() != self.oidc.as_ref().map(|cfg| cfg.issuer.as_str())
+        {
+            return Err(invalid_grant(
+                "refresh target context changed; authorize again",
+            ));
+        }
+        let selected_resource = select_refresh_resource(&context.audience, requested_resource)?;
+
+        let access_scope = select_refresh_scope(refresh.scope.as_deref(), requested_scope)?;
 
         Ok(PreparedRefreshGrant {
             refresh,
             selected_resource,
+            access_scope,
         })
     }
 
@@ -260,6 +286,7 @@ impl TokenIssuer {
         &self,
         refresh: &RefreshToken,
         selected_resource: Option<&str>,
+        access_scope: Option<&str>,
         cnf: Option<&CnfClaim>,
         sender_binding: Option<&SenderBinding>,
     ) -> Result<IssuedRefreshGrant, RefreshGrantError> {
@@ -273,15 +300,12 @@ impl TokenIssuer {
                 ));
             }
         };
-        let audience = self.access_token_audience(
-            &refresh.client_id,
-            refresh.scope.as_deref(),
-            selected_resource,
-        );
+        let audience =
+            self.access_token_audience(&refresh.client_id, access_scope, selected_resource);
         let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
             subject: &refresh.user_id,
             client_id: &refresh.client_id,
-            scope: refresh.scope.as_deref(),
+            scope: access_scope,
             audience: &audience,
             issued_at: now,
             expires_in,
@@ -299,7 +323,7 @@ impl TokenIssuer {
             token_type: "Bearer".to_string(),
             client_id: refresh.client_id.clone(),
             user_id: refresh.user_id.clone(),
-            scope: refresh.scope.clone(),
+            scope: access_scope.map(str::to_owned),
             expires_in,
             created_at: now,
             cnf: cnf.cloned(),
@@ -316,7 +340,7 @@ impl TokenIssuer {
             token_id: access_token_str.clone(),
             client_id: refresh.client_id.clone(),
             user_id: refresh.user_id.clone(),
-            granted_scopes: split_scopes(refresh.scope.as_deref()),
+            granted_scopes: split_scopes(access_scope),
             audience,
             sender_binding: sender_binding.cloned(),
             authorization_details: authorization_details.clone(),
@@ -342,6 +366,7 @@ impl TokenIssuer {
         previous_refresh: &str,
         issued: IssuedRefreshGrant,
     ) -> Result<RefreshGrantSuccess, RefreshGrantError> {
+        let scope = issued.access_token.scope.clone();
         let expires_in = issued.expires_in;
         let authorization_details = issued.authorization_details;
         let (access_token_str, refresh_token) = match self.token_store.store_refreshed_grant(
@@ -367,6 +392,7 @@ impl TokenIssuer {
         };
 
         Ok(RefreshGrantSuccess {
+            scope,
             access_token: access_token_str,
             refresh_token,
             expires_in,
@@ -379,6 +405,7 @@ impl TokenIssuer {
         previous_refresh: String,
         issued: IssuedRefreshGrant,
     ) -> Result<RefreshGrantSuccess, RefreshGrantError> {
+        let scope = issued.access_token.scope.clone();
         let expires_in = issued.expires_in;
         let authorization_details = issued.authorization_details;
         let (access_token_str, refresh_token) = match self
@@ -408,6 +435,7 @@ impl TokenIssuer {
         };
 
         Ok(RefreshGrantSuccess {
+            scope,
             access_token: access_token_str,
             refresh_token,
             expires_in,
@@ -442,19 +470,54 @@ fn invalid_target(description: impl Into<String>) -> RefreshGrantError {
     }
 }
 
+fn invalid_grant(description: impl Into<String>) -> RefreshGrantError {
+    RefreshGrantError::Response {
+        error: "invalid_grant",
+        description: description.into(),
+    }
+}
+
 fn select_refresh_resource(
-    stored_resource: Option<&str>,
+    saved_audience: &str,
     requested_resource: Option<&str>,
 ) -> Result<Option<String>, RefreshGrantError> {
-    let stored = validate_optional_resource_indicator(stored_resource)
-        .map_err(|err| invalid_target(format!("stored resource invalid: {err}")))?;
     let requested =
         validate_optional_resource_indicator(requested_resource).map_err(invalid_target)?;
 
-    match (&stored, &requested) {
-        (Some(grant), Some(requested)) if grant != requested => Err(invalid_target(
-            "requested resource is not permitted by the refresh token grant",
-        )),
-        _ => Ok(requested.or(stored)),
+    // Supplying the saved target explicitly also keeps it stable when a scope
+    // change would otherwise select another default during issuance.
+    super::resource_selection::restrict_resource(Some(saved_audience), requested.as_deref())
+        .map(|selected| selected.map(str::to_owned))
+        .ok_or_else(|| {
+            invalid_target("requested resource is not permitted by the refresh token grant")
+        })
+}
+
+/// RFC 6749 sections 3.3 and 6: omission uses the original grant; an explicit
+/// scope may only narrow the access token. Replacement refresh scope is unchanged.
+fn select_refresh_scope(
+    granted: Option<&str>,
+    requested: Option<&str>,
+) -> Result<Option<String>, RefreshGrantError> {
+    let granted_scopes = crate::oauth_scope::parse_optional_scope_string(granted)
+        .map_err(|_| invalid_grant("stored refresh scope is invalid; authorize again"))?;
+    let Some(requested) = requested else {
+        return Ok(granted.map(str::to_owned));
+    };
+    let requested_scopes = crate::oauth_scope::parse_scope_string(requested)
+        .map_err(|_| invalid_scope("requested scope is not a valid scope string"))?;
+    if !requested_scopes
+        .iter()
+        .all(|scope| granted_scopes.contains(scope))
+    {
+        return Err(invalid_scope("requested scope exceeds the original grant"));
+    }
+    Ok(Some(requested.to_string()))
+}
+
+fn invalid_scope(description: impl Into<String>) -> RefreshGrantError {
+    RefreshGrantError::Response {
+        error: "invalid_scope",
+        description: description.into(),
     }
 }

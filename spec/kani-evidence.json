@@ -178,7 +178,7 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_idempotent_jti",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) \u2014 model regression, not production correspondence",
           "rows": [
             "OIDC-3-005"
           ],
@@ -191,7 +191,7 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_session_rotates_after_logout",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) \u2014 model regression, not production correspondence",
           "rows": [
             "OIDC-3-005"
           ],
@@ -203,7 +203,7 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_session_ttl_prunes_logged_out_entries",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) — model regression, not production correspondence",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed sequential trace (4 sessions/4 clients) \u2014 model regression, not production correspondence",
           "rows": [
             "OIDC-3-005"
           ],
@@ -214,17 +214,17 @@
         {
           "name": "kani_test::kani_tests::verify_client_assertion_replay_window_bounds",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "production helper crate::config::valid_client_assertion_replay_window_secs over kani::any::<i64>() — bounded production check (candidate for evidence-grade admission later)"
+          "domain": "production helper crate::config::valid_client_assertion_replay_window_secs over kani::any::<i64>() \u2014 bounded production check (candidate for evidence-grade admission later)"
         },
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_ttl_normalization_bounds",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "production helper crate::oidc::session::normalize_logout_session_ttl_secs over kani::any::<u64>() — bounded production check"
+          "domain": "production helper crate::oidc::session::normalize_logout_session_ttl_secs over kani::any::<u64>() \u2014 bounded production check"
         },
         {
           "name": "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace (2 auth sessions) — model regression, not production correspondence",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace (2 auth sessions) \u2014 model regression, not production correspondence",
           "unreachable_assertions": {
             "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids.assertion.1": "bounded model has capacity for initial auth session",
             "kani_test::kani_tests::verify_oidc_same_user_distinct_auth_sessions_have_distinct_sids.assertion.2": "bounded model has capacity for second auth session",
@@ -234,7 +234,7 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace — model regression",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace \u2014 model regression",
           "unreachable_assertions": {
             "kani_test::kani_tests::verify_oidc_logout_future_timestamp_prunes_fail_closed.assertion.1": "bounded model has capacity for one session"
           }
@@ -242,7 +242,7 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at capacity — model regression",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at capacity \u2014 model regression",
           "unreachable_assertions": {
             "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.1": "first bounded session insert succeeds",
             "kani_test::kani_tests::verify_oidc_logout_capacity_fails_closed_without_overwrite.assertion.2": "second bounded session insert succeeds",
@@ -253,10 +253,38 @@
         {
           "name": "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite",
           "file": "crates/server/src/kani_test.rs",
-          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at client capacity — model regression",
+          "domain": "cfg(kani) BoundedKaniSessionStore model, fixed trace at client capacity \u2014 model regression",
           "unreachable_assertions": {
             "kani_test::kani_tests::verify_oidc_logout_client_capacity_fails_closed_without_overwrite.assertion.1": "bounded model has capacity for one session"
           }
+        }
+      ]
+    },
+    {
+      "id": "authorization-grant-predicates",
+      "class": "required",
+      "gating": "evidence",
+      "package": {
+        "name": "aegaeon-server",
+        "manifest": "crates/server/Cargo.toml"
+      },
+      "crate": "aegaeon_server",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 66,
+      "harnesses": [
+        {
+          "name": "authcode::code_store::stored_code::proofs::stored_code_read_guard",
+          "file": "crates/server/src/authcode/code_store/stored_code.rs",
+          "domain": "Production stored-code identity guard over optional bytes and code strings of length 0 through 64; does not prove serde decoding, raw snapshot retention, Redis CAS, or full issuance."
+        },
+        {
+          "name": "authcode::token::resource_selection::proofs::resource_choice_preserves_authority",
+          "file": "crates/server/src/authcode/token/resource_selection.rs",
+          "domain": "Production single-resource acceptance predicate over optional byte strings of length 0 through 64; does not prove URI parsing, stored grant provenance, or full issuance."
         }
       ]
     },

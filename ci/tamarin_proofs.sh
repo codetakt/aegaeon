@@ -3,6 +3,7 @@
 # Paths are relative to proofs/tamarin.
 PROOFS=(
 	# --- authcode ---
+	"authcode/snapshot_redemption.spthy:redemption_reachable,stale_worker_reachable,code_single_use,request_binding,validation_before_commit"
 	"authcode/code_injection.spthy:no_code_injection,state_binding,code_exchange_reachable"
 	"authcode/authcode_session_integrity.spthy:"
 	"session_integrity,code_single_use,state_csrf_protection,"

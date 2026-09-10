@@ -82,6 +82,8 @@ pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
     let cleanup_rate_limiter = state.device.rate_limiter.clone();
     let cleanup_management = state.management.clone();
     let cleanup_management_runtime_commands = state.db_pool.clone();
+    let cleanup_authorization_pool = state.db_pool.clone();
+    let cleanup_environment = state.environment_id;
     let management_runtime_command_stale_after =
         runtime_command_stale_after(cleanup_interval_secs.max(1));
     let runtime_restart = state.runtime_restart.clone();
@@ -106,6 +108,23 @@ pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
                     _ = interval.tick() => {}
                 }
                 tokio::join!(
+                    async {
+                        match tokio::time::timeout(
+                            job_timeout,
+                            aegaeon_server::web::cleanup_expired_authorization_transactions(
+                                &cleanup_authorization_pool,
+                                cleanup_environment,
+                            ),
+                        )
+                        .await
+                        {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(error)) => {
+                                log_cleanup_failure("authorization_transactions", error)
+                            }
+                            Err(error) => log_cleanup_failure("authorization_transactions", error),
+                        }
+                    },
                     run_cleanup_blocking("token_issuer", job_timeout, {
                         let cleanup_issuer = cleanup_issuer.clone();
                         move || cleanup_issuer.try_cleanup_expired()

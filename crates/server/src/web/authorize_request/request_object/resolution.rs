@@ -17,7 +17,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
     deps: &RequestObjectAuthorizeDeps<'_>,
     client_id: &str,
     request_jwt: &str,
-    authorize_audience: &str,
+    issuer_base: &str,
     supported_authorization_details: &[String],
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
@@ -38,7 +38,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
         .verify_request_object(
             client_id,
             &request_jwt_for_verification,
-            authorize_audience,
+            issuer_base,
             deps.crypto_profile,
         )
         .map_err(|err| request_object_validation_error_to_resolution_error(&err))?
@@ -60,7 +60,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
 
     crate::request_object::everparse_self_check_request_object_claims_with_runtime(
         &claims,
-        authorize_audience,
+        issuer_base,
         deps.request_object_everparse_runtime_enabled,
     )
     .map_err(|err| {
@@ -74,6 +74,7 @@ pub(in crate::web) fn resolve_authorize_request_object(
     let resource = validate_request_object_resource(&claims)?;
 
     Ok(ResolvedAuthorizeRequestObject {
+        authorization_server_issuer: issuer_base.to_string(),
         redirect_uri,
         response_type,
         scope,
@@ -94,7 +95,7 @@ pub(in crate::web) async fn resolve_authorize_request_object_blocking(
     deps: OwnedRequestObjectAuthorizeDeps,
     client_id: String,
     request_jwt: String,
-    authorize_audience: String,
+    issuer_base: String,
     supported_authorization_details: Vec<String>,
     replay_policy: RequestObjectReplayPolicy,
 ) -> Result<ResolvedAuthorizeRequestObject, RequestObjectResolutionError> {
@@ -104,7 +105,7 @@ pub(in crate::web) async fn resolve_authorize_request_object_blocking(
             &deps,
             &client_id,
             &request_jwt,
-            &authorize_audience,
+            &issuer_base,
             &supported_authorization_details,
             replay_policy,
         )

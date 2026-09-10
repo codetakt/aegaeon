@@ -1,5 +1,8 @@
 use axum::{http::StatusCode, response::Response};
 
+#[cfg(test)]
+mod tests;
+
 use crate::authcode::store::RefreshRotationError;
 use crate::authcode::types::{RefreshToken, TokenResponse as IssuerTokenResp};
 
@@ -105,6 +108,7 @@ pub(super) async fn handle_token_refresh_grant(
             prepared_refresh.previous_refresh_token,
             prepared_refresh.refresh,
             ctx.resource.clone(),
+            ctx.form.scope.clone(),
             ctx.cnf_for_at.clone(),
             ctx.sender_binding.clone(),
         )

@@ -150,6 +150,9 @@ if oidc_enabled then
   end
 end
 
+-- Redis does not roll back writes when a later command fails. Retire the code
+-- before publishing any tokens; errors or a lost reply require reauthorization.
+redis.call("DEL", KEYS[1])
 redis.call("SET", KEYS[4], ARGV[1])
 redis.call("SADD", KEYS[5], ARGV[4])
 redis.call("ZADD", KEYS[6], ARGV[5], ARGV[4])
@@ -181,7 +184,6 @@ if oidc_enabled then
   redis.call("SADD", KEYS[18], ARGV[20])
 end
 
-redis.call("DEL", KEYS[1])
 redis.call("INCR", KEYS[2])
 redis.call("INCR", KEYS[3])
 return "ok"

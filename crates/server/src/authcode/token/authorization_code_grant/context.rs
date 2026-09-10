@@ -1,5 +1,6 @@
 use super::issuance;
-use crate::authcode::types::{AccessToken, AuthorizationCode, RefreshToken};
+use crate::authcode::code_store::StoredAuthorizationCode;
+use crate::authcode::types::{AccessToken, RefreshToken};
 use crate::end_user_profiles::OidcProfileClaims;
 use crate::upstream::UpstreamClaimReleasePolicy;
 use serde_json::Value;
@@ -7,7 +8,7 @@ use std::time::SystemTime;
 
 pub(super) struct ValidatedAuthorizationCodeGrant {
     pub(super) code_str: String,
-    pub(super) code: AuthorizationCode,
+    pub(super) code: StoredAuthorizationCode,
     pub(super) selected_resource: Option<String>,
     pub(super) openid_requested: bool,
 }

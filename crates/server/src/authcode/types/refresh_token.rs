@@ -5,6 +5,17 @@ use std::time::{Duration, SystemTime};
 
 use crate::upstream::UpstreamClaimReleasePolicy;
 
+/// Inputs and result of the single-target selection at grant issuance.
+/// Missing historical context must not be inferred from the current issuer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RefreshTargetContext {
+    pub version: u32,
+    pub audience: String,
+    pub token_issuer: Option<String>,
+    pub oidc_issuer: Option<String>,
+}
+
 /// Refresh Token with rotation tracking (RFC 9700)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshToken {
@@ -14,6 +25,9 @@ pub struct RefreshToken {
     pub scope: Option<String>,
     /// RFC 8707 Resource Indicators: the resource(s) associated with the grant (single value).
     pub resource: Option<String>,
+    /// Resolved target, separate from the optional requested resource.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_context: Option<RefreshTargetContext>,
     /// Sender binding (DPoP/mTLS) captured at issuance time.
     pub sender_binding: Option<SenderBinding>,
     /// RFC 9396 Rich Authorization Requests (`authorization_details`).
@@ -72,6 +86,7 @@ impl RefreshToken {
             user_id: input.user_id,
             scope: input.scope,
             resource: input.resource,
+            target_context: None,
             sender_binding: None,
             authorization_details: input.authorization_details,
             auth_time_epoch_secs: input.auth_time_epoch_secs,
@@ -103,6 +118,7 @@ impl RefreshToken {
             remaining.as_secs(),
         );
         new_token.sender_binding.clone_from(&self.sender_binding);
+        new_token.target_context.clone_from(&self.target_context);
         new_token
             .claim_release_policy
             .clone_from(&self.claim_release_policy);

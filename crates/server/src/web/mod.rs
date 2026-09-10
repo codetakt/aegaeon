@@ -3,9 +3,13 @@
 mod access_token_persistence;
 mod auth_session;
 mod auth_session_flow;
+#[cfg(test)]
+mod authorization_consent_tests;
+mod authorization_transactions;
 mod authorize_context;
 mod authorize_endpoint;
 mod authorize_login_redirect;
+mod authorize_reauthentication;
 mod authorize_request;
 mod authorize_validation;
 mod backchannel_logout;
@@ -43,6 +47,8 @@ mod shared;
 mod state;
 #[cfg(test)]
 mod test_prelude;
+#[cfg(test)]
+mod test_support;
 mod token_authorization_code;
 mod token_client_credentials;
 mod token_device_code;
@@ -86,6 +92,7 @@ use auth_session_flow::{
     create_auth_session_or_error_response_async, local_logout_redirect_target_with_policy,
     local_password_session_acr, normalized_acr, validate_return_to,
 };
+pub use authorization_transactions::cleanup_expired_authorization_transactions;
 use authorize_endpoint::authorize;
 use authorize_validation::{authorize_error_response, AuthorizeErrorContext};
 use dcr_registration::register;
