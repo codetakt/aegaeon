@@ -96,7 +96,7 @@ process/proxy boundary rather than an issuer policy snapshot.
 | `AEGAEON_AUTH_SESSION_REDIS_URL` | _unset_ | `system` | Redis URL for shared browser auth sessions. Required by the supported server runtime serving local or upstream browser login flows. |
 | `AEGAEON_CSRF_REDIS_URL` | _removed_ | `system` | Removed shared Redis fallback for CSRF token stores. Configure each CSRF surface Redis URL explicitly; startup fails closed if this variable is present. |
 | `AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL` | _unset_ | `system` | Redis URL for local end-user authentication CSRF tokens. Startup fails closed when this surface is required and the URL is unset. |
-| `AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for local end-user login rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. |
+| `AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for local end-user login and separately named authorization-source rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. Authorization does not fall back to unbounded admission when this store fails. |
 | `AEGAEON_LOCAL_PASSWORD_ACR` | _removed_ | `environment` | Removed startup-environment fallback ACR value assigned to successful local password authentication. In the supported PostgreSQL-backed runtime, `policy.localPasswordAcr` is authoritative. If supported ACR values are configured, this value must be present in that allow-list. |
 
 ## Step-up authentication (RFC 9470)

@@ -87,6 +87,27 @@ fn database_config_rejects_empty_primary_url() {
 }
 
 #[test]
+fn authorization_admission_budgets_are_configurable_and_validated() -> ConfigTestResult {
+    let _lock = env_lock();
+    let _runtime_env = database_backed_runtime_env();
+    let _capacity = EnvVarGuard::new("AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY", Some("8192"));
+    let _minute = EnvVarGuard::new("AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE", Some("1000"));
+    let _source = EnvVarGuard::new("AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE", Some("200"));
+    let cfg = must_ok!(ServerConfig::try_from_env(), "valid deployment budgets");
+    assert_eq!(cfg.database.authorization_admission.capacity(), 8192);
+    assert_eq!(cfg.database.authorization_admission.per_minute(), 1000);
+    assert_eq!(cfg.database.authorization_admission.per_source(), 200);
+    for value in ["0", "-1", "false", "500", "4294967295"] {
+        let _invalid = EnvVarGuard::new("AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE", Some(value));
+        assert!(ServerConfig::try_from_env().is_err(), "must reject {value}");
+    }
+    for (capacity, minute, source) in [(0, 300, 60), (4096, 120, 60), (360, 300, 60), (1_000_001, 300, 60)] {
+        assert!(AuthorizationAdmissionLimits::new(capacity, minute, source).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn server_config_rejects_removed_database_runtime_envs() {
     for (key, reason_fragment) in [
         ("AEGAEON_DB_ENABLED", "PostgreSQL is mandatory"),

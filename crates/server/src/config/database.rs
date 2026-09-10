@@ -6,6 +6,7 @@ pub struct DatabaseConfig {
     pub url: PostgresDatabaseUrl,
     pub max_connections: u32,
     pub acquire_timeout_secs: u64,
+    pub authorization_admission: super::AuthorizationAdmissionLimits,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +35,7 @@ impl Default for DatabaseConfig {
             url: PostgresDatabaseUrl::for_local_harness(),
             max_connections: 10,
             acquire_timeout_secs: 5,
+            authorization_admission: super::AuthorizationAdmissionLimits::default(),
         }
     }
 }
@@ -43,6 +45,7 @@ impl DatabaseConfig {
         let url = required_database_url_from_env()?;
         Ok(Self {
             url,
+            authorization_admission: super::AuthorizationAdmissionLimits::try_from_env()?,
             max_connections: try_env_num_with(
                 "AEGAEON_DB_MAX_CONNECTIONS",
                 10u32,

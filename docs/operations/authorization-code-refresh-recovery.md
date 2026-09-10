@@ -98,25 +98,59 @@ session's age and ACR.
 
 ## Authorization transaction limits and retention
 
-Login and consent each have a limit of 4,096 retained records and 300 newly
-created records in a rolling minute, per environment and table. These are fixed
-initial server bounds, shared across workers through PostgreSQL, rather than
-per-process or per-browser counters. Completion and consumption do not refund the
-minute budget. A saturated table returns no-store HTTP 429 with `Retry-After`;
-retry later with a fresh authorization request. Do not retry in a tight loop.
-Limits protect stored state; deployments still need their normal ingress request
-rate controls to protect validation and database read capacity.
+Login and consent default to 4,096 retained records and 300 newly created records
+in a rolling minute, per environment and table. These are deployment storage
+budgets shared through PostgreSQL. Configure
+`AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` and
+`AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` for the issuer's aggregate load:
+the default minute budget supports only five new continuations per second on
+average. Completion and consumption do not refund it. A saturated table returns
+no-store HTTP 429 with `Retry-After: 60`; retry later with a fresh request.
+
+Before authorization processing, a separate shared Redis bucket limits each
+transport-validated source to 60 requests per minute by default, controlled by
+`AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE`. Rejected traffic allocates no
+authorization rows. Arbitrary forwarding headers and rotating client IDs cannot
+reset this bucket; the existing trusted-proxy source rules apply. Without a usable
+forwarded source, clients behind a proxy share its address. Configure proxies and
+size the source budget for legitimate shared-NAT traffic.
+
+For example, capacity 20,000, minute budget 10,000 and source budget 1,000 allow
+higher aggregate throughput while preserving source headroom. Startup requires
+`2 * source < minute` and `6 * source < capacity`, and caps both storage budgets at
+1,000,000. Use identical settings on all workers serving an environment and
+coordinate budget changes; mixed limits are not a coherent deployment. Load-test
+these values against database capacity. Source limiting mitigates the cheap
+single-source burst; many sources, delayed requests and cleanup backlogs can still
+exhaust global budgets. These controls do not establish a denial-of-service
+availability guarantee. Keep ingress controls for transport and validation load.
 
 An authorization URI is limited to 32,768 UTF-8 bytes and its serialized request
 snapshot to 65,536 bytes before persistence. A query can contain a signed Request
 Object, so database access must treat these snapshots as sensitive. They are not
 appropriate request logs or permanent audit payloads.
 
-Admission explicitly uses a READ COMMITTED transaction, locks the environment
-row before taking fresh counts, deletes up to 512
+Long queries have an additional continuation limitation: form encoding can
+expand punctuation even when the original query fits the 16 KiB ingress limit.
+The expanded URI may exceed the storage bound, or a login redirect may fail the
+query limit on re-entry. These cases return 400; the initial size check does not
+guarantee that a continuation fits. Keep authorization URLs compact, for example
+by using PAR for large request parameters. This release does not change the
+continuation encoding or its size contract.
+
+Admission explicitly uses a READ COMMITTED transaction and a transaction advisory
+lock named by environment and table. It waits up to the two-second statement
+deadline, then deletes up to 512
 expired rows from the selected table, checks capacity and the recent insertion
 count, then inserts. Workers cannot each admit the final free slot from a stale
-count. Lock/database errors return 503 without admitting a continuation. The
+count. Ordinary short-lived contention queues; a final-slot loser receives 429.
+Login and consent use distinct lock names. Hash collisions can add conservative
+serialization, but never change row ownership or counter predicates. Acquiring
+this lock does not lock the environment row against FK inserts. The inserts
+themselves still take ordinary FK key-share locks, so an environment deletion or
+explicit exclusive environment update can make them wait. Lock deadlines,
+database failures or an unavailable source limiter return 503 without admitting
+a continuation. The
 existing supervised cleanup task also removes up to 512 expired rows per table
 and environment on each cleanup tick, even without new authorization traffic.
 It preserves unexpired rows and other environments. Cleanup is retried and its
@@ -125,7 +159,19 @@ Expired records remain unusable while awaiting deletion. Monitor cleanup failure
 and backlog; the five-minute validity window is not a guaranteed physical-erasure
 deadline when the service or database is unavailable.
 
+Concurrent cleanup can leave rows visible to a READ COMMITTED count until its
+delete commits. A capacity-edge 429 in that interval is conservative; the server
+does not admit beyond the storage bound to compensate for an uncommitted delete.
+
 ## Upgrade and recovery
+
+Drain and stop all workers using the former environment-row admission lock before
+starting workers with transaction advisory locks. This admission change requires
+a coordinated cutover even when no database migration is pending. Old and new
+workers do not share a serialization lock: running them together can admit past
+the capacity or rolling-minute budget. Matching limit values does not make a
+mixed-version rollout safe. Resume traffic only after every writer uses the same
+admission implementation and settings.
 
 This release makes a hard Request Object audience cutover. Read the exact
 `issuer` from discovery, configure each Request Object producer to include that

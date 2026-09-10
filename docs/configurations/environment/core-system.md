@@ -90,6 +90,17 @@ server.
 | `AEGAEON_DATABASE_URL` | _unset_ | `system` | Required Postgres connection string for the server runtime. |
 | `AEGAEON_DB_MAX_CONNECTIONS` | `10` | `system` | SQLx pool size cap. |
 | `AEGAEON_DB_ACQUIRE_TIMEOUT_SECS` | `5` | `system` | Timeout (seconds) when acquiring a pooled connection. |
+| `AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` | `4096` | `system` | Retained login/consent rows per environment and table; range 1–1,000,000. Deployment storage budget, not an issuer authorization permission. |
+| `AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` | `300` | `system` | New login/consent rows per environment and table in a rolling minute; range 1–1,000,000. Size for the deployment's aggregate traffic. |
+| `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` | `60` | `system` | Authorization requests per transport-validated source in a 60-second shared Redis bucket; positive. Separate from password-login buckets. |
+
+The source budget must satisfy `2 * source < minute` and `6 * source < capacity`;
+startup rejects invalid combinations. These relationships leave storage headroom
+beyond one source's overlapping ingress windows; they do not prove availability
+under delayed processing, cleanup backlogs or traffic from many sources. Set the
+same values on every worker serving an environment, and coordinate changes across
+workers. See [authorization transaction operations](../../operations/authorization-code-refresh-recovery.md#authorization-transaction-limits-and-retention)
+for sizing and overload behavior.
 
 `AEGAEON_DB_ENABLED` was removed. PostgreSQL is mandatory, and startup rejects this variable even
 when it is set to a truthy value.

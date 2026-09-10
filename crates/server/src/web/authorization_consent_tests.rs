@@ -1,5 +1,6 @@
 //! Consent acquisition tests use real `PostgreSQL` and the public HTTP routes.
 mod admission;
+mod availability;
 mod reauthentication;
 mod request_objects;
 mod retention;

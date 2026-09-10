@@ -87,7 +87,7 @@ async fn pg_authorization_transactions_enforce_serialized_byte_limits() -> TestR
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL"]
-async fn pg_authorization_transactions_lock_failure_is_recoverable() -> TestResult {
+async fn pg_authorization_transactions_lock_deadline_is_recoverable() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("PostgreSQL test URL required")?;
@@ -106,25 +106,32 @@ async fn pg_authorization_transactions_lock_failure_is_recoverable() -> TestResu
         let response = begin(
             &pool,
             env.environment_id,
-            Kind::Consent,
+            Kind::Login,
             "/authorize",
             &snapshot,
         )
         .await
-        .expect_err("a competing admission must fail without waiting for the lock");
+        .expect_err("an unreleased same-kind lock must eventually reach its deadline");
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         owner.rollback().await?;
         let recovered = begin(
             &pool,
             env.environment_id,
-            Kind::Consent,
+            Kind::Login,
             "/authorize",
             &snapshot,
         )
         .await
         .map_err(|r| format!("lock did not recover: {}", r.status()))?;
         recovered.rollback().await?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM aegaeon.authorization_logins WHERE environment_id=$1",
+        )
+        .bind(env.environment_id)
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(count, 0, "a timed-out admission must not allocate a row");
         Ok(())
     }
     .await;

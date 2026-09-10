@@ -27,6 +27,18 @@ impl MainEnvAuthority {
 
 const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &[
     (
+        "AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY",
+        MainEnvAuthority::SystemBootstrap,
+    ),
+    (
+        "AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE",
+        MainEnvAuthority::SystemBootstrap,
+    ),
+    (
+        "AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE",
+        MainEnvAuthority::SystemBootstrap,
+    ),
+    (
         "AEGAEON_ALLOW_PROXY_CHAIN_LENGTH",
         MainEnvAuthority::SystemBootstrap,
     ),
@@ -396,6 +408,7 @@ fn direct_main_env_reads_are_classified() {
         include_str!("../../main.rs"),
         include_str!("../../config.rs"),
         include_str!("../../config/database.rs"),
+        include_str!("../../config/authorization_admission.rs"),
         include_str!("../../config/environment.rs"),
         include_str!("../../config/transport.rs"),
         include_str!("../../key_encryption.rs"),
@@ -461,6 +474,9 @@ fn database_backed_runtime_env_reads_are_limited_to_bootstrap_or_shared_state() 
     assert_eq!(
         allowed_with_database,
         BTreeSet::from([
+            "AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY",
+            "AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE",
+            "AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE",
             "AEGAEON_ALLOW_PROXY_CHAIN_LENGTH",
             "AEGAEON_AUTH_CODE_REDIS_URL",
             "AEGAEON_AUTH_SESSION_REDIS_URL",
