@@ -71,3 +71,72 @@ let lemma_admission_reachable ()
   : Lemma (reserve {retained=0; recent=0} witness_limits 16384 32768 =
            Some {retained=1; recent=1})
   = ()
+
+(* Lock names may hash to the same advisory key. Such a collision only adds
+   serialization; it must not change the environment predicate of the count.
+   Advisory locks and FK row locks occupy separate PostgreSQL lock domains.
+   This algebra does not prove the SQL implementation or scheduler fairness. *)
+type lock_domain =
+  | Advisory : nat -> lock_domain
+  | ForeignKey : string -> lock_domain
+
+let conflicts (a:lock_domain) (b:lock_domain) : Tot bool = a = b
+
+let lemma_advisory_does_not_conflict_with_fk (key:nat) (environment:string)
+  : Lemma (not (conflicts (Advisory key) (ForeignKey environment)))
+  = ()
+
+type acquisition = | Acquired | Waiting | TimedOut
+
+let acquire (held:bool) (deadline:bool) : Tot acquisition =
+  if not held then Acquired else if deadline then TimedOut else Waiting
+
+let lemma_contender_waits_before_deadline ()
+  : Lemma (acquire true false = Waiting)
+  = ()
+
+let lemma_release_allows_waiter ()
+  : Lemma (acquire false false = Acquired)
+  = ()
+
+let lemma_timeout_does_not_reserve (s:counters) : Lemma
+  ((if acquire true true = Acquired then
+      {retained=s.retained+1; recent=s.recent+1} else s) = s)
+  = ()
+
+(* Ingress accounting precedes storage admission. Fixed sixty-second buckets
+   overlap at most two windows in a rolling minute, and six in a five-minute
+   row lifetime. Clock behavior, source identity and the actual Redis windows
+   are assumptions, not consequences of these arithmetic lemmas. *)
+let source_admission (used:nat) (limit:pos) : Tot (option nat) =
+  if used >= limit then None else Some (used+1)
+
+let ingress_then_reserve (used:nat) (source_limit:pos)
+    (s:counters) (l:limits) (u:nat) (j:nat) : Tot (option counters) =
+  match source_admission used source_limit with
+  | None -> None
+  | Some _ -> reserve s l u j
+
+let lemma_source_rejection_prevents_storage_admission
+    (used:nat) (limit:pos) (s:counters) (l:limits) (u:nat) (j:nat)
+  : Lemma (requires (used >= limit))
+          (ensures (ingress_then_reserve used limit s l u j = None))
+  = ()
+
+let safe_source_limit (source:pos) (l:limits) : Tot bool =
+  op_Multiply 2 source < l.rate && op_Multiply 6 source < l.capacity
+
+let lemma_one_source_below_global_rate (source:pos) (l:limits) (issued:nat)
+  : Lemma (requires (safe_source_limit source l /\ issued <= op_Multiply 2 source))
+          (ensures (issued < l.rate))
+  = ()
+
+let lemma_one_source_below_retained_capacity (source:pos) (l:limits) (retained:nat)
+  : Lemma (requires (safe_source_limit source l /\ retained <= op_Multiply 6 source))
+          (ensures (retained < l.capacity))
+  = ()
+
+let lemma_source_budget_does_not_affect_another_key (other:nat) (limit:pos)
+  : Lemma (requires (other < limit))
+          (ensures (source_admission other limit = Some (other+1)))
+  = ()

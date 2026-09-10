@@ -16,12 +16,13 @@ pub(super) async fn create(
     browser: &str,
 ) -> Result<(), Response> {
     let request_snapshot = snapshot(ctx)?;
-    let mut tx = super::super::authorization_transactions::begin(
+    let mut tx = super::super::authorization_transactions::begin_with_limits(
         &state.db_pool,
         state.environment_id,
         super::super::authorization_transactions::Kind::Login,
         uri,
         &request_snapshot,
+        &state.cfg.database.authorization_admission,
     )
     .await?;
     sqlx::query("INSERT INTO aegaeon.authorization_logins

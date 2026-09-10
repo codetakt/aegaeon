@@ -55,6 +55,13 @@ pub(super) async fn authorize(
     if let Err(resp) = enforce_no_credentials_in_authorize_uri(&uri, issuer_base) {
         return resp;
     }
+    let source = match state.transport.rate_limit_subject(Some(remote), &headers) {
+        Ok(source) => source,
+        Err(kind) => return transport_rejection(&state, kind),
+    };
+    if let Err(response) = super::authorization_transactions::admit_source(&state, &source).await {
+        return response;
+    }
     let request_id = request_id_from_headers(&headers);
     let mut ctx = match build_authorize_request_context(&state, &uri, issuer_base, request_id).await
     {

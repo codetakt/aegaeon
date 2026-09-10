@@ -39,11 +39,16 @@ modules as grounding for `status: verified` entries.
 `fstar/oidc/OIDC.AuthorizationTransactions.fst` is a simplified admission and
 retention slice. Serialized fresh counters bound capacity and a rolling insertion
 budget; completion does not refund the budget. Cleanup preserves live and foreign
-rows and removes expired local rows. The runtime fixes admission to READ COMMITTED
-so counts after its environment lock see earlier commits regardless of the pool
-default. SQL locking and isolation, measured byte sizes, database
-clock observations and cleanup scheduling remain test/review obligations, not
-machine-checked correspondence. It introduces no verified matrix claim.
+rows and removes expired local rows. The lock model separates advisory acquisition
+from FK row locks and distinguishes waiting from a deadline failure. A source
+bucket rejects before storage admission; arithmetic bounds cover one source's
+overlapping rate windows under explicit clock and identity assumptions. The
+runtime uses READ COMMITTED so counts after acquisition see earlier commits.
+SQL locking/isolation, lock-key hash collisions, scheduler progress, source
+identity, Redis windows, measured byte sizes and cleanup scheduling remain
+test/review obligations, not machine-checked correspondence. The source budget
+does not prove availability against many sources or shared-NAT fairness. This
+module introduces no verified matrix claim.
 
 The effective-target slice also models same-grant access-token re-minting:
 a saved target takes precedence over legacy resource/client selection, just as
