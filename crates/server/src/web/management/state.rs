@@ -7,7 +7,6 @@ mod session_store;
 pub use config::ManagementConfig;
 pub use runtime::ManagementState;
 
-#[cfg(test)]
 pub(super) use config::normalize_management_allowed_origin;
 #[cfg(test)]
 pub(super) use control_plane_policy::MAX_MANAGEMENT_MAX_SESSIONS;

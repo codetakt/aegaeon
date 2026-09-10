@@ -11,11 +11,12 @@ use super::{
     activate_environment, commit_management_transaction, default_policy_document,
     fail_if_management_plane_initialized, insert_active_configuration_document,
     insert_administrator, insert_environment, insert_team, insert_team_owner, insert_tenant,
-    response_error, BOOTSTRAP_LOCK_ID,
+    response_error,
 };
 use crate::web::management::{
     api_keys::{insert_api_key_row, ApiKeyInsertInput},
-    begin_management_transaction, sha256_array,
+    sha256_array,
+    transactions::begin_bootstrap_transaction,
 };
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -60,15 +61,9 @@ pub async fn seed_observability_environment(
 ) -> Result<ObservabilitySeedOutput> {
     let input = normalize_seed_input(issuer_host)?;
     let (key_prefix, key_hash) = validate_api_key(raw_api_key)?;
-    let mut tx = begin_management_transaction(pool, "observability-seed")
+    let mut tx = begin_bootstrap_transaction(pool, "observability-seed")
         .await
         .map_err(response_error)?;
-
-    sqlx::query("SELECT pg_advisory_xact_lock($1)")
-        .bind(BOOTSTRAP_LOCK_ID)
-        .execute(&mut *tx)
-        .await
-        .context("failed to acquire observability seed advisory lock")?;
 
     if let Some(existing) =
         load_existing_seed(&mut tx, &input.issuer_host, &key_prefix, &key_hash).await?

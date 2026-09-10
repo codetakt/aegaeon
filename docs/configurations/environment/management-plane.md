@@ -25,6 +25,14 @@ These variables control the management API served under `/api/v1/*` (control pla
 | `AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL` | _unset_ | `system` | Redis URL for management login rate-limit buckets. Startup fails closed when this surface is required and the URL is unset. |
 | `AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN` | _unset_ | `system` | Optional shared secret for first-owner bootstrapping. If set, `POST /api/v1/bootstrapping/owners` requires `bootstrapToken` to match. Remove/rotate after initial bootstrap. |
 
+### Empty database initialization
+
+Use [`aegaeon-management-init`](../../operations/management-initialization.md) before
+starting an interactive management environment. It reads bounded JSON on stdin
+and stores initial Origins and issuer base domain in PostgreSQL with the owner
+credential and initial topology. It uses the existing database connection settings;
+it does not introduce server runtime policy environment variables.
+
 ### Hosted bootstrap utility
 
 The `aegaeon-hosted-bootstrap` utility uses these variables to create the initial hosted team,

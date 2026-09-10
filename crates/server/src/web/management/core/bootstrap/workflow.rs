@@ -4,9 +4,9 @@ use sqlx::PgPool;
 use crate::management::types::BootstrapOwnerRequest;
 
 use super::super::super::{
-    begin_management_transaction, commit_management_transaction, enforce_bootstrap_token,
-    error_response, hash_password, insert_team_owner_membership, management_internal_error,
-    normalize_email, validate_bootstrap_owner_password, ManagementConfig,
+    commit_management_transaction, enforce_bootstrap_token, error_response, hash_password,
+    insert_team_owner_membership, normalize_email, validate_bootstrap_owner_password,
+    ManagementConfig,
 };
 use super::persistence::{
     bootstrap_completed, insert_bootstrap_administrator, insert_bootstrap_audit_record,
@@ -31,17 +31,8 @@ pub(super) async fn bootstrap_owner_inner(
         ));
     };
 
-    let mut tx = begin_management_transaction(pool, request_id).await?;
-    if sqlx::query("SELECT pg_advisory_xact_lock(724617523)")
-        .execute(&mut *tx)
-        .await
-        .is_err()
-    {
-        return Err(management_internal_error(
-            request_id,
-            "Failed to acquire bootstrap lock",
-        ));
-    }
+    let mut tx =
+        super::super::super::transactions::begin_bootstrap_transaction(pool, request_id).await?;
 
     if bootstrap_completed(&mut tx, request_id).await? {
         return Err(error_response(

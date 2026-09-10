@@ -190,3 +190,14 @@ claimed to be constrained against arbitrary corrupted records. The model adds
 no verified matrix claim. Regenerate cases with
 `python3 scripts/validation/authcode_redis_fixtures.py`; run them against real Redis
 with `python3 scripts/validation/check_authcode_redis_grant.py --out-dir OUTPUT`.
+
+## Management initialization
+
+`Management.Initialization` is a simplified atomic transaction model. It proves
+first-owner immutability, complete initialization, rollback, and isolation of
+other environments under serialized fresh reads. Rust/SQL correspondence, input
+validation, password hashing and PostgreSQL locking remain separate obligations.
+The namespace-selection lemma assumes the managed digest function and proves
+independence from the caller's function; PostgreSQL name resolution and SHA-256
+implementation are outside that lemma. No compliance row is promoted on the
+strength of this model.
