@@ -21,9 +21,9 @@ stdlib crates (notably `std`, `core`, `alloc`, `panic_*`, `unwind`, `proc_macro`
 **Symptom if broken**: multiple competing `.rlib`/`.rmeta` candidates inside
 `lib/rustlib/<triple>/lib`, leading to brittle or non-deterministic resolution.
 
-**Fix**: keep MIR-encoded stdlib crates from the `-Z build-std` step, and avoid copying
-competing versions from `rustWithComponents` into the sysroot. The exclusion filter covers:
-`std`, `core`, `alloc`, `panic_*`, `unwind`, `proc_macro`, `test`, and related workspace crates.
+**Fix**: install the artifacts selected by the pinned upstream `tools/build-kani`
+builder. Do not copy driver `target/release/deps` or the ordinary toolchain's
+standard libraries over the verification sysroot.
 
 **Regression check**: `nix build ".#kani'"` must produce a sysroot that can
 compile a trivial crate and a `kani::any()` crate under `-C panic=abort`
@@ -43,9 +43,10 @@ This showed up as:
 1. MIR sysroot was built with the default panic strategy (`unwind`) while Kani compiles with `-C panic=abort`.
 2. `libkani*.rlib` was built against the toolchain `std` and then placed in a sysroot that forces a MIR-encoded `std`.
 
-**Fix**:
-- Build the MIR sysroot with `-C panic=abort` (host + target rustflags) when running `-Z build-std=panic_abort,std,test`.
-- Rebuild `kani_core`, `kani`, and `kani_metadata` against the MIR sysroot with `--sysroot $KANI_SYSROOT` and `-C panic=abort`.
+**Fix**: the upstream builder compiles the verification libraries together with
+`-Z build-std=panic_abort,std,test`, using `kani-compiler` and
+`profile.dev.panic="abort"`. It separately builds the playback and no-core
+libraries. The binary build's release flags do not apply to verification MIR.
 
 **Quick validation**:
 ```bash
@@ -63,9 +64,31 @@ printf 'fn main(){}' > /tmp/kani_abort.rs
 printf 'pub fn f(){ let _x: u8 = kani::any(); }' > /tmp/kani_any.rs
 "$RUSTC" /tmp/kani_any.rs --crate-type lib -C panic=abort -Z unstable-options --cfg kani \\
   --sysroot "$SYSROOT" -L "$SYSROOT/lib" --extern kani
-```text
+```
 
-### 3) Wrapper must not write into read-only vendor trees
+### 3) Verification-library MIR preserves intrinsic hooks
+
+Release MIR inlining can erase the `size_of_val` and `align_of_val` hook calls,
+leaving the placeholder infinite loop instead. String and vector clones can
+then fail unwinding even for a single byte. Increasing the unwind bound does
+not repair that library.
+
+Use the pinned upstream `tools/build-kani` builder. It builds the binaries in
+release mode and the verification libraries through `kani-compiler` in the dev
+profile, with its explicit debug-assertion, panic, cfg and MIR options. Install
+the compiler-produced archives without rewriting them or overwriting them with
+driver dependencies.
+
+`nix build ".#kani'"` runs the installed wrapper on arithmetic, sized and sliced
+size/alignment, string clone and vector clone controls. An intentionally wrong
+size assertion must fail specifically at that assertion. Timeout, incomplete
+output, compilation errors and unwind failures reject the package. The seven
+case records live in `$out/share/kani-library-checks/RESULTS.json`.
+
+These package regressions do not prove application properties. After a tool
+change, rerun the registry selection and re-admit its records.
+
+### 4) Wrapper must not write into read-only vendor trees
 
 **Invariant**: Nix builds must not attempt to create `$HOME`, `KANI_HOME`, or
 `RUSTUP_HOME` under the current working directory when compiling vendored

@@ -64,9 +64,9 @@ But `libkani*.rlib` was built against the toolchain `std` and then copied into t
 
 ## Fix applied (repo changes)
 
-- `nix/kani/package.nix`: build the MIR sysroot via `-Z build-std=panic_abort,std,test` with `-C panic=abort`
-- Rebuild `kani_core`, `kani`, `kani_metadata` against the MIR sysroot (`--sysroot $KANI_SYSROOT`) with `-C panic=abort`
-- Avoid copying duplicate `proc_macro`/`test` libs into the sysroot (MIR build-std output is the source of truth)
+- `nix/kani/package.nix` delegates to the pinned upstream `tools/build-kani` builder: release binaries, separate dev-profile verification libraries via `kani-compiler`, and `panic=abort` MIR standard libraries.
+- The package installs the builder-selected libraries; driver release dependencies cannot overwrite them. This preserves the size/alignment intrinsic hooks needed by even small string/vector operations.
+- Installation runs six positive library controls and one assertion-failure control through the normal wrapper, retaining results under `$out/share/kani-library-checks`. Those checks validate packaging, not production implementation correspondence.
 - Ensure wrapped `cargo-kani` relies on `setup-kani-env` for writable `KANI_HOME`/`RUSTUP_HOME` (avoid literal `'$HOME/…'` defaults that break sandboxed builds)
 
 ## How to run

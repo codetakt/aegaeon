@@ -1,0 +1,143 @@
+"""Exercise the installed Kani wrapper and reject broken library models."""
+
+# Standalone Nix install-check CLI: no Python package, intentional progress output.
+# ruff: noqa: INP001, T201
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import signal
+import subprocess
+from pathlib import Path
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def execute(command: list[str], case: Path, environment: dict[str, str]) -> tuple[int, bool]:
+    timed_out = False
+    with (case / "output.log").open("w") as log:
+        process = subprocess.Popen(  # noqa: S603 - explicit tool argv, no shell
+            command,
+            cwd=case,
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        try:
+            code = process.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            code = 124
+    return code, timed_out
+
+
+def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool, list[str], int]:
+    checks = re.findall(r"^Check \d+: (.+)\n\s+- Status: (\w+)\s*$", text, re.MULTILINE)
+    failed = [identifier for identifier, status in checks if status == "FAILURE"]
+    known_statuses = all(status in {"SUCCESS", "FAILURE", "UNREACHABLE"} for _, status in checks)
+    if name == "wrong_size":
+        expected = (
+            code != 0
+            and failed == ["wrong_size.assertion.1"]
+            and "VERIFICATION:- FAILED" in text
+            and "Complete - 0 successfully verified harnesses, 1 failures, 1 total." in text
+        )
+    else:
+        expected = (
+            code == 0
+            and not failed
+            and (f"{name}.assertion.1", "SUCCESS") in checks
+            and "VERIFICATION:- SUCCESSFUL" in text
+            and "Complete - 1 successfully verified harnesses, 0 failures, 1 total." in text
+        )
+    passed = bool(checks) and known_statuses and expected and not timed_out
+    return passed, failed, len(checks)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--kani", type=Path, required=True)
+    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("KANI_", "RUST", "CARGO_"))
+    }
+    environment["KANI_HOME"] = str(output / "tool-state")
+    records = []
+    cases = (
+        "arithmetic_control",
+        "sized_control",
+        "slice_size",
+        "slice_alignment",
+        "string_clone",
+        "vec_clone",
+        "wrong_size",
+    )
+    for name in cases:
+        case = output / name
+        case.mkdir()
+        source = case / "probe.rs"
+        source.write_bytes(args.source.read_bytes())
+        command = [
+            str(args.kani.resolve()),
+            str(source),
+            "--exact",
+            "--harness",
+            name,
+            "--solver",
+            "cadical",
+            "--default-unwind",
+            "2",
+            "--keep-temps",
+        ]
+        code, timed_out = execute(command, case, environment)
+        text = (case / "output.log").read_text()
+        passed, failed, check_count = classify(text, name, code, timed_out=timed_out)
+        records.append(
+            {
+                "case": name,
+                "command": command,
+                "exit_code": code,
+                "timed_out": timed_out,
+                "status": "PASS" if passed else "FAIL",
+                "expected": "assertion rejection" if name == "wrong_size" else "verification",
+                "failed_checks": failed,
+                "check_count": check_count,
+                "source_sha256": digest(source),
+                "log_sha256": digest(case / "output.log"),
+            }
+        )
+        print(f"Kani library {name}: {'PASS' if passed else 'FAIL'}", flush=True)
+    accepted = all(record["status"] == "PASS" for record in records)
+    (output / "RESULTS.json").write_text(
+        json.dumps(
+            {
+                "scope": "verification-library regression; no application correspondence claim",
+                "status": "PASS" if accepted else "FAIL",
+                "wrapper_sha256": digest(args.kani),
+                "checker_sha256": digest(Path(__file__)),
+                "records": records,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return 0 if accepted else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

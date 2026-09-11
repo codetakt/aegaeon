@@ -432,6 +432,7 @@
           '';
 
         verificationTools = [
+          python'
           verificationZ3
           verificationFstar
           karamel
