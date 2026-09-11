@@ -1,0 +1,154 @@
+"""The package check must distinguish assertion controls from broken tools."""
+
+from __future__ import annotations
+
+import importlib.util
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "kani_library_controls", ROOT / "nix/kani/check-libraries.py"
+)
+assert SPEC is not None
+assert SPEC.loader is not None
+CHECKER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CHECKER)
+
+FIXTURES = ROOT / "tests/fixtures/kani-library-controls"
+POSITIVE = (FIXTURES / "sized_control.txt").read_text()
+NEGATIVE = (FIXTURES / "wrong_size.txt").read_text()
+
+
+class KaniLibraryControlsTests(unittest.TestCase):
+    def test_completed_positive_and_assertion_control(self) -> None:
+        assert CHECKER.classify(POSITIVE, "sized_control", 0, timed_out=False)[0]
+        assert CHECKER.classify(NEGATIVE, "wrong_size", 1, timed_out=False)[0]
+
+    def test_missing_completion_is_rejected(self) -> None:
+        text = POSITIVE.split("Complete", maxsplit=1)[0]
+        assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_unwind_failure_is_not_an_assertion_control(self) -> None:
+        text = NEGATIVE.replace("wrong_size.assertion.1", "kani::intrinsic.unwind.0")
+        assert not CHECKER.classify(text, "wrong_size", 1, timed_out=False)[0]
+
+    def test_extra_failure_is_rejected(self) -> None:
+        text = NEGATIVE + "Check 2: memory.safety_check.1\n - Status: FAILURE\n"
+        assert not CHECKER.classify(text, "wrong_size", 1, timed_out=False)[0]
+
+    def test_timeout_cannot_pass_with_successful_output(self) -> None:
+        assert not CHECKER.classify(POSITIVE, "sized_control", 0, timed_out=True)[0]
+
+    def test_vacuous_or_unknown_positive_is_rejected(self) -> None:
+        for status in ("UNREACHABLE", "UNDETERMINED"):
+            with self.subTest(status=status):
+                text = POSITIVE.replace("Status: SUCCESS", f"Status: {status}", 1)
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_exit_status_must_agree(self) -> None:
+        assert not CHECKER.classify(POSITIVE, "sized_control", 1, timed_out=False)[0]
+        assert not CHECKER.classify(NEGATIVE, "wrong_size", 0, timed_out=False)[0]
+
+    def test_tool_failure_after_assertion_output_is_rejected(self) -> None:
+        for code in (101, 124, 137, -9, -15):
+            with self.subTest(code=code):
+                assert not CHECKER.classify(NEGATIVE, "wrong_size", code, timed_out=False)[0]
+
+    def test_indented_or_malformed_property_header_is_rejected(self) -> None:
+        for header in (" Check 2:", "\tCheck 2:", "Check\t2:", "Check broken:"):
+            with self.subTest(header=header):
+                text = POSITIVE + f"{header} callee.unwind.0\n - Status: FAILURE\n"
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_extra_or_indented_completion_marker_is_rejected(self) -> None:
+        markers = (
+            "VERIFICATION:- SUCCESSFUL\n",
+            " VERIFICATION:- FAILED\n",
+            "Complete - 1 successfully verified harnesses, 0 failures, 1 total.\n",
+            " Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n",
+            " SUMMARY:\n ** 1 of 2 failed\n",
+        )
+        for marker in markers:
+            with self.subTest(marker=marker):
+                text = POSITIVE + marker
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_callee_checks_are_reconciled_with_property_summary(self) -> None:
+        for status, suffix in (("SUCCESS", ""), ("UNREACHABLE", " (1 unreachable)")):
+            with self.subTest(status=status):
+                first, rest = POSITIVE.split("Check 2:", maxsplit=1)
+                text = first + "Check 2:" + rest.replace("Status: SUCCESS", f"Status: {status}", 1)
+                text = text.replace("0 of 4 failed", f"0 of 4 failed{suffix}")
+                assert CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_property_summary_must_match_all_counts(self) -> None:
+        for summary in ("1 of 4 failed", "0 of 5 failed", "0 of 4 failed (1 unreachable)"):
+            with self.subTest(summary=summary):
+                text = POSITIVE.replace("0 of 4 failed", summary)
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_unreported_properties_are_rejected(self) -> None:
+        for status in ("SUCCESS", "UNREACHABLE", "not parsed"):
+            with self.subTest(status=status):
+                text = POSITIVE + f"Check 2: callee.unwind.0\n - Status: {status}\n"
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_duplicate_or_missing_property_identity_is_rejected(self) -> None:
+        variants = (
+            POSITIVE.replace("Check 1:", "Check 2:"),
+            POSITIVE.replace("SUMMARY:", "Check 1: callee.unwind.0\n - Status: SUCCESS\nSUMMARY:"),
+            POSITIVE.replace(
+                "SUMMARY:", "Check 2: sized_control.assertion.1\n - Status: SUCCESS\nSUMMARY:"
+            ),
+        )
+        for text in variants:
+            with self.subTest(text=text):
+                mismatched = text.replace("0 of 4 failed", "0 of 2 failed")
+                assert not CHECKER.classify(mismatched, "sized_control", 0, timed_out=False)[0]
+
+    def test_missing_or_duplicate_property_summary_is_rejected(self) -> None:
+        for summary in ("", "SUMMARY:\n ** 0 of 4 failed\n" * 2):
+            with self.subTest(summary=summary):
+                text = POSITIVE.replace("SUMMARY:\n ** 0 of 4 failed\n", summary)
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_truncation_with_adjusted_summary_is_rejected(self) -> None:
+        before = POSITIVE.split("Check 2:", maxsplit=1)[0]
+        summary = POSITIVE.split("SUMMARY:", maxsplit=1)[1]
+        text = (before + "SUMMARY:" + summary).replace("0 of 4 failed", "0 of 1 failed")
+        assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_replaced_identity_with_unchanged_count_is_rejected(self) -> None:
+        text = POSITIVE.replace(".safety_check.1", ".different_check.1")
+        assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_orphan_property_content_is_rejected(self) -> None:
+        for line in (
+            "\t - Status: FAILURE\n",
+            '\t - Description: "orphan"\n',
+            "\t - Location: orphan.rs:1\n",
+            "unknown property content\n",
+        ):
+            with self.subTest(line=line):
+                text = POSITIVE.replace("\nSUMMARY:", "\n" + line + "\nSUMMARY:")
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_incomplete_property_body_is_rejected(self) -> None:
+        line = next(line for line in POSITIVE.splitlines(keepends=True) if "- Description:" in line)
+        text = POSITIVE.replace(line, "", 1)
+        assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_unknown_case_and_duplicate_results_are_rejected(self) -> None:
+        assert not CHECKER.classify(POSITIVE, "unknown", 0, timed_out=False)[0]
+        text = "\nRESULTS:\n" + POSITIVE
+        assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_orphan_status_outside_report_is_rejected(self) -> None:
+        for text in (" - Status: FAILURE\n" + POSITIVE, POSITIVE + " - Status: FAILURE\n"):
+            with self.subTest(text=text):
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+
+if __name__ == "__main__":
+    unittest.main()

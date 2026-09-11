@@ -258,171 +258,22 @@ rustPlatform.buildRustPackage rec {
   '';
 
   buildPhase = ''
-        runHook preBuild
+    runHook preBuild
 
-        export HOME=$TMPDIR
-        mkdir -p "$HOME/.rustup/toolchains"
-        ln -sf ${rustWithComponents} "$HOME/.rustup/toolchains/$RUSTUP_TOOLCHAIN"
+    # Use the pinned upstream builder: release binaries and dev-profile
+    # verification libraries have different MIR requirements. In particular,
+    # release inlining erases Kani's size/align intrinsic hook boundaries.
+    export KANI_REPO_ROOT="$PWD"
+    export KANI_SYSROOT="$PWD/target/kani"
+    export KANI_BUILD_LIBS="$PWD/target/build-libs"
+    export KANI_LEGACY_LIBS="$PWD/target/legacy-libs"
+    unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
+    cargo run --offline --release -p build-kani -- build-dev --release --offline
 
-        # Cargo config was already set up in postPatch to use combinedVendor
-
-        extra_rustflags="-Z always-encode-mir -Z mir-enable-passes=-RemoveStorageMarkers --remap-path-prefix=${rustWithComponents}=/toolchains/${RUSTUP_TOOLCHAIN}"
-        if [ -n "$RUSTFLAGS" ]; then
-          export RUSTFLAGS="--cfg=kani --cfg=kani_sysroot $extra_rustflags $RUSTFLAGS"
-        else
-          export RUSTFLAGS="--cfg=kani --cfg=kani_sysroot $extra_rustflags"
-        fi
-
-        cargo build --release
-
-        export CARGO_TARGET_DIR=$PWD/target
-        export KANI_SYSROOT=$PWD/target/kani
-
-        cargo build --release -p kani_macros
-        cargo build --release -p kani_core
-        cargo build --release -p kani
-        cargo build --release -p kani_metadata
-        cargo build --release -p kani-verifier
-
-        # Build MIR-encoded standard library using -Z build-std
-        echo "Building MIR-encoded standard library with -Z build-std..."
-
-        # Create sysroot directories
-        mkdir -p "$KANI_SYSROOT/${hostLibDir}"
-        mkdir -p "$KANI_SYSROOT/lib"
-        mkdir -p "$KANI_SYSROOT/lib/rustlib/${rustTarget}/lib"
-
-        # Create a temporary project to build std library
-        mkdir -p build-std
-        cd build-std
-        cargo init --lib
-
-        # Configure cargo vendor for this subproject
-        mkdir -p .cargo
-        cat > .cargo/config.toml <<CARGO_CONFIG_INNER
-    [source.crates-io]
-    replace-with = "vendored-sources"
-
-    [source.vendored-sources]
-    directory = "${combinedVendor}"
-    CARGO_CONFIG_INNER
-
-        # Build std library with MIR encoding using combined vendor.
-        # Kani compiles user crates with `-C panic=abort`, so the sysroot must be built with
-        # a compatible panic strategy as well (otherwise `panic_abort` is rejected at link time).
-        echo "Running: cargo build -Z build-std=panic_abort,std,test --target ${rustTarget} --offline (panic=abort)"
-
-        STD_RUSTFLAGS='["-Zalways-encode-mir","-Zmir-enable-passes=-RemoveStorageMarkers","--remap-path-prefix=${rustWithComponents}=/toolchains/${RUSTUP_TOOLCHAIN}","-Cpanic=abort"]'
-        env -u RUSTFLAGS cargo build \
-          -Z build-std=panic_abort,std,test \
-          --config "host.rustflags=$STD_RUSTFLAGS" \
-          --config "target.\"${rustTarget}\".rustflags=$STD_RUSTFLAGS" \
-          --target ${rustTarget} \
-          --offline
-
-        echo "✓ MIR-encoded std library built successfully"
-
-        # Debug: Show what was actually built and where
-        echo "=== Debug: Build artifacts location ==="
-        echo "Current directory: $(pwd)"
-        echo "Checking workspace root target directory: ../target/${rustTarget}/debug/deps/"
-        if [ -d "../target/${rustTarget}/debug/deps" ]; then
-          echo "✓ Found workspace target directory"
-          echo "Lib*.rlib files in ../target/${rustTarget}/debug/deps/:"
-          ls -1 "../target/${rustTarget}/debug/deps/lib"*.rlib 2>/dev/null | head -10 || echo "No lib*.rlib files found"
-        else
-          echo "✗ Workspace target directory not found"
-        fi
-        echo "==="
-
-        # Copy built MIR-encoded libraries to KANI_SYSROOT
-        # Workspace builds put artifacts in ../target/ (parent directory)
-        echo "Copying MIR-encoded .rlib files to sysroot..."
-        RLIB_COUNT=0
-        TARGET_DEPS="../target/${rustTarget}/debug/deps"
-
-        if [ -d "$TARGET_DEPS" ]; then
-          # Copy all standard library .rlib files using find
-          # Look for lib*.rlib files (standard library crates)
-          if find "$TARGET_DEPS" -maxdepth 1 -name "lib*.rlib" -type f -exec cp {} "$KANI_SYSROOT/lib/rustlib/${rustTarget}/lib/" \; ; then
-            RLIB_COUNT=$(find "$KANI_SYSROOT/lib/rustlib/${rustTarget}/lib" -name "lib*.rlib" -type f | wc -l)
-            echo "✓ Copied $RLIB_COUNT .rlib files to sysroot"
-          fi
-        else
-          echo "❌ ERROR: Workspace target directory not found at $TARGET_DEPS"
-          echo "Attempting to find .rlib files in alternate locations..."
-          find .. -name "lib*.rlib" -type f 2>/dev/null | head -10 || echo "No lib*.rlib files found"
-        fi
-
-        if [ "$RLIB_COUNT" -eq 0 ]; then
-          echo "❌ ERROR: No .rlib files were copied! Build may have failed."
-        fi
-
-        cd ..
-
-        # Create Kani-expected direct path for libstd.rlib (CRITICAL: Kani looks for this specific path)
-        echo "Creating /lib/libstd.rlib symlink for Kani..."
-        # Copy the first libstd-*.rlib to /lib/libstd.rlib (Kani's expected location)
-        STD_RLIB=$(ls "$KANI_SYSROOT/lib/rustlib/${rustTarget}/lib/libstd-"*.rlib 2>/dev/null | head -1)
-        if [ -n "$STD_RLIB" ]; then
-          cp "$STD_RLIB" "$KANI_SYSROOT/lib/libstd.rlib"
-          echo "✓ Created $KANI_SYSROOT/lib/libstd.rlib from $STD_RLIB"
-        else
-          echo "Warning: No libstd-*.rlib found to create libstd.rlib"
-        fi
-
-        # Copy other essential libraries from rustWithComponents (NOT std libs, as they lack MIR)
-        if [ -d "${rustWithComponents}/${hostLibDir}" ]; then
-          # Exclude ALL standard library crates (we built MIR-encoded versions)
-          # Keep only support libraries like libtest, libproc_macro, etc.
-          for lib in ${rustWithComponents}/${hostLibDir}/*.rlib; do
-            if [[ ! "$lib" =~ lib(std|core|alloc|compiler_builtins|panic_abort|panic_unwind|unwind|proc_macro|test|std_detect|hashbrown|rustc_std_workspace_core|rustc_std_workspace_alloc|rustc_std_workspace_std)-.*\.rlib$ ]]; then
-              cp "$lib" "$KANI_SYSROOT/${hostLibDir}" 2>/dev/null || true
-            fi
-          done
-          echo "✓ Copied support libraries from rustWithComponents (excluded std crates)"
-        fi
-
-        # Rebuild the Kani runtime crates against the MIR sysroot so the packaged
-        # `libkani*.rlib` artifacts are compatible with `--extern noprelude:std=...`.
-        echo "Rebuilding Kani runtime libraries against MIR sysroot (panic=abort)..."
-        env RUSTFLAGS="--cfg=kani --cfg=kani_sysroot $extra_rustflags --sysroot $KANI_SYSROOT -L $KANI_SYSROOT/lib -C panic=abort" \
-          cargo build --release -p kani_core -p kani -p kani_metadata
-
-        find target/release/deps -name "libkani*.rlib" -exec cp {} "$KANI_SYSROOT/${hostLibDir}"/ \; 2>/dev/null || true
-        find target/release -maxdepth 1 -name "libkani*.rlib" -exec cp {} "$KANI_SYSROOT/${hostLibDir}"/ \; 2>/dev/null || true
-
-        find target/release/deps -name "libkani_macros*.so" -exec cp {} "$KANI_SYSROOT/${hostLibDir}"/ \; 2>/dev/null || true
-        cp target/release/deps/libkani_core-*.rlib "$KANI_SYSROOT/${hostLibDir}"/ 2>/dev/null || true
-
-        for so in $(find target/release/deps -name "libkani_macros-*.so"); do
-          if [ -f "$so" ]; then
-            cp "$so" "$KANI_SYSROOT/${hostLibDir}"/
-            ln -sf "$(basename "$so")" "$KANI_SYSROOT/${hostLibDir}"/libkani_macros.so || true
-          fi
-        done
-
-        if [ -f "target/release/libkani.rlib" ]; then
-          cp target/release/libkani.rlib $KANI_SYSROOT/lib/
-        fi
-        for rlib in target/release/deps/libkani.rlib target/release/deps/libkani-*.rlib; do
-          if [ -f "$rlib" ]; then
-            cp "$rlib" $KANI_SYSROOT/lib/
-          fi
-        done
-
-        find target/release/deps -name "libkani_macros*.so" -exec cp {} "$KANI_SYSROOT/lib"/ \; 2>/dev/null || true
-        mkdir -p $KANI_SYSROOT/bin
-        for so in $(find target/release/deps -name "libkani_macros*.so" 2>/dev/null); do
-          if [ -f "$so" ]; then
-            cp "$so" "$KANI_SYSROOT/${hostLibDir}"/
-            cp "$so" "$KANI_SYSROOT/lib/"
-            ln -sf "$(basename "$so")" "$KANI_SYSROOT/${hostLibDir}"/libkani_macros.so || true
-            ln -sf "$(basename "$so")" "$KANI_SYSROOT/lib/libkani_macros.so" || true
-          fi
-        done
-
-        runHook postBuild
+    test -s "$KANI_SYSROOT/lib/libkani.rlib"
+    test -s "$KANI_SYSROOT/lib/libstd.rlib"
+    test -d "$KANI_SYSROOT/${hostLibDir}"
+    runHook postBuild
   '';
 
   dontCargoInstall = true;
@@ -443,47 +294,14 @@ rustPlatform.buildRustPackage rec {
         install -Dm755 target/release/kani-driver $out/kani-${version}/bin/kani-driver
         install -Dm755 target/release/kani-compiler $out/kani-${version}/bin/kani-compiler
 
-        # Copy Kani sysroot (includes MIR-encoded std libraries)
-        if [ -d target/kani ]; then
-          cp -r target/kani/* $out/kani-${version}/ 2>/dev/null || true
-        fi
-
-        # Copy other essential libraries from rustWithComponents (NOT std libs, as they lack MIR)
-        # Exclude ALL standard library crates (we built MIR-encoded versions)
-        for lib in ${rustWithComponents}/${hostLibDir}/*.rlib; do
-          if [[ ! "$lib" =~ lib(std|core|alloc|compiler_builtins|panic_abort|panic_unwind|unwind|proc_macro|test|std_detect|hashbrown|rustc_std_workspace_core|rustc_std_workspace_alloc|rustc_std_workspace_std)-.*\.rlib$ ]]; then
-            cp "$lib" "$out/kani-${version}/${hostLibDir}"/ 2>/dev/null || true
-          fi
+        # Install only the artifacts selected by the upstream library builder.
+        # Driver release/deps may contain incompatible or stale Kani libraries.
+        cp -r target/kani/. "$out/kani-${version}/"
+        for library in "$out/kani-${version}/lib"/libkani*.rlib; do
+          cp "$library" "$out/kani-${version}/${hostLibDir}/"
         done
-
-        for so in $(find target/release/deps -name "libkani_macros*.so" 2>/dev/null); do
-          if [ -f "$so" ]; then
-            cp "$so" "$out/kani-${version}/lib/"
-            cp "$so" "$out/kani-${version}/${hostLibDir}"/
-            ln -sf "$(basename "$so")" "$out/kani-${version}/lib/libkani_macros.so" || true
-            ln -sf "$(basename "$so")" "$out/kani-${version}/${hostLibDir}"/libkani_macros.so || true
-          fi
-        done
-
-        for rlib in $(find target/release -name "libkani*.rlib" 2>/dev/null); do
-          if [ -f "$rlib" ]; then
-            cp "$rlib" "$out/kani-${version}/${hostLibDir}"/
-            cp "$rlib" "$out/kani-${version}/lib/" || true
-          fi
-        done
-
-        if [ -f "$out/kani-${version}/${hostLibDir}/libkani.rlib" ]; then
-          cp "$out/kani-${version}/${hostLibDir}/libkani.rlib" "$out/kani-${version}/lib/"
-        fi
-        for rlib in $out/kani-${version}/${hostLibDir}/libkani-*.rlib; do
-          if [ -f "$rlib" ]; then
-            cp "$rlib" "$out/kani-${version}/lib/"
-          fi
-        done
-        for rlib in $out/kani-${version}/${hostLibDir}/libkani_core*.rlib; do
-          if [ -f "$rlib" ]; then
-            cp "$rlib" "$out/kani-${version}/lib/"
-          fi
+        for macro in "$out/kani-${version}/lib"/libkani_macros*.so; do
+          cp "$macro" "$out/kani-${version}/${hostLibDir}/"
         done
 
         echo "${version}" > $out/kani-${version}/.kani-version
@@ -658,11 +476,8 @@ rustPlatform.buildRustPackage rec {
         runHook postInstall
   '';
 
-  # postFixup removed: Keep libkani.rlib as full archive (with object files)
-  # Root cause: Metadata-only .rlib files created by stripping object files
-  # are NOT functionally equivalent to metadata-only files created during compilation.
-  # rustc cannot resolve `--extern kani` lookups with stripped .rlib files.
-  # Official Kani likely keeps full .rlib files with object code.
+  # Preserve compiler-produced archives, including metadata-only verification
+  # libraries. Do not reconstruct them by stripping ordinary release archives.
   postFixup = ''
     echo "=== Verifying libkani.rlib archives (keeping full archives with object files) ==="
 
@@ -715,6 +530,24 @@ rustPlatform.buildRustPackage rec {
   '';
 
   doCheck = false;
+
+  doInstallCheck = true;
+  nativeInstallCheckInputs = [ python3 ];
+  installCheckPhase = ''
+    runHook preInstallCheck
+    python3 ${./check-libraries.py} \
+      --kani "$out/bin/kani" \
+      --source ${./library-controls.rs} \
+      --output "$TMPDIR/kani-library-checks"
+    mkdir -p "$out/share/kani-library-checks"
+    cp "$TMPDIR/kani-library-checks/RESULTS.json" "$out/share/kani-library-checks/"
+    for case in "$TMPDIR/kani-library-checks"/*; do
+      if [ -d "$case" ] && [ "$(basename "$case")" != tool-state ]; then
+        cp -r "$case" "$out/share/kani-library-checks/"
+      fi
+    done
+    runHook postInstallCheck
+  '';
 
   meta = with lib; {
     description = "Kani Rust Verifier - a model checker for Rust";

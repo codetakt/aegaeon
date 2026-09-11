@@ -1,6 +1,6 @@
 # Kani Verification (Status + How to Run)
 
-Last updated: 2026-09-08
+Last updated: 2026-09-12
 
 Status: current implementation baseline
 
@@ -13,7 +13,7 @@ Audience: verification reviewers, contributors
 **Kani Version**: 0.66.0 (Rust `nightly-2025-11-05`)
 
 This document records the current Kani posture and the recommended entrypoints for Aegaeon.
-For deeper RCA of the NixOS packaging fixes, see `docs/verification/kani/kani-nixos-fix/README.md`.
+For the historical archive-reconstruction approach, see [the archived NixOS notes](kani-nixos-fix/README.md). Current packaging is described below.
 
 > **Runner change (2026-09-09).** The `kani.toml` suites and the `AEG_KANI_*` / `KANI_*`
 > environment knobs are retired. Every Kani execution now goes through
@@ -34,7 +34,7 @@ For deeper RCA of the NixOS packaging fixes, see `docs/verification/kani/kani-ni
 ## Canonical Documents
 
 - `[policy]` [Kani evidence admission](evidence-admission.md)
-- `[index]` [Kani NixOS fix](kani-nixos-fix/README.md)
+- `[index]` [Historical Kani NixOS fix](kani-nixos-fix/README.md)
 - `[reference]` [HashMap ICE reproducer](hashmap-ice-repro.md)
 - `[runbook]` [Kani troubleshooting](troubleshooting.md)
 
@@ -64,9 +64,10 @@ But `libkani*.rlib` was built against the toolchain `std` and then copied into t
 
 ## Fix applied (repo changes)
 
-- `nix/kani/package.nix`: build the MIR sysroot via `-Z build-std=panic_abort,std,test` with `-C panic=abort`
-- Rebuild `kani_core`, `kani`, `kani_metadata` against the MIR sysroot (`--sysroot $KANI_SYSROOT`) with `-C panic=abort`
-- Avoid copying duplicate `proc_macro`/`test` libs into the sysroot (MIR build-std output is the source of truth)
+- `nix/kani/package.nix` delegates to the pinned upstream `tools/build-kani` builder: release binaries, separate dev-profile verification libraries via `kani-compiler`, and `panic=abort` MIR standard libraries.
+- The package installs the builder-selected libraries; driver release dependencies cannot overwrite them. This preserves the size/alignment intrinsic hooks needed by even small string/vector operations.
+- Installation runs six positive library controls and one assertion-failure control through the normal wrapper, retaining results under `$out/share/kani-library-checks`. Those checks validate packaging, not production implementation correspondence.
+- The control checker consumes complete property records and compares their identities/counts with a pinned inventory. Changes to Kani, the toolchain or controls require reviewing that inventory; a report cannot lower its own expected coverage through its summary.
 - Ensure wrapped `cargo-kani` relies on `setup-kani-env` for writable `KANI_HOME`/`RUSTUP_HOME` (avoid literal `'$HOME/…'` defaults that break sandboxed builds)
 
 ## How to run
