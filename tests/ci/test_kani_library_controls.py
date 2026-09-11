@@ -61,6 +61,30 @@ class KaniLibraryControlsTests(unittest.TestCase):
         assert not CHECKER.classify(POSITIVE, "sized_control", 1, timed_out=False)[0]
         assert not CHECKER.classify(NEGATIVE, "wrong_size", 0, timed_out=False)[0]
 
+    def test_tool_failure_after_assertion_output_is_rejected(self) -> None:
+        for code in (101, 124, 137, -9, -15):
+            with self.subTest(code=code):
+                assert not CHECKER.classify(NEGATIVE, "wrong_size", code, timed_out=False)[0]
+
+    def test_indented_or_malformed_property_header_is_rejected(self) -> None:
+        for header in (" Check 2:", "\tCheck 2:", "Check\t2:", "Check broken:"):
+            with self.subTest(header=header):
+                text = POSITIVE + f"{header} callee.unwind.0\n - Status: FAILURE\n"
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
+    def test_extra_or_indented_completion_marker_is_rejected(self) -> None:
+        markers = (
+            "VERIFICATION:- SUCCESSFUL\n",
+            " VERIFICATION:- FAILED\n",
+            "Complete - 1 successfully verified harnesses, 0 failures, 1 total.\n",
+            " Complete - 0 successfully verified harnesses, 1 failures, 1 total.\n",
+            " SUMMARY:\n ** 1 of 2 failed\n",
+        )
+        for marker in markers:
+            with self.subTest(marker=marker):
+                text = POSITIVE + marker
+                assert not CHECKER.classify(text, "sized_control", 0, timed_out=False)[0]
+
     def test_callee_checks_are_reconciled_with_property_summary(self) -> None:
         for status, suffix in (("SUCCESS", ""), ("UNREACHABLE", " (1 unreachable)")):
             with self.subTest(status=status):

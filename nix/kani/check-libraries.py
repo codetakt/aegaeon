@@ -53,29 +53,47 @@ def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool,
         re.MULTILINE,
     )
     counts_match = (
-        len(re.findall(r"^Check ", text, re.MULTILINE)) == len(checks)
+        len(re.findall(r"^[ \t]*Check\b", text, re.MULTILINE)) == len(checks)
         and [int(number) for number, _, _ in parsed] == list(range(1, len(checks) + 1))
         and len({identifier for identifier, _ in checks}) == len(checks)
         and len(summaries) == 1
+        and len(re.findall(r"^[ \t]*SUMMARY\b", text, re.MULTILINE)) == 1
         and tuple(int(count or "0") for count in summaries[0])
         == (len(failed), len(checks), sum(status == "UNREACHABLE" for _, status in checks))
     )
+    verdicts = re.findall(r"^VERIFICATION:- (\S+)[ \t]*$", text, re.MULTILINE)
+    completions = re.findall(
+        r"^Complete - (\d+) successfully verified harnesses, (\d+) failures, (\d+) total\.[ \t]*$",
+        text,
+        re.MULTILINE,
+    )
+    single_completion = (
+        len(re.findall(r"^[ \t]*VERIFICATION:", text, re.MULTILINE)) == 1
+        and len(re.findall(r"^[ \t]*Complete\b", text, re.MULTILINE)) == 1
+    )
     if name == "wrong_size":
         expected = (
-            code != 0
+            code == 1
             and failed == ["wrong_size.assertion.1"]
-            and "VERIFICATION:- FAILED" in text
-            and "Complete - 0 successfully verified harnesses, 1 failures, 1 total." in text
+            and verdicts == ["FAILED"]
+            and completions == [("0", "1", "1")]
         )
     else:
         expected = (
             code == 0
             and not failed
             and (f"{name}.assertion.1", "SUCCESS") in checks
-            and "VERIFICATION:- SUCCESSFUL" in text
-            and "Complete - 1 successfully verified harnesses, 0 failures, 1 total." in text
+            and verdicts == ["SUCCESSFUL"]
+            and completions == [("1", "0", "1")]
         )
-    passed = bool(checks) and known_statuses and counts_match and expected and not timed_out
+    passed = (
+        bool(checks)
+        and known_statuses
+        and counts_match
+        and single_completion
+        and expected
+        and not timed_out
+    )
     return passed, failed, len(checks)
 
 
