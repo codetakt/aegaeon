@@ -1,0 +1,33 @@
+Kani Rust Verifier 0.66.0 (standalone)
+Checking harness sized_control...
+
+RESULTS:
+Check 1: sized_control.assertion.1
+	 - Status: SUCCESS
+	 - Description: "assertion failed: std::mem::size_of_val(&value) == 1"
+	 - Location: probe.rs:13:5 in function sized_control
+
+Check 2: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani_core/src/models.rs:23:13 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+Check 3: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "failed to compute `size_of_val`"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+Check 4: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "cannot compute `size_of_val` for extern types"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+
+SUMMARY:
+ ** 0 of 4 failed
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.038128667s
+
+Manual Harness Summary:
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

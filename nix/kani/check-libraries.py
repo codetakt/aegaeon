@@ -14,6 +14,27 @@ import signal
 import subprocess
 from pathlib import Path
 
+# Pinned Kani 0.66.0 / nightly-2025-11-05 / x86_64-linux controls, cadical,
+# unwind 2. SHA256 of sorted property identifiers joined by a newline (no final
+# newline). Deliberately independent of the report's SUMMARY: changing the tool
+# or controls requires reviewing this inventory, not learning it from that run.
+PROPERTY_INVENTORY = {
+    "arithmetic_control": (2, "6f836bd3cad03cde0756de16d6916cc5d5c55d246c04f13f470b4e1452878ef5"),
+    "sized_control": (4, "c36a613243ed4e6090deff0e334c046350b299cb312292f4341dade412cf94d1"),
+    "slice_alignment": (4, "26bff07a48b175e86db882b71b5b51b552f68d43a12730e90fc524659ced3892"),
+    "slice_size": (4, "bcd9cc8116169b2bd28f71ad1c0881f3a4932221d48f9dcdc960fdc14d0251e8"),
+    "string_clone": (212, "0b05c3fc350b9b37b7e13a0e9d94a9c18aa7aa52c73c12c0ab0eb3340ac87a05"),
+    "vec_clone": (384, "69dc278fd57caa21dbecf421202a6b2aef4065a935df8e40dfe4b212e5e27d64"),
+    "wrong_size": (4, "da917938af8911092c56fd49ce28bb7a81f0f7ba28624f35fabf84d7ff1c09e8"),
+}
+PROPERTY = re.compile(
+    r"^Check (\d+): ([^\n]+)\n"
+    r"\t - Status: ([A-Z]+)\n"
+    r'\t - Description: "[^\n]*(?:\n[ ]+[^\n]*)*"\n'
+    r"(?:\t - Location: [^\n]+\n)?",
+    re.MULTILINE,
+)
+
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -41,8 +62,20 @@ def execute(command: list[str], case: Path, environment: dict[str, str]) -> tupl
 
 
 def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool, list[str], int]:
-    parsed = re.findall(r"^Check (\d+): (.+)\n[ \t]+- Status: (\w+)[ \t]*$", text, re.MULTILINE)
+    if text.count("\nRESULTS:\n") != 1:
+        return False, [], 0
+    report = text.split("\nRESULTS:\n", maxsplit=1)[1]
+    body, separator, _ = report.partition("\nSUMMARY:\n")
+    parsed = PROPERTY.findall(body)
+    if not separator or not parsed or PROPERTY.sub("", body).strip():
+        return False, [], len(parsed)
     checks = [(identifier, status) for _, identifier, status in parsed]
+    inventory = (
+        len(checks),
+        hashlib.sha256(
+            "\n".join(sorted(identifier for identifier, _ in checks)).encode()
+        ).hexdigest(),
+    )
     failed = [identifier for identifier, status in checks if status == "FAILURE"]
     known_statuses = all(status in {"SUCCESS", "FAILURE", "UNREACHABLE"} for _, status in checks)
     # Complete counts harnesses, while SUMMARY counts their individual properties.
@@ -53,7 +86,9 @@ def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool,
         re.MULTILINE,
     )
     counts_match = (
-        len(re.findall(r"^[ \t]*Check\b", text, re.MULTILINE)) == len(checks)
+        inventory == PROPERTY_INVENTORY.get(name)
+        and len(re.findall(r"^[ \t]*Check\b", text, re.MULTILINE)) == len(checks)
+        and len(re.findall(r"^[ \t]*- Status:", text, re.MULTILINE)) == len(checks)
         and [int(number) for number, _, _ in parsed] == list(range(1, len(checks) + 1))
         and len({identifier for identifier, _ in checks}) == len(checks)
         and len(summaries) == 1

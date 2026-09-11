@@ -1,0 +1,36 @@
+Kani Rust Verifier 0.66.0 (standalone)
+Checking harness wrong_size...
+
+RESULTS:
+Check 1: wrong_size.assertion.1
+	 - Status: FAILURE
+	 - Description: "assertion failed: std::mem::size_of_val(&value) == 2"
+	 - Location: probe.rs:48:5 in function wrong_size
+
+Check 2: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani_core/src/models.rs:23:13 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+Check 3: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "failed to compute `size_of_val`"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+Check 4: kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "cannot compute `size_of_val` for extern types"
+	 - Location: ../../kani-0.66.0-patched-source/library/kani/src/lib.rs:57:1 in function kani::rustc_intrinsics::size_of_val_raw::<[u8; 1]>
+
+
+SUMMARY:
+ ** 1 of 4 failed
+Failed Checks: assertion failed: std::mem::size_of_val(&value) == 2
+ File: "/build/kani-library-checks/wrong_size/probe.rs", line 48, in wrong_size
+
+VERIFICATION:- FAILED
+Verification Time: 0.046980284s
+
+Manual Harness Summary:
+Verification failed for - wrong_size
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
