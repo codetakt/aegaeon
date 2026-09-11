@@ -1,14 +1,19 @@
 # Kani NixOS Implemented Fix And Validation
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
-Status: current implementation baseline
+Status: historical record
 
 Owner: Verification
 
 Audience: verification contributors, maintainers
 
 This document is part of the split Kani NixOS archive-fix note.
+
+The implementation, line locations and validation below describe an earlier
+archive-reconstruction approach. It has been superseded by the pinned upstream
+builder with intact compiler-produced libraries. Use the current
+[packaging invariants](../../../../nix/kani/README.md) for installation guidance.
 
 ## Implemented Solution
 

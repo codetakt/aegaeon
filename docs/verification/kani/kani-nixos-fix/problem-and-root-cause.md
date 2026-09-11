@@ -1,14 +1,18 @@
 # Kani NixOS Fix Problem And Root Cause
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
-Status: current implementation baseline
+Status: historical record
 
 Owner: Verification
 
 Audience: verification contributors, maintainers
 
 This document is part of the split Kani NixOS archive-fix note.
+
+This historical analysis predates the pinned upstream library builder. Its
+archive-reconstruction conclusions are not current packaging guidance; see the
+[packaging invariants](../../../../nix/kani/README.md) for current checks.
 
 ## Problem Discovery Timeline
 

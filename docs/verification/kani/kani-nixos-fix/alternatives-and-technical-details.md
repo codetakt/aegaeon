@@ -1,14 +1,18 @@
 # Kani NixOS Alternatives And Technical Details
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
-Status: current implementation baseline
+Status: historical record
 
 Owner: Verification
 
 Audience: verification contributors, maintainers
 
 This document is part of the split Kani NixOS archive-fix note.
+
+The alternatives and conclusions below are historical. Current packaging uses
+the pinned upstream builder and preserves compiler-produced libraries; see the
+[packaging invariants](../../../../nix/kani/README.md) for current guidance.
 
 ## Alternative Solutions Considered
 
@@ -136,7 +140,7 @@ postFixup hook adds ~1-2 seconds to build time
 **Impact**: Minimal (build takes several minutes total)
 
 ### 3. Architecture Assumption
-Current implementation assumes:
+The historical implementation assumed:
 - Single host architecture (x86_64-unknown-linux-gnu)
 - Standard library locations
 
