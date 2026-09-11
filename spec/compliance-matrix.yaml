@@ -3287,7 +3287,7 @@ rfc_8707:
     lemma: lemma_resource_mismatch_rejected
   tests:
   - crates/server/src/authcode/token.rs
-  status: verified
+  status: partial
   runtime_link: crates/server/src/authcode/token.rs
   trace:
     kind: guard
@@ -3297,7 +3297,8 @@ rfc_8707:
   applies_to:
   - as
   notes:
-  - "Mismatch between stored and requested resource returns invalid_target."
+  - "Single-resource grant policy permitted by RFC 8707 section 2.2: token requests may omit resource or repeat the recorded explicit resource; a new or different explicit resource returns invalid_target before code consumption."
+  - "Sync/async issuer regressions cover unrecorded targets and a valid retry. The selection model and bounded Rust checks do not establish URI parsing, original resource authorization/consent, or complete storage correspondence."
 
 - id: 8707-104
   requirement: MUST
@@ -3477,9 +3478,16 @@ rfc_8725:
   - type: fstar
     file: fstar/auth/Pkjwt.fst
     invariant: jwt_bearer_assertion_valid
+  - type: fstar
+    file: fstar/oidc/OIDC.RequestObjectTarget.fst
+    lemma: lemma_typed_request_not_assertion
+  - type: fstar
+    file: fstar/oidc/OIDC.RequestObjectTarget.fst
+    lemma: lemma_authorization_request_not_assertion
   tests:
   - crates/server/src/authcode/token/tests/jwt_bearer.rs
-  status: verified
+  - crates/server/src/web/authorization_consent_tests/request_objects/substitution.rs
+  status: partial
   runtime_link: crates/server/src/client_registry.rs
   trace:
     kind: guard
@@ -3491,7 +3499,8 @@ rfc_8725:
   notes:
   - "Default: jwt-bearer assertions with sub==client_id are rejected to prevent substitution with private_key_jwt."
   - "If policy.jwtBearerAllowClientSubject=true, sub==client_id is allowed only when aud={issuer} and MUST NOT include the token endpoint audience, preserving mutual exclusivity."
-  - "Request Objects are separated via aud=/authorize and are rejected at /token."
+  - "Request Objects target the canonical AS issuer. Assertion admission independently rejects Request Object types and response_type claims, including untyped objects."
+  - "Parsed kind-separation lemmas and real-signature regressions cover these guards; complete implementation correspondence and all JWT-kind combinations remain open, so this row is partial."
 
 - id: 8725-201
   section: '3.1'
@@ -3627,12 +3636,14 @@ rfc_8725:
   description: (Request Object) Applications MUST validate the aud claim when present and MUST reject Request Objects where aud is missing or not associated with the recipient.
   module: crates/jose/src/request_object.rs
   tests:
+  - crates/server/src/web/authorization_consent_tests/request_objects.rs
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
   status: implemented
   applies_to:
   - as
   notes:
-  - "Request Objects are validated with the expected /authorize audience; mismatches are rejected."
+  - "Request Objects are validated against the canonical AS issuer audience; endpoint-only audiences and obsolete stored PAR target bindings are rejected."
+  - "Direct JAR and PAR+JAR consent regressions use client-issued signed JWTs with the AS issuer audience, including a shared Redis flow."
 
 - id: 8725-401
   section: '3.1'
@@ -4020,7 +4031,7 @@ rfc_9470:
   - client
   notes:
   - "OAuth/OIDC authorize flow enforces acr_values/max_age and records step-up events."
-  - "Request Object overrides PAR form values for acr_values/max_age."
+  - "Request Objects supply acr_values/max_age; PAR rejects authorization parameters outside the signed object (RFC 9126 section 3)."
   - "The challenge protocol is wired to authorization (issue and single-use consume) and local authentication (completion with successor-session handoff)."
 
 - id: 9470-101
@@ -4701,12 +4712,15 @@ draft_oauth_v2_1:
   tests:
   - crates/server/src/authcode/store/tests/revocation_basic.rs
   - crates/server/src/authcode/store/tests/sender_binding.rs
+  - crates/server/src/web/token_refresh/tests.rs
+  - crates/server/src/authcode/store/tests/refresh_scope.rs
   ci_check: oauth21-refresh-scope-bound
-  status: implemented
+  status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
-  - Refresh token carries original scope; cannot be expanded on refresh.
-  - refresh_access_token() enforces scope subset validation.
+  - "RFC 6749 section 6: the HTTP refresh path rejects scope expansion; omission uses the stored original grant. Only the access token narrows; the replacement refresh token retains the original scope."
+  - "Refresh commit checks access-scope containment and old/new refresh-scope equality; initial issuance retains the equality requirement for both token types."
+  - "The stored grant's offline-consent provenance remains an open obligation; these regressions start with an already-authorized grant and do not establish that consent."
 - id: v21-026
   section: '4.3.1'
   requirement: MUST

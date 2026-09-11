@@ -1,4 +1,5 @@
 mod atomic_store_topology;
+mod authorization_admission;
 mod database;
 mod env_vars;
 mod environment;
@@ -13,6 +14,7 @@ mod startup_policy_boundary;
 mod transport;
 
 use self::atomic_store_topology::validate_authorization_code_grant_commit_store_topology;
+pub use self::authorization_admission::AuthorizationAdmissionLimits;
 pub use self::database::DatabaseConfig;
 pub use self::database::PostgresDatabaseUrl;
 pub(crate) use self::env_vars::try_required_env_flag;

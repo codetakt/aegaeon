@@ -7,6 +7,7 @@ use super::scripts::{
     invoke_refresh_rotation_commit, RefreshRotationCommitArgs, RefreshRotationCommitKeys,
 };
 use super::RedisTokenStoreBackend;
+use crate::authcode::store::token_consistency::scope_set;
 use crate::authcode::store::{RefreshRotationError, TokenStoreStorageError};
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::collections::HashSet;
@@ -22,6 +23,7 @@ const REFRESH_ROTATION_OUTCOME_REUSED: &str = "reused";
 const REFRESH_ROTATION_OUTCOME_EXPIRED: &str = "expired";
 const REFRESH_ROTATION_OUTCOME_TOKEN_COLLISION: &str = "token_collision";
 const REFRESH_ROTATION_OUTCOME_REFRESH_DECODE: &str = "refresh_decode";
+const REFRESH_ROTATION_OUTCOME_INCONSISTENT_GRANT: &str = "inconsistent_grant";
 
 impl RedisTokenStoreBackend {
     fn refresh_rotation_storage_error(outcome: &str) -> TokenStoreStorageError {
@@ -70,7 +72,12 @@ impl RedisTokenStoreBackend {
         if previous.rotated {
             return Ok(REFRESH_ROTATION_OUTCOME_REUSED.to_string());
         }
+        if scope_set(previous.scope.as_deref()) != scope_set(new_refresh.scope.as_deref()) {
+            return Ok(REFRESH_ROTATION_OUTCOME_INCONSISTENT_GRANT.to_string());
+        }
 
+        // The Lua compare-and-swap below binds this scope check to the exact
+        // previous payload. A concurrent change retries validation before commit.
         let mut rotated_previous = previous;
         rotated_previous.rotated = true;
 
@@ -281,6 +288,9 @@ impl RedisTokenStoreBackend {
             Some((access_token, meta)),
         )? {
             outcome if outcome == REFRESH_ROTATION_OUTCOME_OK => Ok((Ok(()), None)),
+            outcome if outcome == REFRESH_ROTATION_OUTCOME_INCONSISTENT_GRANT => {
+                Ok((Err(RefreshRotationError::InconsistentGrant), None))
+            }
             outcome if outcome == REFRESH_ROTATION_OUTCOME_INVALID => {
                 Ok((Err(RefreshRotationError::Invalid), None))
             }

@@ -88,7 +88,7 @@ Open: `http://localhost:8000/swagger-ui.html`
 The management API uses:
 
 - Session cookie: `aegaeon_admin_session` (HttpOnly, `Path=/api/v1`)
-- CSRF cookie: `csrf_token` (not HttpOnly, `Path=/`)
+- CSRF cookie: `csrf_token` (not HttpOnly, host-only, `Path=/api/v1`)
 - Write-method guard: **Origin allowlist + double-submit cookie**
 
 ### Required behavior in the frontend
@@ -115,6 +115,10 @@ If the CSRF/origin checks fail, the API returns `403` with `errorCode` such as:
 `csrf_missing`, `csrf_mismatch`.
 
 ## Bootstrap and login flows
+
+For a fresh database, follow [management initialization](../operations/management-initialization.md)
+to provision the owner and the Origin policy before starting the server. The
+audit-only observability seed does not provide an interactive administrator.
 
 ### Bootstrap (first-owner)
 

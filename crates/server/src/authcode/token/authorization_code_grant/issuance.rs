@@ -1,7 +1,8 @@
 use super::super::{scope_contains, split_scopes, IdTokenBuildInput, TokenIssuer};
 use super::error::TokenGrantError;
 use crate::authcode::types::{
-    BearerTokenMeta, BearerTokenMetaInput, RefreshToken, RefreshTokenInput, SenderBinding,
+    BearerTokenMeta, BearerTokenMetaInput, RefreshTargetContext, RefreshToken, RefreshTokenInput,
+    SenderBinding,
 };
 use crate::end_user_profiles::OidcProfileClaims;
 use crate::oidc::{OidcSessionContext, OidcSessionGrantCommit};
@@ -27,6 +28,7 @@ impl TokenIssuer {
     pub(super) fn refresh_token_for_authorization_code_grant(
         &self,
         ctx: &GrantIssueContext<'_>,
+        audience: &str,
         issue_refresh_tokens: bool,
         sender_binding: Option<&SenderBinding>,
     ) -> Option<RefreshToken> {
@@ -46,6 +48,12 @@ impl TokenIssuer {
             self.refresh_token_ttl_secs,
         );
         refresh.claim_release_policy = ctx.claim_release_policy.cloned();
+        refresh.target_context = Some(RefreshTargetContext {
+            version: 1,
+            audience: audience.to_string(),
+            token_issuer: self.issuer.clone(),
+            oidc_issuer: self.oidc.as_ref().map(|cfg| cfg.issuer.clone()),
+        });
         refresh.sender_binding = sender_binding.cloned();
         Some(refresh)
     }

@@ -80,6 +80,17 @@ async fn local_login_success_response(
         Ok(sid) => sid,
         Err(response) => return response,
     };
+    if let Err(response) = super::super::authorize_reauthentication::complete(
+        state,
+        headers,
+        submission.return_to.as_deref(),
+        &submission.csrf_token,
+        &sid,
+    )
+    .await
+    {
+        return response;
+    }
     complete_stepup_for_local_login(
         state.protocol.stepup_store.as_ref(),
         headers,
@@ -225,6 +236,7 @@ fn complete_stepup_for_local_login(
 async fn local_login_failure_response(
     state: &AppState,
     pool: &PgPool,
+    headers: &HeaderMap,
     submission: &LocalLoginSubmission,
     request_id: &str,
 ) -> Response {
@@ -255,7 +267,8 @@ async fn local_login_failure_response(
     }
 
     local_login_form_response_async(
-        state.device.local_auth_csrf_store.clone(),
+        state,
+        headers,
         StatusCode::UNAUTHORIZED,
         submission.return_to.as_deref(),
         submission.requested_acr.as_deref(),
@@ -275,13 +288,7 @@ pub(in crate::web) async fn local_login_post(
 ) -> Response {
     let pool = &state.db_pool;
     let request_id = request_id_from_headers(&headers);
-    let submission = match parse_local_login_submission_async(
-        &headers,
-        form,
-        state.device.local_auth_csrf_store.clone(),
-    )
-    .await
-    {
+    let submission = match parse_local_login_submission_async(&state, &headers, form).await {
         Ok(submission) => submission,
         Err(response) => return response,
     };
@@ -304,7 +311,8 @@ pub(in crate::web) async fn local_login_post(
         Ok(true) => {}
         Ok(false) => {
             return local_login_form_response_async(
-                state.device.local_auth_csrf_store.clone(),
+                &state,
+                &headers,
                 StatusCode::TOO_MANY_REQUESTS,
                 submission.return_to.as_deref(),
                 submission.requested_acr.as_deref(),
@@ -315,7 +323,8 @@ pub(in crate::web) async fn local_login_post(
         Err(err) => {
             tracing::error!(error = %err, "local login rate limiter unavailable");
             return local_login_form_response_async(
-                state.device.local_auth_csrf_store.clone(),
+                &state,
+                &headers,
                 StatusCode::SERVICE_UNAVAILABLE,
                 submission.return_to.as_deref(),
                 submission.requested_acr.as_deref(),
@@ -337,7 +346,9 @@ pub(in crate::web) async fn local_login_post(
             local_login_success_response(&state, pool, &headers, &submission, user, &request_id)
                 .await
         }
-        Ok(None) => local_login_failure_response(&state, pool, &submission, &request_id).await,
+        Ok(None) => {
+            local_login_failure_response(&state, pool, &headers, &submission, &request_id).await
+        }
         Err(_) => local_auth_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             render_local_result_page(
@@ -365,6 +376,7 @@ mod tests {
             requested_acr: Some("urn:mfa".to_string()),
             identifier: "user@example.com".to_string(),
             password: "password".to_string(),
+            csrf_token: "csrf".to_string(),
         }
     }
 

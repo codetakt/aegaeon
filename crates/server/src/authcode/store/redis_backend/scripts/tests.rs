@@ -39,7 +39,7 @@ fn release_lock_script_deletes_only_matching_owner() {
 }
 
 #[test]
-fn authorization_code_grant_commit_script_consumes_code_after_token_writes() {
+fn authorization_code_grant_commit_script_consumes_code_before_token_writes() {
     let script = super::COMMIT_AUTHORIZATION_CODE_GRANT;
     let set_access = script
         .find(r#"redis.call("SET", KEYS[4], ARGV[1])"#)
@@ -47,7 +47,7 @@ fn authorization_code_grant_commit_script_consumes_code_after_token_writes() {
     let delete_code = script
         .find(r#"redis.call("DEL", KEYS[1])"#)
         .expect("script should delete authorization code");
-    assert!(set_access < delete_code);
+    assert!(delete_code < set_access);
     assert!(script.contains(r#"return "missing_code""#));
     assert!(script.contains(r#"return "code_mismatch""#));
     assert!(script.contains(r#"redis.call("INCR", KEYS[2])"#));
@@ -118,7 +118,7 @@ fn authorization_code_grant_commit_script_checks_oidc_before_token_writes() {
 }
 
 #[test]
-fn authorization_code_grant_commit_script_commits_oidc_before_code_consumption() {
+fn authorization_code_grant_commit_script_consumes_code_before_oidc_publication() {
     let script = super::COMMIT_AUTHORIZATION_CODE_GRANT;
     let oidc_session_write = script
         .find(r#""HSET", KEYS[15]"#)
@@ -130,6 +130,6 @@ fn authorization_code_grant_commit_script_commits_oidc_before_code_consumption()
         .find(r#"redis.call("DEL", KEYS[1])"#)
         .expect("script should delete authorization code");
 
-    assert!(oidc_session_write < delete_code);
-    assert!(oidc_client_write < delete_code);
+    assert!(delete_code < oidc_session_write);
+    assert!(delete_code < oidc_client_write);
 }

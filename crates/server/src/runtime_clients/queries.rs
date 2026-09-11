@@ -102,7 +102,7 @@ pub(super) fn active_runtime_client_fingerprint_for_issuer_host() -> String {
     format!(
         "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
 SELECT encode(
-  digest(
+  aegaeon.digest(
     COALESCE(
       jsonb_agg(row_json ORDER BY environment_id, client_created_at, client_id)::text,
       '[]'

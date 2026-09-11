@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-08T01:16:14.689881+00:00",
+  "generated": "2026-09-09T23:38:34.934299+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -11,15 +11,7 @@
     "crates/ffi/src/id_token.rs": {
       "sha256": "322c452bfbe870e6247b89673d861079b43ae5ae463e08d3e4d1bb04bacce968",
       "entries": [
-        "OIDC-1-005",
-        "OIDC-1-007"
-      ],
-      "critical": true
-    },
-    "crates/ffi/src/kani_tests.rs": {
-      "sha256": "d5cec49ab4b4a745bc8b31316e64c8e460e20f0fee1d4296092705189c755b49",
-      "entries": [
-        "7515-007"
+        "OIDC-1-005"
       ],
       "critical": true
     },
@@ -133,13 +125,12 @@
       "critical": false
     },
     "crates/server/src/authcode/token.rs": {
-      "sha256": "eb5fb74f098fbd6e5ea9dc2a019c771afc122cd02a5707051dd49c573b78aab5",
+      "sha256": "945c2f1386b743503e357213eafe7c4d158ef24fd5635a4a0fe9e84ae1c73da2",
       "entries": [
         "6749-008",
         "7636-006",
         "8705-101",
         "8707-102",
-        "8707-103",
         "8707-104",
         "9068-001",
         "9068-002",
@@ -187,7 +178,6 @@
         "8725-103",
         "8725-104",
         "8725-105",
-        "8725-107",
         "8725-201",
         "8725-202",
         "8725-203",
@@ -264,13 +254,6 @@
       ],
       "critical": false
     },
-    "crates/server/src/oidc/config.rs": {
-      "sha256": "3ad2afe139ba84ccbb83cbd8c28578d9c6d4d681b68e28dafa170aaf993e72b5",
-      "entries": [
-        "OIDC-2-003"
-      ],
-      "critical": false
-    },
     "crates/server/src/oidc/mod.rs": {
       "sha256": "2f4a5fb7311734ee0449c811f83dd714c3a53631adc1a5a9c70e34fed36be754",
       "entries": [
@@ -282,13 +265,6 @@
       "sha256": "bf58f6b59eccb425c314d3bcc3844d450392913ef7625ac2dd57eb75ae23868e",
       "entries": [
         "OIDC-1-010"
-      ],
-      "critical": false
-    },
-    "crates/server/src/oidc/session.rs": {
-      "sha256": "9b594d170aec97ee6473547cecadb3702c34169ccd0186aac3d0db1221eb61e3",
-      "entries": [
-        "OIDC-3-005"
       ],
       "critical": false
     },
@@ -343,7 +319,7 @@
       "critical": false
     },
     "crates/server/src/web/authorize_context.rs": {
-      "sha256": "306c448aff9f276c2439e83ef9520e3a25646fa95f74129d10749b686a00a272",
+      "sha256": "36029e1ceeac8464c2af0505ab7367fe5a1a8de8fbebf4b6648c63ab3354f706",
       "entries": [
         "v21-030"
       ],
@@ -365,7 +341,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "f0e1c17cde6629eb2505c2ec553423c62f02f88aad8c8bdad6e91123e265327e",
+      "sha256": "b3650239a87ffd51126c3151368a7b29e6c3a7a4faca49db16925a505e94e938",
       "entries": [
         "6749-014",
         "7521-201",
@@ -409,7 +385,7 @@
       "critical": false
     },
     "crates/server/src/web/par_endpoint.rs": {
-      "sha256": "6d8e8a9ba67d115e17e2b6fb7f9c0cd2d8ea10b08a5dde470471a54d285ef621",
+      "sha256": "61036b6bcea04d1f41d61eb7187a1ec0d9a6d1d61c868fc631bc7362709a8f9e",
       "entries": [
         "9126-003",
         "9126-005",

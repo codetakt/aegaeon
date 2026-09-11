@@ -246,6 +246,9 @@
                 "^artifacts/kani/run_[0-9T]+\\.log$"
                 "^generated/openapi/aegaeon-management-api\\.v1\\.json$"
                 "^spec/compliance-matrix\\.yaml$"
+                # Shared finite-state fixtures and their generated proof cases.
+                "^tests/fixtures/authcode-redis-grant\\.json$"
+                "^tests/fstar/property/TestAuthCodeRedisGrant\\.fst$"
               ];
             };
             check-case-conflicts.enable = true;
@@ -514,6 +517,7 @@
             ssm-session-manager-plugin
             opentofu
             atlas
+            redis
             tmux
             unzip
             which

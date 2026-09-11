@@ -204,3 +204,16 @@ jobs:
             rm -rf /homeless-shelter || true
           fi
           nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
+
+      - name: Compare Redis grant traces with F* fixtures
+        run: |
+          nix develop .#ci --command python3 scripts/validation/check_authcode_redis_grant.py \
+            --out-dir artifacts/authcode-redis-correspondence
+
+      - name: Upload Redis grant correspondence records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authcode-redis-correspondence
+          path: artifacts/authcode-redis-correspondence/
+          if-no-files-found: error

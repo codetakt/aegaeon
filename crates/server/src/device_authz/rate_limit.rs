@@ -95,6 +95,17 @@ impl VerificationRateLimiter {
         &self,
         keys: impl IntoIterator<Item = &'a str>,
     ) -> Result<bool, String> {
+        self.try_check_all_with_limit(keys, self.max_attempts)
+    }
+
+    fn try_check_all_with_limit<'a>(
+        &self,
+        keys: impl IntoIterator<Item = &'a str>,
+        max_attempts: u32,
+    ) -> Result<bool, String> {
+        if max_attempts == 0 {
+            return Err("rate limit must be positive".to_string());
+        }
         let keys = distinct_rate_limit_keys(keys);
         if keys.is_empty() {
             return Ok(true);
@@ -103,10 +114,10 @@ impl VerificationRateLimiter {
         match &self.backend {
             #[cfg(test)]
             VerificationRateLimiterBackend::InMemory { attempts } => {
-                Ok(self.check_all_in_memory(attempts, &keys))
+                Ok(self.check_all_in_memory(attempts, &keys, max_attempts))
             }
             VerificationRateLimiterBackend::Redis(store) => store
-                .check_all(&keys, self.max_attempts, self.window)
+                .check_all(&keys, max_attempts, self.window)
                 .map_err(|err| {
                     let message = err.to_string();
                     tracing::error!(
@@ -126,11 +137,26 @@ impl VerificationRateLimiter {
             .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
     }
 
+    /// Check a separately named bucket with an operational attempt limit.
+    /// The existing window and shared-store atomicity are unchanged.
+    pub async fn try_check_with_limit_async(
+        self: Arc<Self>,
+        key: String,
+        max_attempts: u32,
+    ) -> Result<bool, String> {
+        tokio::task::spawn_blocking(move || {
+            self.try_check_all_with_limit(std::iter::once(key.as_str()), max_attempts)
+        })
+        .await
+        .map_err(|err| format!("verification rate limiter worker failed: {err}"))?
+    }
+
     #[cfg(test)]
     fn check_all_in_memory(
         &self,
         attempts: &RwLock<HashMap<String, (u32, Instant)>>,
         keys: &[&str],
+        max_attempts: u32,
     ) -> bool {
         let now = Instant::now();
         let Ok(mut map) = write_lock(attempts, "rate_limit_check_all") else {
@@ -151,7 +177,7 @@ impl VerificationRateLimiter {
 
         if next_entries
             .iter()
-            .any(|(_, (count, _))| *count > self.max_attempts)
+            .any(|(_, (count, _))| *count > max_attempts)
         {
             return false;
         }

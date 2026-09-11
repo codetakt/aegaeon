@@ -134,6 +134,7 @@ fuzz_target!(|data: &[u8]| {
         code_challenge: Some("challenge".to_string()),
         code_challenge_method: Some("plain".to_string()),
         scope: Some("openid profile".to_string()),
+        prompt: None,
         nonce: Some("nonce-123".to_string()),
         acr_values: None,
         max_age: None,

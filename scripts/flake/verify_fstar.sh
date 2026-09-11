@@ -340,6 +340,14 @@ MODULES="$MODULES \
 	authcode/AuthCode.Types.fst \
 	authcode/AuthCode.Store.fst \
 	authcode/AuthCode.Flow.fst"
+# Authorization snapshot, effective target, consent and reauthentication slices.
+MODULES="$MODULES authcode/AuthCode.Snapshot.fst authcode/AuthCode.RedisGrant.fst"
+MODULES="$MODULES resource/ResourceIndicators.EffectiveTarget.fst"
+MODULES="$MODULES oidc/OIDC.OfflineConsent.fst oidc/OIDC.RequestObjectTarget.fst oidc/OIDC.Reauthentication.fst"
+MODULES="$MODULES oidc/OIDC.AuthorizationTransactions.fst"
+# Shared finite fixtures must match their generated F* cases exactly.
+python3 "$REPO_ROOT/scripts/validation/authcode_redis_fixtures.py" --check
+MODULES="$MODULES ../tests/fstar/property/TestAuthCodeRedisGrant.fst"
 # Step-up
 MODULES="$MODULES stepup/StepUp.fst"
 # HashComputation model
@@ -367,6 +375,7 @@ MODULES="$MODULES \
 # Management (Phase 4-5)
 MODULES="$MODULES \
 	management/Management.ClientLifecycle.fst \
+	management/Management.Initialization.fst \
 	management/Management.KeyRotation.fst \
 	management/Management.PolicyProfile.fst"
 # RAR

@@ -5,6 +5,7 @@ mod authorization_code_grant;
 mod id_token;
 mod jwt_access;
 mod refresh_grant;
+mod resource_selection;
 mod runtime;
 mod subject_grants;
 mod validator;
