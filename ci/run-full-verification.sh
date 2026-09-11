@@ -35,7 +35,8 @@ fi
 # 2. Kani Verification
 echo ""
 echo "2. Running Kani verification..."
-if command -v cargo-kani >/dev/null 2>&1 || [ -f "$HOME/.cargo/bin/cargo-kani" ]; then
+# The wrapper resolves cargo-kani from PATH only, so gate on exactly that.
+if command -v cargo-kani >/dev/null 2>&1; then
 	echo "⇒ Running the Kani evidence runner (spec/kani-evidence.json)..."
 	if bash scripts/kani/run_kani.sh --scope full --output artifacts/kani-evidence; then
 		KANI_RESULT="PASSED"

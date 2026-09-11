@@ -11,7 +11,7 @@ import json
 import os
 import pathlib
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 def select_run(output: pathlib.Path) -> pathlib.Path | None:
@@ -23,7 +23,7 @@ def select_run(output: pathlib.Path) -> pathlib.Path | None:
             evaluation.read_bytes()
         ).hexdigest() == record.get("evaluation_sha256"):
             return evaluation.parent
-    candidates: list[tuple[datetime, str, pathlib.Path]] = []
+    candidates: list[tuple[float, str, pathlib.Path]] = []
     for evaluation in output.glob("run-*/evaluation.json"):
         try:
             started = datetime.fromisoformat(
@@ -31,7 +31,10 @@ def select_run(output: pathlib.Path) -> pathlib.Path | None:
             )
         except (ValueError, TypeError, json.JSONDecodeError):
             continue
-        candidates.append((started, evaluation.parent.name, evaluation.parent))
+        # A naive timestamp is taken as UTC so mixed histories stay comparable.
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        candidates.append((started.timestamp(), evaluation.parent.name, evaluation.parent))
     return max(candidates)[2] if candidates else None
 
 
