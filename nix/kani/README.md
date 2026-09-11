@@ -84,6 +84,15 @@ size/alignment, string clone and vector clone controls. An intentionally wrong
 size assertion must fail specifically at that assertion. Timeout, incomplete
 output, compilation errors and unwind failures reject the package. The seven
 case records live in `$out/share/kani-library-checks/RESULTS.json`.
+The classifier reconciles every property with the `SUMMARY` counts, including
+failures and unreachable callee checks. The named positive assertion must be
+reachable; the `Complete` line separately confirms the single harness finished.
+
+The public `$out/bin/kani` wrapper starts upstream's proxy, which invokes
+`$KANI_HOME/kani-0.66.0/bin/kani-driver`. `setup-kani-env` links that release
+directory to the installed bundle, so the driver resolves its libraries there.
+The `nix run .#verify-kani` app supplies Python with `jsonschema` and `yaml`;
+it must work with the caller's `PYTHONPATH` unset.
 
 These package regressions do not prove application properties. After a tool
 change, rerun the registry selection and re-admit its records.

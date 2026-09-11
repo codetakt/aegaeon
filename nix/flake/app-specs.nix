@@ -99,7 +99,7 @@ let
         gnused
         which
         kani'
-        python3
+        python'
         rustToolchain
         verificationFstar
         verificationZ3

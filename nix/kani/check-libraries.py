@@ -41,9 +41,25 @@ def execute(command: list[str], case: Path, environment: dict[str, str]) -> tupl
 
 
 def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool, list[str], int]:
-    checks = re.findall(r"^Check \d+: (.+)\n\s+- Status: (\w+)\s*$", text, re.MULTILINE)
+    parsed = re.findall(r"^Check (\d+): (.+)\n[ \t]+- Status: (\w+)[ \t]*$", text, re.MULTILINE)
+    checks = [(identifier, status) for _, identifier, status in parsed]
     failed = [identifier for identifier, status in checks if status == "FAILURE"]
     known_statuses = all(status in {"SUCCESS", "FAILURE", "UNREACHABLE"} for _, status in checks)
+    # Complete counts harnesses, while SUMMARY counts their individual properties.
+    # Callee safety/unwind checks are legitimate; missing or inconsistent checks are not.
+    summaries = re.findall(
+        r"^SUMMARY:\n[ \t]+\*\* (\d+) of (\d+) failed(?: \((\d+) unreachable\))?[ \t]*$",
+        text,
+        re.MULTILINE,
+    )
+    counts_match = (
+        len(re.findall(r"^Check ", text, re.MULTILINE)) == len(checks)
+        and [int(number) for number, _, _ in parsed] == list(range(1, len(checks) + 1))
+        and len({identifier for identifier, _ in checks}) == len(checks)
+        and len(summaries) == 1
+        and tuple(int(count or "0") for count in summaries[0])
+        == (len(failed), len(checks), sum(status == "UNREACHABLE" for _, status in checks))
+    )
     if name == "wrong_size":
         expected = (
             code != 0
@@ -59,7 +75,7 @@ def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool,
             and "VERIFICATION:- SUCCESSFUL" in text
             and "Complete - 1 successfully verified harnesses, 0 failures, 1 total." in text
         )
-    passed = bool(checks) and known_statuses and expected and not timed_out
+    passed = bool(checks) and known_statuses and counts_match and expected and not timed_out
     return passed, failed, len(checks)
 
 
