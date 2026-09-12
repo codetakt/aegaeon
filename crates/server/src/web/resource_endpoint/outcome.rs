@@ -47,7 +47,8 @@ pub(super) fn resource_success(
         "audience": meta.audience,
         "iss": issuer_base,
     });
-    let response = (StatusCode::OK, Json(body)).into_response();
+    let mut response = (StatusCode::OK, Json(body)).into_response();
+    util::apply_no_cache_headers(&mut response);
     ResourceOutcome::success(response, mode)
 }
 

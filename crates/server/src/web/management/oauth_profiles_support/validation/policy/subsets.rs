@@ -43,6 +43,18 @@ fn validate_sender_method_policy(
         return Ok(());
     }
 
+    // Administrative profiles may select certificate binding independently of
+    // DCR, whose accepted methods are a separate capability and allowlist.
+    if input.sender_constrained == "MTLS" {
+        return if policy.mtls_enabled {
+            Ok(())
+        } else {
+            Err(invalid_request(
+                request_id,
+                "MTLS profile requires mtlsEnabled=true",
+            ))
+        };
+    }
     let sender_method = input.sender_constrained.to_ascii_lowercase();
     if !runtime_supported_sender_constrained_method(&sender_method) {
         return Err(invalid_request(

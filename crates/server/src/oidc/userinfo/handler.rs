@@ -8,7 +8,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use super::{Error, UserinfoEndpoint};
-use crate::middleware::tls::normalize_forwarded_client_cert;
+use crate::middleware::tls::VerifiedClientCertificate;
 use crate::middleware::DpopBinding;
 use crate::util;
 
@@ -17,6 +17,7 @@ pub async fn userinfo_handler(
     headers: HeaderMap,
     Extension(endpoint): Extension<Arc<UserinfoEndpoint>>,
     binding: Option<Extension<DpopBinding>>,
+    certificate: Option<Extension<VerifiedClientCertificate>>,
 ) -> impl IntoResponse {
     let auth_header = match util::single_header_str(&headers, header::AUTHORIZATION.as_str()) {
         Ok(Some(value)) => value,
@@ -31,27 +32,11 @@ pub async fn userinfo_handler(
             );
         }
     };
-    let mtls_fingerprint = match util::single_header_str(&headers, "x-forwarded-client-cert") {
-        Ok(Some(value)) if normalize_forwarded_client_cert(value).is_some() => Some(value),
-        Ok(Some(_)) => {
-            return userinfo_json_error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_request",
-                Some("x-forwarded-client-cert header contains an invalid value"),
-                true,
-            );
-        }
-        Ok(None) => None,
-        Err(err) => {
-            let description = err.description("x-forwarded-client-cert");
-            return userinfo_json_error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_request",
-                Some(&description),
-                true,
-            );
-        }
-    };
+    // Headers alone are not certificate evidence. Middleware must establish
+    // proxy provenance and provide this unforgeable transport context.
+    let mtls_fingerprint = certificate
+        .as_ref()
+        .map(|Extension(cert)| cert.fingerprint());
 
     let binding_ref = binding.as_ref().map(|Extension(binding)| binding);
 

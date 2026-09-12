@@ -4,10 +4,12 @@ use super::oauth_errors::{
     bearer_json_error_with_iss, dpop_invalid_token_response, no_cache_json_error_with_iss,
 };
 use super::request_admission::{enforce_content_type, enforce_no_credentials_in_uri};
+use super::transport_boundary::transport_rejection_for_route;
 use super::{
-    dpop_binding_from_request, transport_rejection, trusted_mtls_fingerprint, AppState,
-    X_FORWARDED_CLIENT_CERT_HEADER,
+    dpop_binding_from_request, trusted_mtls_fingerprint, AppState, X_FORWARDED_CLIENT_CERT_HEADER,
 };
+use crate::middleware::dpop::DpopEndpointRole;
+use crate::web::token_sender_binding::dpop_error_response;
 use axum::{
     extract::{ConnectInfo, OriginalUri, State},
     http::{HeaderMap, StatusCode, Uri},
@@ -16,7 +18,6 @@ use axum::{
 };
 use std::net::SocketAddr;
 
-use crate::middleware::DpopBinding;
 use crate::util;
 
 pub(super) async fn userinfo_get(
@@ -38,7 +39,7 @@ pub(super) async fn userinfo_get(
         }
     };
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
-        return transport_rejection(&state, kind);
+        return transport_rejection_for_route(&state, kind, uri.path());
     }
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
         return resp;
@@ -68,13 +69,15 @@ pub(super) async fn userinfo_get(
     };
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
+        DpopEndpointRole::ResourceServer,
         &http::Method::GET,
         &uri_for_dpop,
         &headers,
-        issuer_base,
     ) {
         Ok(binding) => binding,
-        Err(resp) => return resp,
+        Err(error) => {
+            return dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error)
+        }
     };
 
     let mtls = match trusted_mtls_fingerprint(&state, &headers) {
@@ -91,11 +94,9 @@ pub(super) async fn userinfo_get(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => userinfo_error_response(
-            err,
-            issuer_base,
-            userinfo_challenge_scheme(&auth_header, binding.as_ref()),
-        ),
+        Err(err) => {
+            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
+        }
     }
 }
 
@@ -151,15 +152,12 @@ fn userinfo_auth_header(
     }
 }
 
-fn userinfo_challenge_scheme(
-    auth_header: &str,
-    dpop_binding: Option<&DpopBinding>,
-) -> &'static str {
+fn userinfo_challenge_scheme(auth_header: &str) -> &'static str {
     let scheme_is_dpop = auth_header
         .split_whitespace()
         .next()
         .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
-    if scheme_is_dpop || dpop_binding.is_some() {
+    if scheme_is_dpop {
         "DPoP"
     } else {
         "Bearer"
@@ -232,7 +230,7 @@ pub(super) async fn userinfo_post(
         }
     };
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
-        return transport_rejection(&state, kind);
+        return transport_rejection_for_route(&state, kind, uri.path());
     }
 
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
@@ -262,13 +260,15 @@ pub(super) async fn userinfo_post(
     };
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
+        DpopEndpointRole::ResourceServer,
         &http::Method::POST,
         &uri_for_dpop,
         &headers,
-        issuer_base,
     ) {
         Ok(binding) => binding,
-        Err(resp) => return resp,
+        Err(error) => {
+            return dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error)
+        }
     };
 
     let mtls = match trusted_mtls_fingerprint(&state, &headers) {
@@ -285,10 +285,8 @@ pub(super) async fn userinfo_post(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => userinfo_error_response(
-            err,
-            issuer_base,
-            userinfo_challenge_scheme(&auth_header, binding.as_ref()),
-        ),
+        Err(err) => {
+            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
+        }
     }
 }

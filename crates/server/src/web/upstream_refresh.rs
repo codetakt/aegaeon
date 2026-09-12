@@ -1,5 +1,6 @@
 use super::oauth_errors::json_error_with_iss;
 use super::request_admission::enforce_no_credentials_in_uri;
+use super::transport_boundary::transport_rejection_for_route;
 use super::upstream_id_token::{
     refreshed_upstream_id_token_signature_failure, validate_upstream_id_token,
     verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
@@ -15,7 +16,7 @@ use super::upstream_refresh_token_envelope::{
     seal_upstream_refresh_token, upstream_refresh_token_envelope_error_response,
 };
 use super::upstream_token_response::UpstreamTokenResponse;
-use super::{transport_rejection, AppState};
+use super::AppState;
 use axum::{
     extract::{ConnectInfo, OriginalUri, Query, State},
     http::{HeaderMap, StatusCode},
@@ -265,7 +266,7 @@ pub(super) async fn upstream_refresh(
 ) -> Response {
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
-        return transport_rejection(&state, kind);
+        return transport_rejection_for_route(&state, kind, uri.path());
     }
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
         return resp;

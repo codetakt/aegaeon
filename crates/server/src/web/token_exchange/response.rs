@@ -8,11 +8,12 @@ pub(super) fn token_exchange_success_response(
     expires_in: u64,
     scope: Option<String>,
     authorization_details: Option<serde_json::Value>,
+    token_type: &str,
 ) -> Response {
     let mut body = json!({
         "access_token": token,
         "issued_token_type": OAUTH_TOKEN_TYPE_ACCESS_TOKEN,
-        "token_type": "Bearer",
+        "token_type": token_type,
         "expires_in": expires_in,
     });
     if let Some(scope) = scope {

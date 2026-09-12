@@ -20,6 +20,18 @@ pub struct TransportSecurity {
     cfg: Arc<TransportSecurityConfig>,
 }
 
+/// Certificate identity vouched for by a configured TLS terminator.
+/// The private field prevents construction from a self-asserted HTTP header.
+#[derive(Clone, Debug)]
+pub struct VerifiedClientCertificate(String);
+
+impl VerifiedClientCertificate {
+    #[must_use]
+    pub fn fingerprint(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportRejectionKind {
     MissingRemoteAddr,
@@ -56,6 +68,24 @@ impl TransportSecurity {
         headers: &HeaderMap,
     ) -> Result<(), TransportRejectionKind> {
         enforce(&self.cfg, remote, headers)
+    }
+
+    /// Resolve a certificate only after enforcing HTTPS and proxy provenance.
+    ///
+    /// # Errors
+    /// Rejects untrusted transport or malformed certificate metadata.
+    pub fn verified_client_certificate(
+        &self,
+        remote: Option<SocketAddr>,
+        headers: &HeaderMap,
+    ) -> Result<Option<VerifiedClientCertificate>, TransportRejectionKind> {
+        self.enforce(remote, headers)?;
+        if !self.cfg.require_tls_proxy {
+            return Ok(None);
+        }
+        strict_forwarded_client_cert(headers)
+            .map(|value| value.map(VerifiedClientCertificate))
+            .map_err(|_| TransportRejectionKind::MtlsClientCertMissing)
     }
 
     /// Return the rate-limit subject for a request after applying the transport boundary.

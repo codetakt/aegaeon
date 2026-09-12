@@ -123,6 +123,13 @@ pub(crate) fn validate_management_policy_for_runtime(
     validate_sender_constraint_policy(policy)?;
     validate_software_statement_key_policy(policy)?;
     validate_policy_acr(policy)?;
+    if !policy.authorization_details_types_supported.is_empty() {
+        return Err(ConfigError::InvalidValue {
+            key: "authorization_details_types_supported".into(),
+            value: "[configured types]".into(),
+            reason: "no runtime authorization_details type handlers are implemented; the allowlist must be empty".into(),
+        });
+    }
 
     Ok(())
 }

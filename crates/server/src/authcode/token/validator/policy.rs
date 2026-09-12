@@ -1,4 +1,4 @@
-use super::{TokenPolicyContext, TokenPolicyError, TokenValidator};
+use super::{BearerTokenValidationError, TokenPolicyContext, TokenPolicyError, TokenValidator};
 use crate::authcode::types::{AccessToken, BearerTokenMeta, SenderBinding};
 use crate::metrics_integration::MetricsIntegration;
 use crate::policy::SenderConstraint;
@@ -11,6 +11,11 @@ impl TokenValidator {
         meta: &BearerTokenMeta,
         context: &TokenPolicyContext<'_>,
     ) -> Result<(), TokenPolicyError> {
+        if meta.authorization_details.is_some() {
+            return Err(TokenPolicyError::Validation(
+                BearerTokenValidationError::invalid("unsupported authorization details"),
+            ));
+        }
         if self.policy.require_scope_subset() && !context.requested_scopes.is_empty() {
             let granted: HashSet<&str> = meta.granted_scopes.iter().map(String::as_str).collect();
             if let Some(missing) = context
@@ -31,52 +36,33 @@ impl TokenValidator {
             }
         }
 
-        if self.policy.enforce_sender_binding() {
-            match self.policy.sender_constrained {
-                SenderConstraint::DPoP => match (&meta.sender_binding, context.sender_dpop_jkt) {
-                    (Some(SenderBinding::DPoP { jkt }), Some(present))
-                        if jwk_thumbprint_matches(jkt, present) => {}
-                    (Some(SenderBinding::DPoP { .. }), Some(_))
-                    | (Some(SenderBinding::Mtls { .. }), _) => {
-                        return Err(Self::sender_binding_mismatch());
-                    }
-                    (Some(SenderBinding::DPoP { .. }), None) | (None, _) => {
-                        return Err(Self::sender_binding_missing());
-                    }
-                },
-                SenderConstraint::Mtls => {
-                    match (&meta.sender_binding, context.sender_mtls_fingerprint) {
-                        (Some(SenderBinding::Mtls { fingerprint }), Some(present))
-                            if fingerprint == present => {}
-                        (Some(SenderBinding::Mtls { .. }), Some(_))
-                        | (Some(SenderBinding::DPoP { .. }), _) => {
-                            return Err(Self::sender_binding_mismatch());
-                        }
-                        (Some(SenderBinding::Mtls { .. }), None) | (None, _) => {
-                            return Err(Self::sender_binding_missing());
-                        }
-                    }
-                }
-                SenderConstraint::None => match (
-                    &meta.sender_binding,
-                    context.sender_dpop_jkt,
-                    context.sender_mtls_fingerprint,
-                ) {
-                    (Some(SenderBinding::DPoP { jkt }), Some(present), _)
-                        if jwk_thumbprint_matches(jkt, present) => {}
-                    (Some(SenderBinding::Mtls { fingerprint }), _, Some(present))
-                        if fingerprint == present => {}
-                    (Some(SenderBinding::DPoP { .. }), Some(_), _)
-                    | (Some(SenderBinding::Mtls { .. }), _, Some(_)) => {
-                        return Err(Self::sender_binding_mismatch());
-                    }
-                    (None, _, _) => {}
-                    (Some(SenderBinding::DPoP { .. }), None, _)
-                    | (Some(SenderBinding::Mtls { .. }), _, None) => {
-                        return Err(Self::sender_binding_missing());
-                    }
-                },
+        // Enforce the mechanism committed into this token, regardless of which
+        // mechanism the environment currently defaults to for new issuance.
+        // Disabling a refresh-policy option never removes an existing cnf binding.
+        match (
+            &meta.sender_binding,
+            context.sender_dpop_jkt,
+            context.sender_mtls_fingerprint,
+        ) {
+            (Some(SenderBinding::DPoP { jkt }), Some(present), _)
+                if jwk_thumbprint_matches(jkt, present) => {}
+            (Some(SenderBinding::Mtls { fingerprint }), _, Some(present))
+                if fingerprint == present => {}
+            (Some(SenderBinding::DPoP { .. }), Some(_), _)
+            | (Some(SenderBinding::Mtls { .. }), _, Some(_)) => {
+                return Err(Self::sender_binding_mismatch());
             }
+            (Some(SenderBinding::DPoP { .. }), None, _)
+            | (Some(SenderBinding::Mtls { .. }), _, None) => {
+                return Err(Self::sender_binding_missing());
+            }
+            (None, _, _)
+                if self.policy.enforce_sender_binding()
+                    && self.policy.sender_constrained != SenderConstraint::None =>
+            {
+                return Err(Self::sender_binding_missing());
+            }
+            (None, _, _) => {}
         }
 
         Ok(())

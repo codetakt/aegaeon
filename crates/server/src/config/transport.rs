@@ -57,9 +57,8 @@ impl TransportSecurityConfig {
         if policy.enforce_trusted_proxy() || policy.sender_constrained == SenderConstraint::Mtls {
             self.require_tls_proxy = true;
         }
-        if policy.sender_constrained == SenderConstraint::Mtls {
-            self.require_proxy_mtls = true;
-        }
+        // Token binding is checked at OAuth/RS endpoints. Only explicit ingress
+        // configuration may require a certificate on browser and management routes.
         if self.trusted_proxies.is_empty() && self.require_tls_proxy {
             self.trusted_proxies = default_trusted_proxies();
         }

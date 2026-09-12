@@ -59,6 +59,13 @@ pub(super) async fn handle_token_exchange_grant(
             Ok(values) => values,
             Err(response) => return response,
         };
+    if subject_meta.authorization_details.is_some() {
+        return token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("subject_token contains unsupported authorization details"),
+        );
+    }
     if let Err(response) = validate_token_exchange_sender_binding(ctx, &subject_meta) {
         return response;
     }
@@ -106,15 +113,16 @@ pub(super) async fn handle_token_exchange_grant(
             );
         }
     };
+    let token_type = AccessToken::type_for_confirmation(ctx.cnf_for_at.as_ref());
     let access = AccessToken {
         token: token.clone(),
-        token_type: "Bearer".to_string(),
+        token_type: token_type.to_string(),
         client_id: ctx.client_id.clone(),
         user_id: subject_meta.user_id.clone(),
         scope: scope.clone(),
         expires_in,
         created_at: now,
-        cnf: None,
+        cnf: ctx.cnf_for_at.clone(),
     };
     let refresh_parent = state
         .cfg
@@ -143,5 +151,6 @@ pub(super) async fn handle_token_exchange_grant(
         expires_in,
         scope,
         subject_meta.authorization_details,
+        token_type,
     )
 }

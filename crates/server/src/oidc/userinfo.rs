@@ -255,6 +255,17 @@ impl UserinfoEndpoint {
         let meta_preview = self
             .validate_bearer_metadata(normalized_auth.clone())
             .await?;
+        let dpop_scheme = auth_header
+            .split_whitespace()
+            .next()
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
+        if matches!(
+            meta_preview.sender_binding,
+            Some(crate::authcode::types::SenderBinding::DPoP { .. })
+        ) != dpop_scheme
+        {
+            return Err(Error::InvalidToken);
+        }
         let meta = self
             .enforce_userinfo_policy(
                 &normalized_auth,

@@ -25,6 +25,7 @@ struct IssuedRefreshGrant {
 }
 
 struct RefreshGrantSuccess {
+    token_type: String,
     access_token: String,
     scope: Option<String>,
     refresh_token: Option<String>,
@@ -93,7 +94,7 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: success.access_token,
-            token_type: "Bearer".to_string(),
+            token_type: success.token_type,
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
             scope: success.scope,
@@ -143,7 +144,7 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: success.access_token,
-            token_type: "Bearer".to_string(),
+            token_type: success.token_type,
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
             scope: success.scope,
@@ -200,7 +201,7 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: success.access_token,
-            token_type: "Bearer".to_string(),
+            token_type: success.token_type,
             expires_in: success.expires_in,
             refresh_token: success.refresh_token,
             scope: success.scope,
@@ -259,6 +260,11 @@ impl TokenIssuer {
         requested_resource: Option<&str>,
         requested_scope: Option<&str>,
     ) -> Result<PreparedRefreshGrant, RefreshGrantError> {
+        if refresh.authorization_details.is_some() {
+            return Err(invalid_grant(
+                "grant contains unsupported authorization details; authorize again",
+            ));
+        }
         let context = refresh.target_context.as_ref().ok_or_else(|| {
             invalid_grant("refresh token has no original target context; authorize again")
         })?;
@@ -320,7 +326,7 @@ impl TokenIssuer {
         };
         let access_token = AccessToken {
             token: access_token_str.clone(),
-            token_type: "Bearer".to_string(),
+            token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: refresh.client_id.clone(),
             user_id: refresh.user_id.clone(),
             scope: access_scope.map(str::to_owned),
@@ -367,6 +373,7 @@ impl TokenIssuer {
         issued: IssuedRefreshGrant,
     ) -> Result<RefreshGrantSuccess, RefreshGrantError> {
         let scope = issued.access_token.scope.clone();
+        let token_type = issued.access_token.token_type.clone();
         let expires_in = issued.expires_in;
         let authorization_details = issued.authorization_details;
         let (access_token_str, refresh_token) = match self.token_store.store_refreshed_grant(
@@ -392,6 +399,7 @@ impl TokenIssuer {
         };
 
         Ok(RefreshGrantSuccess {
+            token_type,
             scope,
             access_token: access_token_str,
             refresh_token,
@@ -406,6 +414,7 @@ impl TokenIssuer {
         issued: IssuedRefreshGrant,
     ) -> Result<RefreshGrantSuccess, RefreshGrantError> {
         let scope = issued.access_token.scope.clone();
+        let token_type = issued.access_token.token_type.clone();
         let expires_in = issued.expires_in;
         let authorization_details = issued.authorization_details;
         let (access_token_str, refresh_token) = match self
@@ -435,6 +444,7 @@ impl TokenIssuer {
         };
 
         Ok(RefreshGrantSuccess {
+            token_type,
             scope,
             access_token: access_token_str,
             refresh_token,

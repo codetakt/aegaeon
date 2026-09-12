@@ -1,3 +1,5 @@
+use crate::middleware::dpop::DpopEndpointRole;
+use crate::web::token_sender_binding::dpop_error_response;
 use axum::{
     http::{HeaderMap, Method, StatusCode, Uri},
     response::Response,
@@ -12,6 +14,7 @@ use super::super::{
     X_FORWARDED_CLIENT_CERT_HEADER,
 };
 use super::UpstreamRefreshCaller;
+use crate::authcode::types::SenderBinding;
 use crate::authcode::{BearerTokenValidationError, TokenPolicyContext, TokenPolicyError};
 use crate::util;
 
@@ -103,11 +106,12 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         .map_err(|_| dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"))?;
     let binding = dpop_binding_from_request(
         state.dpop.as_ref(),
+        DpopEndpointRole::ResourceServer,
         &Method::POST,
         &uri_for_dpop,
         headers,
-        issuer_base,
-    )?;
+    )
+    .map_err(|error| dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error))?;
     let binding_jkt = binding.as_ref().map(|binding| binding.jkt.as_str());
     let mtls_fingerprint = trusted_mtls_fingerprint(state, headers)
         .map_err(|err| no_cache_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err))?;
@@ -129,6 +133,16 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         util::apply_no_cache_headers(&mut response);
         response
     })?;
+    // RFC 9449 section 7.2: a proof cannot turn Bearer presentation into DPoP.
+    if matches!(meta.sender_binding, Some(SenderBinding::DPoP { .. }))
+        != (challenge_scheme == "DPoP")
+    {
+        return Err(upstream_refresh_policy_error(
+            &TokenPolicyError::SenderBindingMismatch,
+            issuer_base,
+            challenge_scheme,
+        ));
+    }
     let resource_audience = crate::resource_audience::upstream_refresh(issuer_base);
     if let Err(err) = state
         .tokens
@@ -147,11 +161,7 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         return Err(upstream_refresh_policy_error(
             &err,
             issuer_base,
-            if binding_jkt.is_some() {
-                "DPoP"
-            } else {
-                challenge_scheme
-            },
+            challenge_scheme,
         ));
     }
 

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-12T00:00:23.380175+00:00",
+  "generated": "2026-09-12T09:55:02.872268+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -228,13 +228,12 @@
         "8414-006",
         "8705-102",
         "9068-004",
-        "9396-104",
         "9728-101"
       ],
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "3106f07a8e35be5e35735695402977510ce934229b8420df0a0cf3d25aed5953",
+      "sha256": "05261bc146352a80e8ff1118870d004ad6d943c8e2fff545ad9cff9fc538a61b",
       "entries": [
         "9449-004",
         "9449-005",
@@ -278,13 +277,6 @@
       ],
       "critical": false
     },
-    "crates/server/src/par.rs": {
-      "sha256": "dc717127af145a6344eeaf91a9fb76db9189537257e58d87b3912b03d92d0385",
-      "entries": [
-        "9396-106"
-      ],
-      "critical": false
-    },
     "crates/server/src/policy.rs": {
       "sha256": "ec48335e539ac3e37ab15b7f659eba257cb60eede964bb06f9b937bc57d17244",
       "entries": [
@@ -312,9 +304,7 @@
       "sha256": "434e9ce6623d13d43acae17bb6d87bc6334f838ff7cbc77a47e090175c5fefba",
       "entries": [
         "8693-103",
-        "8707-101",
-        "9396-101",
-        "9396-102"
+        "8707-101"
       ],
       "critical": false
     },
@@ -341,7 +331,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "b3650239a87ffd51126c3151368a7b29e6c3a7a4faca49db16925a505e94e938",
+      "sha256": "ba9b5126c789eb73adb112cbd636a211f774b2eaa07b566bc722c1d7ac1ece32",
       "entries": [
         "6749-014",
         "7521-201",
@@ -369,9 +359,6 @@
         "8693-204",
         "8705-104",
         "9207-002",
-        "9396-103",
-        "9396-105",
-        "9396-107",
         "9449-014",
         "9701-001",
         "9701-002",
@@ -417,7 +404,7 @@
       "critical": false
     },
     "crates/server/src/web/upstream_refresh.rs": {
-      "sha256": "b3ae578de613626d985c34c7cf47af4a63aab7c3edee2fa50f835144fdbd9f10",
+      "sha256": "9fcccd39f4f60c1fdb912879736d937ebe5d2caf59773dcedf99fe085cecc2d0",
       "entries": [
         "OIDC-1-009"
       ],

@@ -260,7 +260,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-evaluation.md` | claim | Assurance Evaluation Rules | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | contract reviewers, evidence producers, release decision makers |
 | `docs/verification/claims/assurance-statement.md` | claim | Aegaeon Technical Assurance Statement Specification | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | users, adoption reviewers, implementers, verification and release owners |
-| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-11 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-12 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | snapshot | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-08-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -350,6 +350,7 @@ Audience: contributors, maintainers
 | `docs/operations/monitoring/alertmanager.md` | runbook | Alertmanager (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/grafana-dashboard.md` | runbook | Grafana Dashboard (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/prometheus-rules.md` | runbook | Prometheus Rules (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
+| `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-09-11 | Operations | operators, maintainers |
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

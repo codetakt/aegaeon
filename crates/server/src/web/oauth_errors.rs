@@ -94,6 +94,7 @@ pub(super) fn dpop_invalid_token_response(issuer_base: &str, description: &str) 
     response
 }
 
+#[cfg(test)]
 pub(super) fn dpop_backend_unavailable_response(issuer_base: &str) -> Response {
     let mut response = json_error_with_iss(
         StatusCode::SERVICE_UNAVAILABLE,
@@ -188,15 +189,6 @@ pub(super) fn bearer_header_error(
         Some(&description),
         issuer_base,
     )
-}
-
-pub(super) fn dpop_header_error(
-    issuer_base: &str,
-    header_name: &str,
-    err: util::SingleHeaderError,
-) -> Response {
-    let description = err.description(header_name);
-    dpop_invalid_token_response(issuer_base, &description)
 }
 
 pub(super) fn no_cache_json_error_with_iss(

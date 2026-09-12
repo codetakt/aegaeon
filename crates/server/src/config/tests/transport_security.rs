@@ -68,8 +68,8 @@ fn mtls_sender_constraint_forces_trusted_proxy_boundary() -> ConfigTestResult {
         "mTLS sender binding depends on proxy-provided certificate metadata"
     );
     assert!(
-        cfg.transport.require_proxy_mtls,
-        "mTLS sender binding must require proxy-provided client certificate metadata"
+        !cfg.transport.require_proxy_mtls,
+        "mTLS token binding must not require certificates on browser routes"
     );
     Ok(())
 }
