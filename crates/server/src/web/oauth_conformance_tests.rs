@@ -9,6 +9,8 @@ use axum::{
 };
 use serde_json::Value;
 
+mod sender_contract;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 async fn error(response: Response, status: StatusCode, code: &str) -> TestResult {
@@ -330,17 +332,23 @@ fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResu
 fn resource_dpop_scheme_requires_a_proof() -> TestResult {
     let middleware = DpopMiddleware::new_process_local_for_tests();
     let mut headers = HeaderMap::new();
-    headers.insert("authorization", "DPoP opaque-token".parse()?);
-    assert!(matches!(
-        dpop_binding_from_request(
-            &middleware,
-            DpopEndpointRole::ResourceServer,
-            &http::Method::GET,
-            &"/resource".parse()?,
-            &headers
-        ),
-        Err(crate::middleware::DpopError::MissingProof)
-    ));
+    for authorization in [
+        "DPoP opaque-token",
+        "DPoP\topaque-token",
+        " dpop  opaque-token",
+    ] {
+        headers.insert("authorization", authorization.parse()?);
+        assert!(matches!(
+            dpop_binding_from_request(
+                &middleware,
+                DpopEndpointRole::ResourceServer,
+                &http::Method::GET,
+                &"/resource".parse()?,
+                &headers
+            ),
+            Err(crate::middleware::DpopError::MissingProof)
+        ));
+    }
     headers.insert("authorization", "Bearer opaque-token".parse()?);
     assert!(dpop_binding_from_request(
         &middleware,

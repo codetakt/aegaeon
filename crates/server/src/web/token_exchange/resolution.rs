@@ -40,22 +40,25 @@ pub(super) fn resolve_exchange(
         .collect();
     // Historical same-audience exchange remains available, with no new target authority.
     if subject.exchange_grant.is_none() {
-        let audience = if selectors.is_empty() {
-            ctx.client_id.clone()
-        } else {
-            let first = &selectors[0].1;
-            if selectors.iter().any(|(_, value)| value != first) {
-                return Err(target_error("conflicting exchange targets"));
+        // Aegaeon's legacy compatibility contract requires an explicit audience.
+        // RFC 8693 permits server policy to choose the requested target; do not
+        // infer one from client_id or accept a resource-only request here.
+        let audience = selectors
+            .iter()
+            .find(|(kind, _)| kind == "audience")
+            .map(|(_, value)| value.clone())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| target_error("legacy exchange requires an explicit audience"))?;
+        if selectors.iter().any(|(_, value)| value != &audience) {
+            return Err(target_error("conflicting exchange targets"));
+        }
+        for (kind, value) in &selectors {
+            if kind == "resource"
+                && !url::Url::parse(value).is_ok_and(|url| url.fragment().is_none())
+            {
+                return Err(target_error("invalid resource indicator"));
             }
-            for (kind, value) in &selectors {
-                if kind == "resource"
-                    && !url::Url::parse(value).is_ok_and(|url| url.fragment().is_none())
-                {
-                    return Err(target_error("invalid resource indicator"));
-                }
-            }
-            first.clone()
-        };
+        }
         if audience != subject.audience {
             return Err(target_error("subject has no authorization for this target"));
         }

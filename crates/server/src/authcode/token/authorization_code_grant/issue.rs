@@ -2,17 +2,15 @@ use super::super::{access_token_expires_at, BearerAccessTokenMint, TokenIssuer};
 use super::context::{PreparedAuthorizationCodeGrantIssue, ValidatedAuthorizationCodeGrant};
 use super::error::TokenGrantError;
 use super::issuance;
-use crate::authcode::types::{
-    AccessToken, AuthorizationCode, CnfClaim, SenderBinding, TokenResponse,
-};
+use crate::authcode::types::{AccessToken, CnfClaim, SenderBinding, TokenResponse};
 use std::time::SystemTime;
 
 fn code_access_token_ttl(
-    code: &AuthorizationCode,
+    exchange_grant: Option<&crate::policy::token_exchange::ExchangeGrant>,
     now: SystemTime,
     configured_ttl: u64,
 ) -> Result<u64, TokenGrantError> {
-    if let Some(grant) = &code.exchange_grant {
+    if let Some(grant) = exchange_grant {
         Ok(grant
             .root()
             .and_then(|root| root.expires_at.duration_since(now).ok())
@@ -74,45 +72,11 @@ impl TokenIssuer {
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
 
-        let now = SystemTime::now();
-        let expires_in = code_access_token_ttl(&code, now, self.access_token_ttl_secs)?;
-        let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
-            TokenGrantError::server("access token expiry is outside representable time")
-        })?;
         let audience = self.access_token_audience(
             &code.client_id,
             code.scope.as_deref(),
             selected_resource.as_deref(),
         );
-        let access_token_str = self
-            .issue_access_token_value(BearerAccessTokenMint {
-                subject: &code.user_id,
-                client_id: &code.client_id,
-                scope: code.scope.as_deref(),
-                audience: &audience,
-                issued_at: now,
-                expires_in,
-                auth_time_epoch_secs: Some(code.auth_time_epoch_secs),
-                acr: code.acr.as_deref(),
-                cnf,
-            })
-            .map_err(TokenGrantError::server)?;
-        let access_token = AccessToken {
-            exchange_root: code
-                .exchange_grant
-                .as_ref()
-                .and_then(|grant| grant.root())
-                .cloned(),
-            token: access_token_str.clone(),
-            token_type: AccessToken::type_for_confirmation(cnf).to_string(),
-            client_id: code.client_id.clone(),
-            user_id: code.user_id.clone(),
-            scope: code.scope.clone(),
-            expires_in,
-            created_at: now,
-            cnf: cnf.cloned(),
-        };
-
         let issue_context = issuance::GrantIssueContext {
             client_id: &code.client_id,
             user_id: &code.user_id,
@@ -138,6 +102,47 @@ impl TokenIssuer {
             .as_ref()
             .map(|token| token.token.clone());
 
+        // Target authority needs a refresh lineage. Keep the code-time snapshot,
+        // but publish it only with the parent that actually receives that snapshot.
+        // No-parent access tokens retain only the legacy same-audience capability.
+        let exchange_grant = refresh_token_record
+            .as_ref()
+            .and_then(|refresh| refresh.exchange_grant.clone());
+
+        let now = SystemTime::now();
+        let expires_in =
+            code_access_token_ttl(exchange_grant.as_ref(), now, self.access_token_ttl_secs)?;
+        let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
+            TokenGrantError::server("access token expiry is outside representable time")
+        })?;
+        let access_token_str = self
+            .issue_access_token_value(BearerAccessTokenMint {
+                subject: &code.user_id,
+                client_id: &code.client_id,
+                scope: code.scope.as_deref(),
+                audience: &audience,
+                issued_at: now,
+                expires_in,
+                auth_time_epoch_secs: Some(code.auth_time_epoch_secs),
+                acr: code.acr.as_deref(),
+                cnf,
+            })
+            .map_err(TokenGrantError::server)?;
+        let access_token = AccessToken {
+            exchange_root: exchange_grant
+                .as_ref()
+                .and_then(|grant| grant.root())
+                .cloned(),
+            token: access_token_str.clone(),
+            token_type: AccessToken::type_for_confirmation(cnf).to_string(),
+            client_id: code.client_id.clone(),
+            user_id: code.user_id.clone(),
+            scope: code.scope.clone(),
+            expires_in,
+            created_at: now,
+            cnf: cnf.cloned(),
+        };
+
         Ok(PreparedAuthorizationCodeGrantIssue {
             code_str,
             authorization_code_commit_payload,
@@ -150,7 +155,7 @@ impl TokenIssuer {
             acr: code.acr,
             auth_session_id: code.auth_session_id,
             local_profile: code.local_profile,
-            exchange_grant: code.exchange_grant,
+            exchange_grant,
             claim_release_policy: code.claim_release_policy,
             nonce: code.nonce,
             openid_requested,

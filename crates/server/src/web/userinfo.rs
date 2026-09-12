@@ -18,7 +18,6 @@ use axum::{
 };
 use std::net::SocketAddr;
 
-use crate::middleware::DpopBinding;
 use crate::util;
 
 pub(super) async fn userinfo_get(
@@ -95,11 +94,9 @@ pub(super) async fn userinfo_get(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => userinfo_error_response(
-            err,
-            issuer_base,
-            userinfo_challenge_scheme(&auth_header, binding.as_ref()),
-        ),
+        Err(err) => {
+            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
+        }
     }
 }
 
@@ -155,15 +152,12 @@ fn userinfo_auth_header(
     }
 }
 
-fn userinfo_challenge_scheme(
-    auth_header: &str,
-    dpop_binding: Option<&DpopBinding>,
-) -> &'static str {
+fn userinfo_challenge_scheme(auth_header: &str) -> &'static str {
     let scheme_is_dpop = auth_header
         .split_whitespace()
         .next()
         .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
-    if scheme_is_dpop || dpop_binding.is_some() {
+    if scheme_is_dpop {
         "DPoP"
     } else {
         "Bearer"
@@ -291,10 +285,8 @@ pub(super) async fn userinfo_post(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => userinfo_error_response(
-            err,
-            issuer_base,
-            userinfo_challenge_scheme(&auth_header, binding.as_ref()),
-        ),
+        Err(err) => {
+            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
+        }
     }
 }

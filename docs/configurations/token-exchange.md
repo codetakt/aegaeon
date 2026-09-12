@@ -1,6 +1,6 @@
 # Token exchange targets
 
-Last updated: 2026-09-10
+Last updated: 2026-09-12
 
 Status: current implementation baseline
 
@@ -27,6 +27,11 @@ absolute URI without a fragment; queries are allowed. Repeated parameters and
 both kinds of selector may identify the same target. Unknown selectors and
 requests naming distinct targets return `invalid_target`. These are profile
 restrictions, not a claim that RFC 8693 prohibits multiple target services.
+
+Legacy same-audience exchange requires a nonempty explicit `audience` matching
+the subject's audience. Omitting it, or supplying only `resource`, returns
+`invalid_target`; the client ID is not used as an implicit target. This is an
+Aegaeon restriction: RFC 8693 section 2.1 marks these selectors as optional.
 
 Successful responses include `access_token`, `issued_token_type`, `token_type`,
 `expires_in`, and the actual target `scope`. DPoP-bound output uses `DPoP` as its
@@ -91,6 +96,12 @@ records without this snapshot cannot acquire authority under a newer policy;
 they retain only the existing same-audience exchange behavior. Policy changes
 require a new authorization before snapshot-based exchange can continue.
 
+If code redemption does not issue a refresh token, the access token receives
+neither the captured target authority nor its revocation root. This includes
+grants without `offline_access` and clients whose refresh issuance is disabled.
+Such tokens can use only explicit same-audience exchange; adding a target policy
+later does not grant them permission to change audience.
+
 A refresh token retains its original grant. A narrowed refreshed access token
 receives only the exchange permissions whose original source conditions still
 hold. Exchanging that token cannot restore omitted permissions. Exchange output
@@ -147,5 +158,5 @@ revocation races, lost child indexes and cleanup failure. PostgreSQL/Redis compo
 tests cover policy reload, unchanged-policy authority, no authority backfill and
 foreign-environment rejection. Consent-route regressions repeat fresh code redemption
 and refresh with two, three and nested custom claims. Their authenticated sessions
-are fixtures; deployed browser login, real BFF/API use and process restart still
-require E2E acceptance.
+are fixtures; deployed authorization flows and process restart still require
+E2E acceptance.

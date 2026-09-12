@@ -20,6 +20,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
 mod legacy_commit;
+mod legacy_request;
 
 const CLIENT: &str = "target-exchange-client";
 const SECRET: &str = "integration-test-only-client-secret";

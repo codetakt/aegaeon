@@ -30,6 +30,14 @@ A DPoP-bound token presented with Bearer authentication is rejected even when
 the request also includes a valid proof. A Bearer `invalid_token` challenge for
 that attempted scheme is consistent with RFC 9449 §7.2. Certificate-bound
 tokens use Bearer authentication with `cnf.x5t#S256`, as specified by RFC 8705.
+The scheme check also applies to the upstream-refresh resource. UserInfo GET
+and POST preserve the attempted scheme in the challenge even when a proof is
+present. A DPoP scheme without its proof returns `invalid_dpop_proof` for every
+header separator accepted by the resource parser.
+
+Device-code responses and saved access-token records use the confirmation
+actually issued: `DPoP` for `cnf.jkt`, and `Bearer` for certificate-bound or
+unbound tokens. Clients must use the returned scheme when presenting the token.
 
 ## Mixed DPoP and certificate-bound clients
 

@@ -173,6 +173,7 @@ rfc_6749:
   - crates/server/src/web/token_lifecycle/introspection.rs
   - crates/server/src/authcode/token/tests/sender_response.rs
   - crates/server/src/web/token_exchange/tests/sender_flow.rs
+  - crates/server/src/web/token_device_code/sender_contract_tests.rs
   ci_check: token-response-format
   status: verified
   runtime_link: crates/server/src/authcode/token.rs
@@ -184,6 +185,7 @@ rfc_6749:
   notes:
   - Token endpoint responses include token_type (Bearer/DPoP).
   - Code and refresh regressions bind the response type and lifetime to the issued record; the cited abstract helper does not model DPoP HTTP serialization.
+  - "Device-code issuance derives both the response and persisted token_type from cnf: DPoP for jkt, Bearer for certificate-bound or unbound tokens. The runtime regression does not broaden the cited formal model."
 - id: 6749-009
   section: '5.2'
   requirement: MUST
@@ -1738,9 +1740,14 @@ rfc_9449:
     invariant: token_exchange_allowed
   tests:
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests.rs
+  - crates/server/src/web/oauth_conformance_tests/sender_contract.rs
   ci_check: dpop-token-binding
   status: partial
   runtime_link: crates/server/src/middleware/dpop.rs
+  notes:
+  - "Protected resource, UserInfo and upstream-refresh authentication reject Bearer presentation of a DPoP-bound token even with a matching proof. The challenge retains the attempted scheme (RFC 9449 section 7.2)."
+  - "Request/metadata regression tests use the unit-test DPoP claims verifier; they do not establish production signature-verifier conformance. This row remains partial."
 - id: 9449-011
   section: '8'
   requirement: SHOULD
@@ -3061,6 +3068,8 @@ rfc_8693:
   tests:
   - crates/server/src/policy/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests.rs
+  - crates/server/src/web/token_exchange/tests/legacy_request.rs
+  - crates/server/src/authcode/token/tests/exchange_lineage.rs
   status: partial
   runtime_link: crates/server/src/web/token_exchange.rs
   trace:
@@ -3069,6 +3078,7 @@ rfc_8693:
   applies_to:
   - as
   notes:
+  - "Aegaeon requires an explicit matching audience for legacy exchange; RFC 8693 marks selectors optional. No-parent issuance publishes neither target authority nor its root, while an actually issued refresh parent retains the code-time snapshot."
   - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
 
 - id: 8693-203
