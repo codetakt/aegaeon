@@ -202,10 +202,45 @@ independence from the caller's function; PostgreSQL name resolution and SHA-256
 implementation are outside that lemma. No compliance row is promoted on the
 strength of this model.
 
-## Configuration activation membership
+## Token exchange target authority
 
-`fstar/management/Configuration.Membership.fst` is `simplified`. It models
-atomic membership transfer, stale-base refusal, failed-activation rollback and
-preservation of credential provenance, expiry and lifecycle. The model does not
-establish correspondence with Rust/SQL, database locking or runtime readers.
-No compliance row is promoted on the strength of this model.
+`fstar/token/TokenExchange.TargetPolicy.fst` is `simplified`. It proves decisions
+on canonical target identities, explicit original/current capability sets,
+source-scope attenuation, and monotone revocation-root denial. String/URI parsing,
+policy serialization and digest construction, snapshot persistence, real-time
+rounding, and Redis implementation correspondence remain separate obligations.
+The companion Tamarin target model is a fixed read-only temporal slice with
+abstract client and sender authentication. Its online-use property requires a
+root check at use time and says nothing about offline JWT validation.
+
+The new target-aware behavior supersedes raw audience equality and raw scope
+subset as global exchange requirements. The legacy bearer models still describe
+the same-audience mode. Target-aware rows remain partial until their concrete
+correspondence and full model obligations are discharged.
+
+## Exchange and configuration composition
+
+`TokenExchange.GrantLaws`, `TokenExchange.Lifetime`,
+`Configuration.Membership`, and `TokenExchange.Integration` are `simplified`.
+They prove general capability attenuation, an integer-nanosecond lifetime bound,
+membership preservation across an abstract atomic activation, and composition
+with immutable captured authority, refresh-parent target precedence and root
+denial. A non-exchange configuration change can preserve exchange-policy identity;
+a changed exchange-policy identity rejects the old captured grant.
+
+These models do not refine Rust ownership, clock conversion, PostgreSQL
+transactions or runtime reload, Redis scripts or their error prefixes. Production
+endpoint and database regressions provide separate test evidence. Neither those
+tests nor these model proofs establish machine-checked implementation
+correspondence, and no compliance row is promoted on their strength.
+
+The lifetime model accepts signed integer timestamps, including dates before the
+Unix epoch. `server-exchange-lifetime` separately checks the actual
+`token_exchange_expires_in` Rust helper over every i64 second field, valid
+nanosecond field and positive u64 TTL on the pinned x86_64 Linux target. It uses
+real `SystemTime` construction and subtraction without stubs, and compares the
+result with the seconds/borrow oracle proved in `TokenExchange.Lifetime`.
+This helper proof does not establish JWT NumericDate conversion, real-clock
+behavior, Redis numeric/time semantics, root horizons or grant composition.
+The model remains `simplified`; machine-checked implementation correspondence
+for the complete token lifecycle remains open.

@@ -1,12 +1,14 @@
 //! Secure storage for authorization codes and tokens with snapshot consistency
 
 mod code_facade;
+mod exchange_commit;
 mod grant_commit;
 mod redis_backend;
 mod redis_support;
 mod refresh_rotation;
 mod revocation;
 mod token_consistency;
+pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
 mod token_outcome;
 mod token_records;
 mod token_state;

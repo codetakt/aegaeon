@@ -2,8 +2,28 @@ use super::super::{access_token_expires_at, BearerAccessTokenMint, TokenIssuer};
 use super::context::{PreparedAuthorizationCodeGrantIssue, ValidatedAuthorizationCodeGrant};
 use super::error::TokenGrantError;
 use super::issuance;
-use crate::authcode::types::{AccessToken, CnfClaim, SenderBinding, TokenResponse};
+use crate::authcode::types::{
+    AccessToken, AuthorizationCode, CnfClaim, SenderBinding, TokenResponse,
+};
 use std::time::SystemTime;
+
+fn code_access_token_ttl(
+    code: &AuthorizationCode,
+    now: SystemTime,
+    configured_ttl: u64,
+) -> Result<u64, TokenGrantError> {
+    if let Some(grant) = &code.exchange_grant {
+        Ok(grant
+            .root()
+            .and_then(|root| root.expires_at.duration_since(now).ok())
+            .map(|duration| duration.as_secs())
+            .filter(|seconds| *seconds > 0)
+            .ok_or_else(|| TokenGrantError::server("authorization exchange lineage expired"))?
+            .min(configured_ttl))
+    } else {
+        Ok(configured_ttl)
+    }
+}
 
 impl TokenIssuer {
     pub(super) fn issue_validated_authorization_code_grant(
@@ -54,8 +74,8 @@ impl TokenIssuer {
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
 
-        let expires_in = self.access_token_ttl_secs;
         let now = SystemTime::now();
+        let expires_in = code_access_token_ttl(&code, now, self.access_token_ttl_secs)?;
         let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
             TokenGrantError::server("access token expiry is outside representable time")
         })?;
@@ -78,6 +98,11 @@ impl TokenIssuer {
             })
             .map_err(TokenGrantError::server)?;
         let access_token = AccessToken {
+            exchange_root: code
+                .exchange_grant
+                .as_ref()
+                .and_then(|grant| grant.root())
+                .cloned(),
             token: access_token_str.clone(),
             token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: code.client_id.clone(),
@@ -98,6 +123,7 @@ impl TokenIssuer {
             acr: code.acr.as_deref(),
             auth_session_id: code.auth_session_id.as_deref(),
             local_profile: code.local_profile.as_ref(),
+            exchange_grant: code.exchange_grant.as_ref(),
             claim_release_policy: code.claim_release_policy.as_ref(),
             nonce: code.nonce.as_deref(),
         };
@@ -124,6 +150,7 @@ impl TokenIssuer {
             acr: code.acr,
             auth_session_id: code.auth_session_id,
             local_profile: code.local_profile,
+            exchange_grant: code.exchange_grant,
             claim_release_policy: code.claim_release_policy,
             nonce: code.nonce,
             openid_requested,

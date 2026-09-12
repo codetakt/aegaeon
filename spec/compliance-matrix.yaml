@@ -171,6 +171,8 @@ rfc_6749:
   tests:
   - crates/server/src/authcode/token/tests/token_exchange.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
+  - crates/server/src/authcode/token/tests/sender_response.rs
+  - crates/server/src/web/token_exchange/tests/sender_flow.rs
   ci_check: token-response-format
   status: verified
   runtime_link: crates/server/src/authcode/token.rs
@@ -181,6 +183,7 @@ rfc_6749:
     test: crates/server/src/authcode/token/tests/token_exchange.rs
   notes:
   - Token endpoint responses include token_type (Bearer/DPoP).
+  - Code and refresh regressions bind the response type and lifetime to the issued record; the cited abstract helper does not model DPoP HTTP serialization.
 - id: 6749-009
   section: '5.2'
   requirement: MUST
@@ -2849,7 +2852,7 @@ rfc_8693:
   - as
   notes:
   - "Implemented behind the active management policy `allowedGrantTypes`; metadata advertises the grant type only when enabled."
-  - "MVP profile: subject_token_type=access_token (Aegaeon-issued), actor_token unsupported, audience parameter unsupported, target resource must match subject_token audience (no audience changes)."
+  - "Access-token subjects and outputs only; actor tokens unsupported. Registered audience/resource targets require issuer-owned scope mappings and a retained original authorization snapshot. See docs/configurations/token-exchange.md."
   - "HTTP tests cover required error mapping + response fields: crates/server/src/web/token_exchange_tests.rs."
   - "Formal verification plan: docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md (RFC 8693 section)."
   - "Client-side token exchange usage is tracked in the OAuth client/RP roadmap (outside this repo)."
@@ -2911,7 +2914,7 @@ rfc_8693:
   tests:
   - crates/server/src/util.rs
   - crates/server/src/web/token_exchange_tests.rs
-  status: verified
+  status: partial
   runtime_link: crates/server/src/util.rs
   trace:
     kind: guard
@@ -2921,7 +2924,8 @@ rfc_8693:
   applies_to:
   - as
   notes:
-  - "MVP profile: support a single resource value; reject multiple target services with invalid_target (RFC 8693 §2.1.1)."
+  - "Legacy URI guard evidence does not establish correspondence for the new policy alias resolver; target-policy validation and HTTP negatives cover that path empirically."
+  - "All audience/resource occurrences must resolve to one registered target; distinct target services are rejected with invalid_target (RFC 8693 §2.1.1)."
 
 - id: 8693-104
   section: '2.1'
@@ -3027,51 +3031,45 @@ rfc_8693:
 
 - id: 8693-201
   requirement: MUST
-  description: (Aegaeon profile) Token exchange MUST NOT allow scope escalation; issued token scopes MUST be a subset of the subject_token scopes.
-  module: crates/server/src/web/mod.rs
+  description: Token exchange must keep target-specific permissions within the original and current subject authority; source and target scope names need not be identical.
+  module: crates/server/src/web/token_exchange.rs
   proof:
   - type: fstar
-    file: fstar/token/Bearer.Policy.fst
-    lemma: lemma_token_exchange_scope_subset
-    coverage: token_exchange_scope_subset
-  - type: tamarin
-    file: proofs/tamarin/token_exchange/token_exchange_security.spthy
-    lemma: token_exchange_scope_subset
+    file: fstar/token/TokenExchange.TargetPolicy.fst
+    lemma: lemma_output_binds_authority
   tests:
-  - crates/server/src/web/token_exchange_tests.rs
-  status: verified
-  runtime_link: crates/server/src/web/mod.rs
+  - crates/server/src/policy/token_exchange/tests.rs
+  - crates/server/src/web/token_exchange/tests.rs
+  status: partial
+  runtime_link: crates/server/src/web/token_exchange.rs
   trace:
-    kind: guard
-    fstar: fstar/token/Bearer.Policy.fst#lemma_token_exchange_scope_subset
-    rust: crates/server/src/web/token_exchange/resolution.rs#resolve_token_exchange_scope
-    test: crates/server/src/authcode/token/tests/token_exchange.rs
+    kind: exempt
+    note: "Abstract target-authority model accepted; concrete parsing, snapshot and store correspondence remain open."
   applies_to:
   - as
+  notes:
+  - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
 
 - id: 8693-202
   requirement: MUST
-  description: (Aegaeon profile) Token exchange MUST preserve the target audience (resource); issued token audience MUST match the subject_token audience.
-  module: crates/server/src/web/mod.rs
+  description: Target changes require an explicit issuer-owned client/source/target rule and original authorization; missing snapshots permit only legacy same-audience exchange.
+  module: crates/server/src/web/token_exchange.rs
   proof:
   - type: fstar
-    file: fstar/token/Bearer.Policy.fst
-    lemma: lemma_token_exchange_audience_stable
-    coverage: token_exchange_audience_stable
-  - type: tamarin
-    file: proofs/tamarin/token_exchange/token_exchange_security.spthy
-    lemma: token_exchange_preserves_audience_and_client
+    file: fstar/token/TokenExchange.TargetPolicy.fst
+    lemma: lemma_explicit_route_required
   tests:
-  - crates/server/src/web/token_exchange_tests.rs
-  status: verified
-  runtime_link: crates/server/src/web/mod.rs
+  - crates/server/src/policy/token_exchange/tests.rs
+  - crates/server/src/web/token_exchange/tests.rs
+  status: partial
+  runtime_link: crates/server/src/web/token_exchange.rs
   trace:
-    kind: guard
-    fstar: fstar/token/Bearer.Policy.fst#lemma_token_exchange_audience_stable
-    rust: crates/server/src/web/token_exchange/resolution.rs#resolve_token_exchange_audience
-    test: crates/server/src/authcode/token/tests/token_exchange.rs
+    kind: exempt
+    note: "Abstract target-authority model accepted; concrete parsing, snapshot and store correspondence remain open."
   applies_to:
   - as
+  notes:
+  - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
 
 - id: 8693-203
   requirement: MUST
@@ -3099,15 +3097,18 @@ rfc_8693:
 
 - id: 8693-204
   requirement: MUST
-  description: (Aegaeon profile) Token exchange MUST NOT extend the subject_token lifetime and MUST cap issued tokens to 3600 seconds.
+  description: (Aegaeon profile) Token exchange MUST NOT extend the subject_token lifetime and MUST cap issued tokens to the configured access-token lifetime.
   module: crates/server/src/web/mod.rs
   proof:
   - type: fstar
     file: fstar/token/Bearer.fst
     lemma: lemma_token_exchange_exp_not_extended
     coverage: token_exchange_expiry_bound
+  - type: kani
+    file: crates/server/src/web/token_exchange/resolution/kani_proofs.rs
+    harness: verify_exchange_lifetime_linux
   tests:
-  - crates/server/src/web/mod.rs
+  - crates/server/src/web/token_exchange_tests/expiry.rs
   status: verified
   runtime_link: crates/server/src/web/mod.rs
   trace:
@@ -3115,8 +3116,30 @@ rfc_8693:
     fstar: fstar/token/Bearer.fst#lemma_token_exchange_exp_not_extended
     rust: crates/server/src/web/token_exchange/resolution.rs#token_exchange_expires_in
     test: crates/server/src/web/token_exchange_tests/expiry.rs
+  notes:
+  - "Direct Linux SystemTime helper check covers every i64 second, valid nanosecond and positive u64 TTL. JWT/Redis/clock/root composition is not established by this slice."
   applies_to:
   - as
+
+- id: 8693-205
+  requirement: MUST
+  description: Snapshot-based exchange and online token use must respect retained root denial independently of bounded child cleanup.
+  module: crates/server/src/authcode/store/exchange_commit.rs
+  proof:
+  - type: fstar
+    file: fstar/token/TokenExchange.TargetPolicy.fst
+    lemma: lemma_root_denial_independent_of_cleanup
+  - type: tamarin
+    file: proofs/tamarin/token_exchange/token_exchange_targets.spthy
+    lemma: revocation_stops_online_use
+  tests:
+  - crates/server/src/authcode/store/tests/exchange_targets.rs
+  status: partial
+  runtime_link: crates/server/src/authcode/store/redis_backend/exchange.rs
+  applies_to:
+  - as
+  notes:
+  - "Tamarin models online use with an atomic root check and a fixed read-only capability; no offline JWT revocation or concrete implementation correspondence is claimed."
 
 rfc_8705:
 - id: 8705-001

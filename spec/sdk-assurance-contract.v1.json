@@ -370,8 +370,8 @@
     {
       "id": "management-openapi",
       "path": "generated/openapi/aegaeon-management-api.v1.json",
-      "edition": "Generated interface snapshot; 2026-09-07; reconciliation and independent semantics required",
-      "sha256": "06225a8ae7cdd753e768b05f43b21ec50e243af85d2964bdeaadf7691a6cd7b4"
+      "edition": "Management API v1 with token exchange policy configuration",
+      "sha256": "3cd799fc1cce58af0def845223a4f1d35b32df3874e39aa7866dce1d4a3a5b6b"
     }
   ],
   "specification_groups": [

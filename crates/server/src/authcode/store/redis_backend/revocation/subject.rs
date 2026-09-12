@@ -62,6 +62,15 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
+            for token in self.subject_refresh_tokens(conn, subject)? {
+                if let Some(refresh) =
+                    Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
+                {
+                    if refresh.user_id == subject {
+                        self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
+                    }
+                }
+            }
             let mut count = 0usize;
 
             for token in self.subject_access_tokens(conn, subject)? {

@@ -38,6 +38,7 @@ impl ServerConfig {
         self.enable_private_key_jwt = policy.private_key_jwt_enabled;
         self.enable_jwt_bearer_grant = policy_allows_grant(policy, JWT_BEARER_GRANT_TYPE);
         self.allow_jwt_bearer_client_subject = policy.jwt_bearer_allow_client_subject;
+        self.token_exchange.clone_from(&policy.token_exchange);
         self.enable_token_exchange = policy_allows_grant(policy, TOKEN_EXCHANGE_GRANT_TYPE);
         self.enable_device_authz = policy_allows_grant(policy, DEVICE_CODE_GRANT_TYPE);
         self.allowed_grant_types = canonical_supported_grant_types(&policy.allowed_grant_types)
@@ -110,6 +111,21 @@ impl ServerConfig {
 pub(crate) fn validate_management_policy_for_runtime(
     policy: &PolicyDocument,
 ) -> Result<(), ConfigError> {
+    policy
+        .token_exchange
+        .validate()
+        .map_err(|reason| ConfigError::InvalidValue {
+            key: "tokenExchange".into(),
+            value: "[policy]".into(),
+            reason: reason.into(),
+        })?;
+    if !policy.token_exchange.rules.is_empty() && !policy.retain_refresh_chain {
+        return Err(ConfigError::InvalidValue {
+            key: "retainRefreshChain".into(),
+            value: "false".into(),
+            reason: "token exchange targets require refresh lineage".into(),
+        });
+    }
     validate_numeric_policy_fields(policy)?;
     validate_auth_max_sessions_policy(policy)?;
     crate::client_registry::JwksRuntimePolicy::validate_management_policy(policy)?;

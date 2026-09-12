@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct PolicyPatchRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_exchange: Option<crate::policy::token_exchange::TokenExchangePolicy>,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub base_configuration_version_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

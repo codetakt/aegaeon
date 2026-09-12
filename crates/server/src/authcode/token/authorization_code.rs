@@ -5,6 +5,7 @@ use crate::authcode::code_store::StoreCodeError;
 use crate::authcode::store::AuthorizationCodeOneTimeInputCommit;
 use crate::authcode::types::{AuthorizationCode, AuthorizationCodeInput, AuthorizationRequest};
 use crate::end_user_profiles::OidcProfileClaims;
+use crate::policy::token_exchange::ExchangeGrant;
 use crate::upstream::UpstreamClaimReleasePolicy;
 use std::time::SystemTime;
 use thiserror::Error;
@@ -266,7 +267,7 @@ impl TokenIssuer {
         };
 
         let redirect_uri = req.redirect_uri.clone();
-        let code = AuthorizationCode::new_with_ttl(
+        let mut code = AuthorizationCode::new_with_ttl(
             AuthorizationCodeInput {
                 resource,
                 authorization_details: req.authorization_details,
@@ -285,8 +286,34 @@ impl TokenIssuer {
             self.authorization_code_ttl_secs,
         );
 
+        code.exchange_grant = self.capture_code_exchange_authority(&code);
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
+    }
+
+    fn capture_code_exchange_authority(&self, code: &AuthorizationCode) -> Option<ExchangeGrant> {
+        let audience = self.access_token_audience(
+            &code.client_id,
+            code.scope.as_deref(),
+            code.resource.as_deref(),
+        );
+        let captured = self.issuer.as_deref().and_then(|issuer| {
+            self.exchange_policy.capture(
+                issuer,
+                &code.client_id,
+                &code.user_id,
+                &audience,
+                &super::split_scopes(code.scope.as_deref()),
+            )
+        });
+        let horizon = self
+            .authorization_code_ttl_secs
+            .checked_add(self.refresh_token_ttl_secs)
+            .and_then(|seconds| seconds.checked_add(self.access_token_ttl_secs))
+            .and_then(|seconds| {
+                SystemTime::now().checked_add(std::time::Duration::from_secs(seconds))
+            });
+        captured.and_then(|grant| horizon.map(|deadline| grant.with_lineage_deadline(deadline)))
     }
 
     /// Issue authorization code (strict mode): PKCE is always required.

@@ -27,5 +27,6 @@ pub(super) fn bind_policy_update_fields<'q>(
     let query = allowlists::bind_allowlists_ttls_and_acr_policy(query, policy, request_id)?;
     let query = structural::bind_structural_self_check_policy(query, policy, request_id)?;
     let query = capacity::bind_cache_capacity_policy(query, policy, request_id)?;
-    credential_lifecycle::bind_credential_lifecycle_policy(query, policy, request_id)
+    let query = credential_lifecycle::bind_credential_lifecycle_policy(query, policy, request_id)?;
+    Ok(query.bind(sqlx::types::Json(&policy.token_exchange)))
 }

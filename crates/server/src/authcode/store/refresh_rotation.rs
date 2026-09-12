@@ -69,10 +69,12 @@ impl TokenStore {
             if let Some(successor) = state.refresh_successors.remove(&refresh) {
                 stack.push(successor);
             }
-            let refresh_expires_at = state
-                .refresh_tokens
-                .remove(&refresh)
-                .map(|token| token.expires_at);
+            let refresh_expires_at = state.refresh_tokens.remove(&refresh).map(|token| {
+                if let Some(root) = token.exchange_grant.as_ref().and_then(|grant| grant.root()) {
+                    Self::insert_revoked_locked(state, root.id.clone(), root.expires_at, now);
+                }
+                token.expires_at
+            });
             if let Some(expires_at) = refresh_expires_at {
                 Self::insert_revoked_locked(state, refresh.clone(), expires_at, now);
             }
@@ -127,7 +129,16 @@ impl TokenStore {
                     .map_err(|_| RefreshRotationError::BackendUnavailable)?;
                 let now = SystemTime::now();
                 Self::cleanup_revoked_locked(&mut state, now);
-                if Self::is_revoked_locked(&state, token_str, now) {
+                if Self::is_revoked_locked(&state, token_str, now)
+                    || state
+                        .refresh_tokens
+                        .get(token_str)
+                        .and_then(|token| token.exchange_grant.as_ref())
+                        .and_then(|grant| grant.root())
+                        .is_some_and(|root| {
+                            now >= root.expires_at || Self::is_revoked_locked(&state, &root.id, now)
+                        })
+                {
                     (Err(RefreshRotationError::Invalid), None)
                 } else if let Some(token) = state.refresh_tokens.get(token_str).cloned() {
                     if token.rotated {
@@ -215,7 +226,16 @@ impl TokenStore {
                     .map_err(|_| RefreshRotationError::BackendUnavailable)?;
                 let now = SystemTime::now();
                 Self::cleanup_revoked_locked(&mut state, now);
-                if Self::is_revoked_locked(&state, previous_refresh, now) {
+                if Self::is_revoked_locked(&state, previous_refresh, now)
+                    || state
+                        .refresh_tokens
+                        .get(previous_refresh)
+                        .and_then(|token| token.exchange_grant.as_ref())
+                        .and_then(|grant| grant.root())
+                        .is_some_and(|root| {
+                            now >= root.expires_at || Self::is_revoked_locked(&state, &root.id, now)
+                        })
+                {
                     (Err(RefreshRotationError::Invalid), None)
                 } else if let Some(previous) = state.refresh_tokens.get(previous_refresh).cloned() {
                     if previous.rotated {
@@ -229,8 +249,9 @@ impl TokenStore {
                         state.refresh_successors.remove(previous_refresh);
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Expired), None)
-                    } else if scope_set(previous.scope.as_deref())
-                        != scope_set(new_refresh.scope.as_deref())
+                    } else if previous.exchange_grant != new_refresh.exchange_grant
+                        || scope_set(previous.scope.as_deref())
+                            != scope_set(new_refresh.scope.as_deref())
                     {
                         (Err(RefreshRotationError::InconsistentGrant), None)
                     } else {

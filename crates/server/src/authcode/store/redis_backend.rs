@@ -1,6 +1,8 @@
 mod cleanup;
 mod collision;
 mod commit_result;
+mod exchange;
+mod exchange_root;
 mod indexes;
 mod reads;
 mod revocation;

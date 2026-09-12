@@ -123,6 +123,7 @@ async fn approved_device_grant_response(
         }
     };
     let access = AccessToken {
+        exchange_root: None,
         token: access_token.clone(),
         token_type: "Bearer".to_string(),
         client_id: grant.client_id.clone(),

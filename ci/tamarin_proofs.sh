@@ -98,6 +98,7 @@ PROOFS=(
 	# --- stepup ---
 	"stepup/stepup_soundness.spthy:token_issuance_reachable,stepup_soundness"
 
+	"token_exchange/token_exchange_targets.spthy:registered_target,grant_origin,no_write_regrowth,root_revocation,revocation_stops_descendants,revocation_stops_online_use,distinct_target_reachable,repeated_narrowing_reachable"
 	# --- token_exchange ---
 	"token_exchange/token_exchange_security.spthy:"
 	"token_exchange_scope_subset,token_exchange_preserves_audience_and_client,"

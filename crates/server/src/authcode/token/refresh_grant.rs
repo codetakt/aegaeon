@@ -296,8 +296,21 @@ impl TokenIssuer {
         cnf: Option<&CnfClaim>,
         sender_binding: Option<&SenderBinding>,
     ) -> Result<IssuedRefreshGrant, RefreshGrantError> {
-        let expires_in = self.access_token_ttl_secs;
         let now = SystemTime::now();
+        let expires_in = if let Some(grant) = &refresh.exchange_grant {
+            let root = grant
+                .root()
+                .ok_or_else(|| invalid_grant("missing exchange lineage"))?;
+            root.expires_at
+                .duration_since(now)
+                .ok()
+                .map(|duration| duration.as_secs())
+                .filter(|seconds| *seconds > 0)
+                .ok_or_else(|| invalid_grant("exchange lineage expired"))?
+                .min(self.access_token_ttl_secs)
+        } else {
+            self.access_token_ttl_secs
+        };
         let expires_at = match access_token_expires_at(now, expires_in) {
             Ok(expires_at) => expires_at,
             Err(()) => {
@@ -325,6 +338,11 @@ impl TokenIssuer {
             }
         };
         let access_token = AccessToken {
+            exchange_root: refresh
+                .exchange_grant
+                .as_ref()
+                .and_then(|grant| grant.root())
+                .cloned(),
             token: access_token_str.clone(),
             token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: refresh.client_id.clone(),
@@ -356,6 +374,10 @@ impl TokenIssuer {
             expires_at,
             refresh_parent: Some(new_refresh.token.clone()),
         });
+        meta.exchange_grant = refresh
+            .exchange_grant
+            .as_ref()
+            .map(|grant| grant.attenuate(&meta.granted_scopes));
         meta.claim_release_policy = refresh.claim_release_policy.clone();
 
         Ok(IssuedRefreshGrant {

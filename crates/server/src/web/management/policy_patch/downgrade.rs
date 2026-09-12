@@ -236,6 +236,9 @@ pub(in crate::web::management) fn detect_security_downgrade(
     {
         downgrades.push("sender_constraint");
     }
+    if before.token_exchange != after.token_exchange && !after.token_exchange.rules.is_empty() {
+        downgrades.push("token_exchange");
+    }
     downgrades
 }
 

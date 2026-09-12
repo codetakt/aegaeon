@@ -196,6 +196,7 @@ fn revoking_access_token_with_unrepresentable_expiry_records_bounded_tombstone(
 ) -> Result<(), String> {
     let store = TokenStore::new_process_local_for_tests();
     let token = AccessToken {
+        exchange_root: None,
         token: "overflow-access".to_string(),
         token_type: "Bearer".to_string(),
         client_id: "client-A".to_string(),

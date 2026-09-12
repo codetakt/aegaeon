@@ -283,6 +283,7 @@ pub(crate) async fn cleanup_test_environment(
         "DELETE FROM aegaeon.dynamic_client_registrations WHERE environment_id = $1",
         "DELETE FROM aegaeon.clients WHERE environment_id = $1",
         "DELETE FROM aegaeon.oauth_profiles WHERE environment_id = $1",
+        "DELETE FROM aegaeon.environment_policies WHERE environment_id = $1",
     ] {
         sqlx::query(sql)
             .bind(env.environment_id)

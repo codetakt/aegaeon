@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -100,6 +101,25 @@ class ServerContainerDriverTests(unittest.TestCase):
                 up = [r["args"] for r in records if r["tool"] == "docker" and "up" in r["args"]]
                 self.assertEqual(len(up), 1)
                 self.assertEqual(up[0][-1], scope)
+
+    def test_redis_uses_only_the_selected_test_redis(self) -> None:
+        records = self.run_scope("redis")
+        calls = [r for r in records if CASES[0] in self.selected(r)]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["urls"], dict.fromkeys(URL_KEYS, "redis://127.0.0.1:16579/0"))
+
+    def test_declared_mixed_tests_use_the_mixed_lane(self) -> None:
+        declaration = re.compile(r'#\[ignore\s*=\s*"([^\"]*)"\]\s*(?:async\s+)?fn\s+(\w+)')
+        mixed = []
+        for source in (ROOT / "crates/server/src").rglob("*.rs"):
+            for reason, name in declaration.findall(source.read_text()):
+                description = reason.lower()
+                if "redis" in description and any(
+                    word in description for word in ("postgres", "database_url")
+                ):
+                    mixed.append(name)
+                    self.assertIn("shared_redis_", name, f"{source}: {reason}")
+        self.assertTrue(mixed, "mixed test inventory must not be empty")
 
 
 if __name__ == "__main__":

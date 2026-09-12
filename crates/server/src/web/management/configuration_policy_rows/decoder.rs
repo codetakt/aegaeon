@@ -12,6 +12,16 @@ impl<'a> PolicyRowDecoder<'a> {
         Self { row, request_id }
     }
 
+    pub(super) fn exchange_field(
+        &self,
+    ) -> Result<crate::policy::token_exchange::TokenExchangePolicy, Response> {
+        let sqlx::types::Json(policy) = self
+            .row
+            .try_get("token_exchange")
+            .map_err(|_| self.decode_error())?;
+        Ok(policy)
+    }
+
     pub(super) fn bool_field(&self, column: &str) -> Result<bool, Response> {
         self.row.try_get(column).map_err(|_| self.decode_error())
     }

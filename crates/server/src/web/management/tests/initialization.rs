@@ -9,6 +9,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod exchange_policy;
+mod exchange_reload;
 mod fingerprints;
 
 fn input() -> InitializationInput {

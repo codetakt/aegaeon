@@ -232,3 +232,18 @@ outcomes are the negative fixtures of the regression suite.
 
 This adapter covers the registered selection. It is not a general proof-result
 evaluator, an independent review, or the release assurance decision procedure.
+
+## Exchange lifetime helper
+
+The required `server-exchange-lifetime` group calls production
+`token_exchange_expires_in` with the pinned x86_64 Linux `SystemTime` implementation.
+It quantifies every i64 second field and valid nanosecond field for both timestamps,
+and every positive u64 configured TTL. Negative Unix timestamps and the full range
+of positive time differences are included. No helper or standard-library operation
+is replaced by a stub. Unwinding and memory-safety checks remain enabled.
+
+The expected result is a division-free i128 seconds/borrow calculation whose
+integer equivalence is proved by `TokenExchange.Lifetime`. Accepted output must be
+positive, respect configured TTL, and produce a representable expiry no later than
+the subject. The positive-TTL premise is explicit. This slice does not close JWT
+encoding, real clocks, Redis, root revocation, or complete exchange correspondence.
