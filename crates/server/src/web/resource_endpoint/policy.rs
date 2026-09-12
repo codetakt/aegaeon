@@ -158,6 +158,10 @@ pub(in crate::web) async fn process_resource_request(
     mtls_fingerprint: Option<&str>,
     issuer_base: &str,
 ) -> ResourceOutcome {
+    let dpop_scheme = auth_header
+        .as_deref()
+        .and_then(|value| value.split_whitespace().next())
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
     let normalized_auth = match normalize_resource_authorization_header(auth_header, issuer_base) {
         Ok(auth_header) => auth_header,
         Err(outcome) => return outcome,
@@ -174,6 +178,19 @@ pub(in crate::web) async fn process_resource_request(
         Ok(meta) => meta,
         Err(outcome) => return outcome,
     };
+    if matches!(
+        meta_preview.sender_binding,
+        Some(SenderBinding::DPoP { .. })
+    ) != dpop_scheme
+    {
+        return resource_error_with_mode(
+            issuer_base,
+            StatusCode::UNAUTHORIZED,
+            "invalid_token",
+            "authorization scheme does not match the token binding",
+            if dpop_scheme { "dpop" } else { "bearer" }.into(),
+        );
+    }
     enforce_resource_policy(
         validator,
         &normalized_auth,

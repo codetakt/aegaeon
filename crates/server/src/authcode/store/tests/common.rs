@@ -116,6 +116,7 @@ impl<'a> MakeWriter<'a> for CaptureMakeWriter {
 
 fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {
     AuthorizationCode {
+        exchange_grant: None,
         code: format!("code-{}", uuid::Uuid::new_v4()),
         client_id: "test-client".to_string(),
         redirect_uri: Some("https://example.com/callback".to_string()),
@@ -139,6 +140,7 @@ fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode
 
 fn make_access_token(token: &str) -> AccessToken {
     AccessToken {
+        exchange_root: None,
         token: token.to_string(),
         token_type: "Bearer".to_string(),
         client_id: "test-client".to_string(),

@@ -2,6 +2,7 @@
 mod admission;
 mod availability;
 mod reauthentication;
+mod repetition;
 mod request_objects;
 mod retention;
 use super::test_support::{
@@ -348,8 +349,14 @@ async fn invalid_binding(state: &AppState, sid: &str, token: &str) -> TestResult
         ("wrong-session", Some(state.issuer.as_str())),
         (sid, None),
     ] {
-        let (status, _) = send(state, cookie, "/auth/consent", Some(fields()), origin).await?;
+        let (status, body) = send(state, cookie, "/auth/consent", Some(fields()), origin).await?;
         assert!(status.is_client_error());
+        let error: serde_json::Value = serde_json::from_str(&body)?;
+        assert_eq!(error["error"], "invalid_request");
+        assert_eq!(
+            error["error_description"],
+            "consent request could not be validated; restart authorization"
+        );
     }
     let (status, _) = send(
         state,

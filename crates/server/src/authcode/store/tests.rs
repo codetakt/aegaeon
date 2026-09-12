@@ -9,3 +9,5 @@ include!("tests/state_nonce.rs");
 include!("tests/revocation_basic.rs");
 include!("tests/sender_binding.rs");
 include!("tests/revocation_cleanup.rs");
+
+mod exchange_targets;

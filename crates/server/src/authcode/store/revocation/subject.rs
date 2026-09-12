@@ -117,6 +117,14 @@ impl TokenStore {
                         meta.user_id == subject
                             && meta.expires_at > now
                             && !Self::is_revoked_locked(&state, meta.token_id.as_str(), now)
+                            && meta
+                                .exchange_grant
+                                .as_ref()
+                                .and_then(|grant| grant.root())
+                                .is_none_or(|root| {
+                                    now < root.expires_at
+                                        && !Self::is_revoked_locked(&state, &root.id, now)
+                                })
                     })
                     .cloned()
                     .collect())
@@ -157,6 +165,14 @@ impl TokenStore {
                             && token.expires_at > now
                             && !token.rotated
                             && !Self::is_revoked_locked(&state, token.token.as_str(), now)
+                            && token
+                                .exchange_grant
+                                .as_ref()
+                                .and_then(|grant| grant.root())
+                                .is_none_or(|root| {
+                                    now < root.expires_at
+                                        && !Self::is_revoked_locked(&state, &root.id, now)
+                                })
                     })
                     .cloned()
                     .collect())

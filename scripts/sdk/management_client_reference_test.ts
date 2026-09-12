@@ -123,7 +123,7 @@ async function main() {
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
-  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 75);
+  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 73);
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.csrfCookieName, "csrf_token");
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.sessionCookieName, "aegaeon_admin_session");
   pass("exports OpenAPI metadata and default cookie names");

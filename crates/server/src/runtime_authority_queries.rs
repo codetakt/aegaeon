@@ -1,12 +1,14 @@
-// pgcrypto is installed in aegaeon by the baseline migration. Bind that
-// function explicitly, independently of the connection search_path.
+// Core SHA-256 avoids depending on the schema of a preinstalled pgcrypto.
+// Preserve digest(text, 'sha256') bytes in the database encoding, and bind
+// every hash/encoding function independently of the connection search_path.
 pub(crate) const ACTIVE_RUNTIME_AUTHORITY_REVISION_FOR_ISSUER_HOST: &str = r"
 SELECT
   rt.configuration_version_id AS active_configuration_version_id,
-  encode(aegaeon.digest(rt.configuration_document::text, 'sha256'), 'hex')
+  pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+    rt.configuration_document::text, pg_catalog.getdatabaseencoding())), 'hex')
     AS active_configuration_document_fingerprint,
-  encode(
-    aegaeon.digest(
+  pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(
       COALESCE((
         SELECT jsonb_agg(projected.row_json ORDER BY projected.usage, projected.status, projected.kid, projected.id)::text
         FROM (
@@ -25,7 +27,8 @@ SELECT
               'status', rk.status::text,
               'retiring_expires_at', rk.retiring_expires_at,
               'public_jwk', rk.public_jwk,
-              'key_handle_sha256', encode(aegaeon.digest(rk.key_handle, 'sha256'), 'hex'),
+              'key_handle_sha256', pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+                rk.key_handle, pg_catalog.getdatabaseencoding())), 'hex'),
               'provider_configuration', rk.provider_configuration
             ) AS row_json
           FROM aegaeon.runtime_keys rk
@@ -36,12 +39,12 @@ SELECT
             )
         ) projected
       ), '[]'),
-      'sha256'
-    ),
+      pg_catalog.getdatabaseencoding()
+    )),
     'hex'
   ) AS active_runtime_key_set_fingerprint,
-  encode(
-    aegaeon.digest(
+  pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(
       COALESCE((
         SELECT jsonb_build_object(
           'token_hash', bearer.token_hash,
@@ -51,8 +54,8 @@ SELECT
         WHERE bearer.environment_id = rt.environment_id
           AND bearer.token_hash_algorithm = 'sha256'
       ), 'null'),
-      'sha256'
-    ),
+      pg_catalog.getdatabaseencoding()
+    )),
     'hex'
   ) AS active_dcr_bearer_token_fingerprint
 FROM aegaeon.active_runtime_environments rt

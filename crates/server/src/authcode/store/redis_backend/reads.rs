@@ -56,7 +56,12 @@ impl RedisTokenStoreBackend {
                     Some(meta)
                         if meta.user_id == subject
                             && meta.expires_at > now
-                            && !self.is_revoked_direct(conn, &meta.token_id, now)? =>
+                            && !self.is_revoked_direct(conn, &meta.token_id, now)?
+                            && self.exchange_root_active(
+                                conn,
+                                meta.exchange_grant.as_ref().and_then(|grant| grant.root()),
+                                now,
+                            )? =>
                     {
                         metas.push(meta);
                     }
@@ -92,7 +97,15 @@ impl RedisTokenStoreBackend {
                         if refresh.user_id == subject
                             && refresh.expires_at > now
                             && !refresh.rotated
-                            && !self.is_revoked_direct(conn, &refresh.token, now)? =>
+                            && !self.is_revoked_direct(conn, &refresh.token, now)?
+                            && self.exchange_root_active(
+                                conn,
+                                refresh
+                                    .exchange_grant
+                                    .as_ref()
+                                    .and_then(|grant| grant.root()),
+                                now,
+                            )? =>
                     {
                         refresh_tokens.push(refresh);
                     }
@@ -147,6 +160,16 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
+            if !self.exchange_root_active(
+                &mut conn,
+                refresh
+                    .exchange_grant
+                    .as_ref()
+                    .and_then(|grant| grant.root()),
+                now,
+            )? {
+                return Ok(None);
+            }
             return Ok(Some(refresh));
         }
         Ok(None)
@@ -164,6 +187,9 @@ impl RedisTokenStoreBackend {
         if let Some(access) =
             Self::get_json::<AccessToken>(&mut conn, self.keyspace.access_key(token))?
         {
+            if !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)? {
+                return Ok(None);
+            }
             return Ok((!access.is_expired()).then_some(access));
         }
         Ok(None)
@@ -181,6 +207,9 @@ impl RedisTokenStoreBackend {
         if let Some(access) =
             Self::get_json::<AccessToken>(&mut conn, self.keyspace.access_key(token))?
         {
+            if !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)? {
+                return Ok(None);
+            }
             if !access.is_expired() {
                 return Ok(Some(access.client_id));
             }
@@ -188,6 +217,16 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
+            if !self.exchange_root_active(
+                &mut conn,
+                refresh
+                    .exchange_grant
+                    .as_ref()
+                    .and_then(|grant| grant.root()),
+                now,
+            )? {
+                return Ok(None);
+            }
             if now < refresh.expires_at && !refresh.rotated {
                 return Ok(Some(refresh.client_id));
             }
@@ -195,6 +234,13 @@ impl RedisTokenStoreBackend {
         if let Some(meta) =
             Self::get_json::<BearerTokenMeta>(&mut conn, self.keyspace.bearer_key(token))?
         {
+            if !self.exchange_root_active(
+                &mut conn,
+                meta.exchange_grant.as_ref().and_then(|grant| grant.root()),
+                now,
+            )? {
+                return Ok(None);
+            }
             if now < meta.expires_at {
                 return Ok(Some(meta.client_id));
             }
@@ -214,7 +260,15 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
-            return Ok(refresh.rotated);
+            return Ok(refresh.rotated
+                || !self.exchange_root_active(
+                    &mut conn,
+                    refresh
+                        .exchange_grant
+                        .as_ref()
+                        .and_then(|grant| grant.root()),
+                    now,
+                )?);
         }
         Ok(true)
     }

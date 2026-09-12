@@ -101,14 +101,14 @@ ORDER BY environment_id ASC, client_created_at ASC, client_id ASC
 pub(super) fn active_runtime_client_fingerprint_for_issuer_host() -> String {
     format!(
         "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
-SELECT encode(
-  aegaeon.digest(
+SELECT pg_catalog.encode(
+  pg_catalog.sha256(pg_catalog.convert_to(
     COALESCE(
       jsonb_agg(row_json ORDER BY environment_id, client_created_at, client_id)::text,
       '[]'
     ),
-    'sha256'
-  ),
+    pg_catalog.getdatabaseencoding()
+  )),
   'hex'
 ) AS active_runtime_client_fingerprint
 FROM active_runtime_client_projection

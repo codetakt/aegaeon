@@ -43,6 +43,13 @@ pub(super) async fn resolve_token_exchange_subject(
             Some("subject_token is unacceptable"),
         )
     })?;
+    if crate::authcode::store::validate_exchange_subject(&subject_access, &subject_meta).is_err() {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("subject_token metadata is inconsistent"),
+        ));
+    }
     if subject_access.client_id != ctx.client_id || subject_meta.client_id != ctx.client_id {
         return Err(token_error_response(
             StatusCode::BAD_REQUEST,

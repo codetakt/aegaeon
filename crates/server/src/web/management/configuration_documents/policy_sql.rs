@@ -99,6 +99,7 @@ SET
   recovery_token_max_ttl_seconds = $97,
   client_secret_default_expiration_days = $98,
   client_secret_max_expiration_days = $99,
+  token_exchange = $100,
   updated_at = now()
 WHERE environment_id = $1
 ";

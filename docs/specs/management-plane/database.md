@@ -22,13 +22,15 @@ The authoritative DDL lives in:
 
 - **Org/Tenant/Environment** is the management hierarchy.
 - **Environment is the OIDC security boundary** (owns issuer, keys, clients, policies).
-- **Configuration snapshots are immutable**: each change creates a new row in
+- **Configuration documents are immutable**: a document change creates a new row in
   `configuration_versions`, and `environments.active_configuration_version_id` selects the active
-  snapshot.
-- **Projection tables** (clients/keys/policies/etc.) exist to support queries and constraints; they
-  must match the active configuration version for each Environment.
-- **Rollback safety** is enforced by monotonic “revocation ledger” tables that block resurrecting
-  revoked credentials during activation/rollback.
+  document.
+- **Effective membership**: activation transfers current live clients/profiles/connections to
+  the selected version while preserving stable IDs and payloads. Runtime-key/client-secret version
+  IDs retain provenance; their readers select by environment and lifecycle. The document is not a
+  complete snapshot of these tables. See the [activation contract](configuration.md#current-persistence-and-activation-contract).
+- **Activation safety** preserves credential lifecycle and expiry. Historical credential restoration
+  is not implemented; legacy revocation-ledger tables alone do not establish a restoration guarantee.
 - **Audit events** are append-only at the API level and are stored as a partitioned table for
   time-range queries. This table is intended for control-plane audit and selected security events,
   not as a full-fidelity sink for high-frequency data-plane access logs (ship those to an
@@ -47,20 +49,19 @@ The authoritative DDL lives in:
 - `tenants`: operational unit under an Organization; participates in issuer naming.
 - `environments`: OIDC boundary (issuer host, active configuration pointer).
 
-### Configuration (source of truth)
+### Configuration documents
 
-- `configuration_versions`: immutable configuration snapshots per Environment.
+- `configuration_versions`: immutable configuration documents per Environment.
 
-### Projections (must match the active snapshot)
+### Document state, effective membership and credentials
 
-- `environment_policies`
-- `environment_scope_allowlist`
-- `environment_key_stores`
-- `clients`
-- `client_secrets`
-- `signing_keys`
-- `environment_revoked_client_secrets` (monotonic)
-- `environment_revoked_signing_keys` (monotonic)
+- Document state: `environment_policies`, `environment_scope_allowlist`,
+  `environment_key_stores`.
+- Current-version memberships: `clients`, `oauth_profiles`, `connections`.
+- Independently managed credentials: `client_secrets`, `runtime_keys`. Version IDs
+  on these rows are provenance rather than active-version membership.
+- Legacy revocation records: `environment_revoked_client_secrets` and
+  `environment_revoked_signing_keys`.
 
 ### Users (Phase 1 minimal)
 
@@ -71,6 +72,11 @@ The authoritative DDL lives in:
 - `audit_events` (partitioned by `occurred_at`)
 
 ## ERD (Mermaid)
+
+The diagram below is a historical, incomplete design overview. In particular,
+`signing_keys` represents an earlier key model; the current schema uses
+`runtime_keys` with per-usage lifecycle slots. `db/schema.sql` and the versioned
+migrations define the actual table shape.
 
 ```mermaid
 erDiagram
@@ -285,34 +291,22 @@ Recommended indexes:
 - `client_secrets` MUST enforce the maximum number of concurrently active secrets via a partial
   unique index on `(client_id, active_slot)` WHERE `status = 'active'`. Operators MAY permit 3 slots
   but MUST maintain the same constraint for each slot.
-- `signing_keys` MUST enforce exactly one `ACTIVE` and at most one `NEXT` per Environment using
-  partial unique indexes on `(environment_id)` WHERE `status = 'active'` and
-  `(environment_id)` WHERE `status = 'next'`.
-- Projection tables MUST be updated within the same transaction that writes the new snapshot and
-  updates `environments.active_configuration_version_id` to keep the projection consistent.
+- `runtime_keys` constrains ACTIVE and NEXT slots by environment and usage; key lifecycle remains
+  independent of document activation.
+- Document state, selected memberships and the active pointer MUST be committed in one transaction.
+  Activation MUST NOT transfer unrelated historical rows or rewrite credential provenance.
 
 ## Revocation ledgers
 
-Ledger tables (`environment_revoked_client_secrets`, `environment_revoked_signing_keys`) provide the
-monotonic “never resurrect” guarantee:
+The schema retains `environment_revoked_client_secrets` and
+`environment_revoked_signing_keys`. Their presence does not prove complete
+historical snapshot restoration or universal ledger consultation.
 
-- Columns:
-  - `environment_id` (FK)
-  - `identifier` (`client_secret_id` or `signing_key_id`)
-  - `revoked_at` (`timestamptz`)
-  - `revoked_by_administrator_id` (FK to `administrators`, nullable for automated actions)
-  - `reason` (text, optional; SHOULD follow a controlled vocabulary such as `COMPROMISED`,
-    `ROLLOVER`, `ADMIN_REQUEST`)
-- Constraints:
-  - Primary key `(environment_id, identifier)`; DELETE is disallowed.
-  - Index `(environment_id, revoked_at)` for retention/TTL operations.
-  - `revoked_at` MUST default to `now()` to ensure append-only semantics.
-- Activation guard:
-  - Application logic (or a trigger) MUST check the ledger during configuration activation and raise
-    `SECURITY_LEDGER_CONFLICT` when a snapshot references a revoked identifier.
-- Write path:
-  - Ledger inserts MUST occur within the same transaction as the configuration snapshot update so
-    revocations are visible to the activation guard.
+Current activation does not restore credentials from a document. It preserves
+credential lifecycle and expiry, which the runtime readers enforce. A compatibility
+guard rejects legacy `clientSecrets` references found in the client-secret ledger.
+Any future restoration of historical credentials needs explicit coverage for each
+credential type and its ledger. See [activation safety](configuration.md#rollback-safety-irreversible-operations).
 
 ## Audit events (`audit_events`)
 

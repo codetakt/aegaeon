@@ -8,6 +8,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
+use tracing::Instrument;
 
 fn fields(
     form: Result<Form<Vec<(String, String)>>, FormRejection>,
@@ -45,25 +46,25 @@ async fn process(
     token: &str,
     choice: &str,
 ) -> Result<Response, Response> {
-    let origin =
-        crate::util::single_header_str(headers, "origin").map_err(|_| storage::invalid())?;
+    let origin = crate::util::single_header_str(headers, "origin")
+        .map_err(|_| storage::rejected("consent_origin_malformed"))?;
     let expected = url::Url::parse(&state.issuer)
         .map_err(|_| storage::unavailable())?
         .origin()
         .ascii_serialization();
     if origin != Some(expected.as_str()) {
-        return Err(storage::invalid());
+        return Err(storage::rejected("consent_origin_missing_or_mismatched"));
     }
     let sid = auth_session_cookie(headers)
-        .map_err(|_| storage::invalid())?
-        .ok_or_else(storage::invalid)?;
+        .map_err(|_| storage::rejected("consent_session_cookie_malformed"))?
+        .ok_or_else(|| storage::rejected("consent_session_cookie_missing"))?;
     let browser = state
         .browser_auth
         .auth_sessions
         .try_get_async(sid.clone())
         .await
         .map_err(|_| storage::unavailable())?
-        .ok_or_else(storage::invalid)?;
+        .ok_or_else(|| storage::rejected("consent_session_unavailable"))?;
     let pending = storage::load(state, &sid, &browser.user_id, token).await?;
     let uri = pending.uri.parse().map_err(|_| storage::invalid())?;
     let mut ctx =
@@ -79,11 +80,11 @@ async fn process(
     if !has_prompt(&ctx, "consent")
         || super::snapshot(&ctx).map_err(|_| storage::unavailable())? != pending.snapshot
     {
-        return Err(storage::invalid());
+        return Err(storage::rejected("consent_request_snapshot_mismatch"));
     }
     let decision = authorize_decide_session(state, headers, &ctx, &state.issuer).await?;
     if decision.needs_login || decision.stepup_required {
-        return Err(storage::invalid());
+        return Err(storage::rejected("consent_reauthentication_required"));
     }
     let session = resolve_authorize_session_state(&decision, &state.issuer).await?;
     storage::decide(state, &session, &pending, choice).await?;
@@ -103,11 +104,20 @@ pub(in crate::web) async fn submit(
     headers: HeaderMap,
     form: Result<Form<Vec<(String, String)>>, FormRejection>,
 ) -> Response {
-    let (token, choice) = match fields(form) {
-        Ok(fields) => fields,
-        Err(response) => return response,
-    };
-    match process(&state, &headers, &token, &choice).await {
-        Ok(response) | Err(response) => response,
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let mut response = async {
+        let (token, choice) = match fields(form) {
+            Ok(fields) => fields,
+            Err(response) => return response,
+        };
+        match process(&state, &headers, &token, &choice).await {
+            Ok(response) | Err(response) => response,
+        }
     }
+    .instrument(tracing::warn_span!("authorization_consent", request_id = %request_id))
+    .await;
+    if let Ok(value) = axum::http::HeaderValue::from_str(&request_id) {
+        response.headers_mut().insert("x-request-id", value);
+    }
+    response
 }

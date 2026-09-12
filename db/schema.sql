@@ -1094,6 +1094,7 @@ CREATE TABLE aegaeon.environment_key_stores (
 --
 
 CREATE TABLE aegaeon.environment_policies (
+    token_exchange jsonb DEFAULT '{"version": 1, "targets": [], "rules": []}'::jsonb NOT NULL,
     environment_id uuid NOT NULL,
     configuration_version_id uuid NOT NULL,
     pkce_required boolean NOT NULL,

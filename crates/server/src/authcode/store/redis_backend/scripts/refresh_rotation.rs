@@ -5,6 +5,11 @@ if redis.call("EXISTS", KEYS[1]) == 1 then
   return "busy"
 end
 
+if ARGV[18] == "1" then
+  if redis.call("EXISTS", KEYS[21]) == 1 or tonumber(redis.call("TIME")[1]) >= tonumber(ARGV[19]) then
+    return "invalid"
+  end
+end
 local now_epoch_secs = tonumber(ARGV[1])
 if not now_epoch_secs then
   return "refresh_decode"
@@ -104,7 +109,7 @@ end
 redis.call("INCR", KEYS[20])
 return "ok"
 "#;
-const REFRESH_ROTATION_COMMIT_KEY_PLAN: [LuaSlot; 20] = [
+const REFRESH_ROTATION_COMMIT_KEY_PLAN: [LuaSlot; 21] = [
     LuaSlot::new(1, "mutation_barrier"),
     LuaSlot::new(2, "previous_refresh"),
     LuaSlot::new(3, "previous_revoked"),
@@ -125,8 +130,9 @@ const REFRESH_ROTATION_COMMIT_KEY_PLAN: [LuaSlot; 20] = [
     LuaSlot::new(18, "subject_bearer"),
     LuaSlot::new(19, "bearer_expiry"),
     LuaSlot::new(20, "version"),
+    LuaSlot::new(21, "exchange_root_revoked"),
 ];
-const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 17] = [
+const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 19] = [
     LuaSlot::new(1, "now_epoch_secs"),
     LuaSlot::new(2, "previous_refresh_token"),
     LuaSlot::new(3, "expected_previous_payload"),
@@ -144,6 +150,8 @@ const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 17] = [
     LuaSlot::new(15, "bearer_payload"),
     LuaSlot::new(16, "bearer_token_id"),
     LuaSlot::new(17, "bearer_expires_at_epoch_secs"),
+    LuaSlot::new(18, "has_exchange_root"),
+    LuaSlot::new(19, "exchange_root_deadline"),
 ];
 const REFRESH_ROTATION_COMMIT_KEY_COUNT: usize = REFRESH_ROTATION_COMMIT_KEY_PLAN.len();
 const REFRESH_ROTATION_COMMIT_ARG_COUNT: usize = REFRESH_ROTATION_COMMIT_ARG_PLAN.len();
@@ -170,11 +178,14 @@ pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitKeys<'
     pub(in crate::authcode::store::redis_backend) subject_bearer: &'a str,
     pub(in crate::authcode::store::redis_backend) bearer_expiry: &'a str,
     pub(in crate::authcode::store::redis_backend) version: &'a str,
+    pub(in crate::authcode::store::redis_backend) exchange_root_revoked: &'a str,
 }
 
 #[derive(Clone, Copy)]
 pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitArgs<'a> {
     pub(in crate::authcode::store::redis_backend) now_epoch_secs: u64,
+    pub(in crate::authcode::store::redis_backend) has_exchange_root: bool,
+    pub(in crate::authcode::store::redis_backend) exchange_root_deadline: u64,
     pub(in crate::authcode::store::redis_backend) previous_refresh_token: &'a str,
     pub(in crate::authcode::store::redis_backend) expected_previous_payload: &'a str,
     pub(in crate::authcode::store::redis_backend) rotated_previous_payload: &'a str,
@@ -216,6 +227,7 @@ impl<'a> RefreshRotationCommitKeys<'a> {
             self.subject_bearer,
             self.bearer_expiry,
             self.version,
+            self.exchange_root_revoked,
         ]
     }
 }
@@ -240,6 +252,8 @@ impl<'a> RefreshRotationCommitArgs<'a> {
             RedisScriptArg::Str(self.bearer_payload),
             RedisScriptArg::Str(self.bearer_token_id),
             RedisScriptArg::U64(self.bearer_expires_at_epoch_secs),
+            RedisScriptArg::Bool(self.has_exchange_root),
+            RedisScriptArg::U64(self.exchange_root_deadline),
         ]
     }
 }

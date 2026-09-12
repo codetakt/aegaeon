@@ -21,6 +21,8 @@ This directory holds configuration documentation that should remain valid over t
 - `[reference]` [Environment variables](environment/README.md) — canonical split server environment-variable reference
 - `[runbook]` [Networking](networking.md) — reverse-proxy trust boundary and forwarded-header policy
 
+- `[reference]` [Token exchange targets](token-exchange.md) — issuer-owned target permissions and revocation profile
+
 ## Reading Rule of Thumb
 
 1. Start here when you need deployment or runtime configuration details.

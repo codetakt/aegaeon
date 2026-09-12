@@ -160,5 +160,13 @@ modules:
   fstar/token/Bearer_validation.fst: toy-stub
   fstar/token/JwtAccessToken.fst: faithful
   fstar/token/Token.fst: faithful
+  fstar/token/TokenExchange.TargetPolicy.fst: simplified
   fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst: faithful
   fstar/verifiedcore/api/VerifiedCore.Crypto.Hacl.fst: faithful
+
+  # Abstract exchange/configuration composition; no implementation refinement.
+  fstar/token/TokenExchange.GrantLaws.fst: simplified
+  # Signed integer model; Linux helper checks are a separately admitted slice.
+  fstar/token/TokenExchange.Lifetime.fst: simplified
+  fstar/token/TokenExchange.Integration.fst: simplified
+  fstar/management/Configuration.Membership.fst: simplified

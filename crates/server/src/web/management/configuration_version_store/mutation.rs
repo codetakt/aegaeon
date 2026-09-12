@@ -1,5 +1,6 @@
 mod activate;
 mod insert;
+mod membership;
 mod number;
 
 pub(in crate::web::management) use activate::switch_active_configuration_version;

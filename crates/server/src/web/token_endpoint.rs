@@ -93,7 +93,12 @@ async fn build_token_context(
 ) -> Result<TokenEndpointContext, Response> {
     let form = token_form_from_params(&params, issuer_base)?;
     let grant_type = form.grant_type.trim().to_ascii_lowercase();
-    let resource = token_resource_from_params(&params)?;
+    // RFC 8693 permits repeated audience/resource selectors. Its resolver sees all of them.
+    let resource = if grant_type == TOKEN_EXCHANGE_GRANT_TYPE {
+        None
+    } else {
+        token_resource_from_params(&params)?
+    };
     let auth_header =
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
     let (client_id, client_auth_presence) = token_resolve_client_id(auth_header, &form)?;

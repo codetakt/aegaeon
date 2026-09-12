@@ -11,7 +11,13 @@ impl RedisTokenStoreBackend {
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
         for token in self.expired_index_members(conn, self.keyspace.expiry_revoked_key(), now)? {
-            mutation.delete_revoked_token(token);
+            // Sorted-set scores are whole seconds; the record retains subsecond precision.
+            if self
+                .revoked_expires_at(conn, &token)?
+                .is_none_or(|expires| expires <= now)
+            {
+                mutation.delete_revoked_token(token);
+            }
         }
         Ok(())
     }

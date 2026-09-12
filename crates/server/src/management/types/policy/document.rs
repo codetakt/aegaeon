@@ -50,6 +50,9 @@ impl From<PolicySenderConstraint> for SenderConstraint {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)] // This DTO intentionally exposes each policy toggle independently for auditability.
 pub struct PolicyDocument {
+    #[serde(default)]
+    pub token_exchange: crate::policy::token_exchange::TokenExchangePolicy,
+
     pub pkce_required: bool,
     pub dcr_enabled: bool,
     pub dcr_everparse_runtime_enabled: bool,
@@ -162,6 +165,7 @@ impl Default for PolicyDocument {
     )]
     fn default() -> Self {
         Self {
+            token_exchange: Default::default(),
             pkce_required: true,
             dcr_enabled: false,
             dcr_everparse_runtime_enabled: false,

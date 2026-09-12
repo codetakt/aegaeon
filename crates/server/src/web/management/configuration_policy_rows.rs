@@ -30,6 +30,7 @@ pub(super) fn policy_document_from_environment_policy_row(
     let runtime = runtime::read_runtime_policy_fields(&decoder)?;
 
     Ok(PolicyDocument {
+        token_exchange: decoder.exchange_field()?,
         pkce_required: base.pkce_required,
         dcr_enabled: base.dcr_enabled,
         dcr_everparse_runtime_enabled: base.dcr_everparse_runtime_enabled,

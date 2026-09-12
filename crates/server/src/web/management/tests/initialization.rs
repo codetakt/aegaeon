@@ -9,6 +9,13 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod database_cleanup;
+mod exchange_policy;
+mod exchange_reload;
+mod fingerprints;
+
+use database_cleanup::{cleanup, finish};
+
 fn input() -> InitializationInput {
     InitializationInput {
         owner_email: "owner@example.com".into(),
@@ -42,15 +49,6 @@ async fn database() -> anyhow::Result<(PgPool, PgPool, String)> {
         .execute(&pool)
         .await?;
     Ok((control, pool, name))
-}
-
-async fn cleanup(control: PgPool, pool: PgPool, name: &str) -> anyhow::Result<()> {
-    pool.close().await;
-    sqlx::query(&format!("DROP DATABASE {name}"))
-        .execute(&control)
-        .await?;
-    control.close().await;
-    Ok(())
 }
 
 fn request(
@@ -128,8 +126,7 @@ async fn pg_initialization_supports_login_and_second_environment_without_repair_
         assert!(!audit.contains(&input().owner_password));
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
@@ -161,8 +158,7 @@ async fn pg_initialization_rejects_invalid_input_and_rolls_back_all_writes() -> 
         initialize_management(&pool, &input()).await?;
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
@@ -219,8 +215,7 @@ async fn pg_initialization_concurrent_callers_preserve_the_winning_owner() -> Ma
         Ok(())
     }
     .await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
@@ -245,8 +240,7 @@ async fn pg_initialization_does_not_upgrade_observability_seed() -> ManagementTe
         Ok(())
     }
     .await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
@@ -263,8 +257,7 @@ async fn pg_initialization_preserves_preexisting_control_plane_policy() -> Manag
         assert_eq!(count, 0);
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
@@ -287,6 +280,5 @@ async fn pg_initialization_runtime_fingerprints_ignore_search_path() -> Manageme
         default_path.close().await;
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }

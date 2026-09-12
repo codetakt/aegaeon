@@ -55,10 +55,15 @@ pub(super) fn refresh_parent_audience(parent: &RefreshToken) -> &str {
         .unwrap_or(&parent.client_id)
 }
 
-pub(super) fn bearer_metadata_matches_access_token(
+pub(crate) fn bearer_metadata_matches_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    if access_token.exchange_root.as_ref()
+        != meta.exchange_grant.as_ref().and_then(|grant| grant.root())
+    {
+        return Err("access token and metadata exchange lineage must match");
+    }
     if meta.token_id.as_str() != access_token.token.as_str() {
         return Err("bearer metadata token_id must match the access token");
     }
@@ -95,6 +100,22 @@ pub(super) fn refresh_token_covers_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    let expected_root = refresh_token
+        .exchange_grant
+        .as_ref()
+        .and_then(|grant| grant.root());
+    if access_token.exchange_root.as_ref() != expected_root
+        || expected_root.is_some_and(|root| {
+            meta.expires_at > root.expires_at || refresh_token.expires_at > root.expires_at
+        })
+    {
+        return Err("access token must preserve the refresh lineage and deadline");
+    }
+    match (&refresh_token.exchange_grant, &meta.exchange_grant) {
+        (None, None) => {}
+        (Some(parent), Some(current)) if current.is_restriction_of(parent) => {}
+        _ => return Err("access authority must be a restriction of the refresh grant"),
+    }
     if refresh_token.client_id.as_str() != access_token.client_id.as_str()
         || refresh_token.user_id.as_str() != access_token.user_id.as_str()
     {

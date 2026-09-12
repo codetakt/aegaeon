@@ -82,20 +82,24 @@ wait_for_redis() {
 	exit 1
 }
 
-run_redis_tests() {
-	echo "running Redis-backed aegaeon-server ignored tests"
-	cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_
-}
-
-run_mixed_tests() {
-	echo "running combined Postgres/Redis aegaeon-server ignored tests"
-	# The HTTP fixtures construct the production shared-store adapters. Always
-	# point all four stores at this test Redis, regardless of inherited settings.
+with_test_redis() {
+	# Production shared-store adapters and legacy test helpers must use the
+	# same dedicated Redis, regardless of inherited runtime settings.
 	AEGAEON_PAR_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_AUTH_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_TOKEN_STORE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
-		cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1
+		"$@"
+}
+
+run_redis_tests() {
+	echo "running Redis-backed aegaeon-server ignored tests"
+	with_test_redis cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_
+}
+
+run_mixed_tests() {
+	echo "running combined Postgres/Redis aegaeon-server ignored tests"
+	with_test_redis cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1
 }
 
 run_postgres_tests() {

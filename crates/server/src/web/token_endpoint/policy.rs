@@ -109,6 +109,13 @@ pub(super) async fn token_resolve_policy(
         state.cfg.security_policy.sender_constrained,
         profile.sender_constrained,
     );
+    if sender_constraint == SenderConstraint::Mtls && !state.cfg.mtls_enabled {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "unauthorized_client",
+            Some("mTLS token binding is disabled for this environment"),
+        ));
+    }
     let enforce_refresh_sender_binding = state.cfg.security_policy.enforce_sender_binding()
         || profile.enforce_refresh_sender_binding;
     let authorization_code_grant_allowed = state

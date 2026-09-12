@@ -13,13 +13,6 @@ pub(super) fn parse_token_exchange_request(
     ctx: &TokenEndpointContext,
     issuer_base: &str,
 ) -> Result<TokenExchangeRequest, Response> {
-    if ctx.params.iter().any(|(key, _)| key == "audience") {
-        return Err(token_error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_target",
-            Some("audience parameter is not supported"),
-        ));
-    }
     let subject_token = required_token_param(&ctx.params, "subject_token", issuer_base)?;
     let subject_token_type = required_token_param(&ctx.params, "subject_token_type", issuer_base)?;
     if subject_token_type != OAUTH_TOKEN_TYPE_ACCESS_TOKEN {

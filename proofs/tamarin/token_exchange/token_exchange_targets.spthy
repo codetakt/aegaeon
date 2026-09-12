@@ -1,0 +1,74 @@
+theory TokenExchange_Requests
+begin
+builtins: symmetric-encryption
+
+// The caller key abstracts successful token-endpoint client authentication.
+// Keys are disclosed deliberately: an authenticated client may be malicious.
+// Sender is the externally verified proof binding, not an unverified request field.
+// ActiveRoot models the online grant-revocation boundary. Time is handled by F*.
+rule Register_Client:
+ [ Fr(~c), Fr(~k) ]
+ --> [ !Client(~c,~k), Out(<~c,~k>), !Route(~c,'source','api'), !Route(~c,'api','api') ]
+
+rule Authorize:
+ [ !Client(c,k), Fr(~s), Fr(~u), Fr(~root) ]
+ --[ Issued(c,~s,~u,'source','rw','binding',~root) ]->
+ [ !Meta(~s,c,~u,'source','rw','binding',~root), ActiveRoot(~root), Out(~s) ]
+
+rule Exchange_Read:
+ [ !Client(c,k), In(senc(<s,d,'read',binding>,k)),
+   !Meta(s,c,u,a,'rw',binding,root), !Route(c,a,d), ActiveRoot(root), Fr(~out) ]
+ --[ Exchange(c,s,~out,u,a,d,'rw','read',binding,root), Authorized(c,a,d), RootUsed(root) ]->
+ [ !Meta(~out,c,u,d,'read',binding,root), ActiveRoot(root), Out(~out) ]
+
+rule Exchange_Read_Again:
+ [ !Client(c,k), In(senc(<s,d,'read',binding>,k)),
+   !Meta(s,c,u,a,'read',binding,root), !Route(c,a,d), ActiveRoot(root), Fr(~out) ]
+ --[ Exchange(c,s,~out,u,a,d,'read','read',binding,root), Authorized(c,a,d), RootUsed(root) ]->
+ [ !Meta(~out,c,u,d,'read',binding,root), ActiveRoot(root), Out(~out) ]
+
+// Online use consults the same root; offline JWT consumers are not modelled.
+rule Use:
+ [ In(s), !Meta(s,c,u,a,rights,binding,root), ActiveRoot(root) ]
+ --[ Used(s,root), RootUsed(root) ]-> [ ActiveRoot(root) ]
+
+rule Revoke:
+ [ ActiveRoot(root) ] --[ Revoked(root) ]-> []
+
+lemma registered_target:
+ "All c s out u a d gs rs b root #i.
+  Exchange(c,s,out,u,a,d,gs,rs,b,root)@i ==> (d='api' & (a='source' | a='api'))"
+
+lemma grant_origin [use_induction, reuse]:
+ "All c s out u a d gs rs b root #i.
+  Exchange(c,s,out,u,a,d,gs,rs,b,root)@i ==>
+  (Ex tok #j. Issued(c,tok,u,'source','rw',b,root)@j & j<i)"
+
+lemma no_write_regrowth:
+ "All c s out u a d gs rs b root #i.
+  Exchange(c,s,out,u,a,d,gs,rs,b,root)@i ==> rs='read'"
+
+// Consecutive goal ranking avoids expanding unrelated token/client provenance
+// before resolving the linear root lifecycle. This changes proof search only;
+// transition rules, trace restrictions and the revocation claim stay unchanged.
+lemma root_revocation [use_induction, reuse, heuristic=C]:
+ "All root #i #j. RootUsed(root)@i & Revoked(root)@j ==> i<j"
+
+lemma revocation_stops_descendants:
+ "All c s out u a d gs rs b root #i #j.
+  Exchange(c,s,out,u,a,d,gs,rs,b,root)@i & Revoked(root)@j ==> i<j"
+
+lemma revocation_stops_online_use:
+ "All s root #i #j. Used(s,root)@i & Revoked(root)@j ==> i<j"
+
+lemma distinct_target_reachable:
+ exists-trace
+ "Ex c s out u b root #i.
+  Exchange(c,s,out,u,'source','api','rw','read',b,root)@i"
+
+lemma repeated_narrowing_reachable:
+ exists-trace
+ "Ex c s first second u b root #i #j.
+  Exchange(c,s,first,u,'source','api','rw','read',b,root)@i &
+  Exchange(c,first,second,u,'api','api','read','read',b,root)@j & i<j"
+end

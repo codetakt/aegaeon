@@ -384,3 +384,106 @@ fn test_dpop_duplicate_nonce_claims_are_invalid() -> TestResult {
     assert_eq!(mw.verify(&req), Err(DpopError::InvalidProof));
     Ok(())
 }
+
+// Real shared-store lifecycle test; signature verification is covered by the
+// production-binary E2E lane, not by this module's mock verifier.
+#[test]
+#[ignore = "requires private Redis"]
+fn redis_dpop_nonce_roles_survive_instance_restart_and_concurrent_issuance() -> TestResult {
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+    let namespace = format!("nonce-role-test-{}", uuid::Uuid::new_v4());
+    let ttl = Duration::from_secs(60);
+    let first = Arc::new(must_ok!(
+        DpopNonceStore::redis(&url, namespace.clone(), ttl),
+        "nonce store"
+    ));
+    let mut issued = Vec::new();
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..16)
+            .map(|i| {
+                let store = Arc::clone(&first);
+                scope.spawn(move || {
+                    let role = if i % 2 == 0 {
+                        DpopEndpointRole::AuthorizationServer
+                    } else {
+                        DpopEndpointRole::ResourceServer
+                    };
+                    store
+                        .try_get_current_nonce_for(role)
+                        .map(|nonce| (role, nonce))
+                })
+            })
+            .collect();
+        for handle in handles {
+            issued.push(
+                handle
+                    .join()
+                    .map_err(|_| "nonce issuance thread failed".to_string())?
+                    .map_err(|e| format!("nonce issuance: {e:?}"))?,
+            );
+        }
+        Ok::<(), String>(())
+    })?;
+    drop(first);
+    let restarted = must_ok!(
+        DpopNonceStore::redis(&url, namespace, ttl),
+        "restarted store"
+    );
+    let other_issuer = must_ok!(
+        DpopNonceStore::redis(&url, format!("nonce-other-{}", uuid::Uuid::new_v4()), ttl),
+        "other issuer"
+    );
+    for (role, nonce) in issued {
+        let other_role = if role == DpopEndpointRole::AuthorizationServer {
+            DpopEndpointRole::ResourceServer
+        } else {
+            DpopEndpointRole::AuthorizationServer
+        };
+        assert_eq!(restarted.try_validate_nonce_for(role, &nonce), Ok(true));
+        assert_eq!(
+            restarted.try_validate_nonce_for(other_role, &nonce),
+            Ok(false)
+        );
+        assert_eq!(other_issuer.try_validate_nonce_for(role, &nonce), Ok(false));
+    }
+    Ok(())
+}
+
+#[test]
+fn empty_proof_identifier_is_rejected_before_replay_storage() -> TestResult {
+    let proof = build_test_proof("POST", "http://localhost/token", None)?;
+    let mut parts: Vec<String> = proof.split('.').map(str::to_owned).collect();
+    let mut payload: serde_json::Value = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
+            .decode(&parts[1])
+            .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    payload["jti"] = serde_json::json!("");
+    parts[1] = encode_json(&payload)?;
+    let middleware = DpopMiddleware::new_process_local_for_tests();
+    for role in [
+        DpopEndpointRole::AuthorizationServer,
+        DpopEndpointRole::ResourceServer,
+    ] {
+        assert_eq!(
+            middleware.verify_components_for(
+                role,
+                &Method::POST,
+                &"/token".parse().map_err(|e| format!("{e}"))?,
+                &parts.join("."),
+                None
+            ),
+            Err(DpopError::InvalidProof)
+        );
+    }
+    assert!(middleware
+        .verify_components(
+            &Method::POST,
+            &"/token".parse().map_err(|e| format!("{e}"))?,
+            &proof,
+            None
+        )
+        .is_ok());
+    Ok(())
+}

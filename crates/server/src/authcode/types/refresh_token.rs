@@ -19,6 +19,8 @@ pub struct RefreshTargetContext {
 /// Refresh Token with rotation tracking (RFC 9700)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshToken {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub token: String,
     pub client_id: String,
     pub user_id: String,
@@ -87,6 +89,7 @@ impl RefreshToken {
             scope: input.scope,
             resource: input.resource,
             target_context: None,
+            exchange_grant: None,
             sender_binding: None,
             authorization_details: input.authorization_details,
             auth_time_epoch_secs: input.auth_time_epoch_secs,
@@ -119,6 +122,7 @@ impl RefreshToken {
         );
         new_token.sender_binding.clone_from(&self.sender_binding);
         new_token.target_context.clone_from(&self.target_context);
+        new_token.exchange_grant.clone_from(&self.exchange_grant);
         new_token
             .claim_release_policy
             .clone_from(&self.claim_release_policy);

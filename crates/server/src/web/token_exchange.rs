@@ -18,10 +18,7 @@ mod subject;
 use request::parse_token_exchange_request;
 #[cfg(test)]
 pub(super) use resolution::token_exchange_expires_in;
-use resolution::{
-    resolve_token_exchange_audience, resolve_token_exchange_expires_in,
-    resolve_token_exchange_scope,
-};
+use resolution::{resolve_exchange, resolve_token_exchange_expires_in};
 use response::token_exchange_success_response;
 use subject::resolve_token_exchange_subject;
 pub(super) use subject::validate_token_exchange_sender_binding;
@@ -62,21 +59,12 @@ pub(super) async fn handle_token_exchange_grant(
     if let Err(response) = validate_token_exchange_sender_binding(ctx, &subject_meta) {
         return response;
     }
-    let audience = match resolve_token_exchange_audience(ctx, &subject_meta) {
-        Ok(audience) => audience,
+    let resolved = match resolve_exchange(state, ctx, issuer_base, &subject_meta) {
+        Ok(resolved) => resolved,
         Err(response) => return response,
     };
-    let scope = match resolve_token_exchange_scope(state, ctx, &subject_meta) {
-        Ok(scope) => scope,
-        Err(response) => return response,
-    };
-    let expires_in = match resolve_token_exchange_expires_in(
-        &subject_meta,
-        state.tokens.issuer.access_token_ttl_secs(),
-    ) {
-        Ok(expires_in) => expires_in,
-        Err(response) => return response,
-    };
+    let audience = resolved.audience;
+    let scope = resolved.scope;
     if let Err(response) =
         require_token_issue_audit(state, issuer_base, ctx, Some(subject_meta.user_id.as_str()))
             .await
@@ -84,6 +72,28 @@ pub(super) async fn handle_token_exchange_grant(
         return response;
     }
     let now = SystemTime::now();
+    let expires_in = match resolve_token_exchange_expires_in(
+        &subject_meta,
+        state.tokens.issuer.access_token_ttl_secs(),
+        now,
+    ) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let token_type = if matches!(
+        ctx.sender_binding,
+        Some(crate::authcode::types::SenderBinding::DPoP { .. })
+    ) {
+        "DPoP"
+    } else {
+        "Bearer"
+    };
+    let authorization_details = if resolved.grant.is_some() {
+        None
+    } else {
+        subject_meta.authorization_details.clone()
+    };
+
     let token = match state
         .tokens
         .issuer
@@ -107,8 +117,9 @@ pub(super) async fn handle_token_exchange_grant(
         }
     };
     let access = AccessToken {
+        exchange_root: None,
         token: token.clone(),
-        token_type: "Bearer".to_string(),
+        token_type: token_type.to_string(),
         client_id: ctx.client_id.clone(),
         user_id: subject_meta.user_id.clone(),
         scope: scope.clone(),
@@ -129,19 +140,19 @@ pub(super) async fn handle_token_exchange_grant(
             audience,
             refresh_parent,
             sender_binding: ctx.sender_binding.clone(),
-            authorization_details: subject_meta.authorization_details.clone(),
+            authorization_details: authorization_details.clone(),
+            exchange_grant: resolved.grant.clone(),
+            exchange_subject: subject_meta.clone(),
             auth_time_epoch_secs: subject_meta.auth_time_epoch_secs,
             acr: subject_meta.acr.clone(),
         },
     )
     .await
     {
-        return token_internal_error_response("token_exchange_access_token_store", Some(&error));
+        return response::token_exchange_commit_error(error);
     }
-    token_exchange_success_response(
-        &token,
-        expires_in,
-        scope,
-        subject_meta.authorization_details,
-    )
+    token_exchange_success_response(&token, expires_in, scope, authorization_details, token_type)
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

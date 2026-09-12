@@ -287,6 +287,29 @@ async fn issue_authorize_code_response(
     let state_for_echo = ctx.state_for_echo.clone();
     let pkce_required = ctx.pkce_required;
     let profile_pkce_required = ctx.profile_pkce_required;
+    let exchange_scope_ceiling = match state.clients.try_get(&ctx.req.client_id) {
+        Ok(Some(client)) => client.allowed_scopes,
+        Ok(None) => {
+            return authorize_error_response(
+                authorize_error_context(
+                    state,
+                    &error_request,
+                    response_mode,
+                    issuer_base,
+                    state_for_echo.as_deref(),
+                ),
+                "unauthorized_client",
+                Some("client registration is unavailable"),
+            );
+        }
+        Err(error) => {
+            return registry_state_error_response(
+                issuer_base,
+                "authorize_capture_exchange_scope_ceiling",
+                error,
+            );
+        }
+    };
     match state
         .tokens
         .issuer
@@ -296,6 +319,7 @@ async fn issue_authorize_code_response(
                 auth_session_id: session.session_id.clone(),
                 local_profile,
                 claim_release_policy: session.claim_release_policy.clone(),
+                exchange_scope_ceiling,
                 ..AuthorizationCodeIssueInput::new(
                     ctx.req,
                     session.user_id.clone(),
@@ -332,6 +356,24 @@ async fn issue_authorize_code_response(
             Some("redirect_uri is required for authorization response delivery"),
         ),
         Err(error) => {
+            // Stable classification only: no state, nonce, code, JWT or storage payload.
+            let reason = match &error {
+                AuthorizationCodeIssueError::PkceRequired => "pkce_required",
+                AuthorizationCodeIssueError::PkceS256Required => "pkce_s256_required",
+                AuthorizationCodeIssueError::PushedAuthorizationRequestMissing => "par_unavailable",
+                AuthorizationCodeIssueError::RequestObjectJtiReplay => "request_object_replay",
+                AuthorizationCodeIssueError::InvalidTarget(_) => "invalid_target",
+                AuthorizationCodeIssueError::StoreUnavailable(_) => "storage_unavailable",
+                AuthorizationCodeIssueError::ClockBeforeUnixEpoch => "clock_invalid",
+                AuthorizationCodeIssueError::OpenIdAuthSessionRequired => "openid_session_required",
+                AuthorizationCodeIssueError::NonceRequired => "nonce_required",
+                AuthorizationCodeIssueError::OpenIdDisabled => "openid_disabled",
+                AuthorizationCodeIssueError::StateUsed => "state_reused",
+                AuthorizationCodeIssueError::NonceUsed => "nonce_reused",
+                AuthorizationCodeIssueError::CodeCollision => "code_collision",
+                AuthorizationCodeIssueError::CodeExpired => "code_expired",
+            };
+            tracing::warn!(reason, request_id = %ctx.request_id, "authorization code issuance refused");
             let (error_code, error_description, record_pkce_rejection) = match error {
                 AuthorizationCodeIssueError::PkceRequired
                 | AuthorizationCodeIssueError::PkceS256Required => (

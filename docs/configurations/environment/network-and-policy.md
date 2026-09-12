@@ -62,7 +62,7 @@ process/proxy boundary rather than an issuer policy snapshot.
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_REQUIRE_DPOP_NONCE` | _removed_ | `environment` | Removed startup-environment fallback for server-issued DPoP nonce enforcement (RFC 9449 Section 5). In the supported PostgreSQL-backed runtime, `policy.dpopRequireNonce` is authoritative. |
-| `AEGAEON_DPOP_NONCE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-3600) for DPoP nonces. In the supported PostgreSQL-backed runtime, `policy.dpopNonceTtlSeconds` is authoritative and Redis stores issued nonces until that TTL. |
+| `AEGAEON_DPOP_NONCE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-3600) for DPoP nonces. In the supported PostgreSQL-backed runtime, `policy.dpopNonceTtlSeconds` is authoritative and Redis rotates the current nonce after that TTL and accepts it for at most one additional TTL of grace. |
 | `AEGAEON_DPOP_REDIS_URL` | _unset_ | `system` | Redis URL for the shared DPoP replay store. The supported server process always constructs this store; startup fails closed when it is missing. |
 | `AEGAEON_DPOP_NONCE_REDIS_URL` | _unset_ | `system` | Redis URL for shared DPoP nonce validation. Startup fails closed when nonce enforcement is enabled and this URL is unset. |
 | `AEGAEON_DPOP_STRICT` | _removed_ | `environment` | Removed startup-environment fallback. If the global sender-constraint policy is `None`, strict mode upgrades the runtime posture to DPoP and enables sender-binding enforcement. In the supported PostgreSQL-backed runtime, `policy.dpopStrict` is authoritative. |

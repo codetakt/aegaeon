@@ -21,6 +21,10 @@ fn no_cache_json_error(status: StatusCode, error: &str, description: Option<&str
 }
 
 pub(super) fn unavailable() -> Response {
+    tracing::error!(
+        reason = "consent_storage_unavailable",
+        "consent request could not be processed"
+    );
     no_cache_json_error(
         StatusCode::SERVICE_UNAVAILABLE,
         "temporarily_unavailable",
@@ -29,10 +33,15 @@ pub(super) fn unavailable() -> Response {
 }
 
 pub(super) fn invalid() -> Response {
+    rejected("consent_request_invalid")
+}
+
+pub(super) fn rejected(reason: &'static str) -> Response {
+    tracing::warn!(reason, "consent request rejected");
     no_cache_json_error(
         StatusCode::BAD_REQUEST,
         "invalid_request",
-        Some("consent transaction is invalid, expired or already used"),
+        Some("consent request could not be validated; restart authorization"),
     )
 }
 
@@ -96,7 +105,7 @@ pub(super) async fn load(
     .fetch_optional(&state.db_pool)
     .await
     .map_err(|_| unavailable())?
-    .ok_or_else(invalid)?;
+    .ok_or_else(|| rejected("consent_transaction_binding_or_lifetime"))?;
     Ok(Pending {
         id: row.try_get("id").map_err(|_| unavailable())?,
         uri: row.try_get("authorize_uri").map_err(|_| unavailable())?,
@@ -128,7 +137,7 @@ pub(super) async fn decide(
     .map_err(|_| unavailable())?
     .rows_affected();
     if count != 1 {
-        return Err(invalid());
+        return Err(rejected("consent_changed_before_decision"));
     }
     Ok(())
 }
