@@ -21,7 +21,12 @@ identifiers still undergo replay detection; the server does not claim to infer
 the randomness of a client-generated identifier.
 
 Nonce records are scoped separately to the AS and RS within each runtime
-namespace. Clients must keep separate nonce state for each issuer and role.
+namespace. One expiring Redis record per role retains only the current and previous
+values. Concurrent challenges reuse the current value until its TTL elapses;
+traffic never extends its deadline. Redis time governs rotation, and the previous
+value is accepted for at most one additional TTL. Long idle periods do not renew
+expired nonces. Value and expiry are stored atomically with `SET ... PX`; a
+record without a retained expiry is refused as a backend error. Clients must keep separate nonce state for each issuer and role.
 After upgrading, previously issued nonce values may receive a new challenge;
 retry with a fresh proof and the nonce from the applicable endpoint. Backend
 failures return 503 without misclassifying them as invalid credentials.
@@ -30,7 +35,10 @@ A DPoP-bound token presented with Bearer authentication is rejected even when
 the request also includes a valid proof. A Bearer `invalid_token` challenge for
 that attempted scheme is consistent with RFC 9449 §7.2. Certificate-bound
 tokens use Bearer authentication with `cnf.x5t#S256`, as specified by RFC 8705.
-The scheme check also applies to the upstream-refresh resource. UserInfo GET
+The scheme check also applies to the upstream-refresh resource. When explicit
+ingress policy requires a certificate, missing or malformed certificate metadata
+returns `401 invalid_token` with a Bearer challenge on UserInfo, `/resource` and
+`/oauth/upstream/refresh` (RFC 8705 §3.1 and RFC 6750 §3.1). UserInfo GET
 and POST preserve the attempted scheme in the challenge even when a proof is
 present. A DPoP scheme without its proof returns `invalid_dpop_proof` for every
 header separator accepted by the resource parser.

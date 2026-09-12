@@ -51,7 +51,7 @@ pub(super) fn transport_rejection_for_route(
     path: &str,
 ) -> Response {
     if kind == TransportRejectionKind::MtlsClientCertMissing
-        && matches!(path, "/userinfo" | "/resource")
+        && matches!(path, "/userinfo" | "/resource" | "/oauth/upstream/refresh")
     {
         return super::oauth_errors::bearer_json_error_with_iss(
             StatusCode::UNAUTHORIZED,

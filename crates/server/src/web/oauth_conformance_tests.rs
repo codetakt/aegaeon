@@ -10,6 +10,7 @@ use axum::{
 use serde_json::Value;
 
 mod sender_contract;
+mod transport_contract;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
