@@ -83,6 +83,5 @@ async fn pg_initialization_roundtrips_exchange_policy_without_repair_sql() -> Ma
         assert_eq!(snapshot(&pool, initialized.environment_id).await?, first_snapshot);
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }

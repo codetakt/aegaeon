@@ -168,8 +168,7 @@ async fn scenario(schedule: Schedule, redis: bool) -> ManagementTestResult {
         assert_eq!(status, StatusCode::OK, "fresh authority: {body}");
         Ok(())
     }.await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]

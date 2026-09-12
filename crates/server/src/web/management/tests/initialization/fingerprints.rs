@@ -181,8 +181,7 @@ async fn scenario(preinstall: Option<&str>, encoding: &str) -> ManagementTestRes
         Ok(())
     }
     .await;
-    cleanup(control, pool, &name).await?;
-    result
+    finish(result, cleanup(control, pool, &name).await)
 }
 
 #[tokio::test]
