@@ -1755,6 +1755,7 @@ rfc_9449:
     file: fstar/dpop/Dpop.Nonce.fst
     lemma: lemma_nonce_freshness
   tests:
+  - crates/server/src/middleware/dpop/nonce/redis_store/tests.rs
   - crates/server/src/middleware/dpop.rs
   ci_check: dpop-nonce-issuance
   status: verified
@@ -1769,6 +1770,7 @@ rfc_9449:
     file: fstar/dpop/Dpop.Nonce.fst
     lemma: lemma_nonce_binding
   tests:
+  - crates/server/src/middleware/dpop/nonce/redis_store/tests.rs
   - crates/server/src/middleware/dpop.rs
   ci_check: dpop-nonce-binding
   status: verified
@@ -1788,6 +1790,7 @@ rfc_9449:
     file: fstar/dpop/Dpop.Nonce.fst
     lemma: lemma_nonce_rotation_safety
   tests:
+  - crates/server/src/middleware/dpop/nonce/redis_store/tests.rs
   - crates/server/src/middleware/dpop.rs
   ci_check: dpop-nonce-rotation
   status: verified
@@ -3153,6 +3156,7 @@ rfc_8705:
     file: fstar/token/JwtAccessToken.fst
     invariant: lemma_cnf_binding_present
   tests:
+  - crates/server/src/web/oauth_conformance_tests/transport_contract.rs
   - crates/server/src/web/token_sender_binding.rs
   - crates/server/src/web/resource_endpoint/policy.rs
   status: verified
