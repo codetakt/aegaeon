@@ -158,7 +158,20 @@ impl TokenStore {
                 if Self::is_revoked_locked(&state, token_str, SystemTime::now()) {
                     return Ok(None);
                 }
-                Ok(state.refresh_tokens.get(token_str).cloned())
+                Ok(state
+                    .refresh_tokens
+                    .get(token_str)
+                    .filter(|token| {
+                        token
+                            .exchange_grant
+                            .as_ref()
+                            .and_then(|grant| grant.root())
+                            .is_none_or(|root| {
+                                SystemTime::now() < root.expires_at
+                                    && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
+                            })
+                    })
+                    .cloned())
             }
             TokenStoreBackend::Redis(backend) => backend
                 .get_refresh_token(token_str)
@@ -178,7 +191,13 @@ impl TokenStore {
                 Ok(state
                     .access_tokens
                     .get(token_str)
-                    .filter(|token| !token.is_expired())
+                    .filter(|token| {
+                        !token.is_expired()
+                            && token.exchange_root.as_ref().is_none_or(|root| {
+                                SystemTime::now() < root.expires_at
+                                    && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
+                            })
+                    })
                     .cloned())
             }
             TokenStoreBackend::Redis(backend) => backend
@@ -213,20 +232,47 @@ impl TokenStore {
                 Ok(state
                     .access_tokens
                     .get(token_str)
-                    .filter(|token| !token.is_expired())
+                    .filter(|token| {
+                        !token.is_expired()
+                            && token.exchange_root.as_ref().is_none_or(|root| {
+                                SystemTime::now() < root.expires_at
+                                    && !Self::is_revoked_locked(&state, &root.id, SystemTime::now())
+                            })
+                    })
                     .map(|token| token.client_id.clone())
                     .or_else(|| {
                         state
                             .refresh_tokens
                             .get(token_str)
-                            .filter(|token| now < token.expires_at && !token.rotated)
+                            .filter(|token| {
+                                now < token.expires_at
+                                    && !token.rotated
+                                    && token
+                                        .exchange_grant
+                                        .as_ref()
+                                        .and_then(|grant| grant.root())
+                                        .is_none_or(|root| {
+                                            now < root.expires_at
+                                                && !Self::is_revoked_locked(&state, &root.id, now)
+                                        })
+                            })
                             .map(|token| token.client_id.clone())
                     })
                     .or_else(|| {
                         state
                             .bearer_meta
                             .get(token_str)
-                            .filter(|meta| now < meta.expires_at)
+                            .filter(|meta| {
+                                now < meta.expires_at
+                                    && meta
+                                        .exchange_grant
+                                        .as_ref()
+                                        .and_then(|grant| grant.root())
+                                        .is_none_or(|root| {
+                                            now < root.expires_at
+                                                && !Self::is_revoked_locked(&state, &root.id, now)
+                                        })
+                            })
                             .map(|meta| meta.client_id.clone())
                     }))
             }

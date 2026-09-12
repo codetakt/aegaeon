@@ -10,6 +10,8 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 /// Authorization Code with security properties
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthorizationCode {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub code: String,
     pub client_id: String,
     pub user_id: String,
@@ -90,6 +92,7 @@ impl AuthorizationCode {
         let now = SystemTime::now();
         Self {
             code: generate_secure_random(32),
+            exchange_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
             redirect_uri: input.redirect_uri,

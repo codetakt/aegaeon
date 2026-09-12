@@ -1,4 +1,4 @@
-use crate::authcode::store::TokenStore;
+use crate::authcode::store::{ExchangeCommitError, TokenStore};
 use crate::authcode::types::{
     AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
 };
@@ -22,6 +22,8 @@ pub(super) fn access_token_expires_at(
 }
 
 pub(super) struct AccessTokenPersistence {
+    pub(super) exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
+    pub(super) exchange_subject: BearerTokenMeta,
     pub(super) audience: String,
     pub(super) refresh_parent: Option<String>,
     pub(super) sender_binding: Option<SenderBinding>,
@@ -34,8 +36,10 @@ pub(super) async fn persist_access_with_meta_async(
     store: &TokenStore,
     mut access: AccessToken,
     persistence: AccessTokenPersistence,
-) -> Result<(), String> {
+) -> Result<(), ExchangeCommitError> {
     let AccessTokenPersistence {
+        exchange_grant,
+        exchange_subject,
         audience,
         refresh_parent,
         sender_binding,
@@ -44,6 +48,10 @@ pub(super) async fn persist_access_with_meta_async(
         acr,
     } = persistence;
 
+    access.exchange_root = exchange_grant
+        .as_ref()
+        .and_then(|grant| grant.root())
+        .cloned();
     access.cnf = match &sender_binding {
         Some(SenderBinding::DPoP { jkt }) => Some(CnfClaim::Jkt(jkt.clone())),
         Some(SenderBinding::Mtls { fingerprint }) => {
@@ -51,6 +59,7 @@ pub(super) async fn persist_access_with_meta_async(
         }
         None => None,
     };
+    access.token_type = AccessToken::type_for_confirmation(access.cnf.as_ref()).to_string();
     let created_at = access.created_at;
     let expires_at = access_token_expires_at(created_at, access.expires_in)?;
     let token_id = access.token.clone();
@@ -58,7 +67,7 @@ pub(super) async fn persist_access_with_meta_async(
     let user_id = access.user_id.clone();
     let granted_scopes = scope_members(access.scope.as_deref())
         .map_err(|error| format!("access token scope is invalid: {error}"))?;
-    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+    let mut meta = BearerTokenMeta::new(BearerTokenMetaInput {
         token_id,
         client_id,
         user_id,
@@ -72,15 +81,9 @@ pub(super) async fn persist_access_with_meta_async(
         expires_at,
         refresh_parent,
     });
-    if meta.refresh_parent.is_none() {
-        store
-            .store_issued_grant_async(access, None, meta)
-            .await
-            .map(|_| ())
-    } else {
-        store
-            .store_access_for_refresh_parent_async(access, meta)
-            .await
-            .map(|_| ())
-    }
+    meta.exchange_grant = exchange_grant;
+    store
+        .store_exchanged_access_async(access, meta, exchange_subject)
+        .await
+        .map(|_| ())
 }

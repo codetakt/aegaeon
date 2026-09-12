@@ -969,7 +969,7 @@ function validatePolicyPatchResponse(value: unknown): Readonly<PolicyPatchRespon
 export const MANAGEMENT_OPENAPI_METADATA = Object.freeze({
   title: "Aegaeon Management API",
   version: "v1",
-  pathCount: 75,
+  pathCount: 73,
   sourceArtifact: "generated/openapi/aegaeon-management-api.v1.json",
 });
 

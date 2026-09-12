@@ -94,3 +94,41 @@ fn runtime_ttls_reject_unbounded_authorization_code_lifetime() -> TestResult {
     ));
     Ok(())
 }
+
+#[tokio::test]
+async fn token_exchange_target_root_caps_initial_issue_after_ttl_increase() -> TestResult {
+    for asynchronous in [false, true] {
+    let policy = must_ok!(serde_json::from_value(serde_json::json!({
+        "version":1, "targets":[{"audience":"api","resourceAliases":[]}],
+        "rules":[{"clientId":"test_client","sourceAudience":"test_client","targetAudience":"api",
+            "scopes":[{"targetScope":"api.read","sourceScopes":["read"]}],"defaultScopes":["api.read"]}]
+    })), "exchange policy");
+    let mut issuer = TokenIssuer::new_process_local_with_ttls_for_tests(
+        Arc::new(InMemoryKeyManager::new()), 10, 20, 60,
+    ).with_token_exchange_policy(policy).with_issuer("https://issuer.example".into());
+    let (code, _) = must_ok!(issuer.issue_authorization_code_with_local_profile(AuthorizationCodeIssueInput {
+        exchange_scope_ceiling: vec!["api.read".into()],
+        ..AuthorizationCodeIssueInput::new(authorization_request("read offline_access", None), "user123".into(), true, 0)
+    }), "code");
+    let stored = must_some!(must_ok!(issuer.code_store.try_get_code(&code), "code lookup"), "code exists");
+    let root = must_some!(stored.exchange_grant.as_ref().and_then(|grant| grant.root()), "root exists").clone();
+    // An administrator changes TTLs between authorization and redemption.
+    issuer.access_token_ttl_secs = 3600;
+    issuer.refresh_token_ttl_secs = 7200;
+    let request = token_request_for_code(code, None);
+    let response = if asynchronous {
+        issuer.exchange_code_for_tokens_bound_with_grant_policy_async(request, None, None, true, true).await?
+    } else { issuer.exchange_code_for_tokens(request, None)? };
+
+    let TokenResponse::Success { access_token, expires_in, refresh_token: Some(refresh_token), .. } = response else {
+        fail_test!("expected offline grant: {response:?}");
+    };
+    let access = must_some!(must_ok!(issuer.token_store.try_verify_access_token(&access_token), "access lookup"), "access exists");
+    assert_eq!(expires_in, access.expires_in, "response must report the actual root-bounded lifetime");
+    let refresh = must_some!(must_ok!(issuer.token_store.try_get_refresh_token(&refresh_token), "refresh lookup"), "refresh exists");
+    assert!(access.created_at + Duration::from_secs(access.expires_in) <= root.expires_at);
+    assert!(refresh.expires_at <= root.expires_at);
+    assert_eq!(access.exchange_root.as_ref(), Some(&root));
+    }
+    Ok(())
+}

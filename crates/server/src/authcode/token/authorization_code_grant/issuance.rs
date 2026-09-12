@@ -20,6 +20,7 @@ pub(super) struct GrantIssueContext<'a> {
     pub(super) acr: Option<&'a str>,
     pub(super) auth_session_id: Option<&'a str>,
     pub(super) local_profile: Option<&'a OidcProfileClaims>,
+    pub(super) exchange_grant: Option<&'a crate::policy::token_exchange::ExchangeGrant>,
     pub(super) claim_release_policy: Option<&'a UpstreamClaimReleasePolicy>,
     pub(super) nonce: Option<&'a str>,
 }
@@ -47,6 +48,10 @@ impl TokenIssuer {
             },
             self.refresh_token_ttl_secs,
         );
+        refresh.exchange_grant = ctx.exchange_grant.cloned();
+        if let Some(root) = ctx.exchange_grant.and_then(|grant| grant.root()) {
+            refresh.expires_at = refresh.expires_at.min(root.expires_at);
+        }
         refresh.claim_release_policy = ctx.claim_release_policy.cloned();
         refresh.target_context = Some(RefreshTargetContext {
             version: 1,
@@ -224,6 +229,9 @@ pub(super) fn bearer_meta_for_authorization_code_grant(
         expires_at,
         refresh_parent,
     });
+    meta.exchange_grant = ctx
+        .exchange_grant
+        .map(|grant| grant.attenuate(&meta.granted_scopes));
     meta.claim_release_policy = ctx.claim_release_policy.cloned();
     meta
 }

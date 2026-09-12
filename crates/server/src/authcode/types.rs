@@ -30,6 +30,7 @@ mod tests {
     #[test]
     fn access_token_unrepresentable_expiry_is_expired() {
         let token = AccessToken {
+            exchange_root: None,
             token: "access".to_string(),
             token_type: "Bearer".to_string(),
             client_id: "client".to_string(),

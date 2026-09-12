@@ -10810,6 +10810,78 @@
           }
         }
       },
+      "ExchangeRule": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "sourceAudience",
+          "targetAudience",
+          "scopes",
+          "defaultScopes"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "defaultScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeScope"
+            }
+          },
+          "sourceAudience": {
+            "type": "string"
+          },
+          "targetAudience": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExchangeScope": {
+        "type": "object",
+        "required": [
+          "targetScope",
+          "sourceScopes"
+        ],
+        "properties": {
+          "sourceScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetScope": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExchangeTarget": {
+        "type": "object",
+        "required": [
+          "audience",
+          "resourceAliases"
+        ],
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "resourceAliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "FederationEntityCacheEntry": {
         "type": "object",
         "required": [
@@ -12360,6 +12432,9 @@
           "strictAuthorizeRedirect": {
             "type": "boolean"
           },
+          "tokenExchange": {
+            "$ref": "#/components/schemas/TokenExchangePolicy"
+          },
           "upstreamAuthTtlSeconds": {
             "type": "integer",
             "format": "int32",
@@ -13074,6 +13149,16 @@
               "null"
             ]
           },
+          "tokenExchange": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TokenExchangePolicy"
+              }
+            ]
+          },
           "upstreamAuthTtlSeconds": {
             "type": [
               "integer",
@@ -13499,6 +13584,34 @@
             "format": "date-time"
           }
         }
+      },
+      "TokenExchangePolicy": {
+        "type": "object",
+        "required": [
+          "version",
+          "targets",
+          "rules"
+        ],
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeRule"
+            }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeTarget"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateClientRequest": {
         "type": "object",

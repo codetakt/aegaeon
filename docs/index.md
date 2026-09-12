@@ -73,6 +73,7 @@ Audience: contributors, maintainers
 | `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment.md` | configuration | Server Environment Variables | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/networking.md` | configuration | Networking & TLS enforcement (reverse proxy) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
+| `docs/configurations/token-exchange.md` | configuration | Token exchange targets | current implementation baseline | 2026-09-12 | Identity | operators, application developers, verification reviewers |
 
 ## Policies
 

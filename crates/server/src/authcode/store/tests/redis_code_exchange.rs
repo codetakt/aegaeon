@@ -174,77 +174,81 @@ fn exchange_legacy_json(asynchronous: bool) -> StoreTestResult {
         .map_err(|err| err.to_string())?;
     let runtime = tokio::runtime::Runtime::new().map_err(|err| err.to_string())?;
 
-    for claims in [
-        serde_json::json!({}),
-        serde_json::json!({"department": "engineering"}),
-        serde_json::json!({"z": 1, "a": 2, "m": 3}),
-        serde_json::json!({"https://example.com/claims": {"roles": ["reader"], "z": 1}, "a": 2}),
-    ] {
-        let mut code = make_test_code(None, None);
-        code.scope = Some("read".to_string());
-        code.code_challenge = Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string());
-        code.code_challenge_method = Some("S256".to_string());
-        code.local_profile = Some(OidcProfileClaims {
-            custom_claims: serde_json::from_value(claims).map_err(|err| err.to_string())?,
-            ..OidcProfileClaims::default()
-        });
-        let code_str = code_store.store_code(code.clone())?;
-        let context = code_store
-            .redis_commit_context(&code_str)
-            .ok_or_else(|| "Redis commit context is required".to_string())?;
-        // A valid legacy JSON representation with deterministic ordering/spacing
-        // differences. Do not rely on a random HashMap iteration order to fail.
-        let value = serde_json::to_value(&code).map_err(|err| err.to_string())?;
-        let raw = serde_json::to_string_pretty(&value).map_err(|err| err.to_string())?;
-        let decoded: AuthorizationCode =
-            serde_json::from_str(&raw).map_err(|err| err.to_string())?;
-        assert_eq!(
-            serde_json::to_value(&decoded).map_err(|err| err.to_string())?,
-            value
-        );
-        assert_ne!(
-            serde_json::to_string(&decoded).map_err(|err| err.to_string())?,
-            raw
-        );
-        redis::cmd("SET")
-            .arg(&context.code_key)
-            .arg(&raw)
-            .arg("XX")
-            .arg("KEEPTTL")
-            .query::<()>(&mut conn)
-            .map_err(|err| err.to_string())?;
+    for _ in 0..12 {
+        for claims in [
+            serde_json::json!({}),
+            serde_json::json!({"department": "engineering"}),
+            serde_json::json!({"z": 1, "a": 2}),
+            serde_json::json!({"z": 1, "a": 2, "m": 3}),
+            serde_json::json!({"https://example.com/claims": {"roles": ["reader"], "z": 1}, "a": 2}),
+        ] {
+            let mut code = make_test_code(None, None);
+            code.scope = Some("read".to_string());
+            code.code_challenge = Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string());
+            code.code_challenge_method = Some("S256".to_string());
+            code.local_profile = Some(OidcProfileClaims {
+                custom_claims: serde_json::from_value(claims).map_err(|err| err.to_string())?,
+                ..OidcProfileClaims::default()
+            });
+            let code_str = code_store.store_code(code.clone())?;
+            let context = code_store
+                .redis_commit_context(&code_str)
+                .ok_or_else(|| "Redis commit context is required".to_string())?;
+            // A valid legacy JSON representation with deterministic ordering/spacing
+            // differences. Do not rely on a random HashMap iteration order to fail.
+            let value = serde_json::to_value(&code).map_err(|err| err.to_string())?;
+            let raw = serde_json::to_string_pretty(&value).map_err(|err| err.to_string())?;
+            let decoded: AuthorizationCode =
+                serde_json::from_str(&raw).map_err(|err| err.to_string())?;
+            assert_eq!(
+                serde_json::to_value(&decoded).map_err(|err| err.to_string())?,
+                value
+            );
+            assert_ne!(
+                serde_json::to_string(&decoded).map_err(|err| err.to_string())?,
+                raw
+            );
+            redis::cmd("SET")
+                .arg(&context.code_key)
+                .arg(&raw)
+                .arg("XX")
+                .arg("KEEPTTL")
+                .query::<()>(&mut conn)
+                .map_err(|err| err.to_string())?;
 
-        let exchange = || {
-            if asynchronous {
-                runtime.block_on(
-                    issuer.exchange_code_for_tokens_bound_with_grant_policy_async(
+            let exchange = || {
+                if asynchronous {
+                    runtime.block_on(
+                        issuer.exchange_code_for_tokens_bound_with_grant_policy_async(
+                            request(&code_str),
+                            None,
+                            None,
+                            true,
+                            false,
+                        ),
+                    )
+                } else {
+                    issuer.exchange_code_for_tokens_bound_with_grant_policy(
                         request(&code_str),
                         None,
                         None,
                         true,
                         false,
-                    ),
-                )
-            } else {
-                issuer.exchange_code_for_tokens_bound_with_grant_policy(
-                    request(&code_str),
-                    None,
-                    None,
-                    true,
-                    false,
-                )
-            }
-        };
-        let response = exchange()?;
-        let TokenResponse::Success { access_token, .. } = response else {
-            return Err(format!("valid legacy JSON must redeem: {response:?}"));
-        };
-        assert!(token_store
-            .try_verify_access_token(&access_token)?
-            .is_some());
-        assert!(code_store.try_get_code(&code_str)?.is_none());
-        assert!(invalid_code(exchange()));
+                    )
+                }
+            };
+            let response = exchange()?;
+            let TokenResponse::Success { access_token, .. } = response else {
+                return Err(format!("valid legacy JSON must redeem: {response:?}"));
+            };
+            assert!(token_store
+                .try_verify_access_token(&access_token)?
+                .is_some());
+            assert!(code_store.try_get_code(&code_str)?.is_none());
+            assert!(invalid_code(exchange()));
+        }
     }
+
     Ok(())
 }
 

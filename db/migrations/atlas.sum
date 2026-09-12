@@ -1,4 +1,5 @@
-h1:HUygKBphhYsMCHV6tQ8Bd7/PUbxieuyB8uuhAwMjRPE=
+h1:wFMLoL5OEKceqxmn44zAXIQCA0slzti+zNoSjvBcL5M=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
+20260909120000_token_exchange_policy.sql h1:r6cY8qHe7i1SBvcCYCy5KX2WY/YHAQr3p04fLN7SZyo=

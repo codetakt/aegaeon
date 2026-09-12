@@ -8,6 +8,8 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 /// Access token using Bearer (RFC 6750 / mTLS) or DPoP (RFC 9449).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessToken {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exchange_root: Option<crate::policy::token_exchange::ExchangeRoot>,
     pub token: String,
     pub token_type: String,
     pub client_id: String,
@@ -41,6 +43,8 @@ pub enum CnfClaim {
 /// Metadata tracked for bearer token enforcement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BearerTokenMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub token_id: String,
     pub client_id: String,
     pub user_id: String,
@@ -85,6 +89,7 @@ impl BearerTokenMeta {
     pub fn new(input: BearerTokenMetaInput) -> Self {
         Self {
             token_id: input.token_id,
+            exchange_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
             granted_scopes: input.granted_scopes,
@@ -115,6 +120,7 @@ impl AccessToken {
     pub fn new(client_id: String, user_id: String, scope: Option<String>, expires_in: u64) -> Self {
         Self {
             token: generate_secure_random(32),
+            exchange_root: None,
             token_type: "Bearer".to_string(),
             client_id,
             user_id,

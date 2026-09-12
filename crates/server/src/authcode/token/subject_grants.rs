@@ -333,6 +333,7 @@ impl TokenIssuer {
         };
 
         let access_token = AccessToken {
+            exchange_root: None,
             token: access_token_str.clone(),
             token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: client_id.to_string(),

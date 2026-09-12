@@ -33,6 +33,7 @@ pub(super) fn token_runtime_from_shared_env(
         .with_oidc(oidc.cloned())
         .with_oidc_sessions(oidc_sessions)
         .with_issuer(issuer.to_string())
+        .with_token_exchange_policy(cfg.token_exchange.clone())
         .with_jwt_access_tokens_enabled(jwt_runtime.access_tokens_enabled()),
     );
     let token_store = Arc::new(token_issuer.token_store.clone());

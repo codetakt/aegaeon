@@ -1223,6 +1223,32 @@
           "evidence": "inventory/harness_sites.json"
         }
       ]
+    },
+    {
+      "id": "server-exchange-lifetime",
+      "class": "required",
+      "gating": "evidence",
+      "package": {
+        "name": "aegaeon-server",
+        "manifest": "crates/server/Cargo.toml"
+      },
+      "crate": "aegaeon_server",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 4,
+      "harnesses": [
+        {
+          "name": "web::token_exchange::resolution::kani_proofs::verify_exchange_lifetime_linux",
+          "file": "crates/server/src/web/token_exchange/resolution/kani_proofs.rs",
+          "domain": "Actual production expiry helper over every i64-second/all subsecond fields representable by pinned x86_64 Linux SystemTime and every positive u64 TTL. Construction and standard-library subtraction unmodified, compared to an i128 seconds/borrow oracle. No clock/HTTP/JWT/Redis/root composition claim.",
+          "rows": [
+            "8693-204"
+          ]
+        }
+      ]
     }
   ]
 }

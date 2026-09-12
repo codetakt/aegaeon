@@ -51,6 +51,7 @@ impl TokenIssuer {
             oidc: None,
             oidc_sessions: None,
             issuer: None,
+            exchange_policy: Default::default(),
             jwt_access_tokens_enabled: false,
             access_token_ttl_secs: DEFAULT_ACCESS_TOKEN_TTL_SECS,
             refresh_token_ttl_secs: DEFAULT_REFRESH_TOKEN_TTL_SECS,
@@ -130,6 +131,7 @@ impl TokenIssuer {
             oidc: None,
             oidc_sessions: None,
             issuer: None,
+            exchange_policy: Default::default(),
             jwt_access_tokens_enabled: false,
             access_token_ttl_secs,
             refresh_token_ttl_secs,
@@ -148,6 +150,16 @@ impl TokenIssuer {
     #[must_use]
     pub fn with_oidc_sessions(mut self, sessions: Option<OidcSessionStore>) -> Self {
         self.oidc_sessions = sessions;
+        self
+    }
+
+    /// Attach the validated issuer-owned exchange policy before any authorization.
+    #[must_use]
+    pub fn with_token_exchange_policy(
+        mut self,
+        policy: crate::policy::token_exchange::TokenExchangePolicy,
+    ) -> Self {
+        self.exchange_policy = policy;
         self
     }
 

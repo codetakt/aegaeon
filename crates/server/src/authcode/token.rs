@@ -113,6 +113,7 @@ pub struct TokenIssuer {
     oidc: Option<OidcConfig>,
     oidc_sessions: Option<OidcSessionStore>,
     issuer: Option<String>,
+    exchange_policy: crate::policy::token_exchange::TokenExchangePolicy,
     jwt_access_tokens_enabled: bool,
     access_token_ttl_secs: u64,
     refresh_token_ttl_secs: u64,

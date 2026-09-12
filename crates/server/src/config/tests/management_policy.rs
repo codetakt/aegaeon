@@ -508,3 +508,25 @@ fn management_policy_overlay_accepts_valid_ssa_public_key_pem() -> ConfigTestRes
     );
     Ok(())
 }
+
+#[test]
+fn token_exchange_policy_round_trips_explicit_target_authority() -> Result<(), String> {
+    let mut document = serde_json::to_value(PolicyDocument::default())
+        .map_err(|e| e.to_string())?;
+    let exchange = serde_json::json!({
+        "version": 1,
+        "targets": [{"audience": "api", "resourceAliases": ["https://api.example/resource"]}],
+        "rules": [{
+            "clientId": "client", "sourceAudience": "https://issuer.example/userinfo",
+            "targetAudience": "api",
+            "scopes": [{"targetScope": "api.read", "sourceScopes": ["read"]}],
+            "defaultScopes": ["api.read"]
+        }]
+    });
+    document["tokenExchange"] = exchange.clone();
+    let parsed: PolicyDocument = serde_json::from_value(document)
+        .map_err(|e| format!("explicit token exchange policy must be accepted: {e}"))?;
+    let actual = serde_json::to_value(parsed).map_err(|e| e.to_string())?;
+    assert_eq!(actual["tokenExchange"], exchange);
+    Ok(())
+}

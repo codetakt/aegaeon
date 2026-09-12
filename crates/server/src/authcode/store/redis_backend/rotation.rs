@@ -72,7 +72,9 @@ impl RedisTokenStoreBackend {
         if previous.rotated {
             return Ok(REFRESH_ROTATION_OUTCOME_REUSED.to_string());
         }
-        if scope_set(previous.scope.as_deref()) != scope_set(new_refresh.scope.as_deref()) {
+        if previous.exchange_grant != new_refresh.exchange_grant
+            || scope_set(previous.scope.as_deref()) != scope_set(new_refresh.scope.as_deref())
+        {
             return Ok(REFRESH_ROTATION_OUTCOME_INCONSISTENT_GRANT.to_string());
         }
 
@@ -97,6 +99,15 @@ impl RedisTokenStoreBackend {
             refresh_token: new_refresh.token.clone(),
             predecessor_refresh: previous_refresh.to_string(),
         })?;
+        let root = rotated_previous
+            .exchange_grant
+            .as_ref()
+            .and_then(|grant| grant.root());
+        let root_revoked_key = root.map_or_else(
+            || self.keyspace.version_key(),
+            |root| self.keyspace.revoked_key(&root.id),
+        );
+        let root_deadline = root.map_or(0, |root| system_time_epoch_secs(root.expires_at));
         let previous_subject_refresh_key =
             self.keyspace.subject_refresh_key(&rotated_previous.user_id);
         let new_subject_refresh_key = self.keyspace.subject_refresh_key(&new_refresh.user_id);
@@ -167,9 +178,12 @@ impl RedisTokenStoreBackend {
                 subject_bearer: subject_bearer_key.as_str(),
                 bearer_expiry: self.keyspace.expiry_bearer_key().as_str(),
                 version: dummy_key.as_str(),
+                exchange_root_revoked: &root_revoked_key,
             },
             RefreshRotationCommitArgs {
                 now_epoch_secs: system_time_epoch_secs(SystemTime::now()),
+                has_exchange_root: root.is_some(),
+                exchange_root_deadline: root_deadline,
                 previous_refresh_token: previous_refresh,
                 expected_previous_payload: expected_previous_payload.as_str(),
                 rotated_previous_payload: rotated_previous_payload.as_str(),

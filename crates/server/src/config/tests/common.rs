@@ -329,6 +329,7 @@ fn is_env_key_byte(byte: u8) -> bool {
 
 fn management_policy_document() -> PolicyDocument {
     PolicyDocument {
+        token_exchange: Default::default(),
         pkce_required: true,
         dcr_enabled: false,
         dcr_everparse_runtime_enabled: false,

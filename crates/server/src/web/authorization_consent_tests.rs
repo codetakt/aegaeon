@@ -2,6 +2,7 @@
 mod admission;
 mod availability;
 mod reauthentication;
+mod repetition;
 mod request_objects;
 mod retention;
 use super::test_support::{

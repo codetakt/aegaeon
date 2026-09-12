@@ -287,6 +287,29 @@ async fn issue_authorize_code_response(
     let state_for_echo = ctx.state_for_echo.clone();
     let pkce_required = ctx.pkce_required;
     let profile_pkce_required = ctx.profile_pkce_required;
+    let exchange_scope_ceiling = match state.clients.try_get(&ctx.req.client_id) {
+        Ok(Some(client)) => client.allowed_scopes,
+        Ok(None) => {
+            return authorize_error_response(
+                authorize_error_context(
+                    state,
+                    &error_request,
+                    response_mode,
+                    issuer_base,
+                    state_for_echo.as_deref(),
+                ),
+                "unauthorized_client",
+                Some("client registration is unavailable"),
+            );
+        }
+        Err(error) => {
+            return registry_state_error_response(
+                issuer_base,
+                "authorize_capture_exchange_scope_ceiling",
+                error,
+            );
+        }
+    };
     match state
         .tokens
         .issuer
@@ -296,6 +319,7 @@ async fn issue_authorize_code_response(
                 auth_session_id: session.session_id.clone(),
                 local_profile,
                 claim_release_policy: session.claim_release_policy.clone(),
+                exchange_scope_ceiling,
                 ..AuthorizationCodeIssueInput::new(
                     ctx.req,
                     session.user_id.clone(),

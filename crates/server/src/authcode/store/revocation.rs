@@ -28,6 +28,9 @@ impl TokenStore {
         }
 
         if let Some(token) = state.refresh_tokens.remove(token_str) {
+            if let Some(root) = token.exchange_grant.as_ref().and_then(|grant| grant.root()) {
+                Self::insert_revoked_locked(state, root.id.clone(), root.expires_at, now);
+            }
             Self::insert_revoked_locked(state, token_str.to_string(), token.expires_at, now);
             if let Some(meta) = bearer_meta_removed {
                 Self::insert_revoked_locked(state, token_str.to_string(), meta.expires_at, now);

@@ -127,6 +127,7 @@ async fn approved_device_grant_response(
     };
     let token_type = AccessToken::type_for_confirmation(ctx.cnf_for_at.as_ref());
     let access = AccessToken {
+        exchange_root: None,
         token: access_token.clone(),
         token_type: token_type.to_string(),
         client_id: grant.client_id.clone(),

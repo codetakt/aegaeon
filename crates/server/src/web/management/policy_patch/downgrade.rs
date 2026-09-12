@@ -236,6 +236,10 @@ pub(in crate::web::management) fn detect_security_downgrade(
     {
         downgrades.push("sender_constraint");
     }
+    // Removing rules or targets also changes the captured authorization contract.
+    if before.token_exchange != after.token_exchange {
+        downgrades.push("token_exchange");
+    }
     downgrades
 }
 
@@ -326,6 +330,63 @@ const fn sender_constraint_strength(value: PolicySenderConstraint) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exchange_policy_removal_requires_acknowledgement_and_reason() {
+        let configured = PolicyDocument {
+            token_exchange: serde_json::from_value(serde_json::json!({
+                "version": 1,
+                "targets": [{"audience": "api", "resourceAliases": []}],
+                "rules": [{"clientId": "client", "sourceAudience": "source",
+                    "targetAudience": "api", "scopes": [
+                        {"targetScope": "read", "sourceScopes": ["read"]}
+                    ], "defaultScopes": ["read"]}]
+            }))
+            .expect("exchange policy"),
+            ..PolicyDocument::default()
+        };
+        configured.token_exchange.validate().expect("valid policy");
+        let empty = PolicyDocument::default();
+        let mut targets_only = configured.clone();
+        targets_only.token_exchange.rules.clear();
+        for (before, after) in [
+            (&configured, &empty),
+            (&configured, &targets_only),
+            (&targets_only, &empty),
+            (&empty, &configured),
+        ] {
+            assert_eq!(detect_security_downgrade(before, after), ["token_exchange"]);
+            for (allowed, reason) in [
+                (false, Some("remove exchange")),
+                (true, None),
+                (true, Some("  ")),
+            ] {
+                assert!(require_security_downgrade_authorization(
+                    before,
+                    after,
+                    SecurityDowngradeAuthorization { allowed, reason },
+                    "req-exchange",
+                )
+                .is_err());
+            }
+            assert_eq!(
+                require_security_downgrade_authorization(
+                    before,
+                    after,
+                    SecurityDowngradeAuthorization {
+                        allowed: true,
+                        reason: Some("change exchange policy")
+                    },
+                    "req-exchange",
+                )
+                .expect("acknowledged exchange change"),
+                ["token_exchange"]
+            );
+        }
+        for unchanged in [&empty, &configured, &targets_only] {
+            assert!(detect_security_downgrade(unchanged, unchanged).is_empty());
+        }
+    }
 
     fn downgraded_policy() -> (PolicyDocument, PolicyDocument) {
         let before = PolicyDocument::default();
