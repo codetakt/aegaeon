@@ -169,10 +169,10 @@ rfc_6749:
     file: fstar/authcode/AuthCode.Flow.fst
     invariant: issue_tokens_helper
   tests:
-  - crates/server/src/authcode/token/tests/token_exchange.rs
-  - crates/server/src/web/token_lifecycle/introspection.rs
   - crates/server/src/authcode/token/tests/sender_response.rs
   - crates/server/src/web/token_exchange/tests/sender_flow.rs
+  - crates/server/src/authcode/token/tests/token_exchange.rs
+  - crates/server/src/web/token_lifecycle/introspection.rs
   - crates/server/src/web/token_device_code/sender_contract_tests.rs
   ci_check: token-response-format
   status: verified
@@ -183,8 +183,8 @@ rfc_6749:
     rust: crates/server/src/authcode/token/authorization_code_grant/finalization.rs#finish_validated_authorization_code_issue
     test: crates/server/src/authcode/token/tests/token_exchange.rs
   notes:
-  - Token endpoint responses include token_type (Bearer/DPoP).
   - Code and refresh regressions bind the response type and lifetime to the issued record; the cited abstract helper does not model DPoP HTTP serialization.
+  - Token endpoint responses include token_type (Bearer/DPoP).
   - "Device-code issuance derives both the response and persisted token_type from cnf: DPoP for jkt, Bearer for certificate-bound or unbound tokens. The runtime regression does not broaden the cited formal model."
 - id: 6749-009
   section: '5.2'
