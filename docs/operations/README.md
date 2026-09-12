@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Configuration membership recovery](configuration-membership-recovery.md) —
+  audited repair of explicitly identified rows stranded by an earlier activation.
 - `[runbook]` [Authorization-code, consent and refresh transitions](authorization-code-refresh-recovery.md) —
   explicit offline consent, grant scope, resource binding and recovery.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —

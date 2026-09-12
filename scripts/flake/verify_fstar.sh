@@ -348,6 +348,7 @@ MODULES="$MODULES oidc/OIDC.AuthorizationTransactions.fst"
 # Shared finite fixtures must match their generated F* cases exactly.
 python3 "$REPO_ROOT/scripts/validation/authcode_redis_fixtures.py" --check
 MODULES="$MODULES ../tests/fstar/property/TestAuthCodeRedisGrant.fst"
+MODULES="$MODULES management/Configuration.Membership.fst"
 # Step-up
 MODULES="$MODULES stepup/StepUp.fst"
 # HashComputation model

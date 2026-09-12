@@ -162,3 +162,6 @@ modules:
   fstar/token/Token.fst: faithful
   fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst: faithful
   fstar/verifiedcore/api/VerifiedCore.Crypto.Hacl.fst: faithful
+
+  # Abstract membership transitions; SQL correspondence remains separate.
+  fstar/management/Configuration.Membership.fst: simplified

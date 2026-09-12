@@ -11,6 +11,35 @@ pub(in crate::web::management) async fn switch_active_configuration_version(
     next_configuration_version_id: Uuid,
     request_id: &str,
 ) -> Result<String, Response> {
+    // Derive the source from the locked environment even when a caller has
+    // already loaded it. A stale source must never strand concurrent creations.
+    let active: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+        "SELECT active_configuration_version_id FROM aegaeon.environments
+         WHERE id = $1 FOR UPDATE",
+    )
+    .bind(environment_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| management_internal_error(request_id, "Failed to lock active configuration"))?
+    .flatten();
+    if active != Some(previous_configuration_version_id) {
+        return Err(error_response(
+            StatusCode::CONFLICT,
+            "base_version_mismatch",
+            "The active configuration version changed",
+            None,
+            Some(request_id),
+        ));
+    }
+    super::membership::carry_configuration_membership(
+        tx,
+        environment_id,
+        previous_configuration_version_id,
+        next_configuration_version_id,
+        request_id,
+    )
+    .await?;
+
     if previous_configuration_version_id != next_configuration_version_id {
         sqlx::query(
             r"

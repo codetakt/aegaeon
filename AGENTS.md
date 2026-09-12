@@ -30,6 +30,10 @@ For any `status: verified` compliance-matrix row, every formal `proof[]` block m
 
 ## Commit & Pull Request Guidelines
 
+Use branch names that describe the concrete change in terms an external OSS contributor can understand, such as `fix/configuration-activation-membership`, `fix/oauth-sender-binding-errors`, or `feat/application-authorization-projections`. Never use internal workstream names, plan labels, task IDs, or unexplained shorthand in branch names, PR titles, or PR descriptions. Describe each PR around one independently reviewable behavior change, with its own tests and upgrade notes; separate unrelated configuration, protocol, application, and verification-tooling changes. Before publishing, check the branch name, title, and body together from the perspective of a contributor who has not seen internal plans or conversations.
+
+Assign the repository's existing labels when creating or updating a PR, based on its actual change type and affected area (for example `bug`, `enhancement`, `documentation`, `ci`, `verification`, `security`, and `spec`). Verify the published labels after the update; do not leave the PR unclassified.
+
 Commits follow Conventional Commits enforced by `commitlint.config.cjs`, for example `fix(server): reject invalid DPoP nonce`. Use lowercase types such as `feat`, `fix`, `docs`, `test`, `refactor`, `ci`, and `chore`; keep headers at 72 characters or less. Pull requests should describe behavior changes, link issues, list commands run, include tests or proof evidence, cite RFCs for protocol changes, and update `docs/` or `spec/compliance-matrix.yaml` when needed.
 
 ## Security & Configuration Tips
