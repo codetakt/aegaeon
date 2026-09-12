@@ -34,6 +34,30 @@ pub fn validate_dpop_typ_for_spec_oracle(typ: &str) -> bool {
     ffi::validate_dpop_typ(typ)
 }
 
+/// Nonces are independently scoped to the authorization server and resource server.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DpopEndpointRole {
+    AuthorizationServer,
+    ResourceServer,
+}
+
+impl DpopEndpointRole {
+    pub(super) const fn nonce_scope(self) -> &'static str {
+        match self {
+            Self::AuthorizationServer => "as",
+            Self::ResourceServer => "rs",
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) const fn nonce_index(self) -> usize {
+        match self {
+            Self::AuthorizationServer => 0,
+            Self::ResourceServer => 1,
+        }
+    }
+}
+
 /// Sender binding derived from a verified `DPoP` proof (RFC 9449).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DpopBinding {
@@ -266,6 +290,27 @@ impl DpopMiddleware {
         proof: &str,
         authorization: Option<&str>,
     ) -> Result<DpopBinding, DpopError> {
+        self.verify_components_for(
+            DpopEndpointRole::AuthorizationServer,
+            method,
+            uri,
+            proof,
+            authorization,
+        )
+    }
+
+    /// Validate a proof with a nonce scoped to this endpoint's role.
+    ///
+    /// # Errors
+    /// Returns the same validation errors as [`Self::verify_components`].
+    pub fn verify_components_for(
+        &self,
+        role: DpopEndpointRole,
+        method: &Method,
+        uri: &Uri,
+        proof: &str,
+        authorization: Option<&str>,
+    ) -> Result<DpopBinding, DpopError> {
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
             .ok_or(DpopError::InvalidProof)?;
         let method_upper = method.as_str().to_ascii_uppercase();
@@ -289,15 +334,23 @@ impl DpopMiddleware {
         )
         .ok_or(DpopError::InvalidProof)?;
 
+        // A proof identifier must identify this proof. Reject an empty value
+        // before nonce/replay storage; replay detection still enforces reuse.
+        if verified_proof.jti.is_empty() {
+            return Err(DpopError::InvalidProof);
+        }
+
         // RFC 9449 Section 5: validate nonce if the server requires it.
         if let Some(ref store) = self.nonce_store {
             let nonce_valid = match verified_proof.nonce.as_deref() {
-                Some(nonce) => store.try_validate_nonce(nonce)?,
+                Some(nonce) => store.try_validate_nonce_for(role, nonce)?,
                 None => false,
             };
             if !nonce_valid {
                 // Nonce missing or invalid — tell client to use a fresh one.
-                return Err(DpopError::UseDpopNonce(store.try_get_current_nonce()?));
+                return Err(DpopError::UseDpopNonce(
+                    store.try_get_current_nonce_for(role)?,
+                ));
             }
         }
 

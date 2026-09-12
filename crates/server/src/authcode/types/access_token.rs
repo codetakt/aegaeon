@@ -5,11 +5,11 @@ use std::time::SystemTime;
 
 use crate::upstream::UpstreamClaimReleasePolicy;
 
-/// Bearer Access Token per RFC 6750
+/// Access token using Bearer (RFC 6750 / mTLS) or DPoP (RFC 9449).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessToken {
     pub token: String,
-    pub token_type: String, // Always "Bearer"
+    pub token_type: String,
     pub client_id: String,
     pub user_id: String,
     pub scope: Option<String>,
@@ -102,6 +102,15 @@ impl BearerTokenMeta {
 }
 
 impl AccessToken {
+    /// RFC 9449 section 5: describe the confirmation actually minted into the token.
+    pub(crate) const fn type_for_confirmation(cnf: Option<&CnfClaim>) -> &'static str {
+        if matches!(cnf, Some(CnfClaim::Jkt(_))) {
+            "DPoP"
+        } else {
+            "Bearer"
+        }
+    }
+
     #[must_use]
     pub fn new(client_id: String, user_id: String, scope: Option<String>, expires_in: u64) -> Self {
         Self {

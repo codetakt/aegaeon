@@ -70,6 +70,8 @@ impl TokenIssuer {
                 issue.refresh_token.clone(),
             )
         };
+        let token_type = issue.access_token.token_type.clone();
+        let expires_in = issue.access_token.expires_in;
         let (access_token_str, refresh_token) = self
             .token_store
             .store_issued_authorization_code_grant(AuthorizationCodeGrantCommit::new(
@@ -88,8 +90,8 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: access_token_str,
-            token_type: "Bearer".to_string(),
-            expires_in: self.access_token_ttl_secs,
+            token_type,
+            expires_in,
             refresh_token,
             scope: issue.scope,
             id_token,
@@ -121,6 +123,8 @@ impl TokenIssuer {
                 issue.refresh_token.clone(),
             )
         };
+        let token_type = issue.access_token.token_type.clone();
+        let expires_in = issue.access_token.expires_in;
         let (access_token_str, refresh_token) = self
             .token_store
             .store_issued_authorization_code_grant_async(AuthorizationCodeGrantCommit::new(
@@ -140,8 +144,8 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: access_token_str,
-            token_type: "Bearer".to_string(),
-            expires_in: self.access_token_ttl_secs,
+            token_type,
+            expires_in,
             refresh_token,
             scope: issue.scope,
             id_token,

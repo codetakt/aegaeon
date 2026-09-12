@@ -76,6 +76,19 @@ pub(super) fn token_form_from_params(
     params: &[(String, String)],
     issuer_base: &str,
 ) -> Result<TokenForm, Response> {
+    // RFC 6749 §3.2: empty values are omitted; duplicates are still invalid.
+    // No runtime RAR type has a semantic handler. RFC 9396 §7 constraints
+    // must not disappear while consuming a code or rotating a refresh token.
+    if optional_token_param(params, "authorization_details", issuer_base)?
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Err(no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_authorization_details",
+            Some("authorization_details are not supported at the token endpoint"),
+            issuer_base,
+        ));
+    }
     Ok(TokenForm {
         grant_type: required_token_param(params, "grant_type", issuer_base)?,
         code: optional_token_param(params, "code", issuer_base)?,

@@ -164,3 +164,6 @@ mod token_exchange_tests;
 
 #[cfg(test)]
 mod upstream_tests;
+
+#[cfg(test)]
+mod oauth_conformance_tests;

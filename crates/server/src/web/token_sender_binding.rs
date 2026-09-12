@@ -5,70 +5,98 @@ use axum::{
 
 use crate::authcode::types::{CnfClaim, RefreshToken, SenderBinding};
 use crate::middleware::tls::{mtls_fingerprint_to_x5t_s256, normalize_forwarded_client_cert};
-use crate::middleware::{DpopBinding, DpopError, DpopMiddleware, DPOP_HEADER};
+use crate::middleware::{DpopBinding, DpopError, DpopMiddleware};
 use crate::policy::SenderConstraint;
 use crate::util;
 
 use super::oauth_errors::{
-    authorization_header, dpop_backend_unavailable_response, dpop_header, dpop_header_error,
-    dpop_invalid_token_response, forwarded_client_cert_header, json_error_with_iss,
-    token_header_error,
+    apply_oauth_authenticate_header, authorization_header, dpop_header,
+    forwarded_client_cert_header, no_cache_json_error_with_iss, token_header_error,
 };
 use super::token_response::token_error_response;
 use super::{AppState, X_FORWARDED_CLIENT_CERT_HEADER};
+use crate::middleware::dpop::DpopEndpointRole;
 
+/// Validation retains its error category until the endpoint renders its role.
 pub(super) fn dpop_binding_from_request(
     dpop: &DpopMiddleware,
+    role: DpopEndpointRole,
     method: &http::Method,
     uri: &Uri,
     headers: &HeaderMap,
-    issuer_base: &str,
-) -> Result<Option<DpopBinding>, Response> {
-    let auth = authorization_header(headers)
-        .map_err(|err| dpop_header_error(issuer_base, "Authorization", err))?;
-    let proof =
-        dpop_header(headers).map_err(|err| dpop_header_error(issuer_base, DPOP_HEADER, err))?;
-    let Some(proof) = proof else { return Ok(None) };
-
-    match dpop.verify_components(method, uri, proof, auth) {
-        Ok(binding) => Ok(Some(binding)),
-        Err(DpopError::InvalidProof) => Err(dpop_invalid_token_response(
-            issuer_base,
-            "DPoP proof validation failed",
-        )),
-        Err(DpopError::Replay) => Err(dpop_invalid_token_response(
-            issuer_base,
-            "DPoP proof was replayed",
-        )),
-        Err(DpopError::MissingProof) => Err(dpop_invalid_token_response(
-            issuer_base,
-            "DPoP proof is required for sender-constrained requests",
-        )),
-        Err(DpopError::BackendUnavailable(_)) => {
-            Err(dpop_backend_unavailable_response(issuer_base))
+) -> Result<Option<DpopBinding>, DpopError> {
+    let auth = authorization_header(headers).map_err(|_| DpopError::InvalidProof)?;
+    let proof = dpop_header(headers).map_err(|_| DpopError::InvalidProof)?;
+    let Some(proof) = proof else {
+        if role == DpopEndpointRole::ResourceServer
+            && auth
+                .and_then(|value| value.split_once(' '))
+                .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("DPoP"))
+        {
+            return Err(DpopError::MissingProof);
         }
-        Err(DpopError::UseDpopNonce(nonce)) => Err(dpop_use_nonce_response(issuer_base, &nonce)),
-    }
+        return Ok(None);
+    };
+    dpop.verify_components_for(role, method, uri, proof, auth)
+        .map(Some)
 }
 
-/// RFC 9449 Section 5: respond with `use_dpop_nonce` error and fresh `DPoP-Nonce` header.
-pub(super) fn dpop_use_nonce_response(issuer_base: &str, nonce: &str) -> Response {
-    let mut response = json_error_with_iss(
-        StatusCode::BAD_REQUEST,
-        "use_dpop_nonce",
-        Some("Authorization server requires nonce in DPoP proof"),
-        issuer_base,
-    );
-    attach_dpop_nonce_header(&mut response, nonce);
-    util::apply_no_cache_headers(&mut response);
+/// RFC 9449 §§5,7.1,9: AS errors use OAuth JSON; RS errors use a DPoP challenge.
+pub(super) fn dpop_error_response(
+    issuer: &str,
+    role: DpopEndpointRole,
+    error: DpopError,
+) -> Response {
+    let (code, description) = match &error {
+        DpopError::UseDpopNonce(_) => (
+            "use_dpop_nonce",
+            "server requires a nonce in the DPoP proof",
+        ),
+        DpopError::BackendUnavailable(_) => (
+            "temporarily_unavailable",
+            "DPoP protection backend unavailable",
+        ),
+        DpopError::InvalidProof | DpopError::Replay | DpopError::MissingProof => {
+            ("invalid_dpop_proof", "DPoP proof validation failed")
+        }
+    };
+    let unavailable = matches!(error, DpopError::BackendUnavailable(_));
+    let status = if unavailable {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else if role == DpopEndpointRole::AuthorizationServer {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::UNAUTHORIZED
+    };
+    let mut response = no_cache_json_error_with_iss(status, code, Some(description), issuer);
+    if role == DpopEndpointRole::ResourceServer && !unavailable {
+        apply_oauth_authenticate_header(&mut response, "DPoP", code);
+    }
+    if let DpopError::UseDpopNonce(nonce) = error {
+        match HeaderValue::from_str(&nonce) {
+            Ok(value) => {
+                response.headers_mut().insert("DPoP-Nonce", value);
+            }
+            Err(_) => {
+                return no_cache_json_error_with_iss(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "temporarily_unavailable",
+                    None,
+                    issuer,
+                )
+            }
+        }
+    }
     response
 }
 
-/// Attach a `DPoP-Nonce` header to a response (RFC 9449 Section 5).
-fn attach_dpop_nonce_header(response: &mut Response, nonce: &str) {
-    if let Ok(val) = HeaderValue::from_str(nonce) {
-        response.headers_mut().insert("DPoP-Nonce", val);
-    }
+#[cfg(test)]
+pub(super) fn dpop_use_nonce_response(issuer: &str, nonce: &str) -> Response {
+    dpop_error_response(
+        issuer,
+        DpopEndpointRole::AuthorizationServer,
+        DpopError::UseDpopNonce(nonce.into()),
+    )
 }
 
 pub(super) fn refresh_sender_binding_violation(
@@ -77,7 +105,9 @@ pub(super) fn refresh_sender_binding_violation(
     sender_constraint: SenderConstraint,
     enforce_sender_binding: bool,
 ) -> Option<&'static str> {
-    if !enforce_sender_binding {
+    // An issuance-policy option cannot remove a binding already committed to
+    // a refresh token (RFC 9449 §5 / RFC 8705 §3). It only affects unbound grants.
+    if !enforce_sender_binding && refresh.sender_binding.is_none() {
         return None;
     }
 
@@ -166,7 +196,13 @@ pub(super) fn token_resolve_sender_binding(
     let mtls_fingerprint = trusted_mtls_fingerprint(state, headers)
         .map_err(|err| token_header_error(X_FORWARDED_CLIENT_CERT_HEADER, err))?;
     let dpop_present = dpop_header(headers)
-        .map_err(|err| token_header_error(DPOP_HEADER, err))?
+        .map_err(|_| {
+            dpop_error_response(
+                issuer_base,
+                DpopEndpointRole::AuthorizationServer,
+                DpopError::InvalidProof,
+            )
+        })?
         .is_some();
     if sender_constraint == SenderConstraint::Mtls && dpop_present {
         return Err(token_error_response(
@@ -178,18 +214,25 @@ pub(super) fn token_resolve_sender_binding(
     let path = uri
         .path_and_query()
         .map_or(uri.path(), axum::http::uri::PathAndQuery::as_str);
-    let uri_for_dpop: Uri = path
-        .parse()
-        .map_err(|_| dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"))?;
+    let uri_for_dpop: Uri = path.parse().map_err(|_| {
+        dpop_error_response(
+            issuer_base,
+            DpopEndpointRole::AuthorizationServer,
+            DpopError::InvalidProof,
+        )
+    })?;
     let binding = match sender_constraint {
         SenderConstraint::Mtls => None,
         _ => dpop_binding_from_request(
             state.dpop.as_ref(),
+            DpopEndpointRole::AuthorizationServer,
             &http::Method::POST,
             &uri_for_dpop,
             headers,
-            issuer_base,
-        )?,
+        )
+        .map_err(|error| {
+            dpop_error_response(issuer_base, DpopEndpointRole::AuthorizationServer, error)
+        })?,
     };
     match sender_constraint {
         SenderConstraint::Mtls => mtls_fingerprint
@@ -205,10 +248,10 @@ pub(super) fn token_resolve_sender_binding(
         SenderConstraint::DPoP => binding
             .map(|binding| SenderBinding::DPoP { jkt: binding.jkt })
             .ok_or_else(|| {
-                token_error_response(
-                    StatusCode::BAD_REQUEST,
-                    "invalid_request",
-                    Some("DPoP proof required when sender constraint is DPoP"),
+                dpop_error_response(
+                    issuer_base,
+                    DpopEndpointRole::AuthorizationServer,
+                    DpopError::MissingProof,
                 )
             })
             .map(Some),
@@ -354,6 +397,50 @@ mod sender_binding_policy_tests {
             ),
             Some("sender_binding_mismatch")
         );
+    }
+
+    #[test]
+    fn disabling_refresh_policy_cannot_remove_committed_sender_binding() {
+        for binding in [
+            SenderBinding::DPoP {
+                jkt: "original".into(),
+            },
+            SenderBinding::Mtls {
+                fingerprint: "original".into(),
+            },
+        ] {
+            let refresh = refresh_with_binding(Some(binding.clone()));
+            assert!(refresh_sender_binding_violation(
+                &refresh,
+                Some(&binding),
+                SenderConstraint::None,
+                false
+            )
+            .is_none());
+            assert!(refresh_sender_binding_violation(
+                &refresh,
+                None,
+                SenderConstraint::None,
+                false
+            )
+            .is_some());
+            for wrong in [
+                SenderBinding::DPoP {
+                    jkt: "wrong".into(),
+                },
+                SenderBinding::Mtls {
+                    fingerprint: "wrong".into(),
+                },
+            ] {
+                assert!(refresh_sender_binding_violation(
+                    &refresh,
+                    Some(&wrong),
+                    SenderConstraint::None,
+                    false
+                )
+                .is_some());
+            }
+        }
     }
 
     #[test]

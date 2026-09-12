@@ -219,6 +219,7 @@ impl TokenIssuer {
             Ok(prepared) => prepared,
             Err(error) => return Ok(error.into_token_response()),
         };
+        let token_type = prepared.access_token.token_type.clone();
         let (access_token_str, _) =
             match self
                 .token_store
@@ -235,7 +236,7 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: access_token_str,
-            token_type: "Bearer".to_string(),
+            token_type,
             expires_in: prepared.expires_in,
             refresh_token: None,
             scope: prepared.scope,
@@ -252,6 +253,7 @@ impl TokenIssuer {
             Ok(prepared) => prepared,
             Err(error) => return Ok(error.into_token_response()),
         };
+        let token_type = prepared.access_token.token_type.clone();
         let (access_token_str, _) = match self
             .token_store
             .store_issued_grant_async(prepared.access_token, None, prepared.meta)
@@ -268,7 +270,7 @@ impl TokenIssuer {
 
         Ok(TokenResponse::Success {
             access_token: access_token_str,
-            token_type: "Bearer".to_string(),
+            token_type,
             expires_in: prepared.expires_in,
             refresh_token: None,
             scope: prepared.scope,
@@ -332,7 +334,7 @@ impl TokenIssuer {
 
         let access_token = AccessToken {
             token: access_token_str.clone(),
-            token_type: "Bearer".to_string(),
+            token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: client_id.to_string(),
             user_id: subject.to_string(),
             scope: scope.clone(),

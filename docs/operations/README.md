@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [OAuth sender binding and unsupported authorization details](oauth-conformance.md) —
+  protocol error responses, mixed sender constraints, and RAR rejection.
 - `[runbook]` [Authorization-code, consent and refresh transitions](authorization-code-refresh-recovery.md) —
   explicit offline consent, grant scope, resource binding and recovery.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —

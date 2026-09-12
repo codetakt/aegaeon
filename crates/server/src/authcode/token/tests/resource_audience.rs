@@ -1,57 +1,34 @@
+// Direct issuer/store fixtures model records issued before RAR activation was
+// disabled. These are internal upgrade regressions, not HTTP RAR issuance.
 #[test]
-fn test_authorization_details_propagation() -> TestResult {
-    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
-    let details = json!([{"type": "payment", "actions": ["read"]}]);
-
-    let auth_req = AuthorizationRequest {
-        response_type: "code".to_string(),
-        client_id: "test_client".to_string(),
-        iss: None,
-        redirect_uri: Some("https://example.com/callback".to_string()),
-        resource: None,
-        authorization_details: Some(details.clone()),
-        scope: Some("read".to_string()),
-        state: Some("xyz".to_string()),
-        nonce: Some("abc".to_string()),
-        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
-        code_challenge_method: Some("S256".to_string()),
-        request_uri: None,
-        request_object: None,
-        request_object_claims: None,
-        acr_values: None,
-        max_age: None,
-    };
-
-    let (code, _) = must_ok!(
-        issuer.issue_authorization_code(auth_req, "user123".to_string()),
-        "authorization code",
-    );
-
-    let token_req = TokenRequest {
-        grant_type: "authorization_code".to_string(),
-        code: Some(code),
-        redirect_uri: Some("https://example.com/callback".to_string()),
-        client_id: "test_client".to_string(),
-        client_secret: Some("secret".to_string()),
-        refresh_token: None,
-        code_verifier: Some("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string()),
-        resource: None,
-        request_object_claims: None,
-    };
-
-    let response = must_ok!(
-        issuer.exchange_code_for_tokens(token_req, None),
-        "token exchange",
-    );
-
-    match response {
-        TokenResponse::Success {
-            authorization_details,
-            ..
-        } => {
-            assert_eq!(authorization_details, Some(details));
+fn unsupported_stored_rar_code_is_not_consumed_or_reissued() -> TestResult {
+    for details in [json!([]), json!([{"type":"payment","actions":["read"]}])] {
+        let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
+        let mut request = authorization_request("read", None);
+        request.authorization_details = Some(details);
+        let (code, _) = issuer.issue_authorization_code(request, "user123".into())?;
+        for _ in 0..2 {
+            assert!(matches!(issuer.exchange_code_for_tokens(token_request_for_code(code.clone(), None), None)?,
+                TokenResponse::Error { error, .. } if error == "invalid_grant"));
+            assert!(issuer.code_store.try_get_code(&code)?.is_some());
         }
-        other => fail_test!("expected success response, got {other:?}"),
+    }
+    Ok(())
+}
+
+#[test]
+fn unsupported_stored_rar_refresh_is_not_rotated() -> TestResult {
+    let (issuer, refresh) = offline_target_fixture()?;
+    let mut stored = issuer.token_store.try_get_refresh_token(&refresh)?.ok_or("stored refresh")?;
+    stored.authorization_details = Some(json!([{"type":"payment","actions":["read"]}]));
+    issuer.token_store.try_replace_refresh_token_record(stored.clone())?;
+    for _ in 0..2 {
+        assert!(matches!(issuer.refresh_access_token(&refresh, None, None)?,
+            TokenResponse::Error { error, .. } if error == "invalid_grant"));
+        let after = issuer.token_store.try_get_refresh_token(&refresh)?.ok_or("retained refresh")?;
+        assert!(!after.rotated);
+        assert_eq!(serde_json::to_value(&after).map_err(|e| e.to_string())?,
+            serde_json::to_value(&stored).map_err(|e| e.to_string())?);
     }
     Ok(())
 }

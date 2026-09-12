@@ -1,3 +1,5 @@
+use crate::middleware::dpop::DpopEndpointRole;
+use crate::web::token_sender_binding::dpop_error_response;
 use axum::{
     http::{HeaderMap, Method, StatusCode, Uri},
     response::Response,
@@ -103,11 +105,12 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         .map_err(|_| dpop_invalid_token_response(issuer_base, "DPoP proof validation failed"))?;
     let binding = dpop_binding_from_request(
         state.dpop.as_ref(),
+        DpopEndpointRole::ResourceServer,
         &Method::POST,
         &uri_for_dpop,
         headers,
-        issuer_base,
-    )?;
+    )
+    .map_err(|error| dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error))?;
     let binding_jkt = binding.as_ref().map(|binding| binding.jkt.as_str());
     let mtls_fingerprint = trusted_mtls_fingerprint(state, headers)
         .map_err(|err| no_cache_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err))?;

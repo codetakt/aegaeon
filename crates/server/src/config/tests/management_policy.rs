@@ -55,8 +55,7 @@ fn management_policy_overlay_updates_runtime_security_fields() -> ConfigTestResu
     policy.jwt_access_tokens_enabled = true;
     policy.jwt_introspection_enabled = true;
     policy.jwt_introspection_exp_seconds = 30;
-    policy.authorization_details_types_supported =
-        vec![" payment_initiation ".to_string(), String::new()];
+    policy.authorization_details_types_supported = Vec::new();
     policy.acr_values_supported = vec![" urn:pwd ".to_string(), "urn:mfa".to_string()];
     policy.default_acr = Some(" urn:mfa ".to_string());
     policy.local_password_acr = Some("urn:pwd".to_string());
@@ -91,10 +90,7 @@ fn management_policy_overlay_updates_runtime_security_fields() -> ConfigTestResu
     assert!(cfg.enable_jwt_access_tokens);
     assert!(cfg.enable_jwt_introspection);
     assert_eq!(cfg.jwt_introspection_exp_secs, 30);
-    assert_eq!(
-        cfg.authorization_details_types_supported,
-        vec!["payment_initiation"]
-    );
+    assert!(cfg.authorization_details_types_supported.is_empty());
     assert_eq!(cfg.acr_values_supported, vec!["urn:pwd", "urn:mfa"]);
     assert_eq!(cfg.default_acr, Some("urn:mfa".to_string()));
     assert_eq!(cfg.local_password_acr, Some("urn:pwd".to_string()));

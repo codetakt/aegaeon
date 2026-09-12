@@ -203,12 +203,13 @@ fn validate_oauth_profile_accepts_none_auth_when_policy_allows() {
 }
 
 #[test]
-fn validate_oauth_profile_rejects_unimplemented_mtls_sender() {
+fn validate_oauth_profile_accepts_mtls_only_when_enabled() {
     let mut policy = default_policy_document();
     policy.mtls_enabled = true;
-    policy.dcr_allowed_sender_methods = vec!["mtls".to_string()];
     let mut input = valid_oauth_profile_input();
     input.sender_constrained = "MTLS".to_string();
+    assert!(validate_oauth_profile_input(&mut input, &policy, "req-1").is_ok());
+    policy.mtls_enabled = false;
     assert!(validate_oauth_profile_input(&mut input, &policy, "req-1").is_err());
 }
 

@@ -14,6 +14,14 @@ pub(super) fn validate_code_grant_request(
     authorization_code_grant_allowed: bool,
     oidc_enabled: bool,
 ) -> Result<ValidatedCodeGrantRequest, TokenGrantError> {
+    // A stored constraint must never disappear during an upgrade. No RAR type
+    // currently has an executable permission handler, including legacy grants.
+    if code.authorization_details.is_some() {
+        return Err(error(
+            TokenGrantErrorCode::InvalidGrant,
+            "grant contains unsupported authorization details; authorize again",
+        ));
+    }
     let selected_resource =
         select_authorized_resource(code.resource.as_deref(), req.resource.as_deref())?;
     validate_request_object_binding(

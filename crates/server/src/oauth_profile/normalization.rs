@@ -13,10 +13,12 @@ pub(crate) fn merge_sender_constraints(
     base: SenderConstraint,
     profile: SenderConstraint,
 ) -> SenderConstraint {
-    match (base, profile) {
-        (SenderConstraint::Mtls, _) | (_, SenderConstraint::Mtls) => SenderConstraint::Mtls,
-        (SenderConstraint::DPoP, _) | (_, SenderConstraint::DPoP) => SenderConstraint::DPoP,
-        _ => SenderConstraint::None,
+    // The environment supplies the default and disallows unbound issuance when
+    // binding is required. A profile chooses the mechanism; DPoP and mTLS are
+    // alternatives, not an ordering of cryptographic strength.
+    match profile {
+        SenderConstraint::None => base,
+        mechanism => mechanism,
     }
 }
 

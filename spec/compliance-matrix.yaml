@@ -3842,13 +3842,13 @@ rfc_9396:
   requirement: TRACKING
   description: Track RFC 9396 (Rich Authorization Requests) requirements for authorization_details, including PAR/JAR composition.
   module: docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md
-  status: implemented
+  status: partial
   applies_to:
   - as
   - client
   notes:
-  - "authorization_details parsing/validation is implemented; supported types are configured via policy.authorizationDetailsTypesSupported in the active configuration document."
-  - "Authorize + PAR reject unsupported types with invalid_authorization_details (rar_authorization_details_http_test)."
+  - "Structural parsing and persistence slices exist. No runtime RAR type has semantic validation and attenuation; nonempty authorizationDetailsTypesSupported is rejected at activation and startup."
+  - "Authorize, PAR and all token grants reject nonempty unsupported authorization_details. Token admission rejects duplicates and preserves code/refresh usability on refusal. Empty form values are omitted."
   - "Client-side usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
 - id: 9396-101
@@ -3864,7 +3864,9 @@ rfc_9396:
   tests:
   - crates/server/src/web/mod.rs
   - crates/server/src/web/token_exchange_tests/authorize_query.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/util.rs
   trace:
     kind: guard
@@ -3886,7 +3888,9 @@ rfc_9396:
     lemma: lemma_accept_requires_supported
   tests:
   - crates/server/src/web/token_exchange_tests/authorize_query.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/util.rs
   trace:
     kind: guard
@@ -3911,7 +3915,9 @@ rfc_9396:
     document: docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md
   tests:
   - crates/server/src/web/token_exchange_tests/authorize_query.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: guard
@@ -3933,7 +3939,9 @@ rfc_9396:
     document: docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md
   tests:
   - crates/server/src/metadata.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/metadata.rs
   trace:
     kind: exempt
@@ -3962,7 +3970,9 @@ rfc_9396:
     lemma: request_object_precedence_over_form
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: guard
@@ -3984,7 +3994,9 @@ rfc_9396:
     lemma: par_authorization_details_used
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/par.rs
   trace:
     kind: exempt
@@ -4008,7 +4020,9 @@ rfc_9396:
   - type: tamarin
     file: proofs/tamarin/rar/rar_authorization_details.spthy
     lemma: par_precedence_over_query
-  status: verified
+  notes:
+  - "Cited model slices do not establish runtime RAR type semantics or end-to-end support. Runtime type activation is disabled; conditional legacy persistence tests are not conformance acceptance."
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: guard
@@ -4017,8 +4031,6 @@ rfc_9396:
     test: crates/server/src/web/authorize_request.rs
   applies_to:
   - as
-  notes:
-  - "parse_authorize_request returns PAR-bound authorization_details when request_uri is supplied, ignoring raw query parameters."
 
 rfc_9470:
 - id: 9470-001

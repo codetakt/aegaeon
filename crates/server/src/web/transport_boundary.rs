@@ -5,7 +5,7 @@ use crate::util;
 use axum::{
     body::Body,
     extract::{ConnectInfo, State},
-    http::{header, HeaderValue, StatusCode},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 
 pub(super) async fn transport_security_middleware(
     State(state): State<AppState>,
-    req: axum::http::Request<Body>,
+    mut req: axum::http::Request<Body>,
     next: Next,
 ) -> Response {
     if should_enforce_transport_for_route(req.uri().path()) {
@@ -22,8 +22,15 @@ pub(super) async fn transport_security_middleware(
             .extensions()
             .get::<ConnectInfo<SocketAddr>>()
             .map(|connect_info| connect_info.0);
-        if let Err(kind) = state.transport.enforce(remote, req.headers()) {
-            return transport_rejection(&state, kind);
+        match state
+            .transport
+            .verified_client_certificate(remote, req.headers())
+        {
+            Ok(Some(certificate)) => {
+                req.extensions_mut().insert(certificate);
+            }
+            Ok(None) => {}
+            Err(kind) => return transport_rejection_for_route(&state, kind, req.uri().path()),
         }
     }
     if let Err(resp) =
@@ -36,6 +43,24 @@ pub(super) async fn transport_security_middleware(
 
 fn should_enforce_transport_for_route(path: &str) -> bool {
     path != "/health"
+}
+
+pub(super) fn transport_rejection_for_route(
+    state: &AppState,
+    kind: TransportRejectionKind,
+    path: &str,
+) -> Response {
+    if kind == TransportRejectionKind::MtlsClientCertMissing
+        && matches!(path, "/userinfo" | "/resource")
+    {
+        return super::oauth_errors::bearer_json_error_with_iss(
+            StatusCode::UNAUTHORIZED,
+            "invalid_token",
+            Some("client certificate does not match the token binding"),
+            state.issuer.as_str(),
+        );
+    }
+    transport_rejection(state, kind)
 }
 
 pub(super) fn transport_rejection(state: &AppState, kind: TransportRejectionKind) -> Response {
@@ -61,9 +86,9 @@ pub(super) fn transport_rejection(state: &AppState, kind: TransportRejectionKind
             "insecure transport: HTTPS required",
         ),
         TransportRejectionKind::MtlsClientCertMissing => (
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            "client certificate required for mTLS-bound tokens",
+            StatusCode::FORBIDDEN,
+            "access_denied",
+            "client certificate required by ingress policy",
         ),
     };
 
@@ -73,10 +98,6 @@ pub(super) fn transport_rejection(state: &AppState, kind: TransportRejectionKind
         "iss": state.issuer.as_str(),
     });
     let mut response = (status, Json(body)).into_response();
-    response.headers_mut().insert(
-        header::WWW_AUTHENTICATE,
-        HeaderValue::from_static("Bearer realm=\"aegaeon\", error=\"tls_required\""),
-    );
     util::apply_no_cache_headers(&mut response);
     response
 }

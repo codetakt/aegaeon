@@ -38,15 +38,20 @@ pub struct ClientRegistration {
     #[serde(
         default,
         alias = "require_sender_constrained_tokens",
-        alias = "sender_constrained_tokens",
-        alias = "tls_client_certificate_bound_access_tokens"
+        alias = "sender_constrained_tokens"
     )]
     pub require_sender_constrained_tokens: Option<bool>,
     #[serde(default, alias = "sender_constrained_token_methods")]
     pub sender_constrained_methods: Option<Vec<String>>,
     #[serde(default, alias = "dpop_required", alias = "dpop_bound_access_tokens")]
     pub require_dpop: Option<bool>,
-    #[serde(default, alias = "mtls_required", alias = "mtls_bound_access_tokens")]
+    #[serde(
+        default,
+        rename = "tls_client_certificate_bound_access_tokens",
+        alias = "require_mtls",
+        alias = "mtls_required",
+        alias = "mtls_bound_access_tokens"
+    )]
     pub require_mtls: Option<bool>,
 }
 
@@ -136,9 +141,7 @@ pub(super) fn client_registration_field_for_key(key: &str) -> Option<ClientRegis
         "pkce_required" | "require_pkce" | "oauth_pkce_required" => {
             Some(ClientRegistrationField::PkceRequired)
         }
-        "require_sender_constrained_tokens"
-        | "sender_constrained_tokens"
-        | "tls_client_certificate_bound_access_tokens" => {
+        "require_sender_constrained_tokens" | "sender_constrained_tokens" => {
             Some(ClientRegistrationField::RequireSenderConstrainedTokens)
         }
         "sender_constrained_methods" | "sender_constrained_token_methods" => {
@@ -147,9 +150,10 @@ pub(super) fn client_registration_field_for_key(key: &str) -> Option<ClientRegis
         "require_dpop" | "dpop_required" | "dpop_bound_access_tokens" => {
             Some(ClientRegistrationField::RequireDpop)
         }
-        "require_mtls" | "mtls_required" | "mtls_bound_access_tokens" => {
-            Some(ClientRegistrationField::RequireMtls)
-        }
+        "tls_client_certificate_bound_access_tokens"
+        | "require_mtls"
+        | "mtls_required"
+        | "mtls_bound_access_tokens" => Some(ClientRegistrationField::RequireMtls),
         _ => None,
     }
 }

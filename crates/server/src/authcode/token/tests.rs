@@ -8,6 +8,7 @@ include!("tests/basic_flow.rs");
 include!("tests/resource_audience.rs");
 include!("tests/code_target.rs");
 include!("tests/refresh_target.rs");
+mod sender_response;
 include!("tests/jwt_bearer.rs");
 include!("tests/oidc_id_token.rs");
 include!("tests/token_exchange.rs");

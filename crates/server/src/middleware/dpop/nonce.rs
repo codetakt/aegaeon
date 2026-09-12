@@ -7,7 +7,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use super::super::replay_store::{replay_key_material, ttl_millis_i64, ReplayStoreError};
-use super::DpopError;
+use super::{DpopEndpointRole, DpopError};
 
 #[cfg(test)]
 struct NonceEntry {
@@ -21,7 +21,7 @@ struct NonceEntry {
 enum DpopNonceBackend {
     #[cfg(test)]
     InMemory {
-        inner: RwLock<NonceEntry>,
+        inner: RwLock<[NonceEntry; 2]>,
     },
     Redis(RedisDpopNonceStore),
 }
@@ -61,15 +61,14 @@ impl DpopNonceStore {
     #[cfg(test)]
     #[must_use]
     pub fn new_process_local(ttl: Duration) -> Self {
-        let value = Self::generate_nonce();
         Self {
             backend: DpopNonceBackend::InMemory {
-                inner: RwLock::new(NonceEntry {
-                    value,
+                inner: RwLock::new(std::array::from_fn(|_| NonceEntry {
+                    value: Self::generate_nonce(),
                     previous: None,
                     issued_at: Instant::now(),
                     rotated_at: None,
-                }),
+                })),
             },
             ttl,
         }
@@ -124,14 +123,23 @@ impl DpopNonceStore {
     /// Returns [`DpopError::BackendUnavailable`] when the backing store cannot
     /// retain the nonce for later validation.
     pub fn try_get_current_nonce(&self) -> Result<String, DpopError> {
+        self.try_get_current_nonce_for(DpopEndpointRole::AuthorizationServer)
+    }
+
+    /// Issue a nonce for one endpoint role, within this issuer's namespace.
+    ///
+    /// # Errors
+    /// Returns a backend error if retention fails.
+    pub fn try_get_current_nonce_for(&self, role: DpopEndpointRole) -> Result<String, DpopError> {
         match &self.backend {
             #[cfg(test)]
             DpopNonceBackend::InMemory { inner } => {
-                let mut entry = write_lock(inner)?;
-                Self::maybe_rotate(&mut entry, self.ttl);
+                let mut entries = write_lock(inner)?;
+                let entry = &mut entries[role.nonce_index()];
+                Self::maybe_rotate(entry, self.ttl);
                 Ok(entry.value.clone())
             }
-            DpopNonceBackend::Redis(store) => store.issue_nonce(self.ttl),
+            DpopNonceBackend::Redis(store) => store.issue_nonce(role, self.ttl),
         }
     }
 
@@ -156,11 +164,24 @@ impl DpopNonceStore {
     /// Returns [`DpopError::BackendUnavailable`] when the backing store cannot
     /// confirm nonce validity.
     pub fn try_validate_nonce(&self, nonce: &str) -> Result<bool, DpopError> {
+        self.try_validate_nonce_for(DpopEndpointRole::AuthorizationServer, nonce)
+    }
+
+    /// Validate a nonce only in the role in which it was issued.
+    ///
+    /// # Errors
+    /// Returns a backend error when validity cannot be established.
+    pub fn try_validate_nonce_for(
+        &self,
+        role: DpopEndpointRole,
+        nonce: &str,
+    ) -> Result<bool, DpopError> {
         match &self.backend {
             #[cfg(test)]
             DpopNonceBackend::InMemory { inner } => {
-                let mut entry = write_lock(inner)?;
-                Self::maybe_rotate(&mut entry, self.ttl);
+                let mut entries = write_lock(inner)?;
+                let entry = &mut entries[role.nonce_index()];
+                Self::maybe_rotate(entry, self.ttl);
                 if entry.value == nonce {
                     return Ok(true);
                 }
@@ -170,7 +191,7 @@ impl DpopNonceStore {
                     _ => false,
                 })
             }
-            DpopNonceBackend::Redis(store) => store.validate_nonce(nonce),
+            DpopNonceBackend::Redis(store) => store.validate_nonce(role, nonce),
         }
     }
 
@@ -183,7 +204,8 @@ impl DpopNonceStore {
                 "test nonce rotation helper requires in-memory backend".to_string(),
             ));
         };
-        let mut entry = write_lock(inner)?;
+        let mut entries = write_lock(inner)?;
+        let entry = &mut entries[DpopEndpointRole::AuthorizationServer.nonce_index()];
         let previous = entry.value.clone();
         let current = Self::generate_nonce();
         let now = Instant::now();
@@ -204,7 +226,8 @@ impl DpopNonceStore {
                 "test nonce rotation helper requires in-memory backend".to_string(),
             ));
         };
-        let mut entry = write_lock(inner)?;
+        let mut entries = write_lock(inner)?;
+        let entry = &mut entries[DpopEndpointRole::AuthorizationServer.nonce_index()];
         entry.rotated_at = Some(Instant::now().checked_sub(age).unwrap_or_else(Instant::now));
         Ok(())
     }
@@ -234,8 +257,12 @@ impl RedisDpopNonceStore {
             .map_err(|err| ReplayStoreError::BackendUnavailable(err.to_string()))
     }
 
-    fn nonce_key(&self, nonce: &str) -> String {
-        let material = replay_key_material(&[self.namespace.as_bytes(), nonce.as_bytes()]);
+    fn nonce_key(&self, role: DpopEndpointRole, nonce: &str) -> String {
+        let material = replay_key_material(&[
+            self.namespace.as_bytes(),
+            role.nonce_scope().as_bytes(),
+            nonce.as_bytes(),
+        ]);
         let digest = aegaeon_crypto::hash::sha256_digest(&material);
         let encoded = URL_SAFE_NO_PAD.encode(digest);
         format!("dpop:nonce:v1:{encoded}")
@@ -247,9 +274,9 @@ impl RedisDpopNonceStore {
             .map_err(|err| DpopError::BackendUnavailable(err.to_string()))
     }
 
-    fn issue_nonce(&self, ttl: Duration) -> Result<String, DpopError> {
+    fn issue_nonce(&self, role: DpopEndpointRole, ttl: Duration) -> Result<String, DpopError> {
         let nonce = DpopNonceStore::generate_nonce();
-        let key = self.nonce_key(&nonce);
+        let key = self.nonce_key(role, &nonce);
         let ttl_ms =
             ttl_millis_i64(ttl).map_err(|err| DpopError::BackendUnavailable(err.to_string()))?;
         let mut conn = self.connection()?;
@@ -263,8 +290,8 @@ impl RedisDpopNonceStore {
         Ok(nonce)
     }
 
-    fn validate_nonce(&self, nonce: &str) -> Result<bool, DpopError> {
-        let key = self.nonce_key(nonce);
+    fn validate_nonce(&self, role: DpopEndpointRole, nonce: &str) -> Result<bool, DpopError> {
+        let key = self.nonce_key(role, nonce);
         let mut conn = self.connection()?;
         let count = redis::cmd("EXISTS")
             .arg(&key)

@@ -79,7 +79,7 @@ impl TokenIssuer {
             .map_err(TokenGrantError::server)?;
         let access_token = AccessToken {
             token: access_token_str.clone(),
-            token_type: "Bearer".to_string(),
+            token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: code.client_id.clone(),
             user_id: code.user_id.clone(),
             scope: code.scope.clone(),
