@@ -29,7 +29,9 @@ NEGATIVE = (FIXTURES / "wrong_size.txt").read_text()
 
 
 class KaniLibraryControlsTests(unittest.TestCase):
-    def _assert_source_integrity(self, *, replace_caller: bool, tamper_case: bool) -> None:
+    def _assert_source_integrity(  # noqa: PLR0915 - one complete seven-case orchestration
+        self, *, replace_caller: bool, tamper_case: bool, unavailable_case: str | None = None
+    ) -> None:
         approved = (ROOT / "nix/kani/library-controls.rs").read_bytes()
         altered = approved + b"\n// changed after approval\n"
         with tempfile.TemporaryDirectory() as directory:
@@ -49,8 +51,20 @@ class KaniLibraryControlsTests(unittest.TestCase):
                         source.write_bytes(altered)
                     if tamper_case:
                         probe.write_bytes(altered)
+                    if unavailable_case == "removed":
+                        probe.unlink()
                 (case / "output.log").write_text("accepted classifier result\n")
                 return (1 if case.name == "wrong_size" else 0), False
+
+            original_digest = CHECKER.digest
+
+            def digest(path: Path) -> str:
+                if (
+                    unavailable_case == "unreadable"
+                    and path == output / "arithmetic_control/probe.rs"
+                ):
+                    raise PermissionError
+                return str(original_digest(path))
 
             # Isolate source orchestration from verifier/log behavior. Even an
             # accepted classification must not admit a changed retained input.
@@ -70,6 +84,7 @@ class KaniLibraryControlsTests(unittest.TestCase):
                 ),
                 mock.patch.object(CHECKER, "execute", side_effect=execute) as execution,
                 mock.patch.object(CHECKER, "classify", return_value=(True, [], 1)) as classifier,
+                mock.patch.object(CHECKER, "digest", side_effect=digest),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 code = CHECKER.main()
@@ -78,17 +93,32 @@ class KaniLibraryControlsTests(unittest.TestCase):
             assert observed == [approved] * 7
             assert source.read_bytes() == (altered if replace_caller else approved)
             record = json.loads((output / "RESULTS.json").read_text())
-            assert code == (1 if tamper_case else 0)
-            assert record["status"] == ("FAIL" if tamper_case else "PASS")
+            rejects_source = tamper_case or unavailable_case is not None
+            assert code == (1 if rejects_source else 0)
+            assert record["status"] == ("FAIL" if rejects_source else "PASS")
             assert record["source_sha256"] == CHECKER.CONTROL_SOURCE_SHA256
             assert record["approved_source_sha256"] == CHECKER.CONTROL_SOURCE_SHA256
             records = record["records"]
             assert [entry["status"] for entry in records] == (
-                ["FAIL"] + ["PASS"] * 6 if tamper_case else ["PASS"] * 7
+                ["FAIL"] + ["PASS"] * 6 if rejects_source else ["PASS"] * 7
             )
             assert [entry["source_sha256"] for entry in records] == (
-                [hashlib.sha256(altered if tamper_case else approved).hexdigest()]
+                [
+                    None
+                    if unavailable_case
+                    else hashlib.sha256(altered if tamper_case else approved).hexdigest()
+                ]
                 + [CHECKER.CONTROL_SOURCE_SHA256] * 6
+            )
+            assert [entry["source_error"] for entry in records] == (
+                [
+                    "source_unreadable"
+                    if unavailable_case
+                    else "source_digest_mismatch"
+                    if tamper_case
+                    else None
+                ]
+                + [None] * 6
             )
 
     def test_unchanged_case_copies_are_accepted(self) -> None:
@@ -99,6 +129,13 @@ class KaniLibraryControlsTests(unittest.TestCase):
 
     def test_tampered_retained_case_rejects_case_and_overall_result(self) -> None:
         self._assert_source_integrity(replace_caller=False, tamper_case=True)
+
+    def test_unavailable_retained_case_records_failure_and_finishes(self) -> None:
+        for failure in ("removed", "unreadable"):
+            with self.subTest(failure=failure):
+                self._assert_source_integrity(
+                    replace_caller=False, tamper_case=False, unavailable_case=failure
+                )
 
     def test_unapproved_source_is_rejected_before_tool_execution(self) -> None:
         approved = (ROOT / "nix/kani/library-controls.rs").read_text()

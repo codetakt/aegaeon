@@ -167,6 +167,15 @@ def approved_control_source(source_path: Path, output: Path) -> bytes | None:
     return control_source
 
 
+def retained_control_source(source: Path) -> tuple[str | None, str | None]:
+    try:
+        source_sha256 = digest(source)
+    except OSError:
+        return None, "source_unreadable"
+    error = None if source_sha256 == CONTROL_SOURCE_SHA256 else "source_digest_mismatch"
+    return source_sha256, error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kani", type=Path, required=True)
@@ -214,8 +223,8 @@ def main() -> int:
         code, timed_out = execute(command, case, environment)
         text = (case / "output.log").read_text()
         passed, failed, check_count = classify(text, name, code, timed_out=timed_out)
-        retained_source_sha256 = digest(source)
-        passed = passed and retained_source_sha256 == CONTROL_SOURCE_SHA256
+        retained_source_sha256, source_error = retained_control_source(source)
+        passed = passed and source_error is None
         records.append(
             {
                 "case": name,
@@ -227,6 +236,7 @@ def main() -> int:
                 "failed_checks": failed,
                 "check_count": check_count,
                 "source_sha256": retained_source_sha256,
+                "source_error": source_error,
                 "log_sha256": digest(case / "output.log"),
             }
         )

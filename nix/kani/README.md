@@ -92,6 +92,9 @@ Before starting Kani, the checker compares the control source with its reviewed
 `CONTROL_SOURCE_SHA256`. Missing or changed source fails with no harness run.
 All harnesses use one approved byte snapshot; the retained copies are also
 checked. `RESULTS.json` records the approved and observed source digests.
+If a retained copy disappears or becomes unreadable during execution, its case
+fails with `source_error: source_unreadable` and a null source digest. The
+remaining cases still run, and the completed report retains the overall failure.
 Changing an assertion requires reviewing the source digest and property
 inventory together. Never regenerate the approved digest from a caller's input
 or infer approval from property counts: a weakened assertion can retain the
