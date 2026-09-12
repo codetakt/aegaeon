@@ -14,6 +14,10 @@ import signal
 import subprocess
 from pathlib import Path
 
+# Reviewed together with PROPERTY_INVENTORY. Do not derive this approval from
+# --source: unchanged property identifiers do not identify assertion semantics.
+CONTROL_SOURCE_SHA256 = "66ffb8e23fb003d05887a2aea0d0e392f80d4c29b4b30a999c55124bdc768ee8"
+
 # Pinned Kani 0.66.0 / nightly-2025-11-05 / x86_64-linux controls, cadical,
 # unwind 2. SHA256 of sorted property identifiers joined by a newline (no final
 # newline). Deliberately independent of the report's SUMMARY: changing the tool
@@ -132,6 +136,37 @@ def classify(text: str, name: str, code: int, *, timed_out: bool) -> tuple[bool,
     return passed, failed, len(checks)
 
 
+def approved_control_source(source_path: Path, output: Path) -> bytes | None:
+    # Read once: every harness receives the same approved snapshot, even if the
+    # caller replaces the source path while the controls are running.
+    try:
+        control_source = source_path.read_bytes()
+        source_sha256 = hashlib.sha256(control_source).hexdigest()
+        source_error = None if source_sha256 == CONTROL_SOURCE_SHA256 else "source_digest_mismatch"
+    except OSError:
+        control_source = b""
+        source_sha256 = None
+        source_error = "source_unreadable"
+    if source_error is not None:
+        (output / "RESULTS.json").write_text(
+            json.dumps(
+                {
+                    "status": "FAIL",
+                    "error": source_error,
+                    "approved_source_sha256": CONTROL_SOURCE_SHA256,
+                    "source_sha256": source_sha256,
+                    "checker_sha256": digest(Path(__file__)),
+                    "records": [],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        print(f"Kani library controls: FAIL ({source_error})", flush=True)
+        return None
+    return control_source
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kani", type=Path, required=True)
@@ -140,6 +175,9 @@ def main() -> int:
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    control_source = approved_control_source(args.source, output)
+    if control_source is None:
+        return 1
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -160,7 +198,7 @@ def main() -> int:
         case = output / name
         case.mkdir()
         source = case / "probe.rs"
-        source.write_bytes(args.source.read_bytes())
+        source.write_bytes(control_source)
         command = [
             str(args.kani.resolve()),
             str(source),
@@ -176,6 +214,8 @@ def main() -> int:
         code, timed_out = execute(command, case, environment)
         text = (case / "output.log").read_text()
         passed, failed, check_count = classify(text, name, code, timed_out=timed_out)
+        retained_source_sha256 = digest(source)
+        passed = passed and retained_source_sha256 == CONTROL_SOURCE_SHA256
         records.append(
             {
                 "case": name,
@@ -186,7 +226,7 @@ def main() -> int:
                 "expected": "assertion rejection" if name == "wrong_size" else "verification",
                 "failed_checks": failed,
                 "check_count": check_count,
-                "source_sha256": digest(source),
+                "source_sha256": retained_source_sha256,
                 "log_sha256": digest(case / "output.log"),
             }
         )
@@ -197,6 +237,8 @@ def main() -> int:
             {
                 "scope": "verification-library regression; no application correspondence claim",
                 "status": "PASS" if accepted else "FAIL",
+                "approved_source_sha256": CONTROL_SOURCE_SHA256,
+                "source_sha256": hashlib.sha256(control_source).hexdigest(),
                 "wrapper_sha256": digest(args.kani),
                 "checker_sha256": digest(Path(__file__)),
                 "records": records,

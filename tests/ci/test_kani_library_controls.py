@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,6 +25,46 @@ NEGATIVE = (FIXTURES / "wrong_size.txt").read_text()
 
 
 class KaniLibraryControlsTests(unittest.TestCase):
+    def test_unapproved_source_is_rejected_before_tool_execution(self) -> None:
+        approved = (ROOT / "nix/kani/library-controls.rs").read_text()
+        weakened = approved.replace(
+            "assert!(std::mem::size_of_val(&value) == 1);",
+            "assert!(std::mem::size_of_val(&value) >= 0);",
+        )
+        assert weakened != approved
+        for contents in (weakened, "", None):
+            with self.subTest(contents=contents), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = root / "controls.rs"
+                if contents is not None:
+                    source.write_text(contents)
+                output = root / "results"
+                # A missing executable would cause an error if Kani were invoked.
+                result = subprocess.run(  # noqa: S603 - fixed Python/checker argv, no shell
+                    [
+                        sys.executable,
+                        str(ROOT / "nix/kani/check-libraries.py"),
+                        "--kani",
+                        str(root / "must-not-be-invoked"),
+                        "--source",
+                        str(source),
+                        "--output",
+                        str(output),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert result.returncode == 1
+                assert "Traceback" not in result.stderr
+                record = json.loads((output / "RESULTS.json").read_text())
+                assert record["status"] == "FAIL"
+                assert record["error"] == (
+                    "source_unreadable" if contents is None else "source_digest_mismatch"
+                )
+                assert record["records"] == []
+                assert list(output.iterdir()) == [output / "RESULTS.json"]
+
     def test_completed_positive_and_assertion_control(self) -> None:
         assert CHECKER.classify(POSITIVE, "sized_control", 0, timed_out=False)[0]
         assert CHECKER.classify(NEGATIVE, "wrong_size", 1, timed_out=False)[0]
