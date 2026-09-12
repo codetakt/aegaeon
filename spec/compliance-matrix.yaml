@@ -171,6 +171,7 @@ rfc_6749:
   tests:
   - crates/server/src/authcode/token/tests/token_exchange.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
+  - crates/server/src/web/token_device_code/sender_contract_tests.rs
   ci_check: token-response-format
   status: verified
   runtime_link: crates/server/src/authcode/token.rs
@@ -181,6 +182,7 @@ rfc_6749:
     test: crates/server/src/authcode/token/tests/token_exchange.rs
   notes:
   - Token endpoint responses include token_type (Bearer/DPoP).
+  - "Device-code issuance derives both the response and persisted token_type from cnf: DPoP for jkt, Bearer for certificate-bound or unbound tokens. The runtime regression does not broaden the cited formal model."
 - id: 6749-009
   section: '5.2'
   requirement: MUST
@@ -1735,9 +1737,14 @@ rfc_9449:
     invariant: token_exchange_allowed
   tests:
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests.rs
+  - crates/server/src/web/oauth_conformance_tests/sender_contract.rs
   ci_check: dpop-token-binding
   status: partial
   runtime_link: crates/server/src/middleware/dpop.rs
+  notes:
+  - "Protected resource, UserInfo and upstream-refresh authentication reject Bearer presentation of a DPoP-bound token even with a matching proof. The challenge retains the attempted scheme (RFC 9449 section 7.2)."
+  - "Request/metadata regression tests use the unit-test DPoP claims verifier; they do not establish production signature-verifier conformance. This row remains partial."
 - id: 9449-011
   section: '8'
   requirement: SHOULD

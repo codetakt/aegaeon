@@ -14,6 +14,7 @@ use super::super::{
     X_FORWARDED_CLIENT_CERT_HEADER,
 };
 use super::UpstreamRefreshCaller;
+use crate::authcode::types::SenderBinding;
 use crate::authcode::{BearerTokenValidationError, TokenPolicyContext, TokenPolicyError};
 use crate::util;
 
@@ -132,6 +133,16 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         util::apply_no_cache_headers(&mut response);
         response
     })?;
+    // RFC 9449 section 7.2: a proof cannot turn Bearer presentation into DPoP.
+    if matches!(meta.sender_binding, Some(SenderBinding::DPoP { .. }))
+        != (challenge_scheme == "DPoP")
+    {
+        return Err(upstream_refresh_policy_error(
+            &TokenPolicyError::SenderBindingMismatch,
+            issuer_base,
+            challenge_scheme,
+        ));
+    }
     let resource_audience = crate::resource_audience::upstream_refresh(issuer_base);
     if let Err(err) = state
         .tokens
@@ -150,11 +161,7 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         return Err(upstream_refresh_policy_error(
             &err,
             issuer_base,
-            if binding_jkt.is_some() {
-                "DPoP"
-            } else {
-                challenge_scheme
-            },
+            challenge_scheme,
         ));
     }
 

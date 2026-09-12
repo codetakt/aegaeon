@@ -30,8 +30,8 @@ pub(super) fn dpop_binding_from_request(
     let Some(proof) = proof else {
         if role == DpopEndpointRole::ResourceServer
             && auth
-                .and_then(|value| value.split_once(' '))
-                .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("DPoP"))
+                .and_then(|value| value.split_whitespace().next())
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"))
         {
             return Err(DpopError::MissingProof);
         }

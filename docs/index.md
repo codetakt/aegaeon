@@ -260,7 +260,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-evaluation.md` | claim | Assurance Evaluation Rules | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | contract reviewers, evidence producers, release decision makers |
 | `docs/verification/claims/assurance-statement.md` | claim | Aegaeon Technical Assurance Statement Specification | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | users, adoption reviewers, implementers, verification and release owners |
-| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-11 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-12 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | snapshot | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-08-02 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |

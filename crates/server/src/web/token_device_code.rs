@@ -13,6 +13,9 @@ use super::{
     token_registry_state_error_response, AppState, TokenEndpointContext, DEVICE_CODE_GRANT_TYPE,
 };
 
+#[cfg(test)]
+mod sender_contract_tests;
+
 struct ApprovedDeviceGrant {
     user_id: String,
     scope: Option<String>,
@@ -122,9 +125,10 @@ async fn approved_device_grant_response(
             );
         }
     };
+    let token_type = AccessToken::type_for_confirmation(ctx.cnf_for_at.as_ref());
     let access = AccessToken {
         token: access_token.clone(),
-        token_type: "Bearer".to_string(),
+        token_type: token_type.to_string(),
         client_id: grant.client_id.clone(),
         user_id: grant.user_id.clone(),
         scope: grant.scope.clone(),
@@ -166,7 +170,7 @@ async fn approved_device_grant_response(
     }
     let mut body = json!({
         "access_token": access_token,
-        "token_type": "Bearer",
+        "token_type": token_type,
         "expires_in": expires_in,
     });
     if let Some(scope) = grant.scope {
