@@ -356,6 +356,10 @@ revocation checks; it does not restore historical clients or credentials.
 An environment already damaged by an earlier incomplete activation needs an
 explicitly audited recovery based on its known prior membership set. A later
 activation must not automatically collect every historical row in that environment.
+Use the [configuration membership recovery runbook](../../operations/configuration-membership-recovery.md)
+for an approved row set, rollback-only rehearsal, atomic audit and post-recovery
+checks. Runtime fingerprints require PostgreSQL 11 or newer
+(`pg_catalog.sha256(bytea)`).
 
 ### Rollback safety: irreversible operations
 
