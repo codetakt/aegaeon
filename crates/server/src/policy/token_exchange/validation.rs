@@ -40,6 +40,18 @@ impl TokenExchangePolicy {
                 return Err("invalid or ambiguous exchange target");
             }
         }
+        // An audience and a resource alias may share a spelling only when both
+        // identify the same target. Check after collecting every audience so
+        // validation does not depend on target order.
+        for target in &self.targets {
+            if target
+                .resource_aliases
+                .iter()
+                .any(|alias| alias != &target.audience && names.contains(alias))
+            {
+                return Err("invalid or ambiguous exchange target");
+            }
+        }
         let mut routes = BTreeSet::new();
         for rule in &self.rules {
             if !identity(&rule.client_id)

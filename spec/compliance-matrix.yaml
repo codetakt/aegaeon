@@ -3123,7 +3123,7 @@ rfc_8693:
   tests:
   - crates/server/src/web/token_exchange_tests/expiry.rs
   status: verified
-  runtime_link: crates/server/src/web/mod.rs
+  runtime_link: crates/server/src/web/token_exchange/resolution.rs#token_exchange_expires_in
   trace:
     kind: guard
     fstar: fstar/token/Bearer.fst#lemma_token_exchange_exp_not_extended

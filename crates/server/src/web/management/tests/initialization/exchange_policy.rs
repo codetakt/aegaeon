@@ -27,7 +27,8 @@ async fn pg_initialization_roundtrips_exchange_policy_without_repair_sql() -> Ma
             initialized.team_id, initialized.environment_id);
         let mut patch = request(&uri, serde_json::json!({
             "baseConfigurationVersionId":initial.active_configuration_version_id,
-            "tokenExchange":target,"reason":"integration policy regression"
+            "tokenExchange":target,"reason":"integration policy regression",
+            "allowSecurityDowngrade":true
         }), &session, "https://admin.aegaeon.test", true);
         *patch.method_mut() = Method::PATCH;
         let response = app.clone().oneshot(patch).await?;
@@ -38,6 +39,34 @@ async fn pg_initialization_roundtrips_exchange_policy_without_repair_sql() -> Ma
             &pool, &initialized.issuer_host).await?;
         assert_ne!(reloaded.active_configuration_version_id, initial.active_configuration_version_id);
         assert_eq!(serde_json::to_value(&reloaded.state.policy)?["tokenExchange"], target);
+        let configured_snapshot = snapshot(&pool, initialized.environment_id).await?;
+        for (allowed, reason, expected_error) in [
+            (false, "remove targets", "security_downgrade_rejected"),
+            (true, "  ", "security_downgrade_reason_required"),
+        ] {
+            let mut removal = request(&uri, serde_json::json!({
+                "baseConfigurationVersionId": reloaded.active_configuration_version_id,
+                "tokenExchange": empty, "allowSecurityDowngrade": allowed, "reason": reason
+            }), &session, "https://admin.aegaeon.test", true);
+            *removal.method_mut() = Method::PATCH;
+            let response = app.clone().oneshot(removal).await?;
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            let value: serde_json::Value = serde_json::from_slice(
+                &body::to_bytes(response.into_body(), 65536).await?)?;
+            assert_eq!(value["errorCode"], expected_error);
+            assert_eq!(snapshot(&pool, initialized.environment_id).await?, configured_snapshot);
+        }
+        let mut removal = request(&uri, serde_json::json!({
+            "baseConfigurationVersionId": reloaded.active_configuration_version_id,
+            "tokenExchange": empty, "allowSecurityDowngrade": true,
+            "reason": "remove exchange targets"
+        }), &session, "https://admin.aegaeon.test", true);
+        *removal.method_mut() = Method::PATCH;
+        let response = app.clone().oneshot(removal).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let cleared = crate::runtime_configuration::load_database_runtime_configuration(
+            &pool, &initialized.issuer_host).await?;
+        assert_eq!(serde_json::to_value(&cleared.state.policy)?["tokenExchange"], empty);
         let first_snapshot = snapshot(&pool, initialized.environment_id).await?;
         let uri = format!("/api/v1/teams/{}/tenants/{}/environments",
             initialized.team_id, initialized.tenant_id);

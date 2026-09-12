@@ -179,7 +179,7 @@ for quality/strength definitions.
 | 8693-107 | RFC 8693 | formal | lemma | fstar, tamarin | mod.rs |
 | 8693-108 | RFC 8693 | formal | lemma | fstar, tamarin | mod.rs |
 | 8693-203 | RFC 8693 | formal | lemma | fstar, tamarin | mod.rs |
-| 8693-204 | RFC 8693 | formal | lemma | fstar, kani | mod.rs |
+| 8693-204 | RFC 8693 | formal | lemma | fstar, kani | resolution.rs#token_exchange_expires_in |
 | 8705-101 | RFC 8705 | formal | semantic | fstar | token.rs |
 | 8705-102 | RFC 8705 | formal | semantic | fstar | metadata.rs |
 | 8705-104 | RFC 8705 | formal | semantic | fstar | mod.rs |
@@ -241,7 +241,7 @@ for quality/strength definitions.
 |--------|-------|
 | Entries with runtime_link | 166 |
 | Entries without runtime_link | 0 |
-| Distinct runtime files | 42 |
+| Distinct runtime files | 43 |
 
 | Category | Entries |
 |----------|---------|

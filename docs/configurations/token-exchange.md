@@ -84,8 +84,12 @@ not automatically authorize an application resource.
 The policy accepts at most 64 targets, 256 rules, and 128 scope mappings per rule.
 Names, aliases, routes and scopes must be unambiguous and bounded. Unknown object
 fields, fragments, duplicate values, and empty source conditions are rejected.
-Changing a nonempty exchange policy requires the existing security-change
-acknowledgement and reason. `retainRefreshChain` must remain enabled.
+An audience must not equal another target's resource alias; the same spelling
+may be used for both selectors within one target. This is an Aegaeon policy
+restriction, not a cross-namespace uniqueness requirement in RFC 8693.
+Every exchange-policy change, including removing all rules or targets, requires
+the existing security-change acknowledgement and reason. Unchanged policies do
+not require a new acknowledgement. `retainRefreshChain` must remain enabled.
 
 ## Original authorization and narrowing
 

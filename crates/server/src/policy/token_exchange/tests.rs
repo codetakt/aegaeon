@@ -242,3 +242,36 @@ fn policy_rejects_ambiguous_and_unbounded_or_unconditional_permissions() {
         assert!(bad.validate().is_err(), "case {kind}");
     }
 }
+
+#[test]
+fn policy_rejects_cross_target_audience_alias_collision_in_either_order() {
+    let mut p = policy();
+    p.targets.push(ExchangeTarget {
+        audience: p.targets[0].resource_aliases[0].clone(),
+        resource_aliases: vec![],
+    });
+    assert!(p.validate().is_err());
+    p.targets.reverse();
+    assert!(p.validate().is_err());
+}
+
+#[test]
+fn same_target_audience_and_resource_alias_remain_usable() {
+    let mut p = policy();
+    let audience = "https://api.example/resource?q=1";
+    p.targets[0].audience = audience.into();
+    for rule in &mut p.rules {
+        rule.target_audience = audience.into();
+    }
+    p.validate().expect("same target is unambiguous");
+    for selectors in [
+        vec![("audience".into(), audience.into())],
+        vec![("resource".into(), audience.into())],
+        vec![
+            ("audience".into(), audience.into()),
+            ("resource".into(), audience.into()),
+        ],
+    ] {
+        assert_eq!(p.resolve_target(&selectors), Ok(Some(audience.into())));
+    }
+}
