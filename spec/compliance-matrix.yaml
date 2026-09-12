@@ -3050,6 +3050,7 @@ rfc_8693:
   tests:
   - crates/server/src/policy/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests.rs
+  - crates/server/src/web/token_exchange/tests/client_scope_ceiling.rs
   status: partial
   runtime_link: crates/server/src/web/token_exchange.rs
   trace:
@@ -3059,6 +3060,7 @@ rfc_8693:
   - as
   notes:
   - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
+  - "Runtime capture bounds target capabilities by the client's allowed scopes at code issuance and checks current registration again at exchange. Capturing that client-scope ceiling is not established by the cited abstract root-authority model. Old snapshot versions require reauthorization; current registration is never used to backfill them."
 
 - id: 8693-202
   requirement: MUST

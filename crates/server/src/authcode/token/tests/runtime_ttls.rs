@@ -106,8 +106,10 @@ async fn token_exchange_target_root_caps_initial_issue_after_ttl_increase() -> T
     let mut issuer = TokenIssuer::new_process_local_with_ttls_for_tests(
         Arc::new(InMemoryKeyManager::new()), 10, 20, 60,
     ).with_token_exchange_policy(policy).with_issuer("https://issuer.example".into());
-    let (code, _) = must_ok!(issuer.issue_authorization_code(
-        authorization_request("read offline_access", None), "user123".into()), "code");
+    let (code, _) = must_ok!(issuer.issue_authorization_code_with_local_profile(AuthorizationCodeIssueInput {
+        exchange_scope_ceiling: vec!["api.read".into()],
+        ..AuthorizationCodeIssueInput::new(authorization_request("read offline_access", None), "user123".into(), true, 0)
+    }), "code");
     let stored = must_some!(must_ok!(issuer.code_store.try_get_code(&code), "code lookup"), "code exists");
     let root = must_some!(stored.exchange_grant.as_ref().and_then(|grant| grant.root()), "root exists").clone();
     // An administrator changes TTLs between authorization and redemption.

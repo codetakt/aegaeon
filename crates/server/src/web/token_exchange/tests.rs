@@ -19,6 +19,7 @@ use sqlx::PgPool;
 use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
+mod client_scope_ceiling;
 mod legacy_commit;
 mod legacy_request;
 
@@ -138,15 +139,32 @@ pub(crate) async fn grant(state: &AppState) -> TestResult<Value> {
     grant_with_proof(state, None).await
 }
 
+fn issue_code(
+    state: &AppState,
+    req: crate::authcode::types::AuthorizationRequest,
+    user: &str,
+) -> TestResult<(String, Option<String>)> {
+    let client = state
+        .clients
+        .try_get(&req.client_id)?
+        .ok_or("registered client")?;
+    Ok(state
+        .tokens
+        .issuer
+        .issue_authorization_code_with_local_profile(
+            crate::authcode::AuthorizationCodeIssueInput {
+                exchange_scope_ceiling: client.allowed_scopes,
+                ..crate::authcode::AuthorizationCodeIssueInput::new(req, user.into(), true, 0)
+            },
+        )?)
+}
+
 async fn grant_with_proof(state: &AppState, proof: Option<&str>) -> TestResult<Value> {
     let req = serde_json::from_value(json!({"response_type":"code","client_id":CLIENT,
         "redirect_uri":"https://client.example.com/callback","resource":format!("{}/userinfo",state.issuer),
         "scope":SOURCE_SCOPE,"state":uuid::Uuid::new_v4().to_string(),
         "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM","code_challenge_method":"S256"}))?;
-    let (code, _) = state
-        .tokens
-        .issuer
-        .issue_authorization_code(req, "exchange-user".into())?;
+    let (code, _) = issue_code(state, req, "exchange-user")?;
     let (status, body) = request_with_proof(
         state,
         &[

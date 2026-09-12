@@ -25,8 +25,17 @@ async fn token_exchange_authority_requires_an_issued_refresh_parent() -> TestRes
             )
             .with_token_exchange_policy(policy)
             .with_issuer("https://issuer.example".into());
-            let (code, _) = issuer
-                .issue_authorization_code(authorization_request(scope, None), "user123".into())?;
+            let (code, _) = issuer.issue_authorization_code_with_local_profile(
+                AuthorizationCodeIssueInput {
+                    exchange_scope_ceiling: vec!["api.read".into()],
+                    ..AuthorizationCodeIssueInput::new(
+                        authorization_request(scope, None),
+                        "user123".into(),
+                        true,
+                        0,
+                    )
+                },
+            )?;
             let stored = must_some!(issuer.code_store.try_get_code(&code)?, "code exists");
             let captured = must_some!(stored.exchange_grant, "code captures eligible authority");
             let request = token_request_for_code(code, None);

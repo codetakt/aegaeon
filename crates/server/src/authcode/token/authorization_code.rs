@@ -19,6 +19,9 @@ pub struct AuthorizationCodeIssueInput {
     pub auth_session_id: Option<String>,
     pub local_profile: Option<OidcProfileClaims>,
     pub claim_release_policy: Option<UpstreamClaimReleasePolicy>,
+    /// Trusted client-registration scopes captured before code creation.
+    /// An absent ceiling grants no target-exchange authority.
+    pub exchange_scope_ceiling: Vec<String>,
 }
 
 impl AuthorizationCodeIssueInput {
@@ -38,6 +41,7 @@ impl AuthorizationCodeIssueInput {
             auth_session_id: None,
             local_profile: None,
             claim_release_policy: None,
+            exchange_scope_ceiling: Vec::new(),
         }
     }
 }
@@ -212,6 +216,7 @@ impl TokenIssuer {
             auth_session_id,
             local_profile,
             claim_release_policy,
+            exchange_scope_ceiling,
         } = input;
 
         let resource = validate_optional_resource_indicator(req.resource.as_deref())
@@ -286,12 +291,16 @@ impl TokenIssuer {
             self.authorization_code_ttl_secs,
         );
 
-        code.exchange_grant = self.capture_code_exchange_authority(&code);
+        code.exchange_grant = self.capture_code_exchange_authority(&code, &exchange_scope_ceiling);
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
     }
 
-    fn capture_code_exchange_authority(&self, code: &AuthorizationCode) -> Option<ExchangeGrant> {
+    fn capture_code_exchange_authority(
+        &self,
+        code: &AuthorizationCode,
+        client_scope_ceiling: &[String],
+    ) -> Option<ExchangeGrant> {
         let audience = self.access_token_audience(
             &code.client_id,
             code.scope.as_deref(),
@@ -304,6 +313,7 @@ impl TokenIssuer {
                 &code.user_id,
                 &audience,
                 &super::split_scopes(code.scope.as_deref()),
+                client_scope_ceiling,
             )
         });
         let horizon = self

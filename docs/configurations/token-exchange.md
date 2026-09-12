@@ -76,10 +76,23 @@ For example, an issuer can authorize an application to exchange an existing
 ```
 
 All source conditions for a mapping must hold. Each target scope also must be in
-the client's allowed scopes. If the request omits `scope`, the rule's explicit
+the client's allowed scopes both when the authorization code is created and
+when the exchange is requested. Expanding a client registration later cannot
+add capabilities to an existing code, access token or refresh lineage. A fresh
+authorization is required to use newly allowed target scopes. Narrowing the
+current registration continues to restrict existing grants.
+If the request omits `scope`, the rule's explicit
 defaults apply; absent or unauthorized defaults cause rejection. Scope spelling
 alone does not establish equivalent permission at different APIs. OIDC scopes do
 not automatically authorize an application resource.
+
+The server-side exchange snapshot format is version 2. The management policy
+document remains version 1. Old version 1 snapshots lack the original client
+scope ceiling: their code redemption and refresh return `invalid_grant` and
+require authorization again, without consuming the rejected code or refresh
+token. Target exchange from these snapshots is denied; they are never converted
+to the no-snapshot legacy path or filled from current registration. Replace all
+issuer runtime processes together: an older runtime cannot enforce this ceiling.
 
 The policy accepts at most 64 targets, 256 rules, and 128 scope mappings per rule.
 Names, aliases, routes and scopes must be unambiguous and bounded. Unknown object
@@ -155,6 +168,9 @@ claims and their release policy are a separate feature.
 The F* model checks abstract target authority, attenuation, binding, deadlines
 and monotone root denial. The Tamarin model checks a fixed read-only exchange
 and online-use trace with abstract client/sender authentication. They do not
+establish that root capabilities were captured within the client's registration
+scope ceiling; that capture obligation is covered by runtime regressions here
+and remains an explicit formal-model and correspondence obligation. They do not
 establish Rust/serde/Redis implementation correspondence, cryptographic
 correctness, or application authorization. The affected compliance claims remain
 partial. Regression tests cover the standard HTTP contract, real Redis commits,

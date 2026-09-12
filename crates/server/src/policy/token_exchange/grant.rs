@@ -1,5 +1,9 @@
 use super::*;
 
+// Version 1 did not retain the client's scope ceiling at authorization time.
+// Never infer that missing authority from a later client registration.
+const GRANT_VERSION: u32 = 2;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ExchangeAuthorizationError {
     #[error("{0}")]
@@ -31,6 +35,10 @@ pub(super) struct Capability {
 }
 
 impl ExchangeGrant {
+    pub(crate) fn has_client_scope_ceiling(&self) -> bool {
+        self.version == GRANT_VERSION
+    }
+
     /// Apply effective access scopes, while retaining the original snapshot on the refresh token.
     #[must_use]
     pub fn attenuate(&self, scopes: &[String]) -> Self {
@@ -52,6 +60,7 @@ impl TokenExchangePolicy {
         user: &str,
         source: &str,
         scopes: &[String],
+        client_scope_ceiling: &[String],
     ) -> Option<ExchangeGrant> {
         if self.validate().is_err() || issuer.is_empty() || client.is_empty() || user.is_empty() {
             return None;
@@ -67,13 +76,16 @@ impl TokenExchangePolicy {
                     source_scopes: mapping.source_scopes.clone(),
                 })
             })
-            .filter(|cap| cap.source_scopes.iter().all(|scope| scopes.contains(scope)))
+            .filter(|cap| {
+                client_scope_ceiling.contains(&cap.scope)
+                    && cap.source_scopes.iter().all(|scope| scopes.contains(scope))
+            })
             .collect();
         if capabilities.is_empty() {
             return None;
         }
         Some(ExchangeGrant {
-            version: 1,
+            version: GRANT_VERSION,
             root: None,
             issuer: issuer.into(),
             client: client.into(),
@@ -99,7 +111,7 @@ impl TokenExchangePolicy {
         target: &str,
         requested: Option<&[String]>,
     ) -> Result<(Vec<String>, ExchangeGrant), ExchangeAuthorizationError> {
-        if grant.version != 1
+        if grant.version != GRANT_VERSION
             || grant.issuer != issuer
             || grant.client != client
             || grant.user != user
@@ -158,7 +170,7 @@ impl TokenExchangePolicy {
 
 impl ExchangeGrant {
     pub(crate) fn is_restriction_of(&self, parent: &Self) -> bool {
-        self.version == 1
+        self.version == GRANT_VERSION
             && self.version == parent.version
             && self.root == parent.root
             && self.issuer == parent.issuer
@@ -178,7 +190,8 @@ impl ExchangeGrant {
         target: &str,
         scopes: &[String],
     ) -> bool {
-        self.client == client
+        self.version == GRANT_VERSION
+            && self.client == client
             && self.user == user
             && !scopes.is_empty()
             && scopes.iter().all(|scope| {

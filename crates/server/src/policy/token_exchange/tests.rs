@@ -1,5 +1,67 @@
 use super::*;
 
+#[test]
+fn capture_requires_a_trusted_client_scope_ceiling() {
+    let p = policy();
+    let source = vec!["read".into(), "write".into()];
+    assert!(p
+        .capture("issuer", "client", "user", "userinfo", &source, &[])
+        .is_none());
+    let grant = p
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &source,
+            &["api.read".into()],
+        )
+        .expect("permitted read capability");
+    assert!(p
+        .authorize(&grant, "issuer", "client", "user", "userinfo", &source, "api", None)
+        .is_ok());
+    assert!(matches!(
+        p.authorize(
+            &grant,
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &source,
+            "api",
+            Some(&["api.write".into()])
+        ),
+        Err(ExchangeAuthorizationError::InvalidScope(_))
+    ));
+}
+
+#[test]
+fn older_grant_without_client_scope_ceiling_is_never_upgraded() {
+    let p = policy();
+    let source = vec!["read".into()];
+    let grant = p
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &source,
+            &["api.read".into()],
+        )
+        .expect("captured ceiling");
+    let mut encoded = serde_json::to_value(&grant).expect("serialize");
+    encoded["version"] = serde_json::json!(1);
+    let old: ExchangeGrant =
+        serde_json::from_value(encoded).expect("historical record is readable");
+    assert!(matches!(
+        p.authorize(&old, "issuer", "client", "user", "userinfo", &source, "api", None),
+        Err(ExchangeAuthorizationError::InvalidTarget(_))
+    ));
+    assert!(!old.is_restriction_of(&old));
+    assert!(!old.covers_output("client", "user", "api", &["api.read".into()]));
+    assert!(!old.attenuate(&source).has_client_scope_ceiling());
+}
+
 fn policy() -> TokenExchangePolicy {
     serde_json::from_value(serde_json::json!({
         "version":1,
@@ -22,14 +84,28 @@ fn exchange_requires_all_source_conditions_and_authorized_defaults() {
     let mut p = policy();
     p.rules[0].scopes[1].source_scopes = vec!["read".into(), "write".into()];
     assert!(p
-        .capture("issuer", "client", "user", "userinfo", &["write".into()])
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &["write".into()],
+            &["api.read".into(), "api.write".into()]
+        )
         .is_none());
     for defaults in [vec![], vec!["api.read".into(), "api.write".into()]] {
         p.rules[0].default_scopes = defaults;
         p.validate().expect("valid conditional defaults");
         let actual = vec!["read".into()];
         let grant = p
-            .capture("issuer", "client", "user", "userinfo", &actual)
+            .capture(
+                "issuer",
+                "client",
+                "user",
+                "userinfo",
+                &actual,
+                &["api.read".into(), "api.write".into()],
+            )
             .expect("read capability");
         assert!(p
             .authorize(&grant, "issuer", "client", "user", "userinfo", &actual, "api", None)
@@ -64,7 +140,14 @@ fn exchange_selected_target_cannot_recover_another_original_target() {
     p.validate().expect("two allowed targets");
     let source_scope = vec!["read".into()];
     let grant = p
-        .capture("issuer", "client", "user", "userinfo", &source_scope)
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &source_scope,
+            &["api.read".into(), "api.write".into()],
+        )
         .expect("both targets captured");
     assert!(p
         .authorize(
@@ -109,6 +192,7 @@ fn explicit_target_authority_cannot_regrow_after_refresh_or_exchange() {
             "user",
             "userinfo",
             &["read".into(), "write".into()],
+            &["api.read".into(), "api.write".into()],
         )
         .expect("authority");
     let actual = vec!["read".into()];
@@ -169,7 +253,14 @@ fn authority_binds_client_user_issuer_and_policy() {
     let p = policy();
     let scope = vec!["read".into()];
     let grant = p
-        .capture("issuer", "client", "user", "userinfo", &scope)
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &scope,
+            &["api.read".into(), "api.write".into()],
+        )
         .expect("authority");
     for (issuer, client, user) in [
         ("other", "client", "user"),
@@ -186,7 +277,14 @@ fn authority_binds_client_user_issuer_and_policy() {
         .authorize(&grant, "issuer", "client", "user", "userinfo", &scope, "api", None)
         .is_err());
     assert!(p
-        .capture("issuer", "client", "user", "userinfo", &["openid".into()])
+        .capture(
+            "issuer",
+            "client",
+            "user",
+            "userinfo",
+            &["openid".into()],
+            &["api.read".into(), "api.write".into()]
+        )
         .is_none());
 }
 

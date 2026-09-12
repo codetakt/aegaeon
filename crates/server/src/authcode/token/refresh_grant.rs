@@ -260,6 +260,15 @@ impl TokenIssuer {
         requested_resource: Option<&str>,
         requested_scope: Option<&str>,
     ) -> Result<PreparedRefreshGrant, RefreshGrantError> {
+        if refresh
+            .exchange_grant
+            .as_ref()
+            .is_some_and(|grant| !grant.has_client_scope_ceiling())
+        {
+            return Err(invalid_grant(
+                "exchange grant has no original client scope ceiling; authorize again",
+            ));
+        }
         if refresh.authorization_details.is_some() {
             return Err(invalid_grant(
                 "grant contains unsupported authorization details; authorize again",

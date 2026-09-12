@@ -14,10 +14,7 @@ async fn issue_without_parent(
         "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         "code_challenge_method":"S256"
     }))?;
-    let (code, _) = state
-        .tokens
-        .issuer
-        .issue_authorization_code(req, "exchange-user".into())?;
+    let (code, _) = issue_code(state, req, "exchange-user")?;
     let req = serde_json::from_value(json!({
         "grant_type":"authorization_code", "client_id":CLIENT, "code":code,
         "redirect_uri":"https://client.example.com/callback", "code_verifier":VERIFIER

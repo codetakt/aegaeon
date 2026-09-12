@@ -18,6 +18,7 @@ fn fixture(store: &TokenStore) -> Result<(RefreshToken, BearerTokenMeta), String
         &refresh.user_id,
         &refresh.client_id,
         &["read".into()],
+        &["api.read".into()],
     );
     refresh.exchange_grant = refresh
         .exchange_grant

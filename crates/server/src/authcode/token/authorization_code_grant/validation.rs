@@ -14,6 +14,16 @@ pub(super) fn validate_code_grant_request(
     authorization_code_grant_allowed: bool,
     oidc_enabled: bool,
 ) -> Result<ValidatedCodeGrantRequest, TokenGrantError> {
+    if code
+        .exchange_grant
+        .as_ref()
+        .is_some_and(|grant| !grant.has_client_scope_ceiling())
+    {
+        return Err(error(
+            TokenGrantErrorCode::InvalidGrant,
+            "exchange grant has no original client scope ceiling; authorize again",
+        ));
+    }
     // A stored constraint must never disappear during an upgrade. No RAR type
     // currently has an executable permission handler, including legacy grants.
     if code.authorization_details.is_some() {
