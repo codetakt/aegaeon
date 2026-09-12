@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -25,6 +29,77 @@ NEGATIVE = (FIXTURES / "wrong_size.txt").read_text()
 
 
 class KaniLibraryControlsTests(unittest.TestCase):
+    def _assert_source_integrity(self, *, replace_caller: bool, tamper_case: bool) -> None:
+        approved = (ROOT / "nix/kani/library-controls.rs").read_bytes()
+        altered = approved + b"\n// changed after approval\n"
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "controls.rs"
+            source.write_bytes(approved)
+            output = Path(directory) / "results"
+            observed = []
+
+            def execute(
+                command: list[str], case: Path, environment: dict[str, str]
+            ) -> tuple[int, bool]:
+                probe = Path(command[1])
+                assert probe == case / "probe.rs"
+                observed.append(probe.read_bytes())
+                if len(observed) == 1:
+                    if replace_caller:
+                        source.write_bytes(altered)
+                    if tamper_case:
+                        probe.write_bytes(altered)
+                (case / "output.log").write_text("accepted classifier result\n")
+                return (1 if case.name == "wrong_size" else 0), False
+
+            # Isolate source orchestration from verifier/log behavior. Even an
+            # accepted classification must not admit a changed retained input.
+            with (
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "check-libraries.py",
+                        "--kani",
+                        str(ROOT / "nix/kani/check-libraries.py"),
+                        "--source",
+                        str(source),
+                        "--output",
+                        str(output),
+                    ],
+                ),
+                mock.patch.object(CHECKER, "execute", side_effect=execute) as execution,
+                mock.patch.object(CHECKER, "classify", return_value=(True, [], 1)) as classifier,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                code = CHECKER.main()
+
+            assert execution.call_count == classifier.call_count == 7
+            assert observed == [approved] * 7
+            assert source.read_bytes() == (altered if replace_caller else approved)
+            record = json.loads((output / "RESULTS.json").read_text())
+            assert code == (1 if tamper_case else 0)
+            assert record["status"] == ("FAIL" if tamper_case else "PASS")
+            assert record["source_sha256"] == CHECKER.CONTROL_SOURCE_SHA256
+            assert record["approved_source_sha256"] == CHECKER.CONTROL_SOURCE_SHA256
+            records = record["records"]
+            assert [entry["status"] for entry in records] == (
+                ["FAIL"] + ["PASS"] * 6 if tamper_case else ["PASS"] * 7
+            )
+            assert [entry["source_sha256"] for entry in records] == (
+                [hashlib.sha256(altered if tamper_case else approved).hexdigest()]
+                + [CHECKER.CONTROL_SOURCE_SHA256] * 6
+            )
+
+    def test_unchanged_case_copies_are_accepted(self) -> None:
+        self._assert_source_integrity(replace_caller=False, tamper_case=False)
+
+    def test_replacing_caller_source_keeps_approved_snapshot(self) -> None:
+        self._assert_source_integrity(replace_caller=True, tamper_case=False)
+
+    def test_tampered_retained_case_rejects_case_and_overall_result(self) -> None:
+        self._assert_source_integrity(replace_caller=False, tamper_case=True)
+
     def test_unapproved_source_is_rejected_before_tool_execution(self) -> None:
         approved = (ROOT / "nix/kani/library-controls.rs").read_text()
         weakened = approved.replace(
