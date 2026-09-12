@@ -105,18 +105,17 @@ Recommended defaults (policy guidance; not normative):
 
 ## Environment configuration
 
-### Snapshot model (source of truth)
+### Document state and independently managed objects
 
-Environment-scoped “data plane configuration” is represented as a single configuration document
-(snapshot). It includes:
+The versioned configuration document contains the issuer host/canonical URL,
+policy toggles and TTLs, scope allowlist, key-store configuration and federation
+settings. Client metadata, OAuth profiles, connections, runtime keys and client
+secrets live in independently managed database rows. They are not historical
+object snapshots embedded in `configuration_versions`.
 
-- issuer host / canonical issuer URL,
-- JWKS and signing key state (active/next/retiring/revoked),
-- policy toggles (PKCE, DCR, sender constraints, algorithm allowlists, TTLs),
-- scope allowlists,
-- client registry (metadata required by the data plane),
-- rate limiting settings (Phase 1 minimal),
-- connections (external IdP configuration “container”; expanded in Phase 2+).
+The [activation contract](#current-persistence-and-activation-contract) defines
+which current memberships move with a document version and which credential
+version IDs retain provenance.
 
 ### Configuration scopes (Phase 1; normative)
 
@@ -125,10 +124,11 @@ The management plane separates configuration into two scopes:
 - **System (process-global)**: deployment/operator configuration such as database connectivity,
   reverse-proxy trust, JWKS fetcher tuning, logging, and other host-level settings. These MUST NOT
   be stored in Environment configuration snapshots and MUST NOT be tenant-admin configurable.
-- **Environment (issuer-scoped)**: data plane behaviour that can vary by issuer and must be
-  versioned/rolled back safely (policy toggles, signing keys, client registry, TTLs, etc.). These
-  MUST be stored in Environment configuration snapshots (`configuration_versions`) and updated only
-  via Configuration Transactions.
+- **Environment (issuer-scoped)**: policy and scope/key-store configuration are
+  stored in `configuration_versions` and its document-state tables. Independently
+  managed clients, profiles, connections and credentials also belong to an issuer,
+  but are not restored from document history. Their mutations use the applicable
+  management/runtime transaction and lifecycle rules.
 
 ### Environment-variable split (Phase 1; guidance)
 
@@ -136,8 +136,8 @@ Phase 1 introduces a clear split between:
 
 - **System env vars (operator-controlled, process-global)**: affect server infrastructure and
   security caps; not versioned per issuer.
-- **Environment configuration (DB-backed, issuer-scoped)**: versioned, rollbackable, and mutated
-  only via configuration transactions.
+- **Environment configuration (DB-backed, issuer-scoped)**: document state is versioned;
+  independent objects follow their own transaction and lifecycle rules.
 
 Migration guidance (non-exhaustive; names reflect current code):
 
@@ -304,78 +304,74 @@ Example (abridged):
     "authorizationCodeTimeToLiveSeconds": 300
   },
   "scopeAllowlist": ["openid", "profile"],
-  "clients": [],
-  "signingKeys": [],
   "keyStore": { "type": "databaseEncrypted", "configuration": {}, "redacted": true }
 }
 ```
 
-### Source of truth and projections (Phase 1; normative)
+### Current persistence and activation contract
 
-Conclusion:
+The immutable configuration document stores policy, scope allowlist, key-store
+configuration and federation settings. It does not contain client, profile,
+connection, runtime-key or client-secret snapshots. These objects are managed
+independently in their stable-ID database rows; runtime readers use the database.
 
-- The source of truth for an Environment is the immutable snapshot in `configuration_versions`.
-- Normalised tables (`clients`, `client_secrets`, `signing_keys`, `environment_policies`, etc.) are
-  projections/indexes for querying and constraints. They must always match the active snapshot.
+Policy PATCH and explicit activation MUST hold the environment row lock and
+commit the following changes together:
 
-Invariants (MUST hold):
+1. Validate and persist the selected configuration document and its policy,
+   scope-allowlist and key-store state.
+2. Transfer current-version ACTIVE clients and profiles, and ACTIVE or DISABLED
+   connections, to the selected version. Preserve every other field, including
+   profile expiry, connection status, object identity and credential bindings.
+3. Archive the previous version, activate the selected version, update the
+   environment pointer and write the audit events.
 
-- `environments.activeConfigurationVersionId` identifies the unique active snapshot (“Active
-  Snapshot”) for the Environment.
-- Projection tables MUST match the Active Snapshot.
-- The data plane MUST NOT read from projection tables. It must read the Active Snapshot (or a
-  derived distribution bundle) only.
+The transfer source is the current version read from the locked environment,
+including when activating a draft based on an older version. Historical and
+unrelated-environment rows MUST NOT be imported. Deleted/retired objects remain
+unchanged. An unexpected live membership already in the destination rejects the
+transition with `409 configuration_membership_conflict`. Re-activating the current
+version does not transfer memberships.
 
-Write procedure (Configuration Transaction; MUST be atomic):
+Runtime-key and client-secret version IDs record provenance. Their runtime
+selection depends on environment, identity and lifecycle/expiry, rather than
+active-version equality. Activation MUST preserve that provenance and MUST NOT
+restore revoked or expired credentials.
 
-1. Read the Active Snapshot.
-2. Apply the requested change to produce a new snapshot.
-3. Validate the new snapshot.
-4. Persist the new snapshot in `configuration_versions` (immutable).
-5. Update `environments.activeConfigurationVersionId` to the new version.
-6. Update projection tables to match the new snapshot.
-7. Emit audit events.
+## Configuration versioning and recovery
 
-## Configuration versioning and rollback (Phase 1)
+`environments.activeConfigurationVersionId` selects the active document. A
+successful activation changes the document and effective memberships atomically;
+an aborted transaction leaves the committed state unchanged. If the COMMIT
+acknowledgement is lost, the outcome is unknown and must be reconciled before
+retrying. Concurrent writers
+must derive the active version from the locked environment, including after a
+lock wait.
 
-- Source of truth is an immutable configuration snapshot stored per Environment.
-- `environments.activeConfigurationVersionId` points to the active snapshot.
-- Optional (recommended) review aid:
-  - store a JSON Patch (RFC 6902) between versions.
+This is not complete restoration of a historical environment snapshot. Archived
+versions are not directly reactivated by the current API. Reverting document
+settings requires a validated new draft and the existing security-downgrade and
+revocation checks; it does not restore historical clients or credentials.
 
-Activation and rollback:
+An environment already damaged by an earlier incomplete activation needs an
+explicitly audited recovery based on its known prior membership set. A later
+activation must not automatically collect every historical row in that environment.
 
-- Activation sets a specific version as active and emits an audit event.
-- Rollback activates an older version and emits an audit event.
+### Rollback safety: irreversible operations
 
-### Rollback safety: irreversible operations (Phase 1; normative)
+Activation MUST NOT make revoked keys, revoked secrets or expired credentials
+usable again. The current implementation preserves the independently managed
+credential rows, their version provenance and their lifecycle/expiry fields.
+Runtime readers continue to enforce those fields after a configuration change.
 
-Rollback must not resurrect revoked credentials. Phase 1 enforces irreversibility for revocation:
+The schema also contains legacy revocation-ledger tables. The compatibility
+activation guard can reject revoked IDs in a legacy `clientSecrets` document;
+this is not a claim that the current strict document format contains credential
+snapshots, or that every ledger is consulted by every activation path.
 
-- Revoked signing keys and revoked client secrets MUST NOT become usable again due to activation or
-  rollback.
-
-To enforce this, Phase 1 introduces an Environment-scoped monotonic security ledger:
-
-- `revokedSigningKeyIds`: set of revoked signing key IDs.
-- `revokedClientSecretIds`: set of revoked client secret IDs.
-
-Activation validation (MUST):
-
-- When activating (including rollback), if the target snapshot would make any ledger-revoked key or
-  secret usable (e.g. `ACTIVE/NEXT/RETIRING` for keys or an active secret slot), the server MUST
-  reject activation with `409` (recommend `SECURITY_LEDGER_CONFLICT`).
-
-#### Revocation ledger design
-
-- Ledger tables (`environment_revoked_signing_keys`, `environment_revoked_client_secrets`) MUST
-  enforce uniqueness on `(environment_id, identifier)` and MUST NOT expose delete/update paths.
-- Configuration activation MUST consult the ledger; if the snapshot references a revoked identifier,
-  the server rejects with `409 SECURITY_LEDGER_CONFLICT`.
-- Client secret revocations MUST append to the ledger within the same transaction as the
-  configuration snapshot so concurrent activations observe the revocation.
-- Ledger tables SHOULD record `revoked_at` and `revoked_by_administrator_id` for auditability and
-  SHOULD expose an index on `revoked_at` to support TTL/retention jobs.
+Complete historical snapshot restoration is not implemented. Any future support
+must separately specify and validate monotonic revocation checks for all restored
+credential types; it must not infer safety from the presence of ledger tables.
 
 ### Security downgrade gating (Phase 1; normative)
 

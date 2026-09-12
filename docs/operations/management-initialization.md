@@ -19,6 +19,12 @@ Apply the matching migration inventory with revision metadata in `public` (or th
 connection's current schema). A revision table in an unrelated schema is rejected
 by the server's schema preflight.
 
+An existing `pgcrypto` extension may reside in `public` or another schema, including
+one inherited from the PostgreSQL database template. The baseline migration does
+not relocate it. Runtime fingerprints use explicitly qualified PostgreSQL core
+SHA-256 functions and preserve the database encoding; they do not require moving
+the extension or changing the connection's `search_path`.
+
 ```sh
 DATABASE_URL="$AEGAEON_DATABASE_URL" atlas migrate apply --env local \
   --revisions-schema public
@@ -64,6 +70,13 @@ For local tests, map DNS aliases to the test server and provision matching trust
 HTTPS certificates. A literal `localhost`, loopback IP, or HTTP Origin is rejected
 by the existing management Origin validator. Include the actual browser origin,
 including a non-default port where applicable.
+
+`issuerBaseDomain` accepts a DNS domain, without a scheme or port. The generated
+issuer uses HTTPS port 443. Arrange a TLS ingress on that port before testing;
+the server behind it can listen on an unprivileged port. A local test can also
+use a prearranged loopback-only TCP forwarder to a TLS proxy on a high port. This
+network prerequisite is separate from database initialization and must be recorded
+in the test environment. A port in `allowedOrigins` does not change the issuer.
 
 Prime the CSRF cookie with `GET /api/v1/system/health`, then sign in at
 `POST /api/v1/authentication/sessions` using the supplied owner credentials.

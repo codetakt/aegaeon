@@ -201,3 +201,11 @@ The namespace-selection lemma assumes the managed digest function and proves
 independence from the caller's function; PostgreSQL name resolution and SHA-256
 implementation are outside that lemma. No compliance row is promoted on the
 strength of this model.
+
+## Configuration activation membership
+
+`fstar/management/Configuration.Membership.fst` is `simplified`. It models
+atomic membership transfer, stale-base refusal, failed-activation rollback and
+preservation of credential provenance, expiry and lifecycle. The model does not
+establish correspondence with Rust/SQL, database locking or runtime readers.
+No compliance row is promoted on the strength of this model.

@@ -9,6 +9,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod fingerprints;
+
 fn input() -> InitializationInput {
     InitializationInput {
         owner_email: "owner@example.com".into(),

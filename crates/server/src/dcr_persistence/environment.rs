@@ -52,13 +52,15 @@ pub(super) async fn load_active_environment_for_update(
     issuer_host: &str,
 ) -> Result<ActiveDcrEnvironment, DcrDatabaseError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
+    // After a lock wait, only the locked e row is rechecked. The separate rt
+    // projection can still carry the pre-activation version from its snapshot.
     let rows = sqlx::query(
         r"
 SELECT
   rt.team_id,
   rt.tenant_id,
   rt.environment_id,
-  rt.configuration_version_id
+  e.active_configuration_version_id AS configuration_version_id
 FROM aegaeon.active_runtime_environments rt
 JOIN aegaeon.environments e
   ON e.id = rt.environment_id

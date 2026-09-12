@@ -1,4 +1,5 @@
-const ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE: &str = r"
+-- Reference projection retained as a pgcrypto oracle for hash compatibility tests.
+
 WITH active_runtime_client_projection AS (
   SELECT
     rt.environment_id AS environment_id,
@@ -71,60 +72,14 @@ WITH active_runtime_client_projection AS (
     AND c.status = 'ACTIVE'
     AND c.configuration_version_id = rt.configuration_version_id
 )
-";
-
-pub(super) fn active_runtime_clients_for_issuer_host() -> String {
-    format!(
-        "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
-SELECT
-  client_identifier,
-  redirect_uris,
-  allowed_grant_types,
-  allowed_scopes,
-  token_endpoint_authentication_method,
-  post_logout_redirect_uris,
-  backchannel_logout_uri,
-  backchannel_logout_session_required,
-  jwks_uri,
-  jwks,
-  token_endpoint_auth_signing_alg,
-  client_id_issued_at_epoch_secs,
-  client_secret_hashes,
-  client_secret_expires_at_epoch_secs,
-  row_json::text AS runtime_client_projection_row_json
-FROM active_runtime_client_projection
-ORDER BY environment_id ASC, client_created_at ASC, client_id ASC
-"
-    )
-}
-
-pub(super) fn active_runtime_client_fingerprint_for_issuer_host() -> String {
-    format!(
-        "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
-SELECT pg_catalog.encode(
-  pg_catalog.sha256(pg_catalog.convert_to(
+SELECT encode(
+  aegaeon.digest(
     COALESCE(
       jsonb_agg(row_json ORDER BY environment_id, client_created_at, client_id)::text,
       '[]'
     ),
-    pg_catalog.getdatabaseencoding()
-  )),
+    'sha256'
+  ),
   'hex'
 ) AS active_runtime_client_fingerprint
 FROM active_runtime_client_projection
-"
-    )
-}
-
-pub(super) fn federation_subordinate_entity_ids_for_issuer_host_keyset_page() -> String {
-    format!(
-        "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
-SELECT client_identifier
-FROM active_runtime_client_projection
-WHERE client_identifier ~ '^https://([^/@?#[:space:]\\[\\]:]+|\\[[0-9A-Fa-f:.]+\\])(:[0-9]{{1,5}})?(/[^?#[:space:]]*)?$'
-  AND ($2::text IS NULL OR client_identifier > $2)
-ORDER BY client_identifier ASC, environment_id ASC, client_created_at ASC, client_id ASC
-LIMIT $3
-"
-    )
-}
