@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "contract": "assumption-register-v1",
+  "updated": "2026-09-12",
+  "entries": [
+    {
+      "id": "foreign:hacl_sha256",
+      "kind": "foreign-contract",
+      "title": "HACL* SHA-256 linkage contract (WASM verified core)",
+      "status": "specified-not-attested",
+      "statement": "The extern hacl_sha256 writes the SHA-256 digest of input[0..input_len) into output and modifies nothing else; provided by Hacl_Hash_SHA2 through c/verified-core/hacl_bridge.c. The F* declaration is a linkage contract, not a proof of the C implementation or of the bridge.",
+      "premise_ids": [
+        "premise:VerifiedCore.Crypto.Hacl#hacl_sha256"
+      ],
+      "statements": {
+        "premise:VerifiedCore.Crypto.Hacl#hacl_sha256": "c41832a27c072573c7aa97ab901af9b1983ed225ed7761d2bbe79c75fc4cdd26"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ]
+    },
+    {
+      "id": "foreign:hacl_ed25519_verify",
+      "kind": "foreign-contract",
+      "title": "HACL* Ed25519 verification linkage contract (WASM verified core)",
+      "status": "specified-not-attested",
+      "statement": "The extern hacl_ed25519_verify returns the HACL* Ed25519 verification result for (pk, msg[0..msg_len), sig) and leaves the heap unchanged; provided by Hacl_Ed25519 through the C bridge.",
+      "premise_ids": [
+        "premise:VerifiedCore.Crypto.Hacl#hacl_ed25519_verify"
+      ],
+      "statements": {
+        "premise:VerifiedCore.Crypto.Hacl#hacl_ed25519_verify": "d9098cc2c6209a1ddd96b08dae178455594f226f76cd8b194921f29ef878dfb1"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ]
+    },
+    {
+      "id": "foreign:host_replay_store_check_and_store",
+      "kind": "foreign-contract",
+      "title": "WASM host replay-store atomic check-and-store contract",
+      "status": "specified-not-attested",
+      "statement": "The host callback performs an atomic check-and-store keyed by (namespace, key hash) with the given TTL and does not modify the F* heap. Atomicity and durability are host obligations.",
+      "premise_ids": [
+        "premise:VerifiedCore.Api.Claims.Runtime#host_replay_store_check_and_store"
+      ],
+      "statements": {
+        "premise:VerifiedCore.Api.Claims.Runtime#host_replay_store_check_and_store": "fedec2d6b6126e45dfefba6c24341aff46d3d926501345cad00ebf0ca1dfc4d4"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ]
+    },
+    {
+      "id": "foreign:jose_header_entry_error_code",
+      "kind": "foreign-contract",
+      "title": "EverParse JOSE header entry validator linkage contract",
+      "status": "specified-not-attested",
+      "statement": "The extern returns the coarse EverParse validator error kind for one TLV entry buffer and leaves the heap unchanged; provided by c/jose_header_runtime.c over the generated validator.",
+      "premise_ids": [
+        "premise:Jose.HeaderParser.Runtime#jose_header_entry_error_code"
+      ],
+      "statements": {
+        "premise:Jose.HeaderParser.Runtime#jose_header_entry_error_code": "5023b71c99c8dfa53ed3156aad7682750b791626026e6a1f63f93e3e48486e1c"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ]
+    },
+    {
+      "id": "foreign:bytes_prefix_of_buffer",
+      "kind": "foreign-contract",
+      "title": "OIDC hash runtime buffer-prefix copy contract",
+      "status": "specified-not-attested",
+      "statement": "bytes_prefix_of_buffer returns the first len bytes of a live buffer as an FStar.Bytes value; provided by c/hash_computation_runtime.c.",
+      "premise_ids": [
+        "premise:HashComputation.Low#bytes_prefix_of_buffer"
+      ],
+      "statements": {
+        "premise:HashComputation.Low#bytes_prefix_of_buffer": "6ff13bfd8ee02cfbccdb9e536b81fcebe26c18b3d6721d2afc17d4fb31edab44"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ],
+      "expected_in_closure": false,
+      "notes": "HashComputation.Low is not requested or imported by any production F* pass (Low* lane); the premise is registered for the runtime-linkage inventory only."
+    },
+    {
+      "id": "foreign:evercrypt_hash_incremental_hash",
+      "kind": "foreign-contract",
+      "title": "OIDC hash runtime SHA-2 dispatch contract",
+      "status": "specified-not-attested",
+      "statement": "evercrypt_hash_incremental_hash writes the SHA-256/384/512 digest of the input into the output buffer and preserves liveness and framing; provided by c/hash_computation_runtime.c backed by HACL*/EverCrypt.",
+      "premise_ids": [
+        "premise:HashComputation.Low#evercrypt_hash_incremental_hash"
+      ],
+      "statements": {
+        "premise:HashComputation.Low#evercrypt_hash_incremental_hash": "291bfaa51d5ec432f4caac33d77454994075693177336db1286dbb28f9b3679c"
+      },
+      "references": [
+        "docs/verification/claims/assumptions/current-register.md"
+      ],
+      "expected_in_closure": false,
+      "notes": "HashComputation.Low is not requested or imported by any production F* pass (Low* lane); the premise is registered for the runtime-linkage inventory only."
+    },
+    {
+      "id": "injected:C.Loops",
+      "kind": "builder-injected",
+      "title": "Builder-generated C.Loops loop combinators (assume val)",
+      "status": "specified-not-attested",
+      "statement": "scripts/flake/verify_fstar.sh writes fstar/C.Loops.fst with assume val while, do_while and total_while when no such file exists. The file shadows KaRaMeL's lib/krml/C.Loops.fst; the KaRaMeL checked artifact is reported stale and the EverParse modules that depend on C.Loops are re-loaded by lax-checking. The premises are the three declared loop contracts; the KaRaMeL implementations are not linked to them by any proof in this repository.",
+      "premise_ids": [
+        "premise:C.Loops#while",
+        "premise:C.Loops#do_while",
+        "premise:C.Loops#total_while"
+      ],
+      "statements": {
+        "premise:C.Loops#while": "713423fef031ed2eaf333f1bc3654322d2720cdc2be3007cec90c81346e77c89",
+        "premise:C.Loops#do_while": "03393a1e4586f43abb6616d59647ce02380a99057050053bb8d52fd333344e26",
+        "premise:C.Loops#total_while": "145d196905274261b56b81dcdc16feeb75c6c166b091c9be5f8f8d13d3d3ba8e"
+      },
+      "notes": "Generator output digest 2fab471ce04ab4a3248ef183816ff0e46a48d006bcbe62ec0c0553a1ff035474 (fstar-2025.10.06 baseline)."
+    },
+    {
+      "id": "friend:Verified.Crypto.Hmac.KeyEquiv>Spec.Agile.HMAC",
+      "kind": "declaration",
+      "title": "Implementation exposure of Spec.Agile.HMAC (friend)",
+      "status": "specified-not-attested",
+      "statement": "Verified.Crypto.Hmac.KeyEquiv opens the implementation of the HACL* Spec.Agile.HMAC module to prove the key block-normalisation equivalence. Its proofs depend on the lax-loaded HACL* implementation body, not only on the interface.",
+      "premise_ids": [
+        "premise:Verified.Crypto.Hmac.KeyEquiv#friend:Spec.Agile.HMAC"
+      ],
+      "statements": {
+        "premise:Verified.Crypto.Hmac.KeyEquiv#friend:Spec.Agile.HMAC": "a9c0a994270cae6303ea98f1ebd92ddeaaff877733fa8937e8070f8d07004c48"
+      }
+    },
+    {
+      "id": "provider-lax-source:hacl",
+      "kind": "provider-lax-source",
+      "title": "HACL* specification modules are lax-checked from source",
+      "status": "specified-not-attested",
+      "statement": "HACL* sources with a positive lax-check event are loaded without re-verifying their lemmas in this invocation. The pinned package has no checked artifacts. Upstream verification of exactly these source bytes and the imported contracts remains an external acceptance obligation. Membership in the full dependency graph alone does not imply a type-checker load.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "provider:hacl"
+        }
+      ],
+      "references": [
+        "https://github.com/hacl-star/hacl-star"
+      ]
+    },
+    {
+      "id": "provider-lax-source:steel",
+      "kind": "provider-lax-source",
+      "title": "Steel sources are lax-checked from source",
+      "status": "specified-not-attested",
+      "statement": "Steel sources with a positive lax-check event are loaded without re-verifying their lemmas. The pinned source tree ships no checked artifacts; dependency-graph membership alone does not establish a load.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "provider:steel"
+        }
+      ]
+    },
+    {
+      "id": "provider-lax-source:krml",
+      "kind": "provider-lax-source",
+      "title": "KaRaMeL library modules without a valid checked artifact are lax-checked",
+      "status": "specified-not-attested",
+      "statement": "KaRaMeL modules whose .checked artifact is absent or stale in the pinned package are lax-checked from source.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "provider:krml"
+        }
+      ]
+    },
+    {
+      "id": "provider-lax-source:everparse",
+      "kind": "provider-lax-source",
+      "title": "EverParse modules without a usable checked artifact are lax-checked",
+      "status": "specified-not-attested",
+      "statement": "EverParse/LowParse modules whose .checked artifact is absent in the pinned package are lax-checked from source.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "provider:everparse",
+          "stale": false
+        }
+      ]
+    },
+    {
+      "id": "stale-cascade:C.Loops",
+      "kind": "provider-lax-source",
+      "title": "EverParse checked artifacts invalidated by the shadowed C.Loops",
+      "status": "specified-not-attested",
+      "statement": "Because the builder-generated C.Loops.fst replaces KaRaMeL's, the EverParse artifacts that recorded the KaRaMeL C.Loops digest (LowParse.Low.Base, LowParse.Low.ListUpTo, EverParse3d.Actions.Base, EverParse3d.ProbeActions and their dependents) are reported stale and re-loaded by lax-checking their sources against the injected assumptions.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "provider:everparse",
+          "stale": true
+        }
+      ]
+    },
+    {
+      "id": "checked-import:ulib",
+      "kind": "checked-import",
+      "title": "F* standard library loaded from the tool's checked artifacts",
+      "status": "specified-not-attested",
+      "statement": "ulib modules are loaded from lib/fstar/ulib.checked of the pinned verifier; F* validates the artifact digests against the ulib sources. Their soundness is the verifier's.",
+      "covers": [
+        {
+          "kind": "checked-import",
+          "origin": "ulib"
+        }
+      ]
+    },
+    {
+      "id": "checked-import:everparse",
+      "kind": "checked-import",
+      "title": "EverParse modules loaded from provider checked artifacts",
+      "status": "specified-not-attested",
+      "statement": "EverParse/LowParse modules whose .checked artifacts are present and not stale are loaded without re-verification.",
+      "covers": [
+        {
+          "kind": "checked-import",
+          "origin": "provider:everparse"
+        }
+      ]
+    },
+    {
+      "id": "checked-import:krml",
+      "kind": "checked-import",
+      "title": "KaRaMeL modules loaded from provider checked artifacts",
+      "status": "specified-not-attested",
+      "statement": "KaRaMeL library modules whose .checked artifacts are present and not stale are loaded without re-verification.",
+      "covers": [
+        {
+          "kind": "checked-import",
+          "origin": "provider:krml"
+        }
+      ]
+    },
+    {
+      "id": "first-party-lax-module:Spec.Hash.Definitions",
+      "kind": "first-party-lax-module",
+      "title": "First-party copy of Spec.Hash.Definitions is lax-checked",
+      "status": "specified-not-attested",
+      "statement": "fstar/Spec.Hash.Definitions.fst is a byte-identical copy of the HACL* file; it shadows the provider file and, not being requested in any pass, is lax-checked as a dependency.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "modules": [
+            "Spec.Hash.Definitions#implementation"
+          ],
+          "verified_elsewhere": false
+        }
+      ]
+    },
+    {
+      "id": "cross-pass-verified-lax-import",
+      "kind": "first-party-lax-module",
+      "title": "First-party modules lax-loaded in one pass and verified in another",
+      "status": "specified-not-attested",
+      "statement": "Some passes import a first-party module as a lax-checked dependency (for example Verified.Crypto.Bridge in pass 1b) while another pass requests and verifies the same source bytes. The lax import is discharged only by that other pass's accepted result for the identical digest; the graph records the verifying passes on the premise.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "verified_elsewhere": true
+        }
+      ]
+    },
+    {
+      "id": "first-party-lax-module:EverCrypt.Chacha20Poly1305",
+      "kind": "first-party-lax-module",
+      "title": "EverCrypt.Chacha20Poly1305 is never requested by a production pass",
+      "status": "specified-not-attested",
+      "statement": "fstar/EverCrypt.Chacha20Poly1305.fst (JWE ChaCha20-Poly1305 wrapper) is imported by requested modules but is not itself requested in any production F* pass, so its declarations are lax-checked in every pass that reaches it: none of its lemmas is verified by the production target. Adding it to a pass or removing the dependency is an open verification-scope decision.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "modules": [
+            "EverCrypt.Chacha20Poly1305#implementation"
+          ],
+          "verified_elsewhere": false
+        }
+      ]
+    },
+    {
+      "id": "first-party-lax-module:EverCrypt.HMAC",
+      "kind": "first-party-lax-module",
+      "title": "EverCrypt.HMAC is never requested by a production pass",
+      "status": "specified-not-attested",
+      "statement": "fstar/EverCrypt.HMAC.fst (EverCrypt HMAC wrapper) is imported by requested modules but is not itself requested in any production F* pass, so its declarations are lax-checked in every pass that reaches it: none of its lemmas is verified by the production target. Adding it to a pass or removing the dependency is an open verification-scope decision.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "modules": [
+            "EverCrypt.HMAC#implementation"
+          ],
+          "verified_elsewhere": false
+        }
+      ]
+    },
+    {
+      "id": "first-party-lax-module:HACL_Wrapper",
+      "kind": "first-party-lax-module",
+      "title": "HACL_Wrapper is never requested by a production pass",
+      "status": "specified-not-attested",
+      "statement": "fstar/HACL_Wrapper.fst (HACL wrapper stub (model-fidelity: toy-stub)) is imported by requested modules but is not itself requested in any production F* pass, so its declarations are lax-checked in every pass that reaches it: none of its lemmas is verified by the production target. Adding it to a pass or removing the dependency is an open verification-scope decision.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "modules": [
+            "HACL_Wrapper#implementation"
+          ],
+          "verified_elsewhere": false
+        }
+      ]
+    },
+    {
+      "id": "first-party-lax-module:Steel.Effect",
+      "kind": "first-party-lax-module",
+      "title": "Steel.Effect is never requested by a production pass",
+      "status": "specified-not-attested",
+      "statement": "fstar/Steel.Effect.fst (Steel effect shim) is imported by requested modules but is not itself requested in any production F* pass, so its declarations are lax-checked in every pass that reaches it: none of its lemmas is verified by the production target. Adding it to a pass or removing the dependency is an open verification-scope decision.",
+      "covers": [
+        {
+          "kind": "lax-module",
+          "origin": "first-party",
+          "modules": [
+            "Steel.Effect#implementation"
+          ],
+          "verified_elsewhere": false
+        }
+      ]
+    },
+    {
+      "id": "tool:fstar-2025.10.06",
+      "kind": "tool",
+      "title": "Pinned F* verifier",
+      "status": "specified-not-attested",
+      "statement": "F* 2025.10.06 (Nix package g60d57ag3i8gf6g104xw5lafk0xymk1f) is trusted as the type checker and SMT encoder.",
+      "premise_ids": [
+        "premise:tool:fstar"
+      ],
+      "tool_sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf"
+    },
+    {
+      "id": "tool:z3-4.13.3-effective",
+      "kind": "tool",
+      "title": "Effective SMT solver",
+      "status": "specified-not-attested",
+      "statement": "The current verify-fstar derivation selects Z3 4.13.3 from the pinned F* package definition and passes its absolute executable through FSTAR_SOLVER and --smt to verification and dependency/load probes. The recorder identifies that executable, and the graph compares it with the solver observed in each pass's 'Creating new z3proc' output. Executable identity does not establish solver soundness, which remains an external tool premise. The recorder and graph require exactly the pinned startup arguments [\"-smt2\", \"-in\"] in that order, retain them in effective identity and reject other argument lists even when the executable bytes match. Startup identity is not solver soundness.",
+      "premise_ids": [
+        "premise:tool:solver"
+      ],
+      "notes": "Historical baseline records named PATH Z3 4.15.4 while F* used its bundled Z3 4.13.3; those records retain solver-identity-mismatch. Corrected five-pass evidence records and observes /nix/store/jkwr78r1b6c0hr02ad4afz5jb3q0hd7r-z3-4.13.3/bin/z3, SHA-256 f172457b330a7dc69b7abb61c565dc8711867df71b33b09b0a7855af8d6b1d6a. Pin changes require fresh identity checks. This entry remains specified-not-attested.",
+      "tool_sha256": "f172457b330a7dc69b7abb61c565dc8711867df71b33b09b0a7855af8d6b1d6a"
+    },
+    {
+      "id": "A-SHA256-CR",
+      "kind": "computational",
+      "title": "SHA-256 collision resistance (external computational premise)",
+      "status": "specified-not-attested",
+      "statement": "For inputs shorter than the SHA-256 input bound, the event sha256_collision a b (a differs from b and sha256_hash a = sha256_hash b) is computationally infeasible to produce for adversaries bounded far below the generic birthday bound of 2^128 compression-function evaluations. No numeric evaluation is made here; F* lemmas are stated conditionally on this event not occurring or produce it as an explicit witness.",
+      "events": [
+        "Verified.Crypto.Bridge.sha256_collision",
+        "HashComputation.hash_collision",
+        "Jose.SdJwt.disclosure_digest_collision",
+        "Verified.Crypto.Bridge.sha256_of_string_collision",
+        "Pkce.s256_collision",
+        "HashComputation.oidc_hash_collision"
+      ],
+      "parameters": {
+        "primitive": "SHA-256 (FIPS 180-4) as specified by HACL* Spec.Agile.Hash SHA2_256",
+        "output_bits": 256,
+        "generic_bound": "birthday bound, about 2^128 evaluations",
+        "input_domain": "byte strings shorter than the HACL* max input length",
+        "dispatch_instance": "HashComputation.hash_collision SHA256 only; disclosure_digest_collision requires the separate string encoding boundary as well"
+      },
+      "references": [
+        "FIPS PUB 180-4",
+        "NIST SP 800-107 Rev. 1"
+      ],
+      "notes": "Event bindings are conservative at module-closure granularity. The generic hash dispatcher also requires the separate SHA-384 and SHA-512 entries; a composed string digest also requires string_encoding_collision."
+    },
+    {
+      "id": "A-SHA384-CR",
+      "kind": "computational",
+      "title": "SHA-384 collision resistance (external computational premise)",
+      "status": "specified-not-attested",
+      "statement": "For byte inputs below the SHA-384 input bound, producing distinct inputs with equal full SHA-384 digests is assumed computationally infeasible for the stated adversary class. F* supplies conditional case splits, not this computational claim. No numerical security evaluation is made here.",
+      "events": [
+        "Verified.Crypto.Bridge.sha384_collision",
+        "HashComputation.hash_collision",
+        "HashComputation.oidc_hash_collision"
+      ],
+      "parameters": {
+        "primitive": "SHA-384 (FIPS 180-4), HACL* Spec.Agile.Hash SHA2_384",
+        "output_bits": 384,
+        "generic_bound": "birthday bound, about 2^192 evaluations",
+        "input_domain": "byte strings below the HACL* maximum input length",
+        "dispatch_instance": "HashComputation.hash_collision SHA384 only"
+      },
+      "notes": "The event-to-source graph conservatively includes every registered algorithm instance for this module; it does not identify SHA-256 and this primitive or establish a per-lemma use relation.",
+      "references": [
+        "FIPS PUB 180-4",
+        "NIST SP 800-107 Rev. 1"
+      ]
+    },
+    {
+      "id": "A-SHA512-CR",
+      "kind": "computational",
+      "title": "SHA-512 collision resistance (external computational premise)",
+      "status": "specified-not-attested",
+      "statement": "For byte inputs below the SHA-512 input bound, producing distinct inputs with equal full SHA-512 digests is assumed computationally infeasible for the stated adversary class. F* supplies conditional case splits, not this computational claim. No numerical security evaluation is made here.",
+      "events": [
+        "Verified.Crypto.Bridge.sha512_collision",
+        "HashComputation.hash_collision",
+        "HashComputation.oidc_hash_collision"
+      ],
+      "parameters": {
+        "primitive": "SHA-512 (FIPS 180-4), HACL* Spec.Agile.Hash SHA2_512",
+        "output_bits": 512,
+        "generic_bound": "birthday bound, about 2^256 evaluations",
+        "input_domain": "byte strings below the HACL* maximum input length",
+        "dispatch_instance": "HashComputation.hash_collision SHA512 only"
+      },
+      "notes": "The event-to-source graph conservatively includes every registered algorithm instance for this module; it does not identify SHA-256 and this primitive or establish a per-lemma use relation.",
+      "references": [
+        "FIPS PUB 180-4",
+        "NIST SP 800-107 Rev. 1"
+      ]
+    },
+    {
+      "id": "A-SHA256-TRUNC128-CR",
+      "kind": "computational",
+      "title": "Collision resistance of the leftmost-half OIDC hash",
+      "status": "specified-not-attested",
+      "statement": "The OIDC at_hash/c_hash values keep the leftmost half of the digest. The event truncation_collision (full digests differ, leftmost halves equal) has a generic bound of about 2^64 for SHA-256 and inherits nothing from the full-length premise.",
+      "events": [
+        "HashComputation.oidc_hash_collision",
+        "HashComputation.truncation_collision"
+      ],
+      "parameters": {
+        "primitive": "SHA-256/384/512 leftmost half",
+        "output_bits": "128/192/256",
+        "generic_bound": "about 2^64 / 2^96 / 2^128"
+      },
+      "references": [
+        "OpenID Connect Core 1.0 section 3.1.3.6"
+      ]
+    },
+    {
+      "id": "A-HMAC-SHA2-EUF-CMA",
+      "kind": "computational",
+      "title": "HMAC-SHA2 MAC unforgeability (external computational premise)",
+      "status": "specified-not-attested",
+      "statement": "For a consistent external security-game trace with independently and uniformly generated HMAC keys of at least 32/48/64 bytes for HS256/384/512, a complete MAC-oracle history and compromise set, an adversary triggers jws_mac_forgery with negligible probability under the HMAC-SHA2 PRF/EUF-CMA premise. The event requires algorithm-specific honest-generation provenance, normalized-key equivalence and the minimum length on both the generated and verifying keys. Issuance and compromise use the full equivalence class, including shorter aliases. Arbitrary lists satisfying the model types do not establish this trace precondition; F* and module-level graph event binding do not prove it.",
+      "events": [
+        "Jose.Jws.Verify.jws_mac_forgery"
+      ],
+      "parameters": {
+        "primitive": "HMAC-SHA-256/384/512 as specified by HACL* Spec.Agile.HMAC",
+        "key_policy": "hs_security_key_admissible and mac_key_generated enforce algorithm-specific 32/48/64-byte minima and explicit generation-history membership. jws_verify remains a primitive nonempty-key verifier; this event restriction is not runtime key-policy correspondence.",
+        "provenance": "The external game must establish uniform independent generation and complete oracle/compromise histories. Registry construction or membership alone does not attest those obligations. The generation registry is private game state; it is not exposed to the adversary."
+      },
+      "references": [
+        "Bellare, New Proofs for NMAC and HMAC: Security without Collision-Resistance, CRYPTO 2006",
+        "RFC 2104",
+        "RFC 7518 section 3.2"
+      ]
+    },
+    {
+      "id": "A-ED25519-EUF-CMA",
+      "kind": "computational",
+      "title": "Ed25519 existential unforgeability (external computational premise)",
+      "status": "specified-not-attested",
+      "statement": "For a consistent external security-game trace with honestly generated Ed25519 key pairs, a complete signing-oracle history and compromise set, an adversary triggers ed25519_forgery or jws_eddsa_forgery with negligible probability. Both events explicitly require the public key in the honest key-generation history, exclude compromised keys and exclude previously signed messages. Arbitrary caller-supplied histories do not establish honest key generation or trace completeness; F* and module-level graph event binding do not prove those obligations. Re-presentation of an honestly issued signature does not show that the presenter holds the secret key.",
+      "events": [
+        "Verified.Crypto.Bridge.ed25519_forgery",
+        "Jose.Jws.Verify.jws_eddsa_forgery"
+      ],
+      "parameters": {
+        "primitive": "Ed25519 (RFC 8032) as specified by HACL* Spec.Ed25519",
+        "provenance": "ed25519_key_generated is membership in the external game key-generation history, not an attestation of generation or a runtime key registry."
+      },
+      "references": [
+        "Brendel, Cremers, Jackson, Zhao, The Provable Security of Ed25519: Theory and Practice, IEEE S&P 2021",
+        "Bernstein, Duif, Lange, Schwabe, Yang, High-speed high-security signatures, 2012",
+        "RFC 8032"
+      ]
+    },
+    {
+      "id": "string_encoding_collision",
+      "kind": "symbolic-abstraction",
+      "title": "String-to-bytes encoding is not assumed injective",
+      "status": "specified-not-attested",
+      "statement": "FStar.Bytes.bytes_of_string is abstract in ulib; two distinct strings with equal byte encodings form the explicit event string_encoding_collision. Callers restrict inputs to ASCII by specification, but that restriction is not in the F* types and is not assumed.",
+      "events": [
+        "Verified.Crypto.Bridge.string_encoding_collision",
+        "Verified.Crypto.Bridge.sha256_of_string_collision",
+        "Jose.SdJwt.disclosure_digest_collision",
+        "Pkce.s256_collision"
+      ]
+    },
+    {
+      "id": "sha256_of_string_overlength",
+      "kind": "symbolic-abstraction",
+      "title": "Over-length string inputs (runtime input-domain boundary only)",
+      "status": "specified-not-attested",
+      "statement": "sha256_of_string has an over-length branch returning the empty string. For FStar.Bytes inputs the branch is proved unreachable by Verified.Crypto.Bridge.lemma_sha2_limits_exceed_bytes (every FStar.Bytes value is shorter than 2^32 bytes, below the SHA-2 input limits), so no F* event can occur. The entry is kept only as a runtime input-domain boundary: Rust slices and C buffers longer than 2^32 bytes are outside the modelled input type and are not covered by any F* statement.",
+      "events": [
+        "Verified.Crypto.Bridge.sha256_of_string_overlength"
+      ]
+    },
+    {
+      "id": "hash_overlength",
+      "kind": "symbolic-abstraction",
+      "title": "Over-length byte inputs (runtime input-domain boundary only)",
+      "status": "specified-not-attested",
+      "statement": "compute_hash has an over-length branch returning an all-zero digest. For FStar.Bytes inputs the branch is proved unreachable by HashComputation.lemma_compute_hash_in_range (length < 2^32 <= SHA-2 limits), so the event hash_overlength cannot occur in the F* model. The entry is kept only as a runtime input-domain boundary for inputs outside the modelled FStar.Bytes type (Rust slices / C buffers).",
+      "events": [
+        "HashComputation.hash_overlength"
+      ]
+    },
+    {
+      "id": "truncation_collision",
+      "kind": "symbolic-abstraction",
+      "title": "Truncated digests may collide although full digests differ",
+      "status": "specified-not-attested",
+      "statement": "The OIDC leftmost-half truncation introduces the event truncation_collision; it is distinct from a full-length collision and is covered only by A-SHA256-TRUNC128-CR.",
+      "events": [
+        "HashComputation.truncation_collision"
+      ]
+    },
+    {
+      "id": "tamarin-symbolic-model",
+      "kind": "tamarin-model",
+      "title": "Tamarin symbolic (Dolev-Yao) model premises",
+      "status": "specified-not-attested",
+      "statement": "Selected Tamarin lemmas hold in the symbolic model defined by each theory's builtins, function signatures, equations and restrictions; the model treats hashing and signing as perfect and does not bound computational adversaries.",
+      "covers": [
+        {
+          "kind": "tamarin-model"
+        },
+        {
+          "kind": "tamarin-builtin"
+        },
+        {
+          "kind": "tamarin-function"
+        },
+        {
+          "kind": "tamarin-equation"
+        },
+        {
+          "kind": "tamarin-restriction"
+        }
+      ]
+    },
+    {
+      "id": "kani-bounded-model",
+      "kind": "kani-model",
+      "title": "Kani bounded model-checking premises",
+      "status": "specified-not-attested",
+      "statement": "Kani results hold for the selected harnesses within the recorded unwind bounds, features, cfg, target and solver; they do not generalise beyond the bounds or to the production build configuration.",
+      "covers": [
+        {
+          "kind": "kani-model"
+        },
+        {
+          "kind": "kani-bound"
+        }
+      ]
+    },
+    {
+      "id": "dependency-source:providers",
+      "kind": "dependency-source",
+      "title": "Provider sources retained by conservative dependency closure",
+      "status": "specified-not-attested",
+      "statement": "These hash-identified external sources occur in the full dependency graph and parsing-cache scan, outside the complete batch schedule recorded by the actual proof and matching diagnostic probe. They remain in the conservative interface/implementation closure. This classification establishes neither that their contracts are sound nor that they are irrelevant to a cited property. Acceptance requires review of the fixed source inventory and its upstream justification; the batch schedule is not a substitute for that review.",
+      "covers": [
+        {
+          "kind": "dependency-source",
+          "origin": "ulib"
+        },
+        {
+          "kind": "dependency-source",
+          "origin": "provider:hacl"
+        },
+        {
+          "kind": "dependency-source",
+          "origin": "provider:krml"
+        },
+        {
+          "kind": "dependency-source",
+          "origin": "provider:steel"
+        },
+        {
+          "kind": "dependency-source",
+          "origin": "provider:everparse"
+        }
+      ],
+      "references": [
+        "docs/verification/fstar/assumption-graph.md"
+      ]
+    }
+  ]
+}

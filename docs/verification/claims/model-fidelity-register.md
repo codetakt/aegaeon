@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-09-09
+Last updated: 2026-09-12
 
 Status: current implementation baseline
 
@@ -33,6 +33,34 @@ modules as grounding for `status: verified` entries.
 | `fstar/par/Request_uri.fst` | `simplified` | Lines 62-72 model request URI issuance as a sequential counter; this preserves uniqueness reasoning but does not model RFC 9126 entropy. Runtime entropy remains evidenced by tests and runtime code. |
 | `fstar/dpop/Dpop.Htu_validation.fst` | `simplified` | `validate_htu` models only the final exact string comparison; the runtime (`crates/ffi/src/lib.rs` DPoP checks) additionally rejects `?`/`#` in the proof `htu` and strips query/fragment from the request URI before the modeled comparison. The trace for `9449-006` claims the comparison step; the normalization prefix remains evidenced by runtime tests. |
 | `fstar/stepup/StepUp.fst` | `simplified` | The F* module is a small pure model that binds a challenge to one immutable `session`. It does not model the runtime successor transfer during login session rotation (`crates/server/src/web/local_auth/post.rs` `complete_stepup_for_local_login`) or authorize-endpoint error responses. Its four lemmas are shallow properties discharged by definition unfolding with `()` proofs. |
+
+## JWS protected-header decoding remains open
+
+`fstar/FStar.Json.fst` is a `toy-stub`: `parse` always returns `None` and
+`stringify` always returns `"{}"`. It supplies a JSON value type, but it cannot
+ground byte-decoding correctness or a reachable successful byte-parser path.
+`Jose.Jws_header` and `Jose.Jws_signature` are therefore `simplified`.
+The header-record and `parse_json_spec` policy lemmas concern an already decoded
+JSON value. Their byte wrappers depend on this stub. A conditional theorem over
+successful decoding does not establish that decoding can succeed.
+
+`Jose.Jws.Verify` is a simplified cryptographic signing-input primitive. It
+decodes the compact segments and verifies the signature using `key.alg`, but
+does not parse the protected JSON header or compare its `alg` with the key.
+Its MAC/key-equivalence lemmas and forgery-event case split apply at that
+primitive boundary. They do not establish RFC 7515 Sections 4.1.1/5.2 or
+RFC 8725 Section 3.1 algorithm binding from protected bytes. Federation and
+TrustMark models using this primitive inherit that open obligation.
+
+Full wire-level algorithm binding requires a concrete protected-byte decoder,
+header validation, equality with the verification algorithm, and reachable
+matching-algorithm positive controls. Adding the current stub decoder as a
+guard would reject every token and does not close this gap. The Rust header/key
+comparison and runtime tests are separate evidence; this register does not
+establish their correspondence to the F* models. The existing partial JWS
+serialization/signing-input rows remain partial. Header AST guard rows retain
+only their stated guard-level scope, with no byte-decoding or complete wire
+verification claim.
 
 ## Review Rule
 
@@ -244,3 +272,44 @@ This helper proof does not establish JWT NumericDate conversion, real-clock
 behavior, Redis numeric/time semantics, root horizons or grant composition.
 The model remains `simplified`; machine-checked implementation correspondence
 for the complete token lifecycle remains open.
+
+## Assumption-Boundary Changes (2026-09-11)
+
+Material model changes made when the six crypto lemma `assume val`s were
+removed. Classifications are unchanged (`faithful` for the Bridge, hash, JWS
+and PKCE modules; `simplified` for `Jose.SdJwt`); the entries record what a
+reviewer must re-check.
+
+| Module | Change | Reviewer note |
+|---|---|---|
+| `fstar/crypto/Verified.Crypto.Bridge.fst` | `sha256_of_string` and the HMAC wrappers are `opaque_to_smt` instead of `irreducible`; new bad-event definitions (`sha256_collision`, `string_encoding_collision`, `ed25519_forgery`), key-equivalence predicate and proved case-split lemmas; three axioms removed. | The HACL\* hash/Ed25519 wrappers stay `irreducible`; no identity or constant model was introduced. Over-length fallbacks are proved unreachable for `FStar.Bytes`. |
+| `fstar/crypto/Verified.Crypto.Hmac.KeyEquiv.fst` (new, `faithful`) | Proves that a short HMAC key and its zero-padded form are distinct yet equivalent, via `friend Spec.Agile.HMAC`. | The `friend` exposes the provider's `wrap`/`hmac` bodies; the graph records it as an implementation-exposing edge. |
+| `fstar/HashComputation.fst` | `compute_hash` is `opaque_to_smt`; SMTPat injectivity axiom removed; `hash_collision`, `truncation_collision`, `oidc_hash_collision` and case-split lemmas added. | Consumers (`HashComputation.Model`, `Dpop.Ath_validation`, `IdToken.Spec`) re-verified without the axiom. |
+| `fstar/jose/Jose.SdJwt.fst` | `disclosure_digest` is `opaque_to_smt`; SMTPat axiom removed; `lemma_non_forgeability`, `lemma_reconstruction_subset` and helpers carry the finite premise `no_collision_with_issued` / `no_presented_collision`; `*_or_collision` theorems added. | Matrix row 9901-001 states the conditional form. |
+| `fstar/jose/Jose.Jws.Verify.fst` | `jws_verify` is `opaque_to_smt` (body unchanged); false axiom removed; `mac_key_equiv`, forgery events, key-equivalence, success-path and case-split lemmas added. Compromise is closed under the same normalized-key equivalence as issuance. | `Jose.Federation` and `TrustMark` use only `jws_verify` and its excluded-middle lemma; re-verified. The regression theorem rejects classifying a MAC made with a leaked equivalent key as a cryptographic forgery. |
+| `fstar/pkce/Pkce.fst` | `s256` is `opaque_to_smt`; `s256_collision`, `lemma_s256_collision_witness`, `lemma_pkce_s256_binding_cases` added. | Abstraction of `s256` for downstream proofs is unchanged unless revealed. |
+
+## Forgery-event key provenance (2026-09-12)
+
+The Bridge and JWS Ed25519 events now require membership in an explicit honest
+key-generation history. HMAC events require an algorithm-specific generation
+record, normalized-key equivalence and at least 32/48/64 bytes for HS256/384/512
+on both the generated and verifying keys. The case splits retain a separate
+outcome for keys outside this domain. Issuance and compromise still use the full
+primitive key-equivalence relation: a leaked short equivalent key must exclude
+the entire class from the forgery event.
+
+These histories are inputs from an external security game. The HMAC registry is
+the game's private key-generation state, not an attacker-visible list of keys.
+F* does not prove
+their generation, entropy, oracle-history completeness or correspondence to a
+runtime key registry. The computational premises apply only to a consistent
+external trace, not arbitrary lists accepted by the model's type signatures.
+The assumption graph associates events with modules; it does not establish these
+argument-level provenance obligations. All premise statuses and model
+classifications remain unchanged. The JWS wire/header binding gap remains open.
+
+`TestForgeryKeyProvenance` checks the positive registration domain, missing
+registrations, all three HMAC length boundaries and algorithm separation.
+`TestHmacEquivalentCompromise` supplies a qualified registry and proves that
+leaking an equivalent key still excludes the forgery event.

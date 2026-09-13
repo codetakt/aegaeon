@@ -12,94 +12,65 @@ module Crypto
        (`scripts/validation/check_crypto_calls.py`) references this
        module to verify that no Rust code bypasses the verified layer.
 
-    ## Inventory (0 Category A crypto function assume vals)
+    ## Inventory (assumption-boundary revision)
 
-    ### Category A -- Crypto Primitives (0 function assume vals remain)
+    ### Tracked `assume val` declarations: 6, all linkage contracts
 
-    All 11 former Category A function assume vals eliminated:
-    - 10 via `irreducible` + `reveal_opaque`
-    - 1 (hmac_sha256 in Drbg.HmacSha256.fst) via delegation to
-      Verified.Crypto.Bridge.hmac_sha256 (HACL* Spec.Agile.HMAC)
+    | Module | Declaration | Kind |
+    |--------|-------------|------|
+    | VerifiedCore.Crypto.Hacl | hacl_sha256, hacl_ed25519_verify | HACL* C linkage (-library) |
+    | VerifiedCore.Api.Claims.Runtime | host_replay_store_check_and_store | WASM host import |
+    | Jose.HeaderParser.Runtime | jose_header_entry_error_code | EverParse C linkage |
+    | HashComputation.Low | bytes_prefix_of_buffer, evercrypt_hash_incremental_hash | OIDC hash C linkage |
 
-    6 Lemma assume vals remain (honest computational hardness):
-    - jws_verify_unforgeable (EUF-CMA)
-    - lemma_sha256_collision_resistant (SHA-256 CR)
-    - lemma_sha256_of_string_collision_resistant (SHA-256 CR)
-    - lemma_ed25519_unforgeable (Ed25519 EUF-CMA)
-    - disclosure_digest_collision_resistant (SHA-256 CR)
-    - assumption_collision_resistance (SHA-256 CR)
+    None of them states a cryptographic hardness property.
 
-    ### Category A — Crypto Primitives (6 eliminated via `irreducible`)
+    ### Cryptographic premises: 0 `assume val`, stated as events
 
-    | Former # | Module | Function | Replacement |
-    |----------|--------|----------|-------------|
-    | 1 | Jose.Jws.Verify | jws_verify | `opaque_to_smt let ... = false` |
-    | 4 | Jose.SdJwt | disclosure_digest | `irreducible let ... = encoded` |
-    | 6 | Jose.Rsa_signatures | verify_rsa_pss | `irreducible let ... = false` |
-    | 7 | Jose.Rsa_signatures | verify_ed25519 | `irreducible let ... = false` |
-    | 8 | Dpop.Signature | verify_signature | `irreducible let ... = false` |
-    | 11 | Jose.Jwk_thumbprint_uri | jwk_thumbprint | `irreducible let ... = k` |
+    The former six "honest crypto assumption" lemmas were removed because
+    their mathematical content was wrong or empty:
 
-    ### Category D — Mathematical Axiom (ELIMINATED)
+    - lemma_sha256_collision_resistant, lemma_sha256_of_string_collision_resistant
+      (Verified.Crypto.Bridge), assumption_collision_resistance (HashComputation,
+      SMTPat) and disclosure_digest_collision_resistant (Jose.SdJwt, SMTPat)
+      asserted universal injectivity of a fixed-output hash, which is false
+      by counting.
+    - lemma_ed25519_unforgeable ensured `True`.
+    - jws_verify_unforgeable derived verification failure from raw-key
+      inequality; HMAC key padding makes distinct raw keys equivalent
+      (Verified.Crypto.Hmac.KeyEquiv proves the witness).
 
-    | # | Module | Function | Status |
-    |---|--------|----------|--------|
-    | 12 | HashComputation | assumption_collision_resistance | PROVED via `irreducible` identity + `reveal_opaque` |
+    They are replaced by definitions of bad events and proved case splits:
 
-    ## The `irreducible` Technique
+    | Module | Event / lemma |
+    |--------|---------------|
+    | Verified.Crypto.Bridge | sha256_collision, sha384_collision, sha512_collision, string_encoding_collision, sha256_of_string_collision, lemma_sha256_hash_eq_cases, lemma_sha256_of_string_eq_cases, ed25519_forgery, lemma_ed25519_verify_cases, hmac_sha256_key_equiv |
+    | Verified.Crypto.Hmac.KeyEquiv | lemma_hmac_sha256_zero_pad, lemma_hmac_sha256_zero_pad_key_equiv |
+    | HashComputation | hash_collision, truncation_collision, oidc_hash_collision, lemma_compute_hash_eq_cases, lemma_hash_collision_refines, lemma_oidc_hash_collision_cases |
+    | Jose.SdJwt | disclosure_digest_collision, no_collision_with_issued, no_presented_collision, lemma_non_forgeability_or_collision, lemma_reconstruction_subset_or_collision |
+    | Jose.Jws.Verify | mac_key_equiv, jws_mac_forgery, jws_eddsa_forgery, lemma_jws_verify_hs_key_equiv, lemma_jws_verify_hs_accepts_mac, lemma_jws_verify_cases |
+    | Pkce | s256_collision, lemma_pkce_s256_binding_cases |
 
-    For verification purposes, crypto operations that return boolean or
-    deterministic values can be replaced with concrete implementations:
-    - Signature verification → `false` (conservative deny-by-default)
-    - Hash/digest computation → identity function
-    - JWK thumbprint → identity function
+    The computational premises that these events are infeasible
+    (SHA-256/384/512 collision resistance, HMAC-SHA-2 PRF/EUF-CMA,
+    Ed25519 EUF-CMA) live in
+    `spec/assumption-register.json` and
+    `docs/verification/claims/assumptions/current-register.md`, outside the
+    F* logic.  The effective premises of a verification run (including the
+    builder-injected `C.Loops` and lax-loaded provider sources) are
+    reconstructed by `scripts/validation/assumption_graph.py`.
 
-    The `irreducible` attribute prevents the SMT solver and normalizer
-    from observing the concrete value, so downstream proofs cannot
-    exploit the simplification.  At runtime, the actual crypto operations
-    are linked via the extraction pipeline.
+    ### Crypto function models
 
-    ### Soundness Assessment
-
-    **Signature verification (`false`):** Sound — proofs show protocol
-    correctness under the WORST CASE (all verification rejects). Proofs
-    that hold with always-reject also hold when verification succeeds.
-    This is a standard conservative abstraction.
-
-    **Hash/digest (identity) and thumbprint (identity):** These are
-    WEAKER abstractions. The identity model trivially satisfies
-    collision resistance (injective by construction). After `reveal_opaque`,
-    `disclosure_digest_collision_resistant` and `assumption_collision_resistance`
-    are tautological. The proof shows the protocol is correct IF the hash
-    function is injective (which SHA-256 is by standard cryptographic
-    convention). This is a sound conservative model.
-
-    ## Collision Resistance (Category D) — ELIMINATED (2026-03-03)
-
-    `assumption_collision_resistance` in `HashComputation.fst` was the
-    sole Category D assume val. It has been **eliminated** via
-    `reveal_opaque` on the `irreducible` identity implementation of
-    `compute_hash`. The identity function is trivially injective, making
-    the collision resistance property tautological after `reveal_opaque`.
-
-    **Soundness:** The identity model is weaker than SHA-256 (trivially
-    injective). Proofs that hold under identity also hold under any
-    injective hash. Defense-in-depth: Tamarin models hash as injective
-    (248 lemmas), runtime uses SHA-256 via aws-lc-rs (FIPS-validated).
-
-    ## Permanent vs. Reducible
-
-    All former crypto function assume vals have been eliminated:
-    - 10 via `irreducible` + `reveal_opaque`
-    - 1 (Drbg.HmacSha256.hmac_sha256) via Bridge delegation to HACL*
-
-    6 crypto Lemma assume vals remain (honest computational hardness).
-    2 HACL* linkage assume vals (hacl_sha256, hacl_ed25519_verify in VerifiedCore.Crypto.Hacl).
-    1 EverParse linkage assume val (jose_header_entry_error_code).
-    2 OIDC hash runtime linkage assume vals (HashComputation.Low bridge contracts).
-    1 WASM host import remains (host_replay_store_check_and_store).
-    Total: 12 assume vals across 8 files. Phase D's checkpoint was 9; later
-    JOSE/OIDC runtime-linkage work added 3 explicit linkage contracts.
+    Hash, HMAC and Ed25519 wrappers are real HACL* spec computations
+    (Verified.Crypto.Bridge).  The heavy wrappers (`sha256_hash`,
+    `ed25519_verify`, ...) stay `irreducible`; the thin dispatchers
+    (`sha256_of_string`, `compute_hash`, `disclosure_digest`, `jws_verify`,
+    `hmac_sha256/384/512`, `s256`) are `opaque_to_smt` so that the lemmas
+    above can reveal their one-line bodies. These named Bridge dispatch paths
+    no longer use identity or constant digest models. This does not describe
+    the entire pass closure: HACL_Wrapper and EverCrypt.HMAC retain the
+    separately disclosed zero-output models and lax-import boundaries.
 *)
 
 /// Re-export: this module is documentation-only.

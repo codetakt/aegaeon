@@ -1,0 +1,2003 @@
+{
+  "argv": [
+    "fstar.exe",
+    "--detail_errors",
+    "--query_stats",
+    "--use_hints",
+    "--hint_dir",
+    ".",
+    "--expose_interfaces",
+    "--include",
+    "crypto",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/bignum/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/blake2/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/c/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20poly1305/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/curve25519/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/drbg/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ecdsap256/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ed25519/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/fallback/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ffdhe/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/frodo/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hash/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hkdf/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hmac/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hpke/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/k256/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/lemmas/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/meta/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ml/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/nacl-box/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/poly1305/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/rsapss/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/salsa20/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha2-mb/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha3/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/streaming/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/tests/",
+    "--include",
+    "/nix/store/jzlin36arbymkbbxwxaypx0q2bk7jhi0-karamel-2025-10-08/lib/krml",
+    "--include",
+    "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/buffer",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/extern",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/lib/lowparse",
+    "--warn_error",
+    "-241",
+    "--warn_error",
+    "-242",
+    "--warn_error",
+    "-252",
+    "--warn_error",
+    "-328",
+    "--warn_error",
+    "-274",
+    "--warn_error",
+    "-285",
+    "--warn_error",
+    "-333",
+    "--warn_error",
+    "-276",
+    "FStar.Base64.fst",
+    "jose/JoseNatLemmas.fst",
+    "jose/JoseU32Lemmas.fst",
+    "jose/Jose.Arith.Bounds.fst",
+    "jose/Jose.UInt32Bounds.fst",
+    "jose/Jose.Utf8.fst",
+    "jose/Jose.Utf8.Validity.fst",
+    "jose/Jose.Utf8.Encoding.fst",
+    "jose/Jose.Utf8.Lemmas.fst",
+    "jose/Jose.Utf8Lemmas.fst",
+    "jose/Jose.ListMapLemmas.fst",
+    "jose/Jose.BufferListLemmas.fst",
+    "ConstTime.fst",
+    "HashComputation.fst",
+    "common/EqHelpers.fst",
+    "FStar.Json.fst",
+    "jose/Jose.fst",
+    "jose/Jose.False.fst",
+    "jose/Jose.BytesBlock.fst",
+    "jose/Jose.TlvResultSpec.fst",
+    "jose/Jose.TlvInterface.fst",
+    "jose/Jose.TlvLemmas.fst",
+    "jose/Jose.JsonTlvEquiv.fst",
+    "jose/Jose.StringLemmas.fst",
+    "jose/Jose.HeaderKeyLemmas.fst",
+    "jose/Jose.Alg_policy.fst",
+    "jose/Jose.Policy.fst",
+    "jose/Jose.Metadata.fst",
+    "jose/Jose.HeaderSpec.fst",
+    "jose/Jose.HeaderPolicy.fst",
+    "jose/Jose.HeaderMicro.fst",
+    "jose/Jose.HeaderParser.Assumptions.fst",
+    "jose/Jose.HeaderParser.Spec.fst",
+    "jose/Jose.HeaderParser.Runtime.fst",
+    "jose/Jose.HeaderParser.TLV.fst",
+    "jose/Jose.HeaderParser.Proofs.fst",
+    "jose/Jose.HeaderParser.fst",
+    "jose/Jose.JsonHeaderSpec.fst",
+    "jose/Jose.Context.fst",
+    "jose/Jose.Jwk_metadata.fst",
+    "jose/Jose.Jwk_structure.fst",
+    "jose/Jose.Jws.Verify.fst",
+    "jose/Jose.Jwk_thumbprint_uri.fst",
+    "jose/Jose.Jws_header.fst",
+    "jose/Jose.Jws_signature.fst",
+    "jose/Jose.Jws_serialization.fst",
+    "jose/Jose.Jwe_header.fst",
+    "jose/Jose.Jwe_aad.fst",
+    "jose/Jose.Jwe_chacha20poly1305.fst",
+    "jose/Jose.Jwt_claims.fst",
+    "jose/Jose.Jwt_validation.fst",
+    "jose/Jose.Hmac_verification.fst",
+    "jose/Jose.Rsa_signatures.fst",
+    "jose/Jose.Dcr.fst",
+    "jose/Jose.SdJwt.fst",
+    "../generated/everparse/JoseHeader.fsti",
+    "../generated/everparse/JoseHeader.fst",
+    "../generated/everparse/DCR.fsti",
+    "../generated/everparse/DCR.fst",
+    "../generated/everparse/IdTokenSchema.fsti",
+    "../generated/everparse/IdTokenSchema.fst",
+    "../generated/everparse/DpopSchema.fsti",
+    "../generated/everparse/DpopSchema.fst",
+    "../generated/everparse/DcrRegistration.fsti",
+    "../generated/everparse/DcrRegistration.fst",
+    "../generated/everparse/LogoutTokenSchema.fsti",
+    "../generated/everparse/LogoutTokenSchema.fst",
+    "../generated/everparse/RequestObjectSchema.fsti",
+    "../generated/everparse/RequestObjectSchema.fst",
+    "token/Token.fst",
+    "token/JwtAccessToken.fst",
+    "token/Bearer.fst",
+    "token/Bearer.Policy.fst",
+    "token/Bearer_validation.fst",
+    "common/StringHelpers.fst",
+    "resource/ResourceIndicators.fst",
+    "resource/ProtectedResourceMetadata.fst",
+    "dpop/Dpop.Header.fst",
+    "dpop/Dpop.Claims.fst",
+    "dpop/Dpop.Signature.fst",
+    "dpop/Dpop.Iat_validation.fst",
+    "dpop/Dpop.Htm_validation.fst",
+    "dpop/Dpop.Htu_validation.fst",
+    "dpop/Dpop.Ath_validation.fst",
+    "dpop/Dpop.Token_binding.fst",
+    "dpop/Dpop.Replay.fst",
+    "dpop/Dpop.Validation.fst",
+    "dpop/Dpop.fst",
+    "pkce/Pkce.Challenge.fst",
+    "pkce/Pkce.Verifier.fst",
+    "pkce/Pkce.Method_selection.fst",
+    "pkce/Pkce.Verification.fst",
+    "pkce/Pkce.fst",
+    "par/Authorization.fst",
+    "par/Client_auth.fst",
+    "par/ParBinding.fst",
+    "par/Lifetime.fst",
+    "par/Request_uri.fst",
+    "par/RequestObject.fst",
+    "par/Response.fst",
+    "par/ParApp.fst",
+    "par/Par_Internal.fst",
+    "par/Par.fsti",
+    "par/Par.fst",
+    "par/Par_Steel.fst",
+    "par/Par_Ticket.fst",
+    "par/Par_Ticket_Unit.fst",
+    "auth/Pkjwt.fst",
+    "oidc/IdToken.Spec.fst",
+    "oidc/IdToken.fst",
+    "oidc/IdToken.Low.Plan.fst",
+    "oidc/IdToken.Low.Runtime.fst",
+    "oidc/Logout.Spec.fst",
+    "oidc/Logout.fst",
+    "oidc/FormPost.fst",
+    "introspection/Introspection.fst",
+    "introspection/JwtIntrospection.fst",
+    "revocation/Revocation.fst",
+    "crypto/Crypto.fst",
+    "crypto/Random.fst",
+    "crypto/Drbg.HmacSha256.fst",
+    "crypto/Verified.Crypto.Bridge.fst",
+    "authcode/AuthCode.Types.fst",
+    "authcode/AuthCode.Store.fst",
+    "authcode/AuthCode.Flow.fst",
+    "authcode/AuthCode.Snapshot.fst",
+    "authcode/AuthCode.RedisGrant.fst",
+    "resource/ResourceIndicators.EffectiveTarget.fst",
+    "oidc/OIDC.OfflineConsent.fst",
+    "oidc/OIDC.RequestObjectTarget.fst",
+    "oidc/OIDC.Reauthentication.fst",
+    "oidc/OIDC.AuthorizationTransactions.fst",
+    "../tests/fstar/property/TestAuthCodeRedisGrant.fst",
+    "stepup/StepUp.fst",
+    "HashComputation.Model.fst",
+    "dcr/DcrManagement.fst",
+    "device_authz/DeviceAuthz.fst",
+    "dpop/Dpop.Nonce.fst",
+    "federation/Federation.EntityConfig.fst",
+    "federation/Federation.PgRepo.fst",
+    "federation/OpEntityConfiguration.fst",
+    "federation/OpSubordinateStatement.fst",
+    "federation/TrustMark.fst",
+    "federation/UpstreamRefresh.fst",
+    "federation/OidcRp.Types.fst",
+    "federation/OidcRp.Transitions.fst",
+    "federation/OidcRp.Properties.fst",
+    "management/Management.ClientLifecycle.fst",
+    "management/Management.Initialization.fst",
+    "management/Management.KeyRotation.fst",
+    "management/Management.PolicyProfile.fst",
+    "rar/Rar.AuthorizationDetails.fst",
+    "verifiedcore/api/VerifiedCore.Crypto.Hacl.fst",
+    "verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst",
+    "jose/Jose.LowStar.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Helpers.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Runtime.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Types.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Utf8.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.ParseEntries.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Spec.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Stack.fst",
+    "../tests/fstar/unit/TestFormPostCsp.fst",
+    "../tests/fstar/property/TestFormPostEncoder.fst"
+  ],
+  "cwd": "/build/source/fstar",
+  "executed_argv": [
+    "/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe",
+    "--detail_errors",
+    "--query_stats",
+    "--use_hints",
+    "--hint_dir",
+    ".",
+    "--expose_interfaces",
+    "--include",
+    "crypto",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/bignum/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/blake2/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/c/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20poly1305/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/curve25519/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/drbg/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ecdsap256/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ed25519/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/fallback/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ffdhe/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/frodo/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hash/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hkdf/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hmac/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hpke/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/k256/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/lemmas/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/meta/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ml/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/nacl-box/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/poly1305/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/rsapss/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/salsa20/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha2-mb/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha3/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/streaming/",
+    "--include",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/tests/",
+    "--include",
+    "/nix/store/jzlin36arbymkbbxwxaypx0q2bk7jhi0-karamel-2025-10-08/lib/krml",
+    "--include",
+    "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/buffer",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/extern",
+    "--include",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/lib/lowparse",
+    "--warn_error",
+    "-241",
+    "--warn_error",
+    "-242",
+    "--warn_error",
+    "-252",
+    "--warn_error",
+    "-328",
+    "--warn_error",
+    "-274",
+    "--warn_error",
+    "-285",
+    "--warn_error",
+    "-333",
+    "--warn_error",
+    "-276",
+    "FStar.Base64.fst",
+    "jose/JoseNatLemmas.fst",
+    "jose/JoseU32Lemmas.fst",
+    "jose/Jose.Arith.Bounds.fst",
+    "jose/Jose.UInt32Bounds.fst",
+    "jose/Jose.Utf8.fst",
+    "jose/Jose.Utf8.Validity.fst",
+    "jose/Jose.Utf8.Encoding.fst",
+    "jose/Jose.Utf8.Lemmas.fst",
+    "jose/Jose.Utf8Lemmas.fst",
+    "jose/Jose.ListMapLemmas.fst",
+    "jose/Jose.BufferListLemmas.fst",
+    "ConstTime.fst",
+    "HashComputation.fst",
+    "common/EqHelpers.fst",
+    "FStar.Json.fst",
+    "jose/Jose.fst",
+    "jose/Jose.False.fst",
+    "jose/Jose.BytesBlock.fst",
+    "jose/Jose.TlvResultSpec.fst",
+    "jose/Jose.TlvInterface.fst",
+    "jose/Jose.TlvLemmas.fst",
+    "jose/Jose.JsonTlvEquiv.fst",
+    "jose/Jose.StringLemmas.fst",
+    "jose/Jose.HeaderKeyLemmas.fst",
+    "jose/Jose.Alg_policy.fst",
+    "jose/Jose.Policy.fst",
+    "jose/Jose.Metadata.fst",
+    "jose/Jose.HeaderSpec.fst",
+    "jose/Jose.HeaderPolicy.fst",
+    "jose/Jose.HeaderMicro.fst",
+    "jose/Jose.HeaderParser.Assumptions.fst",
+    "jose/Jose.HeaderParser.Spec.fst",
+    "jose/Jose.HeaderParser.Runtime.fst",
+    "jose/Jose.HeaderParser.TLV.fst",
+    "jose/Jose.HeaderParser.Proofs.fst",
+    "jose/Jose.HeaderParser.fst",
+    "jose/Jose.JsonHeaderSpec.fst",
+    "jose/Jose.Context.fst",
+    "jose/Jose.Jwk_metadata.fst",
+    "jose/Jose.Jwk_structure.fst",
+    "jose/Jose.Jws.Verify.fst",
+    "jose/Jose.Jwk_thumbprint_uri.fst",
+    "jose/Jose.Jws_header.fst",
+    "jose/Jose.Jws_signature.fst",
+    "jose/Jose.Jws_serialization.fst",
+    "jose/Jose.Jwe_header.fst",
+    "jose/Jose.Jwe_aad.fst",
+    "jose/Jose.Jwe_chacha20poly1305.fst",
+    "jose/Jose.Jwt_claims.fst",
+    "jose/Jose.Jwt_validation.fst",
+    "jose/Jose.Hmac_verification.fst",
+    "jose/Jose.Rsa_signatures.fst",
+    "jose/Jose.Dcr.fst",
+    "jose/Jose.SdJwt.fst",
+    "../generated/everparse/JoseHeader.fsti",
+    "../generated/everparse/JoseHeader.fst",
+    "../generated/everparse/DCR.fsti",
+    "../generated/everparse/DCR.fst",
+    "../generated/everparse/IdTokenSchema.fsti",
+    "../generated/everparse/IdTokenSchema.fst",
+    "../generated/everparse/DpopSchema.fsti",
+    "../generated/everparse/DpopSchema.fst",
+    "../generated/everparse/DcrRegistration.fsti",
+    "../generated/everparse/DcrRegistration.fst",
+    "../generated/everparse/LogoutTokenSchema.fsti",
+    "../generated/everparse/LogoutTokenSchema.fst",
+    "../generated/everparse/RequestObjectSchema.fsti",
+    "../generated/everparse/RequestObjectSchema.fst",
+    "token/Token.fst",
+    "token/JwtAccessToken.fst",
+    "token/Bearer.fst",
+    "token/Bearer.Policy.fst",
+    "token/Bearer_validation.fst",
+    "common/StringHelpers.fst",
+    "resource/ResourceIndicators.fst",
+    "resource/ProtectedResourceMetadata.fst",
+    "dpop/Dpop.Header.fst",
+    "dpop/Dpop.Claims.fst",
+    "dpop/Dpop.Signature.fst",
+    "dpop/Dpop.Iat_validation.fst",
+    "dpop/Dpop.Htm_validation.fst",
+    "dpop/Dpop.Htu_validation.fst",
+    "dpop/Dpop.Ath_validation.fst",
+    "dpop/Dpop.Token_binding.fst",
+    "dpop/Dpop.Replay.fst",
+    "dpop/Dpop.Validation.fst",
+    "dpop/Dpop.fst",
+    "pkce/Pkce.Challenge.fst",
+    "pkce/Pkce.Verifier.fst",
+    "pkce/Pkce.Method_selection.fst",
+    "pkce/Pkce.Verification.fst",
+    "pkce/Pkce.fst",
+    "par/Authorization.fst",
+    "par/Client_auth.fst",
+    "par/ParBinding.fst",
+    "par/Lifetime.fst",
+    "par/Request_uri.fst",
+    "par/RequestObject.fst",
+    "par/Response.fst",
+    "par/ParApp.fst",
+    "par/Par_Internal.fst",
+    "par/Par.fsti",
+    "par/Par.fst",
+    "par/Par_Steel.fst",
+    "par/Par_Ticket.fst",
+    "par/Par_Ticket_Unit.fst",
+    "auth/Pkjwt.fst",
+    "oidc/IdToken.Spec.fst",
+    "oidc/IdToken.fst",
+    "oidc/IdToken.Low.Plan.fst",
+    "oidc/IdToken.Low.Runtime.fst",
+    "oidc/Logout.Spec.fst",
+    "oidc/Logout.fst",
+    "oidc/FormPost.fst",
+    "introspection/Introspection.fst",
+    "introspection/JwtIntrospection.fst",
+    "revocation/Revocation.fst",
+    "crypto/Crypto.fst",
+    "crypto/Random.fst",
+    "crypto/Drbg.HmacSha256.fst",
+    "crypto/Verified.Crypto.Bridge.fst",
+    "authcode/AuthCode.Types.fst",
+    "authcode/AuthCode.Store.fst",
+    "authcode/AuthCode.Flow.fst",
+    "authcode/AuthCode.Snapshot.fst",
+    "authcode/AuthCode.RedisGrant.fst",
+    "resource/ResourceIndicators.EffectiveTarget.fst",
+    "oidc/OIDC.OfflineConsent.fst",
+    "oidc/OIDC.RequestObjectTarget.fst",
+    "oidc/OIDC.Reauthentication.fst",
+    "oidc/OIDC.AuthorizationTransactions.fst",
+    "../tests/fstar/property/TestAuthCodeRedisGrant.fst",
+    "stepup/StepUp.fst",
+    "HashComputation.Model.fst",
+    "dcr/DcrManagement.fst",
+    "device_authz/DeviceAuthz.fst",
+    "dpop/Dpop.Nonce.fst",
+    "federation/Federation.EntityConfig.fst",
+    "federation/Federation.PgRepo.fst",
+    "federation/OpEntityConfiguration.fst",
+    "federation/OpSubordinateStatement.fst",
+    "federation/TrustMark.fst",
+    "federation/UpstreamRefresh.fst",
+    "federation/OidcRp.Types.fst",
+    "federation/OidcRp.Transitions.fst",
+    "federation/OidcRp.Properties.fst",
+    "management/Management.ClientLifecycle.fst",
+    "management/Management.Initialization.fst",
+    "management/Management.KeyRotation.fst",
+    "management/Management.PolicyProfile.fst",
+    "rar/Rar.AuthorizationDetails.fst",
+    "verifiedcore/api/VerifiedCore.Crypto.Hacl.fst",
+    "verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst",
+    "jose/Jose.LowStar.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Helpers.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Runtime.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Types.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Utf8.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.ParseEntries.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Spec.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.fst",
+    "jose/LowStar/Json/Jose.LowStar.Json.Stack.fst",
+    "../tests/fstar/unit/TestFormPostCsp.fst",
+    "../tests/fstar/property/TestFormPostEncoder.fst"
+  ],
+  "include_paths": [
+    "crypto",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/bignum/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/blake2/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/c/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20poly1305/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/curve25519/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/drbg/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ecdsap256/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ed25519/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/fallback/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ffdhe/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/frodo/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hash/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hkdf/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hmac/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hpke/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/k256/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/lemmas/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/meta/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ml/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/nacl-box/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/poly1305/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/rsapss/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/salsa20/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha2-mb/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha3/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/streaming/",
+    "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/tests/",
+    "/nix/store/jzlin36arbymkbbxwxaypx0q2bk7jhi0-karamel-2025-10-08/lib/krml",
+    "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/buffer",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/extern",
+    "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/lib/lowparse"
+  ],
+  "local_context": [
+    {
+      "path": "/build/source/fstar/C.Loops.fst",
+      "sha256": "2fab471ce04ab4a3248ef183816ff0e46a48d006bcbe62ec0c0553a1ff035474"
+    },
+    {
+      "path": "/build/source/fstar/ConstTime.fst",
+      "sha256": "f0a3cc6c03069bd7b32827f4225a33cf1893d8a19a73f1a5dffce211a09f67de"
+    },
+    {
+      "path": "/build/source/fstar/EverCrypt.Chacha20Poly1305.fst",
+      "sha256": "2c4fa5c7d5cd952d85c2112ac640c81872f49aefca3ceae8efce2537d06d5b23"
+    },
+    {
+      "path": "/build/source/fstar/EverCrypt.HMAC.fst",
+      "sha256": "76507961540cda7365fa7a156ff2ef35a6164a69b6cc5711a90315301214ee49"
+    },
+    {
+      "path": "/build/source/fstar/FStar.Base64.fst",
+      "sha256": "a440c1b335beb761d77f99484e06a10ab9eac7e8c307e3b91be9322346adb8fd"
+    },
+    {
+      "path": "/build/source/fstar/FStar.Json.fst",
+      "sha256": "87be4d106a60afd262af96532ca4957c31364a5b17c995d140794181c60aff26"
+    },
+    {
+      "path": "/build/source/fstar/HACL_Wrapper.fst",
+      "sha256": "2adb097e5a9a758a08cf8ecf9591bb6d22e1a7f1e92f4e0ecd5834f1e626f1bf"
+    },
+    {
+      "path": "/build/source/fstar/HashComputation.Low.fst",
+      "sha256": "4388c07ea53cc6641278c8576620f9f4ed57066b4c01808a43ffb191a6f0cdd7"
+    },
+    {
+      "path": "/build/source/fstar/HashComputation.Model.fst",
+      "sha256": "321cc4820488982ef6b900feeab1b43f06a4ee0b9a1470347217c37ae8de027c"
+    },
+    {
+      "path": "/build/source/fstar/HashComputation.fst",
+      "sha256": "faa887612a3f383a694c53639d058cb861403f19605d069db11cc07e519d8e3f"
+    },
+    {
+      "path": "/build/source/fstar/Spec.Hash.Definitions.fst",
+      "sha256": "705fd3651671d106afa556edf0533e65cb0f85c6a6a45c5221859f7e1920bace"
+    },
+    {
+      "path": "/build/source/fstar/Steel.Effect.fst",
+      "sha256": "83063d47aa106599896613a03f06d2ae81c17c01d7b439409c99cb73f90a2681"
+    },
+    {
+      "path": "/build/source/fstar/auth/Pkjwt.fst",
+      "sha256": "b32328b5dd1d5c8a46d5f45983dab0d8495672e8e572ff0cc1421ba1e31e602a"
+    },
+    {
+      "path": "/build/source/fstar/authcode/AuthCode.Flow.fst",
+      "sha256": "608aad0294e8d5c4ebe06332e9ce142e0482fe71538e3ab9d1d30745cccd487c"
+    },
+    {
+      "path": "/build/source/fstar/authcode/AuthCode.RedisGrant.fst",
+      "sha256": "600075f311b723d32d276c2a50f4ace740783cd286b6c67bf9d064e90343d693"
+    },
+    {
+      "path": "/build/source/fstar/authcode/AuthCode.Snapshot.fst",
+      "sha256": "f537400dae419563c8567e4554252f7855af0d9cfc5cb2549f991eb3d7ade75f"
+    },
+    {
+      "path": "/build/source/fstar/authcode/AuthCode.Store.fst",
+      "sha256": "ec5a9ad976dc1f5001715e698ea8c056866ea345545987d19df65bbe74e37557"
+    },
+    {
+      "path": "/build/source/fstar/authcode/AuthCode.Types.fst",
+      "sha256": "14e439dec11cabc5c2eab732193099b58b60bd6d6fa1fd80517341afe1370ea1"
+    },
+    {
+      "path": "/build/source/fstar/common/EqHelpers.fst",
+      "sha256": "b77358598160c9ddcd6382714a2ef8b7bda31537b1a86a14a22314708616e412"
+    },
+    {
+      "path": "/build/source/fstar/common/StringHelpers.fst",
+      "sha256": "787d465364e2f92d613745d67810bae0236da3359ef8f28089927afa4d58f1bd"
+    },
+    {
+      "path": "/build/source/fstar/crypto/Crypto.fst",
+      "sha256": "7fb6cb2ad3e9c437144c667daa27a0b79b4020b9e521575082aac74da3f0bc1a"
+    },
+    {
+      "path": "/build/source/fstar/crypto/Drbg.HmacSha256.fst",
+      "sha256": "ead460e381692bceed19f11fb0367e774e35ba1a606a417cc508b398bf00d3b5"
+    },
+    {
+      "path": "/build/source/fstar/crypto/Random.fst",
+      "sha256": "0941966c0ee6bdb9b0a8c3ee0eedc079b4bd929df3a50072c6ed54701a16ee41"
+    },
+    {
+      "path": "/build/source/fstar/crypto/Verified.Crypto.Bridge.fst",
+      "sha256": "28add5c50ed2b65f1bac5f3cb5392fa81a39577b7a6c58cd3fc2014c60ee5114"
+    },
+    {
+      "path": "/build/source/fstar/dcr/DcrManagement.fst",
+      "sha256": "333d3d53b65a01350315230f28038270b4d3b073b159030542461b22ff04180c"
+    },
+    {
+      "path": "/build/source/fstar/device_authz/DeviceAuthz.fst",
+      "sha256": "d891dbab42a5d1d559e9496fcc9bd336c160a48692351b91efdf17490d3079d7"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Ath_validation.fst",
+      "sha256": "baace511b262521e2b2b252e5e1662860ecf9963533f1f70a6b782d9bbd6536b"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Claims.fst",
+      "sha256": "aa087ef3152ae4e313f7f2ff5e3e6d76289beb9b3b127746199a8b0fcd43e91d"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Header.fst",
+      "sha256": "de47e40227fa3577d1de25ad54fc1065da2ff0db742c0d662f335f04298a62e5"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Htm_validation.fst",
+      "sha256": "b1d081d8e752254be4e2299d66a49ac4217a678324f6a3cd379f64d8fe50b075"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Htu_validation.fst",
+      "sha256": "453f1dfe0469058f03e8b9c5cd71dd5afc1d1e8464b70a8246cc05c07c5b1c67"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Iat_validation.fst",
+      "sha256": "805d68fa5b52714f1a64d96e3b7fd2104e1d908682b61b14c0e16b8ba32350cd"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Nonce.fst",
+      "sha256": "161845ccc08876dc5c48cd893e166f3aa16d773d237a68e32fa69d9f3fea05aa"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Replay.fst",
+      "sha256": "70e36b5d2fd8074a11aad2d600d7db9b9a529d8f678d09051f2403f1223cd998"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Signature.fst",
+      "sha256": "fce4f7d2c5ac3aa6986a4f0fb6a70f37ae547f0df14440edd378fb2f3a31255f"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Token_binding.fst",
+      "sha256": "d6ec60eae4c3bbe54a7ece7b5198174abfceaf9c0a69ced92a5b3d93d5744c6c"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.Validation.fst",
+      "sha256": "8b231b339ee4fa7aa4a387d112d312af3db7f19ec7b0868238e005c37d2b2957"
+    },
+    {
+      "path": "/build/source/fstar/dpop/Dpop.fst",
+      "sha256": "07739e9b951fd9f8003d17695a658bd89420b027388987399705182d547af047"
+    },
+    {
+      "path": "/build/source/fstar/federation/Federation.EntityConfig.fst",
+      "sha256": "8ddf91cfc5fdea784ac896bc2fd40671df21f043f2575f2587fe70f2a55b2d42"
+    },
+    {
+      "path": "/build/source/fstar/federation/Federation.PgRepo.fst",
+      "sha256": "fbe04f908404b1937e408a0552550df3b8b3e66ab8dce08a0393e4e29932d457"
+    },
+    {
+      "path": "/build/source/fstar/federation/OidcRp.Properties.fst",
+      "sha256": "6a1e134ad228bec28bb19210dcecf13dda6d5f62c25b6cf9e29cb06476735e5f"
+    },
+    {
+      "path": "/build/source/fstar/federation/OidcRp.Transitions.fst",
+      "sha256": "e0e9f53f65d3ee96b1713ae85e36d750ab1bc56fdd9dbe036e9bf1b409e03764"
+    },
+    {
+      "path": "/build/source/fstar/federation/OidcRp.Types.fst",
+      "sha256": "44360da440894a2c04ac150e80fcb0b891628135fc60a69d08ac9e25ea512794"
+    },
+    {
+      "path": "/build/source/fstar/federation/OpEntityConfiguration.fst",
+      "sha256": "8a9f797ee7f945cc45cf6e467dd16a59250c0cfce8a9ab6c0ef94da33fb61147"
+    },
+    {
+      "path": "/build/source/fstar/federation/OpSubordinateStatement.fst",
+      "sha256": "f8b332856eee99cf2cbc6e998c26bbcb41c9596a1795644a9c47104bc98e989f"
+    },
+    {
+      "path": "/build/source/fstar/federation/TrustMark.fst",
+      "sha256": "4a442783fe6812128f8e060712d48cd23bdaaf607cc606f55b3b20eecad3ffaf"
+    },
+    {
+      "path": "/build/source/fstar/federation/UpstreamRefresh.fst",
+      "sha256": "5b30f716d8b7130aa1fd8d17059e69c6beab8d1214859879dfbd9af0a7ccb55d"
+    },
+    {
+      "path": "/build/source/fstar/introspection/Introspection.fst",
+      "sha256": "478b74bf7c5d4a771ad7da243c94b7788ec3121a3fcc06f09ab17e0ffb2bbdcc"
+    },
+    {
+      "path": "/build/source/fstar/introspection/JwtIntrospection.fst",
+      "sha256": "b8d0365e1e2c0230488b8ad14a7671405d3faaca49f34e4ebb3efce89bb6654f"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Alg_policy.fst",
+      "sha256": "c16425ef00ac652973f84540c7bb09dea8b4ccb5bdbff5e0933067ea514f7285"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Arith.Bounds.fst",
+      "sha256": "95b1b0cf36f7f812ce5116474f0a685ff8de4f6258da3f273efca0c5cd2cae9b"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.BufferListLemmas.fst",
+      "sha256": "08ffd11dcbd865abb5550343f63dd6a24880c62907e01856d891a3eddeccda9e"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.BytesBlock.fst",
+      "sha256": "f47201add91a5076151bdf574290bde5dbfc2ff3d3a94d8e49f0e7212fc28ccd"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Context.fst",
+      "sha256": "090e71b669119c844958c4b5c44dd59d03080cc8e8df8310989e8177562c598e"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Dcr.fst",
+      "sha256": "88fb989a1567924a29d7f6beb0a0c429a91d812399a79dee3412bbd76f228c6d"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.False.fst",
+      "sha256": "5832460794403ffb99dd33a1566043e01dbd4dc57be8112f1660ec9647ed0dda"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Federation.Policy.Lemmas.fst",
+      "sha256": "37af9b7eada6783ed8d3996c6891e22dd552f989fa1e7432084038a5f83594e7"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Federation.Policy.Merge.fst",
+      "sha256": "ab56d552334e2836b9530409fe714a5d3be393652c5f64ee9a111fe405303c3a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Federation.Policy.Order.fst",
+      "sha256": "13013c261e68bf12cef43f5f8c29deb1c74e797227566c37d43603868ef5ff71"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Federation.Policy.Types.fst",
+      "sha256": "03a1577068d260fbbc915d00e7ddc64e1f64fcfdce8f3b2fb433574fbc2f699f"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Federation.fst",
+      "sha256": "abf24973f2ed05a035a0329ca7e90cefaa0288442dcec45723c5c38c203ed478"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderKeyLemmas.fst",
+      "sha256": "9eede608d27ed134ff7e35b55d70b140c82f55a546996193c2f27b2788cda723"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderMicro.fst",
+      "sha256": "c99d96d93692db89a2053e917d4fec523037291557ce4220ebb83a9ee499fe21"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.Assumptions.fst",
+      "sha256": "75c776c7bd31841b7ce45ee5db8ec1cea2e582434c0654345eb616d956c0bfd1"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.Proofs.fst",
+      "sha256": "b2c1bec064769805cdba1d9067b0ac3b9f4ed7da72653a49b7e67bfa1641b08a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.Runtime.fst",
+      "sha256": "b3f02d63e17e27b116f6e00ae85dd52dff60f1e5f0862584027398bd19696678"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.Spec.fst",
+      "sha256": "91299f3afab6afdc93671856e5388e607c8a71c22faa2fde7c8dac75f4108377"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.TLV.fst",
+      "sha256": "8cfac4ba5117d14a961abdeabf98e083105851ca76dc5ee8cc5db556690bbb98"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderParser.fst",
+      "sha256": "ec98d28d77e943c5a35a78fddaca80ca078250a6a405ed6d409199dea1ee4b85"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderPolicy.fst",
+      "sha256": "f77410c5e59f2daa784987bb8847bc38192b145000072424c09e65aa9580268e"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.HeaderSpec.fst",
+      "sha256": "24951c27bd20918800618d4b54a676d85f51bf767cf14ecf0c8441861a7d0905"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Hmac_verification.fst",
+      "sha256": "4468d57d7633eae162bf6a9739c79c501befedd70759344721930c0f1b089446"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.JsonHeaderSpec.fst",
+      "sha256": "ded450572c733c0b6e99214d2132db3736f2aad9c8b3422000581e8cef8a042a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.JsonTlvEquiv.fst",
+      "sha256": "9ae27850b170f152d2f84204fd9bce1a26b60687a878a006a6b1a710f0441ba6"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwe_aad.fst",
+      "sha256": "70fe38271af18f06beb5cf225bcc38ddf58b0e8b56608b578d7a8abf3ec4049e"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwe_chacha20poly1305.fst",
+      "sha256": "fad518d057ad8e8ac9f0a52348209d977df609aafdf9a4c8c5bbb7726b3b8974"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwe_header.fst",
+      "sha256": "3b611976c75a8fa79fdfb728490170bc0acd50532b257d015dfc656ca6df530a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwk_metadata.fst",
+      "sha256": "46930f4ac9c18c325ae5d9b87d647d6e3ad43f7359cfea0f0df7f64499a5a13b"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwk_structure.fst",
+      "sha256": "1a020b47c1726fedda2f22abd23bd8315335d7d4483022da342e9bd8457f766e"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwk_thumbprint_uri.fst",
+      "sha256": "51884b9642c41720e9fc1e78bbb433a1c168fdd4633c25e74ece5f777ac83626"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jws.Verify.fst",
+      "sha256": "bf41621f4a04b64c74cbb6aef6c24d6d8dacd7ae0ad19aa7808a1dae4912966c"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jws_header.fst",
+      "sha256": "fa6016ec6bdd8f16a81dee2d1c8933664ab8f43936958f055ef3eddac1ca267b"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jws_serialization.fst",
+      "sha256": "a43fa70b7ac17c599ccccd2693abe02a92943fa670138706dd19135b73da1b61"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jws_signature.fst",
+      "sha256": "ac79e99202f39cf67f05ec6742cc5aa8a5e3e598037b98b6caaa6df7b5c97878"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwt_claims.fst",
+      "sha256": "9115bda10820adada251b4a2db8f0c3030ffbefb9191a10fa07622c2ee4747f3"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Jwt_validation.fst",
+      "sha256": "2cc6196c7b77e9e73d7df7bec17a17f5c9e04c8eb77d8291014b6d47a86acad1"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.ListMapLemmas.fst",
+      "sha256": "e38bdd06adf10cc5fcbfe2930ccd537606aa06545c4fa0355f5d67f171b47b47"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.LowStar.fst",
+      "sha256": "726d3632566973c51aace6acfe4997acbd4165c93c3cf09f1938a8646c179480"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Metadata.fst",
+      "sha256": "5c1061fa604e26e0d69cbafdcaa034788c41c6c5ad352af5b434e188f8357450"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Policy.fst",
+      "sha256": "0456edadd9877a4a07bf84ab7e60b13eb2abd5c8cc07e77312e9faee71d1dda0"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Rsa_signatures.fst",
+      "sha256": "ee2e20800ae741b77ce2ca0db6b7b29326a0d13e623d0a3cb8bcf56ad2d6bd21"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.SdJwt.fst",
+      "sha256": "8ac21a67d08ebe736ecff97acf5de6fdaf56cd91839a3aae920f6943206b192a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.StringLemmas.fst",
+      "sha256": "4fb7fe3c550928cd8adae75e033d60c5756a1d10f024df833371b5bec192347f"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.TlvInterface.fst",
+      "sha256": "808e10c28d29ea1bff0e53039a96165c40f3572987dc5faf8853b65104157265"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.TlvLemmas.fst",
+      "sha256": "07293ae61f422dc714e27246f2101a010880f145c0134f8a418e39805217e931"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.TlvResultSpec.fst",
+      "sha256": "c6e2466055545e459460e88bf0b6b0aa2ead6674906b0ea8a2839254e56a5695"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.UInt32Bounds.fst",
+      "sha256": "22d60c6f7bdb50c465154c56510bbc04dc37b898b1f43e121e327c792288d31f"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Utf8.Encoding.fst",
+      "sha256": "97b4238369cd7511442b4dbf07d158954e02c4f79c1b7987bb6890afdf273d86"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Utf8.Lemmas.fst",
+      "sha256": "c4429c9f0e619e0917de4a4ad4ad7cd84af045a9606d8b08d2bb93f85f241a3a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Utf8.Validity.fst",
+      "sha256": "818276ffcf42a3af80cdf44227d8f227b22eb4bf4e9b5218c54df4cbe7dd348a"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Utf8.fst",
+      "sha256": "354521aa3631fb185612e9cd77538c583457eed567dba2857730baf2a9384161"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.Utf8Lemmas.fst",
+      "sha256": "4d84a992afb33f6b516bacf29c73be54786436158114c5773e768cd5435f0926"
+    },
+    {
+      "path": "/build/source/fstar/jose/Jose.fst",
+      "sha256": "0a8c9ecd0681e95756764d7ba2af81da57b90656a80b867bd30c0ff33a840f5d"
+    },
+    {
+      "path": "/build/source/fstar/jose/JoseNatLemmas.fst",
+      "sha256": "52e534b30dca2618d5de9d47fb2bac3f439ba27f4fe87ec5505ee9436e2eb8ac"
+    },
+    {
+      "path": "/build/source/fstar/jose/JoseU32Lemmas.fst",
+      "sha256": "949214c6fd59efc081258afd118710706055ac330b4b334ed3a900c024f3b579"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Helpers.fst",
+      "sha256": "b1524e533db8764c7eb951280420d1106e527494efb8884d62b4969502a589e8"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.ParseEntries.fst",
+      "sha256": "fa2acd908ee8d31f1a28da4c0439b82be8fc6aea989fa43c7b45ae262431163c"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Runtime.fst",
+      "sha256": "9d7025fab430d8e3ab5136ac9d5844c03d7d54680e3933fdf9e1652167ffd7f4"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Spec.fst",
+      "sha256": "e6d16ed3583cbb456f6dab2310c7f39c59b7d7786d8a613dd971740561605bf8"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Stack.fst",
+      "sha256": "45a6e6c44e4c779b06f066fbdcb2662c058d00594936abc1aa21c13012e6bfcd"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Structural.Runtime.fst",
+      "sha256": "c45720dadc8cb2baa81f73bf98e3693e2a166662e1b00717fef78cc15bb5f4a7"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Structural.Spec.fst",
+      "sha256": "4f26de411034d80d21dec9ab88d01085794f52e2628c1ded734355270c9439cb"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Structural.Types.fst",
+      "sha256": "9759ac1554cdd650a323015fc49e38f3772c329f3a0fdc291b41f26869024262"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Structural.fst",
+      "sha256": "27b1bc0994610f33f753e6a7238e721383ed0a3b90e8c82fd266dae394412892"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Types.fst",
+      "sha256": "397aec7ec3bb742d3634a5632fbaedcb904255bae3a4dcad624a9ea27be6afb8"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.Utf8.fst",
+      "sha256": "7ba395896f3703067ae7bcc429c66aa86066923e1e5dfc11d31a33b68b9f500b"
+    },
+    {
+      "path": "/build/source/fstar/jose/LowStar/Json/Jose.LowStar.Json.fst",
+      "sha256": "492b9ad82ce08224d29b2464d45cecac5b449e0eaa4182baf69d53697eb5c326"
+    },
+    {
+      "path": "/build/source/fstar/management/Management.ClientLifecycle.fst",
+      "sha256": "007446a8df495a5e1213d70f4ef9f4d4f15438fd51cf90a82cf60e663866f15c"
+    },
+    {
+      "path": "/build/source/fstar/management/Management.Initialization.fst",
+      "sha256": "d188587dbd7af1bae47cf3e78350cec39eaff963934b50a48af9549665723561"
+    },
+    {
+      "path": "/build/source/fstar/management/Management.KeyRotation.fst",
+      "sha256": "731dc5519c924940d8e35f35a6941a52c3a9bdb0a17c1dd90ad475cb35750c0a"
+    },
+    {
+      "path": "/build/source/fstar/management/Management.PolicyProfile.fst",
+      "sha256": "c50569b0180f61e6778397f2578221374995ec1b5752a167df0fadbd7b9f8af5"
+    },
+    {
+      "path": "/build/source/fstar/oidc/FormPost.fst",
+      "sha256": "ef4e7e7049fd4346e3f6b3f7135bab028211122cbc028b0b2ea94ad08f32b1a9"
+    },
+    {
+      "path": "/build/source/fstar/oidc/IdToken.Low.Plan.fst",
+      "sha256": "bc47faa8c89965312d28695c6f4247233e823876ec1887d8235106dad4b0265f"
+    },
+    {
+      "path": "/build/source/fstar/oidc/IdToken.Low.Runtime.fst",
+      "sha256": "32129ddcb22029e4a3b2e1810b49cc8fb80d5480a5772022c1d78ccaa48b6ebe"
+    },
+    {
+      "path": "/build/source/fstar/oidc/IdToken.Spec.fst",
+      "sha256": "5856b42df658bd2395b744c637e5b88e84cd974294d3521a45fc3f8bea8b61a6"
+    },
+    {
+      "path": "/build/source/fstar/oidc/IdToken.fst",
+      "sha256": "cb36de1b5100a4b39b54aa67c9e3a25329fbbcfe8dd8f9c2bd77e0edcaaedd08"
+    },
+    {
+      "path": "/build/source/fstar/oidc/Logout.Spec.fst",
+      "sha256": "ef752987101c57161576621e2cacecb2b28f867c4c2ced27ba4663f9664d0917"
+    },
+    {
+      "path": "/build/source/fstar/oidc/Logout.fst",
+      "sha256": "3d9820bb958b564c83b22a4b3da8d8cb51afa2e42da406bce6e528d5cf094b67"
+    },
+    {
+      "path": "/build/source/fstar/oidc/OIDC.AuthorizationTransactions.fst",
+      "sha256": "449ad32764f2e5137c616814155f8ca410e49f83a27c107ca9b67866fccb8860"
+    },
+    {
+      "path": "/build/source/fstar/oidc/OIDC.OfflineConsent.fst",
+      "sha256": "3e9187bbbcfa53bd3db9b1b5807514b76137906ce679cbf90f03a2285f9c9433"
+    },
+    {
+      "path": "/build/source/fstar/oidc/OIDC.Reauthentication.fst",
+      "sha256": "bc63a4c280541496d8b2b61d48eb360c729784d6a8a808538dab2d2a06fbe6ff"
+    },
+    {
+      "path": "/build/source/fstar/oidc/OIDC.RequestObjectTarget.fst",
+      "sha256": "bb083ed08f0da578167a23c424f066089a9b69f36b2072b7c7b2b3790925d1fb"
+    },
+    {
+      "path": "/build/source/fstar/par/Authorization.fst",
+      "sha256": "cad724b13d121458bea8d8582324f0c8eb4328321a62e2598021ac88f4de759c"
+    },
+    {
+      "path": "/build/source/fstar/par/Client_auth.fst",
+      "sha256": "41aaf68b071bcd030fbe58be36d5290162d8c669372a9c3093e8bd024b419064"
+    },
+    {
+      "path": "/build/source/fstar/par/Lifetime.fst",
+      "sha256": "f21fef2e2c71dadf9bae4403331389147d9c47dd0c81d59271c32c05d986db34"
+    },
+    {
+      "path": "/build/source/fstar/par/Par.fst",
+      "sha256": "fc7e944f0132c89dfafc93be53b9acc53aac55e00a9a17b21b543b1256d1e42d"
+    },
+    {
+      "path": "/build/source/fstar/par/Par.fsti",
+      "sha256": "206e586817b1f1eb3feb2ec7cdb70092078780fc8c64e0620177b13dba5ad851"
+    },
+    {
+      "path": "/build/source/fstar/par/ParApp.fst",
+      "sha256": "76d4500b60de60851f6c16dd4cfa18328c839d12e19fe64df69ad3dc2a6c6982"
+    },
+    {
+      "path": "/build/source/fstar/par/ParBinding.fst",
+      "sha256": "34c18c8052fa2610a3d0ca5c8d7be88a8085a3106433fd371332fbfaeee80c0f"
+    },
+    {
+      "path": "/build/source/fstar/par/Par_Internal.fst",
+      "sha256": "2969599a17b0e7ec0f0a3dd59f83249bb112db564c8d893190be20082dcb2a1f"
+    },
+    {
+      "path": "/build/source/fstar/par/Par_Steel.fst",
+      "sha256": "026277588099da7cf02aa8823896b3ab794c7a3ba673f97fdfa5f2186c1b083f"
+    },
+    {
+      "path": "/build/source/fstar/par/Par_Ticket.fst",
+      "sha256": "f2e3dc1cbe87876f8508f50d8cb334c636509594bf36b2c703efe1e5e5bb7d80"
+    },
+    {
+      "path": "/build/source/fstar/par/Par_Ticket_Unit.fst",
+      "sha256": "92a8e50310b544ca94fbf32b22959d9aa2ba3966ab3453250210403a7d86af3f"
+    },
+    {
+      "path": "/build/source/fstar/par/RequestObject.fst",
+      "sha256": "77a119390716c97c466e63edb8cb770d823f597b1a0f44afc017e2da1aa15770"
+    },
+    {
+      "path": "/build/source/fstar/par/Request_uri.fst",
+      "sha256": "f89ff7104a27b109d8afc4d14ecc3f1f10ba26fba7d34c211d52b68f7efc99f4"
+    },
+    {
+      "path": "/build/source/fstar/par/Response.fst",
+      "sha256": "0afd85485d9dde62be01db75f7b6d564fd6293bc4c5320880c16f6aac919861a"
+    },
+    {
+      "path": "/build/source/fstar/pkce/Pkce.Challenge.fst",
+      "sha256": "680e67eff3444562c17369f82955ac8aebeb5fc017d99be3ac515d06d4b2a9fd"
+    },
+    {
+      "path": "/build/source/fstar/pkce/Pkce.Method_selection.fst",
+      "sha256": "ed686b28dd5df67d7ea8f4c655b985ffd9a69b12bcfb4d0ee4479edbd893280e"
+    },
+    {
+      "path": "/build/source/fstar/pkce/Pkce.Verification.fst",
+      "sha256": "f0938507c1af0bfdc404534adc66fb6e640b013790c34c6a9cbc701726fe0618"
+    },
+    {
+      "path": "/build/source/fstar/pkce/Pkce.Verifier.fst",
+      "sha256": "aaea119610a549576632734b8b31622de41cae53b2d58a474a2884da40641ef5"
+    },
+    {
+      "path": "/build/source/fstar/pkce/Pkce.fst",
+      "sha256": "eb2a884bc3f527c8983837496a1154670ebef00f7f8b5cd827e9ebe7c09c347e"
+    },
+    {
+      "path": "/build/source/fstar/rar/Rar.AuthorizationDetails.fst",
+      "sha256": "a4142a2ac434519ce1134973a21426d3a3c95d9a8ac7f6d60c98273334990c14"
+    },
+    {
+      "path": "/build/source/fstar/resource/ProtectedResourceMetadata.fst",
+      "sha256": "a280df320df361ba53ba027d2c03ad6160dcaf6b7c4201f77b1584da2742b7e5"
+    },
+    {
+      "path": "/build/source/fstar/resource/ResourceIndicators.EffectiveTarget.fst",
+      "sha256": "3dc2aeab5c4f51cb26d397390e21bd6e9ae0fc12e1355796e3328653f94af224"
+    },
+    {
+      "path": "/build/source/fstar/resource/ResourceIndicators.fst",
+      "sha256": "27f142b8f6b783fd2f3242629f0419b47205fdced09720b3311d7b21aafa7546"
+    },
+    {
+      "path": "/build/source/fstar/revocation/Revocation.fst",
+      "sha256": "18f735671680f1ee4525b952ca48d7efdf59e9a7b509ef1ff49dc305d842c288"
+    },
+    {
+      "path": "/build/source/fstar/stepup/StepUp.fst",
+      "sha256": "b61b8995077ba821ab29bb184b66072ccac378bc4d49233d72397f7cb77ac0bc"
+    },
+    {
+      "path": "/build/source/fstar/token/Bearer.Policy.fst",
+      "sha256": "0de04cf709fd404fe9e330fac1e45e59e77e36c50374603ce81b2a4445e2b8af"
+    },
+    {
+      "path": "/build/source/fstar/token/Bearer.fst",
+      "sha256": "451d8e894c396542899c6f8bcf5de0cba30ceca959f0d37f2f9a44d514179791"
+    },
+    {
+      "path": "/build/source/fstar/token/Bearer_validation.fst",
+      "sha256": "f50279b8726d3737135b309f3444a106242b3efeb86aaecbd8d0c9a372c621c4"
+    },
+    {
+      "path": "/build/source/fstar/token/JwtAccessToken.fst",
+      "sha256": "ddaf83de42f9ada2b8b8c9f0aa18889ae3e2ab5772eb1eb36861ca4712a0438d"
+    },
+    {
+      "path": "/build/source/fstar/token/Token.fst",
+      "sha256": "66ed02460096d48ec0bd85d3b01e1c1a9e4d8c788beba9b680d24088540067a3"
+    },
+    {
+      "path": "/build/source/fstar/verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst",
+      "sha256": "3efab143cbbf66751e63377db149983b43eb191898881ad4dd8722cf97d91e80"
+    },
+    {
+      "path": "/build/source/fstar/verifiedcore/api/VerifiedCore.Crypto.Hacl.fst",
+      "sha256": "3efe385a345c4eabbd866e67bd10b5cbde5d27fbe89869c5a4c948c648c31265"
+    },
+    {
+      "path": "/build/source/generated/everparse/DCR.fst",
+      "sha256": "e65ccb28532896b6b1f7763fbe1a02dd98f09bab5432c2e3c9617e5a200f0064"
+    },
+    {
+      "path": "/build/source/generated/everparse/DCR.fsti",
+      "sha256": "2f8e10134cfbc3f68fe5a7cb16a02bacc70a14501acd47da4f55aa5d181cb324"
+    },
+    {
+      "path": "/build/source/generated/everparse/DcrRegistration.fst",
+      "sha256": "db00e70550acdd18eef19cedac53571df42f70380c34e63f1e6a6578d651c4d8"
+    },
+    {
+      "path": "/build/source/generated/everparse/DcrRegistration.fsti",
+      "sha256": "564ef191bee8cc2d1a4a80edf00fd4241420016b38d77db5d4074c61f680212f"
+    },
+    {
+      "path": "/build/source/generated/everparse/Dpop.fst",
+      "sha256": "5b4e3ec4fc2e45eb07e5e37ad61b8e2595c519ab3c5899cb34e6887bf486bb2a"
+    },
+    {
+      "path": "/build/source/generated/everparse/Dpop.fsti",
+      "sha256": "fcf81dd93ce5b7376d1bad3a8e9b32448cd28b5a20013774d7612fdbea68f8cb"
+    },
+    {
+      "path": "/build/source/generated/everparse/DpopSchema.fst",
+      "sha256": "d21b46407d0154694a784a24f89c1ca2e4dffcc9b4a1e29407477620a778cabf"
+    },
+    {
+      "path": "/build/source/generated/everparse/DpopSchema.fsti",
+      "sha256": "c58a89124176458d8f748d6dc02998adacf91b38e2eb9759de3fd0aba5128223"
+    },
+    {
+      "path": "/build/source/generated/everparse/IdTokenSchema.fst",
+      "sha256": "b00734078ba3634fcad0e186b36886c301298b6e9c76f8276a9ec870de98fdad"
+    },
+    {
+      "path": "/build/source/generated/everparse/IdTokenSchema.fsti",
+      "sha256": "dce028a2fe1d1338472968bd992cb25c12dff6a4c61391c715ef879fdaded6f9"
+    },
+    {
+      "path": "/build/source/generated/everparse/JoseHeader.fst",
+      "sha256": "f2e6d807cd8acc685d4c779a0e8aefcc9dbd02f0a06f09c76c9de38d59f82160"
+    },
+    {
+      "path": "/build/source/generated/everparse/JoseHeader.fsti",
+      "sha256": "3bef8638746d5bed17d3731edbac293776aac1542b1d07415c04b879aadbe5b8"
+    },
+    {
+      "path": "/build/source/generated/everparse/LogoutTokenSchema.fst",
+      "sha256": "31c458f8a2bb42b4aa0bc7502a8ac3cfe7814178c419932f99f5c42a61a46dfa"
+    },
+    {
+      "path": "/build/source/generated/everparse/LogoutTokenSchema.fsti",
+      "sha256": "bdcef0f8d4c03e633086704f27d194b6c013d74ddb716db568760a7f2c6d1f34"
+    },
+    {
+      "path": "/build/source/generated/everparse/RequestObjectSchema.fst",
+      "sha256": "7d26b49a2beb8bf08386045786ffdff30f5f136abf6b281f468ca310f0bc1922"
+    },
+    {
+      "path": "/build/source/generated/everparse/RequestObjectSchema.fsti",
+      "sha256": "9948809f2902cf1fe50ad04f89e56a46d239477679e719ca166b757b6268b865"
+    },
+    {
+      "path": "/build/source/tests/fstar/property/TestAuthCodeRedisGrant.fst",
+      "sha256": "ae8f9416bd4d03f6c1de8745dbef2ae992178bd6e4d8cdce430e37c89c70e969"
+    },
+    {
+      "path": "/build/source/tests/fstar/property/TestDpopJtiReuse.fst",
+      "sha256": "2f46515720032114ab33ad6aedfa7616b671e8500f2932c4f113704bd3247f3d"
+    },
+    {
+      "path": "/build/source/tests/fstar/property/TestFormPostEncoder.fst",
+      "sha256": "648370013301747dff9d8aec7bba50e66750e2cb2a7a6be4f070c82923461146"
+    },
+    {
+      "path": "/build/source/tests/fstar/property/TestJoseHeaderMicro.fst",
+      "sha256": "cf11dd17281606d71adc5b893668a9e2bb1d3c351274261c406334ec31e39f39"
+    },
+    {
+      "path": "/build/source/tests/fstar/unit/TestDpopValidation.fst",
+      "sha256": "77576095e5a382e5e0c637bea1295135223040b2b73f1b3e7e2cc454bebd715f"
+    },
+    {
+      "path": "/build/source/tests/fstar/unit/TestFormPostCsp.fst",
+      "sha256": "41b2ba1dd9b0a00299022d92349add44761983766281d9f6ca51de09f935d1ec"
+    },
+    {
+      "path": "/build/source/tests/fstar/unit/TestPkceVerifier.fst",
+      "sha256": "30e2fd240208d60c803a16e8aa96e84e55bc32e218e72b6a560c2f887432cc4d"
+    }
+  ],
+  "loops_origin": "builder-generated-assumptions",
+  "modules": [
+    {
+      "path": "FStar.Base64.fst",
+      "sha256": "a440c1b335beb761d77f99484e06a10ab9eac7e8c307e3b91be9322346adb8fd"
+    },
+    {
+      "path": "jose/JoseNatLemmas.fst",
+      "sha256": "52e534b30dca2618d5de9d47fb2bac3f439ba27f4fe87ec5505ee9436e2eb8ac"
+    },
+    {
+      "path": "jose/JoseU32Lemmas.fst",
+      "sha256": "949214c6fd59efc081258afd118710706055ac330b4b334ed3a900c024f3b579"
+    },
+    {
+      "path": "jose/Jose.Arith.Bounds.fst",
+      "sha256": "95b1b0cf36f7f812ce5116474f0a685ff8de4f6258da3f273efca0c5cd2cae9b"
+    },
+    {
+      "path": "jose/Jose.UInt32Bounds.fst",
+      "sha256": "22d60c6f7bdb50c465154c56510bbc04dc37b898b1f43e121e327c792288d31f"
+    },
+    {
+      "path": "jose/Jose.Utf8.fst",
+      "sha256": "354521aa3631fb185612e9cd77538c583457eed567dba2857730baf2a9384161"
+    },
+    {
+      "path": "jose/Jose.Utf8.Validity.fst",
+      "sha256": "818276ffcf42a3af80cdf44227d8f227b22eb4bf4e9b5218c54df4cbe7dd348a"
+    },
+    {
+      "path": "jose/Jose.Utf8.Encoding.fst",
+      "sha256": "97b4238369cd7511442b4dbf07d158954e02c4f79c1b7987bb6890afdf273d86"
+    },
+    {
+      "path": "jose/Jose.Utf8.Lemmas.fst",
+      "sha256": "c4429c9f0e619e0917de4a4ad4ad7cd84af045a9606d8b08d2bb93f85f241a3a"
+    },
+    {
+      "path": "jose/Jose.Utf8Lemmas.fst",
+      "sha256": "4d84a992afb33f6b516bacf29c73be54786436158114c5773e768cd5435f0926"
+    },
+    {
+      "path": "jose/Jose.ListMapLemmas.fst",
+      "sha256": "e38bdd06adf10cc5fcbfe2930ccd537606aa06545c4fa0355f5d67f171b47b47"
+    },
+    {
+      "path": "jose/Jose.BufferListLemmas.fst",
+      "sha256": "08ffd11dcbd865abb5550343f63dd6a24880c62907e01856d891a3eddeccda9e"
+    },
+    {
+      "path": "ConstTime.fst",
+      "sha256": "f0a3cc6c03069bd7b32827f4225a33cf1893d8a19a73f1a5dffce211a09f67de"
+    },
+    {
+      "path": "HashComputation.fst",
+      "sha256": "faa887612a3f383a694c53639d058cb861403f19605d069db11cc07e519d8e3f"
+    },
+    {
+      "path": "common/EqHelpers.fst",
+      "sha256": "b77358598160c9ddcd6382714a2ef8b7bda31537b1a86a14a22314708616e412"
+    },
+    {
+      "path": "FStar.Json.fst",
+      "sha256": "87be4d106a60afd262af96532ca4957c31364a5b17c995d140794181c60aff26"
+    },
+    {
+      "path": "jose/Jose.fst",
+      "sha256": "0a8c9ecd0681e95756764d7ba2af81da57b90656a80b867bd30c0ff33a840f5d"
+    },
+    {
+      "path": "jose/Jose.False.fst",
+      "sha256": "5832460794403ffb99dd33a1566043e01dbd4dc57be8112f1660ec9647ed0dda"
+    },
+    {
+      "path": "jose/Jose.BytesBlock.fst",
+      "sha256": "f47201add91a5076151bdf574290bde5dbfc2ff3d3a94d8e49f0e7212fc28ccd"
+    },
+    {
+      "path": "jose/Jose.TlvResultSpec.fst",
+      "sha256": "c6e2466055545e459460e88bf0b6b0aa2ead6674906b0ea8a2839254e56a5695"
+    },
+    {
+      "path": "jose/Jose.TlvInterface.fst",
+      "sha256": "808e10c28d29ea1bff0e53039a96165c40f3572987dc5faf8853b65104157265"
+    },
+    {
+      "path": "jose/Jose.TlvLemmas.fst",
+      "sha256": "07293ae61f422dc714e27246f2101a010880f145c0134f8a418e39805217e931"
+    },
+    {
+      "path": "jose/Jose.JsonTlvEquiv.fst",
+      "sha256": "9ae27850b170f152d2f84204fd9bce1a26b60687a878a006a6b1a710f0441ba6"
+    },
+    {
+      "path": "jose/Jose.StringLemmas.fst",
+      "sha256": "4fb7fe3c550928cd8adae75e033d60c5756a1d10f024df833371b5bec192347f"
+    },
+    {
+      "path": "jose/Jose.HeaderKeyLemmas.fst",
+      "sha256": "9eede608d27ed134ff7e35b55d70b140c82f55a546996193c2f27b2788cda723"
+    },
+    {
+      "path": "jose/Jose.Alg_policy.fst",
+      "sha256": "c16425ef00ac652973f84540c7bb09dea8b4ccb5bdbff5e0933067ea514f7285"
+    },
+    {
+      "path": "jose/Jose.Policy.fst",
+      "sha256": "0456edadd9877a4a07bf84ab7e60b13eb2abd5c8cc07e77312e9faee71d1dda0"
+    },
+    {
+      "path": "jose/Jose.Metadata.fst",
+      "sha256": "5c1061fa604e26e0d69cbafdcaa034788c41c6c5ad352af5b434e188f8357450"
+    },
+    {
+      "path": "jose/Jose.HeaderSpec.fst",
+      "sha256": "24951c27bd20918800618d4b54a676d85f51bf767cf14ecf0c8441861a7d0905"
+    },
+    {
+      "path": "jose/Jose.HeaderPolicy.fst",
+      "sha256": "f77410c5e59f2daa784987bb8847bc38192b145000072424c09e65aa9580268e"
+    },
+    {
+      "path": "jose/Jose.HeaderMicro.fst",
+      "sha256": "c99d96d93692db89a2053e917d4fec523037291557ce4220ebb83a9ee499fe21"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.Assumptions.fst",
+      "sha256": "75c776c7bd31841b7ce45ee5db8ec1cea2e582434c0654345eb616d956c0bfd1"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.Spec.fst",
+      "sha256": "91299f3afab6afdc93671856e5388e607c8a71c22faa2fde7c8dac75f4108377"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.Runtime.fst",
+      "sha256": "b3f02d63e17e27b116f6e00ae85dd52dff60f1e5f0862584027398bd19696678"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.TLV.fst",
+      "sha256": "8cfac4ba5117d14a961abdeabf98e083105851ca76dc5ee8cc5db556690bbb98"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.Proofs.fst",
+      "sha256": "b2c1bec064769805cdba1d9067b0ac3b9f4ed7da72653a49b7e67bfa1641b08a"
+    },
+    {
+      "path": "jose/Jose.HeaderParser.fst",
+      "sha256": "ec98d28d77e943c5a35a78fddaca80ca078250a6a405ed6d409199dea1ee4b85"
+    },
+    {
+      "path": "jose/Jose.JsonHeaderSpec.fst",
+      "sha256": "ded450572c733c0b6e99214d2132db3736f2aad9c8b3422000581e8cef8a042a"
+    },
+    {
+      "path": "jose/Jose.Context.fst",
+      "sha256": "090e71b669119c844958c4b5c44dd59d03080cc8e8df8310989e8177562c598e"
+    },
+    {
+      "path": "jose/Jose.Jwk_metadata.fst",
+      "sha256": "46930f4ac9c18c325ae5d9b87d647d6e3ad43f7359cfea0f0df7f64499a5a13b"
+    },
+    {
+      "path": "jose/Jose.Jwk_structure.fst",
+      "sha256": "1a020b47c1726fedda2f22abd23bd8315335d7d4483022da342e9bd8457f766e"
+    },
+    {
+      "path": "jose/Jose.Jws.Verify.fst",
+      "sha256": "bf41621f4a04b64c74cbb6aef6c24d6d8dacd7ae0ad19aa7808a1dae4912966c"
+    },
+    {
+      "path": "jose/Jose.Jwk_thumbprint_uri.fst",
+      "sha256": "51884b9642c41720e9fc1e78bbb433a1c168fdd4633c25e74ece5f777ac83626"
+    },
+    {
+      "path": "jose/Jose.Jws_header.fst",
+      "sha256": "fa6016ec6bdd8f16a81dee2d1c8933664ab8f43936958f055ef3eddac1ca267b"
+    },
+    {
+      "path": "jose/Jose.Jws_signature.fst",
+      "sha256": "ac79e99202f39cf67f05ec6742cc5aa8a5e3e598037b98b6caaa6df7b5c97878"
+    },
+    {
+      "path": "jose/Jose.Jws_serialization.fst",
+      "sha256": "a43fa70b7ac17c599ccccd2693abe02a92943fa670138706dd19135b73da1b61"
+    },
+    {
+      "path": "jose/Jose.Jwe_header.fst",
+      "sha256": "3b611976c75a8fa79fdfb728490170bc0acd50532b257d015dfc656ca6df530a"
+    },
+    {
+      "path": "jose/Jose.Jwe_aad.fst",
+      "sha256": "70fe38271af18f06beb5cf225bcc38ddf58b0e8b56608b578d7a8abf3ec4049e"
+    },
+    {
+      "path": "jose/Jose.Jwe_chacha20poly1305.fst",
+      "sha256": "fad518d057ad8e8ac9f0a52348209d977df609aafdf9a4c8c5bbb7726b3b8974"
+    },
+    {
+      "path": "jose/Jose.Jwt_claims.fst",
+      "sha256": "9115bda10820adada251b4a2db8f0c3030ffbefb9191a10fa07622c2ee4747f3"
+    },
+    {
+      "path": "jose/Jose.Jwt_validation.fst",
+      "sha256": "2cc6196c7b77e9e73d7df7bec17a17f5c9e04c8eb77d8291014b6d47a86acad1"
+    },
+    {
+      "path": "jose/Jose.Hmac_verification.fst",
+      "sha256": "4468d57d7633eae162bf6a9739c79c501befedd70759344721930c0f1b089446"
+    },
+    {
+      "path": "jose/Jose.Rsa_signatures.fst",
+      "sha256": "ee2e20800ae741b77ce2ca0db6b7b29326a0d13e623d0a3cb8bcf56ad2d6bd21"
+    },
+    {
+      "path": "jose/Jose.Dcr.fst",
+      "sha256": "88fb989a1567924a29d7f6beb0a0c429a91d812399a79dee3412bbd76f228c6d"
+    },
+    {
+      "path": "jose/Jose.SdJwt.fst",
+      "sha256": "8ac21a67d08ebe736ecff97acf5de6fdaf56cd91839a3aae920f6943206b192a"
+    },
+    {
+      "path": "../generated/everparse/JoseHeader.fsti",
+      "sha256": "3bef8638746d5bed17d3731edbac293776aac1542b1d07415c04b879aadbe5b8"
+    },
+    {
+      "path": "../generated/everparse/JoseHeader.fst",
+      "sha256": "f2e6d807cd8acc685d4c779a0e8aefcc9dbd02f0a06f09c76c9de38d59f82160"
+    },
+    {
+      "path": "../generated/everparse/DCR.fsti",
+      "sha256": "2f8e10134cfbc3f68fe5a7cb16a02bacc70a14501acd47da4f55aa5d181cb324"
+    },
+    {
+      "path": "../generated/everparse/DCR.fst",
+      "sha256": "e65ccb28532896b6b1f7763fbe1a02dd98f09bab5432c2e3c9617e5a200f0064"
+    },
+    {
+      "path": "../generated/everparse/IdTokenSchema.fsti",
+      "sha256": "dce028a2fe1d1338472968bd992cb25c12dff6a4c61391c715ef879fdaded6f9"
+    },
+    {
+      "path": "../generated/everparse/IdTokenSchema.fst",
+      "sha256": "b00734078ba3634fcad0e186b36886c301298b6e9c76f8276a9ec870de98fdad"
+    },
+    {
+      "path": "../generated/everparse/DpopSchema.fsti",
+      "sha256": "c58a89124176458d8f748d6dc02998adacf91b38e2eb9759de3fd0aba5128223"
+    },
+    {
+      "path": "../generated/everparse/DpopSchema.fst",
+      "sha256": "d21b46407d0154694a784a24f89c1ca2e4dffcc9b4a1e29407477620a778cabf"
+    },
+    {
+      "path": "../generated/everparse/DcrRegistration.fsti",
+      "sha256": "564ef191bee8cc2d1a4a80edf00fd4241420016b38d77db5d4074c61f680212f"
+    },
+    {
+      "path": "../generated/everparse/DcrRegistration.fst",
+      "sha256": "db00e70550acdd18eef19cedac53571df42f70380c34e63f1e6a6578d651c4d8"
+    },
+    {
+      "path": "../generated/everparse/LogoutTokenSchema.fsti",
+      "sha256": "bdcef0f8d4c03e633086704f27d194b6c013d74ddb716db568760a7f2c6d1f34"
+    },
+    {
+      "path": "../generated/everparse/LogoutTokenSchema.fst",
+      "sha256": "31c458f8a2bb42b4aa0bc7502a8ac3cfe7814178c419932f99f5c42a61a46dfa"
+    },
+    {
+      "path": "../generated/everparse/RequestObjectSchema.fsti",
+      "sha256": "9948809f2902cf1fe50ad04f89e56a46d239477679e719ca166b757b6268b865"
+    },
+    {
+      "path": "../generated/everparse/RequestObjectSchema.fst",
+      "sha256": "7d26b49a2beb8bf08386045786ffdff30f5f136abf6b281f468ca310f0bc1922"
+    },
+    {
+      "path": "token/Token.fst",
+      "sha256": "66ed02460096d48ec0bd85d3b01e1c1a9e4d8c788beba9b680d24088540067a3"
+    },
+    {
+      "path": "token/JwtAccessToken.fst",
+      "sha256": "ddaf83de42f9ada2b8b8c9f0aa18889ae3e2ab5772eb1eb36861ca4712a0438d"
+    },
+    {
+      "path": "token/Bearer.fst",
+      "sha256": "451d8e894c396542899c6f8bcf5de0cba30ceca959f0d37f2f9a44d514179791"
+    },
+    {
+      "path": "token/Bearer.Policy.fst",
+      "sha256": "0de04cf709fd404fe9e330fac1e45e59e77e36c50374603ce81b2a4445e2b8af"
+    },
+    {
+      "path": "token/Bearer_validation.fst",
+      "sha256": "f50279b8726d3737135b309f3444a106242b3efeb86aaecbd8d0c9a372c621c4"
+    },
+    {
+      "path": "common/StringHelpers.fst",
+      "sha256": "787d465364e2f92d613745d67810bae0236da3359ef8f28089927afa4d58f1bd"
+    },
+    {
+      "path": "resource/ResourceIndicators.fst",
+      "sha256": "27f142b8f6b783fd2f3242629f0419b47205fdced09720b3311d7b21aafa7546"
+    },
+    {
+      "path": "resource/ProtectedResourceMetadata.fst",
+      "sha256": "a280df320df361ba53ba027d2c03ad6160dcaf6b7c4201f77b1584da2742b7e5"
+    },
+    {
+      "path": "dpop/Dpop.Header.fst",
+      "sha256": "de47e40227fa3577d1de25ad54fc1065da2ff0db742c0d662f335f04298a62e5"
+    },
+    {
+      "path": "dpop/Dpop.Claims.fst",
+      "sha256": "aa087ef3152ae4e313f7f2ff5e3e6d76289beb9b3b127746199a8b0fcd43e91d"
+    },
+    {
+      "path": "dpop/Dpop.Signature.fst",
+      "sha256": "fce4f7d2c5ac3aa6986a4f0fb6a70f37ae547f0df14440edd378fb2f3a31255f"
+    },
+    {
+      "path": "dpop/Dpop.Iat_validation.fst",
+      "sha256": "805d68fa5b52714f1a64d96e3b7fd2104e1d908682b61b14c0e16b8ba32350cd"
+    },
+    {
+      "path": "dpop/Dpop.Htm_validation.fst",
+      "sha256": "b1d081d8e752254be4e2299d66a49ac4217a678324f6a3cd379f64d8fe50b075"
+    },
+    {
+      "path": "dpop/Dpop.Htu_validation.fst",
+      "sha256": "453f1dfe0469058f03e8b9c5cd71dd5afc1d1e8464b70a8246cc05c07c5b1c67"
+    },
+    {
+      "path": "dpop/Dpop.Ath_validation.fst",
+      "sha256": "baace511b262521e2b2b252e5e1662860ecf9963533f1f70a6b782d9bbd6536b"
+    },
+    {
+      "path": "dpop/Dpop.Token_binding.fst",
+      "sha256": "d6ec60eae4c3bbe54a7ece7b5198174abfceaf9c0a69ced92a5b3d93d5744c6c"
+    },
+    {
+      "path": "dpop/Dpop.Replay.fst",
+      "sha256": "70e36b5d2fd8074a11aad2d600d7db9b9a529d8f678d09051f2403f1223cd998"
+    },
+    {
+      "path": "dpop/Dpop.Validation.fst",
+      "sha256": "8b231b339ee4fa7aa4a387d112d312af3db7f19ec7b0868238e005c37d2b2957"
+    },
+    {
+      "path": "dpop/Dpop.fst",
+      "sha256": "07739e9b951fd9f8003d17695a658bd89420b027388987399705182d547af047"
+    },
+    {
+      "path": "pkce/Pkce.Challenge.fst",
+      "sha256": "680e67eff3444562c17369f82955ac8aebeb5fc017d99be3ac515d06d4b2a9fd"
+    },
+    {
+      "path": "pkce/Pkce.Verifier.fst",
+      "sha256": "aaea119610a549576632734b8b31622de41cae53b2d58a474a2884da40641ef5"
+    },
+    {
+      "path": "pkce/Pkce.Method_selection.fst",
+      "sha256": "ed686b28dd5df67d7ea8f4c655b985ffd9a69b12bcfb4d0ee4479edbd893280e"
+    },
+    {
+      "path": "pkce/Pkce.Verification.fst",
+      "sha256": "f0938507c1af0bfdc404534adc66fb6e640b013790c34c6a9cbc701726fe0618"
+    },
+    {
+      "path": "pkce/Pkce.fst",
+      "sha256": "eb2a884bc3f527c8983837496a1154670ebef00f7f8b5cd827e9ebe7c09c347e"
+    },
+    {
+      "path": "par/Authorization.fst",
+      "sha256": "cad724b13d121458bea8d8582324f0c8eb4328321a62e2598021ac88f4de759c"
+    },
+    {
+      "path": "par/Client_auth.fst",
+      "sha256": "41aaf68b071bcd030fbe58be36d5290162d8c669372a9c3093e8bd024b419064"
+    },
+    {
+      "path": "par/ParBinding.fst",
+      "sha256": "34c18c8052fa2610a3d0ca5c8d7be88a8085a3106433fd371332fbfaeee80c0f"
+    },
+    {
+      "path": "par/Lifetime.fst",
+      "sha256": "f21fef2e2c71dadf9bae4403331389147d9c47dd0c81d59271c32c05d986db34"
+    },
+    {
+      "path": "par/Request_uri.fst",
+      "sha256": "f89ff7104a27b109d8afc4d14ecc3f1f10ba26fba7d34c211d52b68f7efc99f4"
+    },
+    {
+      "path": "par/RequestObject.fst",
+      "sha256": "77a119390716c97c466e63edb8cb770d823f597b1a0f44afc017e2da1aa15770"
+    },
+    {
+      "path": "par/Response.fst",
+      "sha256": "0afd85485d9dde62be01db75f7b6d564fd6293bc4c5320880c16f6aac919861a"
+    },
+    {
+      "path": "par/ParApp.fst",
+      "sha256": "76d4500b60de60851f6c16dd4cfa18328c839d12e19fe64df69ad3dc2a6c6982"
+    },
+    {
+      "path": "par/Par_Internal.fst",
+      "sha256": "2969599a17b0e7ec0f0a3dd59f83249bb112db564c8d893190be20082dcb2a1f"
+    },
+    {
+      "path": "par/Par.fsti",
+      "sha256": "206e586817b1f1eb3feb2ec7cdb70092078780fc8c64e0620177b13dba5ad851"
+    },
+    {
+      "path": "par/Par.fst",
+      "sha256": "fc7e944f0132c89dfafc93be53b9acc53aac55e00a9a17b21b543b1256d1e42d"
+    },
+    {
+      "path": "par/Par_Steel.fst",
+      "sha256": "026277588099da7cf02aa8823896b3ab794c7a3ba673f97fdfa5f2186c1b083f"
+    },
+    {
+      "path": "par/Par_Ticket.fst",
+      "sha256": "f2e3dc1cbe87876f8508f50d8cb334c636509594bf36b2c703efe1e5e5bb7d80"
+    },
+    {
+      "path": "par/Par_Ticket_Unit.fst",
+      "sha256": "92a8e50310b544ca94fbf32b22959d9aa2ba3966ab3453250210403a7d86af3f"
+    },
+    {
+      "path": "auth/Pkjwt.fst",
+      "sha256": "b32328b5dd1d5c8a46d5f45983dab0d8495672e8e572ff0cc1421ba1e31e602a"
+    },
+    {
+      "path": "oidc/IdToken.Spec.fst",
+      "sha256": "5856b42df658bd2395b744c637e5b88e84cd974294d3521a45fc3f8bea8b61a6"
+    },
+    {
+      "path": "oidc/IdToken.fst",
+      "sha256": "cb36de1b5100a4b39b54aa67c9e3a25329fbbcfe8dd8f9c2bd77e0edcaaedd08"
+    },
+    {
+      "path": "oidc/IdToken.Low.Plan.fst",
+      "sha256": "bc47faa8c89965312d28695c6f4247233e823876ec1887d8235106dad4b0265f"
+    },
+    {
+      "path": "oidc/IdToken.Low.Runtime.fst",
+      "sha256": "32129ddcb22029e4a3b2e1810b49cc8fb80d5480a5772022c1d78ccaa48b6ebe"
+    },
+    {
+      "path": "oidc/Logout.Spec.fst",
+      "sha256": "ef752987101c57161576621e2cacecb2b28f867c4c2ced27ba4663f9664d0917"
+    },
+    {
+      "path": "oidc/Logout.fst",
+      "sha256": "3d9820bb958b564c83b22a4b3da8d8cb51afa2e42da406bce6e528d5cf094b67"
+    },
+    {
+      "path": "oidc/FormPost.fst",
+      "sha256": "ef4e7e7049fd4346e3f6b3f7135bab028211122cbc028b0b2ea94ad08f32b1a9"
+    },
+    {
+      "path": "introspection/Introspection.fst",
+      "sha256": "478b74bf7c5d4a771ad7da243c94b7788ec3121a3fcc06f09ab17e0ffb2bbdcc"
+    },
+    {
+      "path": "introspection/JwtIntrospection.fst",
+      "sha256": "b8d0365e1e2c0230488b8ad14a7671405d3faaca49f34e4ebb3efce89bb6654f"
+    },
+    {
+      "path": "revocation/Revocation.fst",
+      "sha256": "18f735671680f1ee4525b952ca48d7efdf59e9a7b509ef1ff49dc305d842c288"
+    },
+    {
+      "path": "crypto/Crypto.fst",
+      "sha256": "7fb6cb2ad3e9c437144c667daa27a0b79b4020b9e521575082aac74da3f0bc1a"
+    },
+    {
+      "path": "crypto/Random.fst",
+      "sha256": "0941966c0ee6bdb9b0a8c3ee0eedc079b4bd929df3a50072c6ed54701a16ee41"
+    },
+    {
+      "path": "crypto/Drbg.HmacSha256.fst",
+      "sha256": "ead460e381692bceed19f11fb0367e774e35ba1a606a417cc508b398bf00d3b5"
+    },
+    {
+      "path": "crypto/Verified.Crypto.Bridge.fst",
+      "sha256": "28add5c50ed2b65f1bac5f3cb5392fa81a39577b7a6c58cd3fc2014c60ee5114"
+    },
+    {
+      "path": "authcode/AuthCode.Types.fst",
+      "sha256": "14e439dec11cabc5c2eab732193099b58b60bd6d6fa1fd80517341afe1370ea1"
+    },
+    {
+      "path": "authcode/AuthCode.Store.fst",
+      "sha256": "ec5a9ad976dc1f5001715e698ea8c056866ea345545987d19df65bbe74e37557"
+    },
+    {
+      "path": "authcode/AuthCode.Flow.fst",
+      "sha256": "608aad0294e8d5c4ebe06332e9ce142e0482fe71538e3ab9d1d30745cccd487c"
+    },
+    {
+      "path": "authcode/AuthCode.Snapshot.fst",
+      "sha256": "f537400dae419563c8567e4554252f7855af0d9cfc5cb2549f991eb3d7ade75f"
+    },
+    {
+      "path": "authcode/AuthCode.RedisGrant.fst",
+      "sha256": "600075f311b723d32d276c2a50f4ace740783cd286b6c67bf9d064e90343d693"
+    },
+    {
+      "path": "resource/ResourceIndicators.EffectiveTarget.fst",
+      "sha256": "3dc2aeab5c4f51cb26d397390e21bd6e9ae0fc12e1355796e3328653f94af224"
+    },
+    {
+      "path": "oidc/OIDC.OfflineConsent.fst",
+      "sha256": "3e9187bbbcfa53bd3db9b1b5807514b76137906ce679cbf90f03a2285f9c9433"
+    },
+    {
+      "path": "oidc/OIDC.RequestObjectTarget.fst",
+      "sha256": "bb083ed08f0da578167a23c424f066089a9b69f36b2072b7c7b2b3790925d1fb"
+    },
+    {
+      "path": "oidc/OIDC.Reauthentication.fst",
+      "sha256": "bc63a4c280541496d8b2b61d48eb360c729784d6a8a808538dab2d2a06fbe6ff"
+    },
+    {
+      "path": "oidc/OIDC.AuthorizationTransactions.fst",
+      "sha256": "449ad32764f2e5137c616814155f8ca410e49f83a27c107ca9b67866fccb8860"
+    },
+    {
+      "path": "../tests/fstar/property/TestAuthCodeRedisGrant.fst",
+      "sha256": "ae8f9416bd4d03f6c1de8745dbef2ae992178bd6e4d8cdce430e37c89c70e969"
+    },
+    {
+      "path": "stepup/StepUp.fst",
+      "sha256": "b61b8995077ba821ab29bb184b66072ccac378bc4d49233d72397f7cb77ac0bc"
+    },
+    {
+      "path": "HashComputation.Model.fst",
+      "sha256": "321cc4820488982ef6b900feeab1b43f06a4ee0b9a1470347217c37ae8de027c"
+    },
+    {
+      "path": "dcr/DcrManagement.fst",
+      "sha256": "333d3d53b65a01350315230f28038270b4d3b073b159030542461b22ff04180c"
+    },
+    {
+      "path": "device_authz/DeviceAuthz.fst",
+      "sha256": "d891dbab42a5d1d559e9496fcc9bd336c160a48692351b91efdf17490d3079d7"
+    },
+    {
+      "path": "dpop/Dpop.Nonce.fst",
+      "sha256": "161845ccc08876dc5c48cd893e166f3aa16d773d237a68e32fa69d9f3fea05aa"
+    },
+    {
+      "path": "federation/Federation.EntityConfig.fst",
+      "sha256": "8ddf91cfc5fdea784ac896bc2fd40671df21f043f2575f2587fe70f2a55b2d42"
+    },
+    {
+      "path": "federation/Federation.PgRepo.fst",
+      "sha256": "fbe04f908404b1937e408a0552550df3b8b3e66ab8dce08a0393e4e29932d457"
+    },
+    {
+      "path": "federation/OpEntityConfiguration.fst",
+      "sha256": "8a9f797ee7f945cc45cf6e467dd16a59250c0cfce8a9ab6c0ef94da33fb61147"
+    },
+    {
+      "path": "federation/OpSubordinateStatement.fst",
+      "sha256": "f8b332856eee99cf2cbc6e998c26bbcb41c9596a1795644a9c47104bc98e989f"
+    },
+    {
+      "path": "federation/TrustMark.fst",
+      "sha256": "4a442783fe6812128f8e060712d48cd23bdaaf607cc606f55b3b20eecad3ffaf"
+    },
+    {
+      "path": "federation/UpstreamRefresh.fst",
+      "sha256": "5b30f716d8b7130aa1fd8d17059e69c6beab8d1214859879dfbd9af0a7ccb55d"
+    },
+    {
+      "path": "federation/OidcRp.Types.fst",
+      "sha256": "44360da440894a2c04ac150e80fcb0b891628135fc60a69d08ac9e25ea512794"
+    },
+    {
+      "path": "federation/OidcRp.Transitions.fst",
+      "sha256": "e0e9f53f65d3ee96b1713ae85e36d750ab1bc56fdd9dbe036e9bf1b409e03764"
+    },
+    {
+      "path": "federation/OidcRp.Properties.fst",
+      "sha256": "6a1e134ad228bec28bb19210dcecf13dda6d5f62c25b6cf9e29cb06476735e5f"
+    },
+    {
+      "path": "management/Management.ClientLifecycle.fst",
+      "sha256": "007446a8df495a5e1213d70f4ef9f4d4f15438fd51cf90a82cf60e663866f15c"
+    },
+    {
+      "path": "management/Management.Initialization.fst",
+      "sha256": "d188587dbd7af1bae47cf3e78350cec39eaff963934b50a48af9549665723561"
+    },
+    {
+      "path": "management/Management.KeyRotation.fst",
+      "sha256": "731dc5519c924940d8e35f35a6941a52c3a9bdb0a17c1dd90ad475cb35750c0a"
+    },
+    {
+      "path": "management/Management.PolicyProfile.fst",
+      "sha256": "c50569b0180f61e6778397f2578221374995ec1b5752a167df0fadbd7b9f8af5"
+    },
+    {
+      "path": "rar/Rar.AuthorizationDetails.fst",
+      "sha256": "a4142a2ac434519ce1134973a21426d3a3c95d9a8ac7f6d60c98273334990c14"
+    },
+    {
+      "path": "verifiedcore/api/VerifiedCore.Crypto.Hacl.fst",
+      "sha256": "3efe385a345c4eabbd866e67bd10b5cbde5d27fbe89869c5a4c948c648c31265"
+    },
+    {
+      "path": "verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst",
+      "sha256": "3efab143cbbf66751e63377db149983b43eb191898881ad4dd8722cf97d91e80"
+    },
+    {
+      "path": "jose/Jose.LowStar.fst",
+      "sha256": "726d3632566973c51aace6acfe4997acbd4165c93c3cf09f1938a8646c179480"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Helpers.fst",
+      "sha256": "b1524e533db8764c7eb951280420d1106e527494efb8884d62b4969502a589e8"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Runtime.fst",
+      "sha256": "9d7025fab430d8e3ab5136ac9d5844c03d7d54680e3933fdf9e1652167ffd7f4"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Types.fst",
+      "sha256": "397aec7ec3bb742d3634a5632fbaedcb904255bae3a4dcad624a9ea27be6afb8"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Utf8.fst",
+      "sha256": "7ba395896f3703067ae7bcc429c66aa86066923e1e5dfc11d31a33b68b9f500b"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.ParseEntries.fst",
+      "sha256": "fa2acd908ee8d31f1a28da4c0439b82be8fc6aea989fa43c7b45ae262431163c"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Spec.fst",
+      "sha256": "e6d16ed3583cbb456f6dab2310c7f39c59b7d7786d8a613dd971740561605bf8"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.fst",
+      "sha256": "492b9ad82ce08224d29b2464d45cecac5b449e0eaa4182baf69d53697eb5c326"
+    },
+    {
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Stack.fst",
+      "sha256": "45a6e6c44e4c779b06f066fbdcb2662c058d00594936abc1aa21c13012e6bfcd"
+    },
+    {
+      "path": "../tests/fstar/unit/TestFormPostCsp.fst",
+      "sha256": "41b2ba1dd9b0a00299022d92349add44761983766281d9f6ca51de09f935d1ec"
+    },
+    {
+      "path": "../tests/fstar/property/TestFormPostEncoder.fst",
+      "sha256": "648370013301747dff9d8aec7bba50e66750e2cb2a7a6be4f070c82923461146"
+    }
+  ],
+  "providers": {
+    "EVERPARSE_FSTAR_PATH": "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse",
+    "EVERPARSE_LOWPARSER_PATH": "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/lib/lowparse",
+    "EVERPARSE_PRELUDE_PATH": "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude",
+    "HACL_FSTAR_PATH": "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+    "KRMLLIB_PATH": "/nix/store/jzlin36arbymkbbxwxaypx0q2bk7jhi0-karamel-2025-10-08/lib/krml",
+    "STEEL_PATH": "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source"
+  },
+  "recorder": {
+    "path": "/build/source/scripts/validation/run_fstar_invocation.py",
+    "sha256": "11d9ed2677b5db2ddcf24933d1e3cc41437a6b62d2d3b34586a299f31876da5e"
+  },
+  "solver": {
+    "path": "/nix/store/kc1d2kf2vlss6x6h6l5i231ipwkwzm6v-z3-4.15.4/bin/z3",
+    "sha256": "efa8d9a98d32c221400a7e116918e8b655f99fb624c307a1b3bedaccb9c2d1cf"
+  },
+  "tool": {
+    "path": "/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe",
+    "sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf"
+  }
+}

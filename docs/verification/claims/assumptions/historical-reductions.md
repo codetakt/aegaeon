@@ -1,6 +1,6 @@
 # F* Assumption Historical Reductions
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
 Status: historical record
 
@@ -191,3 +191,26 @@ the trust boundary quality improves significantly:
 Alternatively, if the 2 HACL\* linkage stubs (B') are excluded from the headline
 count (since they represent verified foreign code, not unverified host boundaries),
 the effective count is **7** (6 A + 1 C).
+
+---
+
+## 9. Assumption Boundary Revision (2026-09-11)
+
+The six Phase A "honest" crypto lemma `assume val`s were removed because their
+mathematical content was false or empty, not merely unproved:
+
+| Declaration | Defect | Replacement |
+|---|---|---|
+| `lemma_sha256_collision_resistant`, `lemma_sha256_of_string_collision_resistant` (Bridge) | universal injectivity of a 32-byte-output function; the string form also assumed `bytes_of_string` injective | `sha256_collision`, `string_encoding_collision`, `lemma_sha256_hash_eq_cases`, `lemma_sha256_of_string_eq_cases` |
+| `lemma_ed25519_unforgeable` (Bridge) | `ensures True` | `ed25519_forgery`, `lemma_ed25519_verify_cases` |
+| `assumption_collision_resistance` (HashComputation, SMTPat) | universal injectivity incl. the fallback branch | `hash_collision`, `truncation_collision`, `oidc_hash_collision`, case-split lemmas |
+| `disclosure_digest_collision_resistant` (Jose.SdJwt, SMTPat) | universal injectivity | `disclosure_digest_collision`, finite premises over the issuance, `*_or_collision` theorems |
+| `jws_verify_unforgeable` (Jose.Jws.Verify) | raw-key inequality implies verification failure; refuted by HMAC zero padding (`Verified.Crypto.Hmac.KeyEquiv`) | `mac_key_equiv`, `jws_mac_forgery`, `jws_eddsa_forgery`, `lemma_jws_verify_cases`, `lemma_jws_verify_hs_accepts_mac` |
+
+Net: 12 → 6 tracked `assume val`s (all linkage contracts). The computational
+premises moved to `spec/assumption-register.json` (`A-SHA256-CR`,
+`A-SHA256-TRUNC128-CR`, `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA`,
+`specified-not-attested`). The same revision introduced the effective
+assumption graph (`scripts/validation/assumption_graph.py`), which also
+records the builder-injected `C.Loops` premises, the lax-loaded provider
+sources and the effective solver identity of each pass.

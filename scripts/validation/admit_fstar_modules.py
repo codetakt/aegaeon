@@ -21,6 +21,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from fstar_source_lexing import SourceLexingError, lexical_views
+from run_fstar_invocation import Z3PROC
+
 CONTRACT = "fstar-2025.10.06-text-v1"
 SCHEMA_VERSION = 1
 REQUIRED_PASSES = ("1", "1b", "2a-1", "2a-2", "2b")
@@ -75,35 +78,24 @@ def write_json_new(path: Path, value: dict[str, Any]) -> None:
         target.write(data)
 
 
+def source_views(text: str) -> tuple[str, str]:
+    """Return comment-free and literal-masked views with original positions."""
+    try:
+        return lexical_views(text, allow_comment_eof=True)
+    except SourceLexingError as exc:
+        raise AdmissionError(str(exc)) from exc
+
+
 def strip_comments(text: str) -> str:
-    """Remove nested block comments and line comments from F* source text."""
-    out: list[str] = []
-    depth = 0
-    index = 0
-    length = len(text)
-    while index < length:
-        if text.startswith("(*", index):
-            depth += 1
-            index += 2
-        elif depth and text.startswith("*)", index):
-            depth -= 1
-            index += 2
-        elif depth:
-            index += 1
-        elif text.startswith("//", index):
-            end = text.find("\n", index)
-            index = length if end < 0 else end
-        else:
-            out.append(text[index])
-            index += 1
-    return "".join(out)
+    """Remove comments while preserving literals and source positions."""
+    return source_views(text)[0]
 
 
 def declared_module(text: str) -> str:
     """Return the single module name declared first in an F* source."""
     lines = [
         line.strip()
-        for line in strip_comments(text).splitlines()
+        for line in source_views(text)[1].splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
     tokens = lines[0].split() if lines else []
@@ -232,17 +224,42 @@ def resolve_unrequested(
     if declared != name:
         return None, f"{recorded_path} declares module {declared}, not {name}"
     digest = digest_file(local_path)
-    context = {
-        Path(str(item["path"])).resolve(): str(item["sha256"])
-        for item in inputs.get("local_context", [])
-    }
-    resolved = local_path.resolve()
-    if resolved in context:
-        if context[resolved] != digest:
-            return None, f"{recorded_path} differs from the recorded local context"
-    elif resolved.is_relative_to(source_root.resolve()):
-        return None, f"{recorded_path} is not in the recorded local context"
-    return {"source": str(recorded_path), "sha256": digest}, "resolved"
+    identity, note = retained_dependency(name, kind, inputs)
+    if identity is None:
+        return None, note
+    if identity != {"source": str(recorded_path), "sha256": digest}:
+        return None, f"{recorded_path} differs from the recorded local context or search snapshot"
+    return identity, "resolved"
+
+
+def retained_dependency(
+    name: str, kind: str, inputs: dict[str, Any]
+) -> tuple[dict[str, str] | None, str]:
+    """Resolve the unique pre-invocation identity without reading source/tool paths."""
+    context = inputs.get("dependency_context", inputs.get("local_context", []))
+    if not isinstance(context, list):
+        return None, "recorded dependency context is not a list"
+    found: dict[str, str] = {}
+    for item in context:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            return None, "recorded dependency context has an invalid path"
+        path = item["path"]
+        if outside_search_scope(name, kind, path, inputs) is not None:
+            continue
+        digest = item.get("sha256")
+        if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            return None, f"{path} has an invalid recorded dependency digest"
+        if path in found and found[path] != digest:
+            return None, f"{path} has conflicting recorded dependency digests"
+        found[path] = digest
+    if len(found) != 1:
+        return None, (
+            f"{name} has ambiguous recorded dependency candidates: {sorted(found)}"
+            if found
+            else f"{name} is not in the recorded local context or search snapshot; re-record inputs"
+        )
+    path, digest = next(iter(found.items()))
+    return {"source": path, "sha256": digest}, "resolved from recorded inputs"
 
 
 def checked_candidates(
@@ -267,6 +284,71 @@ def checked_candidates(
     return {"directories": [str(d) for d in directories], "candidates": found}
 
 
+def check_explicit_solver(inputs: dict[str, Any], result: dict[str, Any], output: str) -> None:
+    """Bind retained starts to the recorded pin without requiring live tool files.
+
+    Old unpinned records may contain an ambient solver identity. That is not an
+    explicit choice and cannot satisfy this contract or establish solver identity.
+    """
+    argv = inputs["argv"]
+    options = [i for i, arg in enumerate(argv) if arg.partition("=")[0] == "--smt"]
+    if not options:
+        return
+    index = options[0]
+    if (
+        len(options) != 1
+        or argv[index] != "--smt"
+        or index + 1 >= len(argv)
+        or not Path(argv[index + 1]).is_absolute()
+    ):
+        raise AdmissionError("invalid explicit solver option")
+    pin = inputs.get("solver")
+    if (
+        not isinstance(pin, dict)
+        or not isinstance(pin.get("path"), str)
+        or not Path(pin["path"]).is_absolute()
+        or not isinstance(pin.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", pin["sha256"]) is None
+    ):
+        raise AdmissionError("explicit solver pin is missing its recorded identity")
+    starts = [match for line in output.splitlines() if (match := Z3PROC.fullmatch(line))]
+    if output.count("Creating new z3proc") != len(starts) or not starts:
+        raise AdmissionError("explicit solver pin requires supported observed solver starts")
+    observed = result.get("solver_effective")
+    if (
+        not isinstance(observed, dict)
+        or observed.get("observed") is not True
+        or observed.get("arguments") != ["-smt2", "-in"]
+        or type(observed.get("process_count")) is not int
+        or observed["process_count"] != len(starts)
+        or any(observed.get(key) != pin[key] for key in ("path", "sha256"))
+        or observed.get("name") != starts[0].group(1)
+        or observed.get("version") != starts[0].group(2)
+    ):
+        raise AdmissionError("observed solver summary differs from raw starts or explicit pin")
+    processes = observed.get("processes")
+    if "processes" not in observed:
+        # Older records retain only an aggregate. Identical names are replayable;
+        # multiple aliases need the per-start identities retained by new recorders.
+        processes = [observed] * len(starts)
+    if not isinstance(processes, list) or len(processes) != len(starts):
+        raise AdmissionError("observed solver process identities are incomplete")
+    for start, process in zip(starts, processes, strict=True):
+        if (
+            not isinstance(process, dict)
+            or process.get("observed") is not True
+            or process.get("name") != start.group(1)
+            or process.get("version") != start.group(2)
+            or process.get("version") != observed["version"]
+            or any(process.get(key) != pin[key] for key in ("path", "sha256"))
+        ):
+            raise AdmissionError("observed solver process identity differs from raw start or pin")
+    # An alias is usable only when a retained observed start binds that exact
+    # spelling to the canonical pin. Never resolve replay paths on the live host.
+    if argv[index + 1] not in {pin["path"], *(process["name"] for process in processes)}:
+        raise AdmissionError("explicit solver operand is not bound to the pin or observed aliases")
+
+
 def reconcile(
     pass_id: str,
     inputs: dict[str, Any],
@@ -278,17 +360,31 @@ def reconcile(
     """Compute the per-module record; ``recorded`` replays a modules.json without sources."""
     reasons: list[str] = []
     argv = list(inputs["argv"])
+    try:
+        check_explicit_solver(inputs, result, output)
+    except AdmissionError as error:
+        reasons.append(str(error))
     # The invocation record must be the one made for this pass, not a relabelled copy.
     if result.get("pass_id") != pass_id:
         reasons.append(f"result.json records pass {result.get('pass_id')!r}, not {pass_id!r}")
     if result.get("argv") != argv or result.get("cwd") != inputs.get("cwd"):
         reasons.append("result.json argv/cwd differ from inputs.json")
+    tool = inputs.get("tool")
+    if not isinstance(tool, dict) or inputs.get("executed_argv") != [
+        tool.get("path"),
+        *argv[1:],
+    ]:
+        reasons.append("executed argv differs from the recorded command or verifier identity")
     if recorded is not None and recorded.get("pass_id") != pass_id:
         reasons.append(f"modules.json records pass {recorded.get('pass_id')!r}, not {pass_id!r}")
-    denied = sorted(option for option in argv if option in DENIED_OPTIONS)
+    denied = sorted(option for option in argv if option.partition("=")[0] in DENIED_OPTIONS)
     if denied:
         reasons.append(f"denied options in argv: {' '.join(denied)}")
-    if result.get("status") != "succeeded" or result.get("returncode") != 0:
+    if (
+        result.get("status") != "succeeded"
+        or type(result.get("returncode")) is not int
+        or result["returncode"] != 0
+    ):
         reasons.append(
             f"invocation status {result.get('status')!r} with return code "
             f"{result.get('returncode')!r}"
@@ -406,24 +502,32 @@ def reconcile(
                     raise AdmissionError("source root is required to classify results")
                 identity, note = resolve_unrequested(name, kind, inputs, source_root)
             else:
-                # Replay uses the resolution recorded at admission; the provider
-                # tree need not exist where the records are re-checked.
-                previous = next(
-                    (
-                        e
-                        for e in recorded.get("unrequested", [])
-                        if e.get("module") == name and e.get("kind") == kind
-                    ),
-                    None,
-                )
-                identity = None
-                if previous and previous.get("classification") == "dependency":
-                    if previous.get("lines") != lines:
-                        reasons.append(f"recorded lines for unrequested {name} differ from output")
-                    identity = {
-                        "source": str(previous.get("source")),
-                        "sha256": str(previous.get("sha256")),
-                    }
+                # The input snapshot, rather than modules.json itself, anchors
+                # dependency identity when the original source is unavailable.
+                identity, note = retained_dependency(name, kind, inputs)
+                matches = [
+                    entry
+                    for entry in recorded.get("unrequested", [])
+                    if entry.get("module") == name and entry.get("kind") == kind
+                ]
+                previous = matches[0] if len(matches) == 1 else None
+                if previous is None:
+                    note = f"recorded dependency {name} is missing or duplicated"
+                    identity = None
+                elif identity is not None and previous != {
+                    "module": name,
+                    "kind": kind,
+                    "lines": lines,
+                    "classification": "dependency",
+                    **identity,
+                }:
+                    source = previous.get("source")
+                    note = (
+                        outside_search_scope(name, kind, source, inputs)
+                        if isinstance(source, str)
+                        else None
+                    ) or f"recorded dependency {name} differs from the recorded input identity"
+                    identity = None
             # A recorded source outside the directories F* searched, or of the
             # wrong kind, is not evidence of the dependency, at admission or on replay.
             if identity is not None:
@@ -631,6 +735,11 @@ def verify_records(out_dir: Path, passes: list[str]) -> int:
             raise AdmissionError(f"pass {pass_id}: modules.json digest differs from admission.json")
         record = load_json(record_path)
         inputs, result, output = load_pass(directory)
+        for field in ("inputs_sha256", "output_sha256"):
+            if not entry.get(field) or entry[field] != result.get(field):
+                raise AdmissionError(
+                    f"pass {pass_id}: admission.json {field} differs from result.json"
+                )
         if (record.get("inputs_sha256"), record.get("output_sha256")) != (
             result.get("inputs_sha256"),
             result.get("output_sha256"),
@@ -639,14 +748,11 @@ def verify_records(out_dir: Path, passes: list[str]) -> int:
         replay = reconcile(pass_id, inputs, result, output.decode(errors="replace"), None, record)
         if replay["status"] != "accepted":
             raise AdmissionError(f"pass {pass_id}: replay rejected: {'; '.join(replay['reasons'])}")
-        if [e["disposition"] for e in replay["requested"]] != [
-            e["disposition"] for e in record["requested"]
-        ]:
-            raise AdmissionError(f"pass {pass_id}: recorded dispositions differ from replay")
-        if [(e["module"], e["classification"]) for e in replay["unrequested"]] != [
-            (e["module"], e["classification"]) for e in record["unrequested"]
-        ]:
-            raise AdmissionError(f"pass {pass_id}: recorded classifications differ from replay")
+        for field in ("requested", "unrequested"):
+            if replay[field] != record[field]:
+                raise AdmissionError(
+                    f"pass {pass_id}: recorded {field} identities differ from replay"
+                )
         seen_digests[pass_id] = {
             "inputs_sha256": result.get("inputs_sha256"),
             "output_sha256": result.get("output_sha256"),

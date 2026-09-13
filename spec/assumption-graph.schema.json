@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.codetakt.dev/spec/assumption-graph.schema.json",
+  "title": "Aegaeon effective-assumption graph (version 1)",
+  "description": "Graph reconstructed by scripts/validation/assumption_graph.py from retained F* pass records, the verifier's own dependency and checked-file load probes, the recorded sources, the assumption register, the compliance matrix, the assurance contract and the Tamarin/Kani selections. Dependency edges are recorded at module-closure granularity; a valid graph is a consistency artefact, not an assurance result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "body",
+    "body_sha256",
+    "created_at",
+    "builder"
+  ],
+  "properties": {
+    "body": {
+      "$ref": "#/$defs/body"
+    },
+    "body_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "contract",
+        "source_identity",
+        "passes",
+        "admission_sha256",
+        "register_sha256",
+        "nodes",
+        "edges",
+        "findings"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "contract": {
+          "const": "assumption-graph-v1"
+        },
+        "source_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "passes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "admission_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "register_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "nodes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^(pass|source|checked|premise|property|matrix|guarantee|tamarin|kani|provider|generator|tool|register):"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "source",
+                  "checked",
+                  "premise",
+                  "property",
+                  "matrix",
+                  "guarantee",
+                  "tamarin-theory",
+                  "tamarin-lemma",
+                  "kani-group",
+                  "kani-harness",
+                  "generator",
+                  "tool",
+                  "register-entry"
+                ]
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "from",
+              "to"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "requests",
+                  "imports",
+                  "satisfied-by",
+                  "loads",
+                  "shadows",
+                  "exposes",
+                  "generated-by",
+                  "declares",
+                  "depends-on",
+                  "defined-in",
+                  "cites",
+                  "guarantees",
+                  "selects",
+                  "tamarin-uses",
+                  "kani-uses",
+                  "registers",
+                  "justified-by",
+                  "interprets"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "granularity": {
+                "type": "string",
+                "enum": [
+                  "module",
+                  "module-closure",
+                  "theory"
+                ]
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "passes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "through": {
+                "type": "string",
+                "enum": [
+                  "import",
+                  "interface-satisfaction"
+                ]
+              }
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

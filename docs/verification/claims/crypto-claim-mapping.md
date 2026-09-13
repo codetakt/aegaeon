@@ -1,6 +1,6 @@
 # Crypto Claim Mapping
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
 Status: current implementation baseline
 
@@ -8,10 +8,13 @@ Owner: Verification
 
 Audience: verification reviewers, maintainers
 
-This document maps each cryptographic `assume val` to the compliance matrix
-entries it protects, the Tamarin lemmas that cross-validate the same security
-properties, and the runtime policy fields that control activation of the
-affected code paths.
+This document maps each cryptographic premise — the remaining linkage
+`assume val`s and the external computational premises attached to the F\*
+bad events — to the compliance matrix entries it protects, the Tamarin lemmas
+that cross-validate related properties, and the runtime policy fields that
+control activation of the affected code paths. Since 2026-09-11 no
+cryptographic hardness property is an `assume val`; rows 1–6 below describe
+the events and the register entries that replaced the former axioms.
 
 For the full assumption register, see
 [assumptions/current-register.md](assumptions/current-register.md).
@@ -28,12 +31,12 @@ are closed promoted exceptions; broad RSA remains outside the current server cla
 
 | # | Assume Val | Category | Entries Affected | Tamarin Cross-Refs | Runtime activation |
 |---|---|---|---|---|---|
-| 1 | `jws_verify_unforgeable` | A: Crypto | 7515-001/004, 9068-001, 9449-001, 9901-001, OIDC-1-010, Fed-\* | 10 unforgeability lemmas | `policy.jwtAccessTokensEnabled`, `policy.clientJwtAllowedAlgs`, `policy.oidcEnabled` |
-| 2 | `lemma_sha256_collision_resistant` | A: Crypto | hash-dependent entries (PKCE S256, DPoP `ath`, OIDC hashes; see current-register.md §3.2) | collision-resistance lemmas | *(always active)* |
-| 3 | `lemma_sha256_of_string_collision_resistant` | A: Crypto | string-to-hash entries (see current-register.md §3.2) | (via #2) | *(always active)* |
-| 4 | `lemma_ed25519_unforgeable` | A: Crypto | EdDSA verification entries (see current-register.md §3.2) | unforgeability lemmas | *(always active)* |
-| 5 | `disclosure_digest_collision_resistant` | A: Crypto | 9901-001/002/003 | 6 SD-JWT lemmas | *(always active)* |
-| 6 | `assumption_collision_resistance` | A: Crypto | 7636-002, 8693-001, 9278-001, 9449-008, 9901-001 | (via #5) | *(always active)* |
+| 1 | *(removed)* `jws_verify_unforgeable` → events `jws_mac_forgery`, `jws_eddsa_forgery`; premises `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA` | A: Crypto (event) | No verified matrix row cites the former axiom; `Jose.Federation` and `TrustMark` only use `jws_verify` and its excluded-middle lemma. Rows that would rely on unforgeability (Fed-\*, 9449-001) are protocol-level Tamarin evidence. | `trust_chain.spthy`, `federation_key_rotation.spthy` (symbolic signatures; not a proof of the computational premise) | `policy.jwtAccessTokensEnabled`, `policy.clientJwtAllowedAlgs`, `policy.oidcEnabled` |
+| 2 | *(removed)* `lemma_sha256_collision_resistant` → event `sha256_collision`; premise `A-SHA256-CR` | A: Crypto (event) | 7636-002/007 (through `s256_collision`), 9449-008 (`hash_collision SHA256`), 9278-101 (thumbprint prefix only; no injectivity used) | `pkce_security.spthy` (`mismatched_verifiers_cannot_inject_codes`, symbolic hash) | *(always active)* |
+| 3 | *(removed)* `lemma_sha256_of_string_collision_resistant` → events `string_encoding_collision`, `sha256_of_string_collision` | A: Crypto (event) + symbolic abstraction | 7636-002/007, 9901-001 | (via #2) | *(always active)* |
+| 4 | *(removed)* `lemma_ed25519_unforgeable` (was vacuous) → event `ed25519_forgery`; premise `A-ED25519-EUF-CMA` | A: Crypto (event) | No verified row cited it; `Dpop.Signature` and `Jose.Rsa_signatures` call `ed25519_verify` without an unforgeability lemma | `dpop_replay.spthy` (`dpop_authentication`, symbolic) | *(always active)* |
+| 5 | *(removed)* `disclosure_digest_collision_resistant` → event `disclosure_digest_collision`; finite premises `no_collision_with_issued`, `no_presented_collision` | A: Crypto (event) | 9901-001 (`lemma_non_forgeability`, `lemma_reconstruction_subset` now conditional; `*_or_collision` unconditional) | `sd_jwt_selective_disclosure.spthy` (`disclosure_non_forgeability`, symbolic hash) | *(always active)* |
+| 6 | *(removed)* `assumption_collision_resistance` → events `hash_collision`, `truncation_collision`, `oidc_hash_collision`; premises `A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA256-TRUNC128-CR` | A: Crypto (event) | 9449-008, OIDC-1-003, OIDC-1-010 (no verified row used injectivity; the SMTPat axiom was available to all of them) | — | *(always active)* |
 | 7 | `hacl_sha256` | B': HACL\* linkage | WASM-verified entries | — | *(WASM target only)* |
 | 8 | `hacl_ed25519_verify` | B': HACL\* linkage | WASM-verified entries | — | *(WASM target only)* |
 | 9 | `jose_header_entry_error_code` | B'': EverParse linkage | JOSE header entry validation entries | — | *(always active)* |
@@ -41,9 +44,12 @@ are closed promoted exceptions; broad RSA remains outside the current server cla
 | 11 | `evercrypt_hash_incremental_hash` | B''': OIDC hash runtime linkage | OIDC `at_hash`/`c_hash` entries | — | `policy.oidcEnabled` |
 | 12 | `host_replay_store_check_and_store` | C: WASM | WASM-verified entries | — | *(WASM target only)* |
 
-> The table above reflects the current 12 `assume val` declarations. Eliminated
-> assumptions (FFI stubs, encoding models, WASM host imports #8–#11, DRBG
-> `hmac_sha256`, `generate_secure_random`, `fresh_challenge_id`,
+> Rows 7–12 are the 6 remaining `assume val` declarations (linkage
+> contracts). Rows 1–6 record the removed crypto axioms and their
+> replacements; the earlier claim that #1 backed "10 unforgeability lemmas"
+> was not supported by the sources (no F\* lemma consumed the axiom).
+> Eliminated assumptions (FFI stubs, encoding models, WASM host imports
+> #8–#11, DRBG `hmac_sha256`, `generate_secure_random`, `fresh_challenge_id`,
 > `entity_keys_fresh`) are recorded in
 > [assumptions/historical-reductions.md](assumptions/historical-reductions.md).
 
@@ -51,14 +57,20 @@ are closed promoted exceptions; broad RSA remains outside the current server cla
 
 ## 2. Security Property Cross-Validation
 
-Each crypto assume val is cross-validated by an independent Tamarin lemma
-operating in the symbolic Dolev-Yao model (adversarial network, perfect
-cryptography). This provides defense-in-depth: even if the F\* assumption is
-violated, the protocol design remains secure under the Tamarin model.
+Each crypto premise is cross-referenced to independent Tamarin lemmas operating
+in the symbolic Dolev-Yao model (adversarial network, perfect cryptography).
+This is defense-in-depth for the protocol design only: a symbolic model treats
+hashing and signatures as perfect and therefore cannot attest the computational
+premises `A-*`; it does not replace them.
 
 ### 2.1 Unforgeability (#2: jws\_verify\_unforgeable)
 
-**F\* property:** Distinct key material implies distinct verification results.
+**F\* property:** successful JWS verification is classified as key compromise,
+a message issued under the applicable key equivalence, or an explicit forgery event
+(`lemma_jws_verify_cases`). Distinct raw HMAC keys can be equivalent and accept
+the same token (`lemma_jws_verify_hs_key_equiv`); verification does not establish
+that the presenter holds the signing key. The computational unforgeability
+premises are external and remain unaccepted.
 
 **Tamarin cross-references (10 lemmas):**
 
@@ -91,7 +103,14 @@ violated, the protocol design remains secure under the Tamarin model.
 
 ### 2.3 Collision Resistance (#5, #12)
 
-**F\* property:** Different inputs produce different hashes (SHA-256/384/512).
+**F\* property:** equal digests come from equal inputs or from a named collision
+event (`lemma_sha256_hash_eq_cases`, `lemma_compute_hash_eq_cases`,
+`lemma_disclosure_digest_eq_cases`); the premise that the event is infeasible
+is external (`A-SHA256-CR`, `A-SHA384-CR`, or `A-SHA512-CR` for the
+corresponding full digest). A string-domain digest additionally requires the
+separate `string_encoding_collision` boundary; SHA-256 collision resistance alone
+does not rule out a disclosure-digest collision. OIDC truncation has its own
+128/192/256-bit output premise.
 
 **Tamarin cross-references (3 lemmas):**
 
@@ -140,7 +159,7 @@ entries are **out of scope** for the formal claim (see
 
 ## 4. Runtime Crypto Library Mapping
 
-Each crypto assume val may be exercised by different runtime libraries depending
+Each cryptographic event or assumption concerns different runtime libraries depending
 on the call site. The F\* specification models the security *property*; the
 server runtime fixes `policy.cryptoProfile` to `verified`, so compatibility-only
 library paths are not a selectable server posture.
@@ -149,14 +168,14 @@ library paths are not a selectable server posture.
 The Low\*/C extraction path and WASM host path use different implementations
 (see [FFI contract register](../runbooks/ffi-contracts/README.md) and [extraction-status.md](../runbooks/extraction-status.md)).
 
-| Assume Val | Verified server runtime | Out-of-claim/runtime-only surfaces | Notes |
+| Premise or event | Verified server runtime | Out-of-claim/runtime-only surfaces | Notes |
 |---|---|---|---|
-| #2 `jws_verify_unforgeable` | HACL*/EverCrypt-backed HMAC plus verified Ed25519 FFI for `HS*` / `EdDSA`; promoted OIDC `RS256 Required Slice` and `RS256 Interop Slice` by explicit exception | Broad RSA outside the promoted slices, aws-lc-rs (`PS*`), `p256` (`ES*`), and non-promoted JOSE runtime call sites | OIDC `RS256` ID Tokens, signed Request Objects / `request_uri`, JWT bearer grant assertions, and `private_key_jwt` are in-scope only through the promoted slices; broad RSA remains compat |
+| `jws_mac_forgery` / `jws_eddsa_forgery` events (`A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA`) | HACL*/EverCrypt-backed HMAC plus verified Ed25519 FFI for `HS*` / `EdDSA`; promoted OIDC `RS256 Required Slice` and `RS256 Interop Slice` by explicit exception | Broad RSA outside the promoted slices, aws-lc-rs (`PS*`), `p256` (`ES*`), and non-promoted JOSE runtime call sites | OIDC `RS256` ID Tokens, signed Request Objects / `request_uri`, JWT bearer grant assertions, and `private_key_jwt` are in-scope only through the promoted slices; broad RSA remains compat. Runtime key-equivalence handling (HMAC padding) and key-length policy are runtime obligations, not covered by the F\* event. |
 | #3 `entity_keys_fresh` | ring / host CSPRNG contracts | N/A | External entropy / storage assumptions remain explicit trust boundaries |
-| #5 `disclosure_digest_collision_resistant` | `sha2` / verified hash model | N/A | Hash hardness remains an honest theorem premise, not a proved computational fact |
+| `disclosure_digest_collision` event (`A-SHA256-CR` plus `string_encoding_collision`) | `sha2` / verified hash model | N/A | The composed string digest can collide through string encoding or SHA-256; hash hardness alone does not discharge both boundaries. The F\* theorems are conditional on finite no-collision predicates or exhibit a witness |
 | #9 `generate_secure_random` | ring / OS CSPRNG | N/A | External entropy assumption |
 | #10 `fresh_challenge_id` | ring / OS CSPRNG | N/A | External entropy assumption |
-| #12 `assumption_collision_resistance` | `sha2` / `aws-lc-rs` as runtime providers | N/A | Models collision resistance as a premise; runtime implementation differs by call site |
+| `hash_collision` / `truncation_collision` events (`A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA256-TRUNC128-CR`) | `sha2` / `aws-lc-rs` as runtime providers | N/A | Collision resistance is an external premise; the truncated OIDC form has its own weaker premise; runtime implementation differs by call site |
 
 ---
 

@@ -1,6 +1,6 @@
 # Current F* Assumption Register
 
-Last updated: 2026-09-07
+Last updated: 2026-09-11
 
 Status: current implementation baseline
 
@@ -15,11 +15,20 @@ This document is part of the split F* assumption register.
 This is an inventory of existing assumptions and their historical rationale,
 not an accepted set of premises for foundation activation. The
 [server contract](../assurance-case/assurance-contract.md) requires a soundness
-audit. In particular, the concrete SHA-256 injectivity assumptions, the
-`ensures True` Ed25519 statement, and the different-key JWS assumption must be
-repaired and their dependent proofs reassessed. Historical descriptions below
-as "honest" or "permanent" do not discharge that obligation. See
-[contract status](../assurance-case/contract-status.md).
+audit. The concrete SHA-256 injectivity assumptions, the `ensures True`
+Ed25519 statement and the different-key JWS assumption were removed on
+2026-09-11 (see §3.1–§3.4); the dependent SD-JWT, hash, PKCE and JWS theorems
+now carry explicit finite bad-event premises or exhibit collision witnesses.
+The computational premises that those events are infeasible are recorded in
+`spec/assumption-register.json` with status `specified-not-attested`; no
+register entry is `accepted`, so nothing here activates a guarantee.
+The effective premises of a verification run (tracked `assume val`
+declarations, the builder-injected `C.Loops` module, lax-loaded provider
+sources and provider `.checked` imports) are reconstructed by
+`scripts/validation/assumption_graph.py`; see
+[F\* assumption graph](../../fstar/assumption-graph.md). Historical
+descriptions below as "honest" or "permanent" do not discharge any
+obligation. See [contract status](../assurance-case/contract-status.md).
 
 ## 1. Introduction
 
@@ -33,29 +42,42 @@ on it may be unsound.
 
 `assume val` is distinct from `admit()`:
 - **`admit()`** skips a specific proof obligation inline. Aegaeon has **0** of these.
-- **`assume val`** declares an entire function as an axiom. Aegaeon has **12** of these
-  across **8 files** (in hand-written F\* specification modules under `fstar/`;
+- **`assume val`** declares an entire function as an axiom. Aegaeon has **6** of these
+  across **4 files** (in hand-written F\* specification modules under `fstar/`;
   test modules under `tests/fstar/` and generated modules under `generated/` are
   excluded from this count but generated modules referenced by `VerifiedReqs`
   entries remain within the formal claim).
-  The 12 break down as: 6 crypto hardness (A), 2 HACL\* linkage (B'),
-  2 OIDC hash runtime linkage (B'''), 1 EverParse linkage (B''), and
-  1 WASM host (C).
-  Pre-Phase D count was 11 across 5 files.
+  The 6 are all linkage contracts: 2 HACL\* linkage (B'), 2 OIDC hash runtime
+  linkage (B'''), 1 EverParse linkage (B''), and 1 WASM host (C). No
+  cryptographic hardness statement is an `assume val` any more.
+- **Tracked declarations are not the whole effective premise set.** A
+  verification run additionally admits the builder-generated `C.Loops.fst`
+  (3 `assume val`s: `while`, `do_while`, `total_while`, injected by
+  `scripts/flake/verify_fstar.sh` and shadowing the KaRaMeL module), every
+  HACL\* and Steel module in the dependency closure (loaded lax from source
+  because those providers ship no `.checked` files), and the EverParse/LowParse
+  modules whose `.checked` artifacts become stale through the shadowed
+  `C.Loops` and are therefore also lax-loaded. These are indexed per pass by
+  the assumption graph and registered in `spec/assumption-register.json`.
 
 ### Why do assume vals exist?
 
 Assume vals arise at boundaries where F\* cannot (or should not) reason about
 the implementation. Five categories remain:
 
-1. **Cryptographic trust boundaries** — **6 assume vals.** These are honest
-   computational hardness assumptions (SHA-256 collision resistance, Ed25519
-   EUF-CMA unforgeability) that cannot be proved from first principles. Phase A
-   (strong-constraint HACL\* integration) replaced all `irreducible` identity/false
-   crypto models with genuine HACL\* spec implementations and converted
-   6 previously tautological "proofs" into honest assumptions. The formerly
-   remaining `hmac_sha256` in `Drbg.HmacSha256.fst` was eliminated in Phase A
-   completion by delegating to `Verified.Crypto.Bridge.hmac_sha256`.
+1. **Cryptographic trust boundaries** — **0 assume vals.** Cryptographic
+   hardness is no longer stated inside F\*. The six former "honest
+   assumption" lemmas were mathematically wrong or empty (universal
+   injectivity of a fixed-output hash; an `ensures True` conclusion; a
+   raw-key-inequality statement refuted by HMAC key padding). They are
+   replaced by *definitions* of bad events (`sha256_collision`,
+   `hash_collision`, `truncation_collision`, `disclosure_digest_collision`,
+   `string_encoding_collision`, `ed25519_forgery`, `jws_mac_forgery`,
+   `jws_eddsa_forgery`) and *proved* case-split theorems; the dependent
+   protocol theorems are conditional on the absence of the event for the
+   concrete issuance or exhibit a witness. The computational premises are
+   register entries `A-SHA256-CR`, `A-SHA256-TRUNC128-CR`,
+   `A-HMAC-SHA2-EUF-CMA` and `A-ED25519-EUF-CMA` (§3.1–§3.4).
 2. ~~**FFI/C runtime**~~ — **ELIMINATED.** All 9 FFI stubs replaced with
    concrete Low\* implementations.
 3. **WASM host imports** — The portable verification module (`verified_core.wasm`)
@@ -80,16 +102,18 @@ the implementation. Five categories remain:
    `assume val` properties (roundtrip x2, injectivity x2) in `FStar.Base64.fst`
    have been replaced with concrete encode/decode implementations and proved
    lemmas. Category E = 0.
-8. ~~**Mathematical axioms**~~ — Merged into category 1 (crypto trust boundaries).
-   SHA-256 collision resistance is now an honest `assume val` on the HACL\*
-   spec implementation, not a tautology on an identity model.
+8. ~~**Mathematical axioms**~~ — Eliminated. SHA-256 collision resistance is
+   neither a tautology on an identity model nor an `assume val`; it is an
+   external computational premise attached to a named event (§3.4).
 
 **Strong-constraint rule (fixed policy):** cryptographic hardness claims must be
-modeled as honest theorem premises, not as fake concrete proofs. The remaining
-crypto-hardness `assume val` entries are lemmas only. Runtime function-shaped
-assumptions are explicit linkage contracts (`HACL*`, `EverParse`, OIDC hash
-runtime, WASM host), not hidden claims that the project proves third-party or
-host behaviour.
+modeled as explicit premises, never as fake concrete proofs and never as
+universal statements that are false for a fixed-output function. Inside F\*
+they appear only as named bad events with proved case splits; the hardness
+premise itself lives in `spec/assumption-register.json`. Runtime
+function-shaped assumptions are explicit linkage contracts (`HACL*`,
+`EverParse`, OIDC hash runtime, WASM host), not hidden claims that the project
+proves third-party or host behaviour.
 
 ### Formal Claim Scope (VerifiedReqs)
 
@@ -155,7 +179,8 @@ The project has systematically reduced assume vals through 10 proof campaigns:
 | Phase D (WASM host) | 9 | -2 | host\_bytes\_len, host\_bytes\_eq, host\_crypto\_sha256, host\_crypto\_verify\_signature eliminated (−4); hacl\_sha256, hacl\_ed25519\_verify added (+2 HACL\* linkage) |
 | JOSE EverParse Linkage | 10 | +1 | `jose_header_entry_error_code` added as an explicit Stack/C bridge to the generated JOSE header entry validator |
 | OIDC Hash Runtime Linkage | 12 | +2 | `bytes_prefix_of_buffer` and `evercrypt_hash_incremental_hash` added as explicit Low\*/C bridge contracts for the OIDC hash runtime shim |
-| **Current** | **12** | | **76 eliminated total; 8 files** |
+| Assumption boundary (2026-09-11) | 6 | -6 | `lemma_sha256_collision_resistant`, `lemma_sha256_of_string_collision_resistant`, `lemma_ed25519_unforgeable`, `assumption_collision_resistance`, `disclosure_digest_collision_resistant`, `jws_verify_unforgeable` removed as false/vacuous; replaced by bad-event definitions, proved case splits and external register premises |
+| **Current** | **6** | | **82 eliminated total; 4 files; plus 3 builder-injected `C.Loops` premises and lax-loaded provider sources indexed by the assumption graph** |
 
 ### Relationship to VerifiedReqs
 
@@ -163,9 +188,15 @@ The formal definition of `VerifiedReqs` — the set of compliance-matrix entries
 that carry assumption-qualified formal proofs — is given in
 [claim-definition.md §0.2](../assurance-case/claim-definition.md#02-claim-scope).
 
-This register is the **sole** set of unproved axioms underlying `VerifiedReqs`.
-For every r ∈ `VerifiedReqs` where the proof depends on F\*, the proof holds in
-the F\* logic modulo only the `assume val` declarations listed in §3 below.
+The `assume val` declarations listed in §3 are the tracked unproved axioms
+underlying `VerifiedReqs`, but they are **not** the whole effective premise
+set: a proof also rests on the builder-injected `C.Loops` module (for the
+EverParse-derived parsers and the Low\* JSON modules), on the HACL\*, Steel
+and stale-cascade EverParse sources that F\* lax-loads, on the ulib/EverParse/
+KaRaMeL `.checked` artifacts it imports, and on the external computational
+premises attached to the bad events of §3.1–§3.4. The per-pass closure is
+reconstructed (at module granularity, conservatively) by
+`scripts/validation/assumption_graph.py`.
 
 If any assume val's contract is violated at runtime (e.g., a crypto library
 returns incorrect results, or a WASM host fails to satisfy its callback
@@ -183,11 +214,12 @@ For strong‑constraint claims, only instances using the **verified allowlist**
 are in scope; compat crypto paths remain outside the formal claim even if they
 are supported at runtime.
 
-**Policy note:** there are **no Category A crypto-function assume vals**
-remaining. Category A crypto functions (hash/HMAC/signature verification) are
-concrete or conservative verified models; only hardness lemmas remain as
-Category A assumptions. Function-shaped runtime assumptions in B', B'', and
-B''' are explicit linkage contracts, not hidden cryptographic security lemmas.
+**Policy note:** there are **no Category A assume vals** at all. Category A
+crypto functions (hash/HMAC/signature verification) are real HACL\* spec
+computations; the hardness premises are external register entries attached
+to named events (see §3.1–§3.4). Function-shaped runtime assumptions in B',
+B'', and B''' are explicit linkage contracts, not hidden cryptographic
+security lemmas.
 The OIDC `RS256 Required Slice` and `RS256 Interop Slice` were closed as
 **boundary-promotion tasks**, not by increasing the Category A `assume val`
 surface. Broad RSA and non-promoted JOSE interoperability remain outside the
@@ -226,60 +258,84 @@ and proved lemmas in `FStar.Base64.fst`. Category E = 0.
 
 ## 3. Full Assumption Register
 
-### 3.1 JWS Signature Verification (Category A)
+### 3.1 JWS Signature Verification (Category A) — axiom REMOVED
 
-**File:** `fstar/jose/Jose.Jws.Verify.fst`
+**File:** `fstar/jose/Jose.Jws.Verify.fst` (with `fstar/crypto/Verified.Crypto.Hmac.KeyEquiv.fst`)
 
-Shared module used by Federation trust chain verification, TrustMark JWS
-verification, and SD-JWT. Phase A replaced the `false` model with genuine
-HACL\* dispatch (HMAC + Ed25519). `jws_verify` is now `irreducible` with
-real HACL\* spec implementations. `jws_verify_correct` is a proved tautology.
+`jws_verify` is a real HACL\* dispatch (HMAC-SHA-2 for `HS256/384/512`,
+Ed25519 for `EdDSA`, `false` otherwise), now `opaque_to_smt` so that the
+lemmas in the module can reveal the dispatch body.
 
-| # | Line | Function | Description | Runtime impl | Risk | Reducible? |
-|---|---|---|---|---|---|---|
-| 1 | 94 | `jws_verify_unforgeable` | EUF-CMA unforgeability: a valid signature implies the signer possessed the key. Honest assume val — computational hardness, cannot be proved from first principles. | HACL\* Spec.Agile.HMAC / Spec.Ed25519 | Low | No (computational hardness) |
+| # | Former declaration | Former statement | Why it was wrong | Replacement (all proved, no `assume val`) |
+|---|---|---|---|---|
+| 1 | `jws_verify_unforgeable` | `key1.k =!= key2.k /\ jws_verify key1 t = true ==> jws_verify key2 t = false` | HMAC pads keys shorter than the block with zero bytes, so `k` and `k ++ 0x00` are distinct raw keys with identical verification behaviour; the statement forbade every short-key HS256 verification (red control `RedJwsOldAxiom.fst`). It also named no key generation, signing oracle, freshness or compromise, so calling it EUF-CMA was a misnomer. | `mac_key_equiv` (extensional key equivalence per algorithm), `lemma_jws_verify_hs_key_equiv` (equivalent keys verify alike), `lemma_hmac_sha256_zero_pad_key_equiv` (machine-checked distinct-but-equivalent keys, via `friend Spec.Agile.HMAC`), `lemma_jws_verify_hs_accepts_mac` (the honest MAC is accepted: reachable success path), `jws_mac_forgery` / `jws_eddsa_forgery` (forgery events requiring honest key-generation provenance, a MAC/signing history and a compromised-key set) and `lemma_jws_verify_cases` (a verifying token is outside the key-generation domain, under a compromised key, honestly issued — possibly re-presented — or a qualified forgery event). Verification success never implies that the presenter knows the key. |
 
-### 3.2 HACL\* Crypto Bridge (Category A — Phase A)
+External premises (register, `specified-not-attested`): `A-HMAC-SHA2-EUF-CMA`
+(PRF security of HMAC-SHA-2 implies MAC unforgeability for uniformly chosen,
+uncompromised keys of adequate length) and `A-ED25519-EUF-CMA`. The HMAC
+event checks an algorithm-specific generation record, key equivalence and
+32/48/64-byte minima for HS256/384/512 on both generated and verifying keys.
+`jws_verify` remains a primitive verifier with a nonempty-key guard; runtime
+key-policy correspondence is not established. The Ed25519 events require the
+public key in the honest key-generation history. These histories must come from
+a consistent external game with honest generation and complete oracle/compromise
+records; membership in an arbitrary list does not attest those properties.
+Module-level graph binding does not discharge this argument-level obligation.
+
+### 3.2 HACL\* Crypto Bridge (Category A) — axioms REMOVED
 
 **File:** `fstar/crypto/Verified.Crypto.Bridge.fst`
 
-Phase A bridge module wrapping HACL\* spec-level implementations for use with
-`FStar.Bytes`. All functions are `irreducible` and `Tot`. These assume vals
-model standard cryptographic hardness assumptions on the HACL\* spec
-implementations.
+The heavy wrappers (`sha256_hash`, `sha384_hash`, `sha512_hash`,
+`ed25519_verify`) remain `irreducible` HACL\* spec computations; the thin
+string wrapper `sha256_of_string` and the HMAC wrappers are `opaque_to_smt`.
 
-| # | Line | Function | Description | Runtime impl | Risk | Reducible? |
-|---|---|---|---|---|---|---|
-| 2 | 164 | `lemma_sha256_collision_resistant` | SHA-256 collision resistance: distinct inputs produce distinct 32-byte digests. Standard assumption. | HACL\* `Spec.Agile.Hash.hash SHA2_256` | Low | No (computational hardness) |
-| 3 | 181 | `lemma_sha256_of_string_collision_resistant` | SHA-256 collision resistance for string-to-hash composition. Preconditioned on input length < sha256\_max\_input. Follows from #2 + encoding injectivity. | HACL\* `Spec.Agile.Hash.hash SHA2_256` | Low | No (computational hardness) |
-| 4 | 189 | `lemma_ed25519_unforgeable` | Ed25519 EUF-CMA unforgeability: valid signature implies signer held the secret key. | HACL\* `Spec.Ed25519.verify` | Low | No (computational hardness) |
+| # | Former declaration | Former statement | Why it was wrong | Replacement (all proved) |
+|---|---|---|---|---|
+| 2 | `lemma_sha256_collision_resistant` | `sha256_hash a = sha256_hash b ==> a = b` | Universal injectivity of a 32-byte-output function on inputs of up to 2^32−1 bytes is false by counting (red control `RedHashInjectivity.fst`, `red_pigeonhole.py`). | `sha256_collision a b` (event: distinct in-range inputs, equal digests) and `lemma_sha256_hash_eq_cases` (`equal digests ==> equal inputs \/ sha256_collision`); SHA-384/512 counterparts. |
+| 3 | `lemma_sha256_of_string_collision_resistant` | `sha256_of_string a = sha256_of_string b ==> a = b` | Same counting defect, and it silently assumed injectivity of `FStar.Bytes.bytes_of_string` (abstract in ulib, no lemma) through the same axiom. | `string_encoding_collision a b` (separate event for the abstract string→bytes boundary), `sha256_of_string_collision`, `lemma_sha256_of_string_eq_cases` (`equal outputs ==> equal strings \/ string_encoding_collision \/ sha256_collision (bytes a) (bytes b)`; base64url injectivity is a proved lemma so it adds no event), `lemma_sha2_limits_exceed_bytes` (the over-length fallback of the wrapper is unreachable for `FStar.Bytes`). |
+| 4 | `lemma_ed25519_unforgeable` | `ed25519_verify pk m s = true ==> True` | Vacuous: provable by `()` (red control `RedEd25519Vacuous.fst`); it carried no unforgeability content. | `ed25519_signing_event` / `ed25519_message_signed` (honest signing history), `ed25519_forgery honest_keys history compromised pk m s` (key honestly generated, verifies, key uncompromised, message never honestly signed) and `lemma_ed25519_verify_cases`. Spec-level correctness of honest signatures is not proved here (residual). |
 
-### 3.3 SD-JWT Digest (Category A)
+External premises: `A-SHA256-CR` (the `sha256_collision` event is
+computationally infeasible for SHA-256 as specified in FIPS 180-4; generic
+birthday bound 2^128; no numeric evaluation is produced) and
+`A-ED25519-EUF-CMA` (Brendel, Cremers, Jackson, Zhao 2020; Bernstein et al.
+2012). The string boundary `string_encoding_collision` and the runtime input
+domain (Rust slices, C buffers) are symbolic-abstraction entries, not
+cryptographic premises.
+
+### 3.3 SD-JWT Digest (Category A) — axiom REMOVED
 
 **File:** `fstar/jose/Jose.SdJwt.fst`
 
-Phase A replaced the identity model with genuine HACL\* SHA-256 via
-`Verified.Crypto.Bridge.sha256_of_string`. The collision resistance property
-is now an honest assume val.
+| # | Former declaration | Former statement | Why it was wrong | Replacement (all proved) |
+|---|---|---|---|---|
+| 5 | `disclosure_digest_collision_resistant` (SMTPat) | `e1 =!= e2 ==> disclosure_digest e1 =!= disclosure_digest e2` | Universal injectivity again, and SMTPat-triggered, so it was usable by any proof in the module without an explicit citation. | `disclosure_digest_collision`, `lemma_disclosure_digest_eq_cases`, `lemma_disclosure_digest_collision_witness` (a digest collision is a `sha256_of_string_collision`), the finite premises `no_collision_with_issued enc issued` / `no_presented_collision encs issued` over the concrete issuance, and the unconditional theorems `lemma_non_forgeability_or_collision` and `lemma_reconstruction_subset_or_collision` (any accepted forgery or out-of-set reconstructed claim yields an explicit collision witness `(enc, d)`). |
 
-| # | Line | Function | Description | Runtime impl | Risk | Reducible? |
-|---|---|---|---|---|---|---|
-| 5 | 293 | `disclosure_digest_collision_resistant` | SHA-256 collision resistance for SD-JWT disclosure digests. Follows from Bridge #2. | HACL\* via Bridge | Low | No (computational hardness) |
+The composed disclosure-digest witness can be a string-encoding collision
+or a SHA-256 collision on distinct byte images. Excluding the primitive collision
+alone is insufficient; the `string_encoding_collision` boundary is separate.
 
-### 3.4 Hash Collision Resistance (Category A)
+**Downstream impact:** `forged_digest_not_in_build`, `lemma_non_forgeability`,
+`lemma_digest_decode_claim_in_orig`, `lemma_reconstruct_acc_claims` and
+`lemma_reconstruction_subset` now carry the finite no-collision premise;
+`lemma_completeness`, `lemma_soundness_subset` and `lemma_no_duplicate` were
+unaffected. Compliance entry: RFC 9901-001 (SD-JWT).
+
+### 3.4 Hash Collision Resistance (Category A) — axiom REMOVED
 
 **File:** `fstar/HashComputation.fst`
 
-Phase A replaced the identity model with genuine HACL\* SHA-256 via
-`Verified.Crypto.Bridge.sha256_hash`. The collision resistance property
-is now an honest assume val.
+| # | Former declaration | Former statement | Why it was wrong | Replacement (all proved) |
+|---|---|---|---|---|
+| 6 | `assumption_collision_resistance` (SMTPat) | `i1 =!= i2 ==> compute_hash alg i1 =!= compute_hash alg i2` | Universal injectivity, SMTPat-triggered for every occurrence of `compute_hash`; it also claimed injectivity across the zero-byte fallback branch. | `hash_collision alg i1 i2`, `lemma_compute_hash_eq_cases`, `lemma_hash_collision_refines` (a model collision is a Bridge `sha*_collision`; the fallback is proved unreachable by `lemma_compute_hash_in_range`), `truncation_collision` (full digests differ, leftmost halves equal — the OIDC `at_hash`/`c_hash` form has only half the digest length and must not inherit the full-length premise), `oidc_hash_collision` and `lemma_oidc_hash_collision_cases`. |
 
-| # | Line | Function | Description | Runtime impl | Risk | Reducible? |
-|---|---|---|---|---|---|---|
-| 6 | 103 | `assumption_collision_resistance` | SHA-256 collision resistance for OIDC hash computation. Follows from Bridge #2. | HACL\* via Bridge | Low | No (computational hardness) |
-
-**Downstream impact:** `lemma_non_forgeability`, `forged_digest_not_in_build`,
-`lemma_digest_decode_claim_in_orig`. Compliance entry: RFC 9901-001 (SD-JWT).
+External premises: `A-SHA256-CR`, `A-SHA384-CR` and `A-SHA512-CR` for
+`hash_collision SHA256`, `hash_collision SHA384` and `hash_collision SHA512`,
+respectively (256/384/512 output bits; generic birthday bounds 2^128/2^192/2^256),
+`A-SHA256-TRUNC128-CR` for `truncation_collision SHA256` (generic bound 2^64).
+`Pkce.fst` adds the analogous `s256_collision` and
+`lemma_pkce_s256_binding_cases` for the PKCE S256 binding.
 
 ### 3.5 DRBG Crypto Trust Boundary (Category A) — ELIMINATED
 
@@ -433,15 +489,18 @@ they do not assert cryptographic hardness.
 
 | Risk | Count | Assume vals |
 |---|---|---|
-| **Low** | 11 | #1, #2, #3, #4, #5, #6, NEW-1, NEW-2, NEW-3, NEW-4, NEW-5 |
+| **Low** | 5 | NEW-1, NEW-2, NEW-3, NEW-4, NEW-5 |
 | **Medium** | 1 | #12 |
 | **High** | 0 | — |
+| **Removed** | 6 | #1–#6 (replaced by events and external premises; see §3.1–§3.4) |
 
 ### By Reducibility
 
 | Status | Count | Notes |
 |---|---|---|
-| **Permanent** (computational hardness) | 6 | #1, #2, #3, #4, #5, #6 |
+| **Removed** (former computational hardness lemmas) | 6 | #1–#6; the premises are now `spec/assumption-register.json` entries `A-SHA256-CR`, `A-SHA256-TRUNC128-CR`, `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA` (`specified-not-attested`) |
+| **Builder-injected** (not tracked in `fstar/`) | 3 | `C.Loops.while`, `C.Loops.do_while`, `C.Loops.total_while` generated by `scripts/flake/verify_fstar.sh`; reached by the EverParse-derived parsers and the Low\* JSON modules |
+| **Provider sources lax-loaded** | closure-dependent | HACL\* (ships no `.checked`), Steel, and the EverParse/LowParse modules made stale by the shadowed `C.Loops`; indexed per pass by the assumption graph |
 | **Permanent** (HACL\* linkage) | 2 | NEW-1, NEW-2 (verified foreign code) |
 | **Permanent** (EverParse linkage) | 1 | NEW-3 (generated parser + local bridge) |
 | **Permanent** (OIDC hash runtime linkage) | 2 | NEW-4, NEW-5 (local C bridge backed by HACL\*/EverCrypt) |
@@ -452,7 +511,7 @@ they do not assert cryptographic hardness.
 
 | Category | Count | Risk profile |
 |---|---|---|
-| A: Crypto trust boundaries | **6** | Honest computational hardness assumptions on HACL\* spec implementations. Phase A replaced all identity/false models with genuine HACL\* specs. DRBG hmac\_sha256 eliminated via Bridge delegation. |
+| A: Crypto trust boundaries | **0** | No `assume val`. Bad events with proved case splits inside F\*; computational premises recorded externally with `specified-not-attested` status. |
 | B: FFI / C runtime stubs | **0** | All 9 original FFI stubs eliminated via concrete Low\* implementations. |
 | B': HACL\* linkage stubs | **2** | `hacl_sha256`, `hacl_ed25519_verify` in `VerifiedCore.Crypto.Hacl.fst`. Linking stubs for HACL\*-verified C code; implementations are themselves formally verified. |
 | B'': EverParse linkage stubs | **1** | `jose_header_entry_error_code` in `Jose.HeaderParser.Runtime.fst`. A narrow linkage bridge to generated EverParse C validation with a read-only Stack contract. |
