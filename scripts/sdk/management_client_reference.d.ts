@@ -1249,6 +1249,11 @@ export type ManagementClient = {
   createUser(
     input: { teamId?: string | null; environmentId: string } & CreateUserRequest,
   ): Promise<User>;
+  getUser(input: {
+    teamId?: string | null;
+    environmentId: string;
+    userId: string;
+  }): Promise<User>;
   updateUser(
     input: {
       teamId?: string | null;
@@ -1266,12 +1271,12 @@ export type ManagementClient = {
     environmentId: string;
     userId: string;
   }): Promise<User>;
-  blockUser(input: {
+  suspendUser(input: {
     teamId?: string | null;
     environmentId: string;
     userId: string;
   }): Promise<User>;
-  unblockUser(input: {
+  unsuspendUser(input: {
     teamId?: string | null;
     environmentId: string;
     userId: string;
