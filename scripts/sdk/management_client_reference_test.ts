@@ -118,12 +118,125 @@ function createFetchQueue(
   return { fetchImpl, calls };
 }
 
+async function testApplicationAuthorization(): Promise<void> {
+  const body: import("../index.js").ApplicationAuthorizationUpdate = {
+    clientId: "application-client",
+    subject: "user-1",
+    baseRevision: 0,
+    authority: "membership-service",
+    sourceRevision: 1,
+    audiences: ["https://api.example.test"],
+    claims: {
+      roles: ["USER"],
+      organization_roles: [{ organization_id: "organization-1", roles: ["ORGANIZATION_STAFF"] }],
+    },
+    enabled: true,
+    reason: "Apply membership revision 1",
+  };
+  const sessionStore = createInMemoryManagementSessionStore({
+    teamId: "team/default",
+    origin: "https://admin.example.test",
+    csrfToken: "csrf-projection",
+  });
+  const queue = createFetchQueue([
+    (call) => {
+      assert.equal(call.method, "POST");
+      assert.equal(call.url,
+        "https://admin.example.test/api/v1/teams/team%2Fdefault/environments/env%2F1/application-authorizations");
+      assert.equal(call.headers.get("origin"), "https://admin.example.test");
+      assert.equal(call.headers.get("x-csrf-token"), "csrf-projection");
+      assert.equal(call.headers.get("content-type"), "application/json");
+      assert.equal(call.credentials, "include");
+      assert.deepEqual(parseJsonBody(call), body);
+      return mockResponse({ jsonBody: { revision: 1 } });
+    },
+    (call) => {
+      assert.deepEqual(parseJsonBody(call), { ...body, enabled: false });
+      return mockResponse({ status: 409, jsonBody: {
+        errorCode: "base_revision_mismatch", message: "Stale revision", requestId: "projection-409",
+      } });
+    },
+  ]);
+  const client = createManagementClient({
+    baseUrl: "https://admin.example.test", fetchImpl: queue.fetchImpl, sessionStore,
+  });
+  const input = { environmentId: "env/1", ...body };
+  const result = await client.updateApplicationAuthorization(input);
+  assert.deepEqual(result, { revision: 1 });
+  assert.equal(Object.isFrozen(result), true);
+  pass("application authorization sends the audited projection with Origin, CSRF and credentials");
+  await assert.rejects(
+    () => client.updateApplicationAuthorization({ ...input, enabled: false }),
+    (error) => {
+      assert.ok(error instanceof ManagementApiError);
+      assert.equal(error.status, 409);
+      assert.equal(error.operationId, "update_application_authorization");
+      assert.equal(error.errorCode, "base_revision_mismatch");
+      assert.equal(error.requestId, "projection-409");
+      return true;
+    },
+  );
+  assert.equal(queue.calls.length, 2);
+  pass("application authorization preserves revision conflicts without retrying or changing authority");
+
+  for (const revision of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => client.updateApplicationAuthorization({ ...input, baseRevision: revision }), TypeError);
+  }
+  for (const revision of [0, -1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => client.updateApplicationAuthorization({ ...input, sourceRevision: revision }), TypeError);
+  }
+  assert.equal(queue.calls.length, 2);
+  pass("unsafe or invalid projection revisions fail before transport");
+
+  for (const revision of [undefined, 0, -1, 0.5, "1", Number.MAX_SAFE_INTEGER + 1]) {
+    const invalidQueue = createFetchQueue([() => mockResponse({ jsonBody: { revision } })]);
+    const invalidClient = createManagementClient({
+      baseUrl: "https://admin.example.test", fetchImpl: invalidQueue.fetchImpl, sessionStore,
+    });
+    await assert.rejects(() => invalidClient.updateApplicationAuthorization(input), TypeError);
+    assert.equal(invalidQueue.calls.length, 1);
+  }
+  const boundaryQueue = createFetchQueue([(call) => {
+    assert.deepEqual(parseJsonBody(call), {
+      ...body, baseRevision: Number.MAX_SAFE_INTEGER - 1, sourceRevision: Number.MAX_SAFE_INTEGER,
+    });
+    return mockResponse({ jsonBody: { revision: Number.MAX_SAFE_INTEGER } });
+  }]);
+  const boundaryClient = createManagementClient({
+    baseUrl: "https://admin.example.test", fetchImpl: boundaryQueue.fetchImpl, sessionStore,
+  });
+  assert.equal((await boundaryClient.updateApplicationAuthorization({
+    ...input, baseRevision: Number.MAX_SAFE_INTEGER - 1, sourceRevision: Number.MAX_SAFE_INTEGER,
+  })).revision, Number.MAX_SAFE_INTEGER);
+  pass("projection responses reject missing or rounded revisions and accept the safe integer boundary");
+
+  const noOriginQueue = createFetchQueue([]);
+  const noOriginClient = createManagementClient({
+    baseUrl: "https://admin.example.test", fetchImpl: noOriginQueue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ teamId: "team-1", csrfToken: "csrf-projection" }),
+  });
+  await assert.rejects(() => noOriginClient.updateApplicationAuthorization(input), /origin is required/);
+  assert.equal(noOriginQueue.calls.length, 0);
+  const noCsrfQueue = createFetchQueue([(call) => {
+    assert.equal(call.method, "GET");
+    assert.match(call.url, /\/system\/health$/);
+    return mockResponse({ jsonBody: { status: "ok" } });
+  }]);
+  const noCsrfClient = createManagementClient({
+    baseUrl: "https://admin.example.test", fetchImpl: noCsrfQueue.fetchImpl,
+    sessionStore: createInMemoryManagementSessionStore({ teamId: "team-1", origin: "https://admin.example.test" }),
+  });
+  await assert.rejects(() => noCsrfClient.updateApplicationAuthorization(input), /CSRF token was not available/);
+  assert.equal(noCsrfQueue.calls.length, 1);
+  pass("projection writes require Origin and successful CSRF priming");
+}
+
 async function main() {
   console.log("=== @aegaeon/management-client Tests ===");
 
   assert.equal(MANAGEMENT_OPENAPI_METADATA.title, "Aegaeon Management API");
   assert.equal(MANAGEMENT_OPENAPI_METADATA.version, "v1");
-  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 73);
+  assert.equal(MANAGEMENT_OPENAPI_METADATA.pathCount, 74);
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.csrfCookieName, "csrf_token");
   assert.equal(MANAGEMENT_CLIENT_DEFAULTS.sessionCookieName, "aegaeon_admin_session");
   pass("exports OpenAPI metadata and default cookie names");
@@ -2498,6 +2611,8 @@ async function main() {
     },
   );
   pass("non-2xx JSON responses raise ManagementApiError with UI-friendly error fields");
+
+  await testApplicationAuthorization();
 
   console.log(`=== ${passed} management-client checks passed ===`);
 }

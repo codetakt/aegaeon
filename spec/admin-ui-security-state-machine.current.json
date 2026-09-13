@@ -282,6 +282,7 @@
     "require_all_openapi_operations_in_management_client": true,
     "require_write_csrf_origin_implementation": true,
     "dangerous_write_fragments": [
+      "/application-authorizations",
       "/revoke",
       "/revokeAll",
       "/rotate",

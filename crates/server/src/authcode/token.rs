@@ -31,6 +31,7 @@ const ACCESS_TOKEN_TYP: &str = "at+jwt";
 /// Input claims and timing for minting a bearer access token.
 #[derive(Clone, Copy)]
 pub struct BearerAccessTokenMint<'a> {
+    pub application_grant: Option<&'a crate::application_authorization::inorii::Grant>,
     pub client_id: &'a str,
     pub subject: &'a str,
     pub scope: Option<&'a str>,
@@ -187,6 +188,25 @@ impl TokenIssuer {
                     claims.insert("cnf".to_string(), json!({"x5t#S256": fp}));
                 }
                 _ => {}
+            }
+            if let Some(grant) = mint.application_grant {
+                grant.validate().map_err(|error| error.to_string())?;
+                if grant.issuer != issuer
+                    || grant.client_id != mint.client_id
+                    || grant.subject != mint.subject
+                {
+                    return Err("application grant context mismatch".to_owned());
+                }
+                if grant
+                    .audiences
+                    .iter()
+                    .any(|audience| audience == mint.audience)
+                {
+                    claims.insert(
+                        crate::application_authorization::inorii::CLAIM_NAME.to_owned(),
+                        serde_json::to_value(&grant.claims).map_err(|error| error.to_string())?,
+                    );
+                }
             }
             let payload = Value::Object(claims);
             sign_jwt(&payload, self.key_manager.as_ref(), ACCESS_TOKEN_TYP)

@@ -11,6 +11,8 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthorizationCode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application_grant: Option<crate::application_authorization::inorii::Grant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub code: String,
     pub client_id: String,
@@ -93,6 +95,7 @@ impl AuthorizationCode {
         Self {
             code: generate_secure_random(32),
             exchange_grant: None,
+            application_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
             redirect_uri: input.redirect_uri,

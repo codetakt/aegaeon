@@ -33,9 +33,9 @@ pub(in crate::web::management) async fn write_user_management_audit_event_with_o
     severity: &'static str,
     event: EndUserAuditEvent,
 ) -> Result<(), Response> {
-    write_end_user_control_plane_audit_event(
+    write_management_control_plane_audit_event(
         tx,
-        EndUserControlPlaneAuditWrite {
+        ManagementControlPlaneAuditWrite {
             team_id: context.team_id,
             tenant_id: context.tenant_id,
             environment_id: context.environment_id,
@@ -44,8 +44,51 @@ pub(in crate::web::management) async fn write_user_management_audit_event_with_o
             event_type: event.event_type,
             outcome,
             severity,
-            target_id: event.target_id,
+            target_type: "END_USER",
+            target_id: event.target_id.to_string(),
             data: event.data,
+        },
+    )
+    .await
+    .map_err(|_| audit_write_failed_response(request_id))
+}
+
+pub(in crate::web::management) enum ApplicationAuthorizationAuditTarget<'a> {
+    EndUser(Uuid),
+    Projection {
+        client_id: &'a str,
+        subject: &'a str,
+    },
+}
+
+pub(in crate::web::management) async fn write_application_authorization_audit_event(
+    tx: &mut Transaction<'_, Postgres>,
+    context: &UserManagementContext,
+    request_id: &str,
+    target: ApplicationAuthorizationAuditTarget<'_>,
+    data: serde_json::Value,
+) -> Result<(), Response> {
+    let (target_type, target_id) = match target {
+        ApplicationAuthorizationAuditTarget::EndUser(id) => ("END_USER", id.to_string()),
+        ApplicationAuthorizationAuditTarget::Projection { client_id, subject } => (
+            "APPLICATION_AUTHORIZATION",
+            serde_json::json!([context.environment_id, client_id, subject]).to_string(),
+        ),
+    };
+    write_management_control_plane_audit_event(
+        tx,
+        ManagementControlPlaneAuditWrite {
+            team_id: context.team_id,
+            tenant_id: context.tenant_id,
+            environment_id: context.environment_id,
+            administrator_id: context.session.administrator_id,
+            request_id,
+            event_type: "management.application_authorization.updated.v1",
+            outcome: "SUCCESS",
+            severity: "INFO",
+            target_type,
+            target_id,
+            data,
         },
     )
     .await
@@ -226,7 +269,7 @@ fn audit_write_failed_response(request_id: &str) -> Response {
     )
 }
 
-struct EndUserControlPlaneAuditWrite<'a> {
+struct ManagementControlPlaneAuditWrite<'a> {
     team_id: Uuid,
     tenant_id: Uuid,
     environment_id: Uuid,
@@ -235,13 +278,14 @@ struct EndUserControlPlaneAuditWrite<'a> {
     event_type: &'a str,
     outcome: &'a str,
     severity: &'a str,
-    target_id: Uuid,
+    target_type: &'a str,
+    target_id: String,
     data: serde_json::Value,
 }
 
-async fn write_end_user_control_plane_audit_event(
+async fn write_management_control_plane_audit_event(
     tx: &mut Transaction<'_, Postgres>,
-    event: EndUserControlPlaneAuditWrite<'_>,
+    event: ManagementControlPlaneAuditWrite<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r"
@@ -273,8 +317,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9, $10, $11, $12, $13)
     .bind(event.severity)
     .bind("ADMINISTRATOR")
     .bind(event.administrator_id.to_string())
-    .bind("END_USER")
-    .bind(event.target_id.to_string())
+    .bind(event.target_type)
+    .bind(event.target_id)
     .bind(event.request_id)
     .bind(redacted_audit_data(event.data))
     .execute(&mut **tx)

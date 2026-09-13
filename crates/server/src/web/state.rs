@@ -34,6 +34,7 @@ pub(super) const RUNTIME_AUTHORITY_DATABASE_REVISION_CACHE_TTL: Duration = Durat
 
 #[derive(Clone)]
 pub struct AppState {
+    pub application_authority: Option<crate::application_authorization::Authority>,
     pub cfg: Arc<ServerConfig>,
     pub base_url: Arc<String>,
     pub issuer: Arc<String>,

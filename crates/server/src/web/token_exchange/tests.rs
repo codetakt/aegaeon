@@ -22,6 +22,7 @@ use tower::ServiceExt;
 mod client_scope_ceiling;
 mod legacy_commit;
 mod legacy_request;
+mod projection_pool;
 
 const CLIENT: &str = "target-exchange-client";
 const SECRET: &str = "integration-test-only-client-secret";

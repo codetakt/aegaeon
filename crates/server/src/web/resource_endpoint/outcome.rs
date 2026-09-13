@@ -12,15 +12,45 @@ pub(in crate::web) struct ResourceOutcome {
     pub(in crate::web) mode: String,
     pub(in crate::web) success: bool,
     pub(in crate::web) reason: Option<String>,
+    pub(in crate::web) validated_metadata: Option<BearerTokenMeta>,
 }
 
 impl ResourceOutcome {
-    fn success(response: Response, mode: String) -> Self {
+    pub(super) async fn check_application(
+        self,
+        state: &super::AppState,
+        authorization: Option<&str>,
+    ) -> Self {
+        if !self.success {
+            return self;
+        }
+        let (Some(meta), Some(header)) = (self.validated_metadata.as_ref(), authorization) else {
+            return Self::failure(
+                crate::web::token_internal_error_response("resource_validated_metadata", None),
+                self.mode,
+                "resource_validated_metadata_missing",
+            );
+        };
+        match crate::web::application_authorization::check_resource(state, meta, header).await {
+            Ok(()) => self,
+            Err(response) => {
+                let reason = if response.status().is_server_error() {
+                    "application_authority_unavailable"
+                } else {
+                    "application_authorization_changed"
+                };
+                Self::failure(response, self.mode, reason)
+            }
+        }
+    }
+
+    fn success(response: Response, mode: String, meta: &BearerTokenMeta) -> Self {
         Self {
             response,
             mode,
             success: true,
             reason: None,
+            validated_metadata: Some(meta.clone()),
         }
     }
 
@@ -30,6 +60,7 @@ impl ResourceOutcome {
             mode,
             success: false,
             reason: Some(reason.into()),
+            validated_metadata: None,
         }
     }
 }
@@ -49,7 +80,7 @@ pub(super) fn resource_success(
     });
     let mut response = (StatusCode::OK, Json(body)).into_response();
     util::apply_no_cache_headers(&mut response);
-    ResourceOutcome::success(response, mode)
+    ResourceOutcome::success(response, mode, meta)
 }
 
 pub(super) fn resource_error_with_mode(

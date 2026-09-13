@@ -1,9 +1,11 @@
 //! Shared database-backed HTTP test fixtures. No production request checks are bypassed.
+mod projections;
 use super::AppState;
 use crate::{
     client_registry::{ClientRegistry, RegisteredClient},
     management::types::PolicyDocument,
 };
+pub(crate) use projections::seed_test_projection;
 use serde_json::json;
 use sqlx::PgPool;
 use std::{collections::HashSet, error::Error, io, sync::Arc, time::Duration};
@@ -49,6 +51,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
         .await?;
 
     Ok(AppState {
+        application_authority: None,
         cfg: Arc::clone(&cfg),
         base_url: Arc::new(env.issuer_url.clone()),
         issuer: Arc::new(env.issuer_url.clone()),
@@ -281,6 +284,8 @@ pub(crate) async fn cleanup_test_environment(
         "DELETE FROM aegaeon.audit_events WHERE environment_id = $1",
         "DELETE FROM aegaeon.client_secrets WHERE environment_id = $1",
         "DELETE FROM aegaeon.dynamic_client_registrations WHERE environment_id = $1",
+        "DELETE FROM aegaeon.application_authorizations WHERE environment_id = $1",
+        "DELETE FROM aegaeon.end_users WHERE environment_id = $1",
         "DELETE FROM aegaeon.clients WHERE environment_id = $1",
         "DELETE FROM aegaeon.oauth_profiles WHERE environment_id = $1",
         "DELETE FROM aegaeon.environment_policies WHERE environment_id = $1",

@@ -15,6 +15,41 @@ pub(super) async fn handle_token_authorization_code_grant(
     if let Err(response) = require_token_issue_audit(state, issuer_base, ctx, None).await {
         return response;
     }
+    let _application_guard = if let Some(code_value) = ctx.issuer_req.code.as_ref() {
+        let code = match state
+            .tokens
+            .issuer
+            .code_store
+            .try_get_code_async(code_value.clone())
+            .await
+        {
+            Ok(code) => code,
+            Err(_) => {
+                return token_error_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "temporarily_unavailable",
+                    None,
+                )
+            }
+        };
+        if let Some(code) = code {
+            match super::application_authorization::require_current(
+                state,
+                code.application_grant.as_ref(),
+                &ctx.client_id,
+                &code.user_id,
+            )
+            .await
+            {
+                Ok(guard) => guard,
+                Err(response) => return response,
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     match state
         .tokens
         .issuer

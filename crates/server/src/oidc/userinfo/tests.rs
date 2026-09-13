@@ -234,6 +234,7 @@ async fn test_fetch_userinfo_requires_openid_scope() -> TestResult {
 
 #[tokio::test]
 async fn test_fetch_userinfo_applies_claim_release_policy_to_custom_claims() -> TestResult {
+    let authority_claim = crate::application_authorization::inorii::CLAIM_NAME;
     let key_manager = Arc::new(InMemoryKeyManager::new());
     let token_store = crate::authcode::store::TokenStore::new_process_local_for_tests();
     let access_token = crate::authcode::types::AccessToken::new(
@@ -264,9 +265,13 @@ async fn test_fetch_userinfo_applies_claim_release_policy_to_custom_claims() -> 
         },
     );
     meta.claim_release_policy = Some(UpstreamClaimReleasePolicy {
-        managed_custom_claims: vec!["organization".to_string(), "roles".to_string()],
+        managed_custom_claims: vec![
+            "organization".to_string(),
+            "roles".to_string(),
+            authority_claim.to_string(),
+        ],
         id_token_custom_claims: vec!["organization".to_string()],
-        userinfo_custom_claims: vec!["roles".to_string()],
+        userinfo_custom_claims: vec!["roles".to_string(), authority_claim.to_string()],
     });
     token_store
         .try_replace_bearer_meta_record(meta)
@@ -280,6 +285,10 @@ async fn test_fetch_userinfo_applies_claim_release_policy_to_custom_claims() -> 
     custom_claims.insert("roles".to_string(), serde_json::json!(["admins"]));
     custom_claims.insert("organization".to_string(), serde_json::json!("Platform"));
     custom_claims.insert("department".to_string(), serde_json::json!("Identity"));
+    custom_claims.insert(
+        authority_claim.to_string(),
+        serde_json::json!({"roles":["SUPER_ADMIN"]}),
+    );
     provider_data.add_user(Userinfo {
         sub: "user123".to_string(),
         name: Some("User".to_string()),
@@ -302,5 +311,6 @@ async fn test_fetch_userinfo_applies_claim_release_policy_to_custom_claims() -> 
         Some(&serde_json::json!("Identity"))
     );
     assert!(!result.custom_claims.contains_key("organization"));
+    assert!(!result.custom_claims.contains_key(authority_claim));
     Ok(())
 }

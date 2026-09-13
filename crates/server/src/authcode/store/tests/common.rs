@@ -116,6 +116,7 @@ impl<'a> MakeWriter<'a> for CaptureMakeWriter {
 
 fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {
     AuthorizationCode {
+        application_grant: None,
         exchange_grant: None,
         code: format!("code-{}", uuid::Uuid::new_v4()),
         client_id: "test-client".to_string(),

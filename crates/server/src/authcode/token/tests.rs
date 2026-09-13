@@ -8,6 +8,7 @@ include!("tests/basic_flow.rs");
 include!("tests/resource_audience.rs");
 include!("tests/code_target.rs");
 include!("tests/refresh_target.rs");
+mod application_exchange_lineage;
 mod exchange_lineage;
 mod sender_response;
 include!("tests/jwt_bearer.rs");

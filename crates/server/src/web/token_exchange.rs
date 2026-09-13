@@ -63,14 +63,28 @@ pub(super) async fn handle_token_exchange_grant(
         Ok(resolved) => resolved,
         Err(response) => return response,
     };
-    let audience = resolved.audience;
-    let scope = resolved.scope;
+    // Record the request before holding the projection's publication transaction.
+    // Both operations use the same pool, which may have only one connection.
     if let Err(response) =
         require_token_issue_audit(state, issuer_base, ctx, Some(subject_meta.user_id.as_str()))
             .await
     {
         return response;
     }
+    let (application_grant, _application_guard) =
+        match super::application_authorization::exchange_grant(
+            state,
+            ctx,
+            &subject_meta,
+            &resolved.audience,
+        )
+        .await
+        {
+            Ok(grant) => grant,
+            Err(response) => return response,
+        };
+    let audience = resolved.audience;
+    let scope = resolved.scope;
     let now = SystemTime::now();
     let expires_in = match resolve_token_exchange_expires_in(
         &subject_meta,
@@ -98,6 +112,7 @@ pub(super) async fn handle_token_exchange_grant(
         .tokens
         .issuer
         .mint_bearer_access_token(BearerAccessTokenMint {
+            application_grant: application_grant.as_ref(),
             client_id: &ctx.client_id,
             subject: &subject_meta.user_id,
             scope: scope.as_deref(),
@@ -137,6 +152,7 @@ pub(super) async fn handle_token_exchange_grant(
         &state.tokens.store,
         access,
         AccessTokenPersistence {
+            application_grant,
             audience,
             refresh_parent,
             sender_binding: ctx.sender_binding.clone(),

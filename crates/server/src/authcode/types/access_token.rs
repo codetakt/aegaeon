@@ -44,6 +44,8 @@ pub enum CnfClaim {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BearerTokenMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application_grant: Option<crate::application_authorization::inorii::Grant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exchange_grant: Option<crate::policy::token_exchange::ExchangeGrant>,
     pub token_id: String,
     pub client_id: String,
@@ -90,6 +92,7 @@ impl BearerTokenMeta {
         Self {
             token_id: input.token_id,
             exchange_grant: None,
+            application_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
             granted_scopes: input.granted_scopes,
