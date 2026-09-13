@@ -44,13 +44,6 @@ pub(super) struct ParsedAuthorizeRequest {
     pub(super) par_authorize_continuation: Option<String>,
 }
 
-pub(super) fn prompt_has_conflict(prompt: &str) -> bool {
-    prompt.split(' ').any(|value| value == "none")
-        && prompt
-            .split(' ')
-            .any(|value| !value.is_empty() && value != "none")
-}
-
 fn require_authorize_client_id(
     client_id: Option<String>,
     runtime: &AuthorizeRequestParsingRuntime<'_>,

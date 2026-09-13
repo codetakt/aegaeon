@@ -5628,6 +5628,22 @@ openid_core:
   - "Cryptographic hardness (EUF-CMA) and the `aws-lc-rs` RS256 verifier backend remain explicit assumptions / compat boundaries; the verified claim for this row is limited to the mandatory OIDC RS256 slice."
   - "The shared RS256 verifier encodes RSA JWK components as SPKI and delegates PKCS#1 v1.5 SHA-256 verification to `aegaeon_crypto::signature::verify_rsa_pkcs1_sha256`; Wycheproof RSA signature vectors are regression-tested by `crates/jose/tests/wycheproof_rsa_pkcs1_test.rs::wycheproof_rsa_pkcs1_sha256_vectors_follow_expected_results`."
   - "Fresh local evidence on 2026-03-09 is recorded under `artifacts/verification/oidc-rs256-required-slice/20260309T014321Z`, including targeted cargo tests for `required_rs256`, upstream decode helper coverage, `upstream_refresh_test`, compliance-matrix validation, targeted F* verification for `IdToken.Spec`, targeted Tamarin proofs for `id_token_session_binding` and `token_binding_integrity`, and the Kani harness `oidc_id_token_jwt_canonicalisation_no_panic` via `nix develop .#verification`."
+- id: OIDC-1-011
+  section: '3.1.2.1 (prompt)'
+  requirement: MUST
+  description: The OP must return an error when it cannot obtain the account selection requested by select_account
+  module: crates/server/src/web/prompt.rs
+  proof: []
+  tests:
+  - crates/server/src/web/prompt.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/prompt_validation.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/prompt.rs
+  notes:
+  - "Account selection is not implemented. Aegaeon rejects select_account with invalid_request (RFC 6749 sections 4.1.2.1 and 5.2), including combinations with supported actions."
+  - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
+  - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
