@@ -64,6 +64,13 @@ pub(crate) fn bearer_metadata_matches_access_token(
     {
         return Err("access token and metadata exchange lineage must match");
     }
+    if meta.application_grant.as_ref().is_some_and(|grant| {
+        grant.validate().is_err()
+            || grant.client_id != meta.client_id
+            || grant.subject != meta.user_id
+    }) {
+        return Err("invalid application authorization context");
+    }
     if meta.token_id.as_str() != access_token.token.as_str() {
         return Err("bearer metadata token_id must match the access token");
     }
@@ -110,6 +117,12 @@ pub(super) fn refresh_token_covers_access_token(
         })
     {
         return Err("access token must preserve the refresh lineage and deadline");
+    }
+    if !crate::application_authorization::is_restriction(
+        meta.application_grant.as_ref(),
+        refresh_token.application_grant.as_ref(),
+    ) {
+        return Err("application authority exceeds the refresh grant");
     }
     match (&refresh_token.exchange_grant, &meta.exchange_grant) {
         (None, None) => {}

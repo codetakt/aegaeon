@@ -1094,7 +1094,6 @@ CREATE TABLE aegaeon.environment_key_stores (
 --
 
 CREATE TABLE aegaeon.environment_policies (
-    token_exchange jsonb DEFAULT '{"version": 1, "targets": [], "rules": []}'::jsonb NOT NULL,
     environment_id uuid NOT NULL,
     configuration_version_id uuid NOT NULL,
     pkce_required boolean NOT NULL,
@@ -1196,6 +1195,7 @@ CREATE TABLE aegaeon.environment_policies (
     recovery_token_max_ttl_seconds integer DEFAULT 604800 NOT NULL,
     client_secret_default_expiration_days integer DEFAULT 90 CONSTRAINT environment_policies_client_secret_default_expiration__not_null NOT NULL,
     client_secret_max_expiration_days integer DEFAULT 365 NOT NULL,
+    token_exchange jsonb DEFAULT '{"version": 1, "targets": [], "rules": []}'::jsonb NOT NULL,
     CONSTRAINT environment_policies_client_jwt_algs_verified_shape CHECK ((aegaeon.text_array_is_normalized_set(client_jwt_allowed_algs, false) AND (client_jwt_allowed_algs <@ ARRAY['RS256'::text]))),
     CONSTRAINT environment_policies_credential_lifecycle_bounds CHECK (((activation_token_default_ttl_seconds >= 300) AND (activation_token_default_ttl_seconds <= recovery_token_max_ttl_seconds) AND (password_reset_token_default_ttl_seconds >= 300) AND (password_reset_token_default_ttl_seconds <= recovery_token_max_ttl_seconds) AND (recovery_token_max_ttl_seconds >= 300) AND (recovery_token_max_ttl_seconds <= 604800) AND (client_secret_default_expiration_days > 0) AND (client_secret_default_expiration_days <= client_secret_max_expiration_days) AND (client_secret_max_expiration_days > 0) AND (client_secret_max_expiration_days <= 365))),
     CONSTRAINT environment_policies_crypto_profile CHECK ((crypto_profile = 'verified'::text)),
@@ -2918,3 +2918,21 @@ CREATE TABLE aegaeon.authorization_logins (
 );
 CREATE INDEX authorization_logins_environment_idx
     ON aegaeon.authorization_logins(environment_id, expires_at);
+
+-- Privileged application projections are independent of editable OIDC profiles.
+-- Keep tombstones and monotonic revisions so removal/recreation cannot revive grants.
+CREATE TABLE aegaeon.application_authorizations (
+    environment_id uuid NOT NULL REFERENCES aegaeon.environments(id) ON DELETE CASCADE,
+    client_id text NOT NULL CHECK (length(client_id) BETWEEN 1 AND 255),
+    subject text NOT NULL CHECK (length(subject) BETWEEN 1 AND 255),
+    revision bigint NOT NULL CHECK (revision > 0),
+    authority text NOT NULL CHECK (length(authority) BETWEEN 1 AND 255),
+    source_revision bigint NOT NULL CHECK (source_revision > 0),
+    audiences jsonb NOT NULL CHECK (jsonb_typeof(audiences) = 'array'),
+    claims jsonb NOT NULL CHECK (jsonb_typeof(claims) = 'object'),
+    enabled boolean NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+    client_record_id uuid REFERENCES aegaeon.clients(id) ON DELETE SET NULL,
+    end_user_record_id uuid REFERENCES aegaeon.end_users(id) ON DELETE SET NULL,
+    PRIMARY KEY (environment_id, client_id, subject)
+);

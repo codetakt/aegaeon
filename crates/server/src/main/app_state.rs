@@ -54,7 +54,7 @@ pub(super) struct AppStateParts {
     pub(super) device: DeviceRuntimeStores,
 }
 
-pub(super) fn app_state_from_parts(parts: AppStateParts) -> AppState {
+pub(super) fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppState> {
     let AppStateParts {
         cfg,
         base_url,
@@ -83,7 +83,11 @@ pub(super) fn app_state_from_parts(parts: AppStateParts) -> AppState {
         device,
     } = parts;
 
-    AppState {
+    Ok(AppState {
+        application_authority: Some(
+            aegaeon_server::application_authorization::Authority::from_env(db_pool.clone())
+                .map_err(anyhow::Error::msg)?,
+        ),
         cfg,
         base_url: Arc::new(base_url),
         issuer: Arc::new(issuer),
@@ -145,5 +149,5 @@ pub(super) fn app_state_from_parts(parts: AppStateParts) -> AppState {
             local_login_rate_limiter: device.local_login_rate_limiter,
             rate_limiter: device.device_rate_limiter,
         },
-    }
+    })
 }

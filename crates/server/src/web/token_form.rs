@@ -89,8 +89,21 @@ pub(super) fn token_form_from_params(
             issuer_base,
         ));
     }
+    let grant_type = required_token_param(params, "grant_type", issuer_base)?;
+    if params.iter().any(|(name, _)| {
+        name == "organizationId"
+            || (name == "organization_id"
+                && grant_type != "urn:ietf:params:oauth:grant-type:token-exchange")
+    }) {
+        return Err(no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("organization_id is supported only by the application token-exchange extension"),
+            issuer_base,
+        ));
+    }
     Ok(TokenForm {
-        grant_type: required_token_param(params, "grant_type", issuer_base)?,
+        grant_type,
         code: optional_token_param(params, "code", issuer_base)?,
         client_id: optional_token_param(params, "client_id", issuer_base)?,
         client_secret: optional_token_param(params, "client_secret", issuer_base)?,

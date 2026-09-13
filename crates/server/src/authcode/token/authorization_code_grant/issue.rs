@@ -88,6 +88,7 @@ impl TokenIssuer {
             auth_session_id: code.auth_session_id.as_deref(),
             local_profile: code.local_profile.as_ref(),
             exchange_grant: code.exchange_grant.as_ref(),
+            application_grant: code.application_grant.as_ref(),
             claim_release_policy: code.claim_release_policy.as_ref(),
             nonce: code.nonce.as_deref(),
         };
@@ -117,6 +118,7 @@ impl TokenIssuer {
         })?;
         let access_token_str = self
             .issue_access_token_value(BearerAccessTokenMint {
+                application_grant: code.application_grant.as_ref(),
                 subject: &code.user_id,
                 client_id: &code.client_id,
                 scope: code.scope.as_deref(),
@@ -156,6 +158,7 @@ impl TokenIssuer {
             auth_session_id: code.auth_session_id,
             local_profile: code.local_profile,
             exchange_grant,
+            application_grant: code.application_grant,
             claim_release_policy: code.claim_release_policy,
             nonce: code.nonce,
             openid_requested,

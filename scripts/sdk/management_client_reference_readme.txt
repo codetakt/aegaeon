@@ -17,6 +17,7 @@ Current alpha scope:
   - policy read / patch
   - key store and signing key management
   - user session controls
+  - audited application authorization projection updates
   - team / environment audit queries
 - bundled TypeScript declarations for management-plane UIs
 
@@ -29,3 +30,9 @@ Current non-goals:
 Use this package as the canonical control-plane transport for admin UIs and automation. Management
 UIs should depend on `@aegaeon/management-client`; OIDC client execution belongs in the runtime /
 RP packages.
+
+`updateApplicationAuthorization` requires the interactive management session, registered Origin,
+CSRF token, authority, source revision, base revision and audit reason. A 409
+`base_revision_mismatch` is returned to the caller without automatic retry. Revision numbers must
+be safe JavaScript integers; the client rejects values it cannot preserve exactly. This reference
+method does not establish a published SDK assurance claim.

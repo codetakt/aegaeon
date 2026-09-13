@@ -240,6 +240,22 @@ function requireInteger(value: unknown, fieldName: string): number {
   return value as number;
 }
 
+function requireSafeRevision(value: unknown, fieldName: string, minimum: number): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum) {
+    throw new TypeError(`${fieldName} must be a safe integer >= ${minimum}`);
+  }
+  return value as number;
+}
+
+function validateApplicationAuthorizationResponse(
+  value: unknown,
+): Readonly<import("../index.js").ApplicationAuthorizationResponse> {
+  const response = requirePlainObject(value, "applicationAuthorizationResponse");
+  return Object.freeze({
+    revision: requireSafeRevision(response.revision, "applicationAuthorizationResponse.revision", 1),
+  });
+}
+
 function requireArrayOfStrings(value: unknown, fieldName: string): string[] {
   if (!Array.isArray(value)) {
     throw new TypeError(`${fieldName} must be an array`);
@@ -969,7 +985,7 @@ function validatePolicyPatchResponse(value: unknown): Readonly<PolicyPatchRespon
 export const MANAGEMENT_OPENAPI_METADATA = Object.freeze({
   title: "Aegaeon Management API",
   version: "v1",
-  pathCount: 73,
+  pathCount: 74,
   sourceArtifact: "generated/openapi/aegaeon-management-api.v1.json",
 });
 
@@ -1663,6 +1679,13 @@ export const MANAGEMENT_OPERATIONS: Readonly<Record<string, ManagementOperation>
     path: "/teams/{teamId}/environments/{environmentId}/users/{userId}/profile",
     responseType: "json",
     validate: validateUserProfile,
+  }),
+  updateApplicationAuthorization: Object.freeze({
+    operationId: "update_application_authorization",
+    method: "POST",
+    path: "/teams/{teamId}/environments/{environmentId}/application-authorizations",
+    responseType: "json",
+    validate: validateApplicationAuthorizationResponse,
   }),
   listUserSessions: Object.freeze({
     operationId: "list_user_sessions",
@@ -3181,6 +3204,21 @@ export function createManagementClient({
       return requestOperation("updateUserProfile", {
         pathParams: { teamId, environmentId, userId },
         body: requirePlainObject(input, "updateUserProfile"),
+      });
+    },
+    updateApplicationAuthorization({
+      teamId = null,
+      environmentId,
+      ...input
+    }: MethodInput<"updateApplicationAuthorization">) {
+      const baseRevision = requireSafeRevision(input.baseRevision, "baseRevision", 0);
+      if (baseRevision === Number.MAX_SAFE_INTEGER) {
+        throw new TypeError("baseRevision + 1 must be a safe integer");
+      }
+      requireSafeRevision(input.sourceRevision, "sourceRevision", 1);
+      return requestOperation("updateApplicationAuthorization", {
+        pathParams: { teamId, environmentId },
+        body: requirePlainObject(input, "updateApplicationAuthorization"),
       });
     },
     listUserSessions({

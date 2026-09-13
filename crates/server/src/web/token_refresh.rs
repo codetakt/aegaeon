@@ -13,6 +13,7 @@ use super::{
 };
 
 struct ValidatedRefreshGrant {
+    _application_guard: Option<crate::application_authorization::store::PublicationGuard>,
     previous_refresh_token: String,
     refresh: RefreshToken,
 }
@@ -80,7 +81,15 @@ async fn load_refresh_token_for_client(
             Some(reason),
         ));
     }
+    let application_guard = super::application_authorization::require_current(
+        state,
+        refresh.application_grant.as_ref(),
+        &ctx.client_id,
+        &refresh.user_id,
+    )
+    .await?;
     Ok(ValidatedRefreshGrant {
+        _application_guard: application_guard,
         previous_refresh_token: refresh_token,
         refresh,
     })

@@ -1,6 +1,33 @@
 use super::*;
 
 #[test]
+fn custom_claim_release_never_promotes_reserved_profile_attributes() {
+    let name = crate::application_authorization::inorii::CLAIM_NAME;
+    let claims = HashMap::from([
+        (name.to_string(), json!({"roles":["SUPER_ADMIN"]})),
+        ("sub".to_string(), json!("other-subject")),
+        ("department".to_string(), json!("Identity")),
+    ]);
+    let policy = UpstreamClaimReleasePolicy {
+        managed_custom_claims: vec![name.to_string()],
+        id_token_custom_claims: vec![name.to_string()],
+        userinfo_custom_claims: vec![name.to_string()],
+    };
+    for policy in [None, Some(&policy)] {
+        for surface in [
+            DownstreamClaimSurface::IdToken,
+            DownstreamClaimSurface::Userinfo,
+        ] {
+            let released = filter_downstream_custom_claims(&claims, policy, surface);
+            assert_eq!(
+                released,
+                HashMap::from([("department".to_string(), json!("Identity"))])
+            );
+        }
+    }
+}
+
+#[test]
 fn parse_upstream_claim_release_policy_defaults_managed_custom_claims_to_blocked() {
     let federation = json!({
         "attributeMapping": [

@@ -80,6 +80,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
         .route("/introspect", post(super::introspect))
+        .route(
+            "/application/authorization",
+            get(super::application_authorization::authorization_context),
+        )
         .route("/revoke", post(super::revoke))
         .route(
             "/userinfo",

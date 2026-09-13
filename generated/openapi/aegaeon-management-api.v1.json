@@ -1917,6 +1917,103 @@
         }
       }
     },
+    "/api/v1/teams/{teamId}/environments/{environmentId}/application-authorizations": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "update_application_authorization",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Registered administrative Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationAuthorizationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Audited projection updated; response contains the new revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationAuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Interactive OWNER or ADMINISTRATOR and CSRF required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale revision, replay, or authority change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/teams/{teamId}/environments/{environmentId}/auditEvents": {
       "get": {
         "tags": [
@@ -9710,6 +9807,131 @@
           "read",
           "auditRead",
           "teamAdministration"
+        ]
+      },
+      "ApplicationAuthorizationClaims": {
+        "type": "object",
+        "required": [
+          "roles"
+        ],
+        "properties": {
+          "organization_roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationOrganizationGrant"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationGlobalRole"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationAuthorizationResponse": {
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "New revision. The terminal value 9223372036854775806 is used only by a\ndisabled projection and cannot be reset or reused for reauthorization.",
+            "maximum": 9223372036854775806,
+            "minimum": 1
+          }
+        }
+      },
+      "ApplicationAuthorizationUpdate": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "subject",
+          "baseRevision",
+          "authority",
+          "sourceRevision",
+          "audiences",
+          "claims",
+          "enabled",
+          "reason"
+        ],
+        "properties": {
+          "audiences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "authority": {
+            "type": "string"
+          },
+          "baseRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current revision, or zero for creation. With enabled=true, at most\n9223372036854775804; disabling permits 9223372036854775805.",
+            "maximum": 9223372036854775805,
+            "minimum": 0
+          },
+          "claims": {
+            "$ref": "#/components/schemas/ApplicationAuthorizationClaims"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Enabling must leave room in both counters for a later audited disable.\nExhausted disabled projections cannot be reactivated."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Strictly newer authority revision. With enabled=true, at most\n9223372036854775805; 9223372036854775806 is reserved for disabling.",
+            "maximum": 9223372036854775806,
+            "minimum": 1
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationGlobalRole": {
+        "type": "string",
+        "enum": [
+          "USER",
+          "SUPER_ADMIN"
+        ]
+      },
+      "ApplicationOrganizationGrant": {
+        "type": "object",
+        "required": [
+          "organization_id",
+          "roles"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApplicationOrganizationRole"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationOrganizationRole": {
+        "type": "string",
+        "enum": [
+          "ORGANIZATION_ADMIN",
+          "ORGANIZATION_STAFF"
         ]
       },
       "AuditActor": {

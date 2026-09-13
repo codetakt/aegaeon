@@ -331,6 +331,7 @@ impl TokenIssuer {
         let audience =
             self.access_token_audience(&refresh.client_id, access_scope, selected_resource);
         let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
+            application_grant: refresh.application_grant.as_ref(),
             subject: &refresh.user_id,
             client_id: &refresh.client_id,
             scope: access_scope,
@@ -388,6 +389,7 @@ impl TokenIssuer {
             .as_ref()
             .map(|grant| grant.attenuate(&meta.granted_scopes));
         meta.claim_release_policy = refresh.claim_release_policy.clone();
+        meta.application_grant = refresh.application_grant.clone();
 
         Ok(IssuedRefreshGrant {
             access_token,

@@ -1,3 +1,4 @@
+mod application_authorization;
 mod audit;
 mod list;
 mod mutation;
@@ -19,6 +20,10 @@ pub(super) use store::{
 
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/teams/:teamId/environments/:environmentId/application-authorizations",
+            post(application_authorization::update),
+        )
         .route(
             "/teams/:teamId/environments/:environmentId/users",
             get(list::list_users).post(mutation::create_user),

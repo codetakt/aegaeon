@@ -9,3 +9,8 @@ include!("policy_and_runtime/utility_primitives.rs");
 include!("policy_and_runtime/audit_filters_export.rs");
 include!("policy_and_runtime/client_policy_audit/cursor_time.rs");
 include!("policy_and_runtime/client_policy_audit/redaction_and_tokens.rs");
+include!("policy_and_runtime/application_revocation.rs");
+include!("policy_and_runtime/application_activation_lock.rs");
+include!("policy_and_runtime/application_dcr_lock.rs");
+include!("policy_and_runtime/application_identity_reuse.rs");
+include!("policy_and_runtime/application_revision_exhaustion.rs");

@@ -72,7 +72,8 @@ impl RedisTokenStoreBackend {
         if previous.rotated {
             return Ok(REFRESH_ROTATION_OUTCOME_REUSED.to_string());
         }
-        if previous.exchange_grant != new_refresh.exchange_grant
+        if previous.application_grant != new_refresh.application_grant
+            || previous.exchange_grant != new_refresh.exchange_grant
             || scope_set(previous.scope.as_deref()) != scope_set(new_refresh.scope.as_deref())
         {
             return Ok(REFRESH_ROTATION_OUTCOME_INCONSISTENT_GRANT.to_string());

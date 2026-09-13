@@ -86,10 +86,15 @@ pub(super) async fn userinfo_get(
     };
 
     match endpoint
-        .fetch_userinfo(&auth_header, binding.as_ref(), mtls.as_deref())
+        .fetch_userinfo_with_metadata(&auth_header, binding.as_ref(), mtls.as_deref())
         .await
     {
-        Ok(userinfo) => {
+        Ok((userinfo, meta)) => {
+            if let Err(response) =
+                super::application_authorization::check_resource(&state, &meta, &auth_header).await
+            {
+                return response;
+            }
             let mut response = (StatusCode::OK, Json(userinfo)).into_response();
             util::apply_no_cache_headers(&mut response);
             response
@@ -277,10 +282,15 @@ pub(super) async fn userinfo_post(
     };
 
     match endpoint
-        .fetch_userinfo(&auth_header, binding.as_ref(), mtls.as_deref())
+        .fetch_userinfo_with_metadata(&auth_header, binding.as_ref(), mtls.as_deref())
         .await
     {
-        Ok(userinfo) => {
+        Ok((userinfo, meta)) => {
+            if let Err(response) =
+                super::application_authorization::check_resource(&state, &meta, &auth_header).await
+            {
+                return response;
+            }
             let mut response = (StatusCode::OK, Json(userinfo)).into_response();
             util::apply_no_cache_headers(&mut response);
             response
