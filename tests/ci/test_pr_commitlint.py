@@ -1,4 +1,4 @@
-"""Exercise the PR workflow's commit range against real Git histories."""
+"""Exercise repository and generated PR workflows against real Git histories."""
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ sys.exit(1 if any(m.startswith('invalid ') for m in messages) else 0)
 
 class PullRequestCommitlintTests(unittest.TestCase):
     workflow = ROOT / ".github/workflows/lint.yml"
+    nix_shell = ".#ci"
 
     def git(self, directory: Path, *args: str) -> str:
         return subprocess.check_output(  # noqa: S603 - fixed tool and fixture argv, no shell
@@ -111,7 +112,7 @@ class PullRequestCommitlintTests(unittest.TestCase):
         nix = self.bin / "nix"
         nix.write_text(
             '#!/bin/sh\nset -eu\n[ "$1" = develop ]\n'
-            '[ "$2" = .#ci ]\n[ "$3" = --command ]\nshift 3\nexec "$@"\n'
+            f'[ "$2" = {self.nix_shell} ]\n[ "$3" = --command ]\nshift 3\nexec "$@"\n'
         )
         nix.chmod(0o755)
         self.linter = self.bin / "commitlint"
@@ -187,6 +188,48 @@ class PullRequestCommitlintTests(unittest.TestCase):
 
 class CorePullRequestCommitlintTests(PullRequestCommitlintTests):
     workflow = ROOT / ".github/workflows/ci.yml"
+
+
+class ScaffoldPullRequestCommitlintTests(PullRequestCommitlintTests):
+    nix_shell = "."
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        fixture = Path(cls.enterClassContext(tempfile.TemporaryDirectory()))
+        generated = fixture / "sdk"
+        dist = fixture / "dist"
+        dist.mkdir()
+        # The scaffold copies these files; this suite only executes its workflow.
+        # Placeholder artifact bytes provide no SDK or verification evidence.
+        for name in [
+            "manifest.json",
+            "verified_core.wasm",
+            "verified_core.abi.json",
+            "verified_core.wasm.sha256",
+            "verified_core.wasm.sha512",
+            "verified_core.wasm.sri",
+            "verified-core-sbom.json",
+            "types.d.ts",
+            "integrity.txt",
+        ]:
+            (dist / name).write_text("{}\n")
+        result = subprocess.run(  # noqa: S603 - repository generator and fixture paths
+            [  # noqa: S607 - Node from the pinned shell
+                "node",
+                "--experimental-strip-types",
+                str(ROOT / "scripts/sdk/scaffold_sdk_repo_workspace.ts"),
+                "--dist-dir",
+                str(dist),
+                "--out-dir",
+                str(generated),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        cls.workflow = generated / ".github/workflows/lint.yml"
 
 
 if __name__ == "__main__":
