@@ -308,7 +308,7 @@
       "critical": false
     },
     "crates/server/src/web/authorize_context.rs": {
-      "sha256": "36029e1ceeac8464c2af0505ab7367fe5a1a8de8fbebf4b6648c63ab3354f706",
+      "sha256": "458180512cd4fd9d8db6b0a190fcd165a7c26b208aa31197f40115b97e37f844",
       "entries": [
         "v21-030"
       ],
@@ -330,7 +330,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "e4084560b22d0754a79d4162d994c94f7eafab2e96cdffdbb18eed3b2b4d6192",
+      "sha256": "f952dc738348357ecb23cde3b8a2d9fabb485fa5f491cb16334c0cc8dd962a13",
       "entries": [
         "6749-014",
         "7521-201",

@@ -1,9 +1,18 @@
 use super::*;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde_json::json;
+mod prompt_validation;
 mod substitution;
 
 pub(super) fn signed_request(state: &AppState, mode: &str) -> TestResult<String> {
+    signed_request_with_prompt(state, mode, None)
+}
+
+fn signed_request_with_prompt(
+    state: &AppState,
+    mode: &str,
+    prompt: Option<&str>,
+) -> TestResult<String> {
     let now = crate::util::now_unix_epoch_secs()?;
     let mut claims = json!({
         "iss": CLIENT, "aud": state.issuer.as_str(), "client_id": CLIENT,
@@ -42,6 +51,9 @@ pub(super) fn signed_request(state: &AppState, mode: &str) -> TestResult<String>
         // Negative upgrade fixture: the former adapter conflated these values.
         claims["iss"] = json!(state.issuer.as_str());
         claims["aud"] = json!(format!("{}/authorize", state.issuer));
+    }
+    if let Some(prompt) = prompt {
+        claims["prompt"] = json!(prompt);
     }
     let mut header = Header::new(Algorithm::RS256);
     header.typ = Some("oauth-authz-req+jwt".to_string());

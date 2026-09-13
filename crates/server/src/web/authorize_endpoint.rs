@@ -71,9 +71,6 @@ pub(super) async fn authorize(
             return response;
         }
     };
-    if let Err(response) = consent::validate_prompt(&state, &ctx) {
-        return response;
-    }
     ctx.reauthenticated =
         match super::authorize_reauthentication::resume(&state, &headers, &uri, &ctx).await {
             Ok(value) => value,
@@ -88,8 +85,7 @@ pub(super) async fn authorize(
     };
     let mut resolved_session = None;
     let active_auth_required = !ctx.reauthenticated
-        && (ctx.prompt.split_whitespace().any(|p| p == "login")
-            || authorize_requested_max_age(&ctx.req) == Some(0));
+        && (ctx.prompt.contains("login") || authorize_requested_max_age(&ctx.req) == Some(0));
     if decision.stepup_required && decision.current_session.is_some() && !active_auth_required {
         let session = match resolve_authorize_session_state(&decision, issuer_base).await {
             Ok(session) => session,

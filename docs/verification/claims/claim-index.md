@@ -26,7 +26,7 @@ for quality/strength definitions.
 
 | Metric | Count |
 |--------|-------|
-| Total entries (all statuses) | 313 |
+| Total entries (all statuses) | 314 |
 | Verified entries | 166 |
 | Proof blocks (on verified entries) | 295 |
 

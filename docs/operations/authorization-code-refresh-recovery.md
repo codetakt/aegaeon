@@ -18,6 +18,18 @@ remaining granted scopes, and does not issue an offline refresh token. A login
 session alone is not consent. `prompt=none` combined with another prompt value
 returns `invalid_request`.
 
+Prompt values follow OIDC Core section 3.1.2.1: case-sensitive values separated
+by ASCII spaces. The supported actions are `none`, `login` and `consent`.
+Account selection is not implemented: `select_account`, alone or combined with
+other actions, returns `invalid_request` (RFC 6749 sections 4.1.2.1 and 5.2).
+It cannot silently reuse an existing session without
+the requested choice; OIDC Core section 3.1.2.1 requires an error when that
+choice cannot be obtained. Repeated spaces are accepted; tabs, line breaks, non-ASCII
+characters and unsupported values return `invalid_request`. An omitted or empty
+value requests no prompt action. The same parser checks plain requests, PAR and
+signed Request Objects before authentication or consent decisions. A client that
+previously sent another whitespace separator must send ASCII spaces instead.
+
 With PAR (RFC 9126), send `prompt` in the pushed request. The stored value is
 used when authorization starts and when the consent form resumes it. A later
 outer `prompt` query is rejected; it cannot replace a missing pushed value.

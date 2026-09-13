@@ -39,6 +39,7 @@ mod oauth_errors;
 mod openid_federation;
 mod par_endpoint;
 mod profile_policy;
+mod prompt;
 mod request_admission;
 mod request_id;
 mod resource_endpoint;

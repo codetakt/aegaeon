@@ -7,11 +7,12 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::super::authorize_request::{
-    prompt_has_conflict, request_object_extra_string,
-    request_object_resolution_error_json_response, resolve_authorize_request_object_blocking,
-    OwnedRequestObjectAuthorizeDeps, RequestObjectReplayPolicy, ResolvedAuthorizeRequestObject,
+    request_object_extra_string, request_object_resolution_error_json_response,
+    resolve_authorize_request_object_blocking, OwnedRequestObjectAuthorizeDeps,
+    RequestObjectReplayPolicy, ResolvedAuthorizeRequestObject,
 };
 use super::super::oauth_errors::no_cache_json_error_with_iss;
+use super::super::prompt::Prompt;
 use super::super::AppState;
 use super::form::ParForm;
 use crate::util;
@@ -56,11 +57,11 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
     draft: ParResolvedDraft,
     issuer_base: &str,
 ) -> Result<ParResolvedParameters, Response> {
-    if prompt_has_conflict(draft.prompt.as_deref().unwrap_or("")) {
+    if let Err(description) = Prompt::parse(draft.prompt.clone().unwrap_or_default()) {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            Some("prompt=none cannot be combined with other prompt values"),
+            Some(description),
             issuer_base,
         ));
     }
