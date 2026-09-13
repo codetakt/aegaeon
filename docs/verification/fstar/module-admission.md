@@ -70,6 +70,19 @@ A pass is accepted only when all of the following hold:
   no two passes share an input or output digest (a relabelled copy of another
   pass's records is not that pass's evidence).
 
+For an explicit `--smt` argument, admission and standalone replay require supported
+solver start records and a matching retained pin, reported version, process count,
+and exact `[-smt2, -in]` arguments. The recorder retains each start's raw name and
+resolved path/hash, allowing replay to check aliases without the executable files.
+Older aggregate-only records can be replayed when every start uses the same name;
+records with multiple names require per-start identities. Historical invocations
+without `--smt` keep their existing admission scope: an ambient solver field does
+not establish an explicit pin. These checks do not establish solver soundness.
+
+Standalone replay also compares both input and output digests in `admission.json`
+with the validated invocation result and the per-module record. Missing or changed
+summary digests reject replay even when the other records remain consistent.
+
 Request identity: each requested `.fst` (implementation) or `.fsti` (interface)
 is re-read from the source tree, its SHA-256 must equal the invocation record,
 and its declared module name is taken from the first declaration after
@@ -92,14 +105,19 @@ only when they bind to the one source F* could have used: the single
 interface line) across the directories the verifier searches: the working
 directory and the `--include` directories — never a source's own directory, a
 subdirectory or the recorded local context by file name. The candidate must
-declare `<name>`; when it lies in the working directory it must appear in the
-recorded local context with the same digest. Several candidates are ambiguous
-(the verifier's precedence rules are not emulated), and any of these failures
-leaves the result `unclassified` and rejects the pass. The resolved path (in
-the invocation's recorded working-directory form) and digest are recorded;
-replay uses that record, so records can be re-checked where the provider tree
-does not exist, but replay still rejects a recorded source that is not of the
-result's kind or that lies outside the searched directories. An unrequested
+declare `<name>` and match the path and digest captured before invocation.
+The recorder retains `dependency_context` for direct `.fst`/`.fsti` children of
+the working and include directories, including immutable providers. It preserves
+the searched spelling of symlinks and `..` paths. Several candidates or conflicting
+digests are ambiguous; identical repeated identities are deduplicated. Failure
+leaves the result `unclassified` and rejects the pass.
+
+Replay derives the identity from the retained input snapshot and compares the
+complete requested and dependency records, including result lines. It does not
+read the original sources or executables. Historical records can use their
+`local_context` only when it supplies the unique searched identity; records
+without that evidence must be recorded again. Rebinding summary hashes does not
+permit a different source, digest, result line or classification. An unrequested
 result never satisfies a requested target. The same module selected in
 different passes (for example LowStar dependencies) is expected; duplicates
 are counted within one pass only.
@@ -156,3 +174,8 @@ reported error in one fresh invocation each and that the output belongs to
 that invocation. It does not audit the effective assumption graph, lemma
 coverage within a module, model adequacy or implementation correspondence, and
 it does not activate any assurance statement.
+
+The executed command must equal the recorded verifier path followed by the
+recorded arguments. An explicit `--smt` operand must be the canonical pinned
+path or an alias bound to that pin by a retained observed process start. Replay
+never resolves an alias against the current host filesystem.

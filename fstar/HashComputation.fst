@@ -39,11 +39,14 @@ let truncated_size alg =
 
 (* Compute hash using HACL* via Verified.Crypto.Bridge.
   Real cryptographic computation — NOT identity.
-  Marked `irreducible` so Z3 cannot observe the HACL* internals.
+  Marked `opaque_to_smt`: Z3 sees only the signature unless a lemma in this
+  module reveals the small dispatch body; the HACL* computation itself stays
+  behind the irreducible Bridge wrappers.
   Dispatches to SHA-256/384/512 based on algorithm.
-  Overlength fallback returns zero bytes of correct length (NOT identity). *)
-irreducible
+  Overlength fallback returns zero bytes of correct length (NOT identity);
+  lemma_compute_hash_in_range proves the fallback unreachable for bytes. *)
 val compute_hash: alg:hash_alg -> input:bytes -> Tot bytes
+[@@"opaque_to_smt"]
 let compute_hash alg input =
   let len = Bytes.length input in
   match alg with
@@ -98,15 +101,119 @@ val lemma_truncation_prefix: full:bytes -> size:nat{size <= Bytes.length full} -
     Bytes.length truncated = size))
 let lemma_truncation_prefix full size = ()
 
-(** Collision resistance of the spec-level hash model (honest crypto assumption).
-    SHA-256 collision resistance is a computational hardness assumption — NOT
-    provable from first principles. The previous proof was tautological
-    (reveal_opaque on identity model). *)
-assume val assumption_collision_resistance:
-  alg:hash_alg -> input1:bytes -> input2:bytes ->
-  Lemma (requires input1 =!= input2)
-        (ensures compute_hash alg input1 =!= compute_hash alg input2)
-  [SMTPat (compute_hash alg input1); SMTPat (compute_hash alg input2)]
+(* Input domain and unfolding facts *)
+
+(* The SHA-2 input limit for each algorithm, as exposed by the Bridge. *)
+val hash_max_input: hash_alg -> pos
+let hash_max_input alg =
+  match alg with
+  | SHA256 -> sha256_max_input
+  | SHA384 -> sha384_max_input
+  | SHA512 -> sha512_max_input
+
+(* The over-length event of compute_hash (the zero-digest fallback branch).
+  Named for the register; proved unreachable below, so it is a runtime
+  input-domain boundary only. *)
+let hash_overlength (alg:hash_alg) (input:bytes) : Type0 =
+  Bytes.length input >= hash_max_input alg
+
+(* Every FStar.Bytes input is below the SHA-2 limits: the zero-byte fallback
+  of compute_hash is unreachable in this model. *)
+val lemma_compute_hash_in_range: alg:hash_alg -> input:bytes ->
+  Lemma (ensures Bytes.length input < hash_max_input alg)
+let lemma_compute_hash_in_range alg input = lemma_sha2_limits_exceed_bytes ()
+
+val lemma_hash_overlength_unreachable: alg:hash_alg -> input:bytes ->
+  Lemma (ensures ~(hash_overlength alg input))
+let lemma_hash_overlength_unreachable alg input = lemma_compute_hash_in_range alg input
+
+val lemma_compute_hash_sha256_unfold: input:bytes ->
+  Lemma (ensures Bytes.length input < sha256_max_input /\
+                 compute_hash SHA256 input == sha256_hash input)
+let lemma_compute_hash_sha256_unfold input =
+  lemma_compute_hash_in_range SHA256 input;
+  reveal_opaque (`%compute_hash) compute_hash
+
+val lemma_compute_hash_sha384_unfold: input:bytes ->
+  Lemma (ensures Bytes.length input < sha384_max_input /\
+                 compute_hash SHA384 input == sha384_hash input)
+let lemma_compute_hash_sha384_unfold input =
+  lemma_compute_hash_in_range SHA384 input;
+  reveal_opaque (`%compute_hash) compute_hash
+
+val lemma_compute_hash_sha512_unfold: input:bytes ->
+  Lemma (ensures Bytes.length input < sha512_max_input /\
+                 compute_hash SHA512 input == sha512_hash input)
+let lemma_compute_hash_sha512_unfold input =
+  lemma_compute_hash_in_range SHA512 input;
+  reveal_opaque (`%compute_hash) compute_hash
+
+(* The digest length is the algorithm's output size. *)
+val lemma_compute_hash_length: alg:hash_alg -> input:bytes ->
+  Lemma (ensures Bytes.length (compute_hash alg input) = hash_output_size alg)
+let lemma_compute_hash_length alg input =
+  match alg with
+  | SHA256 -> lemma_compute_hash_sha256_unfold input
+  | SHA384 -> lemma_compute_hash_sha384_unfold input
+  | SHA512 -> lemma_compute_hash_sha512_unfold input
+
+(* Bad events (definitions, no axioms) *)
+
+(** Collision event on the dispatching hash model: two distinct inputs with
+    the same full digest.  Replaces the former SMTPat axiom
+    assumption_collision_resistance, which asserted universal injectivity of
+    a finite-output function.  The computational premise that this event is
+    infeasible is recorded outside F* (register entries A-SHA256-CR and the
+    A-SHA384-CR / A-SHA512-CR for their respective algorithm instances); nothing in F* asserts it. *)
+let hash_collision (alg:hash_alg) (input1 input2:bytes) : Type0 =
+  input1 =!= input2 /\ compute_hash alg input1 = compute_hash alg input2
+
+val lemma_compute_hash_eq_cases: alg:hash_alg -> input1:bytes -> input2:bytes ->
+  Lemma (ensures compute_hash alg input1 = compute_hash alg input2 ==>
+                 input1 = input2 \/ hash_collision alg input1 input2)
+let lemma_compute_hash_eq_cases alg input1 input2 = ()
+
+(** A collision of the dispatching model is a collision of the underlying
+    Bridge primitive (the fallback branch is unreachable). *)
+val lemma_hash_collision_refines: alg:hash_alg -> input1:bytes -> input2:bytes ->
+  Lemma (requires hash_collision alg input1 input2)
+        (ensures (match alg with
+                  | SHA256 -> sha256_collision input1 input2
+                  | SHA384 -> sha384_collision input1 input2
+                  | SHA512 -> sha512_collision input1 input2))
+let lemma_hash_collision_refines alg input1 input2 =
+  match alg with
+  | SHA256 -> lemma_compute_hash_sha256_unfold input1; lemma_compute_hash_sha256_unfold input2
+  | SHA384 -> lemma_compute_hash_sha384_unfold input1; lemma_compute_hash_sha384_unfold input2
+  | SHA512 -> lemma_compute_hash_sha512_unfold input1; lemma_compute_hash_sha512_unfold input2
+
+(** Truncation event: the full digests differ but their leftmost halves
+    (the OIDC at_hash / c_hash form) coincide.  The truncated value carries
+    only half the digest length, so this event is separate from
+    hash_collision and must not inherit the full-length premise
+    (register entry A-SHA256-TRUNC128-CR). *)
+let truncation_collision (alg:hash_alg) (input1 input2:bytes) : Type0 =
+  compute_hash alg input1 =!= compute_hash alg input2 /\
+  truncated_size alg <= Bytes.length (compute_hash alg input1) /\
+  truncated_size alg <= Bytes.length (compute_hash alg input2) /\
+  truncate_hash (compute_hash alg input1) (truncated_size alg) =
+    truncate_hash (compute_hash alg input2) (truncated_size alg)
+
+(** Collision event on the OIDC hash value (Some result, distinct inputs). *)
+let oidc_hash_collision (alg:string) (input1 input2:bytes) : Type0 =
+  input1 =!= input2 /\
+  Some? (compute_oidc_hash alg input1) /\
+  compute_oidc_hash alg input1 = compute_oidc_hash alg input2
+
+(** Every OIDC hash collision is a full-digest collision or a truncation
+    collision of the selected algorithm. *)
+val lemma_oidc_hash_collision_cases: alg:string -> input1:bytes -> input2:bytes ->
+  Lemma (requires oidc_hash_collision alg input1 input2)
+        (ensures (match alg_to_hash alg with
+                  | None -> False
+                  | Some halg -> hash_collision halg input1 input2 \/
+                                 truncation_collision halg input1 input2))
+let lemma_oidc_hash_collision_cases alg input1 input2 = ()
 
 (* Lemma: Successful verification implies correct hash *)
 val lemma_verification_correctness: alg:string -> input:bytes -> hash:bytes ->

@@ -8,12 +8,21 @@ open Verified.Crypto.Bridge
     Delegates to HACL* SHA-256 via Verified.Crypto.Bridge.sha256_of_string.
     The actual computation is string → bytes → SHA-256 → base64url string.
 
-    Marked `irreducible` so that downstream proofs cannot observe the
+    Marked `opaque_to_smt` so that downstream proofs cannot observe the
     SHA-256 internals.  This preserves the abstraction that s256 is
     an opaque one-way function: proofs may only use reflexivity
-    (`s256 v == s256 v`) and the structural properties of verify_pkce. *)
+    (`s256 v == s256 v`) and the structural properties of verify_pkce;
+    the collision lemma below reveals only that s256 is sha256_of_string. *)
 val s256: string -> string
-irreducible let s256 s = sha256_of_string s
+[@@"opaque_to_smt"] let s256 s = sha256_of_string s
+
+(** Collision event on the S256 transform (definition, no axiom). *)
+let s256_collision (v v':string) : Type0 = v =!= v' /\ s256 v = s256 v'
+
+let lemma_s256_collision_witness (v v':string)
+  : Lemma (requires s256_collision v v')
+          (ensures sha256_of_string_collision v v')
+  = reveal_opaque (`%s256) s256
 
 // Domain predicate for verifier (RFC 7636): length and charset constraints
 // NOTE: This is a placeholder; in practice, use EverParse for strict checks.
@@ -36,6 +45,13 @@ let verify_pkce_s256 v c = verify_pkce "S256" v c
 let lemma_pkce_s256_binding (method:string) (verifier:string) (challenge:string) : Lemma
   (requires (verify_pkce method verifier challenge))
   (ensures (method = "S256" /\ challenge = s256 verifier)) = ()
+
+// Lemma: a challenge that verifies against one verifier and equals the S256
+// transform of another verifier identifies the verifiers, or witnesses an
+// explicit S256 collision.  No injectivity of SHA-256 is assumed.
+let lemma_pkce_s256_binding_cases (method:string) (verifier:string) (challenge:string) (verifier':string) : Lemma
+  (requires (verify_pkce method verifier challenge /\ challenge = s256 verifier'))
+  (ensures (verifier = verifier' \/ s256_collision verifier verifier')) = ()
 
 // Lemma: plain method is rejected under this verifier
 let lemma_pkce_plain_rejected (verifier:string) (challenge:string) : Lemma

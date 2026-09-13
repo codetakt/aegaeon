@@ -253,7 +253,7 @@ matrix and liveness classification.
 | Document | What it covers |
 |----------|---------------|
 | [claim-definition.md &sect;0.2](../claims/assurance-case/claim-definition.md#02-claim-scope) | VerifiedReqs formal definition and claim statement |
-| [current-register.md](../claims/assumptions/current-register.md) | Assumption Register (12 assume vals across 8 files: 6 crypto, 2 HACL* linkage, 1 EverParse linkage, 2 OIDC hash runtime linkage, 1 WASM host) |
+| [current-register.md](../claims/assumptions/current-register.md) | Assumption Register (6 tracked linkage assume vals across 4 files: 2 HACL* linkage, 1 EverParse linkage, 2 OIDC hash runtime linkage, 1 WASM host; crypto hardness is stated as named bad events with external register premises; the builder-injected C.Loops premises and lax-loaded provider sources are indexed by the assumption graph) |
 | `scripts/validation/verify_verified_reqs.py` | CI validation script for VerifiedReqs invariant |
 | `spec/compliance-matrix.yaml` | Source of truth for all requirement entries |
 | `spec/compliance-matrix.schema.json` | YAML schema for matrix entries |

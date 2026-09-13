@@ -418,7 +418,7 @@ rfc_7636:
   proof:
   - type: fstar
     file: fstar/pkce/Pkce.fst
-    lemma: lemma_pkce_s256_binding
+    lemma: lemma_pkce_s256_binding, lemma_pkce_s256_binding_cases
   - type: hacl
     file: fstar/crypto/Verified.Crypto.Bridge.fst
     primitive: sha256_hash
@@ -515,7 +515,7 @@ rfc_7636:
   - type: fstar
     file: fstar/pkce/Pkce.fst
     computation: verify_pkce_s256
-    lemma: lemma_pkce_s256_binding
+    lemma: lemma_pkce_s256_binding, lemma_pkce_s256_binding_cases
   - type: tamarin
     file: proofs/tamarin/pkce/pkce_security.spthy
     lemma: mismatched_verifiers_cannot_inject_codes
@@ -803,6 +803,9 @@ rfc_7515:
     fstar: fstar/jose/Jose.Jws_header.fst#jws_header
     rust: crates/jose/src/jws.rs#header_from_pairs
     test: crates/jose/tests/rfc7520_vectors.rs
+  notes:
+  - "The formal reference establishes the required field in a decoded header record. It does not prove protected-byte JSON decoding or header/key algorithm binding; FStar.Json is a stub and the wire-level model obligation remains open."
+
 - id: 7515-002
   section: '4.1.1'
   requirement: MUST NOT
@@ -840,6 +843,9 @@ rfc_7515:
   ci_check: jws-compact-format
   status: partial
   runtime_link: crates/jose/src/jws.rs
+  notes:
+  - "Full protected-byte decoding and algorithm binding remain open model obligations; compact segment splitting is insufficient to establish them."
+
 - id: 7515-004
   section: '5.2'
   requirement: MUST
@@ -856,6 +862,7 @@ rfc_7515:
   status: partial
   runtime_link: crates/jose/src/jws.rs
   notes:
+  - "Jose.Jws.Verify models cryptographic signing-input acceptance using key.alg without validating the protected JSON algorithm. This primitive is not a complete wire-level JWS verifier; its missing decoder/binding remains open."
   - RFC 7520 vectors validate the canonical signing input; TLV and JSON paths share the same implementation.
 - id: 7515-005
   section: '4.1'
@@ -3398,6 +3405,7 @@ rfc_8725:
   applies_to:
   - as
   notes:
+  - "The F* header reference covers the allow-list guard on an already decoded JSON value. Protected-byte decoding and complete header/key binding are outside this guard-level claim."
   - "Aegaeon enforces the promoted RSA verification allow-list for private_key_jwt via policy.clientJwtAllowedAlgs (default RS256, optional verified-backend PS256)."
 
 - id: 8725-102
@@ -3423,6 +3431,7 @@ rfc_8725:
   applies_to:
   - as
   notes:
+  - "The F* header reference covers the algorithm policy on an already decoded JSON value; it does not establish protected-byte decoding."
   - "Aegaeon rejects alg=none for client assertions."
 
 - id: 8725-103
@@ -4314,7 +4323,8 @@ rfc_9901:
     count: 24
   - type: fstar
     file: fstar/jose/Jose.SdJwt.fst
-    lemma: lemma_completeness, lemma_non_forgeability, lemma_soundness_subset, lemma_no_duplicate, lemma_reconstruction_subset
+    lemma: lemma_completeness, lemma_non_forgeability, lemma_soundness_subset, lemma_no_duplicate, lemma_reconstruction_subset,
+      lemma_non_forgeability_or_collision, lemma_reconstruction_subset_or_collision
   - type: tamarin
     file: proofs/tamarin/sd_jwt/sd_jwt_selective_disclosure.spthy
     lemma: disclosure_non_forgeability, selective_privacy, binding_integrity, no_disclosure_without_key, salt_uniqueness, no_disclosure_without_salt
@@ -4335,6 +4345,7 @@ rfc_9901:
   - "Min 128-bit salt, max 256 disclosures, SHA-256 digest algorithm."
   - "F* specification (Jose.SdJwt.fst) completed: disclosure integrity, digest uniqueness, format serialization."
   - "Tamarin model (6 lemmas): disclosure non-forgeability, selective privacy, binding integrity, key/salt requirements."
+  - "Hash premise (2026-09-11): the SD-JWT F* theorems no longer rest on an SHA-256 injectivity axiom. lemma_non_forgeability and lemma_reconstruction_subset are conditional on the finite premise that no presented encoded disclosure collides (disclosure_digest_collision) with an issued one; the *_or_collision theorems are unconditional and exhibit the collision witness otherwise. The witness has two alternatives: string_encoding_collision, or a SHA-256 collision on distinct byte images. Excluding a primitive collision alone does not discharge the composed premise. Both register entry A-SHA256-CR and the separate string_encoding_collision boundary remain specified-not-attested."
 
 draft_oauth_v2_1:
 - id: v21-001
@@ -6035,6 +6046,7 @@ rfc_7515_7516_jose_headers:
   status: verified
   runtime_link: crates/jose/src/json_lowstar.rs
   notes:
+  - "The F* lemma establishes kid policy after JSON decoding. The model byte decoder is a stub; byte-to-AST correspondence remains open."
   - Kid bounds enforced in F* (valid_kid_string) and runtime (JwsHeader::validate)
   - Inline tests kid_validation_rejects_empty / kid_validation_rejects_too_long_or_non_ascii in crates/jose/src/jws.rs cover rejection cases for emptiness, ASCII violations, and length bounds.
 - id: 7516-ENC-ALLOWLIST
@@ -6087,6 +6099,7 @@ rfc_7515_7516_jose_headers:
     rust: crates/jose/src/jws.rs#header_from_pairs
     test: crates/jose/src/jws.rs
   notes:
+  - "The JWS AST parser rejects crit on already decoded JSON; the cited lemma exposes algorithm and kid postconditions. It does not establish protected-byte decoding or complete wire-level JWS verification."
   - crit rejected in both JOSE header parsers; see roadmap specification refresh section
   - Inline unit tests jwe_header_rejects_crit and verify_compact_rejects_crit_header confirm crit is rejected on both TLV and JSON paths.
 

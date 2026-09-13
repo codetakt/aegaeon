@@ -4,7 +4,7 @@ modules:
   fstar/EverCrypt.Chacha20Poly1305.fst: faithful
   fstar/EverCrypt.HMAC.fst: faithful
   fstar/FStar.Base64.fst: faithful
-  fstar/FStar.Json.fst: faithful
+  fstar/FStar.Json.fst: toy-stub
   fstar/HACL_Wrapper.fst: toy-stub
   fstar/HashComputation.Low.fst: faithful
   fstar/HashComputation.Model.fst: faithful
@@ -22,7 +22,9 @@ modules:
   fstar/crypto/Crypto.fst: simplified
   fstar/crypto/Drbg.HmacSha256.fst: faithful
   fstar/crypto/Random.fst: faithful
+  # Honest key-generation history is an external model input, not an attestation.
   fstar/crypto/Verified.Crypto.Bridge.fst: faithful
+  fstar/crypto/Verified.Crypto.Hmac.KeyEquiv.fst: faithful
   fstar/dcr/DcrManagement.fst: faithful
   fstar/device_authz/DeviceAuthz.fst: faithful
   fstar/dpop/Dpop.Ath_validation.fst: faithful
@@ -79,10 +81,11 @@ modules:
   fstar/jose/Jose.Jwk_metadata.fst: faithful
   fstar/jose/Jose.Jwk_structure.fst: faithful
   fstar/jose/Jose.Jwk_thumbprint_uri.fst: faithful
+  # Forgery events require key-generation provenance; wire/header binding remains open.
   fstar/jose/Jose.Jws.Verify.fst: simplified
-  fstar/jose/Jose.Jws_header.fst: faithful
+  fstar/jose/Jose.Jws_header.fst: simplified
   fstar/jose/Jose.Jws_serialization.fst: faithful
-  fstar/jose/Jose.Jws_signature.fst: faithful
+  fstar/jose/Jose.Jws_signature.fst: simplified
   fstar/jose/Jose.Jwt_claims.fst: faithful
   fstar/jose/Jose.Jwt_validation.fst: faithful
   fstar/jose/Jose.ListMapLemmas.fst: faithful

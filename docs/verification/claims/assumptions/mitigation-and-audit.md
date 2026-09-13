@@ -1,6 +1,6 @@
 # F* Assumption Mitigation And Audit Checklist
 
-Last updated: 2026-07-08
+Last updated: 2026-09-11
 
 Status: current implementation baseline
 
@@ -14,28 +14,49 @@ This document is part of the split F* assumption register.
 
 For each category of assume val, the following mitigations are in place:
 
-### Crypto Boundaries (A) — 6 Honest Assumptions
+### Crypto Boundaries (A) — 0 Assume Vals, Named Events
 
 Phase A (2026-03-05) replaced all `irreducible` identity/false/constant crypto
-models with genuine HACL\* spec-level implementations. Phase A completion
-eliminated the last Category A crypto function assume val (`hmac_sha256` in
-DRBG) by delegating to the HACL\* Bridge. The 6 remaining Category A assume
-vals are **honest computational hardness assumptions** — they cannot be proved
-from first principles but are standard assumptions in cryptography:
+models with genuine HACL\* spec-level implementations. The six "honest
+computational hardness" lemma `assume val`s that Phase A introduced were
+removed on 2026-09-11 because their content was false (universal injectivity
+of SHA-256; verification failure under every distinct raw HMAC key) or empty
+(`ensures True` for Ed25519). Inside F\* the boundary is now expressed as
+definitions of bad events with proved case-split lemmas:
 
-- **SHA-256 collision resistance** (#2, #3, #5, #6): distinct inputs produce
-  distinct digests. 20+ years of cryptanalysis, no full-round collision.
-  NIST SP 800-107, FIPS 180-4.
-- **EUF-CMA unforgeability** (#1, #4): valid signature implies signer held key.
-  Standard for HMAC-SHA2 and Ed25519. PRF assumption for HMAC, hardness of ECDLP for Ed25519.
+- **SHA-256 collision events** (`sha256_collision`, `hash_collision`,
+  `disclosure_digest_collision`, `s256_collision`): distinct inputs with the
+  same digest. The dependent SD-JWT and PKCE theorems are conditional on the
+  absence of the event for the concrete issuance, or exhibit a witness
+  (`lemma_reconstruction_subset_or_collision`,
+  `lemma_non_forgeability_or_collision`, `lemma_pkce_s256_binding_cases`).
+- **Boundary events kept separate from hashing**: `string_encoding_collision`
+  (abstract `bytes_of_string`), `truncation_collision` (OIDC leftmost-half
+  digests carry half the length), over-length fallbacks proved unreachable for
+  `FStar.Bytes` (`lemma_sha2_limits_exceed_bytes`).
+- **Forgery events** (`ed25519_forgery`, `jws_mac_forgery`,
+  `jws_eddsa_forgery`) over an honest signing/MAC history and a
+  compromised-key set; re-presentation of honestly issued material is not a
+  forgery. HMAC unforgeability is stated over key equivalence classes
+  (`mac_key_equiv`), because `Verified.Crypto.Hmac.KeyEquiv` proves that a key
+  and its zero-padded form are distinct yet equivalent.
 
-**Defense-in-depth:**
-- **Tamarin models** independently verify the same security properties at the
-  protocol level (248 lemmas, Dolev-Yao model).
-- **Runtime libraries**: FIPS-validated (aws-lc-rs) or extensively audited (ring).
-- **HACL\* spec implementations**: the F\* crypto models now use the same spec
-  functions verified by the HACL\* project (Spec.Agile.Hash, Spec.Agile.HMAC,
-  Spec.Ed25519).
+The computational premises that these events are infeasible are register
+entries in `spec/assumption-register.json` (`A-SHA256-CR`,
+`A-SHA256-TRUNC128-CR`, `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA`), each
+naming the primitive, the standard, the generic bound as text and the F\*
+event it covers. Their status is `specified-not-attested`: no numeric security
+evaluation is produced and no guarantee is activated by them.
+
+**Defense-in-depth (unchanged in kind, not a substitute):**
+- **Tamarin models** verify protocol properties in the symbolic Dolev-Yao model
+  (their builtins/equations/restrictions are indexed as premises by the
+  assumption graph).
+- **HACL\* spec implementations**: the F\* crypto models use the same spec
+  functions verified by the HACL\* project. Note that the pinned HACL\* package
+  ships no `.checked` files, so these modules are lax-loaded from source in
+  every pass; their internal lemmas are provider-verified, not re-verified
+  here (register entry `provider-lax-source:hacl`).
 
 ### FFI Stubs (B)
 
@@ -113,14 +134,23 @@ Category E = 0.
 For a security auditor reviewing this register:
 
 1. **Verify the count:** Run `grep -rn '^\s*assume val' fstar/ --include='*.fst' --include='*.fsti'`
-   and confirm exactly **12** results across **8 files** (6 crypto A,
-   2 HACL\* B', 1 EverParse B'', 2 OIDC hash B''', 1 host C).
-2. **Review crypto assumptions (A):** Verify the 6 Category A assume vals
-   (#1-#6) model standard computational hardness properties (collision
-   resistance, EUF-CMA unforgeability). Confirm they use honest HACL\* spec
-   implementations, not identity/false/constant models.
-3. **Cross-reference Tamarin:** Tamarin independently verifies the same
-   security properties at the protocol level (248 lemmas, Dolev-Yao model).
+   and confirm exactly **6** results across **4 files** (2 HACL\* B',
+   1 EverParse B'', 2 OIDC hash B''', 1 host C). Then run
+   `python3 scripts/validation/assumption_graph.py check` on a `verify-fstar`
+   evidence directory: it must report every tracked declaration, the 3
+   builder-injected `C.Loops` premises, the lax-loaded provider modules and
+   the effective solver identity, and reconcile them with
+   `spec/assumption-register.json`.
+2. **Review crypto events (A):** Confirm that no `assume val`, `assume` or
+   `admit` states a cryptographic property; that `sha256_collision`,
+   `hash_collision`, `disclosure_digest_collision`, `ed25519_forgery`,
+   `jws_mac_forgery` and `jws_eddsa_forgery` are definitions; that the
+   case-split lemmas are proved; and that the success paths
+   (`lemma_jws_verify_hs_accepts_mac`, real HACL\* computations) remain.
+   Confirm the register entries `A-*` are `specified-not-attested`.
+3. **Cross-reference Tamarin:** Tamarin independently verifies protocol-level
+   properties in the symbolic Dolev-Yao model; the assumption graph indexes
+   each selected theory's builtins, equations and restrictions.
 4. **Review FFI contracts:** Category B = 0 (all eliminated). Review
    [FFI contract register](../../runbooks/ffi-contracts/README.md) for historical elimination details.
 5. **Check WASM host contracts:** Category C = 1 (only #12
