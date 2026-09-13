@@ -90,11 +90,38 @@ fn device_access_token_timing(state: &AppState) -> Result<(u64, SystemTime, Syst
     Ok((expires_in, now, expires_at))
 }
 
+async fn device_application_authorization(
+    state: &AppState,
+    grant: &ApprovedDeviceGrant,
+) -> Result<
+    (
+        Option<crate::application_authorization::inorii::Grant>,
+        Option<crate::application_authorization::store::PublicationGuard>,
+    ),
+    Response,
+> {
+    let snapshot =
+        super::application_authorization::capture(state, &grant.client_id, &grant.user_id).await?;
+    let guard = super::application_authorization::require_current(
+        state,
+        snapshot.as_ref(),
+        &grant.client_id,
+        &grant.user_id,
+    )
+    .await?;
+    Ok((snapshot, guard))
+}
+
 async fn approved_device_grant_response(
     state: &AppState,
     ctx: &TokenEndpointContext,
     grant: ApprovedDeviceGrant,
 ) -> Response {
+    let (application_grant, _application_guard) =
+        match device_application_authorization(state, &grant).await {
+            Ok(authorization) => authorization,
+            Err(response) => return response,
+        };
     let (expires_in, now, expires_at) = match device_access_token_timing(state) {
         Ok(timing) => timing,
         Err(response) => return response,
@@ -107,6 +134,7 @@ async fn approved_device_grant_response(
         .tokens
         .issuer
         .mint_bearer_access_token(BearerAccessTokenMint {
+            application_grant: application_grant.as_ref(),
             client_id: &grant.client_id,
             subject: &grant.user_id,
             scope: grant.scope.as_deref(),
@@ -146,7 +174,7 @@ async fn approved_device_grant_response(
             );
         }
     };
-    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+    let mut meta = BearerTokenMeta::new(BearerTokenMetaInput {
         token_id: access_token.clone(),
         client_id: grant.client_id,
         user_id: grant.user_id,
@@ -160,6 +188,7 @@ async fn approved_device_grant_response(
         expires_at,
         refresh_parent: None,
     });
+    meta.application_grant = application_grant;
     if let Err(error) = state
         .tokens
         .store
@@ -234,6 +263,9 @@ pub(super) async fn handle_token_device_code_grant(
         result => device_poll_rejection_response(&result),
     }
 }
+
+#[cfg(test)]
+mod projection_tests;
 
 #[cfg(test)]
 mod tests {

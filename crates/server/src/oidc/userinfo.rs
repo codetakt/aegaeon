@@ -251,6 +251,17 @@ impl UserinfoEndpoint {
         dpop_binding: Option<&DpopBinding>,
         mtls_fingerprint: Option<&str>,
     ) -> Result<Userinfo> {
+        self.fetch_userinfo_with_metadata(auth_header, dpop_binding, mtls_fingerprint)
+            .await
+            .map(|(userinfo, _)| userinfo)
+    }
+
+    pub(crate) async fn fetch_userinfo_with_metadata(
+        &self,
+        auth_header: &str,
+        dpop_binding: Option<&DpopBinding>,
+        mtls_fingerprint: Option<&str>,
+    ) -> Result<(Userinfo, BearerTokenMeta)> {
         let normalized_auth = Self::normalize_authorization_header(auth_header)?;
         let meta_preview = self
             .validate_bearer_metadata(normalized_auth.clone())
@@ -274,7 +285,8 @@ impl UserinfoEndpoint {
                 mtls_fingerprint,
             )
             .await?;
-        self.load_filtered_userinfo(&meta).await
+        let userinfo = self.load_filtered_userinfo(&meta).await?;
+        Ok((userinfo, meta))
     }
 
     /// Handle userinfo request

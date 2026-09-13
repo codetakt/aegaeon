@@ -15,8 +15,9 @@ pub(in crate::web::management) struct ManagedUserIdentity {
 
 pub(in crate::web::management) use audit::{
     insert_user_management_runtime_command, mark_user_management_runtime_command_executing,
-    write_user_management_audit_event, write_user_management_audit_event_with_outcome,
-    write_user_management_runtime_command_outcome, EndUserAuditEvent, EndUserRuntimeCommandOutcome,
+    write_application_authorization_audit_event, write_user_management_audit_event,
+    write_user_management_audit_event_with_outcome, write_user_management_runtime_command_outcome,
+    ApplicationAuthorizationAuditTarget, EndUserAuditEvent, EndUserRuntimeCommandOutcome,
     EndUserRuntimeCommandStatus,
 };
 pub(in crate::web::management) use context::{

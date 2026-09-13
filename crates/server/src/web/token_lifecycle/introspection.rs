@@ -150,6 +150,8 @@ pub(super) async fn active_introspection_body(
     };
     let mut body = json!({
         "active": true,
+        "iss": state.issuer.as_str(),
+        "sub": access_token.user_id,
         "scope": access_token.scope.clone(),
         "client_id": access_token.client_id,
         "username": access_token.user_id,
@@ -166,6 +168,24 @@ pub(super) async fn active_introspection_body(
         .await
     {
         Ok(Some(meta)) => {
+            if let Some(grant) = meta.application_grant.as_ref() {
+                match super::super::application_authorization::current(state, grant).await {
+                    Ok(false) => return Ok(json!({"active":false})),
+                    Err(_) => {
+                        return Err(no_cache_json_error_with_iss(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "temporarily_unavailable",
+                            Some("application authority unavailable"),
+                            state.issuer.as_str(),
+                        ))
+                    }
+                    Ok(true) => {}
+                }
+                if grant.audiences.contains(&meta.audience) {
+                    body[crate::application_authorization::inorii::CLAIM_NAME] =
+                        json!(grant.claims);
+                }
+            }
             augment_introspection_body_with_meta(&mut body, &meta, state.issuer.as_str())?;
         }
         Ok(None) => {}

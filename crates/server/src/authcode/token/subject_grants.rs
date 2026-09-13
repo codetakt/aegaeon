@@ -25,6 +25,7 @@ impl SubjectTokenGrantKind {
 }
 
 struct SubjectTokenGrantRequest<'a> {
+    application_grant: Option<&'a crate::application_authorization::inorii::Grant>,
     kind: SubjectTokenGrantKind,
     client_id: &'a str,
     subject: &'a str,
@@ -104,6 +105,7 @@ impl TokenIssuer {
         sender_binding: Option<&SenderBinding>,
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token(SubjectTokenGrantRequest {
+            application_grant: None,
             kind: SubjectTokenGrantKind::ClientCredentials,
             client_id,
             subject: client_id,
@@ -129,6 +131,7 @@ impl TokenIssuer {
         sender_binding: Option<SenderBinding>,
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token_async(SubjectTokenGrantRequest {
+            application_grant: None,
             kind: SubjectTokenGrantKind::ClientCredentials,
             client_id: &client_id,
             subject: &client_id,
@@ -136,6 +139,28 @@ impl TokenIssuer {
             resource: resource.as_deref(),
             cnf: cnf.as_ref(),
             sender_binding: sender_binding.as_ref(),
+        })
+        .await
+    }
+
+    pub(crate) async fn issue_client_credentials_application_token_async(
+        &self,
+        client_id: &str,
+        scope: Option<String>,
+        resource: Option<&str>,
+        cnf: Option<&CnfClaim>,
+        sender_binding: Option<&SenderBinding>,
+        application_grant: Option<&crate::application_authorization::inorii::Grant>,
+    ) -> Result<TokenResponse, String> {
+        self.issue_subject_token_async(SubjectTokenGrantRequest {
+            kind: SubjectTokenGrantKind::ClientCredentials,
+            client_id,
+            subject: client_id,
+            scope,
+            resource,
+            cnf,
+            sender_binding,
+            application_grant,
         })
         .await
     }
@@ -174,6 +199,7 @@ impl TokenIssuer {
         sender_binding: Option<&SenderBinding>,
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token(SubjectTokenGrantRequest {
+            application_grant: None,
             kind: SubjectTokenGrantKind::JwtBearer,
             client_id,
             subject,
@@ -200,6 +226,7 @@ impl TokenIssuer {
         sender_binding: Option<SenderBinding>,
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token_async(SubjectTokenGrantRequest {
+            application_grant: None,
             kind: SubjectTokenGrantKind::JwtBearer,
             client_id: &client_id,
             subject: &subject,
@@ -284,6 +311,7 @@ impl TokenIssuer {
         req: SubjectTokenGrantRequest<'_>,
     ) -> Result<PreparedSubjectToken, SubjectTokenGrantError> {
         let SubjectTokenGrantRequest {
+            application_grant,
             kind,
             client_id,
             subject,
@@ -316,6 +344,7 @@ impl TokenIssuer {
         };
         let audience = resource.unwrap_or_else(|| client_id.to_string());
         let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
+            application_grant,
             subject,
             client_id,
             scope: scope.as_deref(),
@@ -344,7 +373,7 @@ impl TokenIssuer {
             cnf: cnf.cloned(),
         };
 
-        let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+        let mut meta = BearerTokenMeta::new(BearerTokenMetaInput {
             token_id: access_token_str.clone(),
             client_id: client_id.to_string(),
             user_id: subject.to_string(),
@@ -359,6 +388,7 @@ impl TokenIssuer {
             refresh_parent: None,
         });
 
+        meta.application_grant = application_grant.cloned();
         Ok(PreparedSubjectToken {
             access_token,
             meta,

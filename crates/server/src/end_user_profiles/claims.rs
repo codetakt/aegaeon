@@ -3,6 +3,7 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 const RESERVED_CUSTOM_CLAIMS: &[&str] = &[
+    crate::application_authorization::inorii::CLAIM_NAME,
     "sub",
     "iss",
     "aud",
@@ -38,6 +39,10 @@ const RESERVED_CUSTOM_CLAIMS: &[&str] = &[
     "address",
     "updated_at",
 ];
+
+pub(crate) fn is_reserved_custom_claim_name(name: &str) -> bool {
+    RESERVED_CUSTOM_CLAIMS.contains(&name.trim().to_ascii_lowercase().as_str())
+}
 
 #[must_use]
 pub fn normalize_display_name(raw: &str) -> Option<String> {
@@ -88,8 +93,7 @@ pub fn validate_custom_claims(value: &Value) -> Result<(), &'static str> {
         if trimmed.is_empty() {
             return Err("customClaims keys must not be blank");
         }
-        let normalized = trimmed.to_ascii_lowercase();
-        if RESERVED_CUSTOM_CLAIMS.contains(&normalized.as_str()) {
+        if is_reserved_custom_claim_name(key) {
             return Err("customClaims contains reserved claim names");
         }
     }

@@ -25,13 +25,12 @@ fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::e
     ))
 }
 
-async fn install_token(state: &AppState, path: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let mut access = AccessToken::new(
-        "client".into(),
-        "user".into(),
-        Some("openid read".into()),
-        60,
-    );
+async fn install_token(
+    state: &AppState,
+    path: &str,
+    scope: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut access = AccessToken::new("client".into(), "user".into(), Some(scope.into()), 60);
     let sample = proof("GET", path, &access.token)?;
     let jkt = crate::util::compute_dpop_jkt_from_proof(&sample).ok_or("fixture thumbprint")?;
     access.cnf = Some(crate::authcode::types::CnfClaim::Jkt(jkt.clone()));
@@ -40,7 +39,7 @@ async fn install_token(state: &AppState, path: &str) -> Result<String, Box<dyn s
         token_id: access.token.clone(),
         client_id: access.client_id.clone(),
         user_id: access.user_id.clone(),
-        granted_scopes: vec!["openid".into(), "read".into()],
+        granted_scopes: scope.split_ascii_whitespace().map(str::to_owned).collect(),
         audience: format!("{}{path}", state.issuer),
         sender_binding: Some(SenderBinding::DPoP { jkt }),
         authorization_details: None,
@@ -81,7 +80,7 @@ async fn upstream_refresh_rejects_bearer_downgrade_with_proof_and_preserves_toke
     let result = async {
         let state = test_app_state(pool.clone(), &env).await?;
         let path = "/oauth/upstream/refresh";
-        let token = install_token(&state, path).await?;
+        let token = install_token(&state, path, "openid read").await?;
         for scheme in ["DPoP", "Bearer", "DPoP"] {
             let outcome = crate::web::upstream_refresh_links::authenticate_upstream_refresh_caller(
                 &state,
@@ -122,8 +121,23 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                 pool.clone(),
                 env.issuer_url.clone(),
             )));
-        let token = install_token(&state, "/userinfo").await?;
-        for method in ["GET", "POST"] {
+        // Simulate persisted legacy profile data: release allowlists must not
+        // turn editable profile attributes into an application authority claim.
+        let authority_claim = crate::application_authorization::inorii::CLAIM_NAME;
+        let user: uuid::Uuid = sqlx::query_scalar("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,'user','ACTIVE') RETURNING id")
+            .bind(env.environment_id).fetch_one(&pool).await?;
+        sqlx::query("INSERT INTO aegaeon.end_user_profiles(end_user_id,custom_claims) VALUES ($1,$2)")
+            .bind(user).bind(json!({authority_claim:{"roles":["SUPER_ADMIN"]},"department":"engineering"}))
+            .execute(&pool).await?;
+        let token = install_token(&state, "/userinfo", "openid profile read").await?;
+        for (method, explicit_policy) in [("GET", false), ("POST", false), ("GET", true), ("POST", true)] {
+            let mut meta = state.tokens.store.try_get_bearer_meta(&token)?.ok_or("metadata")?;
+            meta.claim_release_policy = explicit_policy.then(|| crate::upstream::UpstreamClaimReleasePolicy {
+                managed_custom_claims: vec![authority_claim.into()],
+                userinfo_custom_claims: vec![authority_claim.into()],
+                ..Default::default()
+            });
+            state.tokens.store.try_replace_bearer_meta_record(meta)?;
             for scheme in ["DPoP", "Bearer", "DPoP"] {
                 let mut request_headers = headers(scheme, method, "/userinfo", &token)?;
                 let remote = ConnectInfo("127.0.0.1:12345".parse()?);
@@ -150,6 +164,10 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                 };
                 if scheme == "DPoP" {
                     assert_eq!(response.status(), StatusCode::OK);
+                    let claims: Value = serde_json::from_slice(&to_bytes(response.into_body(),65536).await?)?;
+                    assert_eq!(claims["sub"], "user");
+                    assert_eq!(claims["department"], "engineering");
+                    assert!(claims.get(authority_claim).is_none());
                 } else {
                     assert_eq!(
                         response.headers()["www-authenticate"],
@@ -162,5 +180,9 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
         Ok(())
     }
     .await;
+    sqlx::query("DELETE FROM aegaeon.end_users WHERE environment_id=$1")
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }

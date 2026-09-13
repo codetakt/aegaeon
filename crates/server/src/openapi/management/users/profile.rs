@@ -42,3 +42,22 @@ pub(in crate::openapi::management) fn get_user_profile() {}
     )
 )]
 pub(in crate::openapi::management) fn update_user_profile() {}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/teams/{teamId}/environments/{environmentId}/application-authorizations",
+    tag = "users",
+    params(
+        ("Origin" = String, Header, description = "Registered administrative Origin"),
+        ("teamId" = String, Path), ("environmentId" = String, Path)
+    ),
+    request_body = ApplicationAuthorizationUpdate,
+    responses(
+        (status = 200, description = "Audited projection updated; response contains the new revision", body = ApplicationAuthorizationResponse),
+        (status = 400, description = "Invalid projection", body = ErrorResponse),
+        (status = 401, description = "Unauthenticated", body = ErrorResponse),
+        (status = 403, description = "Interactive OWNER or ADMINISTRATOR and CSRF required", body = ErrorResponse),
+        (status = 409, description = "Stale revision, replay, or authority change", body = ErrorResponse)
+    )
+)]
+pub(in crate::openapi::management) fn update_application_authorization() {}

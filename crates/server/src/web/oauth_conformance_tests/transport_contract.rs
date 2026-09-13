@@ -69,11 +69,17 @@ async fn resource_ingress_certificate_errors_preserve_resource_contract() -> Tes
             .route("/resource", get(admitted))
             .route("/userinfo", get(admitted))
             .route("/oauth/upstream/refresh", get(admitted))
+            .route("/application/authorization", get(admitted))
             .layer(middleware::from_fn_with_state(
                 state.clone(),
                 crate::web::transport_boundary::transport_security_middleware,
             ));
-        for path in ["/resource", "/userinfo", "/oauth/upstream/refresh"] {
+        for path in [
+            "/resource",
+            "/userinfo",
+            "/oauth/upstream/refresh",
+            "/application/authorization",
+        ] {
             for certificate in [true, false, true] {
                 let response = app
                     .clone()

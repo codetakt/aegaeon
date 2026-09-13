@@ -152,3 +152,15 @@ tokens, JWT introspection responses, OIDC ID Tokens, and OIDC Request Object dec
 Use management-database runtime keys before enabling those surfaces.
 For OIDC ID Token signing, a runtime key can use provider `databaseEncrypted` or the hosted-bootstrap
 `awsKms` path when that feature is enabled and classified.
+
+## Application authority database connection
+
+`AEGAEON_INORII_AUTHORITY_DATABASE_URL` is an optional process-local infrastructure credential
+for the Inorii adapter. It connects to the authoritative Organization Service database with a
+separate SELECT-only database role. Remote connections require `sslmode=verify-full`; plain
+TCP is allowed only on loopback for isolated local testing. The connection does not enable
+claim release. Releases remain explicitly configured through audited application projections.
+No organization grants can be used if this connection is absent or unavailable. USER-only and
+empty machine grants do not require an organization membership lookup. Issuer and subject
+must have an explicit row in `authorization_subject_bindings`; UUID/string similarity is not
+an identity mapping. See the application authorization operation guide for migration and setup.

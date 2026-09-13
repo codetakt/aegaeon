@@ -348,7 +348,7 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
         key_manager,
         jwt_introspection_key_manager,
         device: device_runtime,
-    });
+    })?;
 
     Ok(BuiltServerRuntime {
         state,

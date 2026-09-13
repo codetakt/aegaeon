@@ -405,6 +405,32 @@ export type UpdateUserProfileRequest = {
   customClaims?: Record<string, unknown> | null;
 };
 
+export type ApplicationAuthorizationClaims = {
+  roles: ("USER" | "SUPER_ADMIN")[];
+  organization_roles?: {
+    organization_id: string;
+    roles: ("ORGANIZATION_ADMIN" | "ORGANIZATION_STAFF")[];
+  }[];
+};
+
+export type ApplicationAuthorizationUpdate = {
+  clientId: string;
+  subject: string;
+  /** Nonnegative safe integer; the returned revision must also be representable. */
+  baseRevision: number;
+  authority: string;
+  /** Positive safe integer, strictly newer than the persisted authority revision. */
+  sourceRevision: number;
+  audiences: string[];
+  claims: ApplicationAuthorizationClaims;
+  enabled: boolean;
+  reason: string;
+};
+
+export type ApplicationAuthorizationResponse = {
+  revision: number;
+};
+
 export type PasswordCredential = {
   id: string;
   status: string;
@@ -1249,6 +1275,11 @@ export type ManagementClient = {
   createUser(
     input: { teamId?: string | null; environmentId: string } & CreateUserRequest,
   ): Promise<User>;
+  getUser(input: {
+    teamId?: string | null;
+    environmentId: string;
+    userId: string;
+  }): Promise<User>;
   updateUser(
     input: {
       teamId?: string | null;
@@ -1266,12 +1297,12 @@ export type ManagementClient = {
     environmentId: string;
     userId: string;
   }): Promise<User>;
-  blockUser(input: {
+  suspendUser(input: {
     teamId?: string | null;
     environmentId: string;
     userId: string;
   }): Promise<User>;
-  unblockUser(input: {
+  unsuspendUser(input: {
     teamId?: string | null;
     environmentId: string;
     userId: string;
@@ -1328,6 +1359,12 @@ export type ManagementClient = {
       userId: string;
     } & UpdateUserProfileRequest,
   ): Promise<UserProfile>;
+  updateApplicationAuthorization(
+    input: {
+      teamId?: string | null;
+      environmentId: string;
+    } & ApplicationAuthorizationUpdate,
+  ): Promise<ApplicationAuthorizationResponse>;
   listUserSessions(input: {
     teamId?: string | null;
     environmentId: string;

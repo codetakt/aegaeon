@@ -1,3 +1,5 @@
+mod application_authorization;
+pub use application_authorization::*;
 mod account_links;
 mod api_keys;
 mod audit;

@@ -197,6 +197,10 @@ impl TokenStore {
             reason = "owned tokens make the atomic refresh rotation boundary explicit"
         )
     )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep atomic rotation validation and backend publication in one audit boundary"
+    )]
     pub fn store_refreshed_grant(
         &self,
         previous_refresh: &str,
@@ -249,7 +253,8 @@ impl TokenStore {
                         state.refresh_successors.remove(previous_refresh);
                         state.version = state.version.saturating_add(1);
                         (Err(RefreshRotationError::Expired), None)
-                    } else if previous.exchange_grant != new_refresh.exchange_grant
+                    } else if previous.application_grant != new_refresh.application_grant
+                        || previous.exchange_grant != new_refresh.exchange_grant
                         || scope_set(previous.scope.as_deref())
                             != scope_set(new_refresh.scope.as_deref())
                     {

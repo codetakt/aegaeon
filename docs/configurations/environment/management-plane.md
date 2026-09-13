@@ -99,3 +99,63 @@ chain or host identity outside Aegaeon policy.
 uses the region stored on the active runtime key. The legacy generic AWS KMS key-manager helper is
 compiled only for `kms-aws` tests, so its legacy key-id and config-file inputs are not
 part of the supported server runtime environment inventory.
+
+### Application authorization boundaries
+
+Editable profile attributes cannot supply reserved protocol or application authority
+claims. Aegaeon rejects reserved custom claim names on write and removes them before
+ID Token and UserInfo serialization, including values retained in older profiles or
+grants. Claim-release allowlists do not override this boundary.
+
+Projection activation binds authority to the active client's database UUID and, for
+human subjects, the end-user UUID. Capture and online checks require those same
+active records in the same environment with the same client ID and subject. Reusing
+a deleted client's identifier or assigning a subject to a different user therefore
+does not transfer the earlier projection. Service principals bind only to their
+client UUID and cannot carry human roles.
+
+Activation and token publication lock the projection, client and end-user rows in
+that order until their transaction completes. Concurrent identity deletion or
+subject changes wait for publication. Disabling an existing projection remains
+possible after identity deactivation and retains its recorded identity bindings.
+
+Updates require the current `baseRevision` and a strictly newer `sourceRevision`
+from the same authority. Enabling a projection permits a resulting revision and
+source revision up to `9223372036854775805` (`i64::MAX - 2`); consequently its
+`baseRevision` must be at most `9223372036854775804`. The next counter value,
+`9223372036854775806`, is reserved for an audited disable. Even at the last active
+revision, the projection can therefore be revoked with the ordinary authenticated,
+CSRF-protected management request. Terminal or overflowing inputs return
+`400 invalid_request` before any projection or success-audit write. Disabling
+still requires the owning authority, a current base revision and a newer source
+revision; stale or replayed updates return `409 base_revision_mismatch`.
+
+An exhausted disabled projection is a permanent tombstone. It cannot be reenabled,
+deleted to restart its counters, or repaired by resetting revisions. These limits
+preserve the rejection of old grants and apply to both revision counters.
+
+Projection audit events retain the administrator as actor. Service-principal targets
+use `APPLICATION_AUTHORIZATION` with a JSON tuple of environment UUID, client ID and
+subject as `target_id`. Human targets use `END_USER` and the bound end-user UUID,
+including revocation after subject reassignment. Legacy projections without a user
+binding use the projection tuple. Audit data includes both identity bindings.
+
+#### Upgrading existing projections
+
+Apply migration `20260913090000_application_authorization_identities.sql` before
+starting the updated server. It adds nullable identity bindings without backfilling
+them: the current owner of a textual identifier cannot prove who originally received
+authority. Existing projections without bindings stop supplying application claims;
+tokens retaining those projections fail online and publication checks. Ordinary
+OAuth grants without application projections keep their existing behavior.
+
+Review each retained projection against its authoritative source and the intended
+active client and end-user UUIDs. Reauthorize through the management application
+authorization endpoint with the current `baseRevision`, the same `authority`, a
+strictly newer `sourceRevision`, `enabled: true`, and an audit reason. The resulting
+revision binds the current identities and records them in the audit event. Obtain a
+new OAuth grant afterward; old grants do not gain the new revision's authority.
+Use an audited disable request for projections that should remain revoked. Do not
+repair ownership by assigning UUIDs directly in SQL or resetting revision counters.
+Physical deletion clears the corresponding binding while retaining the projection
+and its revision history.

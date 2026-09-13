@@ -282,6 +282,39 @@ async fn issue_authorize_code_response(
     issuer_base: &str,
 ) -> Response {
     let error_request = authorize_error_request(&ctx);
+    let authority_error = |error| {
+        authorize_error_response(
+            authorize_error_context(
+                state,
+                &error_request,
+                ctx.response_mode,
+                issuer_base,
+                ctx.state_for_echo.as_deref(),
+            ),
+            error,
+            Some("application authorization unavailable"),
+        )
+    };
+    // A human authorization cannot acquire the machine principal's application grant.
+    if session.user_id == ctx.req.client_id {
+        return authority_error("invalid_request");
+    }
+    let application_grant = match super::super::application_authorization::capture(
+        state,
+        &ctx.req.client_id,
+        &session.user_id,
+    )
+    .await
+    {
+        Ok(grant) => grant,
+        Err(response) => {
+            return authority_error(if response.status().is_server_error() {
+                "temporarily_unavailable"
+            } else {
+                "access_denied"
+            })
+        }
+    };
     let response_mode = ctx.response_mode;
     let client_id_for_error = ctx.client_id_for_error.clone();
     let state_for_echo = ctx.state_for_echo.clone();
@@ -318,6 +351,7 @@ async fn issue_authorize_code_response(
                 acr: session.session_acr.clone(),
                 auth_session_id: session.session_id.clone(),
                 local_profile,
+                application_grant,
                 claim_release_policy: session.claim_release_policy.clone(),
                 exchange_scope_ceiling,
                 ..AuthorizationCodeIssueInput::new(

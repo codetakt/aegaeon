@@ -486,6 +486,48 @@ async fn scenario(state: &AppState, sid: &str, mode: &str) -> TestResult {
     complete_decision(state, sid, token, mode).await
 }
 
+#[tokio::test]
+#[ignore = "requires PostgreSQL"]
+async fn discovery_does_not_advertise_unguarded_application_extensions() -> TestResult {
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("AEGAEON_DATABASE_URL is required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let (mut state, _sid) = fixture(&pool, &env).await?;
+        for enabled in [false, true] {
+            state.application_authority =
+                enabled.then(|| crate::application_authorization::Authority {
+                    projections: pool.clone(),
+                    memberships: None,
+                });
+            let app = super::router::build_router(state.clone()).layer(Extension(ConnectInfo(
+                SocketAddr::from(([127, 0, 0, 1], 12345)),
+            )));
+            let response = app
+                .oneshot(Request::get("/.well-known/openid-configuration").body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let metadata: Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+            assert_eq!(metadata["issuer"], env.issuer_url);
+            assert_eq!(
+                metadata["authorization_endpoint"],
+                format!("{}/authorize", env.issuer_url)
+            );
+            for key in [
+                "inorii_authorization_endpoint",
+                "inorii_organization_id_parameter_supported",
+            ] {
+                assert!(metadata.get(key).is_none(), "{key} was advertised");
+            }
+        }
+        Ok(())
+    }
+    .await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
 async fn pushed_request(state: &AppState, sid: &str, mode: &str) -> TestResult {
     let prompt = match mode {
         "par-no-prompt" | "par-outer-prompt" => None,

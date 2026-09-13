@@ -11,6 +11,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 pub struct AuthorizationCodeIssueInput {
+    pub application_grant: Option<crate::application_authorization::inorii::Grant>,
     pub req: AuthorizationRequest,
     pub user_id: String,
     pub pkce_required: bool,
@@ -41,6 +42,7 @@ impl AuthorizationCodeIssueInput {
             auth_session_id: None,
             local_profile: None,
             claim_release_policy: None,
+            application_grant: None,
             exchange_scope_ceiling: Vec::new(),
         }
     }
@@ -216,6 +218,7 @@ impl TokenIssuer {
             auth_session_id,
             local_profile,
             claim_release_policy,
+            application_grant,
             exchange_scope_ceiling,
         } = input;
 
@@ -292,6 +295,7 @@ impl TokenIssuer {
         );
 
         code.exchange_grant = self.capture_code_exchange_authority(&code, &exchange_scope_ceiling);
+        code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
     }

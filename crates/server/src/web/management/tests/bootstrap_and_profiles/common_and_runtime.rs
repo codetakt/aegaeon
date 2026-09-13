@@ -105,6 +105,7 @@ fn test_app_state(pool: PgPool, management: ManagementState) -> Result<AppState,
     let par_store = par_endpoint.store();
 
     Ok(AppState {
+        application_authority: None,
         cfg: Arc::clone(&cfg),
         base_url: Arc::new("https://auth.example.com".to_string()),
         issuer: Arc::new("https://auth.example.com".to_string()),

@@ -95,6 +95,7 @@ fn test_id_token_sid_is_scoped_to_auth_session() -> TestResult {
 
 #[test]
 fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> TestResult {
+    let authority_claim = crate::application_authorization::inorii::CLAIM_NAME;
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
         .with_oidc(Some(enabled_oidc_config()?));
 
@@ -112,10 +113,14 @@ fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> Tes
     local_profile
         .custom_claims
         .insert("department".to_string(), json!("Identity"));
+    local_profile.custom_claims.insert(
+        authority_claim.to_string(),
+        json!({"roles":["SUPER_ADMIN"]}),
+    );
 
     let claim_release_policy = UpstreamClaimReleasePolicy {
-        managed_custom_claims: vec!["organization".to_string(), "roles".to_string()],
-        id_token_custom_claims: vec!["organization".to_string()],
+        managed_custom_claims: vec!["organization".to_string(), "roles".to_string(), authority_claim.to_string()],
+        id_token_custom_claims: vec!["organization".to_string(), authority_claim.to_string()],
         userinfo_custom_claims: vec!["roles".to_string()],
     };
 
@@ -186,5 +191,6 @@ fn test_id_token_filters_broker_managed_custom_claims_by_release_policy() -> Tes
         Some("Identity")
     );
     assert!(payload.get("roles").is_none());
+    assert!(payload.get(authority_claim).is_none());
     Ok(())
 }

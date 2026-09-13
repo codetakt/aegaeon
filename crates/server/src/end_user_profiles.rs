@@ -3,6 +3,7 @@ mod model;
 mod rows;
 mod store;
 
+pub(crate) use claims::is_reserved_custom_claim_name;
 pub use claims::{
     empty_custom_claims, normalize_display_name, oidc_profile_claims_from_record,
     validate_custom_claims,
@@ -35,6 +36,17 @@ mod tests {
             validate_custom_claims(&json!({ "email": "user@example.com" })),
             Err("customClaims contains reserved claim names")
         );
+        let authority_claim = crate::application_authorization::inorii::CLAIM_NAME;
+        for name in [
+            authority_claim.to_string(),
+            authority_claim.to_ascii_uppercase(),
+            format!(" {authority_claim} "),
+        ] {
+            assert_eq!(
+                validate_custom_claims(&json!({ name: { "roles": ["SUPER_ADMIN"] } })),
+                Err("customClaims contains reserved claim names"),
+            );
+        }
     }
 
     #[test]

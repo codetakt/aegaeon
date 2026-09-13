@@ -43,15 +43,37 @@ pub(super) async fn handle_token_client_credentials_grant(
     {
         return response;
     }
+    let application_grant = match super::application_authorization::capture(
+        state,
+        &ctx.client_id,
+        &ctx.client_id,
+    )
+    .await
+    {
+        Ok(grant) => grant,
+        Err(response) => return response,
+    };
+    let _application_guard = match super::application_authorization::require_current(
+        state,
+        application_grant.as_ref(),
+        &ctx.client_id,
+        &ctx.client_id,
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(response) => return response,
+    };
     match state
         .tokens
         .issuer
-        .issue_client_credentials_token_bound_async(
-            ctx.client_id.clone(),
+        .issue_client_credentials_application_token_async(
+            &ctx.client_id,
             scope.clone(),
-            ctx.resource.clone(),
-            ctx.cnf_for_at.clone(),
-            ctx.sender_binding.clone(),
+            ctx.resource.as_deref(),
+            ctx.cnf_for_at.as_ref(),
+            ctx.sender_binding.as_ref(),
+            application_grant.as_ref(),
         )
         .await
     {

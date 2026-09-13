@@ -52,6 +52,10 @@ impl From<ExchangeCommitError> for String {
 }
 
 #[expect(
+    clippy::too_many_lines,
+    reason = "keep ordered legacy and target publication checks in one audit boundary"
+)]
+#[expect(
     clippy::suspicious_operation_groupings,
     reason = "legacy exchange must reject either a metadata grant or a stored access-token root"
 )]
@@ -104,6 +108,17 @@ pub(super) fn validate_exchange_commit(
         }
     } else if output.refresh_parent.is_some() {
         return Err("exchange refresh parent is missing");
+    }
+    if !crate::application_authorization::is_restriction(
+        output.application_grant.as_ref(),
+        subject.application_grant.as_ref(),
+    ) || parent.is_some_and(|parent| {
+        !crate::application_authorization::is_restriction(
+            subject.application_grant.as_ref(),
+            parent.application_grant.as_ref(),
+        )
+    }) {
+        return Err("exchange application authority exceeds its parent");
     }
     if subject.exchange_grant.is_none() {
         if output.exchange_grant.is_some()

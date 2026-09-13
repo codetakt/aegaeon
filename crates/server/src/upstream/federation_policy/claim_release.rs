@@ -124,19 +124,15 @@ pub fn filter_downstream_custom_claims(
     claim_release_policy: Option<&UpstreamClaimReleasePolicy>,
     surface: DownstreamClaimSurface,
 ) -> HashMap<String, Value> {
-    let Some(claim_release_policy) = claim_release_policy else {
-        return custom_claims
-            .iter()
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect();
-    };
-
     custom_claims
         .iter()
+        // Existing profiles and retained grants may predate write-time validation.
+        // Claim-release policy cannot make editable attributes authoritative.
+        .filter(|(key, _)| !crate::end_user_profiles::is_reserved_custom_claim_name(key))
         .filter_map(|(key, value)| {
-            if claim_release_policy.manages_custom_claim(key)
-                && !claim_release_policy.allows_custom_claim(key, surface)
-            {
+            if claim_release_policy.is_some_and(|policy| {
+                policy.manages_custom_claim(key) && !policy.allows_custom_claim(key, surface)
+            }) {
                 None
             } else {
                 Some((key.clone(), value.clone()))

@@ -4,6 +4,8 @@ use crate::web::token_sender_binding::dpop_error_response;
 mod outcome;
 mod policy;
 mod sender;
+#[cfg(test)]
+mod tests;
 
 pub(super) use policy::process_resource_request;
 
@@ -64,14 +66,17 @@ pub(super) async fn resource(
     };
 
     let start = std::time::Instant::now();
-    let outcome = process_resource_request(
+    let mut outcome = process_resource_request(
         state.tokens.validator.as_ref(),
-        auth_header,
+        auth_header.clone(),
         binding.as_ref(),
         mtls.as_deref(),
         issuer_base,
     )
     .await;
+    outcome = outcome
+        .check_application(&state, auth_header.as_deref())
+        .await;
     let latency = start.elapsed().as_secs_f64();
 
     crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
