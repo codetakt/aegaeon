@@ -5653,7 +5653,9 @@ openid_core:
   runtime_link: crates/server/src/web/prompt.rs
   notes:
   - "Account selection is not implemented. Aegaeon rejects select_account with invalid_request (RFC 6749 sections 4.1.2.1 and 5.2), including combinations with supported actions."
+  - "OIDC Core section 3.1.2.1 identifies account_selection_required (defined in section 3.1.2.6) as the typical error. Aegaeon instead uses invalid_request for the unsupported action across authorization and PAR parameter validation; this meets the mandatory rejection but does not implement account selection."
   - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
+  - "A supplied Request Object prompt must be a JSON string. Null and other non-string values are rejected with invalid_request; omitting the claim requests no prompt action."
   - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
 openid_discovery:
 - id: OIDC-2-001

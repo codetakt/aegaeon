@@ -11,7 +11,7 @@ pub(super) fn signed_request(state: &AppState, mode: &str) -> TestResult<String>
 fn signed_request_with_prompt(
     state: &AppState,
     mode: &str,
-    prompt: Option<&str>,
+    prompt: Option<&Value>,
 ) -> TestResult<String> {
     let now = crate::util::now_unix_epoch_secs()?;
     let mut claims = json!({
@@ -53,7 +53,7 @@ fn signed_request_with_prompt(
         claims["aud"] = json!(format!("{}/authorize", state.issuer));
     }
     if let Some(prompt) = prompt {
-        claims["prompt"] = json!(prompt);
+        claims["prompt"] = prompt.clone();
     }
     let mut header = Header::new(Algorithm::RS256);
     header.typ = Some("oauth-authz-req+jwt".to_string());

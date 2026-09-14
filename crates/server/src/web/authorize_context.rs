@@ -8,8 +8,7 @@ use crate::oauth_profile;
 
 use super::authorize_request::{
     parse_authorize_request_with_runtime_blocking, request_object_extra_string,
-    request_object_resolution_error_response, OwnedRequestObjectAuthorizeDeps, RawAuthzQuery,
-    RequestObjectAuthorizeDeps,
+    OwnedRequestObjectAuthorizeDeps, RawAuthzQuery, RequestObjectAuthorizeDeps,
 };
 use super::authorize_validation::{
     authorize_error_response, validate_authorize_request, AuthorizeErrorContext,
@@ -87,8 +86,13 @@ fn authorize_prompt_from_request(
     issuer_base: &str,
 ) -> Result<Prompt, Response> {
     let raw = match req.request_object_claims.as_ref() {
-        Some(claims) => request_object_extra_string(claims, "prompt")
-            .map_err(|err| request_object_resolution_error_response(issuer_base, &err))?,
+        Some(claims) => request_object_extra_string(claims, "prompt").map_err(|err| {
+            authorize_error_response(
+                authorize_error_context(state, req, response_mode, issuer_base),
+                err.error,
+                Some(&err.error_description),
+            )
+        })?,
         None => outer_prompt,
     };
     Prompt::parse(raw.unwrap_or_default()).map_err(|description| {

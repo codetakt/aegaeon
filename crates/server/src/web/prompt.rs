@@ -17,13 +17,14 @@ impl Prompt {
             return Err("prompt must contain ASCII values separated by spaces");
         }
         let prompt = Self(raw);
+        let has_none = prompt.contains("none");
         for value in prompt.0.split(' ').filter(|value| !value.is_empty()) {
             // No account selector is implemented. Reject select_account rather
             // than silently reusing a session without the requested choice.
             if !matches!(value, "none" | "login" | "consent") {
                 return Err("unsupported prompt value");
             }
-            if value != "none" && prompt.contains("none") {
+            if value != "none" && has_none {
                 return Err("prompt=none cannot be combined with other prompt values");
             }
         }
@@ -89,5 +90,19 @@ mod tests {
                 Some("unsupported prompt value")
             );
         }
+    }
+
+    #[test]
+    fn prompt_preserves_repeated_actions() -> Result<(), &'static str> {
+        let repeated = "login consent ".repeat(512);
+        let prompt = Prompt::parse(repeated.clone())?;
+        assert!(prompt.contains("login"));
+        assert!(prompt.contains("consent"));
+        assert!(!prompt.contains("none"));
+        for raw in [format!("none {repeated}"), format!("{repeated}none")] {
+            assert!(Prompt::parse(raw).is_err());
+        }
+        assert!(Prompt::parse("none ".repeat(512))?.contains("none"));
+        Ok(())
     }
 }

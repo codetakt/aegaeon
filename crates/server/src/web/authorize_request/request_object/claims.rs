@@ -91,7 +91,7 @@ pub(in crate::web) fn request_object_extra_string(
     key: &'static str,
 ) -> Result<Option<String>, RequestObjectResolutionError> {
     match request_object_extra_claim(claims, key) {
-        None | Some(Value::Null) => Ok(None),
+        None => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.clone())),
         Some(_) => Err(RequestObjectResolutionError::invalid_request(format!(
             "Request Object {key} claim must be a string"
