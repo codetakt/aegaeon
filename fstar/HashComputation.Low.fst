@@ -17,6 +17,14 @@ type hash_case =
   | HashCaseSha384
   | HashCaseSha512
 
+(* The C shim writes (or clears on failure) this many bytes. This ghost
+ * definition constrains verified callers without changing the extracted ABI. *)
+let digest_length (case0:hash_case) : GTot pos =
+  match case0 with
+  | HashCaseSha256 -> 32
+  | HashCaseSha384 -> 48
+  | HashCaseSha512 -> 64
+
 (* Status codes consumed by Rust FFI. *)
 let hash_status_ok : U32.t = 0ul
 let hash_status_invalid_algorithm : U32.t = 1ul
@@ -44,14 +52,17 @@ assume val evercrypt_hash_incremental_hash:
   input_len:U32.t ->
   Stack U32.t
   (requires (fun h ->
-    B.live h output_buf /\ U32.v input_len = Bytes.length input))
+    B.live h output_buf /\
+    B.length output_buf >= digest_length case0 /\
+    U32.v input_len = Bytes.length input))
   (ensures (fun h0 _ h1 ->
     B.live h1 output_buf /\ B.modifies (B.loc_buffer output_buf) h0 h1))
 
 val compute_case_with_lengths:
   case0:hash_case ->
-  full_len:U32.t{U32.v full_len > 0} ->
-  trunc_len:U32.t{U32.v trunc_len <= U32.v full_len} ->
+  full_len:U32.t{U32.v full_len >= digest_length case0} ->
+  trunc_len:U32.t{U32.v trunc_len <= U32.v full_len /\
+                  U32.v trunc_len <= digest_length case0} ->
   input:bytes ->
   ST hash_result
   (requires (fun _ -> True))

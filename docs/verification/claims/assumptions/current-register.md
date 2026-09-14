@@ -493,8 +493,8 @@ they do not assert cryptographic hardness.
 
 | # | Line | Function | Description | Runtime impl | Risk | Reducible? |
 |---|---|---|---|---|---|---|
-| NEW-4 | 35 | `bytes_prefix_of_buffer` | Copies the first `len` bytes from a live Low\* output buffer into an `FStar.Bytes.bytes` value. The caller's truncation preconditions ensure `len` is bounded by the digest length. | `c/hash_computation_runtime.c::HashComputation_Low_bytes_prefix_of_buffer` | Low | No (runtime C bridge contract) |
-| NEW-5 | 40 | `evercrypt_hash_incremental_hash` | Dispatches SHA-256 / SHA-384 / SHA-512 over a byte input and writes the full digest into the supplied output buffer. Precondition ties `input_len` to the byte-string length; postcondition preserves buffer liveness and frame. | `c/hash_computation_runtime.c::HashComputation_Low_evercrypt_hash_incremental_hash` backed by HACL\*/EverCrypt hash functions | Low | No (runtime C bridge contract) |
+| NEW-4 | 43 | `bytes_prefix_of_buffer` | The provider copies the first `len` bytes into an `FStar.Bytes.bytes` value. The allocating helper bounds `len` by both buffer capacity and digest length. The `Tot` declaration does not model heap effects, copied contents or ownership; these remain external obligations. | `c/hash_computation_runtime.c::HashComputation_Low_bytes_prefix_of_buffer` | Low | No (runtime C bridge contract) |
+| NEW-5 | 48 | `evercrypt_hash_incremental_hash` | The provider dispatches SHA-256 / SHA-384 / SHA-512. Pre: live output buffer with at least 32 / 48 / 64 bytes for the selected algorithm, and `input_len` equal to the input byte-string length. Post: preserves output liveness and limits modifications to that buffer. Functional digest correctness is not stated by this declaration and remains an external obligation. | `c/hash_computation_runtime.c::HashComputation_Low_evercrypt_hash_incremental_hash` backed by HACL\*/EverCrypt hash functions | Low | No (runtime C bridge contract) |
 
 ---
 
