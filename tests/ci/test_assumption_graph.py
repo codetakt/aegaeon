@@ -398,6 +398,8 @@ class Fixture:
         (directory / "depend.txt").write_text("".join(lines))
         load = self.loads.get(pass_id) or self.default_load(pass_id)
         (directory / "load.log").write_text("".join(f"{line}\n" for line in load))
+        for name in ("depend.stderr", "load.stderr"):
+            (directory / name).write_text("")
         record = {
             "schema_version": 1,
             "contract": ag.DEP_CONTRACT,
@@ -405,6 +407,7 @@ class Fixture:
             "pass_id": pass_id,
             "cwd": CWD,
             "tool": inputs["tool"],
+            "solver": inputs["solver"] if "--smt" in inputs["argv"] else None,
             "verifier_argv": inputs["argv"],
             "dependency_argv": [
                 inputs["tool"]["path"],
@@ -424,6 +427,10 @@ class Fixture:
             "load_returncode": 0,
             "dependency_sha256": sha256((directory / "depend.txt").read_bytes()),
             "load_sha256": sha256((directory / "load.log").read_bytes()),
+            "dependency_stderr_sha256": sha256(b""),
+            "load_stderr_sha256": sha256(b""),
+            "dependency_solver": ag.effective_solver("", Path(inputs["tool"]["path"])),
+            "load_solver": ag.effective_solver("", Path(inputs["tool"]["path"])),
             "status": "succeeded",
         }
         write_json(directory / "record.json", record)
