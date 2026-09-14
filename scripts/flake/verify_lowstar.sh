@@ -8,7 +8,12 @@ mkdir -p artifacts/lowstar
 LOG="${LOWSTAR_LOG:-artifacts/lowstar/run.log}"
 : >"$LOG"
 
-FSTAR="${FSTAR:-$(command -v fstar.exe || command -v fstar)}"
+FSTAR="${FSTAR:-$(command -v fstar.exe || command -v fstar || true)}"
+if [[ -z $FSTAR ]]; then
+	echo "[error] fstar.exe not found in PATH." \
+		"Launch via 'nix develop .#verification' or set FSTAR variable." >&2
+	exit 1
+fi
 export FSTAR
 
 {
