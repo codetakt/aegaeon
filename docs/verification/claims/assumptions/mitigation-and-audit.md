@@ -1,6 +1,6 @@
 # F* Assumption Mitigation And Audit Checklist
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 Status: current implementation baseline
 
@@ -42,8 +42,8 @@ definitions of bad events with proved case-split lemmas:
   and its zero-padded form are distinct yet equivalent.
 
 The computational premises that these events are infeasible are register
-entries in `spec/assumption-register.json` (`A-SHA256-CR`,
-`A-SHA256-TRUNC128-CR`, `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA`), each
+entries in `spec/assumption-register.json` (`A-SHA256-CR`, `A-SHA384-CR`,
+`A-SHA512-CR`, `A-SHA2-HALF-TRUNC-CR`, `A-HMAC-SHA2-EUF-CMA`, `A-ED25519-EUF-CMA`), each
 naming the primitive, the standard, the generic bound as text and the F\*
 event it covers. Their status is `specified-not-attested`: no numeric security
 evaluation is produced and no guarantee is activated by them.

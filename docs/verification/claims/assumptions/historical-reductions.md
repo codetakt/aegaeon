@@ -1,6 +1,6 @@
 # F* Assumption Historical Reductions
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 Status: historical record
 
@@ -214,3 +214,10 @@ premises moved to `spec/assumption-register.json` (`A-SHA256-CR`,
 assumption graph (`scripts/validation/assumption_graph.py`), which also
 records the builder-injected `C.Loops` premises, the lax-loaded provider
 sources and the effective solver identity of each pass.
+
+On 2026-09-14, the truncation premise was renamed to
+`A-SHA2-HALF-TRUNC-CR` to describe its SHA-256/384/512 scope consistently.
+The historical `A-SHA256-TRUNC128-CR` identifier above is retained as a record
+of the earlier revision. The current register specifies the separate
+128/192/256-bit output widths and their 2^64/2^96/2^128 generic birthday bounds;
+no premise acceptance or F* theorem changed with this correction.

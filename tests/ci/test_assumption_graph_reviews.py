@@ -250,26 +250,48 @@ class ReviewedGraphRegressions(unittest.TestCase):
 
 
 class ComposedCollisionRegistrations(unittest.TestCase):
-    def test_composed_events_have_direct_full_hash_and_encoding_premises(self):
+    def test_collision_events_keep_hash_encoding_and_truncation_premises(self):
         root = Path(__file__).resolve().parents[2]
         register = json.loads((root / "spec/assumption-register.json").read_text())
         events = {entry["id"]: set(entry.get("events", [])) for entry in register["entries"]}
         expected = {
             "A-SHA256-CR": {
+                "Verified.Crypto.Bridge.sha256_collision",
+                "HashComputation.hash_collision",
                 "Verified.Crypto.Bridge.sha256_of_string_collision",
                 "Pkce.s256_collision",
                 "HashComputation.oidc_hash_collision",
                 "Jose.SdJwt.disclosure_digest_collision",
             },
-            "A-SHA384-CR": {"HashComputation.oidc_hash_collision"},
-            "A-SHA512-CR": {"HashComputation.oidc_hash_collision"},
-            "string_encoding_collision": {"Pkce.s256_collision"},
+            "A-SHA384-CR": {
+                "Verified.Crypto.Bridge.sha384_collision",
+                "HashComputation.hash_collision",
+                "HashComputation.oidc_hash_collision",
+            },
+            "A-SHA512-CR": {
+                "Verified.Crypto.Bridge.sha512_collision",
+                "HashComputation.hash_collision",
+                "HashComputation.oidc_hash_collision",
+            },
+            "A-SHA2-HALF-TRUNC-CR": {
+                "HashComputation.truncation_collision",
+                "HashComputation.oidc_hash_collision",
+            },
+            "truncation_collision": {"HashComputation.truncation_collision"},
+            "string_encoding_collision": {
+                "Verified.Crypto.Bridge.string_encoding_collision",
+                "Verified.Crypto.Bridge.sha256_of_string_collision",
+                "Jose.SdJwt.disclosure_digest_collision",
+                "Pkce.s256_collision",
+            },
         }
         for premise, required in expected.items():
             with self.subTest(premise=premise):
                 assert required <= events[premise]
-                # Full hash resistance must not stand in for the separate
-                # leftmost-half truncation premise.
+        # Full hash resistance must not stand in for the separate
+        # leftmost-half truncation premise.
+        for premise in ("A-SHA256-CR", "A-SHA384-CR", "A-SHA512-CR"):
+            with self.subTest(full_hash_premise=premise):
                 assert "HashComputation.truncation_collision" not in events[premise]
 
 

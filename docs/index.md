@@ -244,9 +244,9 @@ Audience: contributors, maintainers
 | `docs/verification/claims/admin-ui-assurance-case.md` | claim | Admin UI Assurance Case | current implementation baseline | 2026-05-20 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumption-boundary-overview.md` | claim | Assumption Boundary Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/README.md` | index | F* Assumption Register Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/current-register.md` | claim | Current F* Assumption Register | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/historical-reductions.md` | claim | F* Assumption Historical Reductions | historical record | 2026-09-11 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/assumptions/mitigation-and-audit.md` | claim | F* Assumption Mitigation And Audit Checklist | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/current-register.md` | claim | Current F* Assumption Register | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/historical-reductions.md` | claim | F* Assumption Historical Reductions | historical record | 2026-09-14 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/mitigation-and-audit.md` | claim | F* Assumption Mitigation And Audit Checklist | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions.md` | claim | F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
@@ -264,7 +264,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/claim-index.md` | claim | Claim Index — Verification Quality Report | snapshot | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/client-rp-assurance-case.md` | claim | Client / RP Assurance Case | snapshot | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |

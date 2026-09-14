@@ -441,20 +441,21 @@
       ]
     },
     {
-      "id": "A-SHA256-TRUNC128-CR",
+      "id": "A-SHA2-HALF-TRUNC-CR",
       "kind": "computational",
-      "title": "Collision resistance of the leftmost-half OIDC hash",
+      "title": "Collision resistance of SHA-256/384/512 leftmost-half OIDC hashes",
       "status": "specified-not-attested",
-      "statement": "The OIDC at_hash/c_hash values keep the leftmost half of the digest. The event truncation_collision (full digests differ, leftmost halves equal) has a generic bound of about 2^64 for SHA-256 and inherits nothing from the full-length premise.",
+      "statement": "For inputs below the selected SHA-2 input bound, producing truncation_collision (different full digests with equal leftmost halves) is assumed computationally infeasible for adversaries well below the corresponding generic birthday bound: about 2^64 evaluations for SHA-256 truncated to 128 bits, 2^96 for SHA-384 truncated to 192 bits, and 2^128 for SHA-512 truncated to 256 bits. This external premise covers all three hash_alg instances; it is not proved by F* and does not follow from full-length collision resistance. No quantitative security evaluation or premise acceptance is established here.",
       "events": [
         "HashComputation.oidc_hash_collision",
         "HashComputation.truncation_collision"
       ],
       "parameters": {
         "primitive": "SHA-256/384/512 leftmost half",
-        "output_bits": "128/192/256",
-        "generic_bound": "about 2^64 / 2^96 / 2^128"
+        "output_bits": "SHA-256: 128; SHA-384: 192; SHA-512: 256",
+        "generic_bound": "SHA-256: about 2^64 evaluations; SHA-384: about 2^96; SHA-512: about 2^128"
       },
+      "notes": "Graph event binding is conservative at module granularity and requires this premise for all three algorithm instances. The composed oidc_hash_collision event also requires the separately registered full-hash premises A-SHA256-CR, A-SHA384-CR and A-SHA512-CR. This entry replaces the misleading identifier A-SHA256-TRUNC128-CR; historical graph records retain their original register hash and identifier and must be regenerated before comparison with this register.",
       "references": [
         "OpenID Connect Core 1.0 section 3.1.3.6"
       ]
@@ -537,7 +538,7 @@
       "kind": "symbolic-abstraction",
       "title": "Truncated digests may collide although full digests differ",
       "status": "specified-not-attested",
-      "statement": "The OIDC leftmost-half truncation introduces the event truncation_collision; it is distinct from a full-length collision and is covered only by A-SHA256-TRUNC128-CR.",
+      "statement": "The OIDC leftmost-half truncation introduces truncation_collision for SHA256, SHA384 and SHA512. Their retained output widths are 128, 192 and 256 bits, respectively. This symbolic event is distinct from a full-length collision; its computational interpretation is specified separately by A-SHA2-HALF-TRUNC-CR and is not supplied by the full-hash premises.",
       "events": [
         "HashComputation.truncation_collision"
       ]

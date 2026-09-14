@@ -1,6 +1,6 @@
 # Crypto Claim Mapping
 
-Last updated: 2026-09-11
+Last updated: 2026-09-14
 
 Status: current implementation baseline
 
@@ -36,7 +36,7 @@ are closed promoted exceptions; broad RSA remains outside the current server cla
 | 3 | *(removed)* `lemma_sha256_of_string_collision_resistant` → events `string_encoding_collision`, `sha256_of_string_collision` | A: Crypto (event) + symbolic abstraction | 7636-002/007, 9901-001 | (via #2) | *(always active)* |
 | 4 | *(removed)* `lemma_ed25519_unforgeable` (was vacuous) → event `ed25519_forgery`; premise `A-ED25519-EUF-CMA` | A: Crypto (event) | No verified row cited it; `Dpop.Signature` and `Jose.Rsa_signatures` call `ed25519_verify` without an unforgeability lemma | `dpop_replay.spthy` (`dpop_authentication`, symbolic) | *(always active)* |
 | 5 | *(removed)* `disclosure_digest_collision_resistant` → event `disclosure_digest_collision`; finite premises `no_collision_with_issued`, `no_presented_collision` | A: Crypto (event) | 9901-001 (`lemma_non_forgeability`, `lemma_reconstruction_subset` now conditional; `*_or_collision` unconditional) | `sd_jwt_selective_disclosure.spthy` (`disclosure_non_forgeability`, symbolic hash) | *(always active)* |
-| 6 | *(removed)* `assumption_collision_resistance` → events `hash_collision`, `truncation_collision`, `oidc_hash_collision`; premises `A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA256-TRUNC128-CR` | A: Crypto (event) | 9449-008, OIDC-1-003, OIDC-1-010 (no verified row used injectivity; the SMTPat axiom was available to all of them) | — | *(always active)* |
+| 6 | *(removed)* `assumption_collision_resistance` → events `hash_collision`, `truncation_collision`, `oidc_hash_collision`; premises `A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA2-HALF-TRUNC-CR` | A: Crypto (event) | 9449-008, OIDC-1-003, OIDC-1-010 (no verified row used injectivity; the SMTPat axiom was available to all of them) | — | *(always active)* |
 | 7 | `hacl_sha256` | B': HACL\* linkage | WASM-verified entries | — | *(WASM target only)* |
 | 8 | `hacl_ed25519_verify` | B': HACL\* linkage | WASM-verified entries | — | *(WASM target only)* |
 | 9 | `jose_header_entry_error_code` | B'': EverParse linkage | JOSE header entry validation entries | — | *(always active)* |
@@ -175,7 +175,7 @@ The Low\*/C extraction path and WASM host path use different implementations
 | `disclosure_digest_collision` event (`A-SHA256-CR` plus `string_encoding_collision`) | `sha2` / verified hash model | N/A | The composed string digest can collide through string encoding or SHA-256; hash hardness alone does not discharge both boundaries. The F\* theorems are conditional on finite no-collision predicates or exhibit a witness |
 | #9 `generate_secure_random` | ring / OS CSPRNG | N/A | External entropy assumption |
 | #10 `fresh_challenge_id` | ring / OS CSPRNG | N/A | External entropy assumption |
-| `hash_collision` / `truncation_collision` events (`A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA256-TRUNC128-CR`) | `sha2` / `aws-lc-rs` as runtime providers | N/A | Collision resistance is an external premise; the truncated OIDC form has its own weaker premise; runtime implementation differs by call site |
+| `hash_collision` / `truncation_collision` events (`A-SHA256-CR`, `A-SHA384-CR`, `A-SHA512-CR`, `A-SHA2-HALF-TRUNC-CR`) | `sha2` / `aws-lc-rs` as runtime providers | N/A | Collision resistance is an external premise; the truncated OIDC form has its own weaker premise; runtime implementation differs by call site |
 
 ---
 

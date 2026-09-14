@@ -191,7 +191,7 @@ let lemma_hash_collision_refines alg input1 input2 =
     (the OIDC at_hash / c_hash form) coincide.  The truncated value carries
     only half the digest length, so this event is separate from
     hash_collision and must not inherit the full-length premise
-    (register entry A-SHA256-TRUNC128-CR). *)
+    (register entry A-SHA2-HALF-TRUNC-CR covers SHA256, SHA384 and SHA512). *)
 let truncation_collision (alg:hash_alg) (input1 input2:bytes) : Type0 =
   compute_hash alg input1 =!= compute_hash alg input2 /\
   truncated_size alg <= Bytes.length (compute_hash alg input1) /\
