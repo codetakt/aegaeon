@@ -41,9 +41,16 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import admit_fstar_modules as admission  # sibling module; path set above
+import run_fstar_invocation as invocation
 
 CONTRACT = "assumption-graph-v1"
-DEP_CONTRACT = "fstar-2025.10.06-dep-v1"
+DEP_CONTRACT = "fstar-2025.10.06-dep-v2"
+PROBE_OUTPUTS = {
+    "depend.txt": "dependency_sha256",
+    "depend.stderr": "dependency_stderr_sha256",
+    "load.log": "load_sha256",
+    "load.stderr": "load_stderr_sha256",
+}
 LOAD_CONTRACT = "fstar-2025.10.06-checkedfiles-v1"
 TRACE_CONTRACT = "fstar-2025.10.06-batch-trace-v2"
 TRACE_OPTIONS = ["--debug", "Dep", "--debug", "CheckedFiles"]
@@ -265,6 +272,7 @@ def run_probe(out_dir: Path, pass_id: str, command: list[str]) -> int:
         "pass_id": pass_id,
         "cwd": str(Path.cwd()),
         "tool": file_identity(tool_path),
+        "solver": invocation.requested_solver(command),
         "verifier_argv": command,
         "dependency_argv": dependency_argv,
         "load_argv": load_argv,
@@ -276,10 +284,18 @@ def run_probe(out_dir: Path, pass_id: str, command: list[str]) -> int:
     record.update(
         dependency_returncode=dep_rc,
         load_returncode=load_rc,
-        dependency_sha256=digest_file(directory / "depend.txt"),
-        load_sha256=digest_file(directory / "load.log"),
+        **{key: digest_file(directory / name) for name, key in PROBE_OUTPUTS.items()},
         status="succeeded" if dep_rc == 0 and load_rc == 0 else "failed",
     )
+    try:
+        for kind, names in (
+            ("dependency", ("depend.txt", "depend.stderr")),
+            ("load", ("load.log", "load.stderr")),
+        ):
+            text = "\n".join((directory / name).read_text(errors="replace") for name in names)
+            record[f"{kind}_solver"] = probe_solver(text, tool_path, record["solver"])
+    except (OSError, ValueError) as error:
+        record.update(status="failed", error=str(error))
     (directory / "record.json").write_text(canonical(record))
     print(f"ASSUMPTION-GRAPH {json.dumps({'event': 'probe', **record}, sort_keys=True)}")
     return 0 if record["status"] == "succeeded" else 1
@@ -667,6 +683,17 @@ def effective_solver(output_text: str, tool_path: Path) -> dict[str, Any]:
     return {**first, "arguments": ["-smt2", "-in"], "process_count": len(identities)}
 
 
+def probe_solver(text: str, tool_path: Path, pin: Any) -> dict[str, Any]:
+    """Probes may start no solver; every observed start must match the explicit pin."""
+    observed = effective_solver(text, tool_path)
+    if observed["observed"] and (
+        not isinstance(pin, dict)
+        or any(observed[key] is None or observed[key] != pin.get(key) for key in ("path", "sha256"))
+    ):
+        raise GraphError("probe solver process does not match the explicit pin")
+    return observed
+
+
 def _solver_process(name: str, version: str, tool_path: Path) -> dict[str, Any]:
     directories: list[str] = []
     try:
@@ -861,7 +888,7 @@ class Inputs:
         result = load_object(directory / "result.json")
         modules = load_object(directory / "modules.json")
         record = load_object(dependencies / "record.json")
-        for name in ("depend.txt", "load.log"):
+        for name in PROBE_OUTPUTS:
             if not (dependencies / name).is_file():
                 raise GraphError(f"{name} missing for pass {pass_id}")
         traced = inputs["argv"][1 : 1 + len(TRACE_OPTIONS)] == TRACE_OPTIONS
@@ -910,9 +937,27 @@ class Inputs:
         for key in ("inputs_sha256", "output_sha256"):
             if admitted.get(key) != result.get(key):
                 raise GraphError(f"pass {pass_id}: {key} differs from admission summary")
-        for name, key in (("depend.txt", "dependency_sha256"), ("load.log", "load_sha256")):
+        for name, key in PROBE_OUTPUTS.items():
             if digest_file(dependencies / name) != record.get(key):
                 raise GraphError(f"pass {pass_id}: {name} does not match its record digest")
+        pin = inputs.get("solver") if "--smt" in inputs["argv"] else None
+        if "solver" not in record or record["solver"] != pin:
+            raise GraphError(f"pass {pass_id}: probe solver pin differs from the proof")
+        proof_solver = effective_solver(
+            (directory / "output.log").read_text(errors="replace"), Path(tool["path"])
+        )
+        for kind, names in (
+            ("dependency", ("depend.txt", "depend.stderr")),
+            ("load", ("load.log", "load.stderr")),
+        ):
+            text = "\n".join((dependencies / name).read_text(errors="replace") for name in names)
+            observed = probe_solver(text, Path(tool["path"]), pin)
+            if record.get(f"{kind}_solver") != observed:
+                raise GraphError(f"pass {pass_id}: {kind} solver summary differs from probe output")
+            if observed["observed"] and any(
+                observed[key] != proof_solver.get(key) for key in ("path", "sha256", "version")
+            ):
+                raise GraphError(f"pass {pass_id}: {kind} solver differs from the proof")
         if record.get("status") != "succeeded":
             raise GraphError(f"pass {pass_id}: dependency probe did not succeed")
         return {
@@ -1059,6 +1104,9 @@ class Builder:
             tool_version=version,
             solver_recorded=inputs.get("solver"),
             solver_effective=solver,
+            probe_solvers={
+                kind: records["record"][f"{kind}_solver"] for kind in ("dependency", "load")
+            },
             denied_options=denied,
             admission_status=records["modules"].get("status"),
             records={
@@ -1067,6 +1115,8 @@ class Builder:
                 "modules_sha256": self.inputs.admission["passes"][pass_id].get("modules_sha256"),
                 "dependency_sha256": records["record"]["dependency_sha256"],
                 "load_sha256": records["record"]["load_sha256"],
+                "dependency_stderr_sha256": records["record"]["dependency_stderr_sha256"],
+                "load_stderr_sha256": records["record"]["load_stderr_sha256"],
                 "probe_record_sha256": digest_file(
                     self.inputs.evidence / "dependencies" / pass_id / "record.json"
                 ),

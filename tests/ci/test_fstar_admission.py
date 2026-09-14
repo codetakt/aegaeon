@@ -212,11 +212,13 @@ class ExplicitSolverEvidenceTests(unittest.TestCase):
             record = case.modules()
             for field in ("inputs_sha256", "output_sha256"):
                 record[field] = result[field]
+            record["result_sha256"] = sha256(case.directory / "result.json")
             (case.directory / "modules.json").write_text(json.dumps(record))
             summary = json.loads((case.out / "admission.json").read_text())
             summary["passes"][case.pass_id].update(
                 inputs_sha256=result["inputs_sha256"],
                 output_sha256=result["output_sha256"],
+                result_sha256=record["result_sha256"],
                 modules_sha256=sha256(case.directory / "modules.json"),
             )
             (case.out / "admission.json").write_text(json.dumps(summary))
@@ -226,6 +228,123 @@ class ExplicitSolverEvidenceTests(unittest.TestCase):
         assert case.admit().returncode == 0
         shutil.rmtree(case.src)
         assert case.verify().returncode == 0
+
+    def entrypoint_case(self):
+        case = self.case()
+        inputs = json.loads((case.directory / "inputs.json").read_text())
+        result = json.loads((case.directory / "result.json").read_text())
+        inputs.update(
+            tool_identity_contract="entrypoint-before-after-v1",
+            tool_resolved_path="/missing/canonical-verifier",
+        )
+        result.update(
+            tool_after=inputs["tool"].copy(),
+            tool_resolved_path_after=inputs["tool_resolved_path"],
+            tool_executable_after=True,
+        )
+        (case.directory / "inputs.json").write_text(json.dumps(inputs))
+        self.rebind(case, result)
+        assert case.admit().returncode == 0
+        return case, inputs, result
+
+    def test_entrypoint_observations_replay_without_the_executable(self) -> None:
+        case, _, _ = self.entrypoint_case()
+        shutil.rmtree(case.src)
+        assert case.verify().returncode == 0
+
+    def test_entrypoint_replay_binds_the_complete_result_file(self) -> None:
+        for mutation in ("failure-detail", "formatting"):
+            with self.subTest(mutation=mutation):
+                case, _, result = self.entrypoint_case()
+                paths = [case.out / "admission.json", case.directory / "modules.json"]
+                admitted = [path.read_bytes() for path in paths]
+                path = case.directory / "result.json"
+                if mutation == "failure-detail":
+                    result["error"] = "verifier entrypoint changed during invocation"
+                    path.write_text(json.dumps(result))
+                else:
+                    path.write_bytes(path.read_bytes() + b"\n")
+                completed = case.verify()
+                assert completed.returncode == 1
+                assert "result.json digest" in completed.stderr
+                assert [path.read_bytes() for path in paths] == admitted
+
+    def test_entrypoint_replay_requires_both_result_digest_bindings(self) -> None:
+        for target in ("admission", "modules", "both"):
+            for digest in (None, "", "ff" * 32):
+                with self.subTest(target=target, digest=digest):
+                    case, _, _ = self.entrypoint_case()
+                    summary_path = case.out / "admission.json"
+                    modules_path = case.directory / "modules.json"
+                    summary = json.loads(summary_path.read_text())
+                    record = case.modules()
+                    entries = []
+                    if target in ("admission", "both"):
+                        entries.append(summary["passes"][case.pass_id])
+                    if target in ("modules", "both"):
+                        entries.append(record)
+                    for entry in entries:
+                        if digest is None:
+                            entry.pop("result_sha256", None)
+                        else:
+                            entry["result_sha256"] = digest
+                    modules_path.write_text(json.dumps(record))
+                    summary["passes"][case.pass_id]["modules_sha256"] = sha256(modules_path)
+                    summary_path.write_text(json.dumps(summary))
+                    completed = case.verify()
+                    assert completed.returncode == 1
+                    assert "result.json digest" in completed.stderr
+
+    def test_historical_replay_without_entrypoint_observations(self) -> None:
+        case = self.case()
+        assert case.admit().returncode == 0
+        record = case.modules()
+        record.pop("result_sha256", None)
+        (case.directory / "modules.json").write_text(json.dumps(record))
+        path = case.out / "admission.json"
+        summary = json.loads(path.read_text())
+        summary["passes"][case.pass_id].pop("result_sha256", None)
+        summary["passes"][case.pass_id]["modules_sha256"] = sha256(case.directory / "modules.json")
+        path.write_text(json.dumps(summary))
+        shutil.rmtree(case.src)
+        assert case.verify().returncode == 0
+
+    def test_changed_or_missing_entrypoint_observation_rejects_rebound_records(self) -> None:
+        for mutation in (
+            "missing",
+            "digest",
+            "target",
+            "contract",
+            "contract-missing",
+            "chmod",
+            "missing-digest",
+        ):
+            with self.subTest(mutation=mutation):
+                case, inputs, result = self.entrypoint_case()
+                if mutation == "missing":
+                    del result["tool_after"]
+                elif mutation == "digest":
+                    result["tool_after"]["sha256"] = "ff" * 32
+                elif mutation == "target":
+                    result["tool_resolved_path_after"] = "/missing/other-verifier"
+                elif mutation == "chmod":
+                    result["tool_executable_after"] = False
+                elif mutation == "contract-missing":
+                    del inputs["tool_identity_contract"]
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                elif mutation == "missing-digest":
+                    del inputs["tool"]["sha256"]
+                    del result["tool_after"]["sha256"]
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                else:
+                    inputs["tool_identity_contract"] = "unsupported"
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                self.rebind(case, result)
+                assert case.verify().returncode == 1
+                (case.directory / "modules.json").unlink()
+                (case.out / "admission.json").unlink()
+                assert case.admit().returncode == 1
+                assert "verifier entrypoint" in case.reasons()
 
     def test_command_mutations_reject_even_with_rebound_envelopes(self) -> None:
         for mutation in ("operand", "operand-and-echo", "executed", "executed-lax"):
@@ -437,12 +556,12 @@ class RealEvidenceTests(unittest.TestCase):
         original = json.loads(path.read_text())
         for value in (False, 0.0, "0", None):
             with self.subTest(value=repr(value)):
-                path.write_text(json.dumps({**original, "returncode": value}) + "\n")
+                ExplicitSolverEvidenceTests.rebind(case, {**original, "returncode": value})
                 result = case.verify()
                 assert result.returncode == 1
                 assert "replay rejected" in result.stderr
                 assert "return code" in result.stderr
-        path.write_text(json.dumps(original) + "\n")
+        ExplicitSolverEvidenceTests.rebind(case, original)
         assert case.verify().returncode == 0
 
     def test_hosted_sources_must_match_recorded_digests(self) -> None:

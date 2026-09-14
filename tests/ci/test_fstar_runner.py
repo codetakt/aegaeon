@@ -361,6 +361,9 @@ print('TOTAL TIME 1 ms: ' + ' '.join(sys.argv), flush=True)
             assert inputs["executed_argv"] == [inputs["tool"]["path"], *arguments]
             self.assert_event_stream(events, pass_id)
             assert record["status"] == "succeeded"
+            assert inputs["tool_identity_contract"] == "entrypoint-before-after-v1"
+            assert record["tool_after"] == inputs["tool"]
+            assert record["tool_resolved_path_after"] == inputs["tool_resolved_path"]
             assert (
                 record["inputs_sha256"]
                 == hashlib.sha256((directory / "inputs.json").read_bytes()).hexdigest()
@@ -385,6 +388,75 @@ print('TOTAL TIME 1 ms: ' + ' '.join(sys.argv), flush=True)
         for pass_id in PASS_IDS:
             record = json.loads((self.output / "invocations" / pass_id / "result.json").read_text())
             assert record["solver_effective"]["process_count"] == 2
+
+    def test_mutating_verifier_is_rejected_and_retains_zero_child_exit(self):
+        (self.root / "fstar/ToolIdentity.fst").write_text("module ToolIdentity\n")
+        for operation in ("rewrite", "unlink", "retarget", "chmod", "fifo", "device", "directory"):
+            with self.subTest(operation=operation):
+                tool = self.bin / f"mutating-{operation}"
+                payload = self.bin / f"payload-{operation}"
+                alternate = self.bin / f"alternate-{operation}"
+                source = (
+                    f"#!{sys.executable}\nimport os, pathlib\n"
+                    f"tool = pathlib.Path({str(tool)!r})\n"
+                    f"operation = {operation!r}\n"
+                    "if operation == 'rewrite':\n"
+                    "    tool.write_text('changed verifier bytes')\n"
+                    "elif operation == 'chmod':\n"
+                    "    tool.chmod(0o644)\n"
+                    "else:\n"
+                    "    tool.unlink()\n"
+                    "    if operation == 'retarget':\n"
+                    f"        tool.symlink_to({str(alternate)!r})\n"
+                    "    elif operation == 'fifo':\n"
+                    "        os.mkfifo(tool)\n"
+                    "    elif operation == 'device':\n"
+                    "        tool.symlink_to('/dev/zero')\n"
+                    "    elif operation == 'directory':\n"
+                    "        tool.mkdir()\n"
+                    "print('All verification conditions discharged successfully')\n"
+                )
+                payload.write_text(source)
+                payload.chmod(0o755)
+                alternate.write_text(source)  # Same bytes, different symlink target.
+                alternate.chmod(0o755)
+                tool.symlink_to(payload)
+                output = self.root / f"mutating-output-{operation}"
+                completed = subprocess.run(  # noqa: S603 - fixed recorder and controlled local tool
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts/validation/run_fstar_invocation.py"),
+                        "--out-dir",
+                        str(output),
+                        "--pass-id",
+                        "1",
+                        "--",
+                        str(tool),
+                        "ToolIdentity.fst",
+                    ],
+                    cwd=self.root / "fstar",
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                assert completed.returncode == 1, completed.stderr
+                record = json.loads((output / "invocations/1/result.json").read_text())
+                inputs = json.loads((output / "invocations/1/inputs.json").read_text())
+                assert record["status"] == "failed"
+                assert record["returncode"] == 0
+                assert all(record[field] for field in ("output_sha256", "inputs_sha256", "error"))
+                if operation == "retarget":
+                    assert record["tool_after"] == inputs["tool"]
+                    assert record["tool_resolved_path_after"] != inputs["tool_resolved_path"]
+                elif operation == "rewrite":
+                    assert record["tool_after"]["sha256"] != inputs["tool"]["sha256"]
+                elif operation == "chmod":
+                    assert record["tool_executable_after"] is False
+                else:
+                    assert "tool_after" not in record
+                if operation in ("fifo", "device", "directory"):
+                    assert "non-regular file" in record["error"]
 
     def assert_solver_restart_rejected(self, **environment):
         result = self.invoke(**environment)

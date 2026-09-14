@@ -26,7 +26,7 @@ and never activates an assurance statement.
 | `dependencies/<pass>/depend.txt` | `fstar.exe --dep full` with the pass's arguments (hints and diagnostics stripped) | the module closure the verifier resolved: every `.checked` target, its source and its dependencies |
 | `invocations/<pass>/output.log` (batch-trace-v2) | the actual proof with `--debug Dep --debug CheckedFiles` | ordered batch schedules, positive checked-file loads and source checks, together with the admitted proof result |
 | `dependencies/<pass>/load.log` | `fstar.exe --admit_smt_queries true` with the same trace options | independent diagnostic schedule/load comparison; never proof evidence |
-| `dependencies/<pass>/record.json` | `assumption_graph.py probe` | argv of both probes, working directory, tool digest, output digests, return codes |
+| `dependencies/<pass>/record.json` | `assumption_graph.py probe` | argv of both probes, working directory, tool and solver pin, stdout/stderr digests, observed solver summaries, return codes |
 | recorded sources | `--source-root` (first-party, generated, tests) and the immutable provider/ulib paths named in `inputs.json` | digest re-check, declaration and premise parsing |
 | `scripts/flake/verify_fstar.sh` | generator of the builder-written `C.Loops.fst` | regeneration and digest comparison of the injected premises |
 | `spec/assumption-register.json` | hand-reviewed register | premise identity, statement digests, coverage of provider/tool/model premises, review status |
@@ -185,7 +185,19 @@ Consistency is never reported as qualification.
 
 Graph reconstruction replays the proof admission verifier, checks the exact
 probe argv derived from the proof command, requires zero integer return codes,
-and binds the probe record and proof result digests. Register tool digests are
+and binds the probe record and proof result digests. The `dep-v2` contract hashes
+both stdout and stderr for each probe and checks every solver start in all four
+streams against the proof's explicit solver pin. Malformed starts, unsupported
+arguments, changed executables, inconsistent restarts and a reported version
+different from the proof are rejected, even with recomputed output digests.
+Recorded solver summaries must agree with the raw probe output. Probes may emit
+no solver starts: this is recorded as unobserved and establishes no observed
+solver identity. The probes remain diagnostics, never proof evidence.
+
+Older `dep-v1` records do not bind stderr and are no longer accepted for graph
+reconstruction. Preserve their original records and graphs; collect new probes
+with matching proof inputs before rebuilding. Adding digests retrospectively
+does not establish what the earlier invocation emitted. Register tool digests are
 compared with every pass's observed verifier/solver identity. The resolved graph
 node determines this obligation: all registrations selecting a tool node, by
 explicit ID or coverage, must be tool entries with the matching digest. An
@@ -268,6 +280,27 @@ derivation selects both graph test files.
 
 ## Limits
 
+New invocation records compare the verifier entrypoint's SHA-256 and resolved
+path before and after the child exits. Identity hashing and solver-wrapper
+inspection open paths in nonblocking mode, then require a regular file on the
+opened descriptor before reading. A FIFO, device or directory replacement fails
+instead of entering an unbounded read. A changed or missing executable, a
+different symlink target (even with identical bytes), or lost executable
+permission fails the invocation while retaining its actual child exit code and
+output. Admission rechecks the retained before/after identities without needing
+the original executable. Historical records without `entrypoint-before-after-v1`
+remain replayable but contain no post-execution identity observation.
+Records carrying that contract also require the complete `result.json` digest
+in both admission envelopes. Earlier outputs without that binding require a new
+recorded execution; a retrospectively added digest does not establish which
+observations were admitted. See [module admission](module-admission.md).
+
+These are endpoint observations: replacement followed by restoration during
+execution can evade them. They also do not measure an entrypoint's interpreter,
+wrapped executable or dynamically loaded libraries. The production Nix lane's
+immutable tool closure remains a separate trust boundary; mutable-tool runs do
+not acquire that boundary from these comparisons.
+
 The graph proves nothing about premise soundness, model adequacy, implementation
 correspondence or release assurance. Module-closure granularity over-approximates use.
 Provider and ulib sources are identified by their immutable store paths, not re-digested;
@@ -278,10 +311,11 @@ code path with the real pass but is a separate invocation.
 ### Solver restarts
 
 The invocation recorder and graph reconstruction inspect every `Creating new
-z3proc` record. Repeated starts of the same resolved executable and reported version value are
+z3proc` record, including both streams of dependency and load probes. Repeated
+starts of the same resolved executable and reported version value are
 accepted. A later change of executable, reported version or resolved identity, or a malformed
 start record rejects the invocation or graph, even when the verifier exits zero.
-When an explicit solver pin is supplied, the recorder also compares the observed
+For proof invocations, an explicit solver pin makes the recorder compare the observed
 path and bytes with that pin and requires at least one supported start record.
 An explicit pin with no observation fails even if F\* exits zero; the record retains
 the actual child exit code and unknown observed identity. Without an explicit pin,

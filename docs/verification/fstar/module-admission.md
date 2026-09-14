@@ -1,6 +1,6 @@
 # F* Per-Module Admission
 
-Last updated: 2026-09-08
+Last updated: 2026-09-14
 
 Status: current implementation baseline
 
@@ -83,6 +83,17 @@ Standalone replay also compares both input and output digests in `admission.json
 with the validated invocation result and the per-module record. Missing or changed
 summary digests reject replay even when the other records remain consistent.
 
+New admissions also bind the exact bytes of `result.json` into both `modules.json`
+and `admission.json`. Replay compares these digests with the same bytes it parses,
+so a changed result cannot replace the admitted status or verifier observations.
+Both bindings are required for `entrypoint-before-after-v1`, even if they are
+removed from both envelopes. Earlier outputs carrying that observation contract
+without result digests must be recorded and admitted again; adding a digest later
+does not establish which result was originally admitted. Historical records with
+neither the observation contract nor result bindings retain their previous replay
+scope. These digests check consistency with the retained admission; they do not
+authenticate an artifact when the entire record set can be rewritten.
+
 Request identity: each requested `.fst` (implementation) or `.fsti` (interface)
 is re-read from the source tree, its SHA-256 must equal the invocation record,
 and its declared module name is taken from the first declaration after
@@ -142,14 +153,15 @@ grammar before it reports success.
 ## Records and gate wiring
 
 - `invocations/<pass-id>/modules.json` (schema 1): contract identifier, pass
-  identifier, invocation input/output digests, tool identity, return code,
+  identifier, invocation input/output/result digests, tool identity, return code,
   the disposition and result line of every requested source, unrequested
   results with their classification and resolved source digest, the checked
   file scan, diagnostics (error and warning counts, completion marker lines,
   argv echo check), status and rejection reasons.
   An existing `modules.json` is never overwritten; evidence directories must be
   fresh.
-- `admission.json` (schema 1): the digest of every pass record, written
+- `admission.json` (schema 1): the digest of every pass record and its invocation
+  input, output and result digests, written
   atomically only when all required passes are accepted and removed at the
   start of each admission, so a stale acceptance cannot survive a failure.
 - `FSTAR-ADMISSION` JSON lines on stdout and in `verify.log` per pass and for
