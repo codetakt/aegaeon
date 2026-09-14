@@ -1167,16 +1167,19 @@ jobs:
           fi
       - name: Lint commit messages (pull_request)
         if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: \${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: \${{ github.event.pull_request.head.sha }}
         run: |
-          git fetch origin "\${{ github.base_ref }}" --depth=1
-          base_sha="$(git merge-base HEAD "origin/\${{ github.base_ref }}" || true)"
-          nix develop . --command ./scripts/commitlint-range.sh --from "$base_sha" --to HEAD
+          : "\${PR_BASE_SHA:?Pull request base SHA is required}"
+          : "\${PR_HEAD_SHA:?Pull request head SHA is required}"
+          nix develop . --command ./scripts/commitlint-range.sh --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA"
       - name: Lint PR title
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: \${{ github.event.pull_request.title }}
         run: |
-          printf '%s\n' "$PR_TITLE" > /tmp/pr-title
+          printf '%s\\n' "$PR_TITLE" > /tmp/pr-title
           nix develop . --command commitlint --edit /tmp/pr-title
   typescript-lint:
     name: TypeScript Lint

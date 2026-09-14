@@ -88,6 +88,20 @@ The classifier reconciles every property with the `SUMMARY` counts, including
 failures and unreachable callee checks. The named positive assertion must be
 reachable; the `Complete` line separately confirms the single harness finished.
 
+Before starting Kani, the checker compares the control source with its reviewed
+`CONTROL_SOURCE_SHA256`. Missing or changed source fails with no harness run.
+All harnesses use one approved byte snapshot; the retained copies are also
+checked. `RESULTS.json` records the approved and observed source digests.
+If a retained copy disappears or becomes unreadable during execution, its case
+fails with `source_error: source_unreadable` and a null source digest. The
+remaining cases still run, and the completed report retains the overall failure.
+Changing an assertion requires reviewing the source digest and property
+inventory together. Never regenerate the approved digest from a caller's input
+or infer approval from property counts: a weakened assertion can retain the
+same identifiers and still pass. Output classification alone does not bind a
+log to the intended source. This check identifies the reviewed source; it does
+not establish the soundness of Kani or protect against a compromised host.
+
 The public `$out/bin/kani` wrapper starts upstream's proxy, which invokes
 `$KANI_HOME/kani-0.66.0/bin/kani-driver`. `setup-kani-env` links that release
 directory to the installed bundle, so the driver resolves its libraries there.
