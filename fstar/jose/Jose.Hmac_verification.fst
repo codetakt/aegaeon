@@ -1,3 +1,5 @@
+(** Comparison slice: ct_eq is independent of the HMAC computation.
+    The verify path uses the zero-output EverCrypt.HMAC placeholder. *)
 module Jose.Hmac_verification
 
 open Jose.Alg_policy
@@ -36,7 +38,7 @@ let ct_eq (a:bytes) (b:bytes) : Tot bool =
     ct_eq_loop a b len_a 0ul 0uy = 0uy
   else false
 
-(** Verify an HMAC based JWS signature using EverCrypt. *)
+(** Placeholder signature path, outside the ct_eq comparison claim. *)
 val verify : key:bytes -> alg:alg -> data:bytes -> signature:bytes -> Tot bool
 let verify key alg data signature =
   if not (allowed alg) then false

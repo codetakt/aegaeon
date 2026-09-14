@@ -1,4 +1,5 @@
-(** HMAC wrapper over EverCrypt with constant-time verification *)
+(** Placeholder HMAC model: compute returns zero-filled bytes.
+    Functional HMAC computation and authentication remain unimplemented here. *)
 module EverCrypt.HMAC
 
 open FStar.Bytes
@@ -9,7 +10,7 @@ open HACL_Wrapper
 
 module SHD = Spec.Hash.Definitions
 
-(** Compute an HMAC using HACL* wrapper implementation. *)
+(** Select the output length for the placeholder computation below. *)
 
 let mac_len (alg:SHD.hash_alg) : UInt32.t =
   match alg with
@@ -34,7 +35,7 @@ let ec_hmac_compute a mac key keylen data datalen =
     | SHD.SHA2_512 -> hmac_sha512 key data
     | _ -> hmac_sha256 key data  (* default to SHA256 *)
   in
-  (* Copy computed result to output buffer *)
+  (* Placeholder: the computed result is discarded; no output is copied. *)
   ()
 
 val compute : SHD.hash_alg -> key:bytes -> data:bytes -> Tot bytes
@@ -45,7 +46,8 @@ let compute alg key data =
   ec_hmac_compute alg mac key keylen data datalen;
   mac
 
-(** Verify an HMAC in constant time by recomputing and comparing. *)
+(** Compare against the zero-filled placeholder MAC.
+    This is not evidence of HMAC authentication. *)
 val verify : SHD.hash_alg -> key:bytes -> msg:bytes -> mac:bytes -> Tot bool
 let verify alg key msg mac =
   let mac' = compute alg key msg in

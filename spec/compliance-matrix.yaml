@@ -1096,6 +1096,9 @@ rfc_7518:
     fstar: fstar/jose/Jose.Hmac_verification.fst#ct_eq
     rust: crates/ffi/src/lib.rs#verify_hmac
     test: tests/constant_time/hmac_timing_test.c
+  notes:
+  - "F* grounding is limited to ct_eq and its byte-comparison loop, which do not call EverCrypt.HMAC.compute. It does not establish HMAC computation or JWS signature verification."
+  - "Jose.Hmac_verification.verify calls the zero-output EverCrypt.HMAC placeholder and is outside this claim. Compiled constant-time behavior requires the separately identified extraction and runtime evidence."
 - id: 7518-002
   section: '3.2'
   requirement: MUST

@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-09-12
+Last updated: 2026-09-14
 
 Status: current implementation baseline
 
@@ -29,10 +29,33 @@ modules as grounding for `status: verified` entries.
 | `fstar/pkce/Pkce.Verification.fst` | `toy-stub` | `base64url_encode` returns a constant 43-character placeholder at lines 34-39; verified PKCE S256 rows must use `fstar/pkce/Pkce.fst`, whose S256 model delegates through `Verified.Crypto.Bridge.sha256_of_string`. |
 | `fstar/token/Bearer_validation.fst` | `toy-stub` | `validate_bearer` is a constant-`true` stub at lines 5-6 and is referenced only by implemented rows `6750-001` and `6750-003`, not by verified grounding. |
 | `fstar/HACL_Wrapper.fst` | `toy-stub` | AEAD/HMAC wrappers return zero-filled placeholder outputs or unconditional decrypt success at lines 19-43; HACL grounding must use the bridge modules or linked C integration. |
+| `fstar/EverCrypt.HMAC.fst` | `toy-stub` | `compute` returns a zero-filled MAC because `ec_hmac_compute` discards its computed result. Its `verify` therefore compares against zeros; it cannot ground HMAC computation or authentication. |
+| `fstar/jose/Jose.Hmac_verification.fst` | `simplified` | Only the independent `ct_eq` comparison is cited by `7518-001`. The module's `verify` calls the placeholder `EverCrypt.HMAC.compute` and cannot ground HMAC or JWS signature verification. |
 | `fstar/par/Client_auth.fst` | `toy-stub` | Lines 5-14 define a toy in-memory registry for `client_a`; partial rows `9126-002` and `9700-004` may reference it, but verified rows must not. |
 | `fstar/par/Request_uri.fst` | `simplified` | Lines 62-72 model request URI issuance as a sequential counter; this preserves uniqueness reasoning but does not model RFC 9126 entropy. Runtime entropy remains evidenced by tests and runtime code. |
 | `fstar/dpop/Dpop.Htu_validation.fst` | `simplified` | `validate_htu` models only the final exact string comparison; the runtime (`crates/ffi/src/lib.rs` DPoP checks) additionally rejects `?`/`#` in the proof `htu` and strips query/fragment from the request URI before the modeled comparison. The trace for `9449-006` claims the comparison step; the normalization prefix remains evidenced by runtime tests. |
 | `fstar/stepup/StepUp.fst` | `simplified` | The F* module is a small pure model that binds a challenge to one immutable `session`. It does not model the runtime successor transfer during login session rotation (`crates/server/src/web/local_auth/post.rs` `complete_stepup_for_local_login`) or authorize-endpoint error responses. Its four lemmas are shallow properties discharged by definition unfolding with `()` proofs. |
+
+## HMAC placeholder and comparison boundaries
+
+`EverCrypt.HMAC.compute` allocates an all-zero MAC of the selected length and
+calls `ec_hmac_compute`, whose body discards the result instead of copying it
+into the output. Its imported `HACL_Wrapper` also contains placeholder HMAC
+computations. These models provide no evidence of functional HMAC computation
+or authentication. Their lax-import boundaries are separately recorded in
+`spec/assumption-register.json`; requesting a proof run would not replace the
+placeholder behavior.
+
+`Jose.Hmac_verification.ct_eq` and its comparison loop inspect the supplied
+byte arrays without calling `EverCrypt.HMAC.compute`. Row `7518-001` cites only
+this comparison slice. The module's `verify` function uses the zero-output
+model and is outside that claim. Correspondence to compiled constant-time
+execution requires the separately identified extraction and runtime evidence.
+
+The `toy-stub` and `simplified` classifications disclose these boundaries;
+functional HMAC, provider correspondence and DRBG prerequisites remain open
+for the placeholder paths. This correction changes no cryptographic function
+or accepted premise.
 
 ## JWS protected-header decoding remains open
 
@@ -275,10 +298,10 @@ for the complete token lifecycle remains open.
 
 ## Assumption-Boundary Changes (2026-09-11)
 
-Material model changes made when the six crypto lemma `assume val`s were
-removed. Classifications are unchanged (`faithful` for the Bridge, hash, JWS
-and PKCE modules; `simplified` for `Jose.SdJwt`); the entries record what a
-reviewer must re-check.
+This section records the model changes made on 2026-09-11 when the six crypto
+lemma `assume val`s were removed. Current classifications are listed in
+`model-fidelity.yaml`; subsequent HMAC and JWS corrections are described
+above. The entries record what a reviewer must re-check.
 
 | Module | Change | Reviewer note |
 |---|---|---|

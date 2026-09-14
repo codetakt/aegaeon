@@ -266,7 +266,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-09-12 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |
@@ -325,7 +325,7 @@ Audience: contributors, maintainers
 | `docs/verification/workplans/phase-d/risks-schedule-and-assumptions.md` | verification | Phase D Risks, Schedule, And Assumption Projection | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/phase-d-plan.md` | verification | Phase D: WASM Host Boundary Internalization | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/rng/README.md` | index | DRBG And Entropy Input Workplan Details | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
-| `docs/verification/workplans/rng/drbg-and-entropy.md` | verification | DRBG Scheme And Entropy Input Contract | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
+| `docs/verification/workplans/rng/drbg-and-entropy.md` | verification | DRBG Scheme And Entropy Input Contract | active plan | 2026-09-14 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/rng/fstar-effects-and-callers.md` | verification | RNG F* Effects And Caller Impact | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/rng/proof-boundaries-and-criteria.md` | verification | RNG Proof Boundaries And Completion Criteria | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/rng-plan.md` | verification | DRBG Specification And Entropy Input Contract | active plan | 2026-07-08 | Verification | verification contributors, maintainers |

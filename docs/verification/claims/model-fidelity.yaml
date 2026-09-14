@@ -2,7 +2,7 @@ modules:
   fstar/management/Management.Initialization.fst: simplified
   fstar/ConstTime.fst: faithful
   fstar/EverCrypt.Chacha20Poly1305.fst: faithful
-  fstar/EverCrypt.HMAC.fst: faithful
+  fstar/EverCrypt.HMAC.fst: toy-stub
   fstar/FStar.Base64.fst: faithful
   fstar/FStar.Json.fst: toy-stub
   fstar/HACL_Wrapper.fst: toy-stub
@@ -72,7 +72,7 @@ modules:
   fstar/jose/Jose.HeaderParser.fst: faithful
   fstar/jose/Jose.HeaderPolicy.fst: faithful
   fstar/jose/Jose.HeaderSpec.fst: faithful
-  fstar/jose/Jose.Hmac_verification.fst: faithful
+  fstar/jose/Jose.Hmac_verification.fst: simplified
   fstar/jose/Jose.JsonHeaderSpec.fst: faithful
   fstar/jose/Jose.JsonTlvEquiv.fst: faithful
   fstar/jose/Jose.Jwe_aad.fst: faithful

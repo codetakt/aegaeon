@@ -69,8 +69,13 @@ module Crypto
     `hmac_sha256/384/512`, `s256`) are `opaque_to_smt` so that the lemmas
     above can reveal their one-line bodies. These named Bridge dispatch paths
     no longer use identity or constant digest models. This does not describe
-    the entire pass closure: HACL_Wrapper and EverCrypt.HMAC retain the
-    separately disclosed zero-output models and lax-import boundaries.
+    the entire pass closure: HACL_Wrapper retains zero-output models, and
+    EverCrypt.HMAC.compute returns a zero-filled MAC because ec_hmac_compute
+    discards its result. Jose.Hmac_verification.verify uses that placeholder.
+    docs/verification/claims/model-fidelity-register.md classifies these
+    paths and limits row 7518-001 to the independent ct_eq comparison.
+    Their lax-import boundaries are recorded in spec/assumption-register.json.
+    Functional HMAC and DRBG correspondence remain open for these paths.
 *)
 
 /// Re-export: this module is documentation-only.
