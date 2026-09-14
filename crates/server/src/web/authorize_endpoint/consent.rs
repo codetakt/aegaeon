@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 pub(in crate::web) use submission::submit;
 
 fn has_prompt(ctx: &AuthorizeRequestContext, value: &str) -> bool {
-    ctx.prompt.split(' ').any(|p| p == value)
+    ctx.prompt.contains(value)
 }
 
 fn error(state: &AppState, ctx: &AuthorizeRequestContext, code: &str, message: &str) -> Response {
@@ -26,21 +26,6 @@ fn error(state: &AppState, ctx: &AuthorizeRequestContext, code: &str, message: &
         code,
         Some(message),
     )
-}
-
-pub(super) fn validate_prompt(
-    state: &AppState,
-    ctx: &AuthorizeRequestContext,
-) -> Result<(), Response> {
-    if super::super::authorize_request::prompt_has_conflict(&ctx.prompt) {
-        return Err(error(
-            state,
-            ctx,
-            "invalid_request",
-            "prompt=none cannot be combined with other prompt values",
-        ));
-    }
-    Ok(())
 }
 
 fn snapshot(ctx: &AuthorizeRequestContext) -> Result<Value, serde_json::Error> {

@@ -8,8 +8,7 @@ use crate::oauth_profile;
 
 use super::authorize_request::{
     parse_authorize_request_with_runtime_blocking, request_object_extra_string,
-    request_object_resolution_error_response, OwnedRequestObjectAuthorizeDeps, RawAuthzQuery,
-    RequestObjectAuthorizeDeps,
+    OwnedRequestObjectAuthorizeDeps, RawAuthzQuery, RequestObjectAuthorizeDeps,
 };
 use super::authorize_validation::{
     authorize_error_response, validate_authorize_request, AuthorizeErrorContext,
@@ -17,6 +16,7 @@ use super::authorize_validation::{
 };
 use super::oauth_errors::{json_error_with_iss, registry_state_error_response};
 use super::profile_policy::{record_downstream_profile_rejection, record_downstream_profile_usage};
+use super::prompt::Prompt;
 use super::request_admission::{validate_raw_query, DEFAULT_QUERY_LIMITS};
 use super::AppState;
 
@@ -25,7 +25,7 @@ pub(super) struct AuthorizeRequestContext {
     pub(super) req: AuthzReq,
     pub(super) par_authorize_continuation: Option<String>,
     pub(super) response_mode: crate::form_post::ResponseMode,
-    pub(super) prompt: String,
+    pub(super) prompt: Prompt,
     pub(super) reauthenticated: bool,
     pub(super) client_id_for_error: String,
     pub(super) state_for_echo: Option<String>,
@@ -79,16 +79,29 @@ fn owned_authorize_request_object_deps(state: &AppState) -> OwnedRequestObjectAu
 }
 
 fn authorize_prompt_from_request(
+    state: &AppState,
     req: &AuthzReq,
     outer_prompt: Option<String>,
+    response_mode: crate::form_post::ResponseMode,
     issuer_base: &str,
-) -> Result<String, Response> {
-    let Some(claims) = req.request_object_claims.as_ref() else {
-        return Ok(outer_prompt.map_or_else(String::new, std::convert::identity));
+) -> Result<Prompt, Response> {
+    let raw = match req.request_object_claims.as_ref() {
+        Some(claims) => request_object_extra_string(claims, "prompt").map_err(|err| {
+            authorize_error_response(
+                authorize_error_context(state, req, response_mode, issuer_base),
+                err.error,
+                Some(&err.error_description),
+            )
+        })?,
+        None => outer_prompt,
     };
-    request_object_extra_string(claims, "prompt")
-        .map(|prompt| prompt.map_or_else(String::new, std::convert::identity))
-        .map_err(|err| request_object_resolution_error_response(issuer_base, &err))
+    Prompt::parse(raw.unwrap_or_default()).map_err(|description| {
+        authorize_error_response(
+            authorize_error_context(state, req, response_mode, issuer_base),
+            "invalid_request",
+            Some(description),
+        )
+    })
 }
 
 fn authorize_error_context<'a>(
@@ -113,7 +126,7 @@ async fn authorize_parse_request_context(
 ) -> Result<
     (
         AuthzReq,
-        String,
+        Prompt,
         crate::form_post::ResponseMode,
         Option<String>,
     ),
@@ -147,7 +160,6 @@ async fn authorize_parse_request_context(
     )
     .await?;
     let req = parsed.request;
-    let prompt = authorize_prompt_from_request(&req, parsed.prompt, issuer_base)?;
     let response_mode_source = req
         .request_object_claims
         .as_ref()
@@ -166,6 +178,8 @@ async fn authorize_parse_request_context(
                 Some("response_mode is not supported"),
             )
         })?;
+    let prompt =
+        authorize_prompt_from_request(state, &req, parsed.prompt, response_mode, issuer_base)?;
     Ok((
         req,
         prompt,

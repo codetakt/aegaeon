@@ -121,8 +121,8 @@ pub(super) async fn authorize_decide_session(
         .try_cleanup_expired()
         .map_err(|err| stepup_store_cleanup_error_response(issuer_base, &err))?;
     let now = now_epoch_secs().map_err(|_| clock_error_response(issuer_base))?;
-    let prompt_has_none = ctx.prompt.split_whitespace().any(|value| value == "none");
-    let prompt_has_login = ctx.prompt.split_whitespace().any(|value| value == "login");
+    let prompt_has_none = ctx.prompt.contains("none");
+    let prompt_has_login = ctx.prompt.contains("login");
     let cookie_session_id = auth_session_cookie(headers)
         .map_err(|err| no_cache_header_error(issuer_base, "Cookie", err))?
         .filter(|sid| !sid.is_empty());

@@ -76,7 +76,7 @@ async fn process(
         .get("reauthenticated")
         .and_then(serde_json::Value::as_bool)
         .ok_or_else(storage::invalid)?;
-    super::validate_prompt(state, &ctx)?;
+    // Rebuilding the context above also revalidates the resolved prompt.
     if !has_prompt(&ctx, "consent")
         || super::snapshot(&ctx).map_err(|_| storage::unavailable())? != pending.snapshot
     {
