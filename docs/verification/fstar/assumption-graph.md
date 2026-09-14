@@ -281,7 +281,10 @@ derivation selects both graph test files.
 ## Limits
 
 New invocation records compare the verifier entrypoint's SHA-256 and resolved
-path before and after the child exits. A changed or missing executable, a
+path before and after the child exits. Identity hashing and solver-wrapper
+inspection open paths in nonblocking mode, then require a regular file on the
+opened descriptor before reading. A FIFO, device or directory replacement fails
+instead of entering an unbounded read. A changed or missing executable, a
 different symlink target (even with identical bytes), or lost executable
 permission fails the invocation while retaining its actual child exit code and
 output. Admission rechecks the retained before/after identities without needing

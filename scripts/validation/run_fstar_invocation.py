@@ -12,10 +12,16 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from io import BufferedReader
 
 SOURCE_SUFFIXES = (".fst", ".fsti", ".hints", ".checked")
 PROVIDERS = (
@@ -28,8 +34,21 @@ PROVIDERS = (
 )
 
 
+@contextmanager
+def regular_file(path: Path) -> Iterator[BufferedReader]:
+    """Inspect the opened descriptor before reading a potentially replaced path."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOCTTY)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError(f"cannot read non-regular file: {path}")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            yield source
+    finally:
+        os.close(descriptor)
+
+
 def digest(path: Path) -> str:
-    with path.open("rb") as source:
+    with regular_file(path) as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
@@ -162,7 +181,9 @@ def effective_solver(output: Path, tool_path: Path) -> dict[str, Any]:
 def _solver_process(name: str, version: str, tool_path: Path) -> dict[str, Any]:
     directories: list[str] = []
     try:
-        for line in tool_path.read_text(errors="replace").splitlines():
+        with regular_file(tool_path) as source:
+            wrapper = source.read().decode(errors="replace")
+        for line in wrapper.splitlines():
             if prepend := PATH_PREPEND.match(line):
                 directories.append(prepend.group(1))
     except (OSError, UnicodeError):
