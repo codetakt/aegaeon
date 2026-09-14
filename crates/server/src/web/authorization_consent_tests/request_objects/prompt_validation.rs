@@ -109,16 +109,17 @@ fn invalid_prompt_uri(
     source: &str,
     response_mode: &str,
     redirect_uri: &str,
-    prompt: &str,
+    prompt: &Value,
 ) -> TestResult<String> {
     const ECHO: &str = "prompt-error-state";
     let fields = if source == "jar" {
-        let jwt = signed_request_with_prompt(state, "prompt-validation", Some(prompt))?;
+        let jwt = signed_request_with_prompt(state, "prompt-validation", None)?;
         let payload = jwt.split('.').nth(1).ok_or("request payload missing")?;
         let mut claims: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload)?)?;
         claims["response_mode"] = json!(response_mode);
         claims["redirect_uri"] = json!(redirect_uri);
         claims["state"] = json!(ECHO);
+        claims["prompt"] = prompt.clone();
         let jwt = jsonwebtoken::encode(
             &Header::new(Algorithm::RS256),
             &claims,
@@ -131,7 +132,10 @@ fn invalid_prompt_uri(
             ("request".into(), jwt),
         ]
     } else {
-        let uri = authorize_uri(state, Some(prompt))?;
+        let uri = authorize_uri(
+            state,
+            Some(prompt.as_str().ok_or("plain prompt must be a string")?),
+        )?;
         let mut fields: Vec<(String, String)> =
             serde_urlencoded::from_str(uri.split_once('?').ok_or("query missing")?.1)?;
         fields.retain(|(name, _)| name != "state" && name != "redirect_uri");
@@ -165,17 +169,36 @@ async fn offline_consent_http_prompt_errors_preserve_response_mode_and_state() -
             Arc::make_mut(&mut state.cfg).strict_authorize_redirect = strict;
             for source in ["plain", "jar"] {
                 for mode in ["query", "form_post"] {
+                    // Keep each response-mode group within the per-source limit.
+                    let source_ip = if mode == "query" {
+                        [127, 0, 0, 1]
+                    } else {
+                        [127, 0, 0, 2]
+                    };
                     for registered in [true, false] {
                         let redirect_uri = if registered {
                             "https://client.example.com/callback"
                         } else {
                             "https://unregistered.invalid/callback"
                         };
-                        for prompt in ["none consent", "login\tconsent", "select_account"] {
+                        let mut prompts = vec![
+                            json!("none consent"),
+                            json!("login\tconsent"),
+                            json!("select_account"),
+                        ];
+                        if source == "jar" {
+                            prompts.extend([
+                                json!(["consent"]),
+                                json!({"action": "consent"}),
+                                json!(true),
+                                json!(42),
+                            ]);
+                        }
+                        for prompt in &prompts {
                             let uri =
                                 invalid_prompt_uri(&state, source, mode, redirect_uri, prompt)?;
                             let app = crate::web::router::build_router(state.clone()).layer(
-                                Extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12345)))),
+                                Extension(ConnectInfo(SocketAddr::from((source_ip, 12345)))),
                             );
                             let response = app
                                 .oneshot(
