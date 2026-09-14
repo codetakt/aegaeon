@@ -32,6 +32,8 @@ characters and unsupported values return `invalid_request`. An omitted or empty
 value requests no prompt action. The same parser checks plain requests, PAR and
 signed Request Objects before authentication or consent decisions. A client that
 previously sent another whitespace separator must send ASCII spaces instead.
+In a Request Object, a supplied `prompt` must be a JSON string. JSON `null` is
+rejected with `invalid_request`; omit the claim to request no prompt action.
 
 With PAR (RFC 9126), send `prompt` in the pushed request. The stored value is
 used when authorization starts and when the consent form resumes it. A later

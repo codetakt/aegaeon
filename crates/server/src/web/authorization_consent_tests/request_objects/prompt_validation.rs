@@ -3,14 +3,17 @@ use super::*;
 async fn prompt_request(
     state: &AppState,
     sid: &str,
-    prompt: &str,
+    prompt: &Value,
     source: &str,
 ) -> TestResult<(StatusCode, String)> {
-    let plain = authorize_uri(state, Some(prompt))?;
-    let jwt = signed_request_with_prompt(state, "prompt-validation", Some(prompt))?;
     let fields: Vec<(String, String)> = if source.contains("jar") {
+        let jwt = signed_request_with_prompt(state, "prompt-validation", Some(prompt))?;
         vec![("client_id".into(), CLIENT.into()), ("request".into(), jwt)]
     } else {
+        let plain = authorize_uri(
+            state,
+            Some(prompt.as_str().ok_or("plain prompt must be a string")?),
+        )?;
         serde_urlencoded::from_str(plain.split_once('?').ok_or("query missing")?.1)?
     };
     let uri = if source.starts_with("par") {
@@ -63,7 +66,7 @@ async fn offline_consent_http_prompt_syntax_is_consistent_across_plain_par_and_j
             client.jwks_pem =
                 Some(include_str!("../../../../tests/fixtures/rsa2048-public.pem").into());
             assert!(state.clients.try_update(client)?);
-            for prompt in [
+            let mut prompts: Vec<Value> = [
                 "none consent",
                 "login\tconsent",
                 "none\nconsent",
@@ -74,13 +77,16 @@ async fn offline_consent_http_prompt_syntax_is_consistent_across_plain_par_and_j
                 "select_account",
                 "login select_account",
                 "select_account consent",
-            ] {
+            ]
+            .into_iter()
+            .map(Value::from)
+            .collect();
+            if source.contains("jar") {
+                prompts.push(Value::Null);
+            }
+            for prompt in &prompts {
                 let (status, body) = prompt_request(&state, &sid, prompt, source).await?;
-                assert_eq!(
-                    status,
-                    StatusCode::BAD_REQUEST,
-                    "{source} {prompt:?}: {body}"
-                );
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{source} {prompt:?}");
                 assert_eq!(
                     serde_json::from_str::<Value>(&body)?["error"],
                     "invalid_request"
@@ -93,7 +99,8 @@ async fn offline_consent_http_prompt_syntax_is_consistent_across_plain_par_and_j
             .fetch_one(&pool)
             .await?;
             assert_eq!(count, 0, "rejected prompts must not start consent");
-            let (status, body) = prompt_request(&state, &sid, "  consent  ", source).await?;
+            let (status, body) =
+                prompt_request(&state, &sid, &json!("  consent  "), source).await?;
             assert_eq!(status, StatusCode::OK, "{source}: {body}");
             complete_decision(&state, &sid, transaction(&body)?, "approve").await?;
             Ok(())
@@ -188,6 +195,7 @@ async fn offline_consent_http_prompt_errors_preserve_response_mode_and_state() -
                         ];
                         if source == "jar" {
                             prompts.extend([
+                                Value::Null,
                                 json!(["consent"]),
                                 json!({"action": "consent"}),
                                 json!(true),
