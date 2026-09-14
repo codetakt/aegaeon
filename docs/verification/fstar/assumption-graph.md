@@ -287,6 +287,10 @@ permission fails the invocation while retaining its actual child exit code and
 output. Admission rechecks the retained before/after identities without needing
 the original executable. Historical records without `entrypoint-before-after-v1`
 remain replayable but contain no post-execution identity observation.
+Records carrying that contract also require the complete `result.json` digest
+in both admission envelopes. Earlier outputs without that binding require a new
+recorded execution; a retrospectively added digest does not establish which
+observations were admitted. See [module admission](module-admission.md).
 
 These are endpoint observations: replacement followed by restoration during
 execution can evade them. They also do not measure an entrypoint's interpreter,
