@@ -112,6 +112,8 @@ def command_context(command: list[str]) -> dict[str, Any]:
         "cwd": str(Path.cwd()),
         "recorder": file_identity(Path(__file__).resolve()),
         "tool": file_identity(tool_path),
+        "tool_identity_contract": "entrypoint-before-after-v1",
+        "tool_resolved_path": str(tool_path.resolve(strict=True)),
         "solver": requested_solver(command),
         "modules": [file_identity(Path(module)) for module in modules],
         "include_paths": includes,
@@ -248,6 +250,19 @@ def run(output: Path, pass_id: str, command: list[str]) -> int:
             inputs_sha256=digest(directory / "inputs.json"),
             output_sha256=digest(directory / "output.log"),
         )
+        # Retain the observation even on failure. These endpoint checks detect
+        # persistent changes; they do not exclude replacement followed by restore
+        # during execution or attest an interpreter's/transitive tool's bytes.
+        tool_path = Path(context["tool"]["path"])
+        result["tool_after"] = file_identity(tool_path)
+        result["tool_resolved_path_after"] = str(tool_path.resolve(strict=True))
+        result["tool_executable_after"] = os.access(tool_path, os.X_OK)
+        if (
+            result["tool_after"] != context["tool"]
+            or result["tool_resolved_path_after"] != context["tool_resolved_path"]
+            or not result["tool_executable_after"]
+        ):
+            raise ValueError("verifier entrypoint changed during invocation")
         result["solver_effective"] = effective_solver(
             directory / "output.log", Path(context["executed_argv"][0])
         )

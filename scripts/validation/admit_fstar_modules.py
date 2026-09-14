@@ -284,6 +284,38 @@ def checked_candidates(
     return {"directories": [str(d) for d in directories], "candidates": found}
 
 
+def check_tool_identity(inputs: dict[str, Any], result: dict[str, Any]) -> None:
+    """Replay recorded endpoint comparisons without requiring the original tool."""
+    if "tool_identity_contract" not in inputs:
+        if any(
+            key in result
+            for key in ("tool_after", "tool_resolved_path_after", "tool_executable_after")
+        ):
+            raise AdmissionError("verifier entrypoint observations are missing their contract")
+        # Historical records did not attest a post-execution observation.
+        return
+    if inputs["tool_identity_contract"] != "entrypoint-before-after-v1":
+        raise AdmissionError("unsupported verifier entrypoint identity contract")
+    path = inputs.get("tool_resolved_path")
+    tool = inputs.get("tool")
+    if (
+        not isinstance(tool, dict)
+        or not isinstance(tool.get("path"), str)
+        or not Path(tool["path"]).is_absolute()
+        or not isinstance(tool.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", tool["sha256"]) is None
+    ):
+        raise AdmissionError("verifier entrypoint identity is malformed")
+    if (
+        not isinstance(path, str)
+        or not Path(path).is_absolute()
+        or result.get("tool_resolved_path_after") != path
+        or result.get("tool_executable_after") is not True
+        or result.get("tool_after") != tool
+    ):
+        raise AdmissionError("verifier entrypoint identity differs or is missing after invocation")
+
+
 def check_explicit_solver(inputs: dict[str, Any], result: dict[str, Any], output: str) -> None:
     """Bind retained starts to the recorded pin without requiring live tool files.
 
@@ -361,6 +393,7 @@ def reconcile(
     reasons: list[str] = []
     argv = list(inputs["argv"])
     try:
+        check_tool_identity(inputs, result)
         check_explicit_solver(inputs, result, output)
     except AdmissionError as error:
         reasons.append(str(error))

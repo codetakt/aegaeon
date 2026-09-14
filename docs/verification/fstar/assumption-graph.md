@@ -268,6 +268,20 @@ derivation selects both graph test files.
 
 ## Limits
 
+New invocation records compare the verifier entrypoint's SHA-256 and resolved
+path before and after the child exits. A changed or missing executable, a
+different symlink target (even with identical bytes), or lost executable
+permission fails the invocation while retaining its actual child exit code and
+output. Admission rechecks the retained before/after identities without needing
+the original executable. Historical records without `entrypoint-before-after-v1`
+remain replayable but contain no post-execution identity observation.
+
+These are endpoint observations: replacement followed by restoration during
+execution can evade them. They also do not measure an entrypoint's interpreter,
+wrapped executable or dynamically loaded libraries. The production Nix lane's
+immutable tool closure remains a separate trust boundary; mutable-tool runs do
+not acquire that boundary from these comparisons.
+
 The graph proves nothing about premise soundness, model adequacy, implementation
 correspondence or release assurance. Module-closure granularity over-approximates use.
 Provider and ulib sources are identified by their immutable store paths, not re-digested;

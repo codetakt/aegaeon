@@ -227,6 +227,66 @@ class ExplicitSolverEvidenceTests(unittest.TestCase):
         shutil.rmtree(case.src)
         assert case.verify().returncode == 0
 
+    def entrypoint_case(self):
+        case = self.case()
+        inputs = json.loads((case.directory / "inputs.json").read_text())
+        result = json.loads((case.directory / "result.json").read_text())
+        inputs.update(
+            tool_identity_contract="entrypoint-before-after-v1",
+            tool_resolved_path="/missing/canonical-verifier",
+        )
+        result.update(
+            tool_after=inputs["tool"].copy(),
+            tool_resolved_path_after=inputs["tool_resolved_path"],
+            tool_executable_after=True,
+        )
+        (case.directory / "inputs.json").write_text(json.dumps(inputs))
+        self.rebind(case, result)
+        assert case.admit().returncode == 0
+        return case, inputs, result
+
+    def test_entrypoint_observations_replay_without_the_executable(self) -> None:
+        case, _, _ = self.entrypoint_case()
+        shutil.rmtree(case.src)
+        assert case.verify().returncode == 0
+
+    def test_changed_or_missing_entrypoint_observation_rejects_rebound_records(self) -> None:
+        for mutation in (
+            "missing",
+            "digest",
+            "target",
+            "contract",
+            "contract-missing",
+            "chmod",
+            "missing-digest",
+        ):
+            with self.subTest(mutation=mutation):
+                case, inputs, result = self.entrypoint_case()
+                if mutation == "missing":
+                    del result["tool_after"]
+                elif mutation == "digest":
+                    result["tool_after"]["sha256"] = "ff" * 32
+                elif mutation == "target":
+                    result["tool_resolved_path_after"] = "/missing/other-verifier"
+                elif mutation == "chmod":
+                    result["tool_executable_after"] = False
+                elif mutation == "contract-missing":
+                    del inputs["tool_identity_contract"]
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                elif mutation == "missing-digest":
+                    del inputs["tool"]["sha256"]
+                    del result["tool_after"]["sha256"]
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                else:
+                    inputs["tool_identity_contract"] = "unsupported"
+                    (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                self.rebind(case, result)
+                assert case.verify().returncode == 1
+                (case.directory / "modules.json").unlink()
+                (case.out / "admission.json").unlink()
+                assert case.admit().returncode == 1
+                assert "verifier entrypoint" in case.reasons()
+
     def test_command_mutations_reject_even_with_rebound_envelopes(self) -> None:
         for mutation in ("operand", "operand-and-echo", "executed", "executed-lax"):
             with self.subTest(mutation=mutation):
