@@ -19,6 +19,9 @@ let valid_helpers (input:bytes) : ST unit
   let _ = compute_case_with_lengths HashCaseSha256 33ul 16ul input in
   let _ = compute_case_with_lengths HashCaseSha384 49ul 24ul input in
   let _ = compute_case_with_lengths HashCaseSha512 65ul 32ul input in
+  let _ = compute_case_with_lengths HashCaseSha256 33ul 32ul input in
+  let _ = compute_case_with_lengths HashCaseSha384 49ul 48ul input in
+  let _ = compute_case_with_lengths HashCaseSha512 65ul 64ul input in
   ()
 
 let valid_foreign_calls (input:bytes) : ST unit
@@ -35,7 +38,7 @@ let valid_foreign_calls (input:bytes) : ST unit
   let _ = evercrypt_hash_incremental_hash HashCaseSha512 out512 input input_len in
   B.free out512
 
-(* Each negative differs from a valid call only in output capacity. F* must
+(* Each negative differs from a valid call only in capacity or prefix length. F* must
  * report exactly one failed proof obligation (Error 19); syntax errors,
  * unknown names, missing dependencies or an unexpectedly valid call fail
  * this fixture. No negative is executed or extracted. *)
@@ -56,6 +59,24 @@ let short_helper_sha512 (input:bytes) : ST hash_result
   (requires (fun _ -> True))
   (ensures (fun _ _ _ -> True)) =
   compute_case_with_lengths HashCaseSha512 63ul 32ul input
+
+[@@ expect_failure [19]]
+let long_prefix_sha256 (input:bytes) : ST hash_result
+  (requires (fun _ -> True))
+  (ensures (fun _ _ _ -> True)) =
+  compute_case_with_lengths HashCaseSha256 33ul 33ul input
+
+[@@ expect_failure [19]]
+let long_prefix_sha384 (input:bytes) : ST hash_result
+  (requires (fun _ -> True))
+  (ensures (fun _ _ _ -> True)) =
+  compute_case_with_lengths HashCaseSha384 49ul 49ul input
+
+[@@ expect_failure [19]]
+let long_prefix_sha512 (input:bytes) : ST hash_result
+  (requires (fun _ -> True))
+  (ensures (fun _ _ _ -> True)) =
+  compute_case_with_lengths HashCaseSha512 65ul 65ul input
 
 [@@ expect_failure [19]]
 let short_foreign_sha256 (input:bytes) : ST unit

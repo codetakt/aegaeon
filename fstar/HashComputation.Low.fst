@@ -61,7 +61,8 @@ assume val evercrypt_hash_incremental_hash:
 val compute_case_with_lengths:
   case0:hash_case ->
   full_len:U32.t{U32.v full_len >= digest_length case0} ->
-  trunc_len:U32.t{U32.v trunc_len <= U32.v full_len} ->
+  trunc_len:U32.t{U32.v trunc_len <= U32.v full_len /\
+                  U32.v trunc_len <= digest_length case0} ->
   input:bytes ->
   ST hash_result
   (requires (fun _ -> True))

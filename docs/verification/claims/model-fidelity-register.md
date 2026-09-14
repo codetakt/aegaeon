@@ -89,17 +89,20 @@ verification claim.
 
 `HashComputation.Low` requires at least 32, 48 or 64 output bytes for SHA-256,
 SHA-384 or SHA-512 respectively, both at its allocating helper and at the foreign
-hash call. The C shim writes that many bytes on success and clears that many on
-failure. The OIDC dispatcher already supplies those capacities and copies the
-16-, 24- or 32-byte prefix. The ghost size function and refinements erase during
+hash call. The helper also limits the requested prefix to the selected digest
+length, including when the buffer is larger. The C shim writes the full digest
+on success and clears the same number of bytes on failure. The OIDC dispatcher
+already supplies those capacities and copies the 16-, 24- or 32-byte prefix.
+The ghost size function and refinements erase during
 extraction: this adds no runtime bounds check for arbitrary C callers and changes
 no C signature. The module's `faithful` classification describes this dispatch
 and allocation structure, not completed cryptographic or memory correctness.
 
 `nix run .#verify-lowstar` explicitly verifies the real module and
 `tests/fstar/lowstar/TestHashOutputCapacity.fst` before extraction. The fixture
-accepts exact and larger helper capacities and exact foreign-call capacities;
-each one-byte-short helper or foreign call must produce exactly F\* Error 19.
+accepts exact and larger helper capacities, full digest-length prefixes in larger
+buffers, and exact foreign-call capacities. Each one-byte-short helper or foreign
+call, and each prefix one byte beyond the digest, must produce exactly F\* Error 19.
 An unexpectedly accepted call or a different error fails the fixture.
 The ordinary five-pass `verify-fstar` build does not include this Low\* target.
 
