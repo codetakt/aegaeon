@@ -5,7 +5,7 @@ processes, including ones that reported errors and ones reused from ``.checked``
 files, so that line alone proves nothing. A module is admitted only when the
 invocation exited 0 without any reported error, printed the completion marker,
 and printed exactly one result line for each requested source. The records
-written here bind that decision to the invocation's input and output digests.
+written here bind that decision to the invocation's input, output and result digests.
 They describe tool executions; they do not establish assumption soundness,
 model adequacy, implementation refinement or release assurance.
 """
@@ -284,6 +284,38 @@ def checked_candidates(
     return {"directories": [str(d) for d in directories], "candidates": found}
 
 
+def check_tool_identity(inputs: dict[str, Any], result: dict[str, Any]) -> None:
+    """Replay recorded endpoint comparisons without requiring the original tool."""
+    if "tool_identity_contract" not in inputs:
+        if any(
+            key in result
+            for key in ("tool_after", "tool_resolved_path_after", "tool_executable_after")
+        ):
+            raise AdmissionError("verifier entrypoint observations are missing their contract")
+        # Historical records did not attest a post-execution observation.
+        return
+    if inputs["tool_identity_contract"] != "entrypoint-before-after-v1":
+        raise AdmissionError("unsupported verifier entrypoint identity contract")
+    path = inputs.get("tool_resolved_path")
+    tool = inputs.get("tool")
+    if (
+        not isinstance(tool, dict)
+        or not isinstance(tool.get("path"), str)
+        or not Path(tool["path"]).is_absolute()
+        or not isinstance(tool.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", tool["sha256"]) is None
+    ):
+        raise AdmissionError("verifier entrypoint identity is malformed")
+    if (
+        not isinstance(path, str)
+        or not Path(path).is_absolute()
+        or result.get("tool_resolved_path_after") != path
+        or result.get("tool_executable_after") is not True
+        or result.get("tool_after") != tool
+    ):
+        raise AdmissionError("verifier entrypoint identity differs or is missing after invocation")
+
+
 def check_explicit_solver(inputs: dict[str, Any], result: dict[str, Any], output: str) -> None:
     """Bind retained starts to the recorded pin without requiring live tool files.
 
@@ -361,6 +393,7 @@ def reconcile(
     reasons: list[str] = []
     argv = list(inputs["argv"])
     try:
+        check_tool_identity(inputs, result)
         check_explicit_solver(inputs, result, output)
     except AdmissionError as error:
         reasons.append(str(error))
@@ -629,19 +662,22 @@ def duplicate_evidence(statuses: dict[str, dict[str, Any]]) -> list[str]:
     return reasons
 
 
-def load_pass(directory: Path) -> tuple[dict[str, Any], dict[str, Any], bytes]:
+def load_pass(directory: Path) -> tuple[dict[str, Any], dict[str, Any], bytes, str]:
     inputs_path = directory / "inputs.json"
     result_path = directory / "result.json"
     output_path = directory / "output.log"
     for path in (inputs_path, result_path, output_path):
         if not path.is_file():
             raise AdmissionError(f"missing invocation record {path.name}")
-    result = load_json(result_path)
+    result_bytes = result_path.read_bytes()
+    result = json.loads(result_bytes)
+    if not isinstance(result, dict):
+        raise AdmissionError("result.json is not a JSON object")
     if digest_file(inputs_path) != result.get("inputs_sha256"):
         raise AdmissionError("inputs.json digest differs from result.json")
     if digest_file(output_path) != result.get("output_sha256"):
         raise AdmissionError("output.log digest differs from result.json")
-    return load_json(inputs_path), result, output_path.read_bytes()
+    return load_json(inputs_path), result, output_path.read_bytes(), digest_bytes(result_bytes)
 
 
 def admit(out_dir: Path, passes: list[str], source_root: Path) -> int:
@@ -657,10 +693,11 @@ def admit(out_dir: Path, passes: list[str], source_root: Path) -> int:
                 raise AdmissionError(
                     "modules.json already exists; evidence directories must be fresh"
                 )
-            inputs, result, output = load_pass(directory)
+            inputs, result, output, result_sha256 = load_pass(directory)
             record = reconcile(
                 pass_id, inputs, result, output.decode(errors="replace"), source_root
             )
+            record["result_sha256"] = result_sha256
         except (AdmissionError, OSError, KeyError, TypeError, ValueError) as error:
             record = {
                 "schema_version": SCHEMA_VERSION,
@@ -683,6 +720,7 @@ def admit(out_dir: Path, passes: list[str], source_root: Path) -> int:
             "modules_sha256": digest_file(record_path) if record_path.is_file() else None,
             "inputs_sha256": record.get("inputs_sha256"),
             "output_sha256": record.get("output_sha256"),
+            "result_sha256": record.get("result_sha256"),
         }
         accepted = accepted and record["status"] == "accepted"
     duplicated = duplicate_evidence(statuses)
@@ -734,7 +772,15 @@ def verify_records(out_dir: Path, passes: list[str]) -> int:
         if digest_file(record_path) != entry.get("modules_sha256"):
             raise AdmissionError(f"pass {pass_id}: modules.json digest differs from admission.json")
         record = load_json(record_path)
-        inputs, result, output = load_pass(directory)
+        inputs, result, output, result_sha256 = load_pass(directory)
+        if (
+            "tool_identity_contract" in inputs
+            or "result_sha256" in entry
+            or "result_sha256" in record
+        ):
+            for name, envelope in (("admission.json", entry), ("modules.json", record)):
+                if envelope.get("result_sha256") != result_sha256:
+                    raise AdmissionError(f"pass {pass_id}: result.json digest differs from {name}")
         for field in ("inputs_sha256", "output_sha256"):
             if not entry.get(field) or entry[field] != result.get(field):
                 raise AdmissionError(

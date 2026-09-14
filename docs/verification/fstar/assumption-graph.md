@@ -280,6 +280,27 @@ derivation selects both graph test files.
 
 ## Limits
 
+New invocation records compare the verifier entrypoint's SHA-256 and resolved
+path before and after the child exits. Identity hashing and solver-wrapper
+inspection open paths in nonblocking mode, then require a regular file on the
+opened descriptor before reading. A FIFO, device or directory replacement fails
+instead of entering an unbounded read. A changed or missing executable, a
+different symlink target (even with identical bytes), or lost executable
+permission fails the invocation while retaining its actual child exit code and
+output. Admission rechecks the retained before/after identities without needing
+the original executable. Historical records without `entrypoint-before-after-v1`
+remain replayable but contain no post-execution identity observation.
+Records carrying that contract also require the complete `result.json` digest
+in both admission envelopes. Earlier outputs without that binding require a new
+recorded execution; a retrospectively added digest does not establish which
+observations were admitted. See [module admission](module-admission.md).
+
+These are endpoint observations: replacement followed by restoration during
+execution can evade them. They also do not measure an entrypoint's interpreter,
+wrapped executable or dynamically loaded libraries. The production Nix lane's
+immutable tool closure remains a separate trust boundary; mutable-tool runs do
+not acquire that boundary from these comparisons.
+
 The graph proves nothing about premise soundness, model adequacy, implementation
 correspondence or release assurance. Module-closure granularity over-approximates use.
 Provider and ulib sources are identified by their immutable store paths, not re-digested;
