@@ -85,6 +85,30 @@ serialization/signing-input rows remain partial. Header AST guard rows retain
 only their stated guard-level scope, with no byte-decoding or complete wire
 verification claim.
 
+## Low\* hash output capacity
+
+`HashComputation.Low` requires at least 32, 48 or 64 output bytes for SHA-256,
+SHA-384 or SHA-512 respectively, both at its allocating helper and at the foreign
+hash call. The C shim writes that many bytes on success and clears that many on
+failure. The OIDC dispatcher already supplies those capacities and copies the
+16-, 24- or 32-byte prefix. The ghost size function and refinements erase during
+extraction: this adds no runtime bounds check for arbitrary C callers and changes
+no C signature. The module's `faithful` classification describes this dispatch
+and allocation structure, not completed cryptographic or memory correctness.
+
+`nix run .#verify-lowstar` explicitly verifies the real module and
+`tests/fstar/lowstar/TestHashOutputCapacity.fst` before extraction. The fixture
+accepts exact and larger helper capacities and exact foreign-call capacities;
+each one-byte-short helper or foreign call must produce exactly F\* Error 19.
+An unexpectedly accepted call or a different error fails the fixture.
+The ordinary five-pass `verify-fstar` build does not include this Low\* target.
+
+These checks establish capacity obligations at verified call sites, conditional
+on the foreign declarations. The `bytes_prefix_of_buffer` heap effects, copied
+contents and ownership, functional SHA-2 results, allocation/failure behavior,
+provider evidence and correspondence to production remain open. Both foreign
+entries remain `specified-not-attested` in `spec/assumption-register.json`.
+
 ## Review Rule
 
 `fstar/oidc/OIDC.AuthorizationTransactions.fst` is a simplified admission and

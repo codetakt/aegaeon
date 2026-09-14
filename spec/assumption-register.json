@@ -90,12 +90,12 @@
       "kind": "foreign-contract",
       "title": "OIDC hash runtime SHA-2 dispatch contract",
       "status": "specified-not-attested",
-      "statement": "evercrypt_hash_incremental_hash writes the SHA-256/384/512 digest of the input into the output buffer and preserves liveness and framing; provided by c/hash_computation_runtime.c backed by HACL*/EverCrypt.",
+      "statement": "evercrypt_hash_incremental_hash requires a live output buffer of at least 32/48/64 bytes for SHA-256/384/512 and a matching input length; it preserves output liveness and frames modifications to that buffer. The provider is c/hash_computation_runtime.c backed by HACL*/EverCrypt. Functional digest correctness is not stated by this declaration and remains an external obligation.",
       "premise_ids": [
         "premise:HashComputation.Low#evercrypt_hash_incremental_hash"
       ],
       "statements": {
-        "premise:HashComputation.Low#evercrypt_hash_incremental_hash": "291bfaa51d5ec432f4caac33d77454994075693177336db1286dbb28f9b3679c"
+        "premise:HashComputation.Low#evercrypt_hash_incremental_hash": "464d7dcc278a5955f259367ccc7af642518328c1f1a522f0946e0065839f5086"
       },
       "references": [
         "docs/verification/claims/assumptions/current-register.md"
