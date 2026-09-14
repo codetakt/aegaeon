@@ -14,7 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ADMIT = ROOT / "scripts/validation/admit_fstar_modules.py"
 sys.path.insert(0, str(ADMIT.parent))
-from admit_fstar_modules import reconcile, resolve_unrequested  # noqa: E402 - path set above
+from admit_fstar_modules import (  # noqa: E402 - path set above
+    DENIED_OPTIONS,
+    reconcile,
+    resolve_unrequested,
+)
 
 FIXTURES = ROOT / "tests/fixtures/fstar_admission"
 HOSTED = FIXTURES / "hosted-34200194649"
@@ -163,6 +167,186 @@ def summary_events(stdout: str) -> list[dict]:
     ]
 
 
+class ExplicitSolverEvidenceTests(unittest.TestCase):
+    def case(self) -> Case:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        case = Case(root)
+        case.source("Alpha.fst")
+        case.source("Beta.fst")
+        start = (
+            'Creating new z3proc (cmd=[("/missing/selected-z3", ["-smt2", "-in"])], '
+            'version=["4.13.3"])\n'
+        )
+        case.record(
+            ["Alpha.fst", "Beta.fst"],
+            start + COMPLETE,
+            options=("--query_stats", "--smt", "/missing/selected-z3"),
+        )
+        inputs = json.loads((case.directory / "inputs.json").read_text())
+        inputs["solver"] = {"path": "/missing/canonical-z3", "sha256": "12" * 32}
+        (case.directory / "inputs.json").write_text(json.dumps(inputs))
+        result = json.loads((case.directory / "result.json").read_text())
+        identity = {
+            "observed": True,
+            "name": "/missing/selected-z3",
+            "version": "4.13.3",
+            **inputs["solver"],
+        }
+        result["solver_effective"] = {
+            **identity,
+            "arguments": ["-smt2", "-in"],
+            "process_count": 1,
+            "processes": [identity],
+        }
+        self.rebind(case, result)
+        return case
+
+    @staticmethod
+    def rebind(case: Case, result: dict) -> None:
+        for field, filename in (("inputs_sha256", "inputs.json"), ("output_sha256", "output.log")):
+            result[field] = sha256(case.directory / filename)
+        (case.directory / "result.json").write_text(json.dumps(result))
+        # Model consistent copied/reconstructed summaries, so rejection must come
+        # from the solver contract rather than a stale file digest.
+        if (case.directory / "modules.json").exists():
+            record = case.modules()
+            for field in ("inputs_sha256", "output_sha256"):
+                record[field] = result[field]
+            (case.directory / "modules.json").write_text(json.dumps(record))
+            summary = json.loads((case.out / "admission.json").read_text())
+            summary["passes"][case.pass_id].update(
+                inputs_sha256=result["inputs_sha256"],
+                output_sha256=result["output_sha256"],
+                modules_sha256=sha256(case.directory / "modules.json"),
+            )
+            (case.out / "admission.json").write_text(json.dumps(summary))
+
+    def test_pinned_alias_replay_needs_no_source_or_executable(self) -> None:
+        case = self.case()
+        assert case.admit().returncode == 0
+        shutil.rmtree(case.src)
+        assert case.verify().returncode == 0
+
+    def test_command_mutations_reject_even_with_rebound_envelopes(self) -> None:
+        for mutation in ("operand", "operand-and-echo", "executed", "executed-lax"):
+            with self.subTest(mutation=mutation):
+                case = self.case()
+                assert case.admit().returncode == 0
+                inputs = json.loads((case.directory / "inputs.json").read_text())
+                result = json.loads((case.directory / "result.json").read_text())
+                original = " ".join(inputs["executed_argv"])
+                if mutation.startswith("operand"):
+                    inputs["argv"][3] = "/missing/unobserved-z3"
+                    result["argv"] = inputs["argv"]
+                if mutation == "operand-and-echo":
+                    inputs["executed_argv"][3] = "/missing/unobserved-z3"
+                elif mutation == "executed":
+                    inputs["executed_argv"][0] = "/missing/different-fstar"
+                elif mutation == "executed-lax":
+                    inputs["executed_argv"].insert(1, "--lax")
+                log = case.directory / "output.log"
+                log.write_text(log.read_text().replace(original, " ".join(inputs["executed_argv"])))
+                (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                self.rebind(case, result)
+                assert case.verify().returncode == 1
+                (case.directory / "modules.json").unlink()
+                (case.out / "admission.json").unlink()
+                assert case.admit().returncode == 1
+                assert "solver operand" in case.reasons() or "executed argv" in case.reasons()
+
+    @staticmethod
+    def mutate_solver(case: Case, result: dict, mutation: str) -> None:
+        observed = result["solver_effective"]
+        log = case.directory / "output.log"
+        original = log.read_text()
+        first = original.splitlines(keepends=True)[0]
+        if mutation == "no-start":
+            log.write_text(original.removeprefix(first))
+        elif mutation == "missing-pin":
+            inputs = json.loads((case.directory / "inputs.json").read_text())
+            inputs["solver"] = None
+            (case.directory / "inputs.json").write_text(json.dumps(inputs))
+        elif mutation == "missing-summary":
+            del result["solver_effective"]
+        elif mutation == "changed-hash":
+            observed["processes"][0]["sha256"] = "ff" * 32
+        elif mutation == "malformed-start":
+            log.write_text(original.replace('["-smt2", "-in"]', "[]"))
+        elif mutation in ("changed-later-name", "mixed-version"):
+            later = (
+                first.replace("selected-z3", "different-z3")
+                if mutation == "changed-later-name"
+                else first.replace("4.13.3", "9.9.9")
+            )
+            log.write_text(first + later + original.removeprefix(first))
+            observed["process_count"] = 2
+            observed["processes"].append(observed["processes"][0].copy())
+        else:
+            key, value = {
+                "unobserved": ("observed", False),
+                "bad-count": ("process_count", 2),
+                "boolean-count": ("process_count", True),
+                "bad-arguments": ("arguments", ["-in", "-smt2"]),
+                "missing-process": ("processes", []),
+            }[mutation]
+            observed[key] = value
+
+    def test_constructed_bad_solver_records_reject_admission_and_replay(self) -> None:
+        for mutation in (
+            "no-start",
+            "missing-pin",
+            "unobserved",
+            "missing-summary",
+            "bad-count",
+            "boolean-count",
+            "bad-arguments",
+            "changed-later-name",
+            "changed-hash",
+            "malformed-start",
+            "missing-process",
+            "mixed-version",
+        ):
+            with self.subTest(mutation=mutation):
+                case = self.case()
+                assert case.admit().returncode == 0
+                result = json.loads((case.directory / "result.json").read_text())
+                self.mutate_solver(case, result, mutation)
+                self.rebind(case, result)
+                completed = case.verify()
+                assert completed.returncode == 1, completed.stdout + completed.stderr
+                assert "solver" in completed.stderr
+                (case.directory / "modules.json").unlink()
+                (case.out / "admission.json").unlink()
+                completed = case.admit()
+                assert completed.returncode == 1, completed.stdout + completed.stderr
+                assert "solver" in case.reasons()
+
+    def test_repeated_names_support_legacy_aggregates_but_aliases_need_identities(self) -> None:
+        for alias in (False, True):
+            for retained in (False, True):
+                with self.subTest(alias=alias, retained=retained):
+                    case = self.case()
+                    log = case.directory / "output.log"
+                    first = log.read_text().splitlines(keepends=True)[0]
+                    later = first.replace("selected-z3", "alias-z3") if alias else first
+                    log.write_text(later + log.read_text())
+                    result = json.loads((case.directory / "result.json").read_text())
+                    observed = result["solver_effective"]
+                    observed["name"] = "/missing/alias-z3" if alias else observed["name"]
+                    observed["process_count"] = 2
+                    observed["processes"].insert(
+                        0, {**observed["processes"][0], "name": observed["name"]}
+                    )
+                    if not retained:
+                        del observed["processes"]
+                    self.rebind(case, result)
+                    accepted = not alias or retained
+                    assert (case.admit().returncode == 0) == accepted
+                    if accepted:
+                        shutil.rmtree(case.src)
+                        assert case.verify().returncode == 0
+
+
 class FixtureIntegrityTests(unittest.TestCase):
     def test_fixture_manifest_matches_files(self) -> None:
         manifest = json.loads((FIXTURES / "MANIFEST.json").read_text())
@@ -212,6 +396,27 @@ class RealEvidenceTests(unittest.TestCase):
         assert events[-1] == {"event": "summary", "status": "accepted", "passes": {"1": "accepted"}}
         assert case.verify().returncode == 0
 
+    def test_replay_rejects_changed_or_missing_admission_summary_digests(self) -> None:
+        case = self.hosted_case()
+        assert case.admit().returncode == 0
+        path = case.out / "admission.json"
+        original = path.read_text()
+        for field in ("inputs_sha256", "output_sha256"):
+            for value in (None, "", "ff" * 32):
+                with self.subTest(field=field, value=value):
+                    summary = json.loads(original)
+                    if value is None:
+                        del summary["passes"]["1"][field]
+                    else:
+                        summary["passes"]["1"][field] = value
+                    path.write_text(json.dumps(summary))
+                    completed = case.verify()
+                    assert completed.returncode == 1
+                    assert f"admission.json {field} differs" in completed.stderr
+        path.write_text(original)
+        shutil.rmtree(case.src)
+        assert case.verify().returncode == 0
+
     def test_hosted_records_cannot_be_tampered_after_admission(self) -> None:
         case = self.hosted_case()
         assert case.admit().returncode == 0
@@ -224,6 +429,21 @@ class RealEvidenceTests(unittest.TestCase):
         record = case.directory / "modules.json"
         record.write_text(record.read_text().replace('"verified"', '"missing"', 1))
         assert case.verify().returncode != 0
+
+    def test_hosted_replay_requires_an_integer_zero_returncode(self) -> None:
+        case = self.hosted_case()
+        assert case.admit().returncode == 0
+        path = case.directory / "result.json"
+        original = json.loads(path.read_text())
+        for value in (False, 0.0, "0", None):
+            with self.subTest(value=repr(value)):
+                path.write_text(json.dumps({**original, "returncode": value}) + "\n")
+                result = case.verify()
+                assert result.returncode == 1
+                assert "replay rejected" in result.stderr
+                assert "return code" in result.stderr
+        path.write_text(json.dumps(original) + "\n")
+        assert case.verify().returncode == 0
 
     def test_hosted_sources_must_match_recorded_digests(self) -> None:
         case = self.hosted_case()
@@ -505,6 +725,17 @@ class ControlledMutationTests(unittest.TestCase):
             == 0
         )
 
+    def test_equals_form_denied_options_reject_complete_success_logs(self) -> None:
+        for option in sorted(DENIED_OPTIONS):
+            with self.subTest(option=option):
+                shutil.rmtree(self.case.out)
+                self.case.directory.mkdir(parents=True)
+                assert (
+                    self.admit(COMPLETE, options=("--query_stats", option + "=true")).returncode
+                    == 1
+                )
+                assert f"denied options in argv: {option}=true" in self.case.reasons()
+
     def test_tampered_invocation_records_are_rejected(self) -> None:
         self.case.record(["Alpha.fst", "Beta.fst"], COMPLETE)
         (self.case.directory / "output.log").write_text(COMPLETE.replace("<ECHO>", "x"))
@@ -773,7 +1004,14 @@ class ReviewFollowUpTests(unittest.TestCase):
         output = COMPLETE.replace(
             "Verified module: Beta\n", "Verified module: Gamma\nVerified module: Beta\n"
         )
-        self.case.record(["Alpha.fst", "Beta.fst"], output, include_paths=[str(self.provider)])
+        self.case.record(
+            ["Alpha.fst", "Beta.fst"],
+            output,
+            include_paths=[str(self.provider)],
+            local_context=self.context(
+                self.case.src / "Alpha.fst", self.case.src / "Beta.fst", dependency
+            ),
+        )
         assert self.case.admit().returncode == 0, self.case.reasons()
         entry = self.case.modules()["unrequested"][0]
         assert entry["classification"] == "dependency"
@@ -784,6 +1022,154 @@ class ReviewFollowUpTests(unittest.TestCase):
         record = self.case.directory / "modules.json"
         record.write_text(record.read_text().replace('"dependency"', '"unclassified"'))
         assert self.case.verify().returncode != 0
+
+
+class DependencyIdentityRegressions(unittest.TestCase):
+    def case(self) -> Case:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        case = Case(root)
+        paths = [case.source(name + ".fst") for name in ("Alpha", "Beta", "Gamma")]
+        case.record(
+            ["Alpha.fst", "Beta.fst"],
+            COMPLETE.replace(
+                "Verified module: Beta", "Verified module: Gamma\nVerified module: Beta"
+            ),
+            local_context=[{"path": str(path), "sha256": sha256(path)} for path in paths],
+            include_paths=[str(root / "empty-provider")],
+        )
+        assert case.admit().returncode == 0
+        assert case.verify().returncode == 0
+        return case
+
+    def test_fully_rebound_dependency_and_requested_identity_mutations_reject(self) -> None:
+        for mutation in (
+            "digest",
+            "malformed",
+            "source",
+            "provider",
+            "requested-line",
+            "duplicate",
+        ):
+            with self.subTest(mutation=mutation):
+                case = self.case()
+                record = case.modules()
+                dependency = record["unrequested"][0]
+                if mutation in ("digest", "malformed"):
+                    dependency["sha256"] = "ff" * 32 if mutation == "digest" else "not-a-digest"
+                elif mutation == "source":
+                    dependency["source"] = str(case.src / "other" / "Gamma.fst")
+                elif mutation == "provider":
+                    dependency["source"] = str(case.root / "empty-provider" / "Gamma.fst")
+                elif mutation == "requested-line":
+                    record["requested"][0]["line"] = 9000
+                else:
+                    record["unrequested"].append(dependency.copy())
+                (case.directory / "modules.json").write_text(json.dumps(record))
+                result = json.loads((case.directory / "result.json").read_text())
+                ExplicitSolverEvidenceTests.rebind(case, result)
+                shutil.rmtree(case.src)
+                assert case.verify().returncode == 1
+
+    def test_snapshot_ambiguity_or_missing_identity_rejects_source_free_replay(self) -> None:
+        for mutation in ("missing", "malformed", "conflicting", "ambiguous", "duplicate-identical"):
+            with self.subTest(mutation=mutation):
+                case = self.case()
+                inputs = json.loads((case.directory / "inputs.json").read_text())
+                context = inputs["local_context"]
+                dependency = next(item for item in context if item["path"].endswith("Gamma.fst"))
+                if mutation == "missing":
+                    context.remove(dependency)
+                elif mutation == "malformed":
+                    dependency["sha256"] = "bad"
+                else:
+                    added = dependency.copy()
+                    if mutation == "conflicting":
+                        added["sha256"] = "ff" * 32
+                    elif mutation == "ambiguous":
+                        added["path"] = str(case.root / "empty-provider" / "Gamma.fst")
+                    context.append(added)
+                (case.directory / "inputs.json").write_text(json.dumps(inputs))
+                result = json.loads((case.directory / "result.json").read_text())
+                ExplicitSolverEvidenceTests.rebind(case, result)
+                shutil.rmtree(case.src)
+                assert case.verify().returncode == (0 if mutation == "duplicate-identical" else 1)
+
+    def linked_case(self, layout: str) -> tuple[Case, str, Path]:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        case = Case(root)
+        case.source("Alpha.fst")
+        case.source("Beta.fst")
+        provider = root / "physical/provider"
+        provider.mkdir(parents=True)
+        dependency = provider / "Gamma.fst"
+        dependency.write_text("module Gamma\nlet x = 1\n")
+        link = case.src / "alias"
+        if layout == "directory-link":
+            link.symlink_to(provider, target_is_directory=True)
+            include = str(link)
+        elif layout == "file-link":
+            link.mkdir()
+            (link / "Gamma.fst").symlink_to(dependency)
+            include = str(link)
+        else:
+            (root / "physical/child").mkdir()
+            link.symlink_to(root / "physical/child", target_is_directory=True)
+            include = "alias/../provider"
+        return case, include, dependency
+
+    def test_recorder_preserves_searched_symlinks_for_relocated_replay(self) -> None:
+        recorder = ROOT / "scripts/validation/run_fstar_invocation.py"
+        for layout in ("directory-link", "file-link", "relative-parent"):
+            with self.subTest(layout=layout):
+                case, include, dependency = self.linked_case(layout)
+                root = case.root
+                tool = root / "fstar.exe"
+                tool.write_text(
+                    f"#!{sys.executable}\nimport sys\n"
+                    "print('Verified module: Alpha')\nprint('Verified module: Gamma')\n"
+                    "print('Verified module: Beta')\n"
+                    "print('All verification conditions discharged successfully')\n"
+                    "print('TOTAL TIME 5 ms: ' + ' '.join(sys.argv))\n"
+                )
+                tool.chmod(0o755)
+                case.directory.rmdir()  # The real recorder requires a fresh invocation directory.
+                completed = subprocess.run(  # noqa: S603 - controlled recorder and fixture tool
+                    [
+                        sys.executable,
+                        str(recorder),
+                        "--out-dir",
+                        str(case.out),
+                        "--pass-id",
+                        "1",
+                        "--",
+                        str(tool),
+                        "--include",
+                        include,
+                        "Alpha.fst",
+                        "Beta.fst",
+                    ],
+                    cwd=case.src,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert completed.returncode == 0, completed.stderr
+                inputs = json.loads((case.directory / "inputs.json").read_text())
+                searched = (
+                    Path(include) if Path(include).is_absolute() else case.src / include
+                ) / "Gamma.fst"
+                assert {"path": str(searched), "sha256": sha256(dependency)} in inputs[
+                    "dependency_context"
+                ]
+                assert case.admit().returncode == 0, case.reasons()
+                relocated = root / "relocated"
+                case.out.rename(relocated)
+                case.out = relocated
+                case.directory = relocated / "invocations/1"
+                shutil.rmtree(case.src)
+                shutil.rmtree(root / "physical")
+                tool.unlink()
+                assert case.verify().returncode == 0
 
 
 if __name__ == "__main__":

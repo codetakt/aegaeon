@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # verify_ffi_contracts.sh — CI drift detection for F* ↔ C FFI contracts
 #
-# Checks that every Category B assume val in F* has a matching C implementation
-# and that every extern "C" in crates/ffi has a corresponding compiled object.
+# Checks source-symbol presence, generated-file presence, and the exact lexical
+# inventory of registered first-party assume vals. This is drift detection, not
+# a proof of functional contracts, compiled linkage, or premise acceptance.
 #
 # Exit codes:
 #   0 — all contracts are consistent
@@ -82,7 +83,7 @@ for fstar_file in "${!FSTAR_FFI_FILES[@]}"; do
 done
 
 if [ "$FSTAR_ASSUME_COUNT" -eq 0 ]; then
-	log_ok "Category B = 0: all FFI assume vals eliminated"
+	log_ok "Legacy allocator/parser mapping list is empty; remaining foreign contracts checked in Step 5"
 else
 	log_err "Expected 0 Category B assume vals, found ${FSTAR_ASSUME_COUNT}"
 fi
@@ -249,24 +250,15 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Step 5: Cross-check total assume val count
+# Step 5: Compare exact declarations with the foreign-contract register
 # ---------------------------------------------------------------
 echo ""
-echo "--- Step 5: Global assume val count ---"
+echo "--- Step 5: Registered foreign-assumption source inventory ---"
 
-EXPECTED_TOTAL_ASSUME=12
-EXPECTED_TOTAL_ASSUME_LABEL="6 crypto A; 2 HACL* B'; 1 EverParse; 2 OIDC hash; 1 host replay C"
-
-TOTAL_ASSUME=$(grep -rc '^\s*assume val' "${REPO_ROOT}/fstar/" --include='*.fst' 2>/dev/null |
-	awk -F: '{s+=$2} END {print s}')
-TOTAL_FILES=$(grep -rl '^\s*assume val' "${REPO_ROOT}/fstar/" --include='*.fst' 2>/dev/null | wc -l)
-
-if [ "$TOTAL_ASSUME" -eq "$EXPECTED_TOTAL_ASSUME" ]; then
-	log_ok "Total assume vals: ${TOTAL_ASSUME} across ${TOTAL_FILES} files"
-	log_ok "Assume-val categories: ${EXPECTED_TOTAL_ASSUME_LABEL}"
+if python3 "${REPO_ROOT}/scripts/validation/check_foreign_assumption_inventory.py" --root "$REPO_ROOT"; then
+	log_ok "First-party .fst/.fsti declarations match the register (including closure-external entries)"
 else
-	log_err "Expected ${EXPECTED_TOTAL_ASSUME} total assume vals, found ${TOTAL_ASSUME}"
-	log_err "Assume-val categories: ${EXPECTED_TOTAL_ASSUME_LABEL}"
+	log_err "Foreign-assumption source inventory mismatch"
 fi
 
 # ---------------------------------------------------------------
@@ -274,7 +266,7 @@ fi
 # ---------------------------------------------------------------
 echo ""
 if [ "$ERRORS" -eq 0 ]; then
-	echo "=== ${GREEN}PASSED${NC}: All FFI contracts are consistent ==="
+	echo "=== ${GREEN}PASSED${NC}: FFI source inventory checks passed (contracts remain unqualified) ==="
 	exit 0
 else
 	echo "=== ${RED}FAILED${NC}: ${ERRORS} error(s) detected ==="

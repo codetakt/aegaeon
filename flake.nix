@@ -139,6 +139,10 @@
         verificationPkgs = import verification-nixpkgs { inherit system; };
         verificationOcamlPackages = verificationPkgs.ocaml-ng.ocamlPackages_5_3;
         verificationFstar = verificationPkgs.fstar;
+        # Match the solver bundled by this pinned F* package; do not substitute
+        # the unrelated top-level verificationPkgs.z3 in invocation evidence.
+        verificationFstarSolver =
+          (verificationPkgs.callPackage "${verification-nixpkgs}/pkgs/by-name/fs/fstar/z3" { }).new;
         verificationZ3 = verificationPkgs.z3;
 
         karamel = verificationPkgs.callPackage ./nix/karamel.nix {
@@ -821,7 +825,7 @@
                 pkgs.findutils
                 pkgs.gnugrep
                 pkgs.gnused
-                pkgs.python3
+                python'
                 haclStar
                 karamel
               ];
@@ -838,7 +842,8 @@
               export EVERPARSE_PRELUDE_PATH="${everparse}/share/everparse/prelude"
               export EVERPARSE_LOWPARSER_PATH="${everparse}/lib/lowparse"
               python3 -m unittest discover -s tests/ci -p 'test_fstar_*.py'
-              OUT_DIR="$out" ${pkgs.bash}/bin/bash ${./scripts/flake/verify_fstar.sh}
+              FSTAR_SOLVER="${verificationFstarSolver}/bin/z3" \
+                OUT_DIR="$out" ${pkgs.bash}/bin/bash ${./scripts/flake/verify_fstar.sh}
             '';
 
         verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];

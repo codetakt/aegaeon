@@ -275,8 +275,9 @@ and lemma_json_pairs_roundtrip (l:list (string * json)) (term:list char)
     Corresponds to `base64url(SHA-256(ascii(encoded)))` in Rust.
     Delegates to HACL* SHA-256 via Verified.Crypto.Bridge.sha256_of_string.
     Real cryptographic computation — NOT identity.
-    Marked `irreducible` — Z3 sees only the type signature. *)
-irreducible
+    Marked `opaque_to_smt` — Z3 sees only the type signature unless the
+    collision-witness lemma below reveals the (one-line) body. *)
+[@@"opaque_to_smt"]
 let disclosure_digest (encoded:string) : Tot string = sha256_of_string encoded
 
 (** Determinism: the same encoded input always yields the same digest.
@@ -286,16 +287,27 @@ let disclosure_digest_deterministic (e:string)
   [SMTPat (disclosure_digest e)]
   = ()
 
-(** Collision resistance lifted to the disclosure digest function.
-    Two distinct encoded disclosures never share a digest.
-    This is a computational hardness assumption on SHA-256 — NOT provable
-    from first principles. Previously "proved" via reveal_opaque on
-    an identity model (tautological). *)
-assume val disclosure_digest_collision_resistant:
-  e1:string -> e2:string ->
-  Lemma (requires e1 =!= e2)
-        (ensures disclosure_digest e1 =!= disclosure_digest e2)
-  [SMTPat (disclosure_digest e1); SMTPat (disclosure_digest e2)]
+(** Collision bad event on the disclosure digest: two distinct encoded
+    disclosures with the same digest.  A definition, not an assumption.  The
+    former SMTPat axiom disclosure_digest_collision_resistant asserted
+    universal injectivity of SHA-256 and is removed; the theorems below are
+    conditional on the absence of this event for the concrete issuance, or
+    exhibit a witness of it. *)
+let disclosure_digest_collision (e1 e2:string) : Type0 =
+  e1 =!= e2 /\ disclosure_digest e1 = disclosure_digest e2
+
+let lemma_disclosure_digest_eq_cases (e1 e2:string)
+  : Lemma (disclosure_digest e1 = disclosure_digest e2 ==>
+           e1 = e2 \/ disclosure_digest_collision e1 e2)
+  = ()
+
+(** A disclosure-digest collision is a collision of the string-domain
+    SHA-256 wrapper (Verified.Crypto.Bridge), i.e. a string-encoding event
+    or a SHA-256 collision on the byte images. *)
+let lemma_disclosure_digest_collision_witness (e1 e2:string)
+  : Lemma (requires disclosure_digest_collision e1 e2)
+          (ensures sha256_of_string_collision e1 e2)
+  = reveal_opaque (`%disclosure_digest) disclosure_digest
 
 (* =========================================================================
   Core types
@@ -316,6 +328,20 @@ let encode_disclosure d =
 (** Compute the digest of a disclosure. *)
 val digest_of : disclosure -> Tot string
 let digest_of d = disclosure_digest (encode_disclosure d)
+
+(** Premise tied to a concrete issuance: the encoded string enc does not
+    collide (in the sense of disclosure_digest_collision) with the encoding
+    of any issued disclosure.  This is the finite, protocol-bound condition
+    under which the non-forgeability and reconstruction theorems hold; its
+    negation supplies a composed disclosure-digest collision witness: either
+    a string-encoding collision or a SHA-256 collision on distinct byte images. *)
+let no_collision_with_issued (enc:string) (issued:list disclosure) : Type0 =
+  forall (d:disclosure). mem d issued ==>
+    ~(disclosure_digest_collision enc (encode_disclosure d))
+
+(** The same premise for every presented encoded disclosure. *)
+let no_presented_collision (encs:list string) (issued:list disclosure) : Type0 =
+  forall (enc:string). mem enc encs ==> no_collision_with_issued enc issued
 
 (** A claim is a key-value pair drawn from a JSON object. *)
 type claim = string * json
@@ -550,8 +576,9 @@ val forged_digest_not_in_build :
   forged:disclosure ->
   Lemma (requires (
     let (ds, _) = build_disclosures claims sd_names salts in
-    forall (d:disclosure). mem d ds ==>
-      encode_disclosure forged =!= encode_disclosure d))
+    (forall (d:disclosure). mem d ds ==>
+      encode_disclosure forged =!= encode_disclosure d) /\
+    no_collision_with_issued (encode_disclosure forged) ds))
   (ensures (
     let (_, dgs) = build_disclosures claims sd_names salts in
     mem (digest_of forged) dgs = false))
@@ -562,9 +589,9 @@ let rec forged_digest_not_in_build claims sd_names salts forged =
   | (k, v) :: tl, s :: rest_salts ->
     if mem k sd_names then begin
       let d = { salt = s; claim_name = k; claim_value = v } in
-      (* Precondition gives: encode_disclosure forged =!= encode_disclosure d *)
-      (* Collision resistance: distinct encodings → distinct digests *)
-      disclosure_digest_collision_resistant
+      (* Precondition gives: encode_disclosure forged =!= encode_disclosure d
+         and no collision between the two encodings, hence distinct digests *)
+      lemma_disclosure_digest_eq_cases
         (encode_disclosure forged) (encode_disclosure d);
       (* Recurse for the remaining disclosures *)
       forged_digest_not_in_build tl sd_names rest_salts forged
@@ -989,9 +1016,9 @@ let lemma_completeness claims sd_names salts =
   =========================================================================
 
   An attacker cannot forge a disclosure that the verifier accepts
-  unless they find a SHA-256 collision. Formally: if a disclosure d
+  unless a composed disclosure-digest collision occurs (encoding or byte hash). Formally: if a disclosure d
   was NOT produced by the issuer, its digest cannot match any digest
-  in the _sd array (under the collision resistance assumption). *)
+  in the _sd array (under the finite composed-digest no-collision premise). *)
 
 val lemma_non_forgeability :
   claims:list claim -> sd_names:list string ->
@@ -1003,18 +1030,43 @@ val lemma_non_forgeability :
     not (mem forged r.disclosures) /\
     (* The forged encoding differs from every issued encoding *)
     (forall (d:disclosure). mem d r.disclosures ==>
-      encode_disclosure forged =!= encode_disclosure d)))
+      encode_disclosure forged =!= encode_disclosure d) /\
+    (* No composed digest collision: excludes encoding and byte-hash collisions. *)
+    no_collision_with_issued (encode_disclosure forged) r.disclosures))
   (ensures (
     let r = issue claims sd_names salts in
     (* The forged digest does not appear in sd_digests *)
     not (digest_in (digest_of forged) r.payload.sd_digests)))
 let lemma_non_forgeability claims sd_names salts forged =
-  (* By collision resistance: distinct encodings → distinct digests.
-    Since the forged encoding differs from all issued encodings,
-    its digest differs from all digests in sd_digests.
+  (* Under the no-collision premise, distinct encodings have distinct
+    digests, so the forged digest differs from all digests in sd_digests.
     Proof: forged_digest_not_in_build follows the recursion of
-    build_disclosures, applying collision_resistant at each step. *)
+    build_disclosures, applying the digest case split at each step. *)
   forged_digest_not_in_build claims sd_names salts forged
+
+(** Unconditional form: a forged disclosure is rejected, or it exhibits an
+    explicit disclosure-digest collision with an issued disclosure.  No
+    assumption about SHA-256 is used. *)
+val lemma_non_forgeability_or_collision :
+  claims:list claim -> sd_names:list string ->
+  salts:list string{FStar.List.Tot.length salts >= FStar.List.Tot.length claims} ->
+  forged:disclosure ->
+  Lemma (requires (
+    let r = issue claims sd_names salts in
+    not (mem forged r.disclosures) /\
+    (forall (d:disclosure). mem d r.disclosures ==>
+      encode_disclosure forged =!= encode_disclosure d)))
+  (ensures (
+    let r = issue claims sd_names salts in
+    not (digest_in (digest_of forged) r.payload.sd_digests) \/
+    (exists (d:disclosure). mem d r.disclosures /\
+      disclosure_digest_collision (encode_disclosure forged) (encode_disclosure d))))
+let lemma_non_forgeability_or_collision claims sd_names salts forged =
+  let r = issue claims sd_names salts in
+  if FStar.StrongExcludedMiddle.strong_excluded_middle
+       (no_collision_with_issued (encode_disclosure forged) r.disclosures)
+  then lemma_non_forgeability claims sd_names salts forged
+  else ()
 
 (* =========================================================================
   Property P3: Soundness (subset disclosure)
@@ -1225,9 +1277,10 @@ val lemma_digest_decode_claim_in_orig :
   enc:string -> d:disclosure ->
   Lemma
     (requires (
-      let (_, dgs) = build_disclosures claims sd_names salts in
+      let (ds, dgs) = build_disclosures claims sd_names salts in
       mem (disclosure_digest enc) dgs = true /\
-      decode_disclosure enc == Some d))
+      decode_disclosure enc == Some d /\
+      no_collision_with_issued enc ds))
     (ensures mem (d.claim_name, d.claim_value) claims = true)
     (decreases claims)
 let rec lemma_digest_decode_claim_in_orig claims sd_names salts enc d =
@@ -1240,7 +1293,7 @@ let rec lemma_digest_decode_claim_in_orig claims sd_names salts enc d =
       if enc = enc_i then
         decode_encode_inverse d_i
       else begin
-        disclosure_digest_collision_resistant enc enc_i;
+        lemma_disclosure_digest_eq_cases enc enc_i;
         lemma_digest_decode_claim_in_orig tl sd_names rest_salts enc d
       end
     end
@@ -1272,7 +1325,8 @@ val lemma_reconstruct_acc_claims :
   Lemma
     (requires (
       sd == (issue claims sd_names salts).payload /\
-      (forall (c:claim). mem c acc ==> mem c claims)))
+      (forall (c:claim). mem c acc ==> mem c claims) /\
+      no_presented_collision encs (issue claims sd_names salts).disclosures))
     (ensures (
       match reconstruct_acc sd encs acc with
       | Some result -> (forall (c:claim). mem c result ==> mem c claims)
@@ -1306,6 +1360,9 @@ let rec lemma_reconstruct_acc_claims sd encs acc claims sd_names salts =
         assert (sd == (issue claims sd_names salts).payload);
         assert (sd.sd_digests == (let (_, dgs) = build_disclosures claims sd_names salts in dgs));
         assert (mem (disclosure_digest enc) sd.sd_digests = true);
+        assert ((issue claims sd_names salts).disclosures ==
+                (let (ds, _) = build_disclosures claims sd_names salts in ds));
+        assert (no_collision_with_issued enc (issue claims sd_names salts).disclosures);
         lemma_digest_decode_claim_in_orig claims sd_names salts enc d;
         assert (mem (d.claim_name, d.claim_value) claims = true);
         (* New acc satisfies precondition *)
@@ -1319,7 +1376,10 @@ val lemma_reconstruction_subset :
   claims:list claim -> sd_names:list string ->
   salts:list string{FStar.List.Tot.length salts >= FStar.List.Tot.length claims} ->
   encs:list string ->
-  Lemma (ensures (
+  Lemma (requires (
+    let r = issue claims sd_names salts in
+    no_presented_collision encs r.disclosures))
+  (ensures (
     let r = issue claims sd_names salts in
     match reconstruct r.payload encs with
     | Some reconstructed ->
@@ -1332,3 +1392,29 @@ let lemma_reconstruction_subset claims sd_names salts encs =
   let presented_digests = compute_digests encs in
   if has_duplicates presented_digests then ()
   else lemma_reconstruct_acc_claims r.payload encs [] claims sd_names salts
+
+(** Unconditional form: either every reconstructed claim comes from the
+    issuer's claim set, or some presented encoded disclosure exhibits an
+    explicit disclosure-digest collision with an issued disclosure.  No
+    assumption about SHA-256 is used. *)
+val lemma_reconstruction_subset_or_collision :
+  claims:list claim -> sd_names:list string ->
+  salts:list string{FStar.List.Tot.length salts >= FStar.List.Tot.length claims} ->
+  encs:list string ->
+  Lemma (ensures (
+    let r = issue claims sd_names salts in
+    (match reconstruct r.payload encs with
+     | Some reconstructed ->
+       (forall (c:claim). mem c reconstructed ==>
+         mem c claims \/
+         mem c r.payload.plaintext_claims)
+     | None -> True) \/
+    (exists (enc:string) (d:disclosure).
+      mem enc encs /\ mem d r.disclosures /\
+      disclosure_digest_collision enc (encode_disclosure d))))
+let lemma_reconstruction_subset_or_collision claims sd_names salts encs =
+  let r = issue claims sd_names salts in
+  if FStar.StrongExcludedMiddle.strong_excluded_middle
+       (no_presented_collision encs r.disclosures)
+  then lemma_reconstruction_subset claims sd_names salts encs
+  else ()

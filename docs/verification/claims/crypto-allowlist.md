@@ -1,6 +1,6 @@
 # Verified Crypto Allowlist (Strong-Constraint Mode)
 
-Last updated: 2026-08-02
+Last updated: 2026-09-11
 
 Status: current implementation baseline
 
@@ -114,14 +114,17 @@ with genuine HACL* spec-level implementations via `Spec.Agile.Hash` (SHA-256/384
 8. `disclosure_digest` (Jose.SdJwt.fst) — identity → `Verified.Crypto.Bridge.sha256_of_string`
 9. `compute_hash` (HashComputation.fst) — identity → `Verified.Crypto.Bridge.sha256_hash`
 
-### Security property lemmas (3 targets) — ALL CONVERTED
+### Security property lemmas (3 targets) — CONVERTED, THEN REPLACED
 
 Previously "proved" via `reveal_opaque` on identity/false models (tautological).
-Phase A converts them to honest crypto `assume val` assumptions:
+Phase A converted them to `assume val` premises; on 2026-09-11 those premises
+were removed as mathematically false and replaced by bad-event definitions
+with proved case splits (see `docs/verification/claims/assumptions/current-register.md`
+§3.1–§3.4):
 
-1. `jws_verify_unforgeable` — EUF-CMA assumption (unforgeability)
-2. `disclosure_digest_collision_resistant` — SHA-256 collision resistance
-3. `assumption_collision_resistance` — SHA-256 collision resistance
+1. `jws_verify_unforgeable` → `jws_mac_forgery` / `jws_eddsa_forgery` events, `lemma_jws_verify_cases`
+2. `disclosure_digest_collision_resistant` → `disclosure_digest_collision`, `lemma_reconstruction_subset_or_collision`
+3. `assumption_collision_resistance` → `hash_collision`, `truncation_collision`, `lemma_compute_hash_eq_cases`
 
 ## Verified allowlist (eligible)
 

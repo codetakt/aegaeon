@@ -21,6 +21,7 @@ small proof-support module inventory needed for Low\* bounds work.
 
 - `[runbook]` [F\* verification requirements](verification-requirements.md)
 - `[policy]` [F\* per-module admission](module-admission.md)
+- `[policy]` [F\* effective-assumption graph](assumption-graph.md)
 - `[runbook]` [F\* / KaRaMeL troubleshooting](troubleshooting.md)
 - `[runbook]` [Store-entry VC resolution](store-entries-vc-resolution.md)
 - `[index]` [Assumption register](../claims/assumptions/README.md)

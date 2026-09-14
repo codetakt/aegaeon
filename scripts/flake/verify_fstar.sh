@@ -47,8 +47,23 @@ run_pass() {
 	local pass_id="$1"
 	local pass_status
 	shift
+	if [[ -n ${FSTAR_SOLVER:-} ]]; then
+		set -- --smt "$FSTAR_SOLVER" "$@"
+	fi
+	# Capture the actual proof's ordered batch schedule and load decisions.
+	# The separate admitted-SMT probe is diagnostic evidence only.
+	set -- --debug Dep --debug CheckedFiles "$@"
 	if python3 "$REPO_ROOT/scripts/validation/run_fstar_invocation.py" \
 		--out-dir "$OUT_DIR" --pass-id "$pass_id" -- fstar.exe "$@"; then
+		# Record the verifier's own dependency closure and checked-file load decisions
+		# for the same arguments; these feed the effective-assumption graph and are
+		# never admitted as verification results.
+		if ! python3 "$REPO_ROOT/scripts/validation/assumption_graph.py" probe \
+			--out-dir "$OUT_DIR" --pass-id "$pass_id" -- fstar.exe "$@"; then
+			printf '[FAIL] Pass %s: dependency/load probe failed\n' "$pass_id" |
+				tee -a "$LOG" >&2
+			return 1
+		fi
 		return 0
 	else
 		pass_status=$?
@@ -334,7 +349,9 @@ MODULES="$MODULES \
 	crypto/Crypto.fst \
 	crypto/Random.fst \
 	crypto/Drbg.HmacSha256.fst \
-	crypto/Verified.Crypto.Bridge.fst"
+	crypto/Verified.Crypto.Bridge.fst \
+	crypto/Verified.Crypto.Hmac.KeyEquiv.fsti \
+	crypto/Verified.Crypto.Hmac.KeyEquiv.fst"
 # AuthCode flow
 MODULES="$MODULES \
 	authcode/AuthCode.Types.fst \
@@ -348,6 +365,8 @@ MODULES="$MODULES oidc/OIDC.AuthorizationTransactions.fst"
 # Shared finite fixtures must match their generated F* cases exactly.
 python3 "$REPO_ROOT/scripts/validation/authcode_redis_fixtures.py" --check
 MODULES="$MODULES ../tests/fstar/property/TestAuthCodeRedisGrant.fst"
+MODULES="$MODULES ../tests/fstar/property/TestHmacEquivalentCompromise.fst"
+MODULES="$MODULES ../tests/fstar/property/TestForgeryKeyProvenance.fst"
 MODULES="$MODULES token/TokenExchange.TargetPolicy.fst"
 MODULES="$MODULES token/TokenExchange.GrantLaws.fst token/TokenExchange.Lifetime.fst"
 MODULES="$MODULES management/Configuration.Membership.fst token/TokenExchange.Integration.fst"
@@ -539,3 +558,40 @@ if ! python3 "$REPO_ROOT/scripts/validation/admit_fstar_modules.py" \
 	exit 1
 fi
 echo "[OK] Every requested F* module was admitted" | tee -a "$LOG" >&2
+
+# Effective-assumption graph: reconstruct from the records above, then re-check the
+# stored graph against the same fixed inputs and the register. Consistency here is a
+# formal property of the evidence; qualification is reported separately and is
+# expected to be incomplete until every premise carries an accepted review.
+echo "=> Building the effective-assumption graph" | tee -a "$LOG" >&2
+if ! python3 "$REPO_ROOT/scripts/validation/assumption_graph.py" build \
+	--evidence "$OUT_DIR" --source-root "$REPO_ROOT" \
+	--out "$OUT_DIR/assumption-graph.json"; then
+	echo "[FAIL] Effective-assumption graph could not be reconstructed" | tee -a "$LOG" >&2
+	exit 1
+fi
+if ! python3 "$REPO_ROOT/scripts/validation/assumption_graph.py" check \
+	--evidence "$OUT_DIR" --source-root "$REPO_ROOT" \
+	--graph "$OUT_DIR/assumption-graph.json"; then
+	echo "[FAIL] Effective-assumption graph is inconsistent with its inputs or the register" |
+		tee -a "$LOG" >&2
+	exit 1
+fi
+echo "[OK] Effective-assumption graph is consistent (not a qualification)" | tee -a "$LOG" >&2
+qualify_status=0
+python3 "$REPO_ROOT/scripts/validation/assumption_graph.py" qualify \
+	--evidence "$OUT_DIR" --source-root "$REPO_ROOT" \
+	--graph "$OUT_DIR/assumption-graph.json" >"$OUT_DIR/assumption-graph.qualify.log" ||
+	qualify_status=$?
+grep '^ASSUMPTION-GRAPH ' "$OUT_DIR/assumption-graph.qualify.log" |
+	sed 's/^ASSUMPTION-GRAPH //' >"$OUT_DIR/assumption-graph.qualify.json"
+case "$qualify_status" in
+0) echo "[OK] Effective-assumption graph qualified" | tee -a "$LOG" >&2 ;;
+2) echo "[INFO] Effective-assumption graph qualification incomplete (see assumption-graph.qualify.json)" |
+	tee -a "$LOG" >&2 ;;
+*)
+	echo "[FAIL] Effective-assumption graph qualification failed with status $qualify_status" |
+		tee -a "$LOG" >&2
+	exit 1
+	;;
+esac

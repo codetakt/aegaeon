@@ -1,0 +1,12 @@
+{
+  "files": {
+    "baseline-2b/depend.txt.gz": "e127e4f52db023a94bfd10d4443de5456988e69fb00fb4fbffb033b50a5d9ef2",
+    "baseline-2b/inputs.json": "8f95a664fc215d9f552490c09bfb7baeceeed60dc1f9e92e862d7d8e5f9d6581",
+    "baseline-2b/load.log.gz": "4dda103f5250fc30700fa9294019792375278c7dc8f1de8f34bdaa9ef4e9ffdd",
+    "baseline-2b/modules.json": "5f798e4b5aa311d678a3b6ce4a1b65152270ac08c6f382b6b5f808881f0e47d9",
+    "baseline-2b/output-head.log": "aaa3475998626e881078e623e752b1f0c4d50685cac9b2ea874b7d635a5919f5",
+    "baseline-2b/probe-record.json": "88ecc2686458e1848a8852e7c98e0bb35ec5c32de4ecbd14e3400258d3a55e5a",
+    "baseline-2b/result.json": "2eafaf77af5a2f168e965977a41bfef8fc4c4c32150a3322239336a2f9d9743c"
+  },
+  "note": "baseline-2b: records of production pass 2b from the verify-fstar build of tree bdae540722f977bf971b7a24ed2ff7c68b32bd2a (admission accepted) plus the dependency (--dep full) and load-mode (--admit_smt_queries true --debug CheckedFiles) probe outputs replayed with the pass arguments on a byte-identical copy of the sources; .gz members are stored with gzip -n and listed by the digest of their decompressed bytes."
+}

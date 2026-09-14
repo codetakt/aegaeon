@@ -1,0 +1,1411 @@
+{
+  "checked_scan": {
+    "candidates": [],
+    "directories": [
+      "/build/source/fstar",
+      "/build/source/fstar/jose",
+      "/build/source/fstar/common",
+      "/build/source/fstar/../generated/everparse",
+      "/build/source/fstar/token",
+      "/build/source/fstar/resource",
+      "/build/source/fstar/dpop",
+      "/build/source/fstar/pkce",
+      "/build/source/fstar/par",
+      "/build/source/fstar/auth",
+      "/build/source/fstar/oidc",
+      "/build/source/fstar/introspection",
+      "/build/source/fstar/revocation",
+      "/build/source/fstar/crypto",
+      "/build/source/fstar/authcode",
+      "/build/source/fstar/../tests/fstar/property",
+      "/build/source/fstar/stepup",
+      "/build/source/fstar/dcr",
+      "/build/source/fstar/device_authz",
+      "/build/source/fstar/federation",
+      "/build/source/fstar/management",
+      "/build/source/fstar/rar",
+      "/build/source/fstar/verifiedcore/api",
+      "/build/source/fstar/jose/LowStar/Json",
+      "/build/source/fstar/../tests/fstar/unit",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/bignum",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/blake2",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/c",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/chacha20poly1305",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/curve25519",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/drbg",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ecdsap256",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ed25519",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/fallback",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ffdhe",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/frodo",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hash",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hkdf",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hmac",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/hpke",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/k256",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/lemmas",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/meta",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/ml",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/nacl-box",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/poly1305",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/rsapss",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/salsa20",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha2-mb",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/sha3",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/streaming",
+      "/nix/store/80anjgdrljr3nakfhncxx5f6xbpqr620-hacl-star-2024.08.26/share/hacl-star/fstar/tests",
+      "/nix/store/jzlin36arbymkbbxwxaypx0q2bk7jhi0-karamel-2025-10-08/lib/krml",
+      "/nix/store/7f84df8bqc5x65sna4mr90qybqik9cjn-source",
+      "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse",
+      "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude",
+      "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/buffer",
+      "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/share/everparse/prelude/extern",
+      "/nix/store/vxlik1l0njv6lxmb2fqhjx28g5164x9f-everparse-2025-10-06/lib/lowparse"
+    ]
+  },
+  "contract": "fstar-2025.10.06-text-v1",
+  "diagnostics": {
+    "completion_marker_lines": [
+      3136
+    ],
+    "errors": 0,
+    "total_time_argv_matches": true,
+    "warnings": 4
+  },
+  "inputs_sha256": "8f95a664fc215d9f552490c09bfb7baeceeed60dc1f9e92e862d7d8e5f9d6581",
+  "output_sha256": "b80be0232511289e4d54ea315804459162c43baee142f69a6651f8b84f34f17d",
+  "pass_id": "2b",
+  "reasons": [],
+  "requested": [
+    {
+      "disposition": "verified",
+      "line": 2979,
+      "module": "FStar.Base64",
+      "path": "FStar.Base64.fst",
+      "role": "implementation",
+      "sha256": "a440c1b335beb761d77f99484e06a10ab9eac7e8c307e3b91be9322346adb8fd"
+    },
+    {
+      "disposition": "verified",
+      "line": 2980,
+      "module": "JoseNatLemmas",
+      "path": "jose/JoseNatLemmas.fst",
+      "role": "implementation",
+      "sha256": "52e534b30dca2618d5de9d47fb2bac3f439ba27f4fe87ec5505ee9436e2eb8ac"
+    },
+    {
+      "disposition": "verified",
+      "line": 2981,
+      "module": "JoseU32Lemmas",
+      "path": "jose/JoseU32Lemmas.fst",
+      "role": "implementation",
+      "sha256": "949214c6fd59efc081258afd118710706055ac330b4b334ed3a900c024f3b579"
+    },
+    {
+      "disposition": "verified",
+      "line": 2984,
+      "module": "Jose.Arith.Bounds",
+      "path": "jose/Jose.Arith.Bounds.fst",
+      "role": "implementation",
+      "sha256": "95b1b0cf36f7f812ce5116474f0a685ff8de4f6258da3f273efca0c5cd2cae9b"
+    },
+    {
+      "disposition": "verified",
+      "line": 2982,
+      "module": "Jose.UInt32Bounds",
+      "path": "jose/Jose.UInt32Bounds.fst",
+      "role": "implementation",
+      "sha256": "22d60c6f7bdb50c465154c56510bbc04dc37b898b1f43e121e327c792288d31f"
+    },
+    {
+      "disposition": "verified",
+      "line": 2985,
+      "module": "Jose.Utf8",
+      "path": "jose/Jose.Utf8.fst",
+      "role": "implementation",
+      "sha256": "354521aa3631fb185612e9cd77538c583457eed567dba2857730baf2a9384161"
+    },
+    {
+      "disposition": "verified",
+      "line": 2986,
+      "module": "Jose.Utf8.Validity",
+      "path": "jose/Jose.Utf8.Validity.fst",
+      "role": "implementation",
+      "sha256": "818276ffcf42a3af80cdf44227d8f227b22eb4bf4e9b5218c54df4cbe7dd348a"
+    },
+    {
+      "disposition": "verified",
+      "line": 2987,
+      "module": "Jose.Utf8.Encoding",
+      "path": "jose/Jose.Utf8.Encoding.fst",
+      "role": "implementation",
+      "sha256": "97b4238369cd7511442b4dbf07d158954e02c4f79c1b7987bb6890afdf273d86"
+    },
+    {
+      "disposition": "verified",
+      "line": 2988,
+      "module": "Jose.Utf8.Lemmas",
+      "path": "jose/Jose.Utf8.Lemmas.fst",
+      "role": "implementation",
+      "sha256": "c4429c9f0e619e0917de4a4ad4ad7cd84af045a9606d8b08d2bb93f85f241a3a"
+    },
+    {
+      "disposition": "verified",
+      "line": 2989,
+      "module": "Jose.Utf8Lemmas",
+      "path": "jose/Jose.Utf8Lemmas.fst",
+      "role": "implementation",
+      "sha256": "4d84a992afb33f6b516bacf29c73be54786436158114c5773e768cd5435f0926"
+    },
+    {
+      "disposition": "verified",
+      "line": 2990,
+      "module": "Jose.ListMapLemmas",
+      "path": "jose/Jose.ListMapLemmas.fst",
+      "role": "implementation",
+      "sha256": "e38bdd06adf10cc5fcbfe2930ccd537606aa06545c4fa0355f5d67f171b47b47"
+    },
+    {
+      "disposition": "verified",
+      "line": 2991,
+      "module": "Jose.BufferListLemmas",
+      "path": "jose/Jose.BufferListLemmas.fst",
+      "role": "implementation",
+      "sha256": "08ffd11dcbd865abb5550343f63dd6a24880c62907e01856d891a3eddeccda9e"
+    },
+    {
+      "disposition": "verified",
+      "line": 2992,
+      "module": "ConstTime",
+      "path": "ConstTime.fst",
+      "role": "implementation",
+      "sha256": "f0a3cc6c03069bd7b32827f4225a33cf1893d8a19a73f1a5dffce211a09f67de"
+    },
+    {
+      "disposition": "verified",
+      "line": 2994,
+      "module": "HashComputation",
+      "path": "HashComputation.fst",
+      "role": "implementation",
+      "sha256": "faa887612a3f383a694c53639d058cb861403f19605d069db11cc07e519d8e3f"
+    },
+    {
+      "disposition": "verified",
+      "line": 2995,
+      "module": "EqHelpers",
+      "path": "common/EqHelpers.fst",
+      "role": "implementation",
+      "sha256": "b77358598160c9ddcd6382714a2ef8b7bda31537b1a86a14a22314708616e412"
+    },
+    {
+      "disposition": "verified",
+      "line": 2996,
+      "module": "FStar.Json",
+      "path": "FStar.Json.fst",
+      "role": "implementation",
+      "sha256": "87be4d106a60afd262af96532ca4957c31364a5b17c995d140794181c60aff26"
+    },
+    {
+      "disposition": "verified",
+      "line": 2997,
+      "module": "Jose",
+      "path": "jose/Jose.fst",
+      "role": "implementation",
+      "sha256": "0a8c9ecd0681e95756764d7ba2af81da57b90656a80b867bd30c0ff33a840f5d"
+    },
+    {
+      "disposition": "verified",
+      "line": 2998,
+      "module": "Jose.False",
+      "path": "jose/Jose.False.fst",
+      "role": "implementation",
+      "sha256": "5832460794403ffb99dd33a1566043e01dbd4dc57be8112f1660ec9647ed0dda"
+    },
+    {
+      "disposition": "verified",
+      "line": 2999,
+      "module": "Jose.BytesBlock",
+      "path": "jose/Jose.BytesBlock.fst",
+      "role": "implementation",
+      "sha256": "f47201add91a5076151bdf574290bde5dbfc2ff3d3a94d8e49f0e7212fc28ccd"
+    },
+    {
+      "disposition": "verified",
+      "line": 3013,
+      "module": "Jose.TlvResultSpec",
+      "path": "jose/Jose.TlvResultSpec.fst",
+      "role": "implementation",
+      "sha256": "c6e2466055545e459460e88bf0b6b0aa2ead6674906b0ea8a2839254e56a5695"
+    },
+    {
+      "disposition": "verified",
+      "line": 3014,
+      "module": "Jose.TlvInterface",
+      "path": "jose/Jose.TlvInterface.fst",
+      "role": "implementation",
+      "sha256": "808e10c28d29ea1bff0e53039a96165c40f3572987dc5faf8853b65104157265"
+    },
+    {
+      "disposition": "verified",
+      "line": 3010,
+      "module": "Jose.TlvLemmas",
+      "path": "jose/Jose.TlvLemmas.fst",
+      "role": "implementation",
+      "sha256": "07293ae61f422dc714e27246f2101a010880f145c0134f8a418e39805217e931"
+    },
+    {
+      "disposition": "verified",
+      "line": 3015,
+      "module": "Jose.JsonTlvEquiv",
+      "path": "jose/Jose.JsonTlvEquiv.fst",
+      "role": "implementation",
+      "sha256": "9ae27850b170f152d2f84204fd9bce1a26b60687a878a006a6b1a710f0441ba6"
+    },
+    {
+      "disposition": "verified",
+      "line": 3000,
+      "module": "Jose.StringLemmas",
+      "path": "jose/Jose.StringLemmas.fst",
+      "role": "implementation",
+      "sha256": "4fb7fe3c550928cd8adae75e033d60c5756a1d10f024df833371b5bec192347f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3008,
+      "module": "Jose.HeaderKeyLemmas",
+      "path": "jose/Jose.HeaderKeyLemmas.fst",
+      "role": "implementation",
+      "sha256": "9eede608d27ed134ff7e35b55d70b140c82f55a546996193c2f27b2788cda723"
+    },
+    {
+      "disposition": "verified",
+      "line": 3003,
+      "module": "Jose.Alg_policy",
+      "path": "jose/Jose.Alg_policy.fst",
+      "role": "implementation",
+      "sha256": "c16425ef00ac652973f84540c7bb09dea8b4ccb5bdbff5e0933067ea514f7285"
+    },
+    {
+      "disposition": "verified",
+      "line": 3002,
+      "module": "Jose.Policy",
+      "path": "jose/Jose.Policy.fst",
+      "role": "implementation",
+      "sha256": "0456edadd9877a4a07bf84ab7e60b13eb2abd5c8cc07e77312e9faee71d1dda0"
+    },
+    {
+      "disposition": "verified",
+      "line": 3016,
+      "module": "Jose.Metadata",
+      "path": "jose/Jose.Metadata.fst",
+      "role": "implementation",
+      "sha256": "5c1061fa604e26e0d69cbafdcaa034788c41c6c5ad352af5b434e188f8357450"
+    },
+    {
+      "disposition": "verified",
+      "line": 3006,
+      "module": "Jose.HeaderSpec",
+      "path": "jose/Jose.HeaderSpec.fst",
+      "role": "implementation",
+      "sha256": "24951c27bd20918800618d4b54a676d85f51bf767cf14ecf0c8441861a7d0905"
+    },
+    {
+      "disposition": "verified",
+      "line": 3001,
+      "module": "Jose.HeaderPolicy",
+      "path": "jose/Jose.HeaderPolicy.fst",
+      "role": "implementation",
+      "sha256": "f77410c5e59f2daa784987bb8847bc38192b145000072424c09e65aa9580268e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3007,
+      "module": "Jose.HeaderMicro",
+      "path": "jose/Jose.HeaderMicro.fst",
+      "role": "implementation",
+      "sha256": "c99d96d93692db89a2053e917d4fec523037291557ce4220ebb83a9ee499fe21"
+    },
+    {
+      "disposition": "verified",
+      "line": 3017,
+      "module": "Jose.HeaderParser.Assumptions",
+      "path": "jose/Jose.HeaderParser.Assumptions.fst",
+      "role": "implementation",
+      "sha256": "75c776c7bd31841b7ce45ee5db8ec1cea2e582434c0654345eb616d956c0bfd1"
+    },
+    {
+      "disposition": "verified",
+      "line": 3011,
+      "module": "Jose.HeaderParser.Spec",
+      "path": "jose/Jose.HeaderParser.Spec.fst",
+      "role": "implementation",
+      "sha256": "91299f3afab6afdc93671856e5388e607c8a71c22faa2fde7c8dac75f4108377"
+    },
+    {
+      "disposition": "verified",
+      "line": 3018,
+      "module": "Jose.HeaderParser.Runtime",
+      "path": "jose/Jose.HeaderParser.Runtime.fst",
+      "role": "implementation",
+      "sha256": "b3f02d63e17e27b116f6e00ae85dd52dff60f1e5f0862584027398bd19696678"
+    },
+    {
+      "disposition": "verified",
+      "line": 3020,
+      "module": "Jose.HeaderParser.TLV",
+      "path": "jose/Jose.HeaderParser.TLV.fst",
+      "role": "implementation",
+      "sha256": "8cfac4ba5117d14a961abdeabf98e083105851ca76dc5ee8cc5db556690bbb98"
+    },
+    {
+      "disposition": "verified",
+      "line": 3012,
+      "module": "Jose.HeaderParser.Proofs",
+      "path": "jose/Jose.HeaderParser.Proofs.fst",
+      "role": "implementation",
+      "sha256": "b2c1bec064769805cdba1d9067b0ac3b9f4ed7da72653a49b7e67bfa1641b08a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3021,
+      "module": "Jose.HeaderParser",
+      "path": "jose/Jose.HeaderParser.fst",
+      "role": "implementation",
+      "sha256": "ec98d28d77e943c5a35a78fddaca80ca078250a6a405ed6d409199dea1ee4b85"
+    },
+    {
+      "disposition": "verified",
+      "line": 3009,
+      "module": "Jose.JsonHeaderSpec",
+      "path": "jose/Jose.JsonHeaderSpec.fst",
+      "role": "implementation",
+      "sha256": "ded450572c733c0b6e99214d2132db3736f2aad9c8b3422000581e8cef8a042a"
+    },
+    {
+      "disposition": "verified",
+      "line": 2983,
+      "module": "Jose.Context",
+      "path": "jose/Jose.Context.fst",
+      "role": "implementation",
+      "sha256": "090e71b669119c844958c4b5c44dd59d03080cc8e8df8310989e8177562c598e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3022,
+      "module": "Jose.Jwk_metadata",
+      "path": "jose/Jose.Jwk_metadata.fst",
+      "role": "implementation",
+      "sha256": "46930f4ac9c18c325ae5d9b87d647d6e3ad43f7359cfea0f0df7f64499a5a13b"
+    },
+    {
+      "disposition": "verified",
+      "line": 3023,
+      "module": "Jose.Jwk_structure",
+      "path": "jose/Jose.Jwk_structure.fst",
+      "role": "implementation",
+      "sha256": "1a020b47c1726fedda2f22abd23bd8315335d7d4483022da342e9bd8457f766e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3025,
+      "module": "Jose.Jws.Verify",
+      "path": "jose/Jose.Jws.Verify.fst",
+      "role": "implementation",
+      "sha256": "bf41621f4a04b64c74cbb6aef6c24d6d8dacd7ae0ad19aa7808a1dae4912966c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3026,
+      "module": "Jose.Jwk_thumbprint_uri",
+      "path": "jose/Jose.Jwk_thumbprint_uri.fst",
+      "role": "implementation",
+      "sha256": "51884b9642c41720e9fc1e78bbb433a1c168fdd4633c25e74ece5f777ac83626"
+    },
+    {
+      "disposition": "verified",
+      "line": 3004,
+      "module": "Jose.Jws_header",
+      "path": "jose/Jose.Jws_header.fst",
+      "role": "implementation",
+      "sha256": "fa6016ec6bdd8f16a81dee2d1c8933664ab8f43936958f055ef3eddac1ca267b"
+    },
+    {
+      "disposition": "verified",
+      "line": 3029,
+      "module": "Jose.Jws_signature",
+      "path": "jose/Jose.Jws_signature.fst",
+      "role": "implementation",
+      "sha256": "ac79e99202f39cf67f05ec6742cc5aa8a5e3e598037b98b6caaa6df7b5c97878"
+    },
+    {
+      "disposition": "verified",
+      "line": 3024,
+      "module": "Jose.Jws_serialization",
+      "path": "jose/Jose.Jws_serialization.fst",
+      "role": "implementation",
+      "sha256": "a43fa70b7ac17c599ccccd2693abe02a92943fa670138706dd19135b73da1b61"
+    },
+    {
+      "disposition": "verified",
+      "line": 3005,
+      "module": "Jose.Jwe_header",
+      "path": "jose/Jose.Jwe_header.fst",
+      "role": "implementation",
+      "sha256": "3b611976c75a8fa79fdfb728490170bc0acd50532b257d015dfc656ca6df530a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3030,
+      "module": "Jose.Jwe_aad",
+      "path": "jose/Jose.Jwe_aad.fst",
+      "role": "implementation",
+      "sha256": "70fe38271af18f06beb5cf225bcc38ddf58b0e8b56608b578d7a8abf3ec4049e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3031,
+      "module": "Jose.Jwe_chacha20poly1305",
+      "path": "jose/Jose.Jwe_chacha20poly1305.fst",
+      "role": "implementation",
+      "sha256": "fad518d057ad8e8ac9f0a52348209d977df609aafdf9a4c8c5bbb7726b3b8974"
+    },
+    {
+      "disposition": "verified",
+      "line": 3032,
+      "module": "Jose.Jwt_claims",
+      "path": "jose/Jose.Jwt_claims.fst",
+      "role": "implementation",
+      "sha256": "9115bda10820adada251b4a2db8f0c3030ffbefb9191a10fa07622c2ee4747f3"
+    },
+    {
+      "disposition": "verified",
+      "line": 3033,
+      "module": "Jose.Jwt_validation",
+      "path": "jose/Jose.Jwt_validation.fst",
+      "role": "implementation",
+      "sha256": "2cc6196c7b77e9e73d7df7bec17a17f5c9e04c8eb77d8291014b6d47a86acad1"
+    },
+    {
+      "disposition": "verified",
+      "line": 3028,
+      "module": "Jose.Hmac_verification",
+      "path": "jose/Jose.Hmac_verification.fst",
+      "role": "implementation",
+      "sha256": "4468d57d7633eae162bf6a9739c79c501befedd70759344721930c0f1b089446"
+    },
+    {
+      "disposition": "verified",
+      "line": 3027,
+      "module": "Jose.Rsa_signatures",
+      "path": "jose/Jose.Rsa_signatures.fst",
+      "role": "implementation",
+      "sha256": "ee2e20800ae741b77ce2ca0db6b7b29326a0d13e623d0a3cb8bcf56ad2d6bd21"
+    },
+    {
+      "disposition": "verified",
+      "line": 3034,
+      "module": "Jose.Dcr",
+      "path": "jose/Jose.Dcr.fst",
+      "role": "implementation",
+      "sha256": "88fb989a1567924a29d7f6beb0a0c429a91d812399a79dee3412bbd76f228c6d"
+    },
+    {
+      "disposition": "verified",
+      "line": 3035,
+      "module": "Jose.SdJwt",
+      "path": "jose/Jose.SdJwt.fst",
+      "role": "implementation",
+      "sha256": "8ac21a67d08ebe736ecff97acf5de6fdaf56cd91839a3aae920f6943206b192a"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "JoseHeader",
+      "path": "../generated/everparse/JoseHeader.fsti",
+      "role": "interface",
+      "sha256": "3bef8638746d5bed17d3731edbac293776aac1542b1d07415c04b879aadbe5b8"
+    },
+    {
+      "disposition": "verified",
+      "line": 3019,
+      "module": "JoseHeader",
+      "path": "../generated/everparse/JoseHeader.fst",
+      "role": "implementation",
+      "sha256": "f2e6d807cd8acc685d4c779a0e8aefcc9dbd02f0a06f09c76c9de38d59f82160"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "DCR",
+      "path": "../generated/everparse/DCR.fsti",
+      "role": "interface",
+      "sha256": "2f8e10134cfbc3f68fe5a7cb16a02bacc70a14501acd47da4f55aa5d181cb324"
+    },
+    {
+      "disposition": "verified",
+      "line": 3036,
+      "module": "DCR",
+      "path": "../generated/everparse/DCR.fst",
+      "role": "implementation",
+      "sha256": "e65ccb28532896b6b1f7763fbe1a02dd98f09bab5432c2e3c9617e5a200f0064"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "IdTokenSchema",
+      "path": "../generated/everparse/IdTokenSchema.fsti",
+      "role": "interface",
+      "sha256": "dce028a2fe1d1338472968bd992cb25c12dff6a4c61391c715ef879fdaded6f9"
+    },
+    {
+      "disposition": "verified",
+      "line": 3037,
+      "module": "IdTokenSchema",
+      "path": "../generated/everparse/IdTokenSchema.fst",
+      "role": "implementation",
+      "sha256": "b00734078ba3634fcad0e186b36886c301298b6e9c76f8276a9ec870de98fdad"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "DpopSchema",
+      "path": "../generated/everparse/DpopSchema.fsti",
+      "role": "interface",
+      "sha256": "c58a89124176458d8f748d6dc02998adacf91b38e2eb9759de3fd0aba5128223"
+    },
+    {
+      "disposition": "verified",
+      "line": 3038,
+      "module": "DpopSchema",
+      "path": "../generated/everparse/DpopSchema.fst",
+      "role": "implementation",
+      "sha256": "d21b46407d0154694a784a24f89c1ca2e4dffcc9b4a1e29407477620a778cabf"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "DcrRegistration",
+      "path": "../generated/everparse/DcrRegistration.fsti",
+      "role": "interface",
+      "sha256": "564ef191bee8cc2d1a4a80edf00fd4241420016b38d77db5d4074c61f680212f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3039,
+      "module": "DcrRegistration",
+      "path": "../generated/everparse/DcrRegistration.fst",
+      "role": "implementation",
+      "sha256": "db00e70550acdd18eef19cedac53571df42f70380c34e63f1e6a6578d651c4d8"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "LogoutTokenSchema",
+      "path": "../generated/everparse/LogoutTokenSchema.fsti",
+      "role": "interface",
+      "sha256": "bdcef0f8d4c03e633086704f27d194b6c013d74ddb716db568760a7f2c6d1f34"
+    },
+    {
+      "disposition": "verified",
+      "line": 3040,
+      "module": "LogoutTokenSchema",
+      "path": "../generated/everparse/LogoutTokenSchema.fst",
+      "role": "implementation",
+      "sha256": "31c458f8a2bb42b4aa0bc7502a8ac3cfe7814178c419932f99f5c42a61a46dfa"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "RequestObjectSchema",
+      "path": "../generated/everparse/RequestObjectSchema.fsti",
+      "role": "interface",
+      "sha256": "9948809f2902cf1fe50ad04f89e56a46d239477679e719ca166b757b6268b865"
+    },
+    {
+      "disposition": "verified",
+      "line": 3041,
+      "module": "RequestObjectSchema",
+      "path": "../generated/everparse/RequestObjectSchema.fst",
+      "role": "implementation",
+      "sha256": "7d26b49a2beb8bf08386045786ffdff30f5f136abf6b281f468ca310f0bc1922"
+    },
+    {
+      "disposition": "verified",
+      "line": 3042,
+      "module": "Token",
+      "path": "token/Token.fst",
+      "role": "implementation",
+      "sha256": "66ed02460096d48ec0bd85d3b01e1c1a9e4d8c788beba9b680d24088540067a3"
+    },
+    {
+      "disposition": "verified",
+      "line": 3043,
+      "module": "JwtAccessToken",
+      "path": "token/JwtAccessToken.fst",
+      "role": "implementation",
+      "sha256": "ddaf83de42f9ada2b8b8c9f0aa18889ae3e2ab5772eb1eb36861ca4712a0438d"
+    },
+    {
+      "disposition": "verified",
+      "line": 3044,
+      "module": "Bearer",
+      "path": "token/Bearer.fst",
+      "role": "implementation",
+      "sha256": "451d8e894c396542899c6f8bcf5de0cba30ceca959f0d37f2f9a44d514179791"
+    },
+    {
+      "disposition": "verified",
+      "line": 3045,
+      "module": "Bearer.Policy",
+      "path": "token/Bearer.Policy.fst",
+      "role": "implementation",
+      "sha256": "0de04cf709fd404fe9e330fac1e45e59e77e36c50374603ce81b2a4445e2b8af"
+    },
+    {
+      "disposition": "verified",
+      "line": 3046,
+      "module": "Bearer_validation",
+      "path": "token/Bearer_validation.fst",
+      "role": "implementation",
+      "sha256": "f50279b8726d3737135b309f3444a106242b3efeb86aaecbd8d0c9a372c621c4"
+    },
+    {
+      "disposition": "verified",
+      "line": 3047,
+      "module": "StringHelpers",
+      "path": "common/StringHelpers.fst",
+      "role": "implementation",
+      "sha256": "787d465364e2f92d613745d67810bae0236da3359ef8f28089927afa4d58f1bd"
+    },
+    {
+      "disposition": "verified",
+      "line": 3048,
+      "module": "ResourceIndicators",
+      "path": "resource/ResourceIndicators.fst",
+      "role": "implementation",
+      "sha256": "27f142b8f6b783fd2f3242629f0419b47205fdced09720b3311d7b21aafa7546"
+    },
+    {
+      "disposition": "verified",
+      "line": 3049,
+      "module": "ProtectedResourceMetadata",
+      "path": "resource/ProtectedResourceMetadata.fst",
+      "role": "implementation",
+      "sha256": "a280df320df361ba53ba027d2c03ad6160dcaf6b7c4201f77b1584da2742b7e5"
+    },
+    {
+      "disposition": "verified",
+      "line": 3050,
+      "module": "Dpop.Header",
+      "path": "dpop/Dpop.Header.fst",
+      "role": "implementation",
+      "sha256": "de47e40227fa3577d1de25ad54fc1065da2ff0db742c0d662f335f04298a62e5"
+    },
+    {
+      "disposition": "verified",
+      "line": 3051,
+      "module": "Dpop.Claims",
+      "path": "dpop/Dpop.Claims.fst",
+      "role": "implementation",
+      "sha256": "aa087ef3152ae4e313f7f2ff5e3e6d76289beb9b3b127746199a8b0fcd43e91d"
+    },
+    {
+      "disposition": "verified",
+      "line": 3052,
+      "module": "Dpop.Signature",
+      "path": "dpop/Dpop.Signature.fst",
+      "role": "implementation",
+      "sha256": "fce4f7d2c5ac3aa6986a4f0fb6a70f37ae547f0df14440edd378fb2f3a31255f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3053,
+      "module": "Dpop.Iat_validation",
+      "path": "dpop/Dpop.Iat_validation.fst",
+      "role": "implementation",
+      "sha256": "805d68fa5b52714f1a64d96e3b7fd2104e1d908682b61b14c0e16b8ba32350cd"
+    },
+    {
+      "disposition": "verified",
+      "line": 3054,
+      "module": "Dpop.Htm_validation",
+      "path": "dpop/Dpop.Htm_validation.fst",
+      "role": "implementation",
+      "sha256": "b1d081d8e752254be4e2299d66a49ac4217a678324f6a3cd379f64d8fe50b075"
+    },
+    {
+      "disposition": "verified",
+      "line": 3055,
+      "module": "Dpop.Htu_validation",
+      "path": "dpop/Dpop.Htu_validation.fst",
+      "role": "implementation",
+      "sha256": "453f1dfe0469058f03e8b9c5cd71dd5afc1d1e8464b70a8246cc05c07c5b1c67"
+    },
+    {
+      "disposition": "verified",
+      "line": 3056,
+      "module": "Dpop.Ath_validation",
+      "path": "dpop/Dpop.Ath_validation.fst",
+      "role": "implementation",
+      "sha256": "baace511b262521e2b2b252e5e1662860ecf9963533f1f70a6b782d9bbd6536b"
+    },
+    {
+      "disposition": "verified",
+      "line": 3057,
+      "module": "Dpop.Token_binding",
+      "path": "dpop/Dpop.Token_binding.fst",
+      "role": "implementation",
+      "sha256": "d6ec60eae4c3bbe54a7ece7b5198174abfceaf9c0a69ced92a5b3d93d5744c6c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3058,
+      "module": "Dpop.Replay",
+      "path": "dpop/Dpop.Replay.fst",
+      "role": "implementation",
+      "sha256": "70e36b5d2fd8074a11aad2d600d7db9b9a529d8f678d09051f2403f1223cd998"
+    },
+    {
+      "disposition": "verified",
+      "line": 3059,
+      "module": "Dpop.Validation",
+      "path": "dpop/Dpop.Validation.fst",
+      "role": "implementation",
+      "sha256": "8b231b339ee4fa7aa4a387d112d312af3db7f19ec7b0868238e005c37d2b2957"
+    },
+    {
+      "disposition": "verified",
+      "line": 3060,
+      "module": "Dpop",
+      "path": "dpop/Dpop.fst",
+      "role": "implementation",
+      "sha256": "07739e9b951fd9f8003d17695a658bd89420b027388987399705182d547af047"
+    },
+    {
+      "disposition": "verified",
+      "line": 3061,
+      "module": "Pkce.Challenge",
+      "path": "pkce/Pkce.Challenge.fst",
+      "role": "implementation",
+      "sha256": "680e67eff3444562c17369f82955ac8aebeb5fc017d99be3ac515d06d4b2a9fd"
+    },
+    {
+      "disposition": "verified",
+      "line": 3062,
+      "module": "Pkce.Verifier",
+      "path": "pkce/Pkce.Verifier.fst",
+      "role": "implementation",
+      "sha256": "aaea119610a549576632734b8b31622de41cae53b2d58a474a2884da40641ef5"
+    },
+    {
+      "disposition": "verified",
+      "line": 3063,
+      "module": "Pkce.Method_selection",
+      "path": "pkce/Pkce.Method_selection.fst",
+      "role": "implementation",
+      "sha256": "ed686b28dd5df67d7ea8f4c655b985ffd9a69b12bcfb4d0ee4479edbd893280e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3064,
+      "module": "Pkce.Verification",
+      "path": "pkce/Pkce.Verification.fst",
+      "role": "implementation",
+      "sha256": "f0938507c1af0bfdc404534adc66fb6e640b013790c34c6a9cbc701726fe0618"
+    },
+    {
+      "disposition": "verified",
+      "line": 3065,
+      "module": "Pkce",
+      "path": "pkce/Pkce.fst",
+      "role": "implementation",
+      "sha256": "eb2a884bc3f527c8983837496a1154670ebef00f7f8b5cd827e9ebe7c09c347e"
+    },
+    {
+      "disposition": "verified",
+      "line": 3066,
+      "module": "Authorization",
+      "path": "par/Authorization.fst",
+      "role": "implementation",
+      "sha256": "cad724b13d121458bea8d8582324f0c8eb4328321a62e2598021ac88f4de759c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3067,
+      "module": "Client_auth",
+      "path": "par/Client_auth.fst",
+      "role": "implementation",
+      "sha256": "41aaf68b071bcd030fbe58be36d5290162d8c669372a9c3093e8bd024b419064"
+    },
+    {
+      "disposition": "verified",
+      "line": 3071,
+      "module": "ParBinding",
+      "path": "par/ParBinding.fst",
+      "role": "implementation",
+      "sha256": "34c18c8052fa2610a3d0ca5c8d7be88a8085a3106433fd371332fbfaeee80c0f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3068,
+      "module": "Lifetime",
+      "path": "par/Lifetime.fst",
+      "role": "implementation",
+      "sha256": "f21fef2e2c71dadf9bae4403331389147d9c47dd0c81d59271c32c05d986db34"
+    },
+    {
+      "disposition": "verified",
+      "line": 3069,
+      "module": "Request_uri",
+      "path": "par/Request_uri.fst",
+      "role": "implementation",
+      "sha256": "f89ff7104a27b109d8afc4d14ecc3f1f10ba26fba7d34c211d52b68f7efc99f4"
+    },
+    {
+      "disposition": "verified",
+      "line": 3072,
+      "module": "RequestObject",
+      "path": "par/RequestObject.fst",
+      "role": "implementation",
+      "sha256": "77a119390716c97c466e63edb8cb770d823f597b1a0f44afc017e2da1aa15770"
+    },
+    {
+      "disposition": "verified",
+      "line": 3070,
+      "module": "Response",
+      "path": "par/Response.fst",
+      "role": "implementation",
+      "sha256": "0afd85485d9dde62be01db75f7b6d564fd6293bc4c5320880c16f6aac919861a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3073,
+      "module": "ParApp",
+      "path": "par/ParApp.fst",
+      "role": "implementation",
+      "sha256": "76d4500b60de60851f6c16dd4cfa18328c839d12e19fe64df69ad3dc2a6c6982"
+    },
+    {
+      "disposition": "verified",
+      "line": 3075,
+      "module": "Par_Internal",
+      "path": "par/Par_Internal.fst",
+      "role": "implementation",
+      "sha256": "2969599a17b0e7ec0f0a3dd59f83249bb112db564c8d893190be20082dcb2a1f"
+    },
+    {
+      "disposition": "paired-interface",
+      "line": null,
+      "module": "Par",
+      "path": "par/Par.fsti",
+      "role": "interface",
+      "sha256": "206e586817b1f1eb3feb2ec7cdb70092078780fc8c64e0620177b13dba5ad851"
+    },
+    {
+      "disposition": "verified",
+      "line": 3076,
+      "module": "Par",
+      "path": "par/Par.fst",
+      "role": "implementation",
+      "sha256": "fc7e944f0132c89dfafc93be53b9acc53aac55e00a9a17b21b543b1256d1e42d"
+    },
+    {
+      "disposition": "verified",
+      "line": 3077,
+      "module": "Par_Steel",
+      "path": "par/Par_Steel.fst",
+      "role": "implementation",
+      "sha256": "026277588099da7cf02aa8823896b3ab794c7a3ba673f97fdfa5f2186c1b083f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3074,
+      "module": "Par_Ticket",
+      "path": "par/Par_Ticket.fst",
+      "role": "implementation",
+      "sha256": "f2e3dc1cbe87876f8508f50d8cb334c636509594bf36b2c703efe1e5e5bb7d80"
+    },
+    {
+      "disposition": "verified",
+      "line": 3078,
+      "module": "Par_Ticket_Unit",
+      "path": "par/Par_Ticket_Unit.fst",
+      "role": "implementation",
+      "sha256": "92a8e50310b544ca94fbf32b22959d9aa2ba3966ab3453250210403a7d86af3f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3079,
+      "module": "Pkjwt",
+      "path": "auth/Pkjwt.fst",
+      "role": "implementation",
+      "sha256": "b32328b5dd1d5c8a46d5f45983dab0d8495672e8e572ff0cc1421ba1e31e602a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3081,
+      "module": "IdToken.Spec",
+      "path": "oidc/IdToken.Spec.fst",
+      "role": "implementation",
+      "sha256": "5856b42df658bd2395b744c637e5b88e84cd974294d3521a45fc3f8bea8b61a6"
+    },
+    {
+      "disposition": "verified",
+      "line": 3082,
+      "module": "IdToken",
+      "path": "oidc/IdToken.fst",
+      "role": "implementation",
+      "sha256": "cb36de1b5100a4b39b54aa67c9e3a25329fbbcfe8dd8f9c2bd77e0edcaaedd08"
+    },
+    {
+      "disposition": "verified",
+      "line": 3083,
+      "module": "IdToken.Low.Plan",
+      "path": "oidc/IdToken.Low.Plan.fst",
+      "role": "implementation",
+      "sha256": "bc47faa8c89965312d28695c6f4247233e823876ec1887d8235106dad4b0265f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3084,
+      "module": "IdToken.Low.Runtime",
+      "path": "oidc/IdToken.Low.Runtime.fst",
+      "role": "implementation",
+      "sha256": "32129ddcb22029e4a3b2e1810b49cc8fb80d5480a5772022c1d78ccaa48b6ebe"
+    },
+    {
+      "disposition": "verified",
+      "line": 3085,
+      "module": "Logout.Spec",
+      "path": "oidc/Logout.Spec.fst",
+      "role": "implementation",
+      "sha256": "ef752987101c57161576621e2cacecb2b28f867c4c2ced27ba4663f9664d0917"
+    },
+    {
+      "disposition": "verified",
+      "line": 3086,
+      "module": "Logout",
+      "path": "oidc/Logout.fst",
+      "role": "implementation",
+      "sha256": "3d9820bb958b564c83b22a4b3da8d8cb51afa2e42da406bce6e528d5cf094b67"
+    },
+    {
+      "disposition": "verified",
+      "line": 3087,
+      "module": "FormPost",
+      "path": "oidc/FormPost.fst",
+      "role": "implementation",
+      "sha256": "ef4e7e7049fd4346e3f6b3f7135bab028211122cbc028b0b2ea94ad08f32b1a9"
+    },
+    {
+      "disposition": "verified",
+      "line": 3088,
+      "module": "Introspection",
+      "path": "introspection/Introspection.fst",
+      "role": "implementation",
+      "sha256": "478b74bf7c5d4a771ad7da243c94b7788ec3121a3fcc06f09ab17e0ffb2bbdcc"
+    },
+    {
+      "disposition": "verified",
+      "line": 3089,
+      "module": "JwtIntrospection",
+      "path": "introspection/JwtIntrospection.fst",
+      "role": "implementation",
+      "sha256": "b8d0365e1e2c0230488b8ad14a7671405d3faaca49f34e4ebb3efce89bb6654f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3090,
+      "module": "Revocation",
+      "path": "revocation/Revocation.fst",
+      "role": "implementation",
+      "sha256": "18f735671680f1ee4525b952ca48d7efdf59e9a7b509ef1ff49dc305d842c288"
+    },
+    {
+      "disposition": "verified",
+      "line": 3091,
+      "module": "Crypto",
+      "path": "crypto/Crypto.fst",
+      "role": "implementation",
+      "sha256": "7fb6cb2ad3e9c437144c667daa27a0b79b4020b9e521575082aac74da3f0bc1a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3093,
+      "module": "Random",
+      "path": "crypto/Random.fst",
+      "role": "implementation",
+      "sha256": "0941966c0ee6bdb9b0a8c3ee0eedc079b4bd929df3a50072c6ed54701a16ee41"
+    },
+    {
+      "disposition": "verified",
+      "line": 3092,
+      "module": "Drbg.HmacSha256",
+      "path": "crypto/Drbg.HmacSha256.fst",
+      "role": "implementation",
+      "sha256": "ead460e381692bceed19f11fb0367e774e35ba1a606a417cc508b398bf00d3b5"
+    },
+    {
+      "disposition": "verified",
+      "line": 2993,
+      "module": "Verified.Crypto.Bridge",
+      "path": "crypto/Verified.Crypto.Bridge.fst",
+      "role": "implementation",
+      "sha256": "28add5c50ed2b65f1bac5f3cb5392fa81a39577b7a6c58cd3fc2014c60ee5114"
+    },
+    {
+      "disposition": "verified",
+      "line": 3094,
+      "module": "AuthCode.Types",
+      "path": "authcode/AuthCode.Types.fst",
+      "role": "implementation",
+      "sha256": "14e439dec11cabc5c2eab732193099b58b60bd6d6fa1fd80517341afe1370ea1"
+    },
+    {
+      "disposition": "verified",
+      "line": 3095,
+      "module": "AuthCode.Store",
+      "path": "authcode/AuthCode.Store.fst",
+      "role": "implementation",
+      "sha256": "ec5a9ad976dc1f5001715e698ea8c056866ea345545987d19df65bbe74e37557"
+    },
+    {
+      "disposition": "verified",
+      "line": 3096,
+      "module": "AuthCode.Flow",
+      "path": "authcode/AuthCode.Flow.fst",
+      "role": "implementation",
+      "sha256": "608aad0294e8d5c4ebe06332e9ce142e0482fe71538e3ab9d1d30745cccd487c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3097,
+      "module": "AuthCode.Snapshot",
+      "path": "authcode/AuthCode.Snapshot.fst",
+      "role": "implementation",
+      "sha256": "f537400dae419563c8567e4554252f7855af0d9cfc5cb2549f991eb3d7ade75f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3098,
+      "module": "AuthCode.RedisGrant",
+      "path": "authcode/AuthCode.RedisGrant.fst",
+      "role": "implementation",
+      "sha256": "600075f311b723d32d276c2a50f4ace740783cd286b6c67bf9d064e90343d693"
+    },
+    {
+      "disposition": "verified",
+      "line": 3099,
+      "module": "ResourceIndicators.EffectiveTarget",
+      "path": "resource/ResourceIndicators.EffectiveTarget.fst",
+      "role": "implementation",
+      "sha256": "3dc2aeab5c4f51cb26d397390e21bd6e9ae0fc12e1355796e3328653f94af224"
+    },
+    {
+      "disposition": "verified",
+      "line": 3100,
+      "module": "OIDC.OfflineConsent",
+      "path": "oidc/OIDC.OfflineConsent.fst",
+      "role": "implementation",
+      "sha256": "3e9187bbbcfa53bd3db9b1b5807514b76137906ce679cbf90f03a2285f9c9433"
+    },
+    {
+      "disposition": "verified",
+      "line": 3101,
+      "module": "OIDC.RequestObjectTarget",
+      "path": "oidc/OIDC.RequestObjectTarget.fst",
+      "role": "implementation",
+      "sha256": "bb083ed08f0da578167a23c424f066089a9b69f36b2072b7c7b2b3790925d1fb"
+    },
+    {
+      "disposition": "verified",
+      "line": 3102,
+      "module": "OIDC.Reauthentication",
+      "path": "oidc/OIDC.Reauthentication.fst",
+      "role": "implementation",
+      "sha256": "bc63a4c280541496d8b2b61d48eb360c729784d6a8a808538dab2d2a06fbe6ff"
+    },
+    {
+      "disposition": "verified",
+      "line": 3103,
+      "module": "OIDC.AuthorizationTransactions",
+      "path": "oidc/OIDC.AuthorizationTransactions.fst",
+      "role": "implementation",
+      "sha256": "449ad32764f2e5137c616814155f8ca410e49f83a27c107ca9b67866fccb8860"
+    },
+    {
+      "disposition": "verified",
+      "line": 3104,
+      "module": "TestAuthCodeRedisGrant",
+      "path": "../tests/fstar/property/TestAuthCodeRedisGrant.fst",
+      "role": "implementation",
+      "sha256": "ae8f9416bd4d03f6c1de8745dbef2ae992178bd6e4d8cdce430e37c89c70e969"
+    },
+    {
+      "disposition": "verified",
+      "line": 3105,
+      "module": "StepUp",
+      "path": "stepup/StepUp.fst",
+      "role": "implementation",
+      "sha256": "b61b8995077ba821ab29bb184b66072ccac378bc4d49233d72397f7cb77ac0bc"
+    },
+    {
+      "disposition": "verified",
+      "line": 3080,
+      "module": "HashComputation.Model",
+      "path": "HashComputation.Model.fst",
+      "role": "implementation",
+      "sha256": "321cc4820488982ef6b900feeab1b43f06a4ee0b9a1470347217c37ae8de027c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3106,
+      "module": "DcrManagement",
+      "path": "dcr/DcrManagement.fst",
+      "role": "implementation",
+      "sha256": "333d3d53b65a01350315230f28038270b4d3b073b159030542461b22ff04180c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3107,
+      "module": "DeviceAuthz",
+      "path": "device_authz/DeviceAuthz.fst",
+      "role": "implementation",
+      "sha256": "d891dbab42a5d1d559e9496fcc9bd336c160a48692351b91efdf17490d3079d7"
+    },
+    {
+      "disposition": "verified",
+      "line": 3108,
+      "module": "Dpop.Nonce",
+      "path": "dpop/Dpop.Nonce.fst",
+      "role": "implementation",
+      "sha256": "161845ccc08876dc5c48cd893e166f3aa16d773d237a68e32fa69d9f3fea05aa"
+    },
+    {
+      "disposition": "verified",
+      "line": 3109,
+      "module": "Federation.EntityConfig",
+      "path": "federation/Federation.EntityConfig.fst",
+      "role": "implementation",
+      "sha256": "8ddf91cfc5fdea784ac896bc2fd40671df21f043f2575f2587fe70f2a55b2d42"
+    },
+    {
+      "disposition": "verified",
+      "line": 3110,
+      "module": "Federation.PgRepo",
+      "path": "federation/Federation.PgRepo.fst",
+      "role": "implementation",
+      "sha256": "fbe04f908404b1937e408a0552550df3b8b3e66ab8dce08a0393e4e29932d457"
+    },
+    {
+      "disposition": "verified",
+      "line": 3111,
+      "module": "OpEntityConfiguration",
+      "path": "federation/OpEntityConfiguration.fst",
+      "role": "implementation",
+      "sha256": "8a9f797ee7f945cc45cf6e467dd16a59250c0cfce8a9ab6c0ef94da33fb61147"
+    },
+    {
+      "disposition": "verified",
+      "line": 3112,
+      "module": "OpSubordinateStatement",
+      "path": "federation/OpSubordinateStatement.fst",
+      "role": "implementation",
+      "sha256": "f8b332856eee99cf2cbc6e998c26bbcb41c9596a1795644a9c47104bc98e989f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3113,
+      "module": "TrustMark",
+      "path": "federation/TrustMark.fst",
+      "role": "implementation",
+      "sha256": "4a442783fe6812128f8e060712d48cd23bdaaf607cc606f55b3b20eecad3ffaf"
+    },
+    {
+      "disposition": "verified",
+      "line": 3114,
+      "module": "UpstreamRefresh",
+      "path": "federation/UpstreamRefresh.fst",
+      "role": "implementation",
+      "sha256": "5b30f716d8b7130aa1fd8d17059e69c6beab8d1214859879dfbd9af0a7ccb55d"
+    },
+    {
+      "disposition": "verified",
+      "line": 3115,
+      "module": "OidcRp.Types",
+      "path": "federation/OidcRp.Types.fst",
+      "role": "implementation",
+      "sha256": "44360da440894a2c04ac150e80fcb0b891628135fc60a69d08ac9e25ea512794"
+    },
+    {
+      "disposition": "verified",
+      "line": 3116,
+      "module": "OidcRp.Transitions",
+      "path": "federation/OidcRp.Transitions.fst",
+      "role": "implementation",
+      "sha256": "e0e9f53f65d3ee96b1713ae85e36d750ab1bc56fdd9dbe036e9bf1b409e03764"
+    },
+    {
+      "disposition": "verified",
+      "line": 3117,
+      "module": "OidcRp.Properties",
+      "path": "federation/OidcRp.Properties.fst",
+      "role": "implementation",
+      "sha256": "6a1e134ad228bec28bb19210dcecf13dda6d5f62c25b6cf9e29cb06476735e5f"
+    },
+    {
+      "disposition": "verified",
+      "line": 3118,
+      "module": "Management.ClientLifecycle",
+      "path": "management/Management.ClientLifecycle.fst",
+      "role": "implementation",
+      "sha256": "007446a8df495a5e1213d70f4ef9f4d4f15438fd51cf90a82cf60e663866f15c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3119,
+      "module": "Management.Initialization",
+      "path": "management/Management.Initialization.fst",
+      "role": "implementation",
+      "sha256": "d188587dbd7af1bae47cf3e78350cec39eaff963934b50a48af9549665723561"
+    },
+    {
+      "disposition": "verified",
+      "line": 3120,
+      "module": "Management.KeyRotation",
+      "path": "management/Management.KeyRotation.fst",
+      "role": "implementation",
+      "sha256": "731dc5519c924940d8e35f35a6941a52c3a9bdb0a17c1dd90ad475cb35750c0a"
+    },
+    {
+      "disposition": "verified",
+      "line": 3121,
+      "module": "Management.PolicyProfile",
+      "path": "management/Management.PolicyProfile.fst",
+      "role": "implementation",
+      "sha256": "c50569b0180f61e6778397f2578221374995ec1b5752a167df0fadbd7b9f8af5"
+    },
+    {
+      "disposition": "verified",
+      "line": 3122,
+      "module": "Rar.AuthorizationDetails",
+      "path": "rar/Rar.AuthorizationDetails.fst",
+      "role": "implementation",
+      "sha256": "a4142a2ac434519ce1134973a21426d3a3c95d9a8ac7f6d60c98273334990c14"
+    },
+    {
+      "disposition": "verified",
+      "line": 3123,
+      "module": "VerifiedCore.Crypto.Hacl",
+      "path": "verifiedcore/api/VerifiedCore.Crypto.Hacl.fst",
+      "role": "implementation",
+      "sha256": "3efe385a345c4eabbd866e67bd10b5cbde5d27fbe89869c5a4c948c648c31265"
+    },
+    {
+      "disposition": "verified",
+      "line": 3124,
+      "module": "VerifiedCore.Api.Claims.Runtime",
+      "path": "verifiedcore/api/VerifiedCore.Api.Claims.Runtime.fst",
+      "role": "implementation",
+      "sha256": "3efab143cbbf66751e63377db149983b43eb191898881ad4dd8722cf97d91e80"
+    },
+    {
+      "disposition": "verified",
+      "line": 3125,
+      "module": "Jose.LowStar",
+      "path": "jose/Jose.LowStar.fst",
+      "role": "implementation",
+      "sha256": "726d3632566973c51aace6acfe4997acbd4165c93c3cf09f1938a8646c179480"
+    },
+    {
+      "disposition": "verified",
+      "line": 3126,
+      "module": "Jose.LowStar.Json.Helpers",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Helpers.fst",
+      "role": "implementation",
+      "sha256": "b1524e533db8764c7eb951280420d1106e527494efb8884d62b4969502a589e8"
+    },
+    {
+      "disposition": "verified",
+      "line": 3127,
+      "module": "Jose.LowStar.Json.Runtime",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Runtime.fst",
+      "role": "implementation",
+      "sha256": "9d7025fab430d8e3ab5136ac9d5844c03d7d54680e3933fdf9e1652167ffd7f4"
+    },
+    {
+      "disposition": "verified",
+      "line": 3128,
+      "module": "Jose.LowStar.Json.Types",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Types.fst",
+      "role": "implementation",
+      "sha256": "397aec7ec3bb742d3634a5632fbaedcb904255bae3a4dcad624a9ea27be6afb8"
+    },
+    {
+      "disposition": "verified",
+      "line": 3129,
+      "module": "Jose.LowStar.Json.Utf8",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Utf8.fst",
+      "role": "implementation",
+      "sha256": "7ba395896f3703067ae7bcc429c66aa86066923e1e5dfc11d31a33b68b9f500b"
+    },
+    {
+      "disposition": "verified",
+      "line": 3130,
+      "module": "Jose.LowStar.Json.ParseEntries",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.ParseEntries.fst",
+      "role": "implementation",
+      "sha256": "fa2acd908ee8d31f1a28da4c0439b82be8fc6aea989fa43c7b45ae262431163c"
+    },
+    {
+      "disposition": "verified",
+      "line": 3131,
+      "module": "Jose.LowStar.Json.Spec",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Spec.fst",
+      "role": "implementation",
+      "sha256": "e6d16ed3583cbb456f6dab2310c7f39c59b7d7786d8a613dd971740561605bf8"
+    },
+    {
+      "disposition": "verified",
+      "line": 3132,
+      "module": "Jose.LowStar.Json",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.fst",
+      "role": "implementation",
+      "sha256": "492b9ad82ce08224d29b2464d45cecac5b449e0eaa4182baf69d53697eb5c326"
+    },
+    {
+      "disposition": "verified",
+      "line": 3133,
+      "module": "Jose.LowStar.Json.Stack",
+      "path": "jose/LowStar/Json/Jose.LowStar.Json.Stack.fst",
+      "role": "implementation",
+      "sha256": "45a6e6c44e4c779b06f066fbdcb2662c058d00594936abc1aa21c13012e6bfcd"
+    },
+    {
+      "disposition": "verified",
+      "line": 3134,
+      "module": "TestFormPostCsp",
+      "path": "../tests/fstar/unit/TestFormPostCsp.fst",
+      "role": "implementation",
+      "sha256": "41b2ba1dd9b0a00299022d92349add44761983766281d9f6ca51de09f935d1ec"
+    },
+    {
+      "disposition": "verified",
+      "line": 3135,
+      "module": "TestFormPostEncoder",
+      "path": "../tests/fstar/property/TestFormPostEncoder.fst",
+      "role": "implementation",
+      "sha256": "648370013301747dff9d8aec7bba50e66750e2cb2a7a6be4f070c82923461146"
+    }
+  ],
+  "returncode": 0,
+  "schema_version": 1,
+  "status": "accepted",
+  "tool": {
+    "path": "/nix/store/g60d57ag3i8gf6g104xw5lafk0xymk1f-ocaml5.3.0-fstar-2025.10.06/bin/fstar.exe",
+    "sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf"
+  },
+  "unrequested": []
+}

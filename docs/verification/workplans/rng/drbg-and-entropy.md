@@ -1,6 +1,6 @@
 # DRBG Scheme And Entropy Input Contract
 
-Last updated: 2026-07-08
+Last updated: 2026-09-14
 
 Status: active plan
 
@@ -17,8 +17,11 @@ This document is part of the split DRBG and entropy-input workplan.
 **Algorithm:** HMAC-SHA256
 
 **Rationale:**
-- HMAC-SHA256 is already available in the verification suite via `HACL_Wrapper.hmac_sha256`
-  (`fstar/HACL_Wrapper.fst:42`) and `EverCrypt.HMAC.compute` (`fstar/EverCrypt.HMAC.fst:41`).
+- The design requires a functional HMAC-SHA256 primitive. The checked-in
+  `HACL_Wrapper.hmac_sha256` and `EverCrypt.HMAC.compute` return placeholder
+  zero-filled outputs and cannot satisfy that prerequisite. Primitive and
+  provider correspondence must be established separately; see the
+  [model fidelity register](../../claims/model-fidelity-register.md#hmac-placeholder-and-comparison-boundaries).
 - NIST SP 800-90A HMAC_DRBG is the standard choice for deterministic random
   generation from entropy, widely deployed (OpenSSL, BoringSSL, ring).
 - SHA-256 output (32 bytes) aligns with the 256-bit security level required by

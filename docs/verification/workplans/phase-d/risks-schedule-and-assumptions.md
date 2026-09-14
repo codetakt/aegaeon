@@ -155,6 +155,10 @@ well-established.
 
 ### After Phase D
 
+> Historical Phase D snapshot. Rows 1–6 were removed on 2026-09-11 (see
+> `docs/verification/claims/assumptions/current-register.md` §3.1–§3.4); the
+> table is kept as the record of the Phase D plan and is not current.
+
 | # | Function | Status | Category |
 |---|---|---|---|
 | 1 | `jws_verify_unforgeable` | Unchanged | A (crypto) |

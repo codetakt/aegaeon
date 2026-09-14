@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegaeon.codetakt.dev/spec/assumption-register.schema.json",
+  "title": "Aegaeon effective-assumption register (version 1)",
+  "description": "Hand-reviewed register of the premises that the reconstructed assumption graph (scripts/validation/assumption_graph.py) may encounter. Declaration entries pin the exact normalized statement of every assume val, admit, lax option, friend exposure and builder-injected declaration in the F* closure; coverage entries name the provider, tool and model premises by selector. A register entry never proves a premise; status 'accepted' requires recorded human review and is absent at this baseline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "updated",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "contract": {
+      "const": "assumption-register-v1"
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "format": "date"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "status",
+        "statement"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._#>-]*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "foreign-contract",
+            "builder-injected",
+            "declaration",
+            "provider-lax-source",
+            "checked-import",
+            "dependency-source",
+            "first-party-lax-module",
+            "tool",
+            "computational",
+            "symbolic-abstraction",
+            "tamarin-model",
+            "kani-model"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "specified-not-attested",
+            "accepted",
+            "rejected",
+            "retired"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "premise_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^premise:"
+          },
+          "minItems": 1
+        },
+        "statements": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "covers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "modules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "verified_elsewhere": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]*\\.[A-Za-z_][A-Za-z0-9_']*$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "justified_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^property:"
+          }
+        },
+        "tool_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reviewer_role",
+            "date",
+            "record",
+            "reviewer_id",
+            "subject_sha256"
+          ],
+          "properties": {
+            "reviewer_role": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "date": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "record": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "reviewer_id": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "subject_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "expected_in_closure": {
+          "type": "boolean",
+          "description": "false when the declaration lives in a module that no production F* pass requests or imports (for example Low* modules verified by another lane); check then requires it to stay absent."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "foreign-contract",
+                  "builder-injected",
+                  "declaration"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "premise_ids",
+              "statements"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "accepted"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "review"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "premise_ids",
+              "tool_sha256"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "computational",
+                  "symbolic-abstraction"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "events"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

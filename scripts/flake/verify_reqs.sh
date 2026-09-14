@@ -6,6 +6,7 @@
 set -euo pipefail
 
 python3 -m unittest discover -s tests/ci -p 'test_kani_*.py'
+python3 -m unittest discover -s tests/ci -p 'test_assumption_graph*.py'
 python3 scripts/validation/check_kani_citations.py
 python3 -m pytest -q scripts/validation/test_verify_verified_reqs.py
 

@@ -29,5 +29,11 @@ cp -R "$evidence_dir/result/." "$evidence_dir/verified-output"
 # admission records are present, bound to the invocation digests and replayable.
 python3 "$REPO_ROOT/scripts/validation/admit_fstar_modules.py" \
 	--verify-records "$evidence_dir/verified-output"
+# The effective-assumption graph shipped with the output must be reconstructible
+# from its own records and this checkout; consistency is not qualification.
+python3 "$REPO_ROOT/scripts/validation/assumption_graph.py" check \
+	--evidence "$evidence_dir/verified-output" \
+	--source-root "$REPO_ROOT" \
+	--graph "$evidence_dir/verified-output/assumption-graph.json"
 cat "$evidence_dir/verified-output/verify.log"
 echo "[OK] F* build and evidence capture succeeded"
