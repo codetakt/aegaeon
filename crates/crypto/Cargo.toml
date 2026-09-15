@@ -18,7 +18,7 @@ p256 = "0.13"
 hmac = "0.12"
 base64 = "0.22"
 thiserror = "2.0"
-rustls = { version = "0.23", default-features = false, features = [
+rustls = { version = "0.23.45", default-features = false, features = [
     "aws_lc_rs",
     "std",
     "tls12",
