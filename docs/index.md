@@ -248,6 +248,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assumptions/historical-reductions.md` | claim | F* Assumption Historical Reductions | historical record | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/mitigation-and-audit.md` | claim | F* Assumption Mitigation And Audit Checklist | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/runtime-contract-register.md` | claim | Runtime Contract Register | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assumptions/trust-boundary.md` | claim | Conditional assurance and external trust | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions.md` | claim | F* Assumption Register | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/README.md` | index | Formal Verification Assurance Case Details | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/assurance-contract.md` | claim | Server Assurance Contract | current implementation baseline | 2026-09-07 | Verification / Security | implementers, verification reviewers, release managers |
@@ -288,6 +289,7 @@ Audience: contributors, maintainers
 | `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | historical record | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
+| `docs/verification/kani/authorization-revision-bounds.md` | verification | Application authorization revision bounds | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-09 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/hashmap-ice-repro.md` | verification | Kani HashMap ICE Reproducer | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/kani-nixos-fix/README.md` | index | Kani NixOS Fix Details | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
@@ -295,6 +297,7 @@ Audience: contributors, maintainers
 | `docs/verification/kani/kani-nixos-fix/implemented-fix-and-validation.md` | verification | Kani NixOS Implemented Fix And Validation | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
 | `docs/verification/kani/kani-nixos-fix/problem-and-root-cause.md` | verification | Kani NixOS Fix Problem And Root Cause | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
 | `docs/verification/kani/kani-nixos-fix.md` | verification | Kani 0.66.0 On NixOS: libkani.rlib Archive Fix | historical record | 2026-09-12 | Verification | verification contributors, maintainers |
+| `docs/verification/kani/redis-boolean-encoding.md` | verification | Redis boolean argument encoding | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/troubleshooting.md` | verification | Kani Troubleshooting (Toolchain / Panic Strategy) | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/README.md` | index | OIDC Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/lowstar-runtime-policy.md` | verification | OIDC Low\* Runtime Promotion Policy | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |

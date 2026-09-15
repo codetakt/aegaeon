@@ -138,6 +138,19 @@ if '--debug' in sys.argv:
         print(f'Now verifying {role} of {stem}')
     if '--admit_smt_queries' in sys.argv:
         sys.exit(0)
+if '--debug' not in sys.argv and any(
+    pathlib.Path(s).name in ('TestAuthCodeRedisFlag.fst', 'TestAuthorizationProjectionRevision.fst')
+    for s in sources
+):
+    path = pathlib.Path(os.environ['MOCK_CALLS']).with_name('control_calls.json')
+    calls = json.loads(path.read_text()) if path.exists() else []
+    path.write_text(json.dumps(calls + [sys.argv[1:]]))
+    for source in sources:
+        print('Verified module: ' + pathlib.Path(source).name.rsplit('.', 1)[0])
+    control = pathlib.Path(sources[-1]).name
+    if os.environ.get('MOCK_CONTROL_NO_COMPLETION') != control:
+        print('All verification conditions discharged successfully')
+    sys.exit(int(os.environ.get('MOCK_CONTROL_FAIL') == control))
 calls = pathlib.Path(os.environ['MOCK_CALLS'])
 entries = json.loads(calls.read_text()) if calls.exists() else []
 entries.append(sys.argv[1:])
@@ -381,6 +394,51 @@ print('TOTAL TIME 1 ms: ' + ' '.join(sys.argv), flush=True)
         assert "Every requested F* module was admitted" in result.stderr
         self.assert_admission_records()
         self.assert_graph_records(result.stderr)
+
+    def test_negative_control_gates_are_separate_from_admission(self):
+        result = self.invoke()
+        assert result.returncode == 0, result.stderr
+        calls = json.loads((self.root / "control_calls.json").read_text())
+        expected = (
+            ("TestAuthCodeRedisFlag.fst", "redis-flag"),
+            ("TestAuthorizationProjectionRevision.fst", "authorization-revision"),
+        )
+        assert len(calls) == len(expected)
+        for call, (fixture, prefix) in zip(calls, expected, strict=True):
+            assert "--detail_errors" not in call
+            assert "--debug" not in call
+            assert f"../tests/fstar/property/{fixture}" in call
+            assert (self.output / f"{prefix}-controls.sha256").is_file()
+            assert (self.output / f"{prefix}-controls.log").is_file()
+        self.assert_admission_records()
+
+    def assert_control_failure(self, fixture, prefix, controls_started):
+        result = self.invoke(MOCK_CONTROL_FAIL=fixture)
+        assert result.returncode == 1
+        assert f"[FAIL] {prefix} negative-control gate" in result.stderr
+        calls = json.loads((self.root / "control_calls.json").read_text())
+        assert len(calls) == controls_started
+        assert list((self.output / "invocations").iterdir()) == [self.output / "invocations/1"]
+        assert not (self.output / "admission.json").exists()
+
+    def test_redis_control_failure_stops_following_passes(self):
+        self.assert_control_failure("TestAuthCodeRedisFlag.fst", "redis-flag", 1)
+
+    def test_revision_control_failure_stops_following_passes(self):
+        self.assert_control_failure(
+            "TestAuthorizationProjectionRevision.fst", "authorization-revision", 2
+        )
+
+    def test_control_without_completion_stops_following_passes(self):
+        for fixture in ("TestAuthCodeRedisFlag.fst", "TestAuthorizationProjectionRevision.fst"):
+            with self.subTest(fixture=fixture):
+                output = self.root / fixture
+                (self.root / "calls.json").unlink(missing_ok=True)
+                (self.root / "control_calls.json").unlink(missing_ok=True)
+                result = self.invoke(OUT_DIR=str(output), MOCK_CONTROL_NO_COMPLETION=fixture)
+                assert result.returncode == 1, result.stderr
+                assert list((output / "invocations").iterdir()) == [output / "invocations/1"]
+                assert not (output / "admission.json").exists()
 
     def test_identical_solver_restarts_preserve_all_five_passes(self):
         result = self.invoke(MOCK_RESTART_SOLVER="same")

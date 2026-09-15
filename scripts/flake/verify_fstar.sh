@@ -166,6 +166,44 @@ run_pass 1 --detail_errors --query_stats \
 	$POLICY_MODULES
 echo "[OK] Pass 1: F* invocation succeeded" | tee -a "$LOG" >&2
 
+# Expected rejections use a separate gate without --detail_errors: that option
+# expands a single expected error into diagnostic Error 9 reports. These logs
+# are controls, not additional admitted proof passes or counterexample proofs.
+REDIS_FLAG_CONTROL_ARGS=()
+if [[ -n ${FSTAR_SOLVER:-} ]]; then
+	REDIS_FLAG_CONTROL_ARGS+=(--smt "$FSTAR_SOLVER")
+fi
+sha256sum authcode/AuthCode.RedisFlag.fst \
+	../tests/fstar/property/TestAuthCodeRedisFlag.fst >"$OUT_DIR/redis-flag-controls.sha256"
+if ! fstar.exe "${REDIS_FLAG_CONTROL_ARGS[@]}" --include authcode \
+	authcode/AuthCode.RedisFlag.fst ../tests/fstar/property/TestAuthCodeRedisFlag.fst \
+	>"$OUT_DIR/redis-flag-controls.log" 2>&1; then
+	cat "$OUT_DIR/redis-flag-controls.log" >&2
+	echo "[FAIL] redis-flag negative-control gate" | tee -a "$LOG" >&2
+	exit 1
+fi
+grep -Fq 'All verification conditions discharged successfully' "$OUT_DIR/redis-flag-controls.log"
+echo "[OK] redis-flag negative-control gate (not admitted proof evidence)" | tee -a "$LOG" >&2
+
+# Expected rejections use a separate gate without --detail_errors: that option
+# expands a single expected error into diagnostic Error 9 reports. These logs
+# are controls, not additional admitted proof passes or counterexample proofs.
+AUTHORIZATION_REVISION_CONTROL_ARGS=()
+if [[ -n ${FSTAR_SOLVER:-} ]]; then
+	AUTHORIZATION_REVISION_CONTROL_ARGS+=(--smt "$FSTAR_SOLVER")
+fi
+sha256sum authcode/Authorization.ProjectionRevision.fst \
+	../tests/fstar/property/TestAuthorizationProjectionRevision.fst >"$OUT_DIR/authorization-revision-controls.sha256"
+if ! fstar.exe "${AUTHORIZATION_REVISION_CONTROL_ARGS[@]}" --include authcode \
+	authcode/Authorization.ProjectionRevision.fst ../tests/fstar/property/TestAuthorizationProjectionRevision.fst \
+	>"$OUT_DIR/authorization-revision-controls.log" 2>&1; then
+	cat "$OUT_DIR/authorization-revision-controls.log" >&2
+	echo "[FAIL] authorization-revision negative-control gate" | tee -a "$LOG" >&2
+	exit 1
+fi
+grep -Fq 'All verification conditions discharged successfully' "$OUT_DIR/authorization-revision-controls.log"
+echo "[OK] authorization-revision negative-control gate (not admitted proof evidence)" | tee -a "$LOG" >&2
+
 # =========================================================================
 # Pass 1b: Jose.Federation (separate invocation to avoid Z3 4.13 label_1 bug
 # in large Pass 2 context)
@@ -359,6 +397,8 @@ MODULES="$MODULES \
 	authcode/AuthCode.Flow.fst"
 # Authorization snapshot, effective target, consent and reauthentication slices.
 MODULES="$MODULES authcode/AuthCode.Snapshot.fst authcode/AuthCode.RedisGrant.fst"
+MODULES="$MODULES authcode/AuthCode.RedisFlag.fst"
+MODULES="$MODULES authcode/Authorization.ProjectionRevision.fst"
 MODULES="$MODULES resource/ResourceIndicators.EffectiveTarget.fst"
 MODULES="$MODULES oidc/OIDC.OfflineConsent.fst oidc/OIDC.RequestObjectTarget.fst oidc/OIDC.Reauthentication.fst"
 MODULES="$MODULES oidc/OIDC.AuthorizationTransactions.fst"

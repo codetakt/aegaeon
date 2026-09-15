@@ -1249,6 +1249,52 @@
           ]
         }
       ]
+    },
+    {
+      "id": "redis-boolean-encoding",
+      "class": "required",
+      "gating": "evidence",
+      "package": {
+        "name": "aegaeon-server",
+        "manifest": "crates/server/Cargo.toml"
+      },
+      "crate": "aegaeon_server",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "authcode::store::redis_backend::scripts::contract::proofs::redis_bool_exact_ascii",
+          "file": "crates/server/src/authcode/store/redis_backend/scripts/contract.rs",
+          "domain": "Production redis_bool over every bool, no input restrictions or stubs. Exact one-byte ASCII 0/1 and equality with literal 1. Does not prove caller booleans, ARGV slots, Redis serialization, actual Lua semantics, CAS, or recovery."
+        }
+      ]
+    },
+    {
+      "id": "application-authorization-revision",
+      "class": "required",
+      "gating": "evidence",
+      "package": {
+        "name": "aegaeon-server",
+        "manifest": "crates/server/Cargo.toml"
+      },
+      "crate": "aegaeon_server",
+      "features": [],
+      "no_default_features": false,
+      "cfg": [
+        "kani"
+      ],
+      "default_unwind": 2,
+      "harnesses": [
+        {
+          "name": "web::management::users::application_authorization::kani_proofs::revision_update_reserves_disable",
+          "file": "crates/server/src/web/management/users/application_authorization/kani_proofs.rs",
+          "domain": "Production next_projection_revision over every i64 base/source revision and bool enabled, compared with i128 arithmetic. Other metadata fields fixed empty and unused by the helper. Proves exact increment, disable reservation and terminal reactivation refusal; not HTTP parsing, identity, authority, DB CAS, audit, or revocation propagation."
+        }
+      ]
     }
   ]
 }
