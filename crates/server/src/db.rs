@@ -2,6 +2,7 @@ use crate::config::DatabaseConfig;
 use anyhow::{bail, Context, Result};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
+use std::collections::HashSet;
 use std::time::Duration;
 
 const ATLAS_SUM: &str = include_str!("../../../db/migrations/atlas.sum");
@@ -29,24 +30,55 @@ pub async fn connect_required_pool(cfg: &DatabaseConfig) -> Result<PgPool> {
 /// Returns an error when Atlas revision metadata is absent, stale, failed, or
 /// inconsistent with the migration inventory compiled into this binary.
 pub async fn preflight_required_schema_revision(pool: &PgPool) -> Result<()> {
-    let expected = expected_atlas_head_revision()?;
+    let inventory = parse_atlas_revisions(ATLAS_SUM).ok_or_else(|| {
+        anyhow::anyhow!("db/migrations/atlas.sum has an invalid migration inventory")
+    })?;
+    let expected = inventory
+        .last()
+        .context("db/migrations/atlas.sum does not contain a migration head")?;
     let revision_table = atlas_revision_table_name(pool).await?;
-    let row = sqlx::query(&format!(
+    let rows = sqlx::query(&format!(
         r#"
 SELECT version, description, hash, applied, total, error
 FROM {revision_table}
-WHERE version = $1 OR version = $2
-ORDER BY executed_at DESC
-LIMIT 1
+ORDER BY version
 "#
     ))
-    .bind(expected.version)
-    .bind(expected.stem)
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
     .context("failed to query Atlas schema revision metadata")?;
 
-    let Some(row) = row else {
+    let mut seen = HashSet::new();
+    let mut head = None;
+    for row in &rows {
+        let version: &str = row.try_get("version")?;
+        let Some(known) = inventory
+            .iter()
+            .find(|revision| version == revision.version || version == revision.stem)
+        else {
+            bail!("PostgreSQL schema contains unsupported Atlas revision {version}");
+        };
+        if !seen.insert(known.version) {
+            bail!(
+                "PostgreSQL schema contains duplicate Atlas revision {}",
+                known.version
+            );
+        }
+        let applied: i64 = row.try_get("applied")?;
+        let total: i64 = row.try_get("total")?;
+        let error: Option<&str> = row.try_get("error")?;
+        if error.is_some_and(|value| !value.is_empty()) {
+            bail!("PostgreSQL schema revision {version} has failed Atlas metadata");
+        }
+        if total <= 0 || applied != total {
+            bail!("PostgreSQL schema revision {version} is partial: applied {applied} of {total}");
+        }
+        if known.version == expected.version {
+            head = Some(row);
+        }
+    }
+
+    let Some(row) = head else {
         bail!(
             "PostgreSQL schema is not at the Aegaeon migration head: expected Atlas revision {} ({})",
             expected.version,
@@ -57,24 +89,6 @@ LIMIT 1
     let version: String = row.try_get("version")?;
     let description: Option<String> = row.try_get("description")?;
     let hash: Option<String> = row.try_get("hash")?;
-    let applied: i64 = row.try_get("applied")?;
-    let total: i64 = row.try_get("total")?;
-    let error: Option<String> = row.try_get("error")?;
-
-    if error.as_deref().is_some_and(|value| !value.is_empty()) {
-        bail!("PostgreSQL schema revision {version} has failed Atlas metadata: {error:?}");
-    }
-    if total <= 0 || applied != total {
-        bail!("PostgreSQL schema revision {version} is partial: applied {applied} of {total}");
-    }
-    if version != expected.version && version != expected.stem {
-        bail!(
-            "PostgreSQL schema revision mismatch: expected {} or {}, got {}",
-            expected.version,
-            expected.stem,
-            version
-        );
-    }
     if version == expected.version
         && description
             .as_deref()
@@ -149,16 +163,19 @@ impl ExpectedAtlasRevision<'_> {
     }
 }
 
-fn expected_atlas_head_revision() -> Result<ExpectedAtlasRevision<'static>> {
-    parse_atlas_head_revision(ATLAS_SUM)
-        .ok_or_else(|| anyhow::anyhow!("db/migrations/atlas.sum does not contain a migration head"))
-}
-
-fn parse_atlas_head_revision(sum: &'static str) -> Option<ExpectedAtlasRevision<'static>> {
+fn parse_atlas_revisions(sum: &str) -> Option<Vec<ExpectedAtlasRevision<'_>>> {
     let mut lines = sum.lines().map(str::trim).filter(|line| !line.is_empty());
     let atlas_sum_hash = lines.next()?;
-    let head = lines.next_back()?;
-    let mut fields = head.split_whitespace();
+    lines
+        .map(|line| parse_atlas_revision(line, atlas_sum_hash))
+        .collect()
+}
+
+fn parse_atlas_revision<'a>(
+    line: &'a str,
+    atlas_sum_hash: &'a str,
+) -> Option<ExpectedAtlasRevision<'a>> {
+    let mut fields = line.split_whitespace();
     let file_name = fields.next()?;
     let file_hash = fields.next()?;
     if fields.next().is_some() {
@@ -178,11 +195,11 @@ fn parse_atlas_head_revision(sum: &'static str) -> Option<ExpectedAtlasRevision<
 
 #[cfg(test)]
 mod tests {
-    use super::parse_atlas_head_revision;
+    use super::parse_atlas_revisions;
 
     #[test]
     fn parses_atlas_head_revision() {
-        let head = parse_atlas_head_revision(
+        let inventory = parse_atlas_revisions(
             r#"
 h1:sum
 20260101000000_init.sql h1:init
@@ -190,6 +207,8 @@ h1:sum
 "#,
         )
         .expect("atlas head should parse");
+        assert_eq!(inventory.len(), 2);
+        let head = inventory.last().expect("migration head");
 
         assert_eq!(
             head.file_name,
@@ -205,3 +224,7 @@ h1:sum
         assert!(!head.accepts_hash("other"));
     }
 }
+
+#[cfg(test)]
+#[path = "db_schema_revision_tests.rs"]
+mod schema_revision_tests;

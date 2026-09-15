@@ -55,6 +55,38 @@ atlas migrate apply --env local
 
 ## Notes
 
+### Startup schema checks and upgrades
+
+The server and management initialization tools check Atlas revision metadata
+against the migration inventory compiled into their binary. Startup requires the
+compiled migration head and rejects unknown revisions anywhere in the table,
+including newer revisions whose `executed_at` timestamp predates the known head.
+Duplicate numeric/file-stem aliases and failed or partial recorded migrations
+also fail the check. The existing head description/hash checks and legacy
+numeric/file-stem formats remain supported.
+
+This is a startup check of migration metadata. It does not attest the physical
+schema, authenticate database administrators, or prevent a migration applied
+after startup. Stop all runtime instances before applying an incompatible schema
+update. Do not edit Atlas metadata to make an incompatible binary start.
+
+Older binaries that only look up their own head can still start against a newer
+database. Updating the current binary does not repair those older executables.
+Deployment controls must prevent starting such binaries on an upgraded database.
+For rollback, restore the matching pre-upgrade database, configuration, encryption
+keys and token/session-store state before starting the matching older binary.
+
+The PostgreSQL regression tests create and remove uniquely named schemas. With a
+dedicated test database configured, run:
+
+```bash
+nix develop -c cargo test -p aegaeon-server --lib db::schema_revision_tests -- --ignored
+```
+
+They also run in the PostgreSQL lane of `server-container-integration`.
+
+### Tooling and configuration
+
 - This project uses Atlas for migrations. Do not add SQLx migrations (`sqlx migrate`) to avoid
   having two migration systems.
 - PostgreSQL is required for `aegaeon-server`. Provide `AEGAEON_DATABASE_URL` for the server
