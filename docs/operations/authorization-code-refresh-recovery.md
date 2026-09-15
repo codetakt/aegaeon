@@ -203,15 +203,21 @@ client change before switching server workers. Legacy refresh sessions without
 the new saved target/issuer context require a new login and consent as described
 below.
 
-The startup database gate looks up the last migration in the binary's embedded
-`atlas.sum`. It requires that revision to be complete and error-free, and checks
-its description and hash when present. It does not reject additional, later
-revisions: an older binary can still pass when its own expected revision remains
-in Atlas history. Startup success therefore does not establish downgrade or
-mixed-version compatibility. Enforce the matching binary/schema boundary in the
-deployment procedure. There is no supported down migration for these changes;
-removing an Atlas revision row or changing its checksum is not a recovery
-procedure and does not restore schema or authorization state.
+The startup database gate checks every recorded Atlas revision against the
+binary's embedded `atlas.sum`. It requires the compiled migration head and rejects
+unknown revisions, including later ones, duplicate numeric/file-stem aliases, and
+failed or partial entries. The existing head description/hash checks and legacy
+formats remain supported. These checks inspect migration metadata and do not
+establish physical-schema identity or mixed-version compatibility. See the
+[database guide](../development/database.md#startup-schema-checks-and-upgrades)
+for the startup check's scope.
+
+Older binaries that only look up their own head can still pass when that revision
+remains in Atlas history. Updating the current binary does not change those older
+executables. Enforce the matching binary/schema boundary in the deployment
+procedure. There is no supported down migration for these changes; removing an
+Atlas revision row or changing its checksum is not a recovery procedure and does
+not restore schema or authorization state.
 
 Before applying migrations, drain and fence old writers, retain the matching
 old/new binaries and migration ledgers, and take a tested database backup using
