@@ -27,6 +27,20 @@ pub(super) fn redis_bool(value: bool) -> &'static str {
     }
 }
 
+#[cfg(kani)]
+mod proofs {
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn redis_bool_exact_ascii() {
+        let value: bool = kani::any();
+        let encoded = super::redis_bool(value);
+        let bytes = encoded.as_bytes();
+        assert_eq!(bytes.len(), 1, "one ASCII byte");
+        assert_eq!(bytes[0], 0x30 + u8::from(value), "exact boolean encoding");
+        assert_eq!(encoded == "1", value, "equality test recovers input");
+    }
+}
+
 #[cfg(test)]
 pub(super) mod test_support {
     use super::LuaSlot;

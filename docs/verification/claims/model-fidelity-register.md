@@ -363,3 +363,29 @@ classifications remain unchanged. The JWS wire/header binding gap remains open.
 registrations, all three HMAC length boundaries and algorithm separation.
 `TestHmacEquivalentCompromise` supplies a qualified registry and proves that
 leaking an equivalent key still excludes the forgery event.
+
+## Redis boolean argument leaf
+
+`AuthCode.RedisFlag` is a `simplified` representation specification. The
+production Kani harness checks the complete boolean domain against the same
+exact ASCII relation. The model and its `TestAuthCodeRedisFlag` fixture do not
+establish Rust/Lua transition correspondence or change a compliance status. See
+[Redis boolean argument encoding](../kani/redis-boolean-encoding.md) for the
+checked boundary and remaining caller, transport and storage obligations.
+
+The expected-rejection fixture lives under `tests/fstar/property`, outside the
+`fstar/` model-fidelity catalog. It runs in a separate required control gate,
+not an additional admitted proof pass. Its source hashes and output are retained.
+
+## Application authorization revision arithmetic
+
+`Authorization.ProjectionRevision` is a `simplified` integer model of the
+revision allocator. The adjacent production Kani harness covers all signed
+64-bit counters and both enable states against that relation. Identity,
+authority, transactions and revocation propagation remain outside this leaf.
+See [revision bounds](../kani/authorization-revision-bounds.md).
+
+`TestAuthorizationProjectionRevision` is an expected-rejection fixture under
+`tests/fstar/property`, outside the `fstar/` model-fidelity catalog. It runs in
+a separate required control gate, not an additional admitted proof pass. Its
+source hashes and output are retained.

@@ -19,6 +19,9 @@ use super::super::{
 };
 use crate::application_authorization::inorii::Grant;
 
+#[cfg(kani)]
+mod kani_proofs;
+
 pub(super) async fn update(
     State(state): State<AppState>,
     Extension(request): Extension<RequestContext>,

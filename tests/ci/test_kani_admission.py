@@ -505,10 +505,10 @@ class RegistryTests(unittest.TestCase):
             if g["class"] == "diagnostic"
             for h in g["harnesses"]
         ]
-        assert len(required) == 27
+        assert len(required) == 29
         assert len(diagnostic) == 2
         assert (
-            sum(1 for g in kani.executable_groups(registry) if g.get("gating") == "evidence") == 3
+            sum(1 for g in kani.executable_groups(registry) if g.get("gating") == "evidence") == 5
         )
         sites = kani.source_sites(ROOT)
         assert len(sites) == len(required) + len(diagnostic) + len(kani.excluded_sites(registry))

@@ -10,6 +10,10 @@ Audience: verification reviewers, maintainers
 
 This document is part of the split F* assumption register.
 
+See [Conditional assurance and external trust](trust-boundary.md) for the proof
+boundary, the information required to disclose a premise, and the Aegaeon-side
+obligations that remain when a dependency is trusted.
+
 ## Contract Qualification
 
 This is an inventory of existing assumptions and their historical rationale,
