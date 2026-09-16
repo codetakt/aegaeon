@@ -85,8 +85,8 @@
 
 ### `release/`
 
-- `create_release.sh` — Create and verify a local OpenPGP tag for explicit release inputs
-- `generate_sbom.sh` — SBOM (CycloneDX) + grype scan
+- `create_release.sh` — Create an annotated version tag and release artefacts
+- `generate_sbom.sh` — Generate a Cargo dependency SBOM from a fresh source snapshot
 
 ## Common Commands
 
@@ -115,13 +115,8 @@ nix develop -c ./scripts/kani/run_kani.sh
 # (regression) thicker suite for regressions
 AEG_KANI_SUITE=regression nix develop -c ./scripts/kani/run_kani.sh
 
-# Signed local tag: explicit commit, approved notes, authorized fingerprint
-./scripts/release/create_release.sh v1.0.0 \
-  --commit <full-commit-sha> \
-  --notes-file <release-notes-file> \
-  --signing-key <full-openpgp-fingerprint>
-
-# Cargo source dependency inventory
+# Release artefacts / SBOM generation
+./scripts/release/create_release.sh v1.0.0
 ./scripts/release/generate_sbom.sh
 
 # Future claim-gate policy validation
