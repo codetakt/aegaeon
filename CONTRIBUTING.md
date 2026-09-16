@@ -22,7 +22,7 @@ nix flake check
 # Build the server (release)
 nix build .#server
 ./result/bin/aegaeon-server --release
-```text
+```
 
 If you do not use Nix, you will need the pinned Rust nightly in
 `rust-toolchain.toml` plus additional native dependencies. Non-Nix setups are
@@ -119,7 +119,48 @@ act -l
 Pass secrets via `act -s NAME=value` or `act --secret-file .secrets` (do not put
 secrets in `.env.act`).
 
-## Pull request checklist
+## Issue and pull request descriptions
+
+Write public descriptions in English for contributors who have not read internal
+plans or conversations. Use the same headings and order when posting through the
+GitHub UI, CLI or API:
+
+| Description | Required level-two headings, in order |
+| --- | --- |
+| Pull request | `Summary`, `Validation`, `Notes` |
+| Issue | `Summary`, `Context`, `Acceptance criteria`, `Notes` |
+
+The [PR template](.github/pull_request_template.md) and
+[Issue template](.github/ISSUE_TEMPLATE/issue.md) explain each section. Keep simple
+changes brief; use level-three subsections when a larger change needs detail.
+Retain every required heading and write `None.` when there are no additional notes.
+
+Lead a PR with the concrete problem and resulting behavior. Record validation
+commands and outcomes, identifying the tested revision or artifact when relevant.
+Distinguish fresh execution, cache reuse, retained-record replay and hosted CI;
+report failures, skipped checks and work not run. Put compatibility, migration,
+recovery, evidence limits and related issues in Notes. A passing check or an AI
+review does not by itself establish release assurance or human approval.
+
+An Issue should explain the expected outcome, supply reproducible context or a
+proposal's rationale, and define observable completion criteria. Keep proposed
+validation separate from completed execution. Use the private reporting routes
+below for vulnerabilities.
+
+Before publishing or updating a description, check its rendered structure, links,
+scope and applicable repository labels. CLI/API posts must follow the templates
+even when the client does not insert them automatically. For multiline text with
+`gh`, use a UTF-8 file and `--body-file` to preserve newlines and literal content.
+
+When normalizing an existing description, retain its substantive content, links,
+revision/artifact identities, commands, results and decisions. Back up the original
+body and compare it with the live body before replacing it so concurrent edits are
+not overwritten. Preserve comments, titles, labels and state unless their change
+is separately intended. Identify historical validation and integration notes as
+historical; formatting is not new execution or approval. Do not convert a withdrawn
+PR, an unchecked criterion or a historical failure into completed work.
+
+### Pull request checklist
 
 - Run `nix flake check`.
 - Add/adjust tests for behaviour changes.
