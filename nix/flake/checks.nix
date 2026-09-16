@@ -122,5 +122,6 @@ in
 }
 // pkgs.lib.optionalAttrs isLinux {
   inherit verifyKani;
+  schema-guard = import ../schema-guard-check.nix { inherit pkgs; };
   preview-review-contract = import ../../examples/preview-review/check.nix { inherit pkgs; };
 }

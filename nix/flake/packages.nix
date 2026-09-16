@@ -11,6 +11,7 @@
   stdenv,
   aegaeonWorkspace,
   aegaeonDockerImage,
+  aegaeonServerDistribution,
   verifiedCoreWasm,
   verifyFstar,
   verifyTamarin,
@@ -109,6 +110,7 @@ in
 
 }
 // lib.optionalAttrs isLinux {
+  server-distribution = aegaeonServerDistribution;
   verify-kani = verifyKani;
   inherit verifyKani kani';
 }

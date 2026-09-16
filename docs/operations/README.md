@@ -1,6 +1,6 @@
 # Operations Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-09-16
 
 Status: current implementation baseline
 
@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Launch against a matching migration inventory](schema-guarded-launch.md) —
+  immutable executable binding, guarded OCI entrypoints, and upgrade/rollback scope.
 - `[runbook]` [Configuration membership recovery](configuration-membership-recovery.md) —
   audited repair of explicitly identified rows stranded by an earlier activation.
 - `[runbook]` [OAuth sender binding and unsupported authorization details](oauth-conformance.md) —
