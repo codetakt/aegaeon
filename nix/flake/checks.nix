@@ -33,6 +33,26 @@ in
 {
   inherit pre-commit-check;
 
+  release-tags =
+    pkgs.runCommand "release-tag-tests"
+      {
+        nativeBuildInputs = [
+          pkgs.bash
+          pkgs.git
+          pkgs.gnupg
+          (pkgs.python3.withPackages (ps: [ ps.pytest ]))
+        ];
+      }
+      ''
+        mkdir -p source/scripts/release source/tests/ci "$out"
+        cp ${../../scripts/release/create_release.sh} source/scripts/release/create_release.sh
+        cp ${../../scripts/release/create_release.py} source/scripts/release/create_release.py
+        cp ${../../tests/ci/test_release_tags.py} source/tests/ci/test_release_tags.py
+        cd source
+        python3 -m pytest -q tests/ci/test_release_tags.py
+        touch "$out/success"
+      '';
+
   fmt = craneLib.cargoFmt {
     inherit src cargoArtifacts;
     stdenv = _: stdenv;
