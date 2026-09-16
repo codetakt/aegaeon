@@ -280,7 +280,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/assumption-graph.md` | verification | F\* Effective-Assumption Graph | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
-| `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-14 | Verification | verification reviewers, contributors |
+| `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/store-entries-vc-resolution.md` | verification | Resolving `store_entries_into_buffer_aux` VC Failures | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/troubleshooting.md` | verification | F* / KaRaMeL Troubleshooting (Proof / Extraction Hygiene) | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
@@ -290,7 +290,7 @@ Audience: contributors, maintainers
 | `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/authorization-revision-bounds.md` | verification | Application authorization revision bounds | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
-| `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-09 | Verification | verification reviewers, maintainers |
+| `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/hashmap-ice-repro.md` | verification | Kani HashMap ICE Reproducer | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/kani-nixos-fix/README.md` | index | Kani NixOS Fix Details | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
 | `docs/verification/kani/kani-nixos-fix/alternatives-and-technical-details.md` | verification | Kani NixOS Alternatives And Technical Details | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
@@ -340,7 +340,7 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
+| `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-09-14 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
@@ -360,6 +360,7 @@ Audience: contributors, maintainers
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
+| `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |
 
@@ -384,5 +385,5 @@ Audience: contributors, maintainers
 | `docs/development/admin-console-handoff.md` | development | Admin Console frontend handoff (Phase 1) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
-| `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |
+| `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |

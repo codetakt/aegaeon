@@ -42,6 +42,9 @@ env -u PYTHONPATH nix develop .#verification -c python3 \
 
 The full `verify-kani` and `verify-fstar` lanes include the registered harness
 and model. `TestAuthorizationProjectionRevision` is a separate required control
-gate without detailed-error expansion, with retained log and source hashes. It
+gate without detailed-error expansion, with retained log, source hashes and
+verifier/solver records checked against proof pass 1. The
+[control record contract](../fstar/module-admission.md#expected-rejection-controls)
+supports replay without the original sources or tools. It
 is not an admitted proof pass or an SMT counterexample proof. A partial Kani run
 remains a partial result.
