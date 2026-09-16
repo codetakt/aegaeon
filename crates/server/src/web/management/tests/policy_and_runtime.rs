@@ -14,3 +14,4 @@ include!("policy_and_runtime/application_activation_lock.rs");
 include!("policy_and_runtime/application_dcr_lock.rs");
 include!("policy_and_runtime/application_identity_reuse.rs");
 include!("policy_and_runtime/application_revision_exhaustion.rs");
+include!("policy_and_runtime/management_timestamp_pg.rs");
