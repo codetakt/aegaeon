@@ -94,6 +94,19 @@ server.
 | `AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` | `300` | `system` | New login/consent rows per environment and table in a rolling minute; range 1–1,000,000. Size for the deployment's aggregate traffic. |
 | `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` | `60` | `system` | Authorization requests per transport-validated source in a 60-second shared Redis bucket; positive. Separate from password-login buckets. |
 
+Database URLs require an explicit authority host and cannot contain a fragment.
+Transport checks use SQLx's effective destination, including a `host` or `hostaddr`
+query override. Remote connections require exactly one `sslmode` or `ssl-mode`
+parameter set to `require`, `verify-ca`, or `verify-full`; an environment default
+does not satisfy this requirement. Loopback addresses and Unix sockets may use
+unencrypted connections.
+
+For example, `postgresql://localhost/db?host=db.example&sslmode=disable` is rejected
+because SQLx would connect to `db.example`. Use explicit TLS for that destination.
+Duplicate destination overrides, duplicate SSL-mode parameters (including aliases),
+empty destination overrides and unknown query keys are rejected before connection.
+Query keys are case-sensitive. These checks also apply to the management initializer.
+
 The source budget must satisfy `2 * source < minute` and `6 * source < capacity`;
 startup rejects invalid combinations. These relationships leave storage headroom
 beyond one source's overlapping ingress windows; they do not prove availability

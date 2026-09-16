@@ -434,6 +434,107 @@ fn database_config_rejects_duplicate_sslmode() {
 }
 
 #[test]
+fn database_config_rejects_effective_remote_destinations_without_strong_tls() {
+    let _lock = env_lock();
+    let _default_mode = EnvVarGuard::new("PGSSLMODE", Some("verify-full"));
+    for query in [
+        "host=db.example",
+        "host=db.example&sslmode=disable",
+        "host=db.example&sslmode=allow",
+        "host=db.example&sslmode=prefer",
+        "hostaddr=192.0.2.1",
+        "hostaddr=192.0.2.1&sslmode=disable",
+        "hostaddr=2001%3Adb8%3A%3A1&sslmode=prefer",
+        "%68ost=db.example&sslmode=disable",
+        "host=db.example&ssl-mode=disable",
+        "host=db.example&ssl%2Dmode=prefer",
+    ] {
+        let url = format!("postgresql://user:fixture-password@localhost/db?{query}");
+        let _primary = EnvVarGuard::new("AEGAEON_DATABASE_URL", Some(&url));
+        let error = DatabaseConfig::try_from_env().expect_err(query);
+        assert!(
+            error.to_string().contains("non-loopback PostgreSQL"),
+            "wrong rejection for {query}: {error}"
+        );
+        assert!(!error.to_string().contains("fixture-password"));
+    }
+}
+
+#[test]
+fn database_config_rejects_ambiguous_and_unknown_driver_options_without_echoing_values() {
+    let _lock = env_lock();
+    for query in [
+        "sslmode=require&ssl-mode=disable",
+        "ssl-mode=disable&sslmode=require",
+        "ssl-mode=require&ssl-mode=verify-full",
+        "SSLMODE=require",
+        "HOST=localhost&sslmode=require",
+        "host=localhost&host=db.example&sslmode=require",
+        "host=db.example&host=localhost&sslmode=require",
+        "host=localhost&hostaddr=192.0.2.1&sslmode=require",
+        "hostaddr=192.0.2.1&host=localhost&sslmode=require",
+        "host=&sslmode=require",
+        "hostaddr=not-an-ip&sslmode=require",
+        "sslmode=fixture-password",
+        "unsupported=fixture-password&sslmode=require",
+    ] {
+        let url = format!("postgresql://user:fixture-password@db.example/db?{query}");
+        let _primary = EnvVarGuard::new("AEGAEON_DATABASE_URL", Some(&url));
+        let error = DatabaseConfig::try_from_env().expect_err(query);
+        assert!(!error.to_string().contains("fixture-password"));
+        assert!(matches!(
+            error,
+            ConfigError::InvalidValue { key, value, .. }
+                if key == "AEGAEON_DATABASE_URL" && value == "<redacted>"
+        ));
+    }
+}
+
+#[test]
+fn database_config_accepts_effective_local_connections_and_explicit_remote_tls() -> ConfigTestResult {
+    use sqlx::postgres::{PgConnectOptions, PgSslMode};
+    let _lock = env_lock();
+    let _default_host = EnvVarGuard::new("PGHOSTADDR", Some("192.0.2.99"));
+    let _default_mode = EnvVarGuard::new("PGSSLMODE", Some("disable"));
+    for url in [
+        "postgresql://user:fixture-password@localhost/db",
+        "postgresql://user:fixture-password@127.42.0.1/db",
+        "postgresql://user:fixture-password@[::1]/db",
+        "postgresql://user:fixture-password@%2Fvar%2Frun%2Fpostgresql/db",
+        "postgresql://user:fixture-password@localhost/db?host=%2Fvar%2Frun%2Fpostgresql",
+        "postgresql://user:fixture-password@db.example/db?host=localhost&sslmode=disable",
+        "postgresql://user:fixture-password@db.example/db?hostaddr=127.0.0.2&sslmode=disable",
+        "postgresql://user:fixture-password@db.example/db?hostaddr=%3A%3A1&sslmode=disable",
+    ] {
+        let _primary = EnvVarGuard::new("AEGAEON_DATABASE_URL", Some(url));
+        let cfg = must_ok!(DatabaseConfig::try_from_env(), "effective local destination");
+        let options: PgConnectOptions = must_ok!(cfg.url().parse(), "SQLx local options");
+        assert!(
+            options.get_socket().is_some()
+                || crate::util::is_loopback_host(options.get_host())
+        );
+    }
+    for mode in ["require", "verify-ca", "verify-full"] {
+        for name in ["sslmode", "ssl-mode", "ssl%2Dmode"] {
+            let url = format!(
+                "postgresql://user:fixture-password@localhost/db?host=db.example&{name}={mode}"
+            );
+            let _primary = EnvVarGuard::new("AEGAEON_DATABASE_URL", Some(&url));
+            let cfg = must_ok!(DatabaseConfig::try_from_env(), "explicit remote TLS");
+            let options: PgConnectOptions = must_ok!(cfg.url().parse(), "SQLx remote options");
+            assert_eq!(options.get_host(), "db.example");
+            assert!(matches!(
+                (mode, options.get_ssl_mode()),
+                ("require", PgSslMode::Require)
+                    | ("verify-ca", PgSslMode::VerifyCa)
+                    | ("verify-full", PgSslMode::VerifyFull)
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn database_config_rejects_hostless_database_url() {
     let _lock = env_lock();
     let _primary = EnvVarGuard::new(

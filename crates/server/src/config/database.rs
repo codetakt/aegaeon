@@ -1,4 +1,5 @@
 use super::{try_env_num_with, try_env_optional_string, ConfigError};
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use url::Url;
 
 #[derive(Clone, Debug)]
@@ -124,7 +125,12 @@ fn reject_database_url_fragment(key: &str, parsed: &Url) -> Result<(), ConfigErr
 }
 
 fn validate_database_url_transport_policy(key: &str, parsed: &Url) -> Result<(), ConfigError> {
-    let Some(host) = parsed.host_str().filter(|host| !host.trim().is_empty()) else {
+    let invalid = |reason: String| ConfigError::InvalidValue {
+        key: key.to_string(),
+        value: "<redacted>".to_string(),
+        reason,
+    };
+    let Some(_) = parsed.host_str().filter(|host| !host.trim().is_empty()) else {
         return Err(ConfigError::InvalidValue {
             key: key.to_string(),
             value: "<redacted>".to_string(),
@@ -132,43 +138,95 @@ fn validate_database_url_transport_policy(key: &str, parsed: &Url) -> Result<(),
         });
     };
 
-    if crate::util::is_loopback_host(host) {
+    validate_postgres_query_parameters(parsed).map_err(&invalid)?;
+    let mode = postgres_sslmode(parsed).map_err(&invalid)?;
+    // Use the same parser as the pool and notification listener. Query overrides
+    // and SSL-mode aliases can change the destination or policy in the authority.
+    let options: PgConnectOptions = parsed
+        .as_str()
+        .parse()
+        .map_err(|_| invalid("invalid PostgreSQL connection options".to_string()))?;
+    let host = options.get_host();
+    if options.get_socket().is_some()
+        || host.starts_with('/')
+        || crate::util::is_loopback_host(host)
+    {
         return Ok(());
     }
 
-    match postgres_sslmode(parsed) {
-        Ok(Some(mode)) if postgres_sslmode_is_strong(&mode) => Ok(()),
-        Ok(Some(mode)) => Err(ConfigError::InvalidValue {
+    match mode {
+        Some(_)
+            if matches!(
+                options.get_ssl_mode(),
+                PgSslMode::Require | PgSslMode::VerifyCa | PgSslMode::VerifyFull
+            ) =>
+        {
+            Ok(())
+        }
+        Some(mode) => Err(ConfigError::InvalidValue {
             key: key.to_string(),
             value: mode,
             reason: "non-loopback PostgreSQL database URLs must use sslmode=require, sslmode=verify-ca, or sslmode=verify-full".to_string(),
         }),
-        Ok(None) => Err(ConfigError::InvalidValue {
+        None => Err(ConfigError::InvalidValue {
             key: key.to_string(),
             value: "<redacted>".to_string(),
             reason: "non-loopback PostgreSQL database URLs must include sslmode=require, sslmode=verify-ca, or sslmode=verify-full".to_string(),
         }),
-        Err(reason) => Err(ConfigError::InvalidValue {
-            key: key.to_string(),
-            value: "<redacted>".to_string(),
-            reason,
-        }),
     }
+}
+
+fn validate_postgres_query_parameters(parsed: &Url) -> Result<(), String> {
+    let mut destinations = 0;
+    for (name, value) in parsed.query_pairs() {
+        match name.as_ref() {
+            "host" | "hostaddr" => {
+                destinations += 1;
+                if value.trim().is_empty() || destinations > 1 {
+                    return Err(
+                        "PostgreSQL database URL permits at most one nonempty host or hostaddr override"
+                            .to_string(),
+                    );
+                }
+            }
+            "sslmode"
+            | "ssl-mode"
+            | "sslrootcert"
+            | "ssl-root-cert"
+            | "ssl-ca"
+            | "sslcert"
+            | "ssl-cert"
+            | "sslkey"
+            | "ssl-key"
+            | "statement-cache-capacity"
+            | "port"
+            | "dbname"
+            | "user"
+            | "password"
+            | "application_name"
+            | "options" => {}
+            name if name.starts_with("options[") && name.ends_with(']') => {}
+            _ => {
+                // SQLx logs unknown keys and their values. Refuse them before
+                // invoking its parser, without including either in diagnostics.
+                return Err(
+                    "PostgreSQL database URL contains an unsupported query parameter".to_string(),
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn postgres_sslmode(parsed: &Url) -> Result<Option<String>, String> {
     let mut modes = parsed
         .query_pairs()
-        .filter(|(name, _)| name.eq_ignore_ascii_case("sslmode"))
-        .map(|(_, value)| value.trim().to_ascii_lowercase())
+        .filter(|(name, _)| matches!(name.as_ref(), "sslmode" | "ssl-mode"))
+        .map(|(_, value)| value.to_ascii_lowercase())
         .collect::<Vec<_>>();
     match modes.len() {
         0 => Ok(None),
         1 => Ok(modes.pop()),
         _ => Err("PostgreSQL database URL must include at most one sslmode parameter".to_string()),
     }
-}
-
-fn postgres_sslmode_is_strong(mode: &str) -> bool {
-    matches!(mode, "require" | "verify-ca" | "verify-full")
 }
