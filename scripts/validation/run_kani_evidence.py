@@ -1244,8 +1244,17 @@ def input_digests(
         directories.add(root / dep)
     for directory in sorted(directories):
         for source in sorted(directory.rglob("*")):
-            if source.is_file() and "target" not in source.relative_to(root).parts:
-                inputs[source.relative_to(root).as_posix()] = digest_file(source)
+            source_relative = source.relative_to(root)
+            # Local imports generate these caches beside the Kani packaging
+            # scripts. The installed, digest-bound tool uses its store copy.
+            # Do not apply gitignore broadly: ignored/untracked crate files can
+            # still be compiler inputs (including include_bytes! payloads).
+            tool_bytecode = source_relative.is_relative_to("nix/kani") and source.suffix in (
+                ".pyc",
+                ".pyo",
+            )
+            if source.is_file() and "target" not in source_relative.parts and not tool_bytecode:
+                inputs[source_relative.as_posix()] = digest_file(source)
     return inputs
 
 

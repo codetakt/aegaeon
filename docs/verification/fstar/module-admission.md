@@ -1,6 +1,6 @@
 # F* Per-Module Admission
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 Status: current implementation baseline
 
@@ -13,6 +13,38 @@ exit status. This note fixes the output contract that `scripts/validation/admit_
 enforces, the dispositions it assigns, its cache policy and the records it
 writes. It describes tool executions only; it does not establish assumption
 soundness, model adequacy, implementation refinement or release assurance.
+
+## Expected-rejection controls
+
+The Redis flag and authorization revision fixtures run through the same
+invocation recorder, in `controls/invocations/<name>/`. They use `--hint_info`
+to retain solver starts without the `--detail_errors` expansion that changes
+expected-error handling. An explicit solver pin is required. The recorder
+checks the verifier entrypoint before and after execution and checks every
+observed solver start against that pin.
+
+`scripts/validation/check_fstar_controls.py` requires the same verifier,
+recorder, solver, working directory and observed solver version as proof pass 1.
+The normal assumption graph independently checks that pass's registered tool
+pins. The control checker also binds the fixed command, requested source hashes,
+retained raw log, successful process result, module lines and completion marker.
+A pre-existing checked cache for a requested control source rejects the gate.
+Missing or inconsistent records stop the driver before subsequent proof passes.
+The legacy `<name>-controls.log` and source manifest remain available; detailed
+recorder output, including unsuccessful invocations, is also retained.
+
+Each checked control has a `controls/<name>.json` record bound to its invocation
+and reference pass. Run `python3 scripts/validation/check_fstar_controls.py
+--out-dir <evidence> --verify-records` to reconstruct both controls without the
+original source or executable files. Earlier outputs without these records
+cannot satisfy this new control contract; preserve them with their original
+scope instead of adding attestations after execution.
+
+The controls remain outside module admission and the assumption graph. Their
+successful checks are neither extra admitted proof passes nor SMT counterexample
+proofs. Record consistency does not authenticate a wholly rewritten artifact,
+prove verifier/solver soundness, or extend the recorder's endpoint observations
+to transient replacement, interpreters or transitive tools.
 
 ## Why exit status and result lines are not enough
 

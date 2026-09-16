@@ -25,7 +25,9 @@ boolean by equality. `TestAuthCodeRedisFlag` requires rejection of reversed,
 spelled-out, empty and extra-byte candidates against that exact relation.
 The model is selected by the normal five-pass verification lane. The negative
 fixture is a separate required gate without detailed-error expansion; its log
-and source hashes are retained, but it is not an admitted proof pass or an SMT
+and source hashes are retained along with recorded verifier/solver identities
+checked against proof pass 1. The [control record contract](../fstar/module-admission.md#expected-rejection-controls)
+supports replay without the original sources or tools. It is not an admitted proof pass or an SMT
 counterexample proof. The model's classification is `simplified`: it specifies
 this representation, not a Redis implementation. The test fixture lives under
 `tests/fstar/property`, outside the `fstar/` model-fidelity catalog.

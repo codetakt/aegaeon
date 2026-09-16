@@ -21,12 +21,12 @@ SELECT
   op.enforce_refresh_sender_binding,
   op.allowed_grant_types,
   op.token_endpoint_auth_methods_allowed,
-  to_char(op.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS expires_at,
+  to_char(op.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS expires_at,
   op.status::text AS status,
-  to_char(op.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at_cursor,
+  to_char(op.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
   op.id::text AS id_cursor,
-  to_char(op.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
-  to_char(op.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS updated_at
+  to_char(op.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
+  to_char(op.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at
 FROM aegaeon.oauth_profiles op
 JOIN aegaeon.environments e ON e.id = op.environment_id
 JOIN aegaeon.tenants t ON t.id = e.tenant_id

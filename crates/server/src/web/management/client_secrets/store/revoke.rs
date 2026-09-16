@@ -23,8 +23,8 @@ RETURNING
   cs.client_id,
   cs.status::text AS status,
   cs.active_slot,
-  to_char(cs.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
-  to_char(cs.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS expires_at
+  to_char(cs.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
+  to_char(cs.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS expires_at
         "#;
 
 pub(in crate::web::management) const REVOKE_ALL_CLIENT_SECRETS_ROWS_SQL: &str = r"

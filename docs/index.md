@@ -35,7 +35,7 @@ Audience: contributors, maintainers
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-09-15 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -280,7 +280,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/assumption-graph.md` | verification | F\* Effective-Assumption Graph | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
-| `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-14 | Verification | verification reviewers, contributors |
+| `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/store-entries-vc-resolution.md` | verification | Resolving `store_entries_into_buffer_aux` VC Failures | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/troubleshooting.md` | verification | F* / KaRaMeL Troubleshooting (Proof / Extraction Hygiene) | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/verification-requirements.md` | verification | F* Verification Requirements | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
@@ -290,7 +290,7 @@ Audience: contributors, maintainers
 | `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/authorization-revision-bounds.md` | verification | Application authorization revision bounds | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
-| `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-09 | Verification | verification reviewers, maintainers |
+| `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/hashmap-ice-repro.md` | verification | Kani HashMap ICE Reproducer | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/kani-nixos-fix/README.md` | index | Kani NixOS Fix Details | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
 | `docs/verification/kani/kani-nixos-fix/alternatives-and-technical-details.md` | verification | Kani NixOS Alternatives And Technical Details | historical record | 2026-09-11 | Verification | verification contributors, maintainers |
