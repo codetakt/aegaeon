@@ -219,6 +219,46 @@ class SbomGenerationTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), record["sha256"])
         self.assertEqual(path, (self.output / "aegaeon-sbom-latest.json").resolve())
 
+    def test_missing_result_parent_does_not_publish_any_pointer(self):
+        record = Path(self.temp.name) / "missing" / "result.json"
+        result = self.run_generator(SBOM_RESULT_FILE=str(record))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SBOM generation failed:", result.stderr)
+        self.assertFalse(record.exists())
+        self.assertEqual(list(self.output.glob("*-latest.*")), [])
+        # Inventory generation finished; retain it even though delivery failed.
+        inventories = list(self.output.glob("sbom-*/aegaeon-sbom.json"))
+        self.assertEqual(len(inventories), 1)
+        self.assertEqual(json.loads(inventories[0].read_text())["bomFormat"], "CycloneDX")
+
+    def test_failed_result_replacement_preserves_all_previous_pointers(self):
+        self.assertEqual(self.run_generator().returncode, 0)
+        before = {p.name: p.readlink() for p in self.output.glob("*-latest.*")}
+        self.assertEqual(len(before), 3)
+        record = Path(self.temp.name) / "result.json"
+        record.mkdir()
+        result = self.run_generator(SBOM_RESULT_FILE=str(record))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SBOM generation failed:", result.stderr)
+        self.assertTrue(record.is_dir())
+        self.assertEqual({p.name: p.readlink() for p in self.output.glob("*-latest.*")}, before)
+        self.assertEqual(len(list(self.output.glob("sbom-*/aegaeon-sbom.json"))), 2)
+
+    def test_result_record_cannot_replace_a_shared_pointer(self):
+        self.assertEqual(self.run_generator().returncode, 0)
+        before = {p.name: p.readlink() for p in self.output.glob("*-latest.*")}
+        alias = Path(self.temp.name) / "output-alias"
+        alias.symlink_to(self.output, target_is_directory=True)
+        for name in before:
+            for directory in (self.output, alias):
+                with self.subTest(name=name, directory=directory):
+                    result = self.run_generator(SBOM_RESULT_FILE=str(directory / name))
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("must not replace a shared latest pointer", result.stderr)
+                    self.assertEqual(
+                        {p.name: p.readlink() for p in self.output.glob("*-latest.*")}, before
+                    )
+
     def test_scan_uses_own_run_when_another_run_changes_shared_pointer(self):
         for relative in (
             "scripts/release/generate_sbom.py",
