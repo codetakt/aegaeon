@@ -86,7 +86,7 @@
 ### `release/`
 
 - `create_release.sh` — Create an annotated version tag and release artefacts
-- `generate_sbom.sh` — SBOM (CycloneDX) + grype scan
+- `generate_sbom.sh` — Generate a Cargo dependency SBOM from a fresh source snapshot
 
 ## Common Commands
 

@@ -162,6 +162,10 @@ known-first-party = ["aegaeon"]
 ]
 # Git-facing CI helpers use explicit argv (never shell evaluation) and CLI errors.
 "scripts/ci/*.py" = ["EM", "TRY003", "S603", "S607", "PLR2004", "PLR0911"]
+# SBOM tools use fixed argv and CLI validation errors, as do the CI helpers.
+"scripts/release/generate_sbom.py" = ["EM", "TRY003", "S603", "S607"]
+# Subprocess fixtures use unittest assertions that also run under Python -O.
+"tests/ci/test_sbom_generation.py" = ["PT009", "S603", "S607"]
 # The review runner uses explicit argv for pinned tools and the digest-checked Nix output.
 "examples/preview-review/review.py" = ["S603", "S607"]
 # This standalone example check uses unittest discovery without a pytest dependency.
