@@ -105,6 +105,34 @@ The release pipeline also ships a SBOM-only helper script:
 ./scripts/release/generate_sbom.sh
 ```
 
+Run it in the pinned `nix develop .#ci` environment. It copies the tracked worktree
+files, including local edits, into a temporary directory and generates the server's
+CycloneDX inventory there. Untracked files and existing generated Cargo SBOMs are
+excluded. Generation must finish successfully without changing `Cargo.lock`; the
+result must identify the server package and version from that snapshot.
+
+`OUTPUT_DIR` defaults to `artifacts/sbom`. Each successful run retains its original
+SBOM, normalized SBOM, input digests, tool version, command, and provenance in a new
+directory. The default `artifacts/sbom/aegaeon-sbom-latest.json` pointer selects
+the last successful run. On failure,
+the helper exits nonzero and leaves that pointer unchanged; callers must check the
+exit status. Failure logs are retained separately. `SBOM_TIMEOUT_SECONDS` defaults
+to 60 and terminates the generator and its descendants on expiry.
+
+Callers can set `SBOM_RESULT_FILE` to receive the completed run's exact artifact
+path and SHA-256 in JSON. The security scanner uses that record and checks its
+digest, so another invocation updating the shared pointer cannot select its SBOM.
+
+`ENABLE_COSIGN_SIGNING=1` requires cosign, successful signing, and nonempty signature
+and certificate outputs before publishing the new pointer. The helper records
+their digests; certificate identity, issuer, and signature verification remain a
+separate release acceptance step. With signing disabled, the output is unsigned.
+
+This is a Cargo dependency inventory with default features for the generator host
+target. It is not an inventory of a Nix runtime closure or evidence of a particular
+release binary, protocol conformance, or an activated assurance claim. Full
+CycloneDX schema validation and artifact-bound acceptance remain separate checks.
+
 ## Release Validation
 
 Before creating a release:
