@@ -105,10 +105,81 @@ The release pipeline also ships a SBOM-only helper script:
 ./scripts/release/generate_sbom.sh
 ```
 
+Run it in the pinned `nix develop .#ci` environment. It copies the tracked worktree
+files, including local edits, into a temporary directory and generates the server's
+CycloneDX inventory there. Untracked files and existing generated Cargo SBOMs are
+excluded. Generation must finish successfully without changing `Cargo.lock`; the
+result must identify the server package and version from that snapshot.
+
+`OUTPUT_DIR` defaults to `artifacts/sbom`. Each successful run retains its original
+SBOM, normalized SBOM, input digests, tool version, command, and provenance in a new
+directory. The default `artifacts/sbom/aegaeon-sbom-latest.json` pointer selects
+the last successful run. On failure,
+the helper exits nonzero and leaves that pointer unchanged; callers must check the
+exit status. Failure logs are retained separately. `SBOM_TIMEOUT_SECONDS` defaults
+to 60 and terminates the generator and its descendants on expiry.
+
+Callers can set `SBOM_RESULT_FILE` to receive the completed run's exact artifact
+path and SHA-256 in JSON. The security scanner uses that record and checks its
+digest, so another invocation updating the shared pointer cannot select its SBOM.
+
+`ENABLE_COSIGN_SIGNING=1` requires cosign, successful signing, and nonempty signature
+and certificate outputs before publishing the new pointer. The helper records
+their digests; certificate identity, issuer, and signature verification remain a
+separate release acceptance step. With signing disabled, the output is unsigned.
+
+This is a Cargo dependency inventory with default features for the generator host
+target. It is not an inventory of a Nix runtime closure or evidence of a particular
+release binary, protocol conformance, or an activated assurance claim. Full
+CycloneDX schema validation and artifact-bound acceptance remain separate checks.
+
 ## Release Validation
 
 Before creating a release:
 1. Run `nix flake check`
 2. Ensure all checks pass
 3. Generate SBOM + scan with `nix run .#security-sbom`
-4. Create release with `./scripts/release/create_release.sh <version>`
+4. Complete the applicable release acceptance and approve the release notes and signing identity.
+5. Create and verify the local signed tag with explicit inputs:
+
+```bash
+./scripts/release/create_release.sh v1.2.3-rc.1 \
+  --commit <full-commit-sha> \
+  --notes-file <release-notes-file> \
+  --signing-key <full-openpgp-fingerprint>
+```
+
+The helper requires Python 3.11 or later, Git and GnuPG. It requires a clean checkout
+(including nonignored untracked files), HEAD equal to the full commit ID, an unused
+v-prefixed SemVer tag and matching committed `package.version` values for the existing
+release cohort: server, client, jose, observability and loadtest. It parses TOML;
+a matching dependency version does not satisfy the package check.
+
+Notes must be nonempty UTF-8 without NUL or an embedded PGP signature block. The
+helper signs the notes, source commit, source tree and SHA-256 of the original note
+bytes. It appends a newline when needed without changing that digest. The supplied
+full fingerprint selects the signing key; append `!` to require that exact signing
+key rather than a signing subkey of the specified primary key. Use a reviewed key
+identity: a cryptographically valid signature alone does not establish release authority.
+
+Successful output is a JSON receipt containing the tag object, commit, tree, notes
+digest and verified signing fingerprint. Signature verification uses the immutable
+tag object and checks its target and message. The helper prepares an unreachable
+signed object with GnuPG and `git mktag`, verifies it, then creates the tag ref with
+`git update-ref --no-deref` only if absent. Symbolic refs cannot redirect creation
+into another namespace. Failure leaves no new tag ref, and concurrent tag
+creation is rejected without replacement. Unreferenced objects may remain in the
+local object database for Git's normal garbage collection. Signing follows Git's
+`gpg.openpgp.program` or `gpg.program` setting, otherwise `gpg`.
+
+This helper creates a local tag. Artifact production, SBOM/closure correspondence,
+CI and assurance acceptance, authorized publication and post-publication verification
+remain separate release steps. There is no default version, unsigned fallback,
+automatic push or generated compliance claim.
+
+The `release-tags` flake check exercises real signatures with disposable keys and
+repositories, plus invalid input and failure controls:
+
+```bash
+nix build .#checks.x86_64-linux.release-tags
+```

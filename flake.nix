@@ -939,16 +939,22 @@
           doCheck = false;
         };
 
+        aegaeonServerDistribution = import ./nix/schema-guarded-launch.nix {
+          inherit pkgs;
+          serverPackage = aegaeon-workspace;
+          atlasSum = ./db/migrations/atlas.sum;
+        };
+
         aegaeonDockerImage = pkgs.dockerTools.buildLayeredImage {
           name = "aegaeon";
           tag = "latest";
           contents = [
-            aegaeon-workspace
+            aegaeonServerDistribution
             pkgs.cacert
           ];
           config = {
             WorkingDir = "/opt/aegaeon";
-            Entrypoint = [ "${aegaeon-workspace}/bin/aegaeon-server" ];
+            Entrypoint = [ "${aegaeonServerDistribution}/bin/aegaeon-server" ];
             Cmd = [
               "--host"
               "0.0.0.0"
@@ -1011,7 +1017,7 @@
             kani'
             ;
           aegaeonWorkspace = aegaeon-workspace;
-          inherit aegaeonDockerImage;
+          inherit aegaeonDockerImage aegaeonServerDistribution;
         };
 
         flakeChecks = import ./nix/flake/checks.nix {

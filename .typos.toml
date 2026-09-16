@@ -1,4 +1,6 @@
 [default.extend-words]
+# GnuPG --with-colons fingerprint record type.
+fpr = "fpr"
 aegaeon = "aegaeon"
 formating = "formating"
 karamel = "karamel"
