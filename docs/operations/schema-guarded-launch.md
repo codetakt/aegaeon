@@ -32,12 +32,20 @@ empty database.
 Before connecting, the launcher requires a `postgres://` or `postgresql://` URL
 with an explicit host and no fragment. Non-loopback destinations require exactly
 one `sslmode=require`, `sslmode=verify-ca`, or `sslmode=verify-full` parameter.
-The check also covers destination overrides in `host`/`hostaddr` parameters and
-`PGHOST`/`PGHOSTADDR`; an override cannot use a loopback URL to permit an insecure
-remote connection. A local Unix socket may be selected with a `host` parameter
-while keeping an explicit `localhost` URL authority. Database service files
-(`service` or `PGSERVICE`) are refused because their destination is outside the
-URL. Supply that connection configuration explicitly. Refusal occurs before any
+The check also covers a destination override in a `host` parameter; a loopback
+URL cannot permit an insecure remote connection. A local Unix socket may be
+selected with a `host` parameter while keeping an explicit `localhost` URL
+authority.
+
+The launcher and server use different PostgreSQL drivers. To keep their selected
+database and schema consistent, the launcher refuses `hostaddr`, service files
+(`service` or `PGSERVICE`), and the environment defaults `PGHOST`, `PGHOSTADDR`,
+`PGPORT`, `PGDATABASE`, `PGUSER` and `PGOPTIONS`. Unset these variables and supply
+the settings explicitly in the URL. Connection options `host`, `port`, `dbname`,
+`user` and `options` must be nonempty and unique. Multiple hosts and database
+paths beginning with `//` are unsupported. Encode query spaces as `%20` and
+literal plus signs as `%2B`; the drivers interpret unescaped `+` differently.
+These restrictions apply to the guarded packages. Refusal occurs before any
 database connection and does not include credentials or the supplied URL.
 The validated strong `sslmode` is passed explicitly to the driver so libpq's
 deprecated `requiressl` option cannot downgrade it.

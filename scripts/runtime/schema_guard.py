@@ -3,7 +3,7 @@
 
 The release's immutable manifest is a trusted packaging input. This checks
 metadata and executable identity; it does not authenticate DB administrators,
-attest physical schema, or permit concurrent incompatible migrations.
+attest physical schema, or prevent concurrent incompatible migrations.
 """
 
 from __future__ import annotations
@@ -150,6 +150,30 @@ def database_url_parts(value: str) -> SplitResult:
     return parsed
 
 
+def validate_connection_identity(
+    parsed: SplitResult, parameters: Sequence[tuple[str, str]], environment: Mapping[str, str]
+) -> None:
+    # libpq and sqlx do not apply all connection defaults in the same order.
+    # For example, libpq retains PGHOSTADDR alongside an explicit URL host,
+    # whereas sqlx replaces its default host with that URL host.
+    defaults = ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS")
+    if any(name in environment for name in defaults):
+        raise RefusedError("connection defaults must be supplied in the explicit database URL")
+    if any(name == "hostaddr" for name, _ in parameters):
+        raise RefusedError("database hostaddr indirection is not supported by the launcher")
+    # sqlx form-decodes query strings; libpq does not translate '+' to a space.
+    if "+" in parsed.query:
+        raise RefusedError("database query values must percent-encode spaces and plus signs")
+    if "," in (parsed.hostname or "") or parsed.path.startswith("//"):
+        raise RefusedError("database URL must select a single explicit destination")
+    for name in ("host", "port", "dbname", "user", "options"):
+        values = [value for key, value in parameters if key == name]
+        if len(values) > 1 or any(not value for value in values):
+            raise RefusedError("database connection options must be nonempty and unique")
+        if name == "host" and any("," in value for value in values):
+            raise RefusedError("database URL must select a single explicit destination")
+
+
 def validate_database_url(
     url: str | None, environment: Mapping[str, str]
 ) -> tuple[str, str | None]:
@@ -178,6 +202,7 @@ def validate_database_url(
     local = all(local_database_host(destination) for destination in destinations)
     if not local and not strong_mode:
         raise RefusedError("non-loopback database URLs require one strong sslmode parameter")
+    validate_connection_identity(parsed, parameters, environment)
     return value, strong_mode
 
 

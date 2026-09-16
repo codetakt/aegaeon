@@ -47,10 +47,10 @@ class PackagedLaunchTest(unittest.TestCase):
                 (self.versions[1],),
             )
 
-    def run_release(self, release, *, accepted, url=None, name="aegaeon-server"):
+    def run_release(self, release, *, accepted, url=None, name="aegaeon-server", environment=None):
         result = subprocess.run(
             [str(release / "bin" / name), "23", "literal argument"],
-            env={**os.environ, "AEGAEON_DATABASE_URL": url or self.url},
+            env={**os.environ, **(environment or {}), "AEGAEON_DATABASE_URL": url or self.url},
             text=True,
             capture_output=True,
             timeout=15,
@@ -108,6 +108,23 @@ class PackagedLaunchTest(unittest.TestCase):
                     self.assertIn(reason, result.stderr)
                     self.assertNotIn("guard_diagnostic_sentinel", result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
+
+    def test_connection_indirection_refused_before_launch(self):
+        for name in ("aegaeon-server", "aegaeon-management-init"):
+            for key in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS"):
+                with self.subTest(name=name, key=key):
+                    result = self.run_release(
+                        self.old,
+                        accepted=False,
+                        name=name,
+                        environment={key: ""},
+                    )
+                    self.assertIn("connection defaults", result.stderr)
+            result = self.run_release(
+                self.old, accepted=False, name=name, url=self.url + "&hostaddr=127.0.0.1"
+            )
+            self.assertIn("hostaddr indirection", result.stderr)
+            self.run_release(self.old, accepted=True, name=name)
 
     def test_missing_table_and_bad_query_shape_are_refused(self):
         with psycopg.connect(self.url, autocommit=True) as db:

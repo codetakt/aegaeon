@@ -297,13 +297,45 @@ class DatabaseUrlTest(unittest.TestCase):
     def test_explicit_strong_mode_allows_destination_overrides(self):
         for url, environment in (
             ("postgresql://localhost/db?host=db.example&sslmode=verify-full", {}),
-            ("postgresql://localhost/db?sslmode=require", {"PGHOSTADDR": "192.0.2.1"}),
+            ("postgresql://localhost/db?port=5433&dbname=other&sslmode=require", {}),
             ("postgresql://db.example/db?sslmode=verify-ca", {"PGSSLMODE": "disable"}),
         ):
             with self.subTest(url=url, environment=environment):
                 checked, mode = guard.validate_database_url(url, environment)
                 self.assertEqual(checked, url)
                 self.assertIn(mode, ("require", "verify-ca", "verify-full"))
+
+    def test_connection_defaults_refused_before_connect(self):
+        for name in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGOPTIONS"):
+            for value in ("", "credential-sentinel"):
+                with self.subTest(name=name, value=value):
+                    self.refused_without_connection(
+                        "postgresql://localhost/db?sslmode=require",
+                        "connection defaults",
+                        {name: value},
+                    )
+
+    def test_ambiguous_connection_options_refused_before_connect(self):
+        for query, reason in (
+            ("hostaddr=127.0.0.1&host=localhost", "hostaddr indirection"),
+            ("host=localhost&hostaddr=127.0.0.1", "hostaddr indirection"),
+            ("host=localhost,127.0.0.1", "single explicit destination"),
+            ("options=-c+search_path=public", "percent-encode"),
+            ("options=-c%20search_path=public&options=-c%20search_path=other", "unique"),
+            ("host=localhost&host=/private/socket", "unique"),
+            ("dbname=first&dbname=second", "unique"),
+            ("port=5432&port=5433", "unique"),
+            ("user=first&user=second", "unique"),
+            ("host=", "nonempty"),
+            ("port=", "nonempty"),
+            ("dbname=", "nonempty"),
+            ("user=", "nonempty"),
+            ("options=", "nonempty"),
+        ):
+            with self.subTest(query=query):
+                self.refused_without_connection(
+                    f"postgresql://localhost/db?sslmode=require&{query}", reason
+                )
 
 
 if __name__ == "__main__":
