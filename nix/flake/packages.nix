@@ -45,7 +45,6 @@ in
 
   default = aegaeonWorkspace;
   server = aegaeonWorkspace;
-  docker-image = aegaeonDockerImage;
   verified-core-wasm = verifiedCoreWasm;
 
   verify-fstar = verifyFstar;
@@ -110,6 +109,7 @@ in
 
 }
 // lib.optionalAttrs isLinux {
+  docker-image = aegaeonDockerImage;
   server-distribution = aegaeonServerDistribution;
   verify-kani = verifyKani;
   inherit verifyKani kani';

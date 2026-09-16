@@ -58,7 +58,7 @@ pkgs.runCommand "schema-guard-check"
     printf "listen_addresses = '%s'\n" "" >> pgdata/postgresql.conf
     trap 'pg_ctl -D pgdata -m immediate -w stop > stop.log' EXIT
     pg_ctl -D pgdata -l postgres.log -o "-k $PWD/socket" -w start
-    export AEGAEON_DATABASE_URL="postgresql:///postgres?host=$PWD/socket&port=5432"
+    export AEGAEON_DATABASE_URL="postgresql://localhost/postgres?host=$PWD/socket&port=5432"
     python ${../tests/ci/schema_guard_pg.py} ${wrap oldSum} ${wrap newSum}
     mkdir -p "$out"
     touch "$out/passed"

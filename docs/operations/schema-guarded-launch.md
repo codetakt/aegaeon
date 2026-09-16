@@ -29,6 +29,19 @@ migration execution remains a separate operator action. Apply migrations before
 running the guarded management initializer; initialization does not migrate an
 empty database.
 
+Before connecting, the launcher requires a `postgres://` or `postgresql://` URL
+with an explicit host and no fragment. Non-loopback destinations require exactly
+one `sslmode=require`, `sslmode=verify-ca`, or `sslmode=verify-full` parameter.
+The check also covers destination overrides in `host`/`hostaddr` parameters and
+`PGHOST`/`PGHOSTADDR`; an override cannot use a loopback URL to permit an insecure
+remote connection. A local Unix socket may be selected with a `host` parameter
+while keeping an explicit `localhost` URL authority. Database service files
+(`service` or `PGSERVICE`) are refused because their destination is outside the
+URL. Supply that connection configuration explicitly. Refusal occurs before any
+database connection and does not include credentials or the supplied URL.
+The validated strong `sslmode` is passed explicitly to the driver so libpq's
+deprecated `requiressl` option cannot downgrade it.
+
 `nix build .#server` retains the underlying development/build package. Existing
 bare executables and historical images do not acquire protection from this
 change. In particular, a historical executable may still accept a newer database
@@ -59,6 +72,12 @@ server preflight, which requires the head and checks all recorded entries but
 does not require every historical row. A database bootstrapped by recording only
 the head revision is not accepted by this launcher. Restore a matching,
 Atlas-managed database; do not fabricate missing metadata to bypass admission.
+
+Packaged migration filenames use a 14-digit revision, an underscore, a nonempty
+description containing only ASCII letters, digits and underscores, and `.sql`.
+This is stricter than the underlying server parser. The `schema-guard` check
+parses the repository's actual `atlas.sum`, so a new filename outside this
+packaging grammar fails validation before release.
 
 ## Upgrade and rollback
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -18,9 +19,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qsl, urlsplit
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+    from urllib.parse import SplitResult
 
 
 class RefusedError(Exception):
@@ -113,17 +116,88 @@ def validate_head(expected: Revision, head: Mapping[str, object]) -> None:
         raise RefusedError("database migration head checksum differs")
 
 
+def local_database_host(host: str) -> bool:
+    if host.lower() == "localhost" or host.startswith("/"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    # Match Rust's IpAddr::is_loopback, including 127/8 but not IPv4-mapped IPv6.
+    return (
+        address.is_loopback
+        if isinstance(address, ipaddress.IPv4Address)
+        else address == ipaddress.IPv6Address("::1")
+    )
+
+
+def database_url_parts(value: str) -> SplitResult:
+    if any(character in value for character in ("\r", "\n", "\t", "\0")):
+        raise RefusedError("invalid PostgreSQL database URL")
+    try:
+        parsed = urlsplit(value)
+        host = parsed.hostname
+        # Accessing the port also checks its syntax and range without connecting.
+        _ = parsed.port
+    except ValueError as error:
+        raise RefusedError("invalid PostgreSQL database URL") from error
+    if parsed.scheme not in ("postgres", "postgresql"):
+        raise RefusedError("database URL must use postgres or postgresql")
+    if not host or not host.strip():
+        raise RefusedError("database URL must include an explicit host")
+    if "#" in value:
+        raise RefusedError("database URL must not include a fragment")
+    return parsed
+
+
+def validate_database_url(
+    url: str | None, environment: Mapping[str, str]
+) -> tuple[str, str | None]:
+    if not url or not url.strip():
+        raise RefusedError("AEGAEON_DATABASE_URL is required")
+    value = url.strip()
+    parsed = database_url_parts(value)
+    host = parsed.hostname or ""
+    parameters = parse_qsl(parsed.query, keep_blank_values=True)
+    options = dict(parameters)
+    # Service files can supply a different destination outside this URL. Do not
+    # start a libpq connection whose transport policy cannot be checked here.
+    if "service" in options or environment.get("PGSERVICE"):
+        raise RefusedError("database service indirection is not supported by the launcher")
+    effective_host = options.get("host", host) or environment.get("PGHOST", "")
+    hostaddr = options.get("hostaddr") or environment.get("PGHOSTADDR", "")
+    destinations = [host, *effective_host.split(",")]
+    if hostaddr:
+        destinations.extend(hostaddr.split(","))
+    modes = [mode.strip().lower() for name, mode in parameters if name.lower() == "sslmode"]
+    strong_mode = (
+        modes[0]
+        if len(modes) == 1 and modes[0] in ("require", "verify-ca", "verify-full")
+        else None
+    )
+    local = all(local_database_host(destination) for destination in destinations)
+    if not local and not strong_mode:
+        raise RefusedError("non-loopback database URLs require one strong sslmode parameter")
+    return value, strong_mode
+
+
 def check_database(url: str | None, revisions: Sequence[Revision]) -> None:
+    url, strong_mode = validate_database_url(url, os.environ)
     # Import only for a real connection: pure admission tests need no driver.
     import psycopg  # noqa: PLC0415 - pure admission checks do not need libpq
     from psycopg import sql  # noqa: PLC0415
     from psycopg.rows import dict_row  # noqa: PLC0415
 
-    if not url:
-        raise RefusedError("AEGAEON_DATABASE_URL is required")
     try:
         with (
-            psycopg.connect(url, connect_timeout=5, row_factory=dict_row) as connection,
+            psycopg.connect(
+                url,
+                connect_timeout=5,
+                row_factory=dict_row,
+                # Bind the checked mode explicitly: libpq's legacy requiressl
+                # option can otherwise replace an earlier sslmode in the URL.
+                **({"sslmode": strong_mode} if strong_mode else {}),
+            ) as connection,
             connection.cursor() as cursor,
         ):
             cursor.execute("SET TRANSACTION READ ONLY")

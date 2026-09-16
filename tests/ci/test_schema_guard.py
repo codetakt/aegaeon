@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
+from unittest.mock import Mock, patch, sentinel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/runtime"))
 import schema_guard as guard
@@ -173,6 +175,135 @@ class SchemaGuardTest(unittest.TestCase):
         alias.symlink_to(self.binary)
         with self.assertRaises(OSError):
             guard.open_executable(dict(self.manifest["binary"], path=str(alias)))
+
+
+class DatabaseUrlTest(unittest.TestCase):
+    def setUp(self):
+        # A driver boundary spy: accepted URLs reach connect; rejected URLs must
+        # not import or call a real driver, even in the lightweight CI shell.
+        class DriverError(Exception):
+            pass
+
+        self.connect = Mock(side_effect=DriverError("private driver diagnostic"))
+        driver = ModuleType("psycopg")
+        driver.connect = self.connect
+        driver.Error = DriverError
+        driver.sql = sentinel.sql
+        rows = ModuleType("psycopg.rows")
+        rows.dict_row = sentinel.dict_row
+        self.enterContext(patch.dict(sys.modules, {"psycopg": driver, "psycopg.rows": rows}))
+        self.enterContext(patch.dict(os.environ, {}, clear=True))
+
+    def refused_without_connection(self, url, reason, environment=None):
+        with (
+            patch.dict(os.environ, environment or {}, clear=True),
+            self.assertRaisesRegex(guard.RefusedError, reason) as failure,
+        ):
+            guard.check_database(url, [])
+        self.connect.assert_not_called()
+        self.assertNotIn("credential-sentinel", str(failure.exception))
+        if url:
+            self.assertNotIn(url, str(failure.exception))
+
+    def test_missing_database_url_refused_before_connect(self):
+        for url in (None, "", " \t\n"):
+            with self.subTest(url=url):
+                self.refused_without_connection(url, "required")
+
+    def test_invalid_url_refused_before_connect(self):
+        for url, reason in (
+            ("host=localhost dbname=postgres password=credential-sentinel", "must use"),
+            ("mysql://user:credential-sentinel@localhost/db", "must use"),
+            ("postgresql:///db?host=localhost", "explicit host"),
+            ("postgresql://user:credential-sentinel@/db", "explicit host"),
+            ("postgresql://localhost/db#credential-sentinel", "fragment"),
+            ("postgresql://localhost/db#", "fragment"),
+            ("postgresql://[::1/db", "invalid"),
+            ("postgresql://localhost:bad/db", "invalid"),
+            ("postgresql://localhost:65536/db", "invalid"),
+            ("postgresql://local\thost/db", "invalid"),
+            ("postgresql://localhost/db?password=credential-sentinel\0", "invalid"),
+        ):
+            with self.subTest(url=url):
+                self.refused_without_connection(url, reason)
+
+    def test_remote_transport_refused_before_connect(self):
+        for host in ("db.example", "192.0.2.1", "[2001:db8::1]", "[::ffff:127.0.0.1]"):
+            for query in (
+                "",
+                "?sslmode=",
+                "?sslmode=disable",
+                "?sslmode=allow",
+                "?sslmode=prefer",
+                "?sslmode=require&sslmode=disable",
+                "?sslmode=require&SSLMODE=verify-full",
+            ):
+                with self.subTest(host=host, query=query):
+                    self.refused_without_connection(
+                        f"postgresql://user:credential-sentinel@{host}/db{query}", "strong sslmode"
+                    )
+
+    def test_local_url_cannot_hide_remote_destination(self):
+        for query, environment in (
+            ("?host=db.example", {}),
+            ("?hostaddr=192.0.2.1", {}),
+            ("?host=localhost,db.example", {}),
+            ("?hostaddr=127.0.0.1,192.0.2.1", {}),
+            ("?host=db.example&sslmode=prefer", {}),
+            ("?host=", {"PGHOST": "db.example"}),
+            ("", {"PGHOSTADDR": "192.0.2.1"}),
+            ("?hostaddr=", {"PGHOSTADDR": "192.0.2.1"}),
+            ("?%68ost=db.example", {}),
+        ):
+            with self.subTest(query=query, environment=environment):
+                self.refused_without_connection(
+                    "postgresql://localhost/db" + query, "strong sslmode", environment
+                )
+
+    def test_service_indirection_refused_before_connect(self):
+        for url, environment in (
+            ("postgresql://localhost/db?service=unrecorded", {}),
+            ("postgresql://localhost/db?%73ervice=unrecorded", {}),
+            ("postgresql://localhost/db", {"PGSERVICE": "unrecorded"}),
+        ):
+            with self.subTest(url=url, environment=environment):
+                self.refused_without_connection(url, "service indirection", environment)
+
+    def test_loopback_and_socket_urls_reach_connect(self):
+        for host in ("localhost", "LOCALHOST", "127.0.0.1", "127.255.255.254", "[::1]"):
+            url = f"postgresql://{host}/db"
+            with self.subTest(url=url):
+                self.assertEqual(guard.validate_database_url(url, {}), (url, None))
+        url = "postgresql://localhost/db?host=/private/socket"
+        with self.assertRaisesRegex(guard.RefusedError, "cannot read Atlas"):
+            guard.check_database(url, [])
+        self.connect.assert_called_once_with(url, connect_timeout=5, row_factory=sentinel.dict_row)
+
+    def test_strong_mode_is_bound_to_driver_call(self):
+        for mode in ("require", "verify-ca", "verify-full"):
+            for suffix in ("", "&requiressl=0"):
+                self.connect.reset_mock()
+                url = f"postgres://db.example/db?sslmode={mode}{suffix}"
+                with (
+                    self.subTest(mode=mode, suffix=suffix),
+                    self.assertRaisesRegex(guard.RefusedError, "cannot read Atlas") as failure,
+                ):
+                    guard.check_database(" " + url + " ", [])
+                self.connect.assert_called_once_with(
+                    url, connect_timeout=5, row_factory=sentinel.dict_row, sslmode=mode
+                )
+                self.assertNotIn("private driver diagnostic", str(failure.exception))
+
+    def test_explicit_strong_mode_allows_destination_overrides(self):
+        for url, environment in (
+            ("postgresql://localhost/db?host=db.example&sslmode=verify-full", {}),
+            ("postgresql://localhost/db?sslmode=require", {"PGHOSTADDR": "192.0.2.1"}),
+            ("postgresql://db.example/db?sslmode=verify-ca", {"PGSSLMODE": "disable"}),
+        ):
+            with self.subTest(url=url, environment=environment):
+                checked, mode = guard.validate_database_url(url, environment)
+                self.assertEqual(checked, url)
+                self.assertIn(mode, ("require", "verify-ca", "verify-full"))
 
 
 if __name__ == "__main__":

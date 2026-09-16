@@ -90,10 +90,24 @@ class PackagedLaunchTest(unittest.TestCase):
         result = self.run_release(
             self.old,
             accepted=False,
-            url="postgresql://guard_diagnostic_sentinel@/missing?host=/missing-socket",
+            url="postgresql://guard_diagnostic_sentinel@localhost/missing?host=/missing-socket",
         )
+        self.assertIn("cannot read Atlas revision metadata", result.stderr)
         self.assertNotIn("guard_diagnostic_sentinel", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_invalid_database_urls_refused_at_policy_boundary(self):
+        for name in ("aegaeon-server", "aegaeon-management-init"):
+            for url, reason in (
+                ("postgresql:///postgres?host=/missing-socket", "explicit host"),
+                ("postgresql://db.example/postgres?sslmode=disable", "strong sslmode"),
+                (self.url + "#guard_diagnostic_sentinel", "fragment"),
+            ):
+                with self.subTest(name=name, reason=reason):
+                    result = self.run_release(self.old, accepted=False, url=url, name=name)
+                    self.assertIn(reason, result.stderr)
+                    self.assertNotIn("guard_diagnostic_sentinel", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
 
     def test_missing_table_and_bad_query_shape_are_refused(self):
         with psycopg.connect(self.url, autocommit=True) as db:
