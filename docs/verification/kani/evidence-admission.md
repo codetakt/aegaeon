@@ -1,6 +1,6 @@
 # Kani Evidence Admission
 
-Last updated: 2026-09-09
+Last updated: 2026-09-15
 
 Status: current implementation baseline
 
@@ -138,6 +138,16 @@ own records through the replay path below. `--scope diagnostic` and
 `KANI-EVIDENCE` JSON line per request, one `KANI-ADMISSION` fault line per fault,
 the bounded log tail of every rejected request, and one `KANI-ADMISSION` summary
 line, so a failed Nix build keeps the reasons in its log.
+
+The snapshot omits local `.pyc`/`.pyo` files under `nix/kani/`: imports of the
+packaging checks generate timestamp-dependent bytecode, while execution uses
+the separately digest-bound installed tool. Python sources and other files in
+that directory remain bound. This exclusion does not extend to selected crates
+or path dependencies, where even an ignored or untracked file can be a compiler
+input. No Git metadata or host-specific ignore configuration is consulted, so
+the same rule applies to exported source trees. Existing `target` directories
+remain excluded. Older evidence remains bound to its original runner; do not
+rewrite a retained snapshot to make it pass a newer recorder.
 
 Reconstruction (`--verify-records <run-dir>`, and the evidential citation check)
 re-derives the run from its raw records under the caller's trust inputs and never

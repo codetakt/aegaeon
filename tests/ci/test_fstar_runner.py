@@ -30,6 +30,7 @@ class FstarRunnerTests(unittest.TestCase):
         for path in (
             "scripts/flake/verify_fstar.sh",
             "scripts/validation/run_fstar_invocation.py",
+            "scripts/validation/check_fstar_controls.py",
             "scripts/validation/admit_fstar_modules.py",
             "scripts/validation/fstar_source_lexing.py",
             "scripts/validation/assumption_graph.py",
@@ -148,6 +149,18 @@ if '--debug' not in sys.argv and any(
     for source in sources:
         print('Verified module: ' + pathlib.Path(source).name.rsplit('.', 1)[0])
     control = pathlib.Path(sources[-1]).name
+    if '--smt' in sys.argv and not os.environ.get('MOCK_CONTROL_NO_SOLVER'):
+        solver = sys.argv[sys.argv.index('--smt') + 1]
+        solver = os.environ.get('MOCK_CONTROL_SOLVER', solver)
+        arguments = os.environ.get('MOCK_CONTROL_SOLVER_ARGUMENTS', '["-smt2", "-in"]')
+        print(f'Creating new z3proc (cmd=[("{solver}", {arguments})], version=["4.13.3"])')
+        if os.environ.get('MOCK_CONTROL_RESTART_VERSION'):
+            version = os.environ['MOCK_CONTROL_RESTART_VERSION']
+            print(f'Creating new z3proc (cmd=[("{solver}", ["-smt2", "-in"])], '
+                  f'version=["{version}"])')
+    if os.environ.get('MOCK_CONTROL_CHANGE_TOOL'):
+        with pathlib.Path(sys.argv[0]).open('a') as changed:
+            changed.write(chr(10) + '# changed verifier after control')
     if os.environ.get('MOCK_CONTROL_NO_COMPLETION') != control:
         print('All verification conditions discharged successfully')
     sys.exit(int(os.environ.get('MOCK_CONTROL_FAIL') == control))
@@ -407,10 +420,138 @@ print('TOTAL TIME 1 ms: ' + ' '.join(sys.argv), flush=True)
         for call, (fixture, prefix) in zip(calls, expected, strict=True):
             assert "--detail_errors" not in call
             assert "--debug" not in call
+            assert "--hint_info" in call
             assert f"../tests/fstar/property/{fixture}" in call
             assert (self.output / f"{prefix}-controls.sha256").is_file()
             assert (self.output / f"{prefix}-controls.log").is_file()
+            directory = self.output / "controls/invocations" / prefix
+            inputs = json.loads((directory / "inputs.json").read_text())
+            invocation = json.loads((directory / "result.json").read_text())
+            reference = json.loads((self.output / "invocations/1/inputs.json").read_text())
+            assert inputs["tool"] == reference["tool"] == invocation["tool_after"]
+            assert inputs["solver"] == reference["solver"]
+            assert invocation["solver_effective"]["observed"] is True
+            record = json.loads((self.output / "controls" / f"{prefix}.json").read_text())
+            assert record["status"] == "checked"
+            assert "not admitted proof evidence" in record["scope"]
+            assert not (directory / "modules.json").exists()
+        assert self.replay_controls().returncode == 0
         self.assert_admission_records()
+
+    def replay_controls(self):
+        return subprocess.run(  # noqa: S603 - fixed checker and private retained records
+            [
+                sys.executable,
+                str(ROOT / "scripts/validation/check_fstar_controls.py"),
+                "--out-dir",
+                str(self.output),
+                "--verify-records",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_control_replay_needs_no_original_sources_or_tools(self):
+        assert self.invoke().returncode == 0
+        shutil.rmtree(self.root / "fstar")
+        shutil.rmtree(self.root / "bin")
+        shutil.rmtree(self.root / "external includes")
+        replay = self.replay_controls()
+        assert replay.returncode == 0, replay.stderr
+
+    def test_control_solver_faults_stop_before_further_proofs(self):
+        self.install_tool("other-z3", "print('unapproved solver')")
+        for number, environment in enumerate(
+            (
+                {"MOCK_CONTROL_NO_SOLVER": "1"},
+                {"MOCK_CONTROL_SOLVER": str(self.bin / "other-z3")},
+                {"MOCK_CONTROL_SOLVER_ARGUMENTS": '["-smt2", "-in", "extra"]'},
+                {"MOCK_CONTROL_RESTART_VERSION": "4.99"},
+            )
+        ):
+            with self.subTest(environment=environment):
+                output = self.root / f"control-solver-{number}"
+                result = self.invoke(OUT_DIR=str(output), **environment)
+                assert result.returncode == 1, result.stderr
+                record = json.loads(
+                    (output / "controls/invocations/redis-flag/result.json").read_text()
+                )
+                assert record["returncode"] == 0
+                assert record["status"] == "failed"
+                assert record["output_sha256"]
+                assert "[FAIL] redis-flag negative-control gate" in result.stderr
+                assert not (output / "admission.json").exists()
+                assert not (output / "invocations/1b").exists()
+
+    def test_control_detects_verifier_mutation_despite_zero_exit(self):
+        result = self.invoke(MOCK_CONTROL_CHANGE_TOOL="1")
+        assert result.returncode == 1, result.stderr
+        record = json.loads(
+            (self.output / "controls/invocations/redis-flag/result.json").read_text()
+        )
+        assert record["returncode"] == 0
+        assert record["status"] == "failed"
+        assert "verifier entrypoint changed" in record["error"]
+        assert not (self.output / "invocations/1b").exists()
+
+    def test_control_checked_cache_is_not_a_fresh_expected_rejection(self):
+        cache = self.root / "tests/fstar/property/TestAuthCodeRedisFlag.fst.checked"
+        cache.write_bytes(b"previously checked fixture")
+        result = self.invoke()
+        assert result.returncode == 1, result.stderr
+        assert "pre-existing checked cache" in result.stderr
+        assert not (self.output / "invocations/1b").exists()
+
+    def test_control_replay_rejects_rebound_tool_identity(self):
+        assert self.invoke().returncode == 0
+        directory = self.output / "controls/invocations/redis-flag"
+        inputs_path = directory / "inputs.json"
+        result_path = directory / "result.json"
+        inputs = json.loads(inputs_path.read_text())
+        record = json.loads(result_path.read_text())
+        inputs["tool"]["sha256"] = "0" * 64
+        record["tool_after"] = inputs["tool"]
+        inputs_path.write_text(json.dumps(inputs))
+        record["inputs_sha256"] = hashlib.sha256(inputs_path.read_bytes()).hexdigest()
+        result_path.write_text(json.dumps(record))
+        replay = self.replay_controls()
+        assert replay.returncode == 1
+        assert "tool differs from proof pass 1" in replay.stderr
+
+    def test_control_replay_rejects_source_or_output_rebinding(self):
+        assert self.invoke().returncode == 0
+        directory = self.output / "controls/invocations/redis-flag"
+        paths = [directory / "inputs.json", directory / "result.json", directory / "output.log"]
+        original = [path.read_bytes() for path in paths]
+        for mutation in ("source", "command", "completion", "certificate"):
+            with self.subTest(mutation=mutation):
+                inputs = json.loads(original[0])
+                result = json.loads(original[1])
+                if mutation == "source":
+                    inputs["modules"][0]["sha256"] = "0" * 64
+                elif mutation == "command":
+                    inputs["argv"].insert(1, "--lax")
+                    inputs["executed_argv"].insert(1, "--lax")
+                    result["argv"] = inputs["argv"]
+                elif mutation == "completion":
+                    paths[2].write_bytes(
+                        original[2] + b"All verification conditions discharged successfully\n"
+                    )
+                    result["output_sha256"] = hashlib.sha256(paths[2].read_bytes()).hexdigest()
+                    (self.output / "redis-flag-controls.log").write_bytes(paths[2].read_bytes())
+                else:
+                    certificate = self.output / "controls/redis-flag.json"
+                    certificate.write_text("{}")
+                paths[0].write_text(json.dumps(inputs))
+                result["inputs_sha256"] = hashlib.sha256(paths[0].read_bytes()).hexdigest()
+                paths[1].write_text(json.dumps(result))
+                replay = self.replay_controls()
+                assert replay.returncode == 1, mutation
+                assert "Traceback" not in replay.stderr
+                for path, data in zip(paths, original, strict=True):
+                    path.write_bytes(data)
+                (self.output / "redis-flag-controls.log").write_bytes(original[2])
 
     def assert_control_failure(self, fixture, prefix, controls_started):
         result = self.invoke(MOCK_CONTROL_FAIL=fixture)

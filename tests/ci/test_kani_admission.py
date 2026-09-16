@@ -1201,6 +1201,73 @@ class WrapperTests(unittest.TestCase):
         gate_path.write_bytes(gate_bytes)
         assert self.replay().returncode == 0
 
+    def test_replay_across_checkouts_ignores_local_tool_bytecode(self) -> None:
+        cache = self.root / "nix/kani/__pycache__/check.cpython-314.pyc"
+        cache.parent.mkdir(parents=True)
+        cache.write_bytes(b"original timestamp and bytecode")
+        source = self.root / "nix/kani/check.py"
+        source.write_text("# packaging check source\n")
+        assert self.invoke().returncode == 0
+        run_dir = max(self.output.glob("run-*"))
+        inputs = json.loads((run_dir / "evaluation.json").read_text())["inputs"]
+        assert "nix/kani/__pycache__/check.cpython-314.pyc" not in inputs
+        assert "nix/kani/check.py" in inputs
+        other = pathlib.Path(self.enterContext(tempfile.TemporaryDirectory()))
+        shutil.copytree(self.root, other, dirs_exist_ok=True)
+        (other / cache.relative_to(self.root)).write_bytes(b"different checkout timestamp")
+        extra = other / "nix/kani/check.pyo"
+        extra.write_bytes(b"another interpreter cache")
+
+        def replay_other() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(  # noqa: S603 - fixed runner, private fixture and records
+                [
+                    sys.executable,
+                    str(RUNNER),
+                    "--root",
+                    str(other),
+                    "--verify-records",
+                    str(run_dir),
+                ],
+                env=self.env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        result = replay_other()
+        assert result.returncode == 0, result.stdout + result.stderr
+        (other / cache.relative_to(self.root)).unlink()
+        extra.unlink()
+        result = replay_other()
+        assert result.returncode == 0, result.stdout + result.stderr
+        (other / "nix/kani/check.py").write_text("# changed packaging source\n")
+        result = replay_other()
+        assert result.returncode != 0
+        assert "source inputs" in result.stdout + result.stderr
+
+    def test_replay_still_binds_ignored_crate_payloads_and_non_bytecode(self) -> None:
+        paths = (
+            "crates/alpha-pkg/src/payload.pyc",
+            "crates/alpha-pkg/src/ignored.rs",
+            "nix/kani/__pycache__/data.json",
+        )
+        (self.root / ".gitignore").write_text("*.pyc\nignored.rs\n__pycache__/\n")
+        for relative in paths:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"original compiler or tool input")
+        assert self.invoke().returncode == 0
+        for relative in paths:
+            with self.subTest(path=relative):
+                path = self.root / relative
+                original = path.read_bytes()
+                path.write_bytes(b"changed input")
+                result = self.replay()
+                assert result.returncode != 0
+                assert "source inputs" in result.stdout + result.stderr
+                path.write_bytes(original)
+        assert self.replay().returncode == 0
+
     def test_replay_binds_sources_schema_and_provenance_records(self) -> None:
         # the caller's source snapshot, schema and every provenance record are
         # part of the evidence; a change or an omission rejects the run.
