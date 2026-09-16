@@ -17,6 +17,11 @@ import uuid
 from pathlib import Path
 
 MAX_TIMEOUT_SECONDS = 3600
+LATEST_FILES = {
+    "rust-sbom-latest.json": "rust-sbom.json",
+    "sbom-report-latest.txt": "sbom-report.txt",
+    "aegaeon-sbom-latest.json": "aegaeon-sbom.json",
+}
 
 
 class GenerationError(Exception):
@@ -240,20 +245,19 @@ def generate(root: Path, output: Path, timeout: int, spec_version: str, *, signi
         prepare_inventory(root, pending, timeout, spec_version, signing=signing)
         completed = output / f"sbom-{run_id}"
         pending.rename(completed)
-        for link, filename in (
-            ("rust-sbom-latest.json", "rust-sbom.json"),
-            ("sbom-report-latest.txt", "sbom-report.txt"),
-            ("aegaeon-sbom-latest.json", "aegaeon-sbom.json"),
-        ):
-            temporary_link = output / f".link-{uuid.uuid4().hex}"
-            temporary_link.symlink_to(f"{completed.name}/{filename}")
-            temporary_link.replace(output / link)
     except BaseException:
         if pending.exists():
             pending.rename(output / f"failed-{run_id}")
         raise
     else:
         return completed
+
+
+def publish_latest(completed: Path) -> None:
+    for link, filename in LATEST_FILES.items():
+        temporary_link = completed.parent / f".link-{uuid.uuid4().hex}"
+        temporary_link.symlink_to(f"{completed.name}/{filename}")
+        temporary_link.replace(completed.parent / link)
 
 
 def main() -> int:
@@ -285,9 +289,19 @@ def main() -> int:
         )
         signing = os.environ.get("ENABLE_COSIGN_SIGNING", "0")
         require(signing in ("0", "1"), "ENABLE_COSIGN_SIGNING must be 0 or 1")
+        result_file = (
+            Path(value).absolute() if (value := os.environ.get("SBOM_RESULT_FILE")) else None
+        )
+        if result_file is not None:
+            require(
+                result_file.parent.resolve() / result_file.name
+                not in {output / name for name in LATEST_FILES},
+                "SBOM_RESULT_FILE must not replace a shared latest pointer",
+            )
         result = generate(root, output, timeout, spec_version, signing=signing == "1")
-        if result_file := os.environ.get("SBOM_RESULT_FILE"):
-            write_result(Path(result_file).absolute(), result)
+        if result_file is not None:
+            write_result(result_file, result)
+        publish_latest(result)
         print(f"SBOM generated: {result / 'aegaeon-sbom.json'}")
     except (
         GenerationError,
