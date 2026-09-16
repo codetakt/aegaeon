@@ -1,12 +1,28 @@
 # Management Plane Configuration Model
 
-Last updated: 2026-07-08
+Last updated: 2026-09-15
 
 Status: current implementation baseline
 
 Owner: Product / Engineering
 
 Audience: implementers, reviewers
+
+## Timestamp representation
+
+OAuth profile `createdAt`, `updatedAt` and present `expiresAt` values, and client
+secret `createdAt` and `expiresAt` values, use RFC 3339 UTC timestamps
+with millisecond precision, such as `2030-01-01T00:00:00.123Z`. The `T` and `Z`
+are literal characters in the value, without surrounding quotation marks.
+For OAuth profiles, an absent optional `expiresAt` field means that no expiry
+is set. Client secrets require an expiry.
+
+OAuth profile page tokens are opaque. Their timestamp component preserves
+PostgreSQL microseconds and pairs the timestamp with the row UUID so that
+pagination does not skip or repeat profiles created within one millisecond.
+Clients should return the supplied page token unchanged. Tokens issued with
+malformed timestamps by older versions must be discarded; restart the list
+without a page token. This correction does not require a database migration.
 
 ## Issuer / domain policy (Phase 1)
 
