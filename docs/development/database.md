@@ -1,6 +1,6 @@
 # Database (PostgreSQL + Atlas + SQLx)
 
-Last updated: 2026-07-07
+Last updated: 2026-09-16
 
 Status: current implementation baseline
 
@@ -73,6 +73,10 @@ update. Do not edit Atlas metadata to make an incompatible binary start.
 Older binaries that only look up their own head can still start against a newer
 database. Updating the current binary does not repair those older executables.
 Deployment controls must prevent starting such binaries on an upgraded database.
+The Linux [guarded distribution](../operations/schema-guarded-launch.md) binds
+the executable to its complete migration inventory before launching it; the
+OCI image uses that entrypoint by default. Historical bare executables require
+separate guarded packaging and validation before use in this deployment path.
 For rollback, restore the matching pre-upgrade database, configuration, encryption
 keys and token/session-store state before starting the matching older binary.
 

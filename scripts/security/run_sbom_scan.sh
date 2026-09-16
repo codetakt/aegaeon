@@ -8,6 +8,7 @@ FAIL="[FAIL]"
 OUTPUT_DIR=${OUTPUT_DIR:-artifacts/sbom}
 GRYPE_FAIL_ON=${GRYPE_FAIL_ON:-medium}
 GRYPE_EXTRA_ARGS=${GRYPE_EXTRA_ARGS:-}
+read -r -a grype_extra_args <<<"$GRYPE_EXTRA_ARGS"
 TRIVY_SEVERITY=${TRIVY_SEVERITY:-CRITICAL,HIGH}
 TRIVY_EXIT_CODE=${TRIVY_EXIT_CODE:-1}
 RUN_TRIVY=${RUN_TRIVY:-auto}
@@ -15,9 +16,24 @@ RUN_TRIVY=${RUN_TRIVY:-auto}
 mkdir -p "$OUTPUT_DIR"
 
 echo "$INFO Generating SBOM artifacts under $OUTPUT_DIR"
-OUTPUT_DIR="$OUTPUT_DIR" bash scripts/release/generate_sbom.sh
+SBOM_RESULT_FILE=$(mktemp "$OUTPUT_DIR/.sbom-result.XXXXXXXX.json")
+trap 'rm -f -- "$SBOM_RESULT_FILE"' EXIT
+OUTPUT_DIR="$OUTPUT_DIR" SBOM_RESULT_FILE="$SBOM_RESULT_FILE" bash scripts/release/generate_sbom.sh
 
-SBOM_FILE="$OUTPUT_DIR/aegaeon-sbom-latest.json"
+SBOM_FILE=$(
+	python3 - "$SBOM_RESULT_FILE" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+artifact = pathlib.Path(record["sbom"])
+if hashlib.sha256(artifact.read_bytes()).hexdigest() != record["sha256"]:
+    sys.exit("SBOM result digest mismatch")
+print(artifact)
+PY
+)
 if [[ ! -f $SBOM_FILE ]]; then
 	echo "$FAIL Unable to locate SBOM at $SBOM_FILE"
 	exit 1
@@ -38,7 +54,7 @@ if command -v grype >/dev/null 2>&1; then
 	GRYPE_REPORT="$OUTPUT_DIR/grype-report-$RUN_ID.json"
 	echo "$INFO Running grype scan (fail-on=$GRYPE_FAIL_ON, output=$GRYPE_REPORT)"
 	set +e
-	grype sbom:"$SBOM_FILE" --fail-on "$GRYPE_FAIL_ON" -o json $GRYPE_EXTRA_ARGS >"$GRYPE_REPORT"
+	grype sbom:"$SBOM_FILE" --fail-on "$GRYPE_FAIL_ON" -o json "${grype_extra_args[@]}" >"$GRYPE_REPORT"
 	grype_status=$?
 	set -e
 	ln -sf "$(basename "$GRYPE_REPORT")" "$OUTPUT_DIR/grype-report-latest.json"
