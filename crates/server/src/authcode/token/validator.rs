@@ -130,10 +130,14 @@ impl TokenValidator {
                 ))
             })?;
         if access.client_credentials_digest.is_some()
-            || meta.as_ref().is_some_and(|meta| meta.client_credentials_grant.is_some())
+            || meta
+                .as_ref()
+                .is_some_and(|meta| meta.client_credentials_grant.is_some())
         {
             let Some(meta) = meta.as_ref() else {
-                return Err(BearerTokenValidationError::invalid("client-credentials authority missing"));
+                return Err(BearerTokenValidationError::invalid(
+                    "client-credentials authority missing",
+                ));
             };
             crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
                 .map_err(BearerTokenValidationError::invalid)?;
@@ -217,10 +221,14 @@ impl TokenValidator {
                 ))
             })?;
         if access.client_credentials_digest.is_some()
-            || meta.as_ref().is_some_and(|meta| meta.client_credentials_grant.is_some())
+            || meta
+                .as_ref()
+                .is_some_and(|meta| meta.client_credentials_grant.is_some())
         {
             let Some(meta) = meta.as_ref() else {
-                return Err(BearerTokenValidationError::invalid("client-credentials authority missing"));
+                return Err(BearerTokenValidationError::invalid(
+                    "client-credentials authority missing",
+                ));
             };
             crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
                 .map_err(BearerTokenValidationError::invalid)?;
@@ -345,14 +353,16 @@ impl TokenValidator {
         }
         access_token_introspection_exp(&access_token).map_or_else(
             || json!({ "active": false }),
-            |exp| json!({
-                "active": true,
-                "scope": access_token.scope,
-                "client_id": access_token.client_id,
-                "username": access_token.user_id,
-                "token_type": "Bearer",
-                "exp": exp,
-            }),
+            |exp| {
+                json!({
+                    "active": true,
+                    "scope": access_token.scope,
+                    "client_id": access_token.client_id,
+                    "username": access_token.user_id,
+                    "token_type": "Bearer",
+                    "exp": exp,
+                })
+            },
         )
     }
 }
