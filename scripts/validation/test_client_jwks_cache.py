@@ -18,6 +18,18 @@ import time
 from pathlib import Path
 
 
+def libtest_selection(binary: str, test_filter: str) -> list[str]:
+    """Use the same selection for the nonempty check and fixture execution."""
+    return [
+        binary,
+        test_filter,
+        "--include-ignored",
+        "--skip",
+        # This module requires the separate fingerprint runner's backend context.
+        "client_registry::jwks_runtime_state::redis_kid::",
+    ]
+
+
 def inside_namespace(
     binary: str,
     test_filter: str,
@@ -95,7 +107,7 @@ def inside_namespace(
                     stdout=subprocess.DEVNULL,
                 )
                 return subprocess.run(
-                    [binary, test_filter, "--include-ignored", "--test-threads=1"],
+                    [*libtest_selection(binary, test_filter), "--test-threads=1"],
                     env=env,
                     check=False,
                 ).returncode
@@ -173,7 +185,9 @@ def main() -> int:
         return build.returncode
     if executable is None:
         raise RuntimeError("Cargo did not report the server test executable")
-    listing = subprocess.check_output([executable, args.filter, "--list"], text=True)
+    listing = subprocess.check_output(
+        [*libtest_selection(executable, args.filter), "--list"], text=True
+    )
     if not any(line.endswith(": test") for line in listing.splitlines()):
         raise RuntimeError("test filter selected no tests")
     namespace_command = [tool_paths["unshare"], "--user", "--map-root-user", "--net"]

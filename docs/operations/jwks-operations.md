@@ -170,7 +170,13 @@ a local CONNECT proxy and ephemeral certificates; they never forward traffic to
 the routable literal addresses used to exercise URL policy. Shared-state tests
 start a disposable Redis on a Unix socket with persistence disabled. Temporary
 files and Redis state are removed after the run. The default command includes the
-otherwise ignored HTTPS and Redis tests as well as ordinary JWKS unit tests.
+otherwise ignored HTTPS and Redis tests as well as ordinary JWKS unit tests,
+except for the fingerprint-ledger module. That entire module runs separately via
+[`test_jwks_fingerprint_ledger.py`](../../scripts/validation/test_jwks_fingerprint_ledger.py),
+which supplies its backend profile and isolated fixture context; see
+[fingerprint state](jwks-fingerprint-state.md). The cache runner excludes that
+module even with a custom filter and rejects an empty selection before starting
+a namespace or backend. Listing and execution use the same selection.
 
 CI runs this command as a required step with `--sudo-netns`. Use that option on
 Linux hosts that restrict unprivileged user namespaces. Compilation still runs

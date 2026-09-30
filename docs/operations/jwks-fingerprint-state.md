@@ -85,8 +85,9 @@ workspace test selection does not run the ignored backend fixtures; the command
 above includes them explicitly.
 
 The DB integration CI job runs this dedicated command as a required step. Its
-Compose-backed sweeps exclude only this fixture module, whose tests require a
-separate namespace and disposable backend. On hosts that restrict unprivileged
+Compose-backed sweeps exclude this fixture module alongside the client JWKS
+namespace fixtures. These tests require a separate namespace and disposable
+backend. On hosts that restrict unprivileged
 user namespaces, use `--sudo-netns`: Cargo still builds as the invoking user;
 passwordless sudo creates and checks a network namespace, then drops supplementary
 groups and returns to the original UID/GID before starting fixtures. No host
