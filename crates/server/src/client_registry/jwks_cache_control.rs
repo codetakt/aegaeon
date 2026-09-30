@@ -48,6 +48,9 @@ fn date_field(headers: &HeaderMap, name: HeaderName, context: DateContext) -> Me
 
 impl CacheMetadata {
     pub(super) fn from_headers(headers: &HeaderMap, context: DateContext) -> Self {
+        // RFC 9111 section 5.1 uses the first list member, even for singleton
+        // Age. Repeated lines combine in order (RFC 9110 section 5.2). An
+        // invalid first member never grants freshness under this policy.
         let age = match headers.get_all(AGE).iter().next() {
             None => Metadata::Absent,
             Some(value) => value
@@ -100,7 +103,7 @@ impl CacheMetadata {
 
     fn date_nanos(&self, timing: ResponseTiming) -> Option<i128> {
         match &self.date {
-            Metadata::Absent => timing.receipt_utc,
+            Metadata::Absent => timing.date_context.unix_nanos(),
             Metadata::Valid(date) => date.unix_nanos(),
             _ => None,
         }
@@ -133,7 +136,7 @@ impl CacheMetadata {
     pub(super) fn freshness(&self, timing: ResponseTiming, default_ttl: u64) -> Freshness {
         let date = self.date_nanos(timing);
         let initial_age = (|| {
-            let receipt_utc = timing.receipt_utc?;
+            let receipt_utc = timing.date_context.unix_nanos()?;
             let apparent_age = positive_difference(receipt_utc, date?)?;
             let delay = timing
                 .receipt
@@ -171,7 +174,8 @@ fn saturated_age(a: u128, b: u128) -> u128 {
 pub(super) struct ResponseTiming {
     pub(super) request: Instant,
     pub(super) receipt: Instant,
-    pub(super) receipt_utc: Option<i128>,
+    // One receipt sample supplies both HTTP-date interpretation and age.
+    pub(super) date_context: DateContext,
 }
 
 impl ResponseTiming {
@@ -180,7 +184,7 @@ impl ResponseTiming {
         Self {
             request,
             receipt,
-            receipt_utc: DateContext::capture().unix_nanos(),
+            date_context: DateContext::capture(),
         }
     }
 }

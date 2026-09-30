@@ -5,7 +5,6 @@ use super::jwks_runtime_state::JwksRuntimeState;
 use super::jwks_types::FetchedJwks;
 use super::jwks_url::validate_jwks_fetch_url;
 use super::jwks_validation::validate_fetched_jwks;
-use super::jwks_validators::DateContext;
 use super::{metrics, sha256_hex, JwksRuntimePolicy};
 use tracing::warn;
 
@@ -60,7 +59,6 @@ pub(super) fn refresh_jwks_with_state(
         return None;
     };
 
-    let date_context = DateContext::capture();
     let captured = match state.inner.cache.lock() {
         Ok(mut cache) => cache.capture(uri, std::time::Instant::now()),
         Err(error) => {
@@ -113,7 +111,6 @@ pub(super) fn refresh_jwks_with_state(
         client,
         candidate,
         captured_guard,
-        date_context,
         original_url,
         original_target,
         max_body: policy.max_body_bytes,

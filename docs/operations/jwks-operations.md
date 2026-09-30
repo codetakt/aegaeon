@@ -94,12 +94,19 @@ Monitoring:
   `s-maxage` supplies the application lifetime, further capped by `max-age` when
   both occur. Otherwise use `max-age`, then `Expires`, then the configured default
   TTL only when no explicit lifetime is present. Lifetime is capped at 86,400s.
+- Reads the first `Age` member across comma-separated values and repeated field
+  lines, as recommended by RFC 9111 section 5.1. An invalid first member makes
+  freshness unavailable; later valid members do not replace it.
 - Accounts for Date, Age, the actual response delay and time spent reading and
   admitting the body. Reuse requires age strictly less than lifetime and a live,
   matching local security guard. Equality is stale, including for the default
   TTL. Missing Date is synthesized at receipt; invalid or unavailable clock
   arithmetic never grants a fresh default. Valid leap-second dates that cannot
   be projected into this arithmetic require validation on subsequent use.
+  Each response captures one wall-clock sample at receipt for age calculation
+  and the RFC 850 two-digit-year interpretation of Date, Expires, and
+  Last-Modified. Redirects, retries, and `304` validation use their own response
+  receipt; time spent waiting or reading the body cannot move that reference.
 - Treats `no-cache` as requiring validation on every later use. A strictly
   identifying `304` re-admits the owned keys against local and shared fingerprint
   state and updates policy/age. Present policy groups replace their predecessors;
@@ -140,7 +147,9 @@ The parser follows the field grammar and age calculation in
 [RFC 9111 sections 4 and 5](https://www.rfc-editor.org/rfc/rfc9111.html#section-4),
 with the stricter application retention policy described above. Validator and
 HTTP-date handling use
-[RFC 9110 sections 8.8 and 13](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8).
+[RFC 9110 sections 8.8 and 13](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.8),
+with the rolling 50-year rule in
+[section 5.6.7](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.7).
 
 Run the client JWKS tests from the repository root on Linux:
 

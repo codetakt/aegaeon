@@ -2,7 +2,7 @@ use super::super::jwks_cache_control::CacheMetadata;
 use super::super::jwks_circuit::circuit_on_failure_with_state;
 use super::super::jwks_runtime_state::JwksRuntimeState;
 use super::super::jwks_types::{CacheEntry, KidGuard};
-use super::super::jwks_validators::{DateContext, JwksValidators};
+use super::super::jwks_validators::JwksValidators;
 use super::super::{maybe_log_event, metrics, JwksRuntimePolicy};
 use super::cache_update::{record_successful_fetch_with_state, SuccessfulJwksFetch};
 use super::failure::record_jwks_refresh_internal_failure_with_state;
@@ -23,7 +23,6 @@ pub(super) struct RefreshLoop<'a> {
     pub(super) client: reqwest::blocking::Client,
     pub(super) candidate: Option<CacheEntry>,
     pub(super) captured_guard: Option<Arc<KidGuard>>,
-    pub(super) date_context: DateContext,
     pub(super) original_url: url::Url,
     pub(super) original_target: String,
     pub(super) max_body: usize,
@@ -68,8 +67,7 @@ impl RefreshLoop<'_> {
             };
             let status = bound.response.status();
             if conditional.is_some() && status == reqwest::StatusCode::NOT_MODIFIED {
-                let metadata =
-                    JwksValidators::from_headers(bound.response.headers(), self.date_context);
+                let metadata = bound.validators();
                 if self
                     .candidate
                     .as_ref()
@@ -143,7 +141,7 @@ impl RefreshLoop<'_> {
         )?;
         let metadata = entry
             .metadata
-            .freshen(bound.response.headers(), self.date_context);
+            .freshen(bound.response.headers(), bound.timing.date_context);
         record_successful_fetch_with_state(SuccessfulJwksFetch {
             state: self.state,
             policy: self.policy,
@@ -168,6 +166,7 @@ impl RefreshLoop<'_> {
         status: reqwest::StatusCode,
     ) -> Option<JwksRefreshOutcome> {
         let headers = bound.response.headers().clone();
+        let validators = bound.validators();
         let bytes = match crate::outbound_http::read_blocking_response_body_limited(
             bound.response,
             self.max_body,
@@ -187,14 +186,13 @@ impl RefreshLoop<'_> {
             self.start,
             self.captured_guard.as_deref(),
         )?;
-        let validators = JwksValidators::from_headers(&headers, self.date_context);
         record_successful_fetch_with_state(SuccessfulJwksFetch {
             state: self.state,
             policy: self.policy,
             uri: self.uri,
             uri_hash: self.uri_hash,
             start: self.start,
-            metadata: CacheMetadata::from_headers(&headers, self.date_context),
+            metadata: CacheMetadata::from_headers(&headers, bound.timing.date_context),
             timing: bound.timing,
             eligible_200: status == reqwest::StatusCode::OK && bound.follows == 0,
             revalidated: false,
@@ -216,3 +214,6 @@ impl RefreshLoop<'_> {
         false
     }
 }
+
+#[cfg(test)]
+mod tests;

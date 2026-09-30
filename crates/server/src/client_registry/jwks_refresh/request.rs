@@ -16,6 +16,15 @@ pub(super) struct BoundResponse {
     pub(super) follows: usize,
 }
 
+impl BoundResponse {
+    pub(super) fn validators(&self) -> super::super::jwks_validators::JwksValidators {
+        super::super::jwks_validators::JwksValidators::from_headers(
+            self.response.headers(),
+            self.timing.date_context,
+        )
+    }
+}
+
 pub(super) fn target_identity(url: &Url) -> Option<String> {
     let mut transmitted = url.clone();
     transmitted.set_fragment(None);

@@ -52,8 +52,8 @@ impl DateContext {
             .ok_or(DateError::ClockOutOfRange)?;
         let (month, day, hour, minute, second) = fields;
         let proposed = (year, month, day, hour, minute, second, 0);
-        // This is an ordered calendar boundary, including a possible February29
-        // in a nonleap boundary year; it is deliberately not constructed as Date.
+        // This is an ordered calendar boundary, including a possible February 29
+        // in a non-leap boundary year; it is deliberately not constructed as Date.
         let boundary = (
             boundary_year,
             now.month() as u8,

@@ -2,7 +2,10 @@ use super::*;
 use std::time::UNIX_EPOCH;
 
 const DATE_1994: &str = "Sun, 06 Nov 1994 08:49:37 GMT";
-const UTC_1994: i128 = 784_111_777_000_000_000;
+const UTC_1994: u64 = 784_111_777;
+fn context(seconds: u64) -> DateContext {
+    DateContext::from_system_time(UNIX_EPOCH + Duration::from_secs(seconds))
+}
 fn headers(fields: &[(&str, &[u8])]) -> HeaderMap {
     let mut h = HeaderMap::new();
     for (name, value) in fields {
@@ -24,7 +27,7 @@ fn timing() -> ResponseTiming {
     ResponseTiming {
         request: now,
         receipt: now,
-        receipt_utc: Some(UTC_1994),
+        date_context: context(UTC_1994),
     }
 }
 fn seconds(n: u64) -> Option<u128> {
@@ -168,7 +171,7 @@ fn restrictions_qualified_fields_and_application_precedence() {
 fn corrected_age_includes_final_response_and_residence_delay() {
     let mut time = timing();
     time.request = time.receipt - Duration::from_secs(2);
-    time.receipt_utc = Some(UTC_1994 + 10_000_000_000);
+    time.date_context = context(UTC_1994 + 10);
     let m = metadata(&[
         ("Cache-Control", b"max-age=20"),
         ("Date", DATE_1994.as_bytes()),
@@ -184,7 +187,7 @@ fn corrected_age_includes_final_response_and_residence_delay() {
         f.remaining(time.receipt + Duration::from_secs(3)),
         Some(Duration::from_secs(7))
     );
-    time.receipt_utc = Some(UTC_1994);
+    time.date_context = context(UTC_1994);
     let f = m.freshness(time, 300);
     assert_eq!(f.initial_age, seconds(7));
     assert!(!f.reusable(time.receipt + Duration::from_secs(13)));
@@ -192,15 +195,26 @@ fn corrected_age_includes_final_response_and_residence_delay() {
 
 #[test]
 fn age_uses_first_member_of_first_line_without_valid_value_search() {
-    for (age, expected) in [
-        (b"5, 99".as_slice(), Some(5)),
-        (b"bad, 0", None),
-        (b",0", None),
-        (b" 5\t", Some(5)),
+    for (lines, expected) in [
+        (vec!["5"], Some(5)),
+        (vec!["5, 99"], Some(5)),
+        (vec!["5", "99"], Some(5)),
+        (vec!["5, 99", "0"], Some(5)),
+        (vec![" 5\t, bad", "invalid"], Some(5)),
+        (vec!["bad, 0"], None),
+        (vec![",0"], None),
+        (vec!["bad", "0"], None),
+        (vec!["", "0"], None),
     ] {
-        let m = metadata(&[("Age", age), ("Age", b"0")]);
-        let f = m.freshness(timing(), 300);
-        assert_eq!(f.initial_age, expected.and_then(seconds));
+        let fields: Vec<_> = lines
+            .iter()
+            .map(|value| ("Age", value.as_bytes()))
+            .collect();
+        let m = metadata(&fields);
+        let time = timing();
+        let f = m.freshness(time, 300);
+        assert_eq!(f.initial_age, expected.and_then(seconds), "{lines:?}");
+        assert_eq!(f.reusable(time.receipt), expected.is_some(), "{lines:?}");
     }
     assert_eq!(
         metadata(&[]).freshness(timing(), 300).initial_age,
@@ -273,7 +287,7 @@ fn unavailable_clock_and_valid_leap_second_do_not_grant_heuristic() {
         unavailable,
     );
     assert!(matches!(m.date, Metadata::ClockOutOfRange));
-    time.receipt_utc = None;
+    time.date_context = unavailable;
     assert!(metadata(&[]).freshness(time, 300).initial_age.is_none());
     let m = metadata(&[("Date", b"Sun, 06 Nov 1994 08:49:60 GMT")]);
     assert!(matches!(m.date, Metadata::Valid(_)));
@@ -303,7 +317,8 @@ fn response_304_group_inheritance_replacement_and_absolute_expiration() {
         context,
     );
     let mut time = timing();
-    time.receipt_utc = Some(UTC_1994 + 30_000_000_000);
+    time.date_context =
+        DateContext::from_system_time(UNIX_EPOCH + Duration::from_secs(UTC_1994 + 30));
     assert_eq!(replacement.freshness(time, 300).lifetime, seconds(30));
     assert_eq!(
         metadata(&[])

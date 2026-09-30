@@ -104,8 +104,8 @@ mod tests {
     #[test]
     fn delayed_publication_keeps_admission_retention_anchor() {
         // Controlled pure clock operands: shared admission succeeded at/before
-        // the recorded anchor, then the publication path was delayed by600s.
-        // This is not a host clock change or an actual600s supplier execution.
+        // the recorded anchor, then the publication path was delayed by 600s.
+        // This is not a host clock change or an actual 600s supplier execution.
         let now = Instant::now();
         let anchor = now - Duration::from_secs(600);
         for (control, expected_lifetime, retained) in [
@@ -144,7 +144,7 @@ mod tests {
                 timing: ResponseTiming {
                     request: anchor,
                     receipt: anchor,
-                    receipt_utc: Some(0),
+                    date_context: DateContext::from_system_time(std::time::UNIX_EPOCH),
                 },
                 eligible_200: true,
                 revalidated: false,
