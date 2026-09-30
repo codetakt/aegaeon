@@ -102,6 +102,23 @@ impl StepUpStore {
         Self::new_process_local_with_ttl(ttl)
     }
 
+    /// Fail one issue or completion operation before changing the process-local store.
+    ///
+    /// Ordinals start at one and include fixture setup. Clones share the counter;
+    /// consuming and cleaning up challenges do not advance it.
+    #[cfg(test)]
+    pub(crate) fn new_process_local_failing_on_operation_for_tests(
+        operation: usize,
+        error: &str,
+    ) -> Self {
+        Self {
+            backend: StepUpStoreBackend::ProcessLocal(
+                ProcessLocalStepUpStoreBackend::failing_on_operation(operation, error),
+            ),
+            ttl: Duration::from_secs(DEFAULT_STEPUP_CHALLENGE_TTL_SECS),
+        }
+    }
+
     pub fn try_issue_challenge(
         &self,
         client_id: &str,
