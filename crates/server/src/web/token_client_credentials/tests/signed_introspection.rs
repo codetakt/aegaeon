@@ -79,7 +79,8 @@ fn verified_response(state: &AppState, compact: &str) -> TestResult<Value> {
 
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn client_credentials_signed_introspection_binds_resource_and_requester() -> TestResult {
+async fn client_credentials_shared_redis_signed_introspection_binds_resource_and_requester(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL is required")?;

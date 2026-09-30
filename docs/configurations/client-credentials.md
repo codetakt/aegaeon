@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-30
 
-Status: implementation contract
+Status: current implementation baseline
 
 Owner: Identity
 
