@@ -8,7 +8,8 @@ jwe_rc Jose_Jwe_chacha20poly1305_encrypt(jwe_buf key, size_t key_len,
                                          jwe_buf aad, size_t aad_len,
                                          jwe_buf plaintext, size_t pt_len,
                                          jwe_buf ciphertext, jwe_buf tag) {
-  if (key_len != 32 || nonce_len != 12) {
+  if (key_len != 32 || nonce_len != 12 ||
+      aad_len > UINT32_MAX || pt_len > UINT32_MAX) {
     return JWE_ERR_UNSUPPORTED_ALG;
   }
   EverCrypt_Chacha20Poly1305_aead_encrypt(
