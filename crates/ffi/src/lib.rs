@@ -15,6 +15,7 @@ use std::ffi::{c_char, CString};
 use std::ptr::NonNull;
 use std::slice;
 
+mod aead_bounds;
 pub mod dcr;
 pub mod dcr_parser;
 pub mod id_token;
@@ -998,7 +999,10 @@ pub fn verify_ed25519(alg: JwsAlg, key: &[u8], msg: &[u8], sig: &[u8]) -> bool {
 
 /// Encrypt a message using ChaCha20-Poly1305.
 ///
-/// Returns `true` on success.
+/// Returns `true` on success, writing `plaintext.len()` ciphertext bytes and
+/// 16 tag bytes. Any extra output capacity remains untouched. Invalid key/nonce
+/// lengths, short outputs, or AAD/plaintext lengths above the native u32 limit
+/// return `false` before calling either backend or modifying output buffers.
 #[allow(unused_unsafe)]
 #[must_use]
 pub fn encrypt_chacha20poly1305(
@@ -1009,44 +1013,40 @@ pub fn encrypt_chacha20poly1305(
     ciphertext: &mut [u8],
     tag: &mut [u8],
 ) -> bool {
-    let key_buf = KeyBuf::from_slice(key);
-    let nonce_buf = MsgBuf::from_slice(nonce);
-    let aad_buf = MsgBuf::from_slice(aad);
-    let pt_buf = MsgBuf::from_slice(plaintext);
-    let ct_buf = MsgBuf::from_mut_slice(ciphertext);
-    let tag_buf = MsgBuf::from_mut_slice(tag);
-    #[cfg(kani)]
-    {
-        Jose_Jwe_chacha20poly1305_encrypt(
-            key_buf,
-            key.len(),
-            nonce_buf,
-            nonce.len(),
-            aad_buf,
-            aad.len(),
-            pt_buf,
-            plaintext.len(),
-            ct_buf,
-            tag_buf,
-        ) == JweRc::Ok
-    }
-    #[cfg(not(kani))]
-    {
-        unsafe {
-            Jose_Jwe_chacha20poly1305_encrypt(
-                key_buf,
-                key.len(),
-                nonce_buf,
-                nonce.len(),
-                aad_buf,
-                aad.len(),
-                pt_buf,
-                plaintext.len(),
-                ct_buf,
-                tag_buf,
-            ) == JweRc::Ok
-        }
-    }
+    aead_bounds::encrypt(
+        key.len(),
+        nonce.len(),
+        aad.len(),
+        plaintext.len(),
+        ciphertext.len(),
+        tag.len(),
+        || {
+            let key_buf = KeyBuf::from_slice(key);
+            let nonce_buf = MsgBuf::from_slice(nonce);
+            let aad_buf = MsgBuf::from_slice(aad);
+            let pt_buf = MsgBuf::from_slice(plaintext);
+            let ct_buf = MsgBuf::from_mut_slice(ciphertext);
+            let tag_buf = MsgBuf::from_mut_slice(tag);
+            // SAFETY: Rust slices supply valid, disjoint mutable outputs. The
+            // dispatch gate establishes the complete C write extents and
+            // lossless length conversion before any raw buffer is constructed.
+            // The selected backend must honor the raw contract in include/jwe.h.
+            unsafe {
+                Jose_Jwe_chacha20poly1305_encrypt(
+                    key_buf,
+                    key.len(),
+                    nonce_buf,
+                    nonce.len(),
+                    aad_buf,
+                    aad.len(),
+                    pt_buf,
+                    plaintext.len(),
+                    ct_buf,
+                    tag_buf,
+                ) == JweRc::Ok
+            }
+        },
+    )
 }
 
 /// Decrypt and authenticate a message using ChaCha20-Poly1305.
@@ -1691,6 +1691,32 @@ mod tests {
             signing.as_bytes(),
             &sig_vec
         ));
+    }
+
+    #[test]
+    fn chacha20poly1305_rejects_short_outputs_before_compat_writes() {
+        let mut ciphertext = [0xa5; 1];
+        let mut tag = [0x5a; 16];
+        assert!(!encrypt_chacha20poly1305(
+            &[7; 32],
+            &[3; 12],
+            b"aad",
+            b"two",
+            &mut ciphertext,
+            &mut tag,
+        ));
+        assert_eq!(ciphertext, [0xa5; 1]);
+        assert_eq!(tag, [0x5a; 16]);
+        assert!(!encrypt_chacha20poly1305(
+            &[7; 32],
+            &[3; 12],
+            b"aad",
+            b"x",
+            &mut ciphertext,
+            &mut tag[..15],
+        ));
+        assert_eq!(ciphertext, [0xa5; 1]);
+        assert_eq!(tag, [0x5a; 16]);
     }
 
     #[test]
