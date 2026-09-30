@@ -56,11 +56,11 @@ pub(super) async fn authorize(
         &state.cfg.token_exchange, &ctx.client_id, &client.allowed_scopes,
         &ctx.params, ctx.form.scope.as_deref(),
     ).map_err(|error| match error {
-        ClientCredentialsAuthorizationError::InvalidTarget(reason) =>
-            token_error_response(StatusCode::BAD_REQUEST, "invalid_target", Some(reason)),
-        ClientCredentialsAuthorizationError::InvalidScope(reason) =>
-            token_error_response(StatusCode::BAD_REQUEST, "invalid_scope", Some(reason)),
-        ClientCredentialsAuthorizationError::InvalidPolicy(reason) => unavailable(state, reason),
+        ClientCredentialsAuthorizationError::InvalidTarget =>
+            token_error_response(StatusCode::BAD_REQUEST, "invalid_target", Some("client is not authorized for the requested target")),
+        ClientCredentialsAuthorizationError::InvalidScope =>
+            token_error_response(StatusCode::BAD_REQUEST, "invalid_scope", Some("scope exceeds client-credentials authority or defaults are absent")),
+        ClientCredentialsAuthorizationError::InvalidPolicy => unavailable(state, "invalid client-credentials policy"),
     })?;
     let mut ids = selection.introspection_clients.clone();
     ids.push(ctx.client_id.clone());

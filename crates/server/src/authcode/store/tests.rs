@@ -11,3 +11,5 @@ include!("tests/sender_binding.rs");
 include!("tests/revocation_cleanup.rs");
 
 mod exchange_targets;
+
+mod client_credentials;
