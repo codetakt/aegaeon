@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:47678bca-d9de-4172-9cbf-8924116d0235",
+  "serialNumber": "urn:uuid:f335f829-a761-42ca-8cf4-e5c63c73c5a5",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-03-10T10:08:52.666Z",
+    "timestamp": "2026-09-30T01:30:22.816Z",
     "tools": {
       "components": [
         {
@@ -24,7 +24,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "6cb7c55a0ff4384c88b51f002587324953e303ca60f4e9d2ba8bd4df49529539"
+          "content": "7033a3b223ca63ac4d795f700cd9753d2cbf17cffea2ba2409c9e89c1cf91a72"
         }
       ],
       "licenses": [
@@ -34,11 +34,11 @@
           }
         }
       ],
-      "purl": "pkg:generic/aegaeon/verified-core@1.0.0?source_commit=unknown",
+      "purl": "pkg:generic/aegaeon/verified-core@1.0.0?source_commit=cfaee924962566954457b5dd4b73760b547d0c5b",
       "properties": [
         {
           "name": "cdx:verified-core:sri",
-          "value": "sha256-bLfFWg/0OEyItR8AJYcySVPjA8pg9OnSuovU30lSlTk="
+          "value": "sha256-cDOjsiPKY6xNeV9wDNl1PSy/F8/+orokCcnonBz5GnI="
         },
         {
           "name": "cdx:security:formal-verification",
