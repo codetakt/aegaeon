@@ -1,22 +1,49 @@
 use super::*;
 
-async fn resource_request(state: &AppState, path: &str, token: &str) -> TestResult<axum::response::Response> {
-    let app=Router::new()
-        .route("/resource",axum::routing::get(crate::web::resource_endpoint::resource))
-        .route("/oauth/upstream/refresh",post(crate::web::upstream_refresh::upstream_refresh))
-        .route_layer(middleware::from_fn_with_state(state.clone(),crate::web::runtime_authority_guard::runtime_authority_guard_middleware))
-        .layer(Extension(ConnectInfo(SocketAddr::from(([127,0,0,1],12455)))))
+async fn resource_request(
+    state: &AppState,
+    path: &str,
+    token: &str,
+) -> TestResult<axum::response::Response> {
+    let app = Router::new()
+        .route(
+            "/resource",
+            axum::routing::get(crate::web::resource_endpoint::resource),
+        )
+        .route(
+            "/oauth/upstream/refresh",
+            post(crate::web::upstream_refresh::upstream_refresh),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::web::runtime_authority_guard::runtime_authority_guard_middleware,
+        ))
+        .layer(Extension(ConnectInfo(SocketAddr::from((
+            [127, 0, 0, 1],
+            12455,
+        )))))
         .with_state(state.clone());
-    let builder=if path=="/resource" { Request::get(path) } else { Request::post(path) };
-    Ok(app.oneshot(builder.header(header::AUTHORIZATION,format!("Bearer {token}"))
-        .body(Body::empty())?).await?)
+    let builder = if path == "/resource" {
+        Request::get(path)
+    } else {
+        Request::post(path)
+    };
+    Ok(app
+        .oneshot(
+            builder
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())?,
+        )
+        .await?)
 }
 
 #[tokio::test]
-#[ignore="requires private PostgreSQL"]
+#[ignore = "requires private PostgreSQL"]
 async fn client_credentials_online_resource_revocation_and_error_headers() -> TestResult {
-    let pool=test_pg_pool().await?.ok_or("AEGAEON_DATABASE_URL is required")?;
-    let env=setup_test_environment(&pool).await?;
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("AEGAEON_DATABASE_URL is required")?;
+    let env = setup_test_environment(&pool).await?;
     let result=async {
         let state=fixture(&pool,&env,false,false).await?;
         let mut document=policy(false)?;
@@ -59,5 +86,5 @@ async fn client_credentials_online_resource_revocation_and_error_headers() -> Te
         }
         Ok(())
     }.await;
-    finish_test(result,cleanup_test_environment(&pool,&env).await)
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
 }

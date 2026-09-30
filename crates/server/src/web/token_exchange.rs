@@ -84,9 +84,17 @@ pub(super) async fn handle_token_exchange_grant(
             Err(response) => return response,
         };
     if let Some(grant) = subject_meta.client_credentials_grant.as_ref() {
-        if let Err(response) = super::client_credentials_authorization::bind_application_registration(
-            state, grant.caller.registration_id, application_grant.as_ref(), application_guard.as_mut(),
-        ).await { return response; }
+        if let Err(response) =
+            super::client_credentials_authorization::bind_application_registration(
+                state,
+                grant.caller.registration_id,
+                application_grant.as_ref(),
+                application_guard.as_mut(),
+            )
+            .await
+        {
+            return response;
+        }
     }
     let audience = resolved.audience;
     let scope = resolved.scope;
