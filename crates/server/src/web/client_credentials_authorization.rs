@@ -114,7 +114,7 @@ pub(super) async fn authorize(
                 "invalid_scope",
                 Some("scope exceeds client-credentials authority or defaults are absent"),
             ),
-            ClientCredentialsAuthorizationError::InvalidPolicy => {
+            ClientCredentialsAuthorizationError::MalformedPolicy => {
                 unavailable(state, "invalid client-credentials policy")
             }
         })?;
