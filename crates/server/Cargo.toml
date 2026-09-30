@@ -21,7 +21,7 @@ verified-claim = ["ffi/verified-claim", "aegaeon-jose/verified-claim"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [dependencies]
-ffi = { path = "../ffi", version = "0.9.0-beta" }
+ffi = { path = "../ffi", version = "0.9.0-beta", features = ["everparse_idtoken"] }
 aegaeon-pure = { path = "../pure", version = "0.1.0" }
 aegaeon-crypto = { path = "../crypto", version = "0.9.0-beta" }
 http = "1.1"
