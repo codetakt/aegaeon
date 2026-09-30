@@ -637,3 +637,39 @@ async fn client_credentials_authentication_snapshot_rejects_identity_substitutio
     let result = identity_scenario(&pool, &env).await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
+
+
+#[tokio::test]
+#[ignore="requires private PostgreSQL"]
+async fn client_credentials_application_identity_composition_with_one_connection() -> TestResult {
+    let pool=sqlx::postgres::PgPoolOptions::new().max_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect(&std::env::var("AEGAEON_DATABASE_URL")?).await?;
+    let env=setup_test_environment(&pool).await?;
+    let result=async {
+        let mut state=fixture(&pool,&env,false,false).await?;
+        state.application_authority=Some(crate::application_authorization::Authority { projections:pool.clone(), memberships:None });
+        let (id,_)=seed_test_projection(&pool,&env,CALLER,CALLER,json!([TARGET]),json!({"roles":["USER"],"organization_roles":[]})).await?;
+        let (status,body)=request(&state,"/token",CALLER,SECRET,&[("grant_type","client_credentials"),("audience",TARGET)]).await?;
+        assert_eq!(status,StatusCode::OK,"pool1 CC publication: {body}");
+        let token=body["access_token"].as_str().ok_or("token missing")?;
+        let meta=state.tokens.store.try_get_bearer_meta_async(token.to_string()).await?.ok_or("metadata missing")?;
+        let app=meta.application_grant.as_ref().ok_or("application grant missing")?;
+        let cc=meta.client_credentials_grant.clone().ok_or("CC grant missing")?;
+        assert_eq!(cc.caller.registration_id,id);
+        let permit=crate::policy::client_credentials::AuthorizedClientCredentials::new(cc.clone())?;
+        let mut guard=crate::application_authorization::store::lock_current(&pool,env.environment_id,&env.issuer_url,app).await?.ok_or("guard missing")?;
+        crate::web::client_credentials_authorization::bind_application_identity(&state,&permit,Some(app),Some(&mut guard)).await
+            .map_err(|response| format!("identity check returned {}",response.status()))?;
+        let mut wrong=cc;
+        wrong.caller.registration_id=uuid::Uuid::new_v4();
+        let wrong=crate::policy::client_credentials::AuthorizedClientCredentials::new(wrong)?;
+        let denied=crate::web::client_credentials_authorization::bind_application_identity(&state,&wrong,Some(app),Some(&mut guard)).await
+            .expect_err("different CC identity must not acquire the locked projection");
+        assert_eq!(denied.status(),StatusCode::BAD_REQUEST);
+        assert!(crate::web::client_credentials_authorization::bind_application_identity(&state,&permit,Some(app),None).await.is_err());
+        drop(guard);
+        Ok(())
+    }.await;
+    finish_test(result,cleanup_test_environment(&pool,&env).await)
+}

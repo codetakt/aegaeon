@@ -48,7 +48,7 @@ pub(super) async fn handle_token_client_credentials_grant(
         Ok(grant) => grant,
         Err(response) => return response,
     };
-    let _application_guard = match super::application_authorization::require_current(
+    let mut application_guard = match super::application_authorization::require_current(
         state,
         application_grant.as_ref(),
         &ctx.client_id,
@@ -59,6 +59,9 @@ pub(super) async fn handle_token_client_credentials_grant(
         Ok(guard) => guard,
         Err(response) => return response,
     };
+    if let Err(response) = super::client_credentials_authorization::bind_application_identity(
+        state, &permit, application_grant.as_ref(), application_guard.as_mut(),
+    ).await { return response; }
     match state
         .tokens
         .issuer
