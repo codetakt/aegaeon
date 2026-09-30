@@ -192,6 +192,7 @@ async fn pg_admission_configured_throughput_exceeds_previous_default() -> TestRe
             .database
             .authorization_admission =
             crate::config::AuthorizationAdmissionLimits::new(8192, 1000, 200)?;
+        reload_authorization_runtime(&mut state).await?;
         for i in 0..301 {
             let source = if i % 2 == 0 { 1 } else { 2 };
             if authorize_from(&state, source, None).await? != StatusCode::FOUND {
@@ -223,6 +224,7 @@ async fn shared_redis_authorization_source_budget_spans_server_instances() -> Te
         Arc::make_mut(&mut state.cfg)
             .database
             .authorization_admission = crate::config::AuthorizationAdmissionLimits::new(64, 12, 3)?;
+        reload_authorization_runtime(&mut state).await?;
         let namespace = crate::config::RuntimeStateNamespace::for_tests(Uuid::new_v4().to_string());
         let limiter = || {
             crate::device_authz::VerificationRateLimiter::try_from_shared_store_env(

@@ -79,6 +79,32 @@ return no-cache `invalid_request` responses without echoing supplied values.
 Clients that relied on replacement-character decoding must send valid UTF-8;
 no server configuration or database migration is required.
 
+## Authorization configuration snapshots
+
+Each authorization request reads the selected client, its effective OAuth
+profile, active configuration and runtime key facts in one read-only
+`REPEATABLE READ` transaction. An explicit inactive or expired profile remains
+an error; it cannot fall back to the default profile. Expiry checks use the
+transaction's time. The transaction ends before remote JAR key lookup or PAR
+reservation, and later validation, consent processing and error redirects use
+the selected client view for that request. A subsequent request reads fresh
+client and profile data.
+
+If the environment, issuer, configuration or runtime keys no longer match the
+loaded startup configuration, authorization returns no-cache HTTP 503
+`temporarily_unavailable` after query parsing and before JAR/PAR processing.
+Existing runtime restart and readiness behavior still applies. This snapshot
+bounds authorization input selection; it does not lock the database for later
+code issuance or make that issuance atomic with concurrent management changes.
+
+Rust integrations must construct `DatabaseRuntimeConfiguration` with
+`load_database_runtime_configuration`, derive an `AuthorizationRuntime`, and
+use its configuration and OIDC instances with
+`RuntimeAuthorityState::from_authorization_runtime`. The retained loader source
+is private, so external struct literals are no longer supported. Independently
+assembled or replaced configuration instances cannot serve authorization.
+No database migration or new environment setting is required.
+
 ## private_key_jwt and request objects (JAR)
 
 | Variable | Default | Scope | Notes |

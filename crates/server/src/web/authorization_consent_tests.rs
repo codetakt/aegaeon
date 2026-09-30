@@ -5,9 +5,11 @@ mod reauthentication;
 mod repetition;
 mod request_objects;
 mod retention;
+mod snapshot;
 use super::test_support::{
-    cleanup_test_environment, finish_test, sample_registered_client, setup_test_environment,
-    test_app_state, test_pg_pool, TestEnvironment, TestResult,
+    cleanup_test_environment, finish_test, reload_authorization_runtime, sample_registered_client,
+    seed_oidc_configuration, setup_test_environment, test_app_state, test_pg_pool,
+    update_test_policy, TestEnvironment, TestResult,
 };
 use super::{AppState, AuthSessionTimes};
 use axum::{
@@ -31,6 +33,18 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
     let mut client = sample_registered_client(CLIENT);
     client.allowed_scopes = SCOPE.split(' ').map(str::to_string).collect();
     client.allowed_grant_types.push("refresh_token".to_string());
+    let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
+        "consent-test".into(),
+        include_str!("../../tests/fixtures/rsa2048-private.pk8.pem"),
+    )?;
+    client.inline_jwks = Some(
+        crate::client_registry::RegisteredClientJwks::from_value(
+            serde_json::to_value(signing_key.jwks())?,
+            false,
+        )
+        .map_err(std::io::Error::other)?,
+    );
+
     crate::dcr_persistence::create_dynamic_registration(
         pool,
         &env.issuer_host,
@@ -47,14 +61,18 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
     .bind(env.environment_id)
     .execute(pool)
     .await?;
+    let policy = crate::management::types::PolicyDocument {
+        sender_constraint: crate::management::types::PolicySenderConstraint::None,
+        strict_authorize_redirect: false,
+        // RFC 9126 permits a public PKCE client registered with method `none`.
+        require_client_auth_par: false,
+        oidc_enabled: true,
+        oidc_require_nonce: true,
+        id_token_time_to_live_seconds: 300,
+        ..crate::management::types::PolicyDocument::default()
+    };
+    seed_oidc_configuration(pool, env, policy, "consent-test").await?;
     let mut state = test_app_state(pool.clone(), env).await?;
-    Arc::make_mut(&mut state.cfg)
-        .security_policy
-        .sender_constrained = crate::policy::SenderConstraint::None;
-    Arc::make_mut(&mut state.cfg).strict_authorize_redirect = false;
-    // This fixture registers a public PKCE client; RFC 9126 permits PAR
-    // without client credentials when the registered method is `none`.
-    Arc::make_mut(&mut state.cfg).require_client_auth_par = false;
     state
         .protocol
         .par_endpoint
@@ -65,23 +83,12 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
             redirect_uris: client.redirect_uris.clone(),
             allowed_scopes: client.allowed_scopes.clone(),
         });
-    let oidc = crate::oidc::OidcConfig {
-        issuer: env.issuer_url.clone(),
-        id_token_ttl_secs: 300,
-        discovery_enabled: true,
-        userinfo_enabled: true,
-        logout_enabled: false,
-        backchannel_logout_enabled: false,
-        logout_session_ttl_secs: 600,
-        backchannel_logout_timeout_secs: 2,
-        require_nonce: true,
-        signing_key: crate::oidc::OidcSigningKey::from_rsa_pem(
-            "consent-test".to_string(),
-            include_str!("../../tests/fixtures/rsa2048-private.pk8.pem"),
-        )?,
-        request_object_encryption_key: None,
-    };
-    state.oidc.config = Some(Arc::new(oidc.clone()));
+    let oidc = state
+        .oidc
+        .config
+        .as_deref()
+        .ok_or("OIDC config missing")?
+        .clone();
     state.keys.access_token = Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?);
     state.tokens.issuer = Arc::new(
         crate::authcode::TokenIssuer::with_stores(
@@ -295,6 +302,8 @@ async fn changed_policy(state: &AppState, sid: &str, token: &str) -> TestResult 
     let fields = || vec![("transaction", token), ("decision", "approve")];
     let mut client = sample_registered_client(CLIENT);
     client.allowed_scopes = vec!["openid".to_string()];
+    sqlx::query("UPDATE aegaeon.clients SET allowed_scopes=$1 WHERE environment_id=$2 AND client_identifier=$3")
+        .bind(&client.allowed_scopes).bind(state.environment_id).bind(CLIENT).execute(&state.db_pool).await?;
     assert!(state.clients.try_update(client)?);
     let (_, body) = send(
         state,

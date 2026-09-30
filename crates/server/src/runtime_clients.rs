@@ -20,3 +20,5 @@ use snapshot::{RuntimeClientSnapshot, RuntimeClientSnapshotEntry};
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) use repository::load_authorization_client_in_tx;

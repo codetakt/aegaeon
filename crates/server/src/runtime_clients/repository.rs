@@ -190,3 +190,38 @@ async fn load_runtime_authority_revision_for_issuer_host_in_tx(
         row.try_get("active_dcr_bearer_token_fingerprint")?,
     )?)
 }
+
+pub(crate) struct AuthorizationClient {
+    pub(crate) environment_id: uuid::Uuid,
+    pub(crate) configuration_id: uuid::Uuid,
+    pub(crate) requested_profile_id: Option<uuid::Uuid>,
+    pub(crate) client: crate::client_registry::RegisteredClient,
+}
+
+pub(crate) async fn load_authorization_client_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    issuer_host: &str,
+    client_id: &str,
+) -> Result<Option<AuthorizationClient>, RuntimeClientSnapshotError> {
+    let rows = sqlx::query(&queries::authorization_client_for_issuer_host())
+        .bind(issuer_host)
+        .bind(client_id)
+        .fetch_all(&mut **tx)
+        .await?;
+    let row = match rows.as_slice() {
+        [] => return Ok(None),
+        [row] => row,
+        _ => {
+            return Err(RuntimeClientSnapshotError::DuplicateClientIdentifier(
+                client_id.to_owned(),
+            ))
+        }
+    };
+    let entry = runtime_client_entry_from_row(row)?;
+    Ok(Some(AuthorizationClient {
+        environment_id: row.try_get("environment_id")?,
+        configuration_id: row.try_get("configuration_version_id")?,
+        requested_profile_id: row.try_get("oauth_profile_id")?,
+        client: entry.client,
+    }))
+}

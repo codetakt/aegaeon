@@ -1,3 +1,7 @@
+mod authorization;
+pub(crate) use authorization::AuthorizationObservation;
+pub use authorization::AuthorizationRuntime;
+
 mod document;
 mod revision;
 
@@ -37,6 +41,7 @@ LIMIT 2
 
 #[derive(Clone, Debug)]
 pub struct DatabaseRuntimeConfiguration {
+    authorization_source: std::sync::Arc<authorization::AuthorizationSource>,
     pub environment_id: Uuid,
     pub issuer_host: String,
     pub issuer_url: String,
@@ -54,8 +59,8 @@ impl DatabaseRuntimeConfiguration {
     ///
     /// # Errors
     ///
-    /// Returns [`RuntimeFingerprintError`] if a caller constructed this public snapshot with
-    /// non-canonical runtime fingerprints instead of using the database loader.
+    /// Returns [`RuntimeFingerprintError`] if a caller changed the exposed fingerprint
+    /// copies to non-canonical values after loading the database snapshot.
     pub fn authority_revision(&self) -> Result<RuntimeAuthorityRevision, RuntimeFingerprintError> {
         RuntimeAuthorityRevision::try_new(
             self.active_configuration_version_id,
@@ -154,11 +159,23 @@ pub async fn load_database_runtime_configuration(
     }
     let runtime_keys = load_runtime_key_set_for_issuer_host_in_tx(&mut tx, &issuer_host).await?;
     runtime_keys.validate_allowed_signing_algorithms(&state.policy.allowed_signing_algorithms)?;
+    let stable_facts = authorization::load_stable_facts(&mut tx, &issuer_host).await?;
     tx.commit()
         .await
         .map_err(RuntimeConfigurationError::DatabaseQuery)?;
 
+    let authorization_source = std::sync::Arc::new(authorization::AuthorizationSource {
+        environment_id,
+        issuer_host: issuer_host.clone(),
+        issuer_url: issuer_url.clone(),
+        document: configuration_document,
+        revision: revision.clone(),
+        state: state.clone(),
+        keys: runtime_keys.clone(),
+        stable_facts,
+    });
     Ok(DatabaseRuntimeConfiguration {
+        authorization_source,
         environment_id,
         issuer_host,
         issuer_url,

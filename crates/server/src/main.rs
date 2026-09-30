@@ -76,8 +76,8 @@ use oidc_runtime::{
 };
 use protocol_runtime::protocol_runtime_stores_from_shared_env;
 use runtime_config::{
-    hydrate_database_runtime_config, log_runtime_state_boundary, oidc_runtime_from_authority,
-    runtime_issuer_for_authority, validate_runtime_boundaries_for_authority,
+    hydrate_database_runtime_config, log_runtime_state_boundary, runtime_issuer_for_authority,
+    validate_runtime_boundaries_for_authority,
 };
 use runtime_key_managers::runtime_key_managers;
 #[cfg(test)]
@@ -107,6 +107,7 @@ struct BuiltServerRuntime {
 
 struct RuntimeAuthority {
     oidc_runtime: Option<Arc<OidcConfig>>,
+    authorization_runtime: aegaeon_server::runtime_configuration::AuthorizationRuntime,
     oidc_sessions: Option<OidcSessionStore>,
     issuer: String,
 }
@@ -160,8 +161,10 @@ async fn runtime_authority(
     runtime_state_namespace: &RuntimeStateNamespace,
 ) -> Result<RuntimeAuthority> {
     let runtime_issuer = runtime_issuer_for_authority(database_runtime_config);
-    let oidc_runtime =
-        oidc_runtime_from_authority(&runtime_issuer, database_runtime_config).await?;
+    let authorization_runtime = database_runtime_config
+        .derive_authorization_runtime(server_config.clone())
+        .await?;
+    let oidc_runtime = authorization_runtime.oidc();
     validate_runtime_boundaries_for_authority(
         server_config,
         oidc_runtime.is_some(),
@@ -173,14 +176,11 @@ async fn runtime_authority(
         oidc_sessions_from_shared_env(oidc_runtime.as_deref(), runtime_state_namespace)?;
     let issuer = effective_issuer(&runtime_issuer, oidc_runtime.as_deref());
     Ok(RuntimeAuthority {
+        authorization_runtime,
         oidc_runtime,
         oidc_sessions,
         issuer,
     })
-}
-
-fn runtime_issuer_host(database_runtime_config: &DatabaseRuntimeConfiguration) -> Arc<String> {
-    Arc::new(database_runtime_config.issuer_host.clone())
 }
 
 fn validate_explicit_ps256_policy(
@@ -241,6 +241,7 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
     )
     .await?;
     let RuntimeAuthority {
+        authorization_runtime,
         oidc_runtime,
         oidc_sessions,
         issuer,
@@ -248,7 +249,7 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
 
     let (registry, metrics) = register_metrics()?;
     let transport_security = TransportSecurity::new(server_config.transport.clone());
-    let cfg = Arc::new(server_config);
+    let cfg = authorization_runtime.configuration();
 
     let clients = Arc::new(client_registry_for_runtime_authority(
         database_runtime_policy,
@@ -280,11 +281,8 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
         &runtime_state_namespace,
     )?);
 
-    let runtime_authority_revision = database_runtime_config.authority_revision()?;
-    let runtime_authority_state = RuntimeAuthorityState::from_database_revision(
-        runtime_issuer_host(&database_runtime_config),
-        runtime_authority_revision,
-    );
+    let runtime_authority_state =
+        RuntimeAuthorityState::from_authorization_runtime(authorization_runtime);
     let runtime_sync = prepare_runtime_sync_for_authority(
         &db_pool,
         &database_runtime_config,

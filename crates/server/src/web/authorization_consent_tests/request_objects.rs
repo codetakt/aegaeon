@@ -166,10 +166,6 @@ async fn run_signed(mode: &str) -> TestResult {
         if mode == "par-redis" {
             shared_protocol_stores(&mut state)?;
         }
-        let mut client = state.clients.try_get(CLIENT)?.ok_or("client missing")?;
-        client.jwks_pem =
-            Some(include_str!("../../../tests/fixtures/rsa2048-public.pem").to_string());
-        assert!(state.clients.try_update(client)?);
         let jwt = signed_request(&state, mode)?;
         if mode == "legacy-target" {
             return legacy_pushed_target(&state, &sid, &jwt).await;
