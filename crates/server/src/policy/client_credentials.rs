@@ -16,6 +16,7 @@ pub use grant::{
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ClientCredentialsPolicy {
+    #[cfg_attr(feature = "openapi", schema(minimum = 1, maximum = 1))]
     pub version: u32,
     pub resource_servers: Vec<ClientCredentialsResourceServer>,
     pub rules: Vec<ClientCredentialsRule>,

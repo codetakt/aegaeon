@@ -10284,7 +10284,8 @@
           "version": {
             "type": "integer",
             "format": "int32",
-            "minimum": 0
+            "maximum": 1,
+            "minimum": 1
           }
         },
         "additionalProperties": false
