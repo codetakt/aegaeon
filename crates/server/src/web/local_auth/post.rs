@@ -143,6 +143,8 @@ fn complete_stepup_for_local_login(
     new_session_id: &str,
     now: u64,
 ) {
+    // Session identifiers and opaque store errors are not diagnostic fields.
+    // Keep operation messages and request/challenge correlation only.
     let Some(return_to) = submission.return_to.as_deref() else {
         return;
     };
@@ -166,11 +168,9 @@ fn complete_stepup_for_local_login(
         match store.try_complete_for_request(&req.client_id, &old_session_id, &request_id, now) {
             Ok(Some(challenge)) => challenge,
             Ok(None) => return,
-            Err(err) => {
+            Err(_) => {
                 tracing::warn!(
-                    error = %err,
                     client_id = %req.client_id,
-                    session_id = %old_session_id,
                     request_id = %request_id,
                     "step-up challenge completion failed after local login"
                 );
@@ -184,17 +184,14 @@ fn complete_stepup_for_local_login(
             Ok(None) => {
                 tracing::warn!(
                     client_id = %req.client_id,
-                    session_id = %new_session_id,
                     request_id = %request_id,
                     "step-up successor challenge expiry overflowed"
                 );
                 return;
             }
-            Err(err) => {
+            Err(_) => {
                 tracing::warn!(
-                    error = %err,
                     client_id = %req.client_id,
-                    session_id = %new_session_id,
                     request_id = %request_id,
                     "step-up successor challenge issue failed"
                 );
@@ -208,8 +205,6 @@ fn complete_stepup_for_local_login(
             });
             tracing::info!(
                 client_id = %req.client_id,
-                old_session_id = %old_session_id,
-                new_session_id = %new_session_id,
                 challenge_id = %completed.id,
                 successor_challenge_id = %successor.id,
                 event = "stepup_challenge_completed",
@@ -219,14 +214,11 @@ fn complete_stepup_for_local_login(
         }
         Ok(None) => tracing::warn!(
             client_id = %req.client_id,
-            session_id = %new_session_id,
             request_id = %request_id,
             "step-up successor challenge was not available for completion"
         ),
-        Err(err) => tracing::warn!(
-            error = %err,
+        Err(_) => tracing::warn!(
             client_id = %req.client_id,
-            session_id = %new_session_id,
             request_id = %request_id,
             "step-up successor challenge completion failed"
         ),
@@ -364,7 +356,64 @@ pub(in crate::web) async fn local_login_post(
 mod tests {
     use super::*;
     use http::{header, HeaderValue};
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+
+    #[derive(Clone)]
+    struct DiagnosticWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for DiagnosticWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("diagnostic buffer lock")
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn capture_diagnostics(run: impl FnOnce()) -> Vec<serde_json::Value> {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let writer = DiagnosticWriter(Arc::clone(&buffer));
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_target(true)
+            .with_level(true)
+            .with_thread_ids(true)
+            .with_thread_names(true)
+            .json()
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, run);
+        let bytes = buffer.lock().expect("diagnostic buffer lock").clone();
+        let output = String::from_utf8(bytes).expect("diagnostics should be UTF-8");
+        assert!(
+            !output.contains("old-session"),
+            "old session must not be logged"
+        );
+        assert!(
+            !output.contains("new-session"),
+            "new session must not be logged"
+        );
+        output
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("diagnostics should be JSON"))
+            .collect()
+    }
+
+    fn assert_diagnostic_fields(record: &serde_json::Value, expected: &[&str]) {
+        let fields = record["fields"].as_object().expect("diagnostic fields");
+        let mut names: Vec<_> = fields.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        assert_eq!(names, expected);
+    }
 
     fn return_to() -> &'static str {
         "/authorize?response_type=code&client_id=stepup-client&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&scope=openid&state=state&nonce=nonce&acr_values=urn%3Amfa&max_age=0"
@@ -435,13 +484,31 @@ mod tests {
         assert_eq!(challenge.session_id, "old-session");
         let metric_before = completed_metric();
 
-        complete_stepup_for_local_login(
-            &store,
-            &old_session_headers(),
-            &submission(Some(return_to())),
-            "new-session",
-            101,
+        let records = capture_diagnostics(|| {
+            complete_stepup_for_local_login(
+                &store,
+                &old_session_headers(),
+                &submission(Some(return_to())),
+                "new-session",
+                101,
+            );
+        });
+        assert_eq!(records.len(), 1);
+        assert_diagnostic_fields(
+            &records[0],
+            &[
+                "challenge_id",
+                "client_id",
+                "event",
+                "message",
+                "request_id",
+                "successor_challenge_id",
+            ],
         );
+        assert_eq!(records[0]["fields"]["challenge_id"], challenge.id);
+        assert_eq!(records[0]["fields"]["client_id"], req.client_id);
+        assert_eq!(records[0]["fields"]["request_id"], request_id);
+        assert_eq!(records[0]["fields"]["event"], "stepup_challenge_completed");
 
         assert!(store
             .try_consume_completed(&req.client_id, "old-session", &request_id, 101)
@@ -473,6 +540,69 @@ mod tests {
         assert!(!store
             .try_consume_completed(&req.client_id, "new-session", &request_id, 101)
             .expect("missing challenge should remain fail-closed"));
+    }
+
+    #[test]
+    fn local_login_stepup_expiry_warning_omits_sessions() {
+        let store = crate::stepup::StepUpStore::new_process_local_with_ttl_for_tests(
+            Duration::from_secs(60),
+        );
+        let (req, request_id) = request_and_id();
+        store
+            .try_issue_challenge(&req.client_id, "old-session", &request_id, u64::MAX - 60)
+            .expect("old challenge issue should succeed")
+            .expect("old challenge expiry should fit");
+        let records = capture_diagnostics(|| {
+            complete_stepup_for_local_login(
+                &store,
+                &old_session_headers(),
+                &submission(Some(return_to())),
+                "new-session",
+                u64::MAX - 1,
+            );
+        });
+        assert_eq!(records.len(), 1);
+        assert_diagnostic_fields(&records[0], &["client_id", "message", "request_id"]);
+        assert_eq!(records[0]["level"], "WARN");
+        assert_eq!(records[0]["fields"]["client_id"], req.client_id);
+        assert_eq!(records[0]["fields"]["request_id"], request_id);
+        assert_eq!(
+            records[0]["fields"]["message"],
+            "step-up successor challenge expiry overflowed"
+        );
+        assert!(!store
+            .try_consume_completed(&req.client_id, "new-session", &request_id, u64::MAX - 1)
+            .expect("overflow should not create a successor"));
+    }
+
+    #[test]
+    fn local_login_stepup_cookie_warning_contains_only_error_kind() {
+        let store = crate::stepup::StepUpStore::new_process_local_for_tests();
+        let mut duplicate = old_session_headers();
+        duplicate.append(
+            header::COOKIE,
+            HeaderValue::from_static("aegaeon_auth_session=another-old-session"),
+        );
+        let mut invalid = HeaderMap::new();
+        invalid.insert(
+            header::COOKIE,
+            HeaderValue::from_bytes(b"aegaeon_auth_session=old-session\x80")
+                .expect("non-ASCII header should be representable"),
+        );
+        for (headers, kind) in [(duplicate, "Multiple"), (invalid, "InvalidValue")] {
+            let records = capture_diagnostics(|| {
+                complete_stepup_for_local_login(
+                    &store,
+                    &headers,
+                    &submission(Some(return_to())),
+                    "new-session",
+                    101,
+                );
+            });
+            assert_eq!(records.len(), 1);
+            assert_diagnostic_fields(&records[0], &["error", "message"]);
+            assert_eq!(records[0]["fields"]["error"], kind);
+        }
     }
 
     #[test]
