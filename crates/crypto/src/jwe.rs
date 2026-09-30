@@ -4,10 +4,24 @@
 
 use aws_lc_rs::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
 use aws_lc_rs::rsa::{OaepPrivateDecryptingKey, PrivateDecryptingKey, OAEP_SHA1_MGF1SHA1};
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::CryptoError;
 
+// The borrowed key is consumed even when validation returns early. This guard
+// covers this slice, not provider-internal copies or the caller's other copies.
+struct ConsumedCek<'a>(&'a mut [u8]);
+
+impl Drop for ConsumedCek<'_> {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// Unwrap a CEK using RSA-OAEP (SHA-1/MGF1).
+///
+/// The caller owns the returned CEK and its eventual erasure. The intermediate
+/// output allocation is guarded until ownership transfers on success.
 ///
 /// # Errors
 ///
@@ -21,15 +35,25 @@ pub fn rsa_oaep_unwrap(
         .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
     let oaep = OaepPrivateDecryptingKey::new(priv_key)
         .map_err(|_| CryptoError::InvalidKey("invalid RSA private key".into()))?;
-    let mut buffer = vec![0u8; oaep.min_output_size()];
-    oaep.decrypt(&OAEP_SHA1_MGF1SHA1, encrypted_key, &mut buffer, None)
-        .map(|cek| cek.to_vec())
-        .map_err(|_| CryptoError::DecryptionFailed("RSA-OAEP key unwrap failed".into()))
+    let mut buffer = Zeroizing::new(vec![0u8; oaep.min_output_size()]);
+    let cek_len = oaep
+        .decrypt(&OAEP_SHA1_MGF1SHA1, encrypted_key, &mut buffer, None)
+        .map_err(|_| CryptoError::DecryptionFailed("RSA-OAEP key unwrap failed".into()))?
+        .len();
+    // aws-lc-rs returns the initialized output prefix. Erase the unused tail
+    // before truncation, then transfer this allocation instead of copying CEK.
+    buffer[cek_len..].zeroize();
+    buffer.truncate(cek_len);
+    Ok(std::mem::take(&mut *buffer))
 }
 
 /// Decrypt AES-256-GCM ciphertext.
 ///
 /// `cek` must be exactly 32 bytes. `iv` must be 12 bytes. `tag` must be 16 bytes.
+/// The supplied mutable CEK is consumed: its bytes are zeroized on every
+/// ordinary return, including validation and authentication errors. The caller
+/// owns the returned plaintext and its eventual erasure. Provider-internal
+/// objects and other copies of the inputs are outside this buffer contract.
 ///
 /// # Errors
 ///
@@ -42,26 +66,36 @@ pub fn decrypt_a256gcm(
     tag: &[u8],
     aad: &[u8],
 ) -> Result<Vec<u8>, CryptoError> {
-    let unbound = UnboundKey::new(&AES_256_GCM, cek)
+    let cek = ConsumedCek(cek);
+    let unbound = UnboundKey::new(&AES_256_GCM, cek.0)
         .map_err(|_| CryptoError::InvalidKey("invalid CEK length".into()))?;
     let key = LessSafeKey::new(unbound);
     let nonce_bytes: [u8; 12] = iv
         .try_into()
         .map_err(|_| CryptoError::DecryptionFailed("invalid IV length".into()))?;
     let nonce = Nonce::assume_unique_for_key(nonce_bytes);
-    let mut in_out = Vec::with_capacity(ciphertext.len() + tag.len());
+    let capacity = ciphertext
+        .len()
+        .checked_add(tag.len())
+        .ok_or_else(|| CryptoError::DecryptionFailed("ciphertext too long".into()))?;
+    let mut in_out = Zeroizing::new(Vec::with_capacity(capacity));
     in_out.extend_from_slice(ciphertext);
     in_out.extend_from_slice(tag);
-    let result = key.open_in_place(nonce, Aad::from(aad), &mut in_out);
-    cek.fill(0);
-    result
-        .map(|plaintext| plaintext.to_vec())
-        .map_err(|_| CryptoError::DecryptionFailed("AES-256-GCM decryption failed".into()))
+    let plaintext_len = key
+        .open_in_place(nonce, Aad::from(aad), &mut in_out)
+        .map_err(|_| CryptoError::DecryptionFailed("AES-256-GCM decryption failed".into()))?
+        .len();
+    // open_in_place returns the plaintext prefix of this same allocation.
+    in_out[plaintext_len..].zeroize();
+    in_out.truncate(plaintext_len);
+    Ok(std::mem::take(&mut *in_out))
 }
 
 /// Encrypt with AES-256-GCM.
 ///
-/// Used in management API test helpers. `key` must be 32 bytes.
+/// `key` must be 32 bytes. The caller must supply a fresh nonce for each seal
+/// under the same key, including uses in other domains. Borrowed key/plaintext
+/// inputs remain caller-owned; the intermediate output allocation is guarded.
 ///
 /// # Errors
 ///
@@ -77,11 +111,18 @@ pub fn encrypt_a256gcm(
         .map_err(|_| CryptoError::InvalidKey("invalid key length".into()))?;
     let less_safe_key = LessSafeKey::new(unbound);
     let nonce = Nonce::assume_unique_for_key(*nonce_bytes);
-    let mut in_out = plaintext.to_vec();
+    let capacity = plaintext
+        .len()
+        .checked_add(16)
+        .ok_or_else(|| CryptoError::DecryptionFailed("plaintext too long".into()))?;
+    // Reserve the tag before copying plaintext so appending it cannot reallocate
+    // a secret-bearing buffer. Provider-internal copies are outside this guard.
+    let mut in_out = Zeroizing::new(Vec::with_capacity(capacity));
+    in_out.extend_from_slice(plaintext);
     less_safe_key
-        .seal_in_place_append_tag(nonce, Aad::from(aad), &mut in_out)
+        .seal_in_place_append_tag(nonce, Aad::from(aad), &mut *in_out)
         .map_err(|_| CryptoError::DecryptionFailed("AES-256-GCM encryption failed".into()))?;
-    Ok(in_out)
+    Ok(std::mem::take(&mut *in_out))
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-14T01:32:41.309631+00:00",
+  "generated": "2026-09-30T00:52:47.510126+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -437,7 +437,7 @@
       "critical": true
     },
     "crates/crypto/src/jwe.rs": {
-      "sha256": "79f401c6eb92adf90ce866cf6ffc1504ce6cb0a8b90ab7dd40ad71260bad35f6",
+      "sha256": "ccb1458725edb40129ae9bb06afd8eedac29c89a6ec5ad5fecf884ad4d565571",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
