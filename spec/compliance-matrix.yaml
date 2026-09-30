@@ -693,7 +693,7 @@ rfc_7662:
     file: proofs/tamarin/introspection/introspection_security.spthy
     lemma: introspection_requires_authz
   tests:
-  - crates/server/src/web/client_credentials_authorization.rs
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: introspection-authentication
   status: partial
@@ -3294,7 +3294,7 @@ rfc_8707:
     file: fstar/resource/ResourceIndicators.fst
     refinement: resource_indicator_wellformed
   tests:
-  - crates/server/src/policy/client_credentials/authorization.rs
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/client_credentials/tests.rs
   - crates/server/src/util.rs
   - crates/server/src/authcode/token.rs
@@ -3328,6 +3328,7 @@ rfc_8707:
     file: proofs/tamarin/resource/resource_indicators.spthy
     lemma: resource_audience_enforced
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/client_credentials/tests.rs
   - crates/server/src/authcode/token.rs
   status: partial
@@ -3356,6 +3357,7 @@ rfc_8707:
     file: fstar/resource/ResourceIndicators.fst
     lemma: lemma_resource_mismatch_rejected
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/client_credentials/tests.rs
   - crates/server/src/authcode/token.rs
   status: partial
@@ -3386,6 +3388,7 @@ rfc_8707:
     file: fstar/resource/ResourceIndicators.fst
     lemma: lemma_audience_binds_to_resource
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/client_credentials/tests.rs
   - crates/server/src/authcode/token.rs
   status: partial
