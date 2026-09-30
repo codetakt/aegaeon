@@ -94,9 +94,14 @@ def validate_directory(root: Path, requested_drv: str, build_root: Path) -> Path
     if not match:
         raise ValueError("invalid requested derivation")
     old_layout = re.fullmatch(r"nix-build-" + re.escape(match[1]) + r"\.drv-\d+", root.name)
+    flat_layout = re.fullmatch(r"nix-\d+-\d+", root.name)
     new_layout = root.name == "build" and re.fullmatch(r"nix-\d+-\d+", root.parent.name)
-    parent = root.parent if old_layout else root.parent.parent
-    if root.resolve(strict=True) != root or parent != build_root or not (old_layout or new_layout):
+    parent = root.parent if old_layout or flat_layout else root.parent.parent
+    if (
+        root.resolve(strict=True) != root
+        or parent != build_root
+        or not (old_layout or flat_layout or new_layout)
+    ):
         raise ValueError("unexpected or noncanonical Nix retained-directory layout")
     output = root / "source/artifacts/kani-evidence"
     if output.resolve(strict=True) != output or not output.is_dir():

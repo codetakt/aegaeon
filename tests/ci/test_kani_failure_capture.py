@@ -126,6 +126,72 @@ class FailureCaptureTests(unittest.TestCase):
         with pytest.raises(FileExistsError):
             collect(self.evidence)
 
+    def test_flat_and_legacy_build_raw_records_are_copied_without_admission(self):
+        original = (self.raw / "failure.json").read_bytes()
+        for layout in ("nix-321-654", "nix-build-verify-kani-0.0.0.drv-0"):
+            with self.subTest(layout=layout):
+                build = self.root / layout
+                raw = build / "source/artifacts/kani-evidence/run-example"
+                raw.mkdir(parents=True)
+                (raw / "failure.json").write_bytes(original)
+                evidence = self.evidence / layout
+                evidence.mkdir()
+                (evidence / "requested-drv").write_text(DERIVATION)
+                (evidence / "build-root").write_text(str(self.root))
+                (evidence / "build.log").write_text(
+                    start() + kept(build) + event(action="stop", id=1)
+                )
+                collect(evidence)
+                assert (
+                    evidence / "failed-output/run-example/failure.json"
+                ).read_bytes() == original
+                assert (raw / "failure.json").read_bytes() == original
+                receipt = json.loads((evidence / "failed-capture.json").read_text())
+                assert receipt["status"] == "retained"
+                assert receipt["admission"] is False
+                assert receipt["requested_drv"] == DERIVATION
+                assert receipt["build_directory"] == str(build)
+
+    def test_nested_or_malformed_layouts_are_rejected(self):
+        for layout in (
+            "other/nix-321-654",
+            "other/nix-321-654/build",
+            "nix-321-654/wrong-leaf",
+            "nix-321-654/build/extra",
+            "nix-321-counter",
+            "nix-build-other.drv-0",
+        ):
+            with self.subTest(layout=layout):
+                build = self.root / layout
+                raw = build / "source/artifacts/kani-evidence"
+                raw.mkdir(parents=True)
+                (raw / "failure.json").write_text('{"status":"fault"}\n')
+                (self.evidence / "build.log").write_text(start() + kept(build))
+                with pytest.raises(ValueError, match="layout"):
+                    collect(self.evidence)
+                assert not (self.evidence / "failed-output").exists()
+
+    def test_flat_layout_outside_the_caller_root_is_rejected(self):
+        allowed = self.root / "allowed"
+        allowed.mkdir()
+        outside = self.root / "nix-321-654"
+        raw = outside / "source/artifacts/kani-evidence"
+        raw.mkdir(parents=True)
+        (raw / "failure.json").write_text('{"status":"fault"}\n')
+        (self.evidence / "build-root").write_text(str(allowed))
+        (self.evidence / "build.log").write_text(start() + kept(outside))
+        with pytest.raises(ValueError, match="one retained"):
+            collect(self.evidence)
+        assert not (self.evidence / "failed-output").exists()
+
+    def test_symlinked_flat_layout_is_rejected(self):
+        alias = self.root / "nix-321-654"
+        alias.symlink_to(self.build, target_is_directory=True)
+        (self.evidence / "build.log").write_text(start() + kept(alias))
+        with pytest.raises(ValueError, match="layout"):
+            collect(self.evidence)
+        assert not (self.evidence / "failed-output").exists()
+
     def test_builder_text_dependency_and_ambiguous_notices_are_never_selected(self):
         forged = event(action="result", type=101, id=1, fields=[kept(self.build)])
         logs = [

@@ -12,9 +12,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from run_core_pr_checks import FORMAL_PACKAGES, partition
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts/ci"))
+
+from run_core_pr_checks import FORMAL_PACKAGES, partition  # noqa: E402 - standalone Nix tests
 
 
 def drv(name):
