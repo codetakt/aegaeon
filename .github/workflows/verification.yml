@@ -309,17 +309,28 @@ jobs:
         with:
           enable-flakehub-cache: "true"
       - name: Admit the required Kani selection (full scope, pinned 0.66.0)
-        run: nix develop .#verification --command bash scripts/flake/verify_kani_check.sh
+        env:
+          KANI_CI_ARTIFACT_DIR: ${{ runner.temp }}/kani-evidence
+        run: bash scripts/verify/verify_kani_ci.sh
       - name: Summarize Kani admission
         if: always()
-        run: python3 scripts/validation/summarize_kani_evidence.py artifacts/kani-evidence "Kani (pure harness, required + diagnostic)"
+        env:
+          KANI_CI_ARTIFACT_DIR: ${{ runner.temp }}/kani-evidence
+        run: |
+          for evidence in "$KANI_CI_ARTIFACT_DIR"/run.*/verified-output; do
+            python3 scripts/validation/summarize_kani_evidence.py "$evidence" \
+              "Kani (pure harness, required + diagnostic)"
+          done
       - name: Upload Kani evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kani-pure-artifacts
-          path: artifacts/kani-evidence/
-          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/kani-evidence/
+            !${{ runner.temp }}/kani-evidence/**/result/**
+            !${{ runner.temp }}/kani-evidence/**/.failed-staging-*/**
+          if-no-files-found: error
 
   kani:
     name: Kani Model Checking

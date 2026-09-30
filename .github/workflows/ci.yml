@@ -9,6 +9,11 @@ on:
   push:
     branches: [ main ]
   workflow_call:
+    inputs:
+      delegate-formal-checks:
+        description: Full PR validation owns formal checks in its verification workflow.
+        type: boolean
+        default: false
   workflow_dispatch:
 
 concurrency:
@@ -100,6 +105,7 @@ jobs:
           nix develop .#ci --command cargo xtask openapi --check
 
       - name: nix flake check
+        if: ${{ !inputs.delegate-formal-checks }}
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
@@ -107,6 +113,24 @@ jobs:
             rm -rf /homeless-shelter || true
           fi
           nix flake check --print-build-logs
+
+      - name: Evaluate all flake outputs and build core-owned PR checks
+        if: ${{ inputs.delegate-formal-checks }}
+        run: |
+          if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf /homeless-shelter || true
+          else
+            rm -rf /homeless-shelter || true
+          fi
+          python3 scripts/ci/run_core_pr_checks.py
+
+      - name: Preserve PR check ownership
+        if: ${{ always() && inputs.delegate-formal-checks }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-check-ownership
+          path: artifacts/ci-check-ownership.json
+          if-no-files-found: warn
 
       - name: Build release server
         run: |

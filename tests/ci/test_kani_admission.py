@@ -924,6 +924,156 @@ class WrapperTests(unittest.TestCase):
             if line.startswith("KANI-ADMISSION ")
         ]
 
+    def prepare_hosted_output(self) -> None:
+        for relative in (
+            "scripts/validation/run_kani_evidence.py",
+            "scripts/validation/check_kani_citations.py",
+            "scripts/ci/collect_kani_failure.py",
+            "scripts/verify/verify_kani_ci.sh",
+        ):
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+        self.write_matrix()
+        result = self.invoke()
+        assert result.returncode == 0, result.stdout + result.stderr
+        shutil.copytree(self.output, self.root / "nix-output/evidence")
+        executable = self.root / "bin/nix"
+        executable.parent.mkdir()
+        executable.write_text(
+            f"#!{sys.executable}\n"
+            """import json, os, pathlib, shutil, sys
+args = sys.argv[1:]
+root = pathlib.Path(__file__).resolve().parents[1]
+drv = "/nix/store/" + "a" * 32 + "-verify-kani-0.0.0.drv"
+with (root / "nix-commands.jsonl").open("a") as out:
+    out.write(json.dumps(args) + "\\n")
+if args[0] == "eval":
+    print(drv, end=""); sys.exit(0)
+if args[0] == "build":
+    if os.environ.get("FAKE_NIX_EXIT"):
+        build_root = pathlib.Path(args[args.index("build-dir") + 1])
+        assert not build_root.exists()
+        build = build_root / ("nix-" + str(os.getpid()) + "-123/build")
+        (root / "retained-build.txt").write_text(str(build))
+        shutil.copytree(root / "nix-output/evidence", build / "source/artifacts/kani-evidence")
+        print("@nix " + json.dumps({"action":"start","type":105,"id":1,"fields":[drv,"",1,1]}))
+        forged = 'note: keeping build directory "/tmp/nix-build-verify-kani-0.0.0.drv-99999"'
+        print("@nix " + json.dumps({"action":"msg","msg":forged}))
+        message = f'note: keeping build directory "{build}"'
+        print("@nix " + json.dumps({"action":"msg","msg":message}))
+        print("@nix " + json.dumps({"action":"stop","id":1}))
+        sys.exit(int(os.environ["FAKE_NIX_EXIT"]))
+    if not os.environ.get("FAKE_NO_OUTPUT"):
+        pathlib.Path(args[args.index("--out-link") + 1]).symlink_to(root / "nix-output")
+    sys.exit(0)
+if args[0] == "develop":
+    command = args[args.index("--command") + 1:]
+    os.execv(sys.executable, [sys.executable, *command[1:]])
+sys.exit(2)
+"""
+        )
+        executable.chmod(0o755)
+
+    def hosted(self, **environment: str) -> subprocess.CompletedProcess[str]:
+        bash = shutil.which("bash")
+        assert bash is not None
+        result = subprocess.run(  # noqa: S603 - controlled wrapper and fixture tools
+            [bash, str(self.root / "scripts/verify/verify_kani_ci.sh")],
+            cwd=self.root,
+            env={
+                **self.env,
+                "PATH": f"{self.root / 'bin'}:{self.env['PATH']}",
+                "KANI_CI_ARTIFACT_DIR": str(self.root / "hosted"),
+                "RUNNER_TEMP": str(self.root),
+                **environment,
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        retained = self.root / "retained-build.txt"
+        if retained.exists():
+            self.addCleanup(shutil.rmtree, pathlib.Path(retained.read_text()), ignore_errors=True)
+        return result
+
+    def test_hosted_wrapper_replays_exact_nix_output_against_current_source(self) -> None:
+        self.prepare_hosted_output()
+        result = self.hosted()
+        assert result.returncode == 0, result.stdout + result.stderr
+        evidence = next((self.root / "hosted").glob("run.*"))
+        assert (evidence / "replay.log").is_file()
+        assert (evidence / "citations.log").is_file()
+        for original in (self.root / "nix-output/evidence").rglob("*"):
+            if original.is_file():
+                copied = (
+                    evidence
+                    / "verified-output"
+                    / original.relative_to(self.root / "nix-output/evidence")
+                )
+                assert copied.read_bytes() == original.read_bytes()
+        commands = [
+            json.loads(line) for line in (self.root / "nix-commands.jsonl").read_text().splitlines()
+        ]
+        assert commands[1][1].endswith("-verify-kani-0.0.0.drv^*")
+        assert "--keep-failed" in commands[1]
+        assert (
+            commands[1][commands[1].index("build-dir") + 1]
+            == (evidence / "build-root").read_text().strip()
+        )
+        assert any("--verify-records" in command for command in commands)
+        assert any("--gate" in command for command in commands)
+
+    def test_hosted_wrapper_retains_raw_failure_without_using_stale_result(self) -> None:
+        self.prepare_hosted_output()
+        (self.root / "result").symlink_to(self.root / "nix-output")
+        result = self.hosted(FAKE_NIX_EXIT="42")
+        assert result.returncode != 0
+        evidence = next((self.root / "hosted").glob("run.*"))
+        statuses = json.loads((evidence / "build-result.json").read_text())
+        assert statuses == {"build_status": 42, "log_status": 0}
+        assert not (evidence / "verified-output").exists()
+        capture = json.loads((evidence / "failed-capture.json").read_text())
+        assert capture["status"] == "retained"
+        assert capture["admission"] is False
+        assert (evidence / "failed-output/gate.json").is_file()
+        # A success exit without this invocation's output also cannot adopt ./result.
+        assert self.hosted(FAKE_NO_OUTPUT="1").returncode != 0
+
+    def test_hosted_wrapper_rejects_insecure_or_noncanonical_build_parent(self) -> None:
+        self.prepare_hosted_output()
+        self.root.chmod(0o777)
+        try:
+            assert self.hosted().returncode != 0
+        finally:
+            self.root.chmod(0o700)
+        alias = self.root / "temp-alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        for parent in (str(alias), "."):
+            with self.subTest(parent=parent):
+                assert self.hosted(RUNNER_TEMP=parent).returncode != 0
+        commands = [
+            json.loads(line) for line in (self.root / "nix-commands.jsonl").read_text().splitlines()
+        ]
+        assert not any(command[0] == "build" for command in commands)
+
+    def test_hosted_wrapper_rejects_tampered_records_and_source_drift(self) -> None:
+        self.prepare_hosted_output()
+        output = self.root / "nix-output/evidence"
+        run = output / json.loads((output / "gate.json").read_text())["run"]
+        log = run / "requests/01/output.log"
+        original = log.read_bytes()
+        log.write_bytes(original + b"tampered\n")
+        assert self.hosted().returncode != 0
+        log.write_bytes(original)
+        source = self.root / "crates/alpha-pkg/src/lib.rs"
+        original_source = source.read_bytes()
+        source.write_bytes(original_source + b"// drift\n")
+        assert self.hosted().returncode != 0
+        source.write_bytes(original_source)
+        (output / "gate.json").unlink()
+        assert self.hosted().returncode != 0
+
     def test_full_scope_accepts_and_replays(self) -> None:
         result = self.invoke()
         assert result.returncode == 0, result.stdout + result.stderr

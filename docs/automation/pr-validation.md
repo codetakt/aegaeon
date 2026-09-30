@@ -1,6 +1,6 @@
 # Pull Request Validation
 
-Last updated: 2026-09-07
+Last updated: 2026-09-30
 
 Status: current implementation baseline
 
@@ -59,6 +59,22 @@ workflow definitions. Workflow/policy changes need review. Repository administra
 must configure the aggregate check as required; this source change does not alter
 hosted protection settings. See [branch protection](../policies/branch-protection.md).
 Do not require an individual conditional lane or the historical passthrough checks.
+
+## Formal check ownership
+
+For full PR validation, Core evaluates every flake output with
+`nix flake check --no-build`, then builds all current-system check derivations
+except `verifyFstar`, `verifyTamarin` and `verifyKani`. Formal Verification owns
+those three derivations and replays their retained evidence. This prevents
+separate runners from rebuilding the same formal checks on a cache miss.
+Both workflows remain mandatory inputs to **Required checks**.
+
+`scripts/ci/run_core_pr_checks.py` records the complete ownership map in
+`core-check-ownership`. A missing formal check, a package alias that resolves to
+a different derivation, or a derivation assigned to both owners fails the check.
+New check attributes default to Core. This division is enabled only by the full
+PR caller; local `nix flake check`, main-push Core and manually invoked Core keep
+their full check execution.
 
 ## Local reproduction
 
