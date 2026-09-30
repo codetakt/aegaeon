@@ -4600,13 +4600,15 @@ draft_oauth_v2_1:
   section: '3.1'
   requirement: MUST
   description: Authorization server MUST ignore unrecognized request parameters
-  module: crates/server/src/web/mod.rs
+  module: crates/server/src/web/oidc_request_input.rs
   tests:
   - crates/server/src/web/token_exchange_tests/authorize_query.rs
+  - crates/server/src/web/oidc_request_input/tests.rs
+  - crates/server/src/web/dcr_configuration/tests/oidc_request_input.rs
   ci_check: oauth21-ignore-unknown-params
   status: implemented
   notes:
-  - Query deserialization ignores unknown parameters via serde flatten/deny_unknown disabled pattern.
+  - Strict query admission decodes and bounds all parameters, then omits empty values and ignores unknown names, including unknown duplicates.
 - id: v21-016
   section: '3.1'
   requirement: MUST NOT
