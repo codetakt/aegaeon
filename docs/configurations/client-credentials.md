@@ -85,6 +85,13 @@ security-change acknowledgement and reason, including removal of authority.
 Issuance records a versioned authorization snapshot binding issuer, environment,
 configuration provenance, caller registration identity, selected audience,
 issued scopes, selected policy context and introspection-client identities.
+When issuing application claims, the existing application publication guard
+compares its locked client registration UUID with the caller UUID captured in
+this authorization before minting. Recreating a client with the same identifier
+cannot attach the replacement registration's application claims to the old
+authorization. This check shares the existing transaction; it introduces no
+new client-credentials publication lock.
+
 The access-token record carries the snapshot's SHA-256 fingerprint. The marker
 and snapshot must both exist and agree; missing or mismatched metadata cannot
 fall through to legacy validation or owner visibility. Origin is never inferred
