@@ -6,7 +6,7 @@ use crate::web::{test_support::TestEnvironment, token_exchange::tests as exchang
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-async fn patch(
+pub(super) async fn patch(
     app: &Router,
     pool: &PgPool,
     env: &TestEnvironment,

@@ -16,11 +16,11 @@ use sqlx::PgPool;
 use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
-const CALLER: &str = "service-caller";
-const RS: &str = "resource-reader";
-const TARGET: &str = "orders";
-const SECRET: &str = "private-caller-fixture-secret";
-const RS_SECRET: &str = "private-resource-reader-fixture-secret";
+pub(in crate::web) const CALLER: &str = "service-caller";
+pub(in crate::web) const RS: &str = "resource-reader";
+pub(in crate::web) const TARGET: &str = "orders";
+pub(in crate::web) const SECRET: &str = "private-caller-fixture-secret";
+pub(in crate::web) const RS_SECRET: &str = "private-resource-reader-fixture-secret";
 fn credential(client: &str) -> &'static str {
     match client {
         CALLER => SECRET,
@@ -29,7 +29,7 @@ fn credential(client: &str) -> &'static str {
         _ => "private-unrelated-client-fixture-secret",
     }
 }
-const ALIAS: &str = "https://resource.example/orders";
+pub(in crate::web) const ALIAS: &str = "https://resource.example/orders";
 
 fn policy(jwt: bool) -> TestResult<PolicyDocument> {
     Ok(PolicyDocument {

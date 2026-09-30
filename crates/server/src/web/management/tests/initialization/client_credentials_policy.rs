@@ -16,7 +16,7 @@ async fn update_policy(
     Ok(())
 }
 
-async fn management_session(
+pub(super) async fn management_session(
     pool: &PgPool,
 ) -> Result<(axum::Router, String), Box<dyn std::error::Error>> {
     let mut management = test_management_state();
