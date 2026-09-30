@@ -550,7 +550,7 @@ class NodeReferenceCoreRuntime {
         const namespace = this.readBytes(nsPtr >>> 0, nsLen >>> 0);
         const keyHash = this.readBytes(keyHashPtr >>> 0, 32);
         const replayed = this.replayStore.checkAndStore(namespace, keyHash, ttlMs >>> 0);
-        return replayed ? 1 : 0;
+        return replayed === false ? 0 : replayed === true ? 1 : 2;
       },
       vc_host_register_bytes: (ptr, len) => this.registerHandleFromMemory(ptr >>> 0, len >>> 0),
       vc_host_release_handle: (handle) => {
