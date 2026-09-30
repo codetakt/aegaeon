@@ -104,4 +104,4 @@ pub(super) async fn handle_token_client_credentials_grant(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
