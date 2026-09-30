@@ -803,3 +803,5 @@ async fn client_credentials_application_identity_composition_with_one_connection
 mod online_resources;
 
 mod authority_boundaries;
+
+mod signed_introspection;
