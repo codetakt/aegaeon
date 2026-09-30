@@ -533,13 +533,15 @@ fn token_exchange_policy_round_trips_explicit_target_authority() -> Result<(), S
 
 #[test]
 fn client_credentials_policy_roundtrip_and_missing_authority_default() -> Result<(), Box<dyn std::error::Error>> {
-    let mut policy = PolicyDocument::default();
-    policy.token_exchange = serde_json::from_value(serde_json::json!({"version":1,
-        "targets":[{"audience":"api","resourceAliases":["https://api.example/resource"]}],"rules":[]}))?;
-    policy.client_credentials = serde_json::from_value(serde_json::json!({"version":1,
-        "resourceServers":[{"targetAudience":"api","introspectionClients":["resource-server"]}],
-        "rules":[{"clientId":"worker","targetAudience":"api","scopes":["read"],
-            "defaultScopes":["read"],"defaultTarget":true}]}))?;
+    let mut policy = PolicyDocument {
+        token_exchange: serde_json::from_value(serde_json::json!({"version":1,
+            "targets":[{"audience":"api","resourceAliases":["https://api.example/resource"]}],"rules":[]}))?,
+        client_credentials: serde_json::from_value(serde_json::json!({"version":1,
+            "resourceServers":[{"targetAudience":"api","introspectionClients":["resource-server"]}],
+            "rules":[{"clientId":"worker","targetAudience":"api","scopes":["read"],
+                "defaultScopes":["read"],"defaultTarget":true}]}))?,
+        ..PolicyDocument::default()
+    };
     let mut document = serde_json::to_value(&policy)?;
     let decoded: PolicyDocument = serde_json::from_value(document.clone())?;
     let runtime = ServerConfig::default().with_management_policy(&decoded)?;

@@ -21,7 +21,7 @@ pub(super) async fn management_session(
 ) -> Result<(axum::Router, String), Box<dyn std::error::Error>> {
     let mut management = test_management_state();
     management.cfg = std::sync::Arc::new(
-        super::super::super::ManagementConfig::try_from_env_with_database(&pool).await?,
+        super::super::super::ManagementConfig::try_from_env_with_database(pool).await?,
     );
     let app = crate::web::build_router(test_app_state(pool.clone(), management)?);
     let response = app

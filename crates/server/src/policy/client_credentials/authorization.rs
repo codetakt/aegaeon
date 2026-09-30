@@ -14,7 +14,7 @@ impl ClientCredentialsPolicy {
         params: &[(String, String)],
         requested_scope: Option<&str>,
     ) -> Result<ClientCredentialsSelection, Error> {
-        self.validate(catalog).map_err(|_| Error::InvalidPolicy)?;
+        self.validate(catalog).map_err(|_| Error::MalformedPolicy)?;
         if ["audience", "resource"].iter().any(|key| {
             params
                 .iter()
@@ -70,7 +70,7 @@ impl ClientCredentialsPolicy {
         client_id: &str,
         audience: &str,
     ) -> Result<ClientCredentialsSelectionContext, Error> {
-        self.validate(catalog).map_err(|_| Error::InvalidPolicy)?;
+        self.validate(catalog).map_err(|_| Error::MalformedPolicy)?;
         let mut target = catalog
             .targets
             .iter()
@@ -101,7 +101,7 @@ impl ClientCredentialsPolicy {
             &rule,
             &binding,
         ))
-        .map_err(|_| Error::InvalidPolicy)?;
+        .map_err(|_| Error::MalformedPolicy)?;
         Ok(ClientCredentialsSelectionContext {
             scopes: rule.scopes,
             context_digest: aegaeon_crypto::hash::sha256_hex(&bytes),

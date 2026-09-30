@@ -52,7 +52,7 @@ pub struct ClientCredentialsRule {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClientCredentialsAuthorizationError {
-    InvalidPolicy,
+    MalformedPolicy,
     InvalidTarget,
     InvalidScope,
 }
