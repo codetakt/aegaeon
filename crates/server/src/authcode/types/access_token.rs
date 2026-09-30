@@ -9,6 +9,8 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessToken {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_credentials_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exchange_root: Option<crate::policy::token_exchange::ExchangeRoot>,
     pub token: String,
     pub token_type: String,
@@ -43,6 +45,8 @@ pub enum CnfClaim {
 /// Metadata tracked for bearer token enforcement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BearerTokenMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_credentials_grant: Option<crate::policy::client_credentials::ClientCredentialsGrant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application_grant: Option<crate::application_authorization::inorii::Grant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,6 +96,7 @@ impl BearerTokenMeta {
         Self {
             token_id: input.token_id,
             exchange_grant: None,
+            client_credentials_grant: None,
             application_grant: None,
             client_id: input.client_id,
             user_id: input.user_id,
@@ -124,6 +129,7 @@ impl AccessToken {
         Self {
             token: generate_secure_random(32),
             exchange_root: None,
+            client_credentials_digest: None,
             token_type: "Bearer".to_string(),
             client_id,
             user_id,

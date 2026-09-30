@@ -54,6 +54,7 @@ mod test_prelude;
 mod test_support;
 mod token_authorization_code;
 mod token_client_credentials;
+mod client_credentials_authorization;
 mod token_device_code;
 mod token_endpoint;
 mod token_exchange;

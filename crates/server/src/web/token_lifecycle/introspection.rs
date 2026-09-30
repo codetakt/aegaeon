@@ -89,41 +89,16 @@ fn augment_introspection_body_with_meta(
     Ok(())
 }
 
-fn bearer_meta_authorizes_introspection(meta: &BearerTokenMeta, requester: &str) -> bool {
-    meta.client_id == requester || meta.audience == requester
-}
-
 pub(super) async fn introspection_token_visible_to_client(
     state: &AppState,
-    token: &str,
     access_token: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
     requester: Option<&str>,
 ) -> Result<bool, Response> {
-    let Some(requester) = requester else {
-        return Ok(false);
-    };
-    if access_token.client_id == requester {
-        return Ok(true);
-    }
-    state
-        .tokens
-        .store
-        .try_get_bearer_meta_async(token.to_string())
-        .await
-        .map(|meta| meta.is_some_and(|meta| bearer_meta_authorizes_introspection(&meta, requester)))
-        .map_err(|err| {
-            tracing::error!(
-                target: "oauth",
-                error = %err,
-                "token metadata lookup failed during introspection authorization"
-            );
-            no_cache_json_error_with_iss(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "temporarily_unavailable",
-                Some("token store unavailable"),
-                state.issuer.as_str(),
-            )
-        })
+    let Some(requester) = requester else { return Ok(false); };
+    super::super::client_credentials_authorization::introspection_visible(
+        state, access_token, meta, requester,
+    ).await
 }
 
 fn access_token_introspection_exp(access_token: &AccessToken) -> Option<u64> {
@@ -137,8 +112,8 @@ fn access_token_introspection_exp(access_token: &AccessToken) -> Option<u64> {
 
 pub(super) async fn active_introspection_body(
     state: &AppState,
-    token: &str,
     access_token: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
 ) -> Result<Value, Response> {
     let Some(exp) = access_token_introspection_exp(access_token) else {
         return Err(no_cache_json_error_with_iss(
@@ -161,13 +136,7 @@ pub(super) async fn active_introspection_body(
     if let Some(cnf_claim) = access_token.cnf.as_ref() {
         apply_introspection_cnf_claim(&mut body, cnf_claim);
     }
-    match state
-        .tokens
-        .store
-        .try_get_bearer_meta_async(token.to_string())
-        .await
-    {
-        Ok(Some(meta)) => {
+    if let Some(meta) = meta {
             if let Some(grant) = meta.application_grant.as_ref() {
                 match super::super::application_authorization::current(state, grant).await {
                     Ok(false) => return Ok(json!({"active":false})),
@@ -186,22 +155,7 @@ pub(super) async fn active_introspection_body(
                         json!(grant.claims);
                 }
             }
-            augment_introspection_body_with_meta(&mut body, &meta, state.issuer.as_str())?;
-        }
-        Ok(None) => {}
-        Err(err) => {
-            tracing::error!(
-                target: "oauth",
-                error = %err,
-                "token metadata lookup failed while building introspection body"
-            );
-            return Err(no_cache_json_error_with_iss(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "temporarily_unavailable",
-                Some("token store unavailable"),
-                state.issuer.as_str(),
-            ));
-        }
+            augment_introspection_body_with_meta(&mut body, meta, state.issuer.as_str())?;
     }
     Ok(body)
 }

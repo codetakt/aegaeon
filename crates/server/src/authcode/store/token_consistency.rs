@@ -59,6 +59,13 @@ pub(crate) fn bearer_metadata_matches_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    match (&access_token.client_credentials_digest, &meta.client_credentials_grant) {
+        (None, None) => {}
+        (Some(digest), Some(grant)) if grant.digest().as_ref().ok() == Some(digest)
+            && grant.covers(&meta.client_id, &meta.user_id, &meta.audience, &meta.granted_scopes)
+            && meta.exchange_grant.is_none() && meta.refresh_parent.is_none() => {}
+        _ => return Err("access token and client-credentials authority must match"),
+    }
     if access_token.exchange_root.as_ref()
         != meta.exchange_grant.as_ref().and_then(|grant| grant.root())
     {
@@ -107,6 +114,9 @@ pub(super) fn refresh_token_covers_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    if access_token.client_credentials_digest.is_some() || meta.client_credentials_grant.is_some() {
+        return Err("client-credentials authority cannot have refresh lineage");
+    }
     let expected_root = refresh_token
         .exchange_grant
         .as_ref()

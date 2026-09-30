@@ -90,11 +90,11 @@ async fn build_token_context(
     params: Vec<(String, String)>,
     issuer_base: &str,
     request_id: String,
-) -> Result<TokenEndpointContext, Response> {
+) -> Result<(TokenEndpointContext, AppState), Response> {
     let form = token_form_from_params(&params, issuer_base)?;
     let grant_type = form.grant_type.trim().to_ascii_lowercase();
     // RFC 8693 permits repeated audience/resource selectors. Its resolver sees all of them.
-    let resource = if grant_type == TOKEN_EXCHANGE_GRANT_TYPE {
+    let resource = if matches!(grant_type.as_str(), TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials") {
         None
     } else {
         token_resource_from_params(&params)?
@@ -102,6 +102,10 @@ async fn build_token_context(
     let auth_header =
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
     let (client_id, client_auth_presence) = token_resolve_client_id(auth_header, &form)?;
+    let captured_state = if matches!(grant_type.as_str(), TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials") {
+        super::client_credentials_authorization::request_state(state, &[&client_id])?
+    } else { state.clone() };
+    let state = &captured_state;
     let client_auth_method = token_client_auth_method(client_auth_presence);
     token_validate_client_authentication(
         state,
@@ -133,7 +137,7 @@ async fn build_token_context(
         resource: resource.clone(),
         request_object_claims: None,
     };
-    Ok(TokenEndpointContext {
+    Ok((TokenEndpointContext {
         request_id,
         params,
         form,
@@ -147,7 +151,7 @@ async fn build_token_context(
         cnf_for_at: token_cnf_from_sender_binding(sender_binding.as_ref()),
         sender_binding,
         issuer_req,
-    })
+    }, captured_state))
 }
 
 pub(super) fn validate_token_scope_subset(
@@ -217,7 +221,7 @@ pub(super) async fn token(
         return form_parse_error_response(issuer_base);
     };
     let request_id = request_id_from_headers(&headers);
-    let ctx =
+    let (ctx, state) =
         match build_token_context(&state, &uri, &headers, params, issuer_base, request_id).await {
             Ok(ctx) => ctx,
             Err(response) => return response,

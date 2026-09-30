@@ -133,6 +133,7 @@ pub(super) async fn handle_token_exchange_grant(
     };
     let access = AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
         token: token.clone(),
         token_type: token_type.to_string(),
         client_id: ctx.client_id.clone(),

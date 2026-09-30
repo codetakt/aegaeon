@@ -8,6 +8,7 @@ mod redis_support;
 mod refresh_rotation;
 mod revocation;
 mod token_consistency;
+pub(crate) use token_consistency::bearer_metadata_matches_access_token;
 pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
 mod token_outcome;
 mod token_records;

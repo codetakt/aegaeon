@@ -129,6 +129,15 @@ impl TokenValidator {
                     "token store metadata lookup failed: {err}"
                 ))
             })?;
+        if access.client_credentials_digest.is_some()
+            || meta.as_ref().is_some_and(|meta| meta.client_credentials_grant.is_some())
+        {
+            let Some(meta) = meta.as_ref() else {
+                return Err(BearerTokenValidationError::invalid("client-credentials authority missing"));
+            };
+            crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
+                .map_err(BearerTokenValidationError::invalid)?;
+        }
         if let (Some(ref verified), Some(ref meta)) = (&verified, &meta) {
             if !Self::aud_matches(&verified.payload, &meta.audience) {
                 return Err(BearerTokenValidationError::invalid(
@@ -207,6 +216,15 @@ impl TokenValidator {
                     "token store metadata lookup failed: {err}"
                 ))
             })?;
+        if access.client_credentials_digest.is_some()
+            || meta.as_ref().is_some_and(|meta| meta.client_credentials_grant.is_some())
+        {
+            let Some(meta) = meta.as_ref() else {
+                return Err(BearerTokenValidationError::invalid("client-credentials authority missing"));
+            };
+            crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
+                .map_err(BearerTokenValidationError::invalid)?;
+        }
         if let (Some(ref verified), Some(ref meta)) = (&verified, &meta) {
             if !Self::aud_matches(&verified.payload, &meta.audience) {
                 return Err(BearerTokenValidationError::invalid(
@@ -310,7 +328,7 @@ impl TokenValidator {
     #[must_use]
     pub fn introspect_token(&self, token: &str) -> serde_json::Value {
         match self.token_store.try_verify_access_token(token) {
-            Ok(Some(access_token)) => access_token_introspection_exp(&access_token).map_or_else(
+            Ok(Some(access_token)) if access_token.client_credentials_digest.is_none() => access_token_introspection_exp(&access_token).map_or_else(
                 || json!({ "active": false }),
                 |exp| {
                     json!({
@@ -323,7 +341,7 @@ impl TokenValidator {
                     })
                 },
             ),
-            Ok(None) | Err(_) => json!({ "active": false }),
+            Ok(None) | Ok(Some(_)) | Err(_) => json!({ "active": false }),
         }
     }
 }

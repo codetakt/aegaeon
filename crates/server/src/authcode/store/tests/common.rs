@@ -142,6 +142,7 @@ fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode
 fn make_access_token(token: &str) -> AccessToken {
     AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
         token: token.to_string(),
         token_type: "Bearer".to_string(),
         client_id: "test-client".to_string(),

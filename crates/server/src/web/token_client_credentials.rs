@@ -5,7 +5,7 @@ use crate::authcode::types::TokenResponse as IssuerTokenResp;
 use super::{
     oauth_audit::require_token_issue_audit, token_error_response, token_internal_error_response,
     token_issuer_error_response, token_json_response, token_registry_state_error_response,
-    token_success_body, validate_token_scope_subset, AppState, TokenEndpointContext,
+    token_success_body, AppState, TokenEndpointContext,
 };
 
 pub(super) async fn handle_token_client_credentials_grant(
@@ -24,13 +24,8 @@ pub(super) async fn handle_token_client_credentials_grant(
     if !grant_allowed {
         return token_error_response(StatusCode::BAD_REQUEST, "unauthorized_client", None);
     }
-    let scope = match validate_token_scope_subset(
-        state,
-        &ctx.client_id,
-        ctx.form.scope.as_deref(),
-        "openid scope is not allowed for the client_credentials grant",
-    ) {
-        Ok(scope) => scope,
+    let permit = match super::client_credentials_authorization::authorize(state, ctx).await {
+        Ok(permit) => permit,
         Err(response) => return response,
     };
     if let Err(response) = require_token_issue_audit(
@@ -68,9 +63,7 @@ pub(super) async fn handle_token_client_credentials_grant(
         .tokens
         .issuer
         .issue_client_credentials_application_token_async(
-            &ctx.client_id,
-            scope.clone(),
-            ctx.resource.as_deref(),
+            permit,
             ctx.cnf_for_at.as_ref(),
             ctx.sender_binding.as_ref(),
             application_grant.as_ref(),

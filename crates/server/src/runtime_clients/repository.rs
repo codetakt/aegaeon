@@ -191,6 +191,47 @@ async fn load_runtime_authority_revision_for_issuer_host_in_tx(
     )?)
 }
 
+/// A narrow identity/membership read bound to the same projection used to authenticate.
+#[derive(Debug)]
+pub(crate) struct RuntimeClientIdentity {
+    pub(crate) registration_id: uuid::Uuid,
+    pub(crate) client_id: String,
+    pub(crate) allowed_grant_types: Vec<String>,
+    pub(crate) allowed_scopes: Vec<String>,
+}
+
+pub(crate) async fn load_client_identities_guarded(
+    pool: &PgPool,
+    issuer_host: &str,
+    environment_id: uuid::Uuid,
+    expected: &RuntimeAuthorityRevision,
+    client_ids: &[String],
+) -> Result<Vec<RuntimeClientIdentity>, RuntimeClientSnapshotError> {
+    let mut tx = begin_runtime_client_snapshot(pool).await?;
+    let actual = load_runtime_authority_revision_for_issuer_host_in_tx(&mut tx, issuer_host).await?;
+    if actual != *expected {
+        return Err(RuntimeClientSnapshotError::RuntimeRevisionMismatch(issuer_host.into()));
+    }
+    let rows = sqlx::query(
+        "SELECT c.id, c.client_identifier, c.allowed_grant_types, c.allowed_scopes \
+         FROM aegaeon.clients c JOIN aegaeon.active_runtime_environments rt \
+         ON rt.environment_id = c.environment_id AND rt.configuration_version_id = c.configuration_version_id \
+         WHERE rt.issuer_host = $1 AND rt.environment_id = $2 AND c.status = 'ACTIVE' \
+         AND c.client_identifier = ANY($3) ORDER BY c.client_identifier",
+    ).bind(issuer_host).bind(environment_id).bind(client_ids).fetch_all(&mut *tx).await?;
+    let identities = rows.iter().map(|row| Ok(RuntimeClientIdentity {
+        registration_id: row.try_get("id")?,
+        client_id: row.try_get("client_identifier")?,
+        allowed_grant_types: row.try_get("allowed_grant_types")?,
+        allowed_scopes: row.try_get("allowed_scopes")?,
+    })).collect::<Result<Vec<_>, sqlx::Error>>()?;
+    if identities.windows(2).any(|pair| pair[0].client_id == pair[1].client_id) {
+        return Err(RuntimeClientSnapshotError::AmbiguousIssuerHost(issuer_host.into()));
+    }
+    tx.commit().await?;
+    Ok(identities)
+}
+
 pub(crate) struct AuthorizationClient {
     pub(crate) environment_id: uuid::Uuid,
     pub(crate) configuration_id: uuid::Uuid,

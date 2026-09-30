@@ -31,6 +31,12 @@ impl ResourceOutcome {
                 "resource_validated_metadata_missing",
             );
         };
+        match crate::web::client_credentials_authorization::current(state, meta).await {
+            Ok(true) => {}
+            Ok(false) => return resource_error_with_mode(state.issuer.as_str(), StatusCode::UNAUTHORIZED,
+                "invalid_token", "client-credentials authority is no longer current", self.mode),
+            Err(response) => return Self::failure(response, self.mode, "client_credentials_authority_unavailable"),
+        }
         match crate::web::application_authorization::check_resource(state, meta, header).await {
             Ok(()) => self,
             Err(response) => {

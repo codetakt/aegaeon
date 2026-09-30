@@ -348,6 +348,7 @@ impl TokenIssuer {
             }
         };
         let access_token = AccessToken {
+            client_credentials_digest: None,
             exchange_root: refresh
                 .exchange_grant
                 .as_ref()
