@@ -140,7 +140,11 @@ pub(crate) async fn publication_client_identity_matches(
     let identity: Option<Option<Uuid>> = sqlx::query_scalar(
         "SELECT client_record_id FROM aegaeon.application_authorizations \
          WHERE environment_id=$1 AND client_id=$2 AND subject=$3 AND enabled",
-    ).bind(grant.environment_id).bind(&grant.client_id).bind(&grant.subject)
-        .fetch_optional(&mut **guard).await?;
+    )
+    .bind(grant.environment_id)
+    .bind(&grant.client_id)
+    .bind(&grant.subject)
+    .fetch_optional(&mut **guard)
+    .await?;
     Ok(identity.flatten() == Some(expected_registration_id))
 }

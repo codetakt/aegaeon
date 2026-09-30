@@ -60,8 +60,15 @@ pub(super) async fn handle_token_client_credentials_grant(
         Err(response) => return response,
     };
     if let Err(response) = super::client_credentials_authorization::bind_application_identity(
-        state, &permit, application_grant.as_ref(), application_guard.as_mut(),
-    ).await { return response; }
+        state,
+        &permit,
+        application_grant.as_ref(),
+        application_guard.as_mut(),
+    )
+    .await
+    {
+        return response;
+    }
     match state
         .tokens
         .issuer

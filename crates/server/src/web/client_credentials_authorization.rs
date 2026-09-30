@@ -326,21 +326,31 @@ fn caller_eligible(
     }
 }
 
-
 pub(super) async fn bind_application_identity(
     state: &AppState,
     permit: &AuthorizedClientCredentials,
     grant: Option<&crate::application_authorization::inorii::Grant>,
     guard: Option<&mut crate::application_authorization::store::PublicationGuard>,
 ) -> Result<(), Response> {
-    let Some(grant) = grant else { return Ok(()); };
-    let Some(guard) = guard else { return Err(unavailable(state, "application publication guard missing")); };
+    let Some(grant) = grant else {
+        return Ok(());
+    };
+    let Some(guard) = guard else {
+        return Err(unavailable(state, "application publication guard missing"));
+    };
     match crate::application_authorization::store::publication_client_identity_matches(
-        guard, grant, permit.caller_registration_id(),
-    ).await {
+        guard,
+        grant,
+        permit.caller_registration_id(),
+    )
+    .await
+    {
         Ok(true) => Ok(()),
-        Ok(false) => Err(token_error_response(StatusCode::BAD_REQUEST, "invalid_grant",
-            Some("application and client-credentials registration identities differ"))),
+        Ok(false) => Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_grant",
+            Some("application and client-credentials registration identities differ"),
+        )),
         Err(error) => Err(unavailable(state, &error.to_string())),
     }
 }

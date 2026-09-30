@@ -39,7 +39,9 @@ impl AuthorizedClientCredentials {
         Ok(Self { grant })
     }
 
-    pub(crate) fn caller_registration_id(&self) -> Uuid { self.grant.caller.registration_id }
+    pub(crate) fn caller_registration_id(&self) -> Uuid {
+        self.grant.caller.registration_id
+    }
 
     pub(crate) fn into_grant(self) -> ClientCredentialsGrant {
         self.grant
