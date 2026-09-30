@@ -106,6 +106,26 @@ Claims パスでは Base64/JSON パースをホスト側で行い、Verified Cor
 - `Host_parse_dpop_compact` / `Host_parse_jwt_compact` – Compact JWS を事前パースし、claims / signing input / signature / key handles を返します。
 - `Host_handle_data_ptr / Host_handle_data_len` – bytes handle を WASM 線形メモリ上の `(ptr, len)` に解決します。
 
+### Reference adapter DPoP time values
+
+The Node and Web reference adapters encode DPoP time values as integer seconds.
+`iatSeconds` and `nowUnixTimeSeconds` must be non-negative integer `number` or
+`bigint` values that fit `u64`; policy values `maxAgeSeconds` and
+`maxFutureSkewSeconds` must be integer `number` values in the `u32` range.
+Invalid values throw before the WASM verification call instead of wrapping or
+being coerced. Low-level field writers retain their existing zero defaults for
+optional fields; higher-level API defaults and required fields are unchanged.
+Use `bigint` when a JavaScript `number` cannot represent the intended second
+exactly; the adapter cannot recover precision lost before the API call.
+
+For compact DPoP proofs, the root `iat` JSON number is converted from its original
+number token, preserving values such as `9007199254740993`. Decimal or exponent
+notation is accepted when its exact value is an integer in the `u64` range;
+negative, fractional and out-of-range values are rejected without rounding.
+JSON parsing retains its existing last-member behavior for duplicate names.
+The signed JWS bytes are preserved. This integer-seconds ABI does not add support
+for fractional NumericDate values (RFC 7519 §2; DPoP `iat`: RFC 9449 §4.2).
+
 ### Claims パス用 Imports
 Claims ベース検証パスで残る**機能的な検証依存**は **replay store** のみです。
 - `VerifiedCore_Api_Claims_Runtime_host_replay_store_check_and_store` – リプレイ検出

@@ -579,6 +579,22 @@ if (typeof vcAbiVersion === "function") {
   console.log("  [skip] vc_abi_version not exported (fixture may pre-date ABI shim)");
 }
 
+// Exercise the reference adapters against the selected WASM artifact.
+try {
+  const { checkDpopTimePolicyBounds } = await import("./dpop_time_policy_boundary_test.mjs");
+  const checks = await checkDpopTimePolicyBounds(ROOT, wasmPath);
+  pass(`DPoP time/policy boundaries: ${checks} checks`);
+} catch (error) {
+  fail(`DPoP time/policy boundaries: ${error.message}`);
+}
+try {
+  const { checkDpopIatNumericDates } = await import("./dpop_iat_numericdate_boundary_test.mjs");
+  const checks = await checkDpopIatNumericDates(ROOT, wasmPath);
+  pass(`DPoP exact iat values: ${checks} checks`);
+} catch (error) {
+  fail(`DPoP exact iat values: ${error.message}`);
+}
+
 // ���─ Summary ──────────────────────────────────────────────────────────
 
 console.log("");
