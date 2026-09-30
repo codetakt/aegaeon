@@ -575,6 +575,95 @@ mod tests {
             .expect("overflow should not create a successor"));
     }
 
+    fn assert_stepup_backend_failure_is_redacted(
+        failed_operation: usize,
+        expected_message: &str,
+        old_completed: bool,
+        successor_issued: bool,
+    ) {
+        const ERROR_SENTINEL: &str = "synthetic-backend-error-sentinel";
+        let opaque_error = format!("{ERROR_SENTINEL}: old-session -> new-session");
+        let store = crate::stepup::StepUpStore::new_process_local_failing_on_operation_for_tests(
+            failed_operation,
+            &opaque_error,
+        );
+        let (req, request_id) = request_and_id();
+        // Fixture issue is operation 1; login completes, issues, then completes.
+        store
+            .try_issue_challenge(&req.client_id, "old-session", &request_id, 100)
+            .expect("fixture issue should succeed")
+            .expect("fixture challenge should be issued");
+
+        let records = capture_diagnostics(|| {
+            complete_stepup_for_local_login(
+                &store,
+                &old_session_headers(),
+                &submission(Some(return_to())),
+                "new-session",
+                101,
+            );
+        });
+        assert!(
+            !serde_json::to_string(&records)
+                .expect("diagnostics should serialize")
+                .contains(ERROR_SENTINEL),
+            "opaque backend errors must not be logged"
+        );
+        assert_eq!(records.len(), 1);
+        assert_diagnostic_fields(&records[0], &["client_id", "message", "request_id"]);
+        assert_eq!(records[0]["level"], "WARN");
+        assert_eq!(records[0]["fields"]["client_id"], req.client_id);
+        assert_eq!(records[0]["fields"]["request_id"], request_id);
+        assert_eq!(records[0]["fields"]["message"], expected_message);
+
+        assert_eq!(
+            store
+                .try_consume_completed(&req.client_id, "old-session", &request_id, 101)
+                .expect("old challenge state should remain readable"),
+            old_completed
+        );
+        assert!(!store
+            .try_consume_completed(&req.client_id, "new-session", &request_id, 101)
+            .expect("successor must not be completed after a backend failure"));
+        assert_eq!(
+            store
+                .try_complete_for_request(&req.client_id, "new-session", &request_id, 101)
+                .expect("successor state should remain readable")
+                .is_some(),
+            successor_issued
+        );
+    }
+
+    #[test]
+    fn local_login_stepup_original_completion_failure_is_redacted() {
+        assert_stepup_backend_failure_is_redacted(
+            2,
+            "step-up challenge completion failed after local login",
+            false,
+            false,
+        );
+    }
+
+    #[test]
+    fn local_login_stepup_successor_issue_failure_is_redacted() {
+        assert_stepup_backend_failure_is_redacted(
+            3,
+            "step-up successor challenge issue failed",
+            true,
+            false,
+        );
+    }
+
+    #[test]
+    fn local_login_stepup_successor_completion_failure_is_redacted() {
+        assert_stepup_backend_failure_is_redacted(
+            4,
+            "step-up successor challenge completion failed",
+            true,
+            true,
+        );
+    }
+
     #[test]
     fn local_login_stepup_cookie_warning_contains_only_error_kind() {
         let store = crate::stepup::StepUpStore::new_process_local_for_tests();
