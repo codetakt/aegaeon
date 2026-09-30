@@ -23,6 +23,17 @@ typedef enum {
 
 /**
  * Encrypt using ChaCha20-Poly1305.
+ *
+ * Raw-pointer caller contract: key/nonce/aad/plaintext must be readable for
+ * their stated lengths; ciphertext must be writable for pt_len bytes and tag
+ * for 16 bytes. Aliasing requirements are those of the selected primitive;
+ * this declaration does not impose a new disjointness requirement on raw C
+ * callers. The safe Rust interface supplies disjoint mutable output slices.
+ * This ABI carries no output capacities, so callers must establish them before
+ * entry. The safe Rust wrapper performs these checks on its actual slices.
+ * Key/nonce lengths other than 32/12 or aad_len/pt_len above UINT32_MAX are
+ * rejected before the primitive is called. No length is silently truncated.
+ * On success exactly pt_len ciphertext bytes and 16 tag bytes are written.
  */
 jwe_rc Jose_Jwe_chacha20poly1305_encrypt(jwe_buf key, size_t key_len,
                                          jwe_buf nonce, size_t nonce_len,
