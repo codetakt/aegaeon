@@ -767,3 +767,5 @@ async fn client_credentials_application_identity_composition_with_one_connection
     .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
+
+mod online_resources;
