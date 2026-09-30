@@ -148,6 +148,13 @@ unchecked constructor or deserializer. This boundary concerns authenticated
 grant issuance; it does not turn a trusted low-level signing capability into an
 untrusted interface.
 
+The synchronous `TokenValidator::introspect_token` convenience API returns
+inactive whenever either client-credentials authority marker is present. It has
+no live environment-authority context. Use authenticated HTTP introspection for
+these tokens. Signature and stored-metadata validation alone does not establish
+current policy or registration authority; Aegaeon's online handlers additionally
+perform the currentness checks described above.
+
 ## Verification boundary
 
 This contract concerns Aegaeon's client-credentials issuance and online token

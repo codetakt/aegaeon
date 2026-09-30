@@ -3090,7 +3090,8 @@ rfc_8693:
   - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
   - "Runtime capture bounds target capabilities by the client's allowed scopes at code issuance and checks current registration again at exchange. Capturing that client-scope ceiling is not established by the cited abstract root-authority model. Old snapshot versions require reauthorization; current registration is never used to backfill them."
   - Marked client_credentials tokens permit only same-audience scope attenuation, preserving
-    their captured client_credentials authority and marker while checking current authority;
+    their captured client_credentials provenance and recomputing the full-snapshot marker
+    for the attenuated scopes while checking current authority;
     cross-audience conversion is rejected. The cited authorization-code target model does
     not establish correspondence for this separate provenance.
 
