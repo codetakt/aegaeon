@@ -229,6 +229,9 @@ Secret material rules (MUST):
 
 `configurationDocument.policy` MUST be a JSON object with the following keys:
 
+- `clientCredentials` (object; optional on historical documents, defaults to deny-all version 1;
+  see [client-credentials target authorization](../../configurations/client-credentials.md)
+  for caller/target rules, defaults and independent resource-server introspection bindings)
 - `pkceRequired` (boolean)
 - `dcrEnabled` (boolean)
 - `requireStateParameter` (boolean)

@@ -530,3 +530,25 @@ fn token_exchange_policy_round_trips_explicit_target_authority() -> Result<(), S
     assert_eq!(actual["tokenExchange"], exchange);
     Ok(())
 }
+
+#[test]
+fn client_credentials_policy_roundtrip_and_missing_authority_default() -> Result<(), Box<dyn std::error::Error>> {
+    let mut policy = PolicyDocument::default();
+    policy.token_exchange = serde_json::from_value(serde_json::json!({"version":1,
+        "targets":[{"audience":"api","resourceAliases":["https://api.example/resource"]}],"rules":[]}))?;
+    policy.client_credentials = serde_json::from_value(serde_json::json!({"version":1,
+        "resourceServers":[{"targetAudience":"api","introspectionClients":["resource-server"]}],
+        "rules":[{"clientId":"worker","targetAudience":"api","scopes":["read"],
+            "defaultScopes":["read"],"defaultTarget":true}]}))?;
+    let mut document = serde_json::to_value(&policy)?;
+    let decoded: PolicyDocument = serde_json::from_value(document.clone())?;
+    let runtime = ServerConfig::default().with_management_policy(&decoded)?;
+    assert_eq!(runtime.client_credentials, policy.client_credentials);
+    assert_eq!(runtime.token_exchange, policy.token_exchange);
+    document.as_object_mut().expect("policy object").remove("clientCredentials");
+    let legacy: PolicyDocument = serde_json::from_value(document)?;
+    assert_eq!(legacy.client_credentials, Default::default());
+    policy.client_credentials.resource_servers.clear();
+    assert!(ServerConfig::default().with_management_policy(&policy).is_err());
+    Ok(())
+}

@@ -100,6 +100,7 @@ SET
   client_secret_default_expiration_days = $98,
   client_secret_max_expiration_days = $99,
   token_exchange = $100,
+  client_credentials = $101,
   updated_at = now()
 WHERE environment_id = $1
 ";

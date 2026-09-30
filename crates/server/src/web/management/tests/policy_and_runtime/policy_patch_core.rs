@@ -15,7 +15,7 @@ fn policy_patch_rejects_federation_op_enablement_input() {
 fn environment_policy_update_sql_projection_placeholders_are_contiguous() -> ManagementTestResult {
     let sql = super::configuration_documents::UPDATE_ENVIRONMENT_POLICY_SQL;
     let placeholders = policy_update_sql_placeholders(sql)?;
-    let expected = (1..=100).collect::<Vec<_>>();
+    let expected = (1..=101).collect::<Vec<_>>();
     assert_eq!(
         placeholders, expected,
         "environment policy update SQL placeholders must stay contiguous"
@@ -31,6 +31,7 @@ fn environment_policy_update_sql_projection_placeholders_are_contiguous() -> Man
         ("client_secret_default_expiration_days", 98usize),
         ("client_secret_max_expiration_days", 99usize),
         ("token_exchange", 100usize),
+        ("client_credentials", 101usize),
     ] {
         assert!(
             sql.contains(&format!("{column} = ${placeholder}")),
@@ -63,6 +64,7 @@ fn apply_policy_patch_preserves_untouched_fields() {
     let policy = default_policy_document();
     let patch = PolicyPatchRequest {
         token_exchange: None,
+        client_credentials: None,
         base_configuration_version_id: "00000000-0000-0000-0000-000000000000".to_string(),
         pkce_required: None,
         dcr_enabled: None,
@@ -180,6 +182,7 @@ fn apply_policy_patch_updates_boolean_fields() {
     let policy = default_policy_document();
     let patch = PolicyPatchRequest {
         token_exchange: None,
+        client_credentials: None,
         base_configuration_version_id: "00000000-0000-0000-0000-000000000000".to_string(),
         pkce_required: Some(false),
         dcr_enabled: Some(true),
@@ -346,6 +349,7 @@ fn apply_policy_patch_sets_ssa_fields() {
     let policy = default_policy_document();
     let patch = PolicyPatchRequest {
         token_exchange: None,
+        client_credentials: None,
         base_configuration_version_id: "00000000-0000-0000-0000-000000000000".to_string(),
         pkce_required: None,
         dcr_enabled: None,

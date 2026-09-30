@@ -10,6 +10,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 mod database_cleanup;
+mod client_credentials_policy;
 mod exchange_policy;
 mod exchange_reload;
 mod fingerprints;

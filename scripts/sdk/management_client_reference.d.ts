@@ -312,10 +312,25 @@ export type ActivateConfigurationVersionRequest = {
   reason?: string | null;
 };
 
-export type PolicyDocument = Record<string, unknown>;
+export type ClientCredentialsPolicy = {
+  version: 1;
+  resourceServers: { targetAudience: string; introspectionClients: string[] }[];
+  rules: {
+    clientId: string;
+    targetAudience: string;
+    scopes: string[];
+    defaultScopes: string[];
+    defaultTarget: boolean;
+  }[];
+};
+
+export type PolicyDocument = Record<string, unknown> & {
+  clientCredentials?: ClientCredentialsPolicy;
+};
 
 export type PolicyPatchRequest = {
   baseConfigurationVersionId: string;
+  clientCredentials?: ClientCredentialsPolicy | null;
   [key: string]: unknown;
 };
 

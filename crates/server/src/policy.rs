@@ -1,5 +1,6 @@
 mod grant_types;
 pub mod token_exchange;
+pub mod client_credentials;
 
 pub use grant_types::{
     canonical_supported_grant_type, canonical_supported_grant_types, default_grant_types,

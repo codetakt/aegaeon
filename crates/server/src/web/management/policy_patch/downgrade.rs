@@ -240,6 +240,9 @@ pub(in crate::web::management) fn detect_security_downgrade(
     if before.token_exchange != after.token_exchange {
         downgrades.push("token_exchange");
     }
+    if before.client_credentials != after.client_credentials {
+        downgrades.push("client_credentials");
+    }
     downgrades
 }
 

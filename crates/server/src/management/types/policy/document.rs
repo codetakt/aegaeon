@@ -52,6 +52,8 @@ impl From<PolicySenderConstraint> for SenderConstraint {
 pub struct PolicyDocument {
     #[serde(default)]
     pub token_exchange: crate::policy::token_exchange::TokenExchangePolicy,
+    #[serde(default)]
+    pub client_credentials: crate::policy::client_credentials::ClientCredentialsPolicy,
 
     pub pkce_required: bool,
     pub dcr_enabled: bool,
@@ -166,6 +168,7 @@ impl Default for PolicyDocument {
     fn default() -> Self {
         Self {
             token_exchange: Default::default(),
+            client_credentials: Default::default(),
             pkce_required: true,
             dcr_enabled: false,
             dcr_everparse_runtime_enabled: false,

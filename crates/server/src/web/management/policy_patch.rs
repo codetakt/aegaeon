@@ -22,6 +22,9 @@ pub(super) fn apply_policy_patch(
     if let Some(value) = &patch.token_exchange {
         policy.token_exchange.clone_from(value);
     }
+    if let Some(value) = &patch.client_credentials {
+        policy.client_credentials.clone_from(value);
+    }
     base::apply_base_policy_patch(&mut policy, patch);
     jwks::apply_jwks_policy_patch(&mut policy, patch);
     jwt::apply_jwt_policy_patch(&mut policy, patch);

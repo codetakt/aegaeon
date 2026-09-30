@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct PolicyPatchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_exchange: Option<crate::policy::token_exchange::TokenExchangePolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_credentials: Option<crate::policy::client_credentials::ClientCredentialsPolicy>,
     #[cfg_attr(feature = "openapi", schema(format = "uuid"))]
     pub base_configuration_version_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
