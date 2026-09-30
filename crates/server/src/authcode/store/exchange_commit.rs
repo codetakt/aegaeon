@@ -120,12 +120,18 @@ pub(super) fn validate_exchange_commit(
     }) {
         return Err("exchange application authority exceeds its parent");
     }
-    match (&subject.client_credentials_grant, &output.client_credentials_grant) {
+    match (
+        &subject.client_credentials_grant,
+        &output.client_credentials_grant,
+    ) {
         (None, None) => {}
-        (Some(source), Some(derived)) if derived.is_restriction_of(source)
-            && parent.is_none() && output.refresh_parent.is_none()
-            && subject.refresh_parent.is_none() && subject.exchange_grant.is_none()
-            && output.exchange_grant.is_none() => {}
+        (Some(source), Some(derived))
+            if derived.is_restriction_of(source)
+                && parent.is_none()
+                && output.refresh_parent.is_none()
+                && subject.refresh_parent.is_none()
+                && subject.exchange_grant.is_none()
+                && output.exchange_grant.is_none() => {}
         _ => return Err("exchange must preserve client-credentials authority"),
     }
     if subject.exchange_grant.is_none() {

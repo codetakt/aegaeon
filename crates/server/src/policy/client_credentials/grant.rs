@@ -53,8 +53,13 @@ impl ClientCredentialsGrant {
             || self.caller.client_id.is_empty()
             || self.caller.registration_id.is_nil()
             || self.audience.is_empty()
-            || [&self.context_digest, &self.configuration_document_fingerprint, &self.runtime_client_fingerprint]
-                .iter().any(|digest| digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()))
+            || [
+                &self.context_digest,
+                &self.configuration_document_fingerprint,
+                &self.runtime_client_fingerprint,
+            ]
+            .iter()
+            .any(|digest| digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()))
             || self.scopes.is_empty()
             || self.scopes.len() > 128
             || self.scopes.windows(2).any(|pair| pair[0] >= pair[1])
@@ -64,11 +69,14 @@ impl ClientCredentialsGrant {
                         .is_ok_and(|scopes| scopes.len() == 1)
             })
             || self.introspection_clients.len() > 128
-            || self.introspection_clients.windows(2)
+            || self
+                .introspection_clients
+                .windows(2)
                 .any(|pair| pair[0].client_id >= pair[1].client_id)
-            || self.introspection_clients.iter().any(|identity| {
-                identity.client_id.is_empty() || identity.registration_id.is_nil()
-            })
+            || self
+                .introspection_clients
+                .iter()
+                .any(|identity| identity.client_id.is_empty() || identity.registration_id.is_nil())
         {
             return Err("invalid client-credentials authorization snapshot");
         }
@@ -82,11 +90,20 @@ impl ClientCredentialsGrant {
         Ok(aegaeon_crypto::hash::sha256_hex(&bytes))
     }
 
-    pub(crate) fn covers(&self, client: &str, subject: &str, audience: &str, scopes: &[String]) -> bool {
+    pub(crate) fn covers(
+        &self,
+        client: &str,
+        subject: &str,
+        audience: &str,
+        scopes: &[String],
+    ) -> bool {
         let mut scopes = scopes.to_vec();
         scopes.sort();
-        self.validate().is_ok() && self.caller.client_id == client && subject == client
-            && self.audience == audience && self.scopes == scopes
+        self.validate().is_ok()
+            && self.caller.client_id == client
+            && subject == client
+            && self.audience == audience
+            && self.scopes == scopes
     }
 
     pub(crate) fn attenuate(&self, scopes: &[String]) -> Result<Self, &'static str> {
@@ -100,8 +117,12 @@ impl ClientCredentialsGrant {
     }
 
     pub(crate) fn is_restriction_of(&self, parent: &Self) -> bool {
-        if self.validate().is_err() || parent.validate().is_err()
-            || !self.scopes.iter().all(|scope| parent.scopes.contains(scope))
+        if self.validate().is_err()
+            || parent.validate().is_err()
+            || !self
+                .scopes
+                .iter()
+                .all(|scope| parent.scopes.contains(scope))
         {
             return false;
         }
@@ -121,7 +142,10 @@ impl ClientCredentialsGrant {
             configuration_version_id: Uuid::from_u128(2),
             configuration_document_fingerprint: "0".repeat(64),
             runtime_client_fingerprint: "0".repeat(64),
-            caller: ClientCredentialsRegistration { client_id: client.to_string(), registration_id: Uuid::from_u128(3) },
+            caller: ClientCredentialsRegistration {
+                client_id: client.to_string(),
+                registration_id: Uuid::from_u128(3),
+            },
             audience: audience.to_string(),
             scopes,
             context_digest: "0".repeat(64),

@@ -5,8 +5,8 @@ use super::{
 use crate::authcode::types::{
     AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding, TokenResponse,
 };
-use std::{borrow::Cow, time::SystemTime};
 use crate::policy::client_credentials::{AuthorizedClientCredentials, ClientCredentialsGrant};
+use std::{borrow::Cow, time::SystemTime};
 
 #[derive(Clone, Copy)]
 enum SubjectTokenGrantKind {
@@ -116,8 +116,12 @@ impl TokenIssuer {
         sender_binding: Option<SenderBinding>,
     ) -> Result<TokenResponse, String> {
         self.issue_client_credentials_application_token_async(
-            permit, cnf.as_ref(), sender_binding.as_ref(), None,
-        ).await
+            permit,
+            cnf.as_ref(),
+            sender_binding.as_ref(),
+            None,
+        )
+        .await
     }
 
     pub(crate) async fn issue_client_credentials_application_token_async(
@@ -138,16 +142,23 @@ impl TokenIssuer {
             cnf,
             sender_binding,
             application_grant,
-        }).await
+        })
+        .await
     }
 
     /// Unchecked authority fixture for isolated issuer tests; not a runtime API.
     #[cfg(test)]
     pub(crate) fn client_credentials_permit_for_tests(
-        &self, client: &str, scopes: &[String], audience: &str,
+        &self,
+        client: &str,
+        scopes: &[String],
+        audience: &str,
     ) -> AuthorizedClientCredentials {
         let grant = ClientCredentialsGrant::fixture(
-            self.issuer.as_deref().unwrap_or("https://issuer.example"), client, audience, scopes,
+            self.issuer.as_deref().unwrap_or("https://issuer.example"),
+            client,
+            audience,
+            scopes,
         );
         AuthorizedClientCredentials::new(grant).expect("valid isolated issuer authority fixture")
     }
@@ -317,17 +328,21 @@ impl TokenIssuer {
 
         let resource = match client_credentials_grant {
             Some(grant) => {
-                if grant.validate().is_err() || self.issuer.as_deref() != Some(grant.issuer.as_str()) {
-                    return Err(SubjectTokenGrantError::invalid_target("client-credentials permit issuer mismatch".into()));
+                if grant.validate().is_err()
+                    || self.issuer.as_deref() != Some(grant.issuer.as_str())
+                {
+                    return Err(SubjectTokenGrantError::invalid_target(
+                        "client-credentials permit issuer mismatch".into(),
+                    ));
                 }
                 Some(grant.audience.clone())
             }
             None => match validate_optional_resource_indicator(resource) {
-            Ok(value) => value,
-            Err(err) => {
-                return Err(SubjectTokenGrantError::invalid_target(err));
-            }
-        },
+                Ok(value) => value,
+                Err(err) => {
+                    return Err(SubjectTokenGrantError::invalid_target(err));
+                }
+            },
         };
 
         let expires_in = self.access_token_ttl_secs;
@@ -361,8 +376,10 @@ impl TokenIssuer {
 
         let access_token = AccessToken {
             exchange_root: None,
-            client_credentials_digest: client_credentials_grant.map(ClientCredentialsGrant::digest)
-                .transpose().map_err(SubjectTokenGrantError::server)?,
+            client_credentials_digest: client_credentials_grant
+                .map(ClientCredentialsGrant::digest)
+                .transpose()
+                .map_err(SubjectTokenGrantError::server)?,
             token: access_token_str.clone(),
             token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: client_id.to_string(),

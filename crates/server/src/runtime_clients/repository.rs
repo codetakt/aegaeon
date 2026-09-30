@@ -208,9 +208,12 @@ pub(crate) async fn load_client_identities_guarded(
     client_ids: &[String],
 ) -> Result<Vec<RuntimeClientIdentity>, RuntimeClientSnapshotError> {
     let mut tx = begin_runtime_client_snapshot(pool).await?;
-    let actual = load_runtime_authority_revision_for_issuer_host_in_tx(&mut tx, issuer_host).await?;
+    let actual =
+        load_runtime_authority_revision_for_issuer_host_in_tx(&mut tx, issuer_host).await?;
     if actual != *expected {
-        return Err(RuntimeClientSnapshotError::RuntimeRevisionMismatch(issuer_host.into()));
+        return Err(RuntimeClientSnapshotError::RuntimeRevisionMismatch(
+            issuer_host.into(),
+        ));
     }
     let rows = sqlx::query(
         "SELECT c.id, c.client_identifier, c.allowed_grant_types, c.allowed_scopes \
@@ -219,14 +222,24 @@ pub(crate) async fn load_client_identities_guarded(
          WHERE rt.issuer_host = $1 AND rt.environment_id = $2 AND c.status = 'ACTIVE' \
          AND c.client_identifier = ANY($3) ORDER BY c.client_identifier",
     ).bind(issuer_host).bind(environment_id).bind(client_ids).fetch_all(&mut *tx).await?;
-    let identities = rows.iter().map(|row| Ok(RuntimeClientIdentity {
-        registration_id: row.try_get("id")?,
-        client_id: row.try_get("client_identifier")?,
-        allowed_grant_types: row.try_get("allowed_grant_types")?,
-        allowed_scopes: row.try_get("allowed_scopes")?,
-    })).collect::<Result<Vec<_>, sqlx::Error>>()?;
-    if identities.windows(2).any(|pair| pair[0].client_id == pair[1].client_id) {
-        return Err(RuntimeClientSnapshotError::AmbiguousIssuerHost(issuer_host.into()));
+    let identities = rows
+        .iter()
+        .map(|row| {
+            Ok(RuntimeClientIdentity {
+                registration_id: row.try_get("id")?,
+                client_id: row.try_get("client_identifier")?,
+                allowed_grant_types: row.try_get("allowed_grant_types")?,
+                allowed_scopes: row.try_get("allowed_scopes")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    if identities
+        .windows(2)
+        .any(|pair| pair[0].client_id == pair[1].client_id)
+    {
+        return Err(RuntimeClientSnapshotError::AmbiguousIssuerHost(
+            issuer_host.into(),
+        ));
     }
     tx.commit().await?;
     Ok(identities)

@@ -39,7 +39,8 @@ impl ServerConfig {
         self.enable_jwt_bearer_grant = policy_allows_grant(policy, JWT_BEARER_GRANT_TYPE);
         self.allow_jwt_bearer_client_subject = policy.jwt_bearer_allow_client_subject;
         self.token_exchange.clone_from(&policy.token_exchange);
-        self.client_credentials.clone_from(&policy.client_credentials);
+        self.client_credentials
+            .clone_from(&policy.client_credentials);
         self.enable_token_exchange = policy_allows_grant(policy, TOKEN_EXCHANGE_GRANT_TYPE);
         self.enable_device_authz = policy_allows_grant(policy, DEVICE_CODE_GRANT_TYPE);
         self.allowed_grant_types = canonical_supported_grant_types(&policy.allowed_grant_types)

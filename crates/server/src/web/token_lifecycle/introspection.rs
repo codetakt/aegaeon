@@ -95,10 +95,16 @@ pub(super) async fn introspection_token_visible_to_client(
     meta: Option<&BearerTokenMeta>,
     requester: Option<&str>,
 ) -> Result<bool, Response> {
-    let Some(requester) = requester else { return Ok(false); };
+    let Some(requester) = requester else {
+        return Ok(false);
+    };
     super::super::client_credentials_authorization::introspection_visible(
-        state, access_token, meta, requester,
-    ).await
+        state,
+        access_token,
+        meta,
+        requester,
+    )
+    .await
 }
 
 fn access_token_introspection_exp(access_token: &AccessToken) -> Option<u64> {
@@ -137,25 +143,24 @@ pub(super) async fn active_introspection_body(
         apply_introspection_cnf_claim(&mut body, cnf_claim);
     }
     if let Some(meta) = meta {
-            if let Some(grant) = meta.application_grant.as_ref() {
-                match super::super::application_authorization::current(state, grant).await {
-                    Ok(false) => return Ok(json!({"active":false})),
-                    Err(_) => {
-                        return Err(no_cache_json_error_with_iss(
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            "temporarily_unavailable",
-                            Some("application authority unavailable"),
-                            state.issuer.as_str(),
-                        ))
-                    }
-                    Ok(true) => {}
+        if let Some(grant) = meta.application_grant.as_ref() {
+            match super::super::application_authorization::current(state, grant).await {
+                Ok(false) => return Ok(json!({"active":false})),
+                Err(_) => {
+                    return Err(no_cache_json_error_with_iss(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "temporarily_unavailable",
+                        Some("application authority unavailable"),
+                        state.issuer.as_str(),
+                    ))
                 }
-                if grant.audiences.contains(&meta.audience) {
-                    body[crate::application_authorization::inorii::CLAIM_NAME] =
-                        json!(grant.claims);
-                }
+                Ok(true) => {}
             }
-            augment_introspection_body_with_meta(&mut body, meta, state.issuer.as_str())?;
+            if grant.audiences.contains(&meta.audience) {
+                body[crate::application_authorization::inorii::CLAIM_NAME] = json!(grant.claims);
+            }
+        }
+        augment_introspection_body_with_meta(&mut body, meta, state.issuer.as_str())?;
     }
     Ok(body)
 }

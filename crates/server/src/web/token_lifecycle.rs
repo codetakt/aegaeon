@@ -111,14 +111,23 @@ async fn active_access_token_introspection_response(
     access_token: &AccessToken,
     introspect_client: &EndpointClientAuthContext,
 ) -> Response {
-    let meta = match state.tokens.store.try_get_bearer_meta_async(token.to_string()).await {
+    let meta = match state
+        .tokens
+        .store
+        .try_get_bearer_meta_async(token.to_string())
+        .await
+    {
         Ok(meta) => meta,
         Err(error) => return token_store_introspection_error(state, error),
     };
     if (access_token.client_credentials_digest.is_some()
-        || meta.as_ref().is_some_and(|meta| meta.client_credentials_grant.is_some()))
+        || meta
+            .as_ref()
+            .is_some_and(|meta| meta.client_credentials_grant.is_some()))
         && introspect_client.client_auth_method == "none"
-    { return inactive_introspection_response(state, headers, introspect_client); }
+    {
+        return inactive_introspection_response(state, headers, introspect_client);
+    }
     let visible = match introspection_token_visible_to_client(
         state,
         access_token,
@@ -195,13 +204,19 @@ pub(super) async fn introspect(
         Err(resp) => return resp,
     };
     // Pin the presented identity before authentication; token state remains unread here.
-    let basic_id = super::oauth_errors::authorization_header(&headers).ok().flatten()
+    let basic_id = super::oauth_errors::authorization_header(&headers)
+        .ok()
+        .flatten()
         .and_then(crate::client_registry::ClientRegistry::decode_basic_auth_credentials)
         .map(|(id, _)| id);
     let requested_id = basic_id.as_deref().or(form.client_id.as_deref());
     let state = match super::client_credentials_authorization::request_state(
-        &state, &requested_id.into_iter().collect::<Vec<_>>(),
-    ) { Ok(state) => state, Err(response) => return response };
+        &state,
+        &requested_id.into_iter().collect::<Vec<_>>(),
+    ) {
+        Ok(state) => state,
+        Err(response) => return response,
+    };
     let issuer_base = state.issuer.as_str();
     let introspect_client =
         match authenticate_introspection_client(&state, &headers, &form, issuer_base).await {
