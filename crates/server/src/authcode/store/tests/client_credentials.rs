@@ -176,3 +176,20 @@ fn client_credentials_initial_storage_rejects_marker_mismatch_and_refresh() -> S
     }
     Ok(())
 }
+
+#[test]
+fn client_credentials_legacy_serialization_never_infers_authority() -> StoreTestResult {
+    let access=AccessToken::new("legacy".into(),"legacy".into(),Some("read".into()),300);
+    let meta=BearerTokenMeta::new(bearer_meta_input(&access.token,"legacy","legacy"));
+    let access_json=serde_json::to_value(access).map_err(|error|error.to_string())?;
+    let meta_json=serde_json::to_value(meta).map_err(|error|error.to_string())?;
+    assert!(access_json.get("client_credentials_digest").is_none());
+    assert!(meta_json.get("client_credentials_grant").is_none());
+    let access:AccessToken=serde_json::from_value(access_json).map_err(|error|error.to_string())?;
+    let meta:BearerTokenMeta=serde_json::from_value(meta_json).map_err(|error|error.to_string())?;
+    assert!(access.client_credentials_digest.is_none());
+    assert!(meta.client_credentials_grant.is_none());
+    assert!(serde_json::to_value(access).map_err(|error|error.to_string())?.get("client_credentials_digest").is_none());
+    assert!(serde_json::to_value(meta).map_err(|error|error.to_string())?.get("client_credentials_grant").is_none());
+    Ok(())
+}

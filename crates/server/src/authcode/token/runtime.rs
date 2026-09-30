@@ -59,6 +59,14 @@ impl TokenIssuer {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_runtime_ttls_for_tests(mut self, access: u64, refresh: u64, code: u64) -> Self {
+        self.access_token_ttl_secs = access;
+        self.refresh_token_ttl_secs = refresh;
+        self.authorization_code_ttl_secs = code;
+        self
+    }
+
     /// Create a process-local token issuer for unit tests.
     ///
     /// Production code should use [`Self::try_from_shared_store_env_with_ttls`].
