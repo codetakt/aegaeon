@@ -49,16 +49,21 @@ pub fn rsa_oaep_unwrap(
 
 /// Decrypt AES-256-GCM ciphertext.
 ///
-/// `cek` must be exactly 32 bytes. `iv` must be 12 bytes. `tag` must be 16 bytes.
+/// `cek` must be exactly 32 bytes. `iv` must be 12 bytes. `tag` must be exactly
+/// 16 bytes, as required by [RFC 7518, Section 5.3]. Ciphertext and tag are
+/// validated as separate inputs; moving bytes between them is rejected.
+///
 /// The supplied mutable CEK is consumed: its bytes are zeroized on every
 /// ordinary return, including validation and authentication errors. The caller
 /// owns the returned plaintext and its eventual erasure. Provider-internal
 /// objects and other copies of the inputs are outside this buffer contract.
 ///
+/// [RFC 7518, Section 5.3]: https://www.rfc-editor.org/rfc/rfc7518#section-5.3
+///
 /// # Errors
 ///
 /// Returns `CryptoError::InvalidKey` when the CEK length is invalid and
-/// `CryptoError::DecryptionFailed` when the IV length or authentication check fails.
+/// `CryptoError::DecryptionFailed` when the IV/tag length or authentication check fails.
 pub fn decrypt_a256gcm(
     cek: &mut [u8],
     iv: &[u8],
@@ -74,6 +79,9 @@ pub fn decrypt_a256gcm(
         .try_into()
         .map_err(|_| CryptoError::DecryptionFailed("invalid IV length".into()))?;
     let nonce = Nonce::assume_unique_for_key(nonce_bytes);
+    if tag.len() != 16 {
+        return Err(CryptoError::DecryptionFailed("invalid tag length".into()));
+    }
     let capacity = ciphertext
         .len()
         .checked_add(tag.len())
