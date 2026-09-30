@@ -31,6 +31,8 @@ sender constraints, and release handling.
   runtime authority, environment, and startup troubleshooting.
 - `[runbook]` [JWKS operations](jwks-operations.md) — key distribution,
   caching, pinning, and circuit behaviour.
+- `[runbook]` [Shared client JWKS fingerprint state](jwks-fingerprint-state.md) —
+  admission permissions, reply handling, and partial-effect recovery limits.
 - `[index]` [Monitoring overview](monitoring/README.md) — metrics, alerts, and
   sample dashboard configuration.
 - `[runbook]` [Hardened reference deployment](hardened-reference-deployment.md)
