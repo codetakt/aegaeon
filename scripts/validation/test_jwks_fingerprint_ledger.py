@@ -19,22 +19,46 @@ import tempfile
 from pathlib import Path
 
 
-def inside_namespace(binary: str, filters: list[str], parent_namespace: str) -> int:
+def inside_namespace(
+    binary: str,
+    filters: list[str],
+    parent_namespace: str,
+    ip: str,
+    server: str,
+    engine: str,
+    run_as: list[int] | None,
+) -> int:
     namespace = os.readlink("/proc/self/ns/net")
     if namespace == parent_namespace:
         raise RuntimeError("network namespace was not isolated")
-    subprocess.run(["ip", "link", "set", "lo", "up"], check=True)
-    links = json.loads(subprocess.check_output(["ip", "-j", "link", "show"]))
+    subprocess.run([ip, "link", "set", "lo", "up"], check=True)
+    links = json.loads(subprocess.check_output([ip, "-j", "link", "show"]))
     if any(link["ifname"] != "lo" and "UP" in link["flags"] for link in links):
         raise RuntimeError("fixture namespace has an active non-loopback interface")
     for family in ("-4", "-6"):
         routes = json.loads(
-            subprocess.check_output(["ip", family, "-j", "route", "show", "table", "all"])
+            subprocess.check_output([ip, family, "-j", "route", "show", "table", "all"])
         )
         if any(route.get("dev") != "lo" for route in routes):
             raise RuntimeError("fixture namespace contains a non-loopback route")
+    if run_as is not None:
+        uid, gid = run_as
+        if os.geteuid() != 0 or uid <= 0 or gid < 0:
+            raise RuntimeError("privileged namespace must drop to the invoking non-root user")
+        os.setgroups([])
+        os.setgid(gid)
+        os.setuid(uid)
+        if (os.getuid(), os.geteuid(), os.getgid(), os.getegid()) != (uid, uid, gid, gid):
+            raise RuntimeError("fixture privilege drop failed")
+    print(f"Fixture namespace: {namespace}; uid={os.geteuid()}; gid={os.getegid()}", flush=True)
     with tempfile.TemporaryDirectory(prefix="aegaeon-ledger-", dir="/tmp") as directory:
-        env = dict(os.environ, JWKS_LEDGER_TEST_NETNS=namespace, JWKS_LEDGER_TEST_DIR=directory)
+        env = dict(
+            os.environ,
+            JWKS_LEDGER_TEST_NETNS=namespace,
+            JWKS_LEDGER_TEST_DIR=directory,
+            JWKS_LEDGER_TEST_SERVER=server,
+            JWKS_LEDGER_TEST_ENGINE=engine,
+        )
         command = [binary, *filters, "--include-ignored", "--test-threads=1"]
         if env["JWKS_LEDGER_TEST_ENGINE"] == "redis-legacy":
             # Older Redis does not have the inspected base-time addition guards.
@@ -48,16 +72,39 @@ def main() -> int:
     parser.add_argument("--filter", action="append")
     parser.add_argument("--server", default="redis-server")
     parser.add_argument(
+        "--sudo-netns",
+        action="store_true",
+        help="create the network namespace with sudo, then run fixtures as the invoking user",
+    )
+    parser.add_argument(
         "--inside", nargs=2, metavar=("BINARY", "PARENT_NETNS"), help=argparse.SUPPRESS
     )
+    parser.add_argument("--ip-tool", help=argparse.SUPPRESS)
+    parser.add_argument("--engine", help=argparse.SUPPRESS)
+    parser.add_argument("--run-as", nargs=2, type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     filters = args.filter or ["client_registry::jwks_runtime_state::redis_kid::"]
     if args.inside:
-        return inside_namespace(args.inside[0], filters, args.inside[1])
+        if args.ip_tool is None or args.engine is None:
+            parser.error("internal namespace invocation lacks resolved tools or backend profile")
+        return inside_namespace(
+            args.inside[0],
+            filters,
+            args.inside[1],
+            args.ip_tool,
+            args.server,
+            args.engine,
+            args.run_as,
+        )
     if sys.platform != "linux":
         parser.error("the contained backend fixtures require Linux")
+    if args.sudo_netns and os.geteuid() == 0:
+        parser.error("--sudo-netns must be invoked by the non-root user who will run the tests")
     tool_paths: dict[str, str] = {}
-    for tool in ("cargo", "unshare", "ip", args.server):
+    required_tools = ["cargo", "unshare", "ip", args.server]
+    if args.sudo_netns:
+        required_tools.append("sudo")
+    for tool in required_tools:
         resolved = shutil.which(tool)
         if resolved is None:
             parser.error(f"required executable not found: {tool}")
@@ -76,7 +123,7 @@ def main() -> int:
     root = Path(__file__).resolve().parents[2]
     build = subprocess.run(
         [
-            "cargo",
+            tool_paths["cargo"],
             "test",
             "--locked",
             "-p",
@@ -108,21 +155,28 @@ def main() -> int:
     listing = subprocess.check_output([executable, *filters, "--list"], text=True)
     if not any(line.endswith(": test") for line in listing.splitlines()):
         raise RuntimeError("test filters selected no tests")
-    env = dict(os.environ, JWKS_LEDGER_TEST_SERVER=server, JWKS_LEDGER_TEST_ENGINE=engine)
-    command = [
-        "unshare",
-        "--user",
-        "--map-root-user",
-        "--net",
+    if args.sudo_netns:
+        command = [tool_paths["sudo"], "-n", "--", tool_paths["unshare"], "--net"]
+    else:
+        command = [tool_paths["unshare"], "--user", "--map-root-user", "--net"]
+    command += [
         sys.executable,
         str(Path(__file__).resolve()),
         "--inside",
         executable,
         os.readlink("/proc/self/ns/net"),
+        "--ip-tool",
+        tool_paths["ip"],
+        "--server",
+        server,
+        "--engine",
+        engine,
     ]
+    if args.sudo_netns:
+        command += ["--run-as", str(os.getuid()), str(os.getgid())]
     for test_filter in filters:
         command += ["--filter", test_filter]
-    return subprocess.run(command, cwd=root, env=env, check=False).returncode
+    return subprocess.run(command, cwd=root, check=False).returncode
 
 
 if __name__ == "__main__":

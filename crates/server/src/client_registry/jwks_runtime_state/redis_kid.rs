@@ -98,11 +98,11 @@ impl RedisJwksRuntimeState {
         invocation
             .invoke::<redis::Value>(&mut self.connection()?)
             .map_err(|err| JwksSharedStateError::BackendUnavailable(err.to_string()))
-            .and_then(decode_kid_ledger_reply)
+            .and_then(|value| decode_kid_ledger_reply(&value))
     }
 }
 
-fn decode_kid_ledger_reply(value: redis::Value) -> Result<bool, JwksSharedStateError> {
+fn decode_kid_ledger_reply(value: &redis::Value) -> Result<bool, JwksSharedStateError> {
     match value {
         redis::Value::Int(0) => Ok(false),
         redis::Value::Int(1) => Ok(true),

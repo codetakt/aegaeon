@@ -15,6 +15,7 @@ NAMESPACE_TEST_SKIPS=(
 	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
 	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
 	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::
+	--skip client_registry::jwks_runtime_state::redis_kid::behavior_tests::
 )
 
 usage() {

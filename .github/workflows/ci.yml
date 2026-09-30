@@ -237,6 +237,10 @@ jobs:
         run: |
           nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py --sudo-netns
 
+      - name: Run JWKS fingerprint tests in an isolated network namespace
+        run: |
+          nix develop .#ci --command python3 scripts/validation/test_jwks_fingerprint_ledger.py --sudo-netns
+
       - name: Compare Redis grant traces with F* fixtures
         run: |
           nix develop .#ci --command python3 scripts/validation/check_authcode_redis_grant.py \

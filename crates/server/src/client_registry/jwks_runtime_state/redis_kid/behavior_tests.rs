@@ -683,8 +683,8 @@ fn cold_noscript_and_transport_reply_loss() {
 
 #[test]
 fn raw_reply_type_is_exact() {
-    assert!(!decode_kid_ledger_reply(redis::Value::Int(0)).unwrap());
-    assert!(decode_kid_ledger_reply(redis::Value::Int(1)).unwrap());
+    assert!(!decode_kid_ledger_reply(&redis::Value::Int(0)).unwrap());
+    assert!(decode_kid_ledger_reply(&redis::Value::Int(1)).unwrap());
     let bad = [
         redis::Value::Int(-1),
         redis::Value::Int(2),
@@ -702,7 +702,7 @@ fn raw_reply_type_is_exact() {
         },
     ];
     for value in bad {
-        let err = decode_kid_ledger_reply(value).unwrap_err();
+        let err = decode_kid_ledger_reply(&value).unwrap_err();
         assert!(
             matches!(err,JwksSharedStateError::BackendUnavailable(ref message) if message == "unexpected JWKS kid-ledger reply")
         );

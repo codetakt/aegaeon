@@ -84,6 +84,14 @@ disabled. It never connects to the configured production Redis. Ordinary
 workspace test selection does not run the ignored backend fixtures; the command
 above includes them explicitly.
 
+The DB integration CI job runs this dedicated command as a required step. Its
+Compose-backed sweeps exclude only this fixture module, whose tests require a
+separate namespace and disposable backend. On hosts that restrict unprivileged
+user namespaces, use `--sudo-netns`: Cargo still builds as the invoking user;
+passwordless sudo creates and checks a network namespace, then drops supplementary
+groups and returns to the original UID/GID before starting fixtures. No host
+network settings are changed, and a failed isolation setup fails the command.
+
 Use `--server /path/to/valkey-server` or another Redis binary to select a backend.
 The runner identifies its version and exercises database ACL selectors on Valkey
 9.1 or later. It explicitly omits the newer-engine time-addition regression on
