@@ -57,20 +57,6 @@ fn use_oidc_id_token_payload_verified_structural_backend() -> RawJsonBackendOver
     use_oidc_id_token_payload_backend("verified-structural-v1")
 }
 
-fn raw_json_structural_parser_unavailable(payload: &[u8]) -> bool {
-    matches!(
-        ffi::raw_json_structural::parse_raw_json_structural(payload),
-        Err(ffi::raw_json_structural::RawJsonStructuralParseError::ParserUnavailable)
-    )
-}
-
-fn id_token_structure_parser_unavailable(token: &str) -> bool {
-    matches!(
-        ffi::id_token::check_id_token_jwt(token.as_bytes()),
-        Err(IdTokenParserError::ParserUnavailable)
-    )
-}
-
 fn raw_json_env_lock() -> TestResult<std::sync::MutexGuard<'static, ()>> {
     crate::util::RAW_JSON_ENV_GUARD
         .lock()
@@ -112,7 +98,6 @@ fn sign_raw_rs256_payload(payload_json: &str) -> TestResult<String> {
     Ok(format!("{signing_input}.{signature}"))
 }
 
-#[cfg(not(feature = "verified-claim"))]
 #[test]
 fn required_rs256_round_trip_signs_and_verifies() -> TestResult {
     let _guard = raw_json_env_lock()?;
@@ -130,9 +115,6 @@ fn required_rs256_round_trip_signs_and_verifies() -> TestResult {
     .claims;
 
     let token = sign_required_id_token(&claims, &signing_key)?;
-    if id_token_structure_parser_unavailable(&token) {
-        return Ok(());
-    }
     let (modulus, exponent) = sample_jwk_components(&signing_key)?;
     let verified = verify_required_id_token_claims(&token, &modulus, &exponent)?;
 
@@ -156,9 +138,6 @@ fn required_rs256_rejects_tampered_signature() -> TestResult {
     .claims;
 
     let token = sign_required_id_token(&claims, &signing_key)?;
-    if id_token_structure_parser_unavailable(&token) {
-        return Ok(());
-    }
     let mut parts: Vec<String> = token.split('.').map(ToString::to_string).collect();
     assert_eq!(parts.len(), 3);
     let replacement = if parts[2].starts_with('A') { "B" } else { "A" };
@@ -291,9 +270,6 @@ fn required_rs256_rejects_duplicate_claim_keys() -> TestResult {
             "nonce":"nonce-123"
         }"#;
     let token = sign_raw_rs256_payload(payload)?;
-    if id_token_structure_parser_unavailable(&token) {
-        return Ok(());
-    }
 
     let err = require_err(
         verify_required_id_token_claims(&token, &modulus, &exponent),
@@ -377,9 +353,6 @@ fn raw_id_token_payload_parser_accepts_valid_payload_with_additional_claims() ->
             "email_verified":true,
             "profile":{"department":"Platform"}
         }"#;
-    if raw_json_structural_parser_unavailable(payload) {
-        return Ok(());
-    }
     let _payload_backend = use_oidc_id_token_payload_backend("verified-structural-v1");
 
     let result = decode_id_token_payload_claims_without_duplicate_keys(payload);
@@ -415,9 +388,6 @@ fn raw_id_token_payload_parser_rejects_invalid_exp_type_under_verified_backend()
             "exp":"4102444800",
             "iat":1700000000
         }"#;
-    if raw_json_structural_parser_unavailable(payload) {
-        return Ok(());
-    }
     let _payload_backend = use_oidc_id_token_payload_backend("verified-structural-v1");
 
     let result = decode_id_token_payload_claims_without_duplicate_keys(payload);

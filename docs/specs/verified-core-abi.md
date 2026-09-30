@@ -106,6 +106,16 @@ Claims パスでは Base64/JSON パースをホスト側で行い、Verified Cor
 - `Host_parse_dpop_compact` / `Host_parse_jwt_compact` – Compact JWS を事前パースし、claims / signing input / signature / key handles を返します。
 - `Host_handle_data_ptr / Host_handle_data_len` – bytes handle を WASM 線形メモリ上の `(ptr, len)` に解決します。
 
+### Reference adapter replay-store results
+
+The Node and Web reference adapters require the synchronous
+`replayStore.checkAndStore(namespace, keyHash, ttlMs)` callback to return a
+boolean: `false` means a fresh registration and `true` means replay. Every
+other return value maps to the unavailable result, including `undefined`,
+`null`, numbers, strings and promises. Exceptions propagate to the caller.
+Custom stores must return explicit booleans; a missing return value cannot
+admit a request as fresh.
+
 ### Reference adapter DPoP time values
 
 The Node and Web reference adapters encode DPoP time values as integer seconds.

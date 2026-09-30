@@ -579,6 +579,15 @@ if (typeof vcAbiVersion === "function") {
   console.log("  [skip] vc_abi_version not exported (fixture may pre-date ABI shim)");
 }
 
+// Exercise both reference adapters against the selected WASM artifact.
+try {
+  const { checkReplayStoreResults } = await import("./replay_store_result_boundary_test.mjs");
+  const checks = await checkReplayStoreResults(ROOT, wasmPath);
+  pass(`Replay-store result boundary: ${checks} checks`);
+} catch (error) {
+  fail(`Replay-store result boundary: ${error.message}`);
+}
+
 // Exercise the reference adapters against the selected WASM artifact.
 try {
   const { checkDpopTimePolicyBounds } = await import("./dpop_time_policy_boundary_test.mjs");
