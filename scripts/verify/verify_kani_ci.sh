@@ -23,7 +23,7 @@ build_root="$(cat "$evidence_dir/build-root")"
 if nix build "$requested_drv^*" --keep-failed --log-format internal-json -L \
 	--option build-dir "$build_root" \
 	--out-link "$evidence_dir/result" 2>&1 |
-	tee "$evidence_dir/build.log"; then
+	tee "$evidence_dir/build.log" >/dev/null; then
 	statuses=("${PIPESTATUS[@]}")
 else
 	statuses=("${PIPESTATUS[@]}")

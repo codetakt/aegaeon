@@ -955,6 +955,9 @@ if args[:3] == ["config", "show", "build-dir"]:
 if args[0] == "eval":
     print(drv, end=""); sys.exit(0)
 if args[0] == "build":
+    if os.environ.get("FAKE_NIX_BUILD_LOG"):
+        sys.stdout.buffer.write(pathlib.Path(os.environ["FAKE_NIX_BUILD_LOG"]).read_bytes())
+        sys.stdout.buffer.flush()
     if os.environ.get("FAKE_NIX_EXIT"):
         build_root = pathlib.Path(args[args.index("build-dir") + 1])
         assert not build_root.exists()
@@ -1044,6 +1047,58 @@ sys.exit(2)
         assert (evidence / "nix-configured-build-dir").is_file()
         assert any("--verify-records" in command for command in commands)
         assert any("--gate" in command for command in commands)
+
+    def test_hosted_wrapper_retains_large_raw_build_log_without_console_forwarding(self) -> None:
+        self.prepare_hosted_output()
+        progress = b'@nix {"action":"result","type":105,"id":1,"fields":[1,2,3,4]}\n'
+        diagnostics = (
+            b'@nix {"action":"msg","msg":"retained diagnostic marker"}\n'
+            b'@nix {"action":"result","type":101,"id":1,"fields":["builder diagnostic marker"]}\n'
+        )
+        raw = progress * 32768 + diagnostics
+        log = self.root / "fake-build-stream.log"
+        log.write_bytes(raw)
+        result = self.hosted(FAKE_NIX_BUILD_LOG=str(log))
+        assert result.returncode == 0, result.stdout + result.stderr
+        evidence = next((self.root / "hosted").glob("run.*"))
+        assert (evidence / "build.log").read_bytes() == raw
+        assert json.loads((evidence / "build-result.json").read_text()) == {
+            "build_status": 0,
+            "log_status": 0,
+        }
+        console = result.stdout + result.stderr
+        assert len(console.encode()) < 16384
+        assert "@nix " not in console
+        assert "diagnostic marker" not in console
+        assert "Kani build evidence:" in console
+        assert "[OK] Full-scope Kani output replays against the current source" in console
+        assert (evidence / "replay.log").is_file()
+        assert (evidence / "citations.log").is_file()
+
+    def test_hosted_wrapper_rejects_log_stage_failure_after_successful_build(self) -> None:
+        self.prepare_hosted_output()
+        # Simulate a nonzero log stage after draining input; this is not an ENOSPC test.
+        tee = self.root / "bin/tee"
+        tee.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "sys.stdin.buffer.read()\n"
+            "print('simulated log stage failure', file=sys.stderr)\n"
+            "sys.exit(73)\n"
+        )
+        tee.chmod(0o755)
+        result = self.hosted()
+        assert result.returncode != 0
+        evidence = next((self.root / "hosted").glob("run.*"))
+        assert json.loads((evidence / "build-result.json").read_text()) == {
+            "build_status": 0,
+            "log_status": 73,
+        }
+        assert "simulated log stage failure" in result.stderr
+        assert not (evidence / "verified-output").exists()
+        assert not (evidence / "replay.log").exists()
+        assert not (evidence / "citations.log").exists()
+        assert "[OK] Full-scope Kani output" not in result.stdout
 
     def test_hosted_wrapper_retains_raw_failure_without_using_stale_result(self) -> None:
         self.prepare_hosted_output()
