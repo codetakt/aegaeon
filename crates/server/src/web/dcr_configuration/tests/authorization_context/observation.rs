@@ -425,6 +425,80 @@ async fn source_scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult 
 
 #[tokio::test]
 #[ignore = "requires real PostgreSQL"]
+async fn same_document_under_new_configuration_id_refuses_original_runtime() -> TestResult {
+    let pool = required_pool().await?;
+    let env = setup_test_dcr_environment(&pool).await?;
+    let result = configuration_id_scenario(&pool, &env).await;
+    finish_test(result, cleanup_test_dcr_environment(&pool, &env).await)
+}
+
+async fn configuration_id_scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
+    let (state, client) = fixture(pool, env).await?;
+    let pairs = plain_pairs(env, &client);
+    context(&state, &pairs).await?;
+    let original =
+        crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
+            pool,
+            &env.issuer_host,
+        )
+        .await?;
+    let replacement = Uuid::new_v4();
+    let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE aegaeon.configuration_versions SET status='ARCHIVED' WHERE id=$1")
+        .bind(original.active_configuration_version_id())
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO aegaeon.configuration_versions(id,environment_id,version_number,configuration_hash,status,configuration_document) SELECT $1,environment_id,version_number+1,configuration_hash,'ACTIVE',configuration_document FROM aegaeon.configuration_versions WHERE id=$2")
+        .bind(replacement).bind(original.active_configuration_version_id()).execute(&mut *tx).await?;
+    sqlx::query("UPDATE aegaeon.environments SET active_configuration_version_id=$1 WHERE id=$2")
+        .bind(replacement)
+        .bind(env.environment_id)
+        .execute(&mut *tx)
+        .await?;
+    // Keep the selected client/profile coherent with the replacement so their
+    // membership checks cannot conceal a missing startup configuration-ID check.
+    for sql in [
+        "UPDATE aegaeon.clients SET configuration_version_id=$1 WHERE environment_id=$2",
+        "UPDATE aegaeon.oauth_profiles SET configuration_version_id=$1 WHERE environment_id=$2",
+    ] {
+        sqlx::query(sql)
+            .bind(replacement)
+            .bind(env.environment_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    let changed =
+        crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
+            pool,
+            &env.issuer_host,
+        )
+        .await?;
+    assert_eq!(changed.active_configuration_version_id(), replacement);
+    assert_ne!(
+        changed.active_configuration_version_id(),
+        original.active_configuration_version_id()
+    );
+    assert_eq!(
+        changed.active_configuration_document_fingerprint(),
+        original.active_configuration_document_fingerprint()
+    );
+    assert_eq!(
+        changed.active_runtime_key_set_fingerprint(),
+        original.active_runtime_key_set_fingerprint()
+    );
+    assert_eq!(
+        changed.active_dcr_bearer_token_fingerprint(),
+        original.active_dcr_bearer_token_fingerprint()
+    );
+    let response = refused(&state, &pairs).await?;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(response.headers().get(header::LOCATION).is_none());
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires real PostgreSQL"]
 async fn remote_jar_uses_actual_selected_key_after_pg_transaction_ends() -> TestResult {
     let pool = required_pool().await?;
     let env = setup_test_dcr_environment(&pool).await?;

@@ -132,6 +132,9 @@ impl AuthorizationRuntime {
         let observed_issuer: String = row
             .try_get("issuer_url")
             .map_err(RuntimeConfigurationError::DatabaseQuery)?;
+        let configuration_id: Uuid = row
+            .try_get("active_configuration_version_id")
+            .map_err(RuntimeConfigurationError::DatabaseQuery)?;
         let document: Value = row
             .try_get("configuration_document")
             .map_err(RuntimeConfigurationError::DatabaseQuery)?;
@@ -139,6 +142,7 @@ impl AuthorizationRuntime {
             || observed_environment != environment
             || issuer != source.issuer_url
             || observed_issuer != issuer
+            || configuration_id != source.revision.active_configuration_version_id()
             || document != source.document
         {
             return Err(RuntimeConfigurationError::ConcurrentModification(
@@ -150,15 +154,10 @@ impl AuthorizationRuntime {
             barriers.observed.wait().await;
             barriers.resume.wait().await;
         }
-        let revision = super::load_active_runtime_configuration_revision_for_issuer_host_in_tx(
-            &mut tx,
-            &source.issuer_host,
-        )
-        .await?;
+        // The exact document, configuration ID and key/DCR facts cover the
+        // stable authority without fingerprinting the whole client registry.
         let stable_facts = load_stable_facts(&mut tx, &source.issuer_host).await?;
-        if stable_facts != source.stable_facts
-            || !revision.stable_authority_matches(&source.revision)
-        {
+        if stable_facts != source.stable_facts {
             return Err(RuntimeConfigurationError::ConcurrentModification(
                 source.issuer_host.clone(),
             ));
@@ -173,11 +172,10 @@ impl AuthorizationRuntime {
         .await
         .map_err(RuntimeConfigurationError::DatabaseQuery)?;
         if client.as_ref().is_some_and(|c| {
-            c.environment_id != environment
-                || c.configuration_id != revision.active_configuration_version_id()
+            c.environment_id != environment || c.configuration_id != configuration_id
         }) || profile.as_ref().is_some_and(|p| {
             p.environment_id != environment
-                || p.configuration_id != revision.active_configuration_version_id()
+                || p.configuration_id != configuration_id
                 || client
                     .as_ref()
                     .is_none_or(|c| c.requested_profile_id != p.requested_profile_id)
