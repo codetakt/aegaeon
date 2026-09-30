@@ -87,11 +87,7 @@ pub(in crate::web) async fn reload(
     state: &AppState,
     env: &TestEnvironment,
 ) -> TestResult<AppState> {
-    let value:Value=sqlx::query_scalar("SELECT configuration_document->'policy' FROM aegaeon.configuration_versions WHERE environment_id=$1 AND status='ACTIVE'")
-        .bind(env.environment_id).fetch_one(&state.db_pool).await?;
-    let policy: PolicyDocument = serde_json::from_value(value)?;
     let mut loaded = test_app_state(state.db_pool.clone(), env).await?;
-    Arc::make_mut(&mut loaded.cfg).apply_management_policy(&policy)?;
     loaded.keys = state.keys.clone();
     loaded.tokens = state.tokens.clone();
     configure_token_runtime(&mut loaded, state.tokens.issuer.code_store.clone());
@@ -112,7 +108,6 @@ pub(in crate::web) async fn fixture(
     sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=$2 WHERE environment_id=$3")
         .bind(&policy.allowed_grant_types).bind(vec!["client_secret_basic", "none"]).bind(env.environment_id).execute(pool).await?;
     let mut state = test_app_state(pool.clone(), env).await?;
-    Arc::make_mut(&mut state.cfg).apply_management_policy(&policy)?;
     state.keys.access_token = Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?);
     let codes = if redis {
         let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
@@ -805,3 +800,5 @@ mod online_resources;
 mod authority_boundaries;
 
 mod signed_introspection;
+
+mod authorization_runtime;
