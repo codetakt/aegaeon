@@ -236,7 +236,9 @@ the executable or renaming a runtime namespace alone is not a validated recovery
 The authorization-code storage and standalone consume scripts validate their
 version counter before any write. A present counter must be Redis's canonical
 signed decimal integer and leave room for `INCR`; `9223372036854775807`, malformed
-text and non-string keys are rejected. Storage also checks that each enabled
+text and non-string keys are rejected. Counters longer than 20 bytes are rejected
+before their contents are loaded into Lua. Redis ACLs for these scripts must allow
+`STRLEN` on counter keys. Storage also checks that each enabled
 `state`/`nonce` index is absent or a sorted set before creating markers or a code.
 These failures report backing-store unavailability while retaining the existing
 code/marker state. Investigate the affected Redis key types and counter contents

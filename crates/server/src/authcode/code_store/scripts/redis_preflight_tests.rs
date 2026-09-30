@@ -69,6 +69,8 @@ fn counter_samples() -> Vec<Option<Vec<u8>>> {
         "9223372036854775806",
         "9223372036854775807",
         "9223372036854775808",
+        "10000000000000000000",
+        "100000000000000000000",
         "-9223372036854775808",
         "-9223372036854775809",
         "9007199254740991",
@@ -232,4 +234,89 @@ fn invalid_version_type_cannot_delete_a_code_during_consume() {
         .unwrap();
     assert_eq!(value, "value");
     delete(&mut conn, &keys);
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL with ACL administration"]
+fn oversized_counter_is_rejected_without_reading_its_value() {
+    let mut admin = connection();
+    let keys = keys();
+    let user = format!("authcode-preflight-{}", uuid::Uuid::new_v4());
+    // Permit GET only for the code. A counter GET is denied even inside Lua,
+    // making this a command-access observation rather than a timing threshold.
+    redis::cmd("ACL")
+        .arg("SETUSER")
+        .arg(&user)
+        .arg(&[
+            "reset",
+            "+eval",
+            "+evalsha",
+            "+script|load",
+            "+exists",
+            "+type",
+            "+strlen",
+            "~*",
+            "on",
+            "nopass",
+        ])
+        .arg(format!("(+get ~{})", keys[0]))
+        .query::<()>(&mut admin)
+        .unwrap();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut restricted = connection();
+        redis::cmd("AUTH")
+            .arg(&user)
+            .arg("")
+            .query::<()>(&mut restricted)
+            .unwrap();
+        set(&mut admin, &keys[3], b"0");
+        let denied = redis::cmd("GET")
+            .arg(&keys[3])
+            .query::<Option<Vec<u8>>>(&mut restricted)
+            .unwrap_err();
+        assert_eq!(denied.code(), Some("NOPERM"));
+
+        for length in [21, 1024 * 1024] {
+            let value = vec![b'9'; length];
+            set(&mut admin, &keys[3], &value);
+            let error = store(&mut restricted, &keys).unwrap_err();
+            assert!(
+                error.code() == Some("invalid")
+                    && error.detail() == Some("authorization code version counter"),
+                "oversized store counter must reject before GET: {error}"
+            );
+            for index in [0, 1, 2, 4, 5] {
+                assert_eq!(get(&mut admin, &keys[index]), None);
+            }
+            set(&mut admin, &keys[0], b"retained code");
+            let error = super::consume_code_script()
+                .key(&keys[0])
+                .key(&keys[3])
+                .invoke::<Option<Vec<u8>>>(&mut restricted)
+                .unwrap_err();
+            assert!(
+                error.code() == Some("invalid")
+                    && error.detail() == Some("authorization code version counter"),
+                "oversized consume counter must reject before GET: {error}"
+            );
+            assert_eq!(
+                get(&mut admin, &keys[0]).as_deref(),
+                Some(b"retained code".as_slice())
+            );
+            assert!(
+                get(&mut admin, &keys[3]).as_deref() == Some(value.as_slice()),
+                "rejection changed the {length}-byte counter"
+            );
+            delete(&mut admin, &keys);
+        }
+    }));
+    delete(&mut admin, &keys);
+    redis::cmd("ACL")
+        .arg("DELUSER")
+        .arg(&user)
+        .query::<usize>(&mut admin)
+        .unwrap();
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
 }

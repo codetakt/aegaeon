@@ -10,6 +10,10 @@ local function increment_is_safe(key)
   if kind ~= "string" then
     return false
   end
+  -- Bound the Lua copy and parsing work before loading a malformed value.
+  if redis.call("STRLEN", key) > 20 then
+    return false
+  end
   local text = redis.call("GET", key)
   if text == "0" then
     return true
