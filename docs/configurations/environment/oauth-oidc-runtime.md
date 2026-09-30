@@ -117,6 +117,14 @@ trust, Redis, and observability settings remain process environment because they
 boundary rather than issuer policy. JWKS body caching is bounded, process-local, and
 non-authoritative; Redis remains the shared runtime-state boundary.
 
+`policy.jwksHttpTimeoutSeconds` bounds waiting for each explicit HTTP request
+and each blocking body read; it is not a total acquisition deadline. A redirect
+chain follows at most two HTTPS redirects. Conditional revalidation never follows
+a redirect: an unusable `304` or usable redirect can trigger one unconditional
+recovery from the registered URI. `policy.jwksHttpRetries` is one shared ordinary
+transport/server-error budget across those phases and all redirect hops. A single
+acquisition captures its TLS trust and system proxy configuration once.
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_JWKS_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.jwksCacheTtlSeconds` is authoritative. |

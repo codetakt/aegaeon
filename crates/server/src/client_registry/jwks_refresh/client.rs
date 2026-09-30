@@ -13,7 +13,7 @@ pub(super) fn build_jwks_refresh_client(
     let timeout_secs = policy.http_timeout_secs;
     let mut builder = reqwest::blocking::Client::builder()
         .use_rustls_tls()
-        .redirect(crate::ssrf::build_redirect_policy(None))
+        .redirect(reqwest::redirect::Policy::none())
         .danger_accept_invalid_certs(insecure)
         .timeout(std::time::Duration::from_secs(timeout_secs));
     if !jwks_http_loopback_allowed_for_tests(policy, uri) {

@@ -2,7 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use super::jwks_circuit::circuit_on_failure_with_state;
 use super::jwks_runtime_state::JwksRuntimeState;
+use super::jwks_types::FetchedJwks;
 use super::jwks_url::validate_jwks_fetch_url;
+use super::jwks_validation::validate_fetched_jwks;
+use super::jwks_validators::DateContext;
 use super::{metrics, sha256_hex, JwksRuntimePolicy};
 use tracing::warn;
 
@@ -25,13 +28,16 @@ use client::build_jwks_refresh_client;
 use failure::record_jwks_refresh_internal_failure_with_state;
 use fetch_loop::RefreshLoop;
 
+pub(super) enum JwksRefreshOutcome {
+    AdmittedBody(FetchedJwks),
+    RevalidatedBody(FetchedJwks),
+}
+
 pub(super) fn refresh_jwks_with_state(
     state: &JwksRuntimeState,
     policy: &JwksRuntimePolicy,
     uri: &str,
-    etag: Option<String>,
-    last_modified: Option<String>,
-) -> Option<()> {
+) -> Option<JwksRefreshOutcome> {
     let uri_hash = &sha256_hex(uri.as_bytes())[0..8];
     let start = std::time::Instant::now();
     if let Err(err) = validate_jwks_fetch_url(policy, uri) {
@@ -54,6 +60,31 @@ pub(super) fn refresh_jwks_with_state(
         return None;
     };
 
+    let date_context = DateContext::capture();
+    let captured = match state.inner.cache.lock() {
+        Ok(mut cache) => cache.capture(uri, std::time::Instant::now()),
+        Err(error) => {
+            super::jwks_circuit::record_jwks_in_memory_runtime_state_failure(
+                "candidate_capture_lock",
+                uri,
+                error,
+            );
+            Err(())
+        }
+    };
+    let Ok((candidate, captured_guard)) = captured else {
+        record_jwks_refresh_internal_failure_with_state(
+            state,
+            policy,
+            uri,
+            uri_hash,
+            "candidate_capture",
+            start,
+        );
+        return None;
+    };
+    let candidate = candidate.filter(|entry| validate_fetched_jwks(&entry.jwks).is_ok());
+
     let client = match build_jwks_refresh_client(policy, uri) {
         Ok(client) => client,
         Err(err) => {
@@ -70,6 +101,34 @@ pub(super) fn refresh_jwks_with_state(
         }
     };
 
+    let original = match request::original_request(&client, uri) {
+        Ok(request) => request,
+        Err(_) => {
+            record_jwks_refresh_internal_failure_with_state(
+                state,
+                policy,
+                uri,
+                uri_hash,
+                "request_build",
+                start,
+            );
+            return None;
+        }
+    };
+    let Some(original_target) = request::target_identity(original.url()) else {
+        record_jwks_refresh_internal_failure_with_state(
+            state,
+            policy,
+            uri,
+            uri_hash,
+            "request_target",
+            start,
+        );
+        return None;
+    };
+    let original_url = original.url().clone();
+    drop(original);
+
     RefreshLoop {
         state,
         policy,
@@ -77,8 +136,11 @@ pub(super) fn refresh_jwks_with_state(
         uri_hash,
         start,
         client,
-        etag,
-        last_modified,
+        candidate,
+        captured_guard,
+        date_context,
+        original_url,
+        original_target,
         max_body: policy.max_body_bytes,
         retries: policy.http_retries,
     }
