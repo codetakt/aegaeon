@@ -286,3 +286,6 @@ pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod redis_root_expiry_tests;

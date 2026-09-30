@@ -2,8 +2,8 @@ use super::*;
 use std::time::{Duration, SystemTime};
 
 #[tokio::test]
-#[ignore = "requires private PostgreSQL and Redis; waits for the configured lineage horizon"]
-async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> TestResult {
+#[ignore = "requires private PostgreSQL and Redis; waits for the configured refresh lifetime"]
+async fn shared_redis_token_exchange_source_output_and_refresh_expire_online() -> TestResult {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(2)
         .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
@@ -105,8 +105,12 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             next_record.exchange_grant.as_ref().and_then(|g| g.root()),
             Some(root)
         );
+        // Rotation retains the earlier refresh deadline. This HTTP case checks
+        // that deadline; the independent root guard has a dedicated script test.
+        assert!(next_record.expires_at < root.expires_at);
         tokio::time::sleep(
-            root.expires_at
+            next_record
+                .expires_at
                 .duration_since(SystemTime::now())
                 .unwrap_or(Duration::ZERO)
                 + Duration::from_millis(30),
@@ -118,7 +122,11 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             true,
         )
         .await?;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "expired root: {body}");
+        assert!(
+            SystemTime::now() < root.expires_at,
+            "root must still be live"
+        );
+        assert_eq!(status, StatusCode::BAD_REQUEST, "expired refresh: {body}");
         assert!(state.tokens.store.try_get_refresh_token(next)?.is_none());
         Ok(())
     }
