@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:f335f829-a761-42ca-8cf4-e5c63c73c5a5",
+  "serialNumber": "urn:uuid:705a3e46-1522-413a-914a-adf6589b9d93",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-30T01:30:22.816Z",
+    "timestamp": "2026-09-30T04:55:17.398Z",
     "tools": {
       "components": [
         {
@@ -34,7 +34,7 @@
           }
         }
       ],
-      "purl": "pkg:generic/aegaeon/verified-core@1.0.0?source_commit=cfaee924962566954457b5dd4b73760b547d0c5b",
+      "purl": "pkg:generic/aegaeon/verified-core@1.0.0?source_commit=4118b6296cca13130991f30d385013d5abf66003",
       "properties": [
         {
           "name": "cdx:verified-core:sri",

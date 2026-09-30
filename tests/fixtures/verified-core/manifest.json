@@ -5,7 +5,7 @@
   "sha256": "7033a3b223ca63ac4d795f700cd9753d2cbf17cffea2ba2409c9e89c1cf91a72",
   "sha512": "cf9134790f70c1424898e677f824ce14a4c0ca3958672deea4161835bd8d17e0a4a91a6db37c10913b305b9e90c31a7f9f295f73adaff1e2645573b88231b6b1",
   "sri": "sha256-cDOjsiPKY6xNeV9wDNl1PSy/F8/+orokCcnonBz5GnI=",
-  "generated_at": "2026-09-30T01:30:22.797Z",
-  "source_commit": "cfaee924962566954457b5dd4b73760b547d0c5b",
+  "generated_at": "2026-09-30T04:55:17.383Z",
+  "source_commit": "4118b6296cca13130991f30d385013d5abf66003",
   "abi_version": "1.0.0"
 }

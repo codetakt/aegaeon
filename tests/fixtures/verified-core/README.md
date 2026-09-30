@@ -6,7 +6,7 @@ checksums, ABI, SBOM, types and integrity summary together. Do not edit these
 generated files manually.
 
 This refresh was built from the clean source commit
-`cfaee924962566954457b5dd4b73760b547d0c5b`, including the PKCE borrowed-challenge
+`4118b6296cca13130991f30d385013d5abf66003`, including the PKCE borrowed-challenge
 repair. `manifest.json` records that source commit and the artifact digests;
 the generated fixture is recorded in a subsequent commit. To reproduce the
 source build, check out the source commit and run:
