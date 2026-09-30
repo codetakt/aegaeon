@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-09-07
+Last updated: 2026-09-30
 
-Document revision: **2026-09-07-r4**.
+Document revision: **2026-09-30-r2**.
 
 Status: current implementation baseline
 
@@ -112,6 +112,25 @@ The complete direction/token-class/provider list is still a release obligation.
 No arbitrary provider-interoperability claim follows from first-party RS256 tests.
 
 ## Maintenance and handoff
+
+The 2026-09-30 management OpenAPI snapshot adds `ClientCredentialsPolicy`,
+`ClientCredentialsResourceServer` and `ClientCredentialsRule`, and an optional
+`clientCredentials` field to policy documents and patches. The management-client
+declarations expose the same rule, target, scope and resource-server fields.
+For patches, omission and `null` both leave the current policy unchanged. An
+explicit object with `version: 1` and empty `resourceServers` and `rules` arrays
+represents a deny-all policy; applying it remains subject to configuration and
+security-downgrade checks. The declarations' `version: 1` type and the OpenAPI
+integer bounds of `minimum: 1` and `maximum: 1` match the server's supported
+policy version.
+
+This revision updates the `management-openapi` project-source pin and records
+those inputs under the existing management API group. The prior snapshot is
+retained in version history. It preserves the bounded authorization-revision
+contract, guarantee IDs, profiles and external source pins. It does not activate
+an SDK profile, discharge the management-client correspondence obligations or
+attest server authorization. The policy semantics and migration behavior remain
+specified in [client credentials configuration](../../../configurations/client-credentials.md).
 
 Run `python3 scripts/validation/validate_sdk_assurance_contract.py` for contract
 integrity. Optional `--source-dir` checks archived original specification bytes.
