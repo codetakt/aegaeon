@@ -223,7 +223,7 @@ pub(crate) async fn load_client_identities_guarded(
         "SELECT c.id, c.client_identifier, c.allowed_grant_types, c.allowed_scopes, c.token_endpoint_authentication_method \
          FROM aegaeon.clients c JOIN aegaeon.active_runtime_environments rt \
          ON rt.environment_id = c.environment_id AND rt.configuration_version_id = c.configuration_version_id \
-         WHERE rt.issuer_host = $1 AND rt.environment_id = $2 AND c.status = 'ACTIVE' \
+         WHERE rt.issuer_host = $1 AND rt.environment_id = $2 AND c.status = 'ACTIVE' AND c.deleted_at IS NULL \
          AND c.client_identifier = ANY($3) ORDER BY c.client_identifier",
     ).bind(issuer_host).bind(environment_id).bind(client_ids).fetch_all(&mut *tx).await?;
     let mut identities = rows

@@ -70,7 +70,7 @@ impl ClientCredentialsGrant {
             || self.scopes.iter().any(|scope| {
                 matches!(scope.as_str(), "openid" | "offline_access")
                     || !crate::oauth_scope::parse_scope_string(scope)
-                        .is_ok_and(|scopes| scopes.len() == 1)
+                        .is_ok_and(|scopes| scopes.len() == 1 && scopes[0] == *scope)
             })
             || self.introspection_clients.len() > 128
             || self
