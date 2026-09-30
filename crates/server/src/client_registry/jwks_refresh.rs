@@ -101,7 +101,36 @@ pub(super) fn refresh_jwks_with_state(
         }
     };
 
-    let original = match request::original_request(&client, uri) {
+    let (original_url, original_target) =
+        prepare_original_target(&client, state, policy, uri, uri_hash, start)?;
+
+    RefreshLoop {
+        state,
+        policy,
+        uri,
+        uri_hash,
+        start,
+        client,
+        candidate,
+        captured_guard,
+        date_context,
+        original_url,
+        original_target,
+        max_body: policy.max_body_bytes,
+        retries: policy.http_retries,
+    }
+    .run()
+}
+
+fn prepare_original_target(
+    client: &reqwest::blocking::Client,
+    state: &JwksRuntimeState,
+    policy: &JwksRuntimePolicy,
+    uri: &str,
+    uri_hash: &str,
+    start: std::time::Instant,
+) -> Option<(url::Url, String)> {
+    let original = match request::original_request(client, uri) {
         Ok(request) => request,
         Err(_) => {
             record_jwks_refresh_internal_failure_with_state(
@@ -128,23 +157,7 @@ pub(super) fn refresh_jwks_with_state(
     };
     let original_url = original.url().clone();
     drop(original);
-
-    RefreshLoop {
-        state,
-        policy,
-        uri,
-        uri_hash,
-        start,
-        client,
-        candidate,
-        captured_guard,
-        date_context,
-        original_url,
-        original_target,
-        max_body: policy.max_body_bytes,
-        retries: policy.http_retries,
-    }
-    .run()
+    Some((original_url, original_target))
 }
 
 fn fetch_lock_for_uri(

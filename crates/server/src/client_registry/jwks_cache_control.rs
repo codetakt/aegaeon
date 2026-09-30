@@ -50,14 +50,12 @@ impl CacheMetadata {
     pub(super) fn from_headers(headers: &HeaderMap, context: DateContext) -> Self {
         let age = match headers.get_all(AGE).iter().next() {
             None => Metadata::Absent,
-            Some(value) => delta_seconds(trim_ows(
-                value
-                    .as_bytes()
-                    .split(|b| *b == b',')
-                    .next()
-                    .unwrap_or_default(),
-            ))
-            .map_or(Metadata::Invalid, Metadata::Valid),
+            Some(value) => value
+                .as_bytes()
+                .split(|b| *b == b',')
+                .next()
+                .and_then(|first| delta_seconds(trim_ows(first)))
+                .map_or(Metadata::Invalid, Metadata::Valid),
         };
         Self {
             control: control(headers),

@@ -99,24 +99,26 @@ impl JwksLocalCache {
     }
 
     fn evict_oldest_guard(&mut self) {
-        let key = self
+        if let Some(key) = self
             .guards
             .iter()
             .min_by(|(ka, a), (kb, b)| a.admitted_at.cmp(&b.admitted_at).then_with(|| ka.cmp(kb)))
             .map(|(key, _)| key.clone())
-            .expect("eviction requires nonempty guard map");
-        self.guards.remove(&key);
-        self.representations.remove(&key);
+        {
+            self.guards.remove(&key);
+            self.representations.remove(&key);
+        }
     }
 
     fn evict_oldest_body(&mut self) {
-        let key = self
+        if let Some(key) = self
             .representations
             .iter()
             .min_by(|(ka, a), (kb, b)| a.fetched_at.cmp(&b.fetched_at).then_with(|| ka.cmp(kb)))
             .map(|(key, _)| key.clone())
-            .expect("eviction requires nonempty body map");
-        self.representations.remove(&key);
+        {
+            self.representations.remove(&key);
+        }
     }
 
     // Controlled fixture insertion establishes the same body/guard identity.

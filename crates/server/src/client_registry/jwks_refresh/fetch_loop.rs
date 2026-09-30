@@ -6,7 +6,9 @@ use super::super::jwks_validators::{DateContext, JwksValidators};
 use super::super::{maybe_log_event, metrics, JwksRuntimePolicy};
 use super::cache_update::{record_successful_fetch_with_state, SuccessfulJwksFetch};
 use super::failure::record_jwks_refresh_internal_failure_with_state;
-use super::request::{execute_phase, is_supported_redirect, redirect_location, RequestError};
+use super::request::{
+    execute_phase, is_supported_redirect, redirect_location, BoundResponse, RequestError,
+};
 use super::retry::sleep_before_retry;
 use super::validation::{admit_jwks_with_state, validate_refreshed_jwks_with_state};
 use super::JwksRefreshOutcome;
@@ -73,36 +75,8 @@ impl RefreshLoop<'_> {
                     .as_ref()
                     .is_some_and(|entry| metadata.identifies(&entry.validators))
                 {
-                    if let Some(mut entry) = self.candidate.take() {
-                        metadata.update_selected(&mut entry.validators);
-                        let validated = admit_jwks_with_state(
-                            self.state,
-                            self.policy,
-                            self.uri,
-                            self.uri_hash,
-                            entry.jwks,
-                            self.start,
-                            self.captured_guard.as_deref(),
-                        )?;
-                        let metadata = entry
-                            .metadata
-                            .freshen(bound.response.headers(), self.date_context);
-                        record_successful_fetch_with_state(SuccessfulJwksFetch {
-                            state: self.state,
-                            policy: self.policy,
-                            uri: self.uri,
-                            uri_hash: self.uri_hash,
-                            start: self.start,
-                            jwks: &validated.jwks,
-                            guard: validated.guard,
-                            validators: entry.validators,
-                            effective_target: bound.target,
-                            metadata,
-                            timing: bound.timing,
-                            eligible_200: true,
-                            revalidated: true,
-                        });
-                        return Some(JwksRefreshOutcome::RevalidatedBody(validated.jwks));
+                    if let Some(entry) = self.candidate.take() {
+                        return self.revalidate_body(entry, metadata, bound);
                     }
                 }
                 // This transition is one-way, independent of the ordinary error budget.
@@ -147,44 +121,89 @@ impl RefreshLoop<'_> {
                 circuit_on_failure_with_state(self.state, self.policy, self.uri);
                 return None;
             }
-            let headers = bound.response.headers().clone();
-            let bytes = match crate::outbound_http::read_blocking_response_body_limited(
-                bound.response,
-                self.max_body,
-            ) {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    circuit_on_failure_with_state(self.state, self.policy, self.uri);
-                    return None;
-                }
-            };
-            let validated = validate_refreshed_jwks_with_state(
-                self.state,
-                self.policy,
-                self.uri,
-                self.uri_hash,
-                &bytes,
-                self.start,
-                self.captured_guard.as_deref(),
-            )?;
-            let validators = JwksValidators::from_headers(&headers, self.date_context);
-            record_successful_fetch_with_state(SuccessfulJwksFetch {
-                state: self.state,
-                policy: self.policy,
-                uri: self.uri,
-                uri_hash: self.uri_hash,
-                start: self.start,
-                metadata: CacheMetadata::from_headers(&headers, self.date_context),
-                timing: bound.timing,
-                eligible_200: status == reqwest::StatusCode::OK && bound.follows == 0,
-                revalidated: false,
-                jwks: &validated.jwks,
-                guard: validated.guard,
-                validators,
-                effective_target: bound.target,
-            });
-            return Some(JwksRefreshOutcome::AdmittedBody(validated.jwks));
+            return self.admit_response(bound, status);
         }
+    }
+
+    fn revalidate_body(
+        &self,
+        mut entry: CacheEntry,
+        metadata: JwksValidators,
+        bound: BoundResponse,
+    ) -> Option<JwksRefreshOutcome> {
+        metadata.update_selected(&mut entry.validators);
+        let validated = admit_jwks_with_state(
+            self.state,
+            self.policy,
+            self.uri,
+            self.uri_hash,
+            entry.jwks,
+            self.start,
+            self.captured_guard.as_deref(),
+        )?;
+        let metadata = entry
+            .metadata
+            .freshen(bound.response.headers(), self.date_context);
+        record_successful_fetch_with_state(SuccessfulJwksFetch {
+            state: self.state,
+            policy: self.policy,
+            uri: self.uri,
+            uri_hash: self.uri_hash,
+            start: self.start,
+            jwks: &validated.jwks,
+            guard: validated.guard,
+            validators: entry.validators,
+            effective_target: bound.target,
+            metadata,
+            timing: bound.timing,
+            eligible_200: true,
+            revalidated: true,
+        });
+        Some(JwksRefreshOutcome::RevalidatedBody(validated.jwks))
+    }
+
+    fn admit_response(
+        &self,
+        bound: BoundResponse,
+        status: reqwest::StatusCode,
+    ) -> Option<JwksRefreshOutcome> {
+        let headers = bound.response.headers().clone();
+        let bytes = match crate::outbound_http::read_blocking_response_body_limited(
+            bound.response,
+            self.max_body,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                circuit_on_failure_with_state(self.state, self.policy, self.uri);
+                return None;
+            }
+        };
+        let validated = validate_refreshed_jwks_with_state(
+            self.state,
+            self.policy,
+            self.uri,
+            self.uri_hash,
+            &bytes,
+            self.start,
+            self.captured_guard.as_deref(),
+        )?;
+        let validators = JwksValidators::from_headers(&headers, self.date_context);
+        record_successful_fetch_with_state(SuccessfulJwksFetch {
+            state: self.state,
+            policy: self.policy,
+            uri: self.uri,
+            uri_hash: self.uri_hash,
+            start: self.start,
+            metadata: CacheMetadata::from_headers(&headers, self.date_context),
+            timing: bound.timing,
+            eligible_200: status == reqwest::StatusCode::OK && bound.follows == 0,
+            revalidated: false,
+            jwks: &validated.jwks,
+            guard: validated.guard,
+            validators,
+            effective_target: bound.target,
+        });
+        Some(JwksRefreshOutcome::AdmittedBody(validated.jwks))
     }
 
     fn retry_transport(&self, attempt: &mut u32) -> bool {

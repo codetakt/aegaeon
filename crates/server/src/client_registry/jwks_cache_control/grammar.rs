@@ -92,39 +92,7 @@ fn parse(bytes: &[u8]) -> Option<CacheControl> {
         let name = &bytes[start..pos];
         let arg = if bytes.get(pos) == Some(&b'=') {
             pos += 1;
-            if bytes.get(pos) == Some(&b'"') {
-                pos += 1;
-                let mut decoded = Vec::new();
-                loop {
-                    let b = *bytes.get(pos)?;
-                    pos += 1;
-                    match b {
-                        b'"' => break,
-                        b'\\' => {
-                            let quoted = *bytes.get(pos)?;
-                            if !matches!(quoted, b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) {
-                                return None;
-                            }
-                            decoded.push(quoted);
-                            pos += 1;
-                        }
-                        b'\t' | b' ' | b'!' | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff => {
-                            decoded.push(b)
-                        }
-                        _ => return None,
-                    }
-                }
-                Some(decoded)
-            } else {
-                let start = pos;
-                while pos < bytes.len() && tchar(bytes[pos]) {
-                    pos += 1;
-                }
-                if pos == start {
-                    return None;
-                }
-                Some(bytes[start..pos].to_vec())
-            }
+            Some(parse_argument(bytes, &mut pos)?)
         } else {
             None
         };
@@ -176,4 +144,38 @@ fn parse(bytes: &[u8]) -> Option<CacheControl> {
         }
     }
     Some(cc)
+}
+
+fn parse_argument(bytes: &[u8], pos: &mut usize) -> Option<Vec<u8>> {
+    if bytes.get(*pos) == Some(&b'"') {
+        *pos += 1;
+        let mut decoded = Vec::new();
+        loop {
+            let b = *bytes.get(*pos)?;
+            *pos += 1;
+            match b {
+                b'"' => break,
+                b'\\' => {
+                    let quoted = *bytes.get(*pos)?;
+                    if !matches!(quoted, b'\t' | b' ' | 0x21..=0x7e | 0x80..=0xff) {
+                        return None;
+                    }
+                    decoded.push(quoted);
+                    *pos += 1;
+                }
+                b'\t' | b' ' | b'!' | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff => decoded.push(b),
+                _ => return None,
+            }
+        }
+        Some(decoded)
+    } else {
+        let start = *pos;
+        while *pos < bytes.len() && tchar(bytes[*pos]) {
+            *pos += 1;
+        }
+        if *pos == start {
+            return None;
+        }
+        Some(bytes[start..*pos].to_vec())
+    }
 }
