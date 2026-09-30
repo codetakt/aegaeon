@@ -474,7 +474,7 @@ impl Drop for RedisFixture {
 }
 
 #[test]
-#[ignore = "requires contained JWKS HTTPS and Unix Redis fixture runner"]
+#[ignore = "requires scripts/validation/test_client_jwks_cache.py"]
 fn real_shared_304_renewal_conflict_and_backend_error() {
     let _env = env_lock().unwrap();
     let redis = RedisFixture::new();

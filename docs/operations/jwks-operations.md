@@ -157,3 +157,12 @@ the routable literal addresses used to exercise URL policy. Shared-state tests
 start a disposable Redis on a Unix socket with persistence disabled. Temporary
 files and Redis state are removed after the run. The default command includes the
 otherwise ignored HTTPS and Redis tests as well as ordinary JWKS unit tests.
+
+CI runs this command as a required step with `--sudo-netns`. Use that option on
+Linux hosts that restrict unprivileged user namespaces. Compilation still runs
+as the caller; sudo only creates the network namespace and configures loopback.
+After verifying the isolated interfaces and routes, the runner drops all
+supplementary groups and restores the caller's UID/GID before starting fixtures.
+The container integration driver excludes these namespace-only modules from its
+ordinary ignored sweeps; the dedicated runner executes them and propagates any
+failure. The fixture's namespace checks remain mandatory in both modes.

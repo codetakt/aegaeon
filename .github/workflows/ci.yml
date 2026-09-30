@@ -233,6 +233,10 @@ jobs:
           fi
           nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
 
+      - name: Run client JWKS tests in an isolated network namespace
+        run: |
+          nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py --sudo-netns
+
       - name: Compare Redis grant traces with F* fixtures
         run: |
           nix develop .#ci --command python3 scripts/validation/check_authcode_redis_grant.py \
