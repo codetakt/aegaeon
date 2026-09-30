@@ -15,11 +15,13 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             "exchange-lifetime-{}",
             uuid::Uuid::new_v4()
         ));
+        // Allow client authentication and Redis publication time on busy runners.
+        // The lineage horizon remains 75 seconds (access + refresh + code TTLs).
         let issuer = crate::authcode::TokenIssuer::try_from_shared_store_env_with_ttls(
             Arc::clone(&state.keys.access_token),
-            3,
-            12,
-            60,
+            15,
+            45,
+            15,
             &namespace,
         )?
         .with_issuer(env.issuer_url.clone())
@@ -50,7 +52,13 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             .ok_or("root")?;
         let (status, output) =
             exchange(&state, source, &[("audience", "internal-api")], true).await?;
-        assert_eq!(status, StatusCode::OK, "live exchange: {output}");
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "live exchange: {output}; source expires at {:?}, now {:?}",
+            meta.expires_at,
+            SystemTime::now(),
+        );
         let token = output["access_token"].as_str().ok_or("output")?;
         let output_meta = state
             .tokens
