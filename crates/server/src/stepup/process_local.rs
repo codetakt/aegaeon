@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, RwLock,
+};
 
 use super::{challenge_valid, request_key, StepUpChallenge};
 
@@ -7,6 +10,13 @@ use super::{challenge_valid, request_key, StepUpChallenge};
 pub(super) struct ProcessLocalStepUpStoreBackend {
     challenges: Arc<RwLock<HashMap<String, StepUpChallenge>>>,
     by_request: Arc<RwLock<HashMap<String, String>>>,
+    failure: Option<Arc<InjectedFailure>>,
+}
+
+struct InjectedFailure {
+    operation: usize,
+    calls: AtomicUsize,
+    error: String,
 }
 
 impl ProcessLocalStepUpStoreBackend {
@@ -14,10 +24,33 @@ impl ProcessLocalStepUpStoreBackend {
         Self {
             challenges: Arc::new(RwLock::new(HashMap::new())),
             by_request: Arc::new(RwLock::new(HashMap::new())),
+            failure: None,
         }
     }
 
+    pub(super) fn failing_on_operation(operation: usize, error: &str) -> Self {
+        assert!(operation > 0, "operation ordinals start at one");
+        Self {
+            failure: Some(Arc::new(InjectedFailure {
+                operation,
+                calls: AtomicUsize::new(0),
+                error: error.to_string(),
+            })),
+            ..Self::new()
+        }
+    }
+
+    fn fail_if_injected(&self) -> Result<(), String> {
+        if let Some(failure) = &self.failure {
+            if failure.calls.fetch_add(1, Ordering::Relaxed) == failure.operation - 1 {
+                return Err(failure.error.clone());
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn issue_challenge(&self, challenge: &StepUpChallenge) -> Result<(), String> {
+        self.fail_if_injected()?;
         let key = request_key(
             &challenge.client_id,
             &challenge.session_id,
@@ -45,6 +78,7 @@ impl ProcessLocalStepUpStoreBackend {
         request_id: &str,
         now_epoch_secs: u64,
     ) -> Result<Option<StepUpChallenge>, String> {
+        self.fail_if_injected()?;
         let key = request_key(client_id, session_id, request_id);
         let challenge_id = {
             let by_request = self
