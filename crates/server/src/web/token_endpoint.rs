@@ -83,7 +83,7 @@ pub(super) struct TokenEndpointContext {
     pub(super) cnf_for_at: Option<CnfClaim>,
 }
 
-async fn build_token_context(
+pub(super) async fn build_token_context(
     state: &AppState,
     uri: &Uri,
     headers: &HeaderMap,

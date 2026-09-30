@@ -332,7 +332,9 @@ impl TokenValidator {
         }
     }
 
-    /// Introspect token (RFC 7662)
+    /// Inspect legacy stored-token status without an online authority backend.
+    /// Marked client-credentials tokens always return inactive here; use the HTTP
+    /// introspection endpoint for authenticated current-policy evaluation (RFC 7662).
     #[must_use]
     pub fn introspect_token(&self, token: &str) -> serde_json::Value {
         match self.token_store.try_verify_access_token(token) {
