@@ -948,6 +948,10 @@ root = pathlib.Path(__file__).resolve().parents[1]
 drv = "/nix/store/" + "a" * 32 + "-verify-kani-0.0.0.drv"
 with (root / "nix-commands.jsonl").open("a") as out:
     out.write(json.dumps(args) + "\\n")
+if args[0] == "--version":
+    print("nix (fixture)"); sys.exit(0)
+if args[:3] == ["config", "show", "build-dir"]:
+    print(""); sys.exit(0)
 if args[0] == "eval":
     print(drv, end=""); sys.exit(0)
 if args[0] == "build":
@@ -974,6 +978,23 @@ sys.exit(2)
 """
         )
         executable.chmod(0o755)
+        # Model the daemon's privileged state directory in this private fixture.
+        # The allocator implementation is unchanged; production exposes no path override.
+        (self.root / "nix-state").mkdir()
+        python = self.root / "bin/python3"
+        python.write_text(
+            f"#!{sys.executable}\n"
+            "import importlib.util, os, pathlib, sys\n"
+            "if len(sys.argv) == 4 and sys.argv[2] == '--prepare-build':\n"
+            "    spec = importlib.util.spec_from_file_location('capture', sys.argv[1])\n"
+            "    module = importlib.util.module_from_spec(spec)\n"
+            "    spec.loader.exec_module(module)\n"
+            f"    anchor = pathlib.Path({str(self.root / 'nix-state')!r})\n"
+            "    module.prepare_build(pathlib.Path(sys.argv[3]), anchor)\n"
+            "else:\n"
+            "    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
+        )
+        python.chmod(0o755)
 
     def hosted(self, **environment: str) -> subprocess.CompletedProcess[str]:
         bash = shutil.which("bash")
@@ -1015,12 +1036,12 @@ sys.exit(2)
         commands = [
             json.loads(line) for line in (self.root / "nix-commands.jsonl").read_text().splitlines()
         ]
-        assert commands[1][1].endswith("-verify-kani-0.0.0.drv^*")
-        assert "--keep-failed" in commands[1]
-        assert (
-            commands[1][commands[1].index("build-dir") + 1]
-            == (evidence / "build-root").read_text().strip()
-        )
+        build = next(command for command in commands if command[0] == "build")
+        assert build[1].endswith("-verify-kani-0.0.0.drv^*")
+        assert "--keep-failed" in build
+        assert build[build.index("build-dir") + 1] == (evidence / "build-root").read_text().strip()
+        assert (evidence / "nix-version").read_text() == "nix (fixture)\n"
+        assert (evidence / "nix-configured-build-dir").is_file()
         assert any("--verify-records" in command for command in commands)
         assert any("--gate" in command for command in commands)
 
@@ -1040,22 +1061,25 @@ sys.exit(2)
         # A success exit without this invocation's output also cannot adopt ./result.
         assert self.hosted(FAKE_NO_OUTPUT="1").returncode != 0
 
-    def test_hosted_wrapper_rejects_insecure_or_noncanonical_build_parent(self) -> None:
+    def test_hosted_wrapper_keeps_runner_temp_separate_from_daemon_build_parent(self) -> None:
         self.prepare_hosted_output()
-        self.root.chmod(0o777)
-        try:
-            assert self.hosted().returncode != 0
-        finally:
-            self.root.chmod(0o700)
         alias = self.root / "temp-alias"
         alias.symlink_to(self.root, target_is_directory=True)
-        for parent in (str(alias), "."):
+        for parent in (str(alias), ".", str(self.root / "absent-temp")):
             with self.subTest(parent=parent):
-                assert self.hosted(RUNNER_TEMP=parent).returncode != 0
+                result = self.hosted(RUNNER_TEMP=parent)
+                assert result.returncode == 0, result.stdout + result.stderr
         commands = [
             json.loads(line) for line in (self.root / "nix-commands.jsonl").read_text().splitlines()
         ]
-        assert not any(command[0] == "build" for command in commands)
+        roots = [
+            pathlib.Path(command[command.index("build-dir") + 1])
+            for command in commands
+            if command[0] == "build"
+        ]
+        assert len(set(roots)) == 3
+        assert all(root.parent == self.root / "nix-state/builds" for root in roots)
+        assert len(list((self.root / "hosted").glob("run.*/verified-output/gate.json"))) == 3
 
     def test_hosted_wrapper_rejects_tampered_records_and_source_drift(self) -> None:
         self.prepare_hosted_output()

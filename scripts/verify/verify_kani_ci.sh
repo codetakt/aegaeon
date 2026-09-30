@@ -11,32 +11,15 @@ mkdir -p "$artifact_base"
 artifact_base="$(realpath "$artifact_base")"
 evidence_dir="$(mktemp -d "$artifact_base/run.XXXXXX")"
 echo "Kani build evidence: $evidence_dir"
+nix --version >"$evidence_dir/nix-version"
+nix config show build-dir >"$evidence_dir/nix-configured-build-dir"
 nix eval --raw .#verify-kani.drvPath >"$evidence_dir/requested-drv"
 requested_drv="$(cat "$evidence_dir/requested-drv")"
 
-# Nix creates this fresh root beneath a traversable, secure parent. The default
-# works with a local daemon; hosted runners provide RUNNER_TEMP. Do not derive
-# capture bounds from builder-controlled log messages or upload the build tree.
-build_root="$(python3 - "${RUNNER_TEMP:-/nix/var/nix/builds}" <<'PY'
-import pathlib
-import sys
-import uuid
-
-parent = pathlib.Path(sys.argv[1])
-if (
-    not parent.is_absolute()
-    or parent.resolve(strict=True) != parent
-    or not parent.is_dir()
-    or parent.stat().st_mode & 0o022
-):
-    raise SystemExit("Kani build parent must be a secure canonical absolute directory")
-root = parent / ("aegaeon-kani-" + uuid.uuid4().hex)
-if root.exists() or root.is_symlink():
-    raise SystemExit("Kani build root must be fresh")
-print(root)
-PY
-)"
-printf '%s\n' "$build_root" >"$evidence_dir/build-root"
+# The Nix build user may not traverse runner.temp. Use only the daemon's fixed
+# build parent; keep uploaded artifacts separate from the retained build tree.
+python3 "$REPO_ROOT/scripts/ci/collect_kani_failure.py" --prepare-build "$evidence_dir"
+build_root="$(cat "$evidence_dir/build-root")"
 if nix build "$requested_drv^*" --keep-failed --log-format internal-json -L \
 	--option build-dir "$build_root" \
 	--out-link "$evidence_dir/result" 2>&1 |
@@ -57,7 +40,7 @@ fi
 output="$evidence_dir/verified-output"
 cp -R "$evidence_dir/result/evidence/." "$output"
 run_name="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["run"])' "$output/gate.json")"
-if [[ ! "$run_name" =~ ^run-[a-zA-Z0-9_-]+$ ]]; then
+if [[ ! $run_name =~ ^run-[a-zA-Z0-9_-]+$ ]]; then
 	echo "[FAIL] Kani gate names an invalid retained run" >&2
 	exit 1
 fi

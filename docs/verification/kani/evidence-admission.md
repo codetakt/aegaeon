@@ -221,10 +221,14 @@ the stored source paths and results are preserved. Each invocation uploads its
 build status, logs and copied records in `kani-pure-artifacts`.
 
 The wrapper retains failed Nix builds with `--keep-failed` beneath a fresh
-caller-selected `--option build-dir` root, recorded before the build. Hosted
-runners use `RUNNER_TEMP` as its parent; local daemon use defaults to
-`/nix/var/nix/builds`. Nix must accept that parent's permissions; there is no
-fallback to a wider capture root. Build trees remain outside uploaded artifacts.
+caller-selected `--option build-dir` root, recorded before the build, beneath
+`/nix/var/nix/builds`. The caller requires a secure canonical `/nix/var/nix`
+anchor and validates `builds` when present; the daemon creates a missing
+`builds` child and the fresh invocation directory. `RUNNER_TEMP` never selects
+the build parent: its ancestors may be inaccessible to Nix build users. There
+is no alternate parent, permission relaxation or global configuration change.
+Artifacts remain in their separately configured location. Each invocation also
+records the Nix binary version, configured `build-dir` value and parent metadata.
 
 Raw failure records are collected only from a single retained-directory notice
 within that root, associated with the requested derivation's activity. Builder

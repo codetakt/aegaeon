@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts/ci"))
 from collect_kani_failure import (  # noqa: E402 - standalone Nix tests
     collect,
     file_digests,
+    prepare_build,
     retained_directory,
 )
 
@@ -34,6 +35,68 @@ def start(drv=DERIVATION, identity=1):
 
 def kept(path):
     return event(action="msg", msg=f'note: keeping build directory "{path}"')
+
+
+class BuildPreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        self.anchor = self.root / "state"
+        self.anchor.mkdir()
+        self.evidence = self.root / "invocation"
+        self.evidence.mkdir()
+
+    def test_missing_builds_child_is_left_for_daemon_creation(self):
+        prepare_build(self.evidence, self.anchor)
+        root = Path((self.evidence / "build-root").read_text().strip())
+        assert root.parent == self.anchor / "builds"
+        assert root.name.startswith("aegaeon-kani-")
+        assert not root.parent.exists()
+        receipt = json.loads((self.evidence / "build-parent.json").read_text())
+        assert receipt["existing_parent"] is None
+        assert receipt["anchor"]["path"] == str(self.anchor)
+
+    def test_existing_secure_builds_child_is_recorded(self):
+        (self.anchor / "builds").mkdir(mode=0o755)
+        prepare_build(self.evidence, self.anchor)
+        receipt = json.loads((self.evidence / "build-parent.json").read_text())
+        assert receipt["existing_parent"]["mode"] == "0o755"
+
+    def test_missing_or_insecure_anchor_is_rejected(self):
+        with pytest.raises(FileNotFoundError):
+            prepare_build(self.evidence, self.anchor / "absent")
+        self.anchor.chmod(0o777)
+        with pytest.raises(ValueError, match="secure canonical"):
+            prepare_build(self.evidence, self.anchor)
+        self.anchor.chmod(0o755)
+        alias = self.root / "alias"
+        alias.symlink_to(self.anchor, target_is_directory=True)
+        with pytest.raises(ValueError, match="secure canonical"):
+            prepare_build(self.evidence, alias)
+        assert not (self.evidence / "build-root").exists()
+
+    def test_existing_symlink_file_or_writable_child_is_rejected(self):
+        parent = self.anchor / "builds"
+        parent.symlink_to(self.root, target_is_directory=True)
+        with pytest.raises(ValueError, match="secure canonical"):
+            prepare_build(self.evidence, self.anchor)
+        parent.unlink()
+        parent.write_text("not a directory")
+        with pytest.raises(ValueError, match="secure canonical"):
+            prepare_build(self.evidence, self.anchor)
+        parent.unlink()
+        parent.mkdir()
+        parent.chmod(0o777)
+        with pytest.raises(ValueError, match="secure canonical"):
+            prepare_build(self.evidence, self.anchor)
+        parent.chmod(0o755)
+        assert not (self.evidence / "build-root").exists()
+
+    def test_colliding_invocation_directory_is_never_reused(self):
+        with patch("collect_kani_failure.uuid.uuid4") as identity:
+            identity.return_value.hex = "a" * 32
+            (self.anchor / "builds" / ("aegaeon-kani-" + "a" * 32)).mkdir(parents=True)
+            with pytest.raises(ValueError, match="fresh"):
+                prepare_build(self.evidence, self.anchor)
 
 
 class FailureCaptureTests(unittest.TestCase):

@@ -9,6 +9,7 @@ import re
 import shutil
 import stat
 import sys
+import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -16,6 +17,37 @@ from typing import Any
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 KEPT = re.compile(r"""note: keeping build directory (['"])([^'"]+)\1""")
 DRV = re.compile(r"/nix/store/[0-9a-z]{32}-([^/\s]+)\.drv")
+NIX_STATE_DIR = Path("/nix/var/nix")
+
+
+def secure_directory(path: Path) -> dict[str, int | str]:
+    if (
+        not path.is_absolute()
+        or path.resolve(strict=True) != path
+        or not path.is_dir()
+        or path.stat().st_mode & 0o022
+    ):
+        raise ValueError("Nix build parent must be a secure canonical absolute directory")
+    info = path.stat()
+    return {"path": str(path), "mode": oct(stat.S_IMODE(info.st_mode)), "uid": info.st_uid}
+
+
+def prepare_build(evidence: Path, anchor: Path = NIX_STATE_DIR) -> None:
+    """Reserve a name below the fixed daemon state anchor; Nix creates directories."""
+    anchor_record = secure_directory(anchor)
+    parent = anchor / "builds"
+    parent_record = secure_directory(parent) if parent.exists() or parent.is_symlink() else None
+    root = parent / ("aegaeon-kani-" + uuid.uuid4().hex)
+    if root.exists() or root.is_symlink():
+        raise ValueError("Kani build root must be fresh")
+    (evidence / "build-root").write_text(str(root) + "\n")
+    (evidence / "build-parent.json").write_text(
+        json.dumps(
+            {"anchor": anchor_record, "parent": str(parent), "existing_parent": parent_record},
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 def nix_event(line: str) -> dict[str, Any]:
@@ -140,15 +172,20 @@ def copy_records(output: Path, destination: Path) -> dict[str, str]:
 
 
 def main() -> int:
-    evidence = Path(sys.argv[1])
+    preparing = sys.argv[1] == "--prepare-build"
+    evidence = Path(sys.argv[-1])
     try:
-        collect(evidence)
+        if preparing:
+            prepare_build(evidence)
+        else:
+            collect(evidence)
     except (OSError, ValueError, KeyError, TypeError) as error:
-        (evidence / "failed-capture.json").write_text(
-            json.dumps({"status": "capture-failed", "reason": str(error), "admission": False})
-            + "\n"
+        status = "preparation-failed" if preparing else "capture-failed"
+        receipt = "build-parent.json" if preparing else "failed-capture.json"
+        (evidence / receipt).write_text(
+            json.dumps({"status": status, "reason": str(error), "admission": False}) + "\n"
         )
-        print(f"[FAIL] Raw Kani failure capture: {error}", file=sys.stderr)
+        print(f"[FAIL] Kani {status}: {error}", file=sys.stderr)
         return 1
     return 0
 
