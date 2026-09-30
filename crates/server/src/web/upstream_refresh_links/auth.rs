@@ -137,7 +137,9 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         return Err(upstream_refresh_policy_error(
             &TokenPolicyError::Validation(BearerTokenValidationError::Invalid(
                 "client-credentials authority is no longer current".into(),
-            )), issuer_base, challenge_scheme,
+            )),
+            issuer_base,
+            challenge_scheme,
         ));
     }
     // RFC 9449 section 7.2: a proof cannot turn Bearer presentation into DPoP.
