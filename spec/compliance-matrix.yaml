@@ -278,6 +278,8 @@ rfc_6749:
   - type: policy
     rule: client_credentials_grant_authenticated_and_scoped
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
+  - crates/server/src/policy/client_credentials/tests.rs
   - crates/server/src/web/token_client_credentials.rs
   ci_check: token-client-credentials
   status: verified
@@ -287,7 +289,11 @@ rfc_6749:
     note: "Tamarin protocol-level property (client_authentication); no F* function-level counterpart."
   notes:
   - "Aegaeon supports client_credentials for configured clients (e.g., cc-only-client) and enforces client authentication."
-  - "Scope requests are validated against the client's allowed scopes; openid is rejected for this grant."
+  - Issuance also requires an explicit client_credentials caller/target rule and explicit
+    default when no selector is supplied. Requested and default scopes must fit both that
+    rule and the current client registration; openid is rejected. The cited Tamarin lemma
+    establishes its modeled authentication property, not correspondence for target selection,
+    stable registration identity, configuration coherence, snapshot markers, or online currentness.
 rfc_6750:
 - id: 6750-001
   section: '2.1'
@@ -3069,6 +3075,7 @@ rfc_8693:
     file: fstar/token/TokenExchange.TargetPolicy.fst
     lemma: lemma_output_binds_authority
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests/client_scope_ceiling.rs
@@ -3082,6 +3089,10 @@ rfc_8693:
   notes:
   - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
   - "Runtime capture bounds target capabilities by the client's allowed scopes at code issuance and checks current registration again at exchange. Capturing that client-scope ceiling is not established by the cited abstract root-authority model. Old snapshot versions require reauthorization; current registration is never used to backfill them."
+  - Marked client_credentials tokens permit only same-audience scope attenuation, preserving
+    their captured client_credentials authority and marker while checking current authority;
+    cross-audience conversion is rejected. The cited authorization-code target model does
+    not establish correspondence for this separate provenance.
 
 - id: 8693-202
   requirement: MUST
@@ -3092,6 +3103,7 @@ rfc_8693:
     file: fstar/token/TokenExchange.TargetPolicy.fst
     lemma: lemma_explicit_route_required
   tests:
+  - crates/server/src/web/token_client_credentials/tests.rs
   - crates/server/src/policy/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests.rs
   - crates/server/src/web/token_exchange/tests/legacy_request.rs
@@ -3106,6 +3118,9 @@ rfc_8693:
   notes:
   - "Aegaeon requires an explicit matching audience for legacy exchange; RFC 8693 marks selectors optional. No-parent issuance publishes neither target authority nor its root, while an actually issued refresh parent retains the code-time snapshot."
   - "The older bearer models describe only legacy same-audience exchange. No production refinement claim is made for the new target-aware path."
+  - A marked client_credentials token cannot enter the authorization-code target route or
+    recover authority from missing or inconsistent client_credentials metadata. Same-audience
+    attenuation retains its original client_credentials provenance; no legacy backfill is performed.
 
 - id: 8693-203
   requirement: MUST
@@ -4798,7 +4813,7 @@ draft_oauth_v2_1:
     file: proofs/tamarin/client_auth/client_authentication.spthy
     lemma: client_authentication
   tests:
-  - crates/server/src/web/token_client_credentials.rs
+  - crates/server/src/web/token_client_credentials/tests.rs
   ci_check: oauth21-client-cred-auth
   status: verified
   runtime_link: crates/server/src/web/mod.rs
@@ -4807,6 +4822,10 @@ draft_oauth_v2_1:
     note: "Tamarin protocol-level property (client_authentication); no F* function-level counterpart."
   notes:
   - Client credentials grant requires client authentication (Basic, post, or private_key_jwt).
+  - The cited Tamarin authentication lemma does not model captured registration UUIDs,
+    configuration/runtime fingerprint agreement, or client_credentials target authority;
+    those concrete correspondence obligations remain open.
+
 - id: v21-025
   section: '4.3'
   requirement: MUST
