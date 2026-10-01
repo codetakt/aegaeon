@@ -11,8 +11,8 @@ use std::net::SocketAddr;
 use crate::util;
 
 use super::action_admission::{
-    enforce_action_rate_limit, require_result_user_code, resolve_action_user, result_form_params,
-    result_form_user_code, validate_result_form_csrf,
+    enforce_action_rate_limit, require_device_confirmation, require_result_user_code,
+    resolve_action_user, result_form_params, result_form_user_code, validate_result_form_csrf,
 };
 use super::response::{device_result_page_response, device_result_response};
 
@@ -69,6 +69,10 @@ pub(in crate::web) async fn device_approve(
         Ok(user_id) => user_id,
         Err(response) => return response,
     };
+
+    if let Err(response) = require_device_confirmation(&params) {
+        return response;
+    }
 
     let approved = match state
         .device

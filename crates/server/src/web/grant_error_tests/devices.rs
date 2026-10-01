@@ -40,12 +40,11 @@ async fn decide(state: &AppState, user_code: &str, action: &str) -> TestResult {
             None,
         )?
         .ok_or("session")?;
-    let mut request = request(
-        &format!("/device/{action}"),
-        form(&[("user_code", user_code), ("csrf_token", csrf)]),
-        OWNER,
-        SECRET,
-    )?;
+    let mut fields = vec![("user_code", user_code), ("csrf_token", csrf)];
+    if action == "approve" {
+        fields.push(("confirm_device", "yes"));
+    }
+    let mut request = request(&format!("/device/{action}"), form(&fields), OWNER, SECRET)?;
     request.headers_mut().insert(
         header::COOKIE,
         format!("{cookie}; {}={sid}", super::super::AUTH_SESSION_COOKIE_NAME).parse()?,
@@ -265,3 +264,5 @@ async fn controls(pool: &PgPool, env: &TestEnvironment) -> TestResult {
     }
     Ok(())
 }
+
+mod confirmation;
