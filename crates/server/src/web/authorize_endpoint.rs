@@ -16,7 +16,9 @@ use crate::util;
 
 use issue::{authorize_error_context, commit_authorize_code_response};
 
-use super::authorize_context::build_authorize_request_context;
+use super::authorize_context::{
+    build_authorize_request_context, state_for_authorization_observation,
+};
 use super::authorize_login_redirect::authorize_login_redirect_response;
 use super::request_admission::enforce_no_credentials_in_authorize_uri;
 use super::{authorize_error_response, request_id_from_headers, transport_rejection, AppState};
@@ -71,6 +73,7 @@ pub(super) async fn authorize(
             return response;
         }
     };
+    let state = state_for_authorization_observation(&state, &ctx.observation);
     ctx.reauthenticated =
         match super::authorize_reauthentication::resume(&state, &headers, &uri, &ctx).await {
             Ok(value) => value,

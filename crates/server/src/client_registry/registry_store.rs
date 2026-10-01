@@ -15,6 +15,20 @@ use super::{
 use crate::middleware::ReplayStore;
 
 impl ClientRegistry {
+    /// Keep one request's selected client while sharing the existing JWKS/replay stores.
+    pub(crate) fn for_authorization_observation(&self, client: Option<RegisteredClient>) -> Self {
+        let mut selected = self.clone();
+        selected.clients = Arc::new(RwLock::new(
+            client
+                .into_iter()
+                .map(|c| (c.client_id.clone(), c))
+                .collect(),
+        ));
+        selected.client_secret_credentials = Arc::new(RwLock::new(HashMap::new()));
+        selected.runtime_snapshot_fingerprint = Arc::new(RwLock::new(None));
+        selected
+    }
+
     #[cfg(test)]
     pub(super) fn with_replay_store_and_policy(
         jwt_replay_store: Arc<dyn ReplayStore>,

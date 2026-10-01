@@ -6,6 +6,7 @@ WITH active_runtime_client_projection AS (
     c.created_at AS client_created_at,
     c.id AS client_id,
     c.client_identifier,
+    c.oauth_profile_id,
     c.redirect_uris,
     c.allowed_grant_types,
     c.allowed_scopes,
@@ -126,5 +127,13 @@ WHERE client_identifier ~ '^https://([^/@?#[:space:]\\[\\]:]+|\\[[0-9A-Fa-f:.]+\
 ORDER BY client_identifier ASC, environment_id ASC, client_created_at ASC, client_id ASC
 LIMIT $3
 "
+    )
+}
+
+pub(super) fn authorization_client_for_issuer_host() -> String {
+    format!(
+        "{ACTIVE_RUNTIME_CLIENT_PROJECTION_CTE}
+SELECT *, row_json::text AS runtime_client_projection_row_json
+FROM active_runtime_client_projection WHERE client_identifier=$2 ORDER BY client_id LIMIT 2"
     )
 }

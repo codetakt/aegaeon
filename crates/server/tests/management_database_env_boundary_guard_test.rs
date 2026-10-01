@@ -56,18 +56,30 @@ fn oidc_management_database_constructor_uses_managed_snapshot_key_material() -> 
 
 #[test]
 fn main_hydrates_oidc_from_management_snapshot_when_database_authority_is_active() -> TestResult {
-    let source = server_source("src/main/runtime_config.rs", "runtime config source")?;
-    let body = function_body(&source, "pub(super) async fn oidc_runtime_from_authority(")
-        .test_context("OIDC runtime authority function should exist")?;
-
+    let source = server_source(
+        "src/runtime_configuration/authorization.rs",
+        "authorization runtime source",
+    )?;
+    let body = function_body(&source, "pub async fn derive_authorization_runtime(")
+        .test_context("actual authorization runtime derivation should exist")?;
     assert!(
-        body.contains("OidcConfig::from_management_snapshot_async("),
-        "database-authority startup must hydrate OIDC from the management runtime snapshot"
+        body.contains("OidcConfig::from_management_snapshot_async(")
+            && body.contains("&source.state.policy")
+            && body.contains("&source.keys"),
+        "OIDC must derive from the private original database snapshot"
     );
     assert!(
         !body.contains("legacy_startup_oidc_config(") && !body.contains("None =>"),
-        "OIDC runtime authority must not retain a startup-environment fallback branch"
+        "OIDC derivation must not retain a startup-environment fallback"
     );
+    let main_source = server_source("src/main.rs", "main source")?;
+    assert!(
+        main_source.contains(".derive_authorization_runtime(server_config.clone())")
+            && main_source.contains("authorization_runtime.oidc()")
+            && main_source.contains("authorization_runtime.configuration()"),
+        "startup must use the actual derived configuration and OIDC instances"
+    );
+
     Ok(())
 }
 
@@ -337,7 +349,7 @@ fn management_database_runtime_boundaries_are_revalidated_after_snapshot_hydrati
     assert_ordered_markers(
         runtime_authority_body,
         &[
-            "oidc_runtime_from_authority(",
+            "derive_authorization_runtime(",
             "validate_runtime_boundaries_for_authority(",
             "oidc_sessions_from_shared_env(",
         ],
@@ -2384,8 +2396,8 @@ fn app_state_keeps_runtime_authority_as_single_typed_context() -> TestResult {
     assert_ordered_markers(
         &main_source,
         &[
-            "let runtime_authority_revision = database_runtime_config.authority_revision()?",
-            "RuntimeAuthorityState::from_database_revision(",
+            "let cfg = authorization_runtime.configuration()",
+            "RuntimeAuthorityState::from_authorization_runtime(",
             "let runtime_sync = prepare_runtime_sync_for_authority(",
         ],
         "main startup must initialize RuntimeAuthorityState before using the authority-owned runtime-client sync coordinator",

@@ -62,10 +62,6 @@ async fn offline_consent_http_prompt_syntax_is_consistent_across_plain_par_and_j
         let env = setup_test_environment(&pool).await?;
         let result = async {
             let (state, sid) = fixture(&pool, &env).await?;
-            let mut client = state.clients.try_get(CLIENT)?.ok_or("client missing")?;
-            client.jwks_pem =
-                Some(include_str!("../../../../tests/fixtures/rsa2048-public.pem").into());
-            assert!(state.clients.try_update(client)?);
             let mut prompts: Vec<Value> = [
                 "none consent",
                 "login\tconsent",
@@ -168,12 +164,11 @@ async fn offline_consent_http_prompt_errors_preserve_response_mode_and_state() -
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let (mut state, sid) = fixture(&pool, &env).await?;
-        let mut client = state.clients.try_get(CLIENT)?.ok_or("client missing")?;
-        client.jwks_pem =
-            Some(include_str!("../../../../tests/fixtures/rsa2048-public.pem").into());
-        assert!(state.clients.try_update(client)?);
         for strict in [false, true] {
-            Arc::make_mut(&mut state.cfg).strict_authorize_redirect = strict;
+            update_test_policy(&mut state, |policy| {
+                policy.strict_authorize_redirect = strict
+            })
+            .await?;
             for source in ["plain", "jar"] {
                 for mode in ["query", "form_post"] {
                     // Keep each response-mode group within the per-source limit.

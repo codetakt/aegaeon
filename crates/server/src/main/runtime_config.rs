@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use sqlx::PgPool;
 use tracing::info;
 
 use aegaeon_server::config::{BootstrapConfig, ServerConfig};
-use aegaeon_server::oidc::OidcConfig;
 use aegaeon_server::runtime_configuration::{
     load_database_runtime_configuration, DatabaseRuntimeConfiguration,
 };
@@ -31,19 +28,6 @@ pub(super) fn runtime_issuer_for_authority(
     database_runtime_config: &DatabaseRuntimeConfiguration,
 ) -> String {
     database_runtime_config.issuer_url.clone()
-}
-
-pub(super) async fn oidc_runtime_from_authority(
-    runtime_issuer: &str,
-    database_runtime_config: &DatabaseRuntimeConfiguration,
-) -> Result<Option<Arc<OidcConfig>>> {
-    let config = OidcConfig::from_management_snapshot_async(
-        runtime_issuer,
-        &database_runtime_config.state.policy,
-        &database_runtime_config.runtime_keys,
-    )
-    .await?;
-    Ok(config.map(Arc::new))
 }
 
 pub(super) fn validate_runtime_boundaries_for_authority(
