@@ -250,11 +250,31 @@ fn authorize_query_rejects_duplicate_singleton_fields() {
     }
 }
 
-#[test]
-fn authorize_query_rejects_multiple_resource_parameters() {
-    let query = "resource=https%3A%2F%2Fapi-a.example&resource=https%3A%2F%2Fapi-b.example";
-    assert!(
-        serde_urlencoded::from_str::<RawAuthzQuery>(query).is_err(),
-        "multiple authorize resource parameters are not supported and must fail closed"
+#[tokio::test]
+async fn authorize_query_repeated_resources_reach_explicit_invalid_target_policy() {
+    use crate::web::oidc_request_input::{admit_oidc_query, OidcEndpoint};
+    let query = "response_type=code&client_id=test-client&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&resource=https%3A%2F%2Fapi-a.example&resource=https%3A%2F%2Fapi-b.example";
+    let uri = format!("/authorize?{query}").parse().expect("URI");
+    let admitted = admit_oidc_query(OidcEndpoint::Authorize, &uri)
+        .expect("repeated resources are syntactically valid");
+    let raw = RawAuthzQuery::from_admitted(&admitted).expect("all resources preserved");
+    assert_eq!(
+        raw.resource,
+        ["https://api-a.example", "https://api-b.example"]
     );
+    let response = match parse_authorize_request(
+        raw,
+        &ParStore::new_process_local_for_tests(),
+        "https://issuer.example",
+        &[],
+    ) {
+        Ok(_) => panic!("current single-resource backend must reject explicitly"),
+        Err(response) => response,
+    };
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("error body");
+    let json: Value = serde_json::from_slice(&body).expect("JSON");
+    assert_eq!(json["error"], "invalid_target");
 }

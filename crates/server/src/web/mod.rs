@@ -35,6 +35,7 @@ pub mod management;
 mod metadata;
 mod oauth_audit;
 mod oauth_errors;
+mod oidc_request_input;
 #[cfg(test)]
 mod openid_federation;
 mod par_endpoint;
