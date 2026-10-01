@@ -1,9 +1,7 @@
 use super::{
     RuntimeKey, RuntimeKeyAlgorithm, RuntimeKeyProvider, RuntimeKeySetError, RuntimeKeyStatus,
-    RuntimeKeyUsage,
+    RuntimeKeyUsage, MAX_RETIRING_KEYS_PER_USAGE,
 };
-
-const MAX_RETIRING_KEYS_PER_USAGE: usize = 4;
 
 pub(super) fn validate_runtime_key_set(keys: &[RuntimeKey]) -> Result<(), RuntimeKeySetError> {
     reject_duplicate_active_usages(keys)?;

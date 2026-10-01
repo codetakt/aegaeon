@@ -270,9 +270,32 @@ not hot-reloaded. Emergency revocation can deliberately interrupt old requests.
 Reactivating a configuration does not restore historical key records or purge
 external caches. The stored retirement-duration formulas and public JWKS cache
 policy are unchanged by this consumer repair. Their coordination, older issued
-artifact lifetimes, rapid-rotation capacity and emergency operations require
+artifact lifetimes, rotation frequency and emergency operations require
 separate release review; successful decryption overlap alone does not establish
 complete rotation continuity.
+
+## Runtime retirement capacity
+
+Each runtime key usage permits at most four unexpired `RETIRING` keys. Creating
+an `ACTIVE` replacement or activating a `NEXT` key returns HTTP 409 with error
+code `conflict` if retiring the current active key would exceed this local bound.
+The response details give `usage`, `liveRetiringCount`,
+`prospectiveRetiringCount` and `limit`; no key mutation or success audit commits.
+This applies to ID Token signing, Request Object decryption, JWT access token
+signing and JWT introspection signing. Creating a `NEXT` key remains permitted,
+and activating a key without an active predecessor consumes no retirement slot.
+
+The count and rotation run in the same locked environment transaction. Expiry
+uses database transaction time; a key that expires while the request waits for
+the lock can still count, so retry in a new transaction after expiry. This does
+not establish behavior across arbitrary database clock rollback.
+
+On upgrade, existing over-capacity environments are not automatically repaired.
+Wait for normal retirement expiry, or use explicit revocation only when justified
+independently: revocation can disrupt outstanding artifacts. Expired, revoked and
+historical rows are preserved. Do not delete history or shorten retention to make
+space. This guard does not change retirement durations, cache freshness or the
+remaining historical lifetime and in-flight issuance requirements.
 
 ## Incident handling
 

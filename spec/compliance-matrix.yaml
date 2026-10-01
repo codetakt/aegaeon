@@ -5816,6 +5816,8 @@ openid_jwks:
   module: crates/server/src/oidc/config/runtime_keys.rs
   proof: []
   tests:
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_http.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/capacity_concurrency.rs
   - crates/server/src/oidc/config/tests/decryption_keyring.rs
   - crates/server/src/web/management/request_object_keyring_tests.rs
   - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
@@ -5824,6 +5826,7 @@ openid_jwks:
   status: implemented
   runtime_link: crates/server/src/request_object/envelope.rs
   notes:
+  - "Management refuses activation that would exceed the shared four-live-retiring-key bound per usage under the environment lock. This is local configuration integrity, not an OIDC numerical requirement. Router/PostgreSQL tests cover all four usages and both activation paths; synchronized inner-workflow races separately check competing last-slot mutations."
   - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
   - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
   - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."
