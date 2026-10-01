@@ -50,6 +50,8 @@ mod postgres;
 mod traits;
 mod types;
 
+pub(crate) use cache::resolve_trust_chain_artifacts_cached_with;
+
 #[cfg(test)]
 pub(super) use cache::{reconstruct_chain_from_cache, trust_chain_cache_expires_at};
 pub use cache::{

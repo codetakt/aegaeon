@@ -92,6 +92,7 @@ fn validate_path(
 
         validate_entity_statement(sub_stmt, now)?;
         validate_entity_statement(superior_config, now)?;
+        crate::federation::profile::validate_superior(superior_config)?;
         validate_subordinate_statement_link(sub_stmt, superior_config, current_entity_id)?;
         // Section 3.2 requires the subject's signed configuration to name its
         // immediate superior, including on cached and custom-fetched paths.

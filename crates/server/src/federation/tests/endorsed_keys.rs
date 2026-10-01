@@ -507,3 +507,8 @@ fn disjoint_issuer_configuration_keys_fail_resolution_and_cache() {
         }
     });
 }
+
+mod statement_profile {
+    use super::*;
+    include!("statement_profile.rs");
+}

@@ -142,7 +142,7 @@ async fn resolve_upstream_federation_metadata(
         .cache_config
         .outbound_allowed_domains
         .clone();
-    let chain_result = crate::federation::resolve_trust_chain_cached_with(
+    let chain_result = crate::federation::resolve_trust_chain_artifacts_cached_with(
         upstream_issuer,
         environment_id,
         anchor_repo,
@@ -168,6 +168,13 @@ async fn resolve_upstream_federation_metadata(
         },
     )
     .await;
+    admit_upstream_federation_metadata(chain_result, issuer_base)
+}
+
+pub(crate) fn admit_upstream_federation_metadata(
+    chain_result: Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    issuer_base: &str,
+) -> Result<Option<Value>, Response> {
     let chain = match chain_result {
         Ok(chain) => chain,
         Err(crate::federation::FederationError::ChainResolution(reason))
@@ -183,7 +190,13 @@ async fn resolve_upstream_federation_metadata(
         }
     };
 
-    let resolved_metadata = chain.resolved_metadata().map_err(|_| {
+    crate::federation::validate_oidc_upstream_chain(&chain).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "federation chain does not satisfy ordinary OIDC context",
+        )
+    })?;
+    let resolved_metadata = chain.trust_chain.resolved_metadata().map_err(|_| {
         upstream_federation_gateway_error(
             issuer_base,
             "federation metadata policy validation failed",

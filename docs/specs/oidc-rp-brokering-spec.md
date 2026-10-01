@@ -109,6 +109,57 @@ This implements the JWT purpose and key-identification requirements common to Op
 1.0 and 1.1 sections 3, 3.2, and 7. It does not change the adopted edition or establish full statement
 profile conformance, Trust Mark issuer accreditation, or delegation validation.
 
+## Federation Statement Claim Admission
+
+Signature verification admits the exact verified payload through the existing structural JSON
+backend and a common claim-profile gate. Duplicate members and trailing JSON are rejected before
+projection. The public unverified parser remains structural; typed validation cannot reconstruct
+raw null presence or discarded extensions. Signature and profile success alone do not establish
+requested identity, freshness, anchor trust, or complete-chain acceptance.
+
+Entity Identifiers require HTTPS authority and host without userinfo, query, fragment, whitespace,
+control characters, or backslashes. Strings retain their original spelling for identity checks.
+Endpoint URLs permit query parameters. Shape checks do not retrieve unused identifiers or endpoints;
+actual retrieval retains the existing SSRF, domain, and rebinding protections.
+
+Both configurations and subordinate statements require a nonempty signing JWKS. Every original
+member must have a unique string `kid`, including unused keys, before material parsing. Existing
+strict material admission remains; this does not establish full mixed-key or public-key conformance.
+Configuration-only hints and Trust Mark fields and subordinate-only constraints, metadata policy,
+policy critical members, and source endpoint reject wrong-kind presence, including null. Hints,
+when present, must be nonempty identifier arrays. Metadata entity types must be objects and their
+immediate parameters non-null; null inside structured parameter values remains supported.
+
+Trust Mark envelopes require the exact `trust_mark_type` and a signed compact JWT whose raw type
+matches the envelope. Owner and issuer maps receive shape and identifier checks. This does not
+verify Trust Mark accreditation, issuer trust, or delegation. Any present payload `crit` or
+`metadata_policy_crit` is refused because no corresponding critical extension is implemented.
+Entity Statements explicitly prohibit `trust_chain` and `peer_trust_chain` protected headers.
+
+Every known superior in a selected chain must publish its own signed `federation_entity` metadata
+with HTTPS fetch and list endpoints. Subordinate statements cannot supply these two endpoints.
+Fetch URL construction requires the advertised endpoint; the inferred well-known fetch fallback
+has been removed. A first entity may also offer subordinate services, and a configured terminal
+anchor may have superiors. Those path positions do not assert global leaf or rootless roles.
+
+The upstream OIDC consumer additionally rejects raw `aud` and `trust_anchor` presence, even null,
+in every selected statement, and requires `openid_provider` in the signed first configuration.
+An empty provider object passes this role check, with resolved issuer, endpoint, and key checks
+still required. This context gate applies to fresh and cached use. Generic Federation processing
+continues to ignore these ordinary extension claims; a core-valid cached chain need not be valid
+for OIDC authorization.
+
+Existing cache entries need no migration. Invalid core/profile entries are refused on use and
+follow the existing fresh-resolution fallback, including cache replacement after successful
+resolution. Test-only statement builders omit empty hints and require explicit subject Federation public
+keys, separate from issuer keys and registered OAuth client keys. These builders do not activate
+public Federation producer endpoints.
+
+These changes implement common subsets of Federation 1.0/1.1 sections 3.1, 3.2, 5.1.1, 8.1, and 8.2,
+and ordinary OIDC restrictions shared by Federation 1.0 and Federation Connect 1.1 section 3.2.
+Full metadata-policy, constraints, key-material, temporal-domain, and individual entity admission
+remain separate obligations. No edition adoption or new formal assurance follows from these checks.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The
