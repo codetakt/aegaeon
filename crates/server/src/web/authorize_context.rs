@@ -145,7 +145,6 @@ async fn authorize_parse_request_context(
     let observation = observe_authorization(state, selected_client_id, issuer_base).await?;
     let selected_state = state_for_authorization_observation(state, &observation);
     let state = &selected_state;
-    let response_mode_raw = raw.response_mode.clone();
     let parsed = parse_authorize_request_with_runtime_blocking(
         raw,
         state.protocol.par_store.clone(),
@@ -156,13 +155,8 @@ async fn authorize_parse_request_context(
     )
     .await?;
     let req = parsed.request;
-    let response_mode_source = req
-        .request_object_claims
-        .as_ref()
-        .and_then(|claims| claims.response_mode.as_deref())
-        .or(response_mode_raw.as_deref());
-    let response_mode =
-        crate::form_post::parse_response_mode(response_mode_source).map_err(|_| {
+    let response_mode = crate::form_post::parse_response_mode(parsed.response_mode.as_deref())
+        .map_err(|_| {
             authorize_error_response(
                 authorize_error_context(
                     state,

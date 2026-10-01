@@ -41,6 +41,7 @@ pub(super) struct ParsedAuthorizeRequest {
     pub(super) request: AuthzReq,
     // Selected by request source. Wrapped absence never falls back to the query.
     pub(super) prompt: Option<String>,
+    pub(super) response_mode: Option<String>,
     pub(super) par_authorize_continuation: Option<String>,
 }
 
@@ -67,7 +68,7 @@ struct RequestObjectAuthorizeInput {
 fn authorize_request_from_request_object(
     input: RequestObjectAuthorizeInput,
     runtime: &AuthorizeRequestParsingRuntime<'_>,
-) -> Result<AuthzReq, Response> {
+) -> Result<ParsedAuthorizeRequest, Response> {
     let client_id = require_authorize_client_id(input.client_id, runtime)?;
     let Some(deps) = runtime.request_object_deps.as_ref() else {
         return Err(json_error_with_iss(
@@ -86,7 +87,8 @@ fn authorize_request_from_request_object(
         RequestObjectReplayPolicy::Defer,
     )
     .map_err(|err| request_object_resolution_error_response(runtime.issuer_base, &err))?;
-    Ok(AuthzReq {
+    let response_mode = resolved.request_object_claims.response_mode.clone();
+    let request = AuthzReq {
         response_type: resolved.response_type,
         client_id,
         // RFC 9101: use the admitted AS recipient, not JWT iss or an outer
@@ -105,6 +107,12 @@ fn authorize_request_from_request_object(
         request_object_claims: Some(resolved.request_object_claims),
         acr_values: resolved.acr_values,
         max_age: resolved.max_age,
+    };
+    Ok(ParsedAuthorizeRequest {
+        request,
+        response_mode,
+        prompt: None,
+        par_authorize_continuation: None,
     })
 }
 
@@ -278,23 +286,19 @@ fn parse_authorize_request_with_runtime_inner(
         return Ok(ParsedAuthorizeRequest {
             request: parsed.request,
             prompt: parsed.prompt,
+            response_mode: parsed.response_mode,
             par_authorize_continuation: Some(parsed.continuation),
         });
     }
 
     if let Some(request_jwt) = request {
-        let request = authorize_request_from_request_object(
+        return authorize_request_from_request_object(
             RequestObjectAuthorizeInput {
                 client_id,
                 request_jwt,
             },
             &runtime,
-        )?;
-        return Ok(ParsedAuthorizeRequest {
-            request,
-            prompt: None,
-            par_authorize_continuation: None,
-        });
+        );
     }
 
     let request = authorize_request_from_plain_query(
@@ -318,6 +322,7 @@ fn parse_authorize_request_with_runtime_inner(
     Ok(ParsedAuthorizeRequest {
         request,
         prompt,
+        response_mode,
         par_authorize_continuation: None,
     })
 }

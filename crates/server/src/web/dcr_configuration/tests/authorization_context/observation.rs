@@ -356,6 +356,7 @@ async fn source_scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult 
         client_id: client.client_id.clone(),
         redirect_uri: client.redirect_uris[0].clone(),
         response_type: "code".into(),
+        response_mode: None,
         iss: Some(env.issuer_url.clone()),
         resource: None,
         state: Some("pushed".into()),

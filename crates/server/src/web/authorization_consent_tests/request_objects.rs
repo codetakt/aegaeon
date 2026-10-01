@@ -24,6 +24,12 @@ fn signed_request_with_prompt(
         "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         "code_challenge_method": "S256"
     });
+    if mode.contains("form-post") {
+        claims["response_mode"] = json!("form_post");
+    }
+    if mode.contains("query-mode") {
+        claims["response_mode"] = json!("query");
+    }
     if mode.contains("login-consent") {
         claims["prompt"] = json!("login consent");
     } else if mode.contains("login") {
@@ -248,7 +254,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
     Ok(())
 }
 
-fn shared_protocol_stores(state: &mut AppState) -> TestResult {
+pub(super) fn shared_protocol_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let par_store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,

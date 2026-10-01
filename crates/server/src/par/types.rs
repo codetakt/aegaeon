@@ -9,6 +9,9 @@ pub struct ParRequest {
     pub client_id: String,
     pub redirect_uri: String,
     pub response_type: String,
+    /// Selected pushed response mode; omission means query, never an outer value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_mode: Option<String>,
     /// AS recipient binding; independent of the issuer of a signed Request Object.
     #[serde(default)]
     pub iss: Option<String>,
