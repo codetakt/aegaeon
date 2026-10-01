@@ -1,5 +1,12 @@
 # Claim Index — Verification Quality Report
 
+> **Historical record notice (2026-09-30):** The September 14 snapshot below is
+> preserved for historical reference. Its counts and classifications are not
+> current verification evidence or a product assurance statement. Its original
+> instruction to rerun the generator is superseded: do not regenerate this
+> document to satisfy CI. CI validates the current matrix and its proof
+> references directly.
+
 Last updated: 2026-09-14
 
 Status: snapshot
