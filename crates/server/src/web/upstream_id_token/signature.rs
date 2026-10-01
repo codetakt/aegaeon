@@ -1,11 +1,11 @@
 use super::super::upstream_metadata::select_upstream_signing_key;
-use super::algorithms::{jwt_alg_curve, jwt_alg_name, jwt_alg_requires_rsa};
+use super::algorithms::{jwt_alg_curve, jwt_alg_requires_rsa};
 use super::errors::UpstreamIdTokenSignatureError;
 use aegaeon_jose::jwk::{JwkSet, KeyMaterial};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
+use super::header::admit_upstream_id_token_header;
 use crate::oidc::{required_rs256, IdTokenClaims, OidcDiscovery};
-use crate::util;
 
 pub(in crate::web) fn verify_compact_jwt_payload_with_key(
     token: &str,
@@ -52,28 +52,10 @@ pub(in crate::web) fn verify_upstream_id_token_claims(
     discovery: &OidcDiscovery,
     jose_header_max_len: usize,
 ) -> Result<(IdTokenClaims, &'static str), UpstreamIdTokenSignatureError> {
-    let header = util::decode_compact_jwt_header_without_duplicate_keys_with_max_len(
-        token,
-        jose_header_max_len,
-    )
-    .map_err(|err| match err {
-        util::JsonObjectParseError::BackendPolicy => UpstreamIdTokenSignatureError::Internal(
-            "unsupported raw JSON backend for jose-header".to_string(),
-        ),
-        util::JsonObjectParseError::DuplicateKey
-        | util::JsonObjectParseError::InvalidJson
-        | util::JsonObjectParseError::TrailingBytes
-        | util::JsonObjectParseError::InvalidShape => UpstreamIdTokenSignatureError::HeaderInvalid,
-    })?;
+    let admitted = admit_upstream_id_token_header(token, discovery, jose_header_max_len)?;
+    let header = admitted.header;
     let alg = header.alg;
-    let alg_name = jwt_alg_name(alg).ok_or(UpstreamIdTokenSignatureError::AlgNotAllowed)?;
-    if !discovery
-        .id_token_signing_alg_values_supported
-        .iter()
-        .any(|value| value.eq_ignore_ascii_case(alg_name))
-    {
-        return Err(UpstreamIdTokenSignatureError::AlgNotSupported);
-    }
+    let alg_name = admitted.alg_name;
 
     let jwk = select_upstream_signing_key(jwks, header.kid.as_deref())
         .map_err(UpstreamIdTokenSignatureError::KeySelection)?;
