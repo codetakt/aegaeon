@@ -59,7 +59,11 @@ for file in \
 	manifest.json \
 	verified_core.wasm.sha256 \
 	verified_core.wasm.sha512 \
-	verified_core.wasm.sri; do
+	verified_core.wasm.sri \
+	verified_core.abi.json \
+	verified-core-sbom.json \
+	types.d.ts \
+	integrity.txt; do
 	copy_replace "$DIST_DEST/$file" "$SDK_DEST/$file"
 done
 
