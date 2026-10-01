@@ -38,7 +38,7 @@ pub fn host_matches_domain_allowlist(host: &str, allowed_domains: &[String]) -> 
     })
 }
 
-pub(super) fn validate_redirect_target(
+pub(crate) fn validate_redirect_target(
     url: &url::Url,
     allowed_domains: Option<&[String]>,
 ) -> Result<(), String> {

@@ -27,3 +27,5 @@ pub use url_validation::{
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) use redirect::validate_redirect_target;

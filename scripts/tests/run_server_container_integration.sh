@@ -9,6 +9,14 @@ AEGAEON_DATABASE_URL="${AEGAEON_DATABASE_URL:-$DEFAULT_AEGAEON_DATABASE_URL}"
 AEGAEON_TEST_REDIS_URL="${AEGAEON_TEST_REDIS_URL:-redis://localhost:6379/0}"
 SCOPE="${1:-${AEGAEON_SERVER_CONTAINER_TEST_SCOPE:-all}}"
 
+# These fixtures have their own required namespace runner in CI. They must not
+# run in a broad ignored sweep against the host's network or Compose services.
+NAMESPACE_TEST_SKIPS=(
+	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
+	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
+	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::
+)
+
 usage() {
 	cat <<'USAGE'
 usage: run_server_container_integration.sh [all|redis|postgres]
@@ -94,12 +102,12 @@ with_test_redis() {
 
 run_redis_tests() {
 	echo "running Redis-backed aegaeon-server ignored tests"
-	with_test_redis cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_
+	with_test_redis cargo test -p aegaeon-server redis_ --lib -- --ignored --test-threads=1 --skip shared_redis_ "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
 run_mixed_tests() {
 	echo "running combined Postgres/Redis aegaeon-server ignored tests"
-	with_test_redis cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1
+	with_test_redis cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
 run_postgres_tests() {
@@ -110,7 +118,7 @@ run_postgres_tests() {
 	# name-prefix filter: prefix filtering silently skipped DB-gated tests
 	# that were not named pg_* (e.g. the dcr_configuration_* RFC 7592 tests).
 	echo "running Postgres-backed aegaeon-server ignored lib tests"
-	cargo test -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_
+	cargo test -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ "${NAMESPACE_TEST_SKIPS[@]}"
 
 	echo "running Postgres-backed dynamic client registration integration test"
 	cargo test -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1

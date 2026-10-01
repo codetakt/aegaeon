@@ -6,21 +6,14 @@ use super::super::JwksRuntimePolicy;
 use super::refresh_jwks_with_state;
 
 #[cfg(test)]
-pub(in crate::client_registry) fn spawn_jwks_refresh_once(
-    policy: JwksRuntimePolicy,
-    uri: &str,
-    etag: Option<String>,
-    last_modified: Option<String>,
-) {
-    spawn_jwks_refresh_once_with_state(jwks_runtime_state(), policy, uri, etag, last_modified);
+pub(in crate::client_registry) fn spawn_jwks_refresh_once(policy: JwksRuntimePolicy, uri: &str) {
+    spawn_jwks_refresh_once_with_state(jwks_runtime_state(), policy, uri);
 }
 
 pub(in crate::client_registry) fn spawn_jwks_refresh_once_with_state(
     state: &JwksRuntimeState,
     policy: JwksRuntimePolicy,
     uri: &str,
-    etag: Option<String>,
-    last_modified: Option<String>,
 ) {
     let inserted = match state
         .inner
@@ -44,13 +37,7 @@ pub(in crate::client_registry) fn spawn_jwks_refresh_once_with_state(
     if std::thread::Builder::new()
         .name("aegaeon-jwks-refresh".to_string())
         .spawn(move || {
-            let _ = refresh_jwks_with_state(
-                &refresh_state,
-                &policy,
-                &uri_for_refresh,
-                etag,
-                last_modified,
-            );
+            let _ = refresh_jwks_with_state(&refresh_state, &policy, &uri_for_refresh);
             match cleanup_state
                 .inner
                 .coordination

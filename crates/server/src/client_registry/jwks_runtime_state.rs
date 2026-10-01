@@ -4,9 +4,10 @@ use std::time::SystemTime;
 
 use thiserror::Error;
 
-use super::jwks_types::CacheEntry;
+mod local_cache;
 use super::{sha256_hex, ClientRegistryInitError, JwksRuntimePolicy, JWKS_REDIS_URL_ENV};
 use crate::config::{require_shared_runtime_store_url, RuntimeStateNamespace};
+pub(super) use local_cache::JwksLocalCache;
 
 mod redis_circuit;
 mod redis_kid;
@@ -71,7 +72,7 @@ pub(super) struct JwksRuntimeState {
 }
 
 pub(super) struct JwksRuntimeStateInner {
-    pub(super) cache: Mutex<HashMap<String, CacheEntry>>,
+    pub(super) cache: Mutex<JwksLocalCache>,
     pub(super) last_gc: Mutex<Option<std::time::Instant>>,
     pub(super) coordination: JwksCoordinationState,
     pub(super) shared_state: JwksSharedRuntimeState,
@@ -201,7 +202,7 @@ impl JwksRuntimeState {
     pub(super) fn with_shared_state(shared_state: JwksSharedRuntimeState) -> Self {
         Self {
             inner: Arc::new(JwksRuntimeStateInner {
-                cache: Mutex::new(HashMap::new()),
+                cache: Mutex::new(JwksLocalCache::default()),
                 last_gc: Mutex::new(None),
                 coordination: JwksCoordinationState::new(),
                 shared_state,
@@ -297,7 +298,7 @@ impl RedisJwksRuntimeState {
         .unwrap_or(60)
     }
 
-    fn ttl_i64(policy: &JwksRuntimePolicy) -> Result<i64, JwksSharedStateError> {
+    pub(super) fn ttl_i64(policy: &JwksRuntimePolicy) -> Result<i64, JwksSharedStateError> {
         Self::shared_ttl_secs(policy)
             .try_into()
             .map(|ttl: i64| ttl.max(1))
