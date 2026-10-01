@@ -141,19 +141,28 @@ async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
     assert_no_cache(&response);
     assert_eq!(response_json(response).await?["error"], "invalid_target");
 
-    // Normal no-hint logout reaches the existing GET/HEAD handler.
+    // GET now starts confirmation; HEAD remains non-destructive and empty.
     for method in [Method::GET, Method::HEAD] {
         let is_head = method == Method::HEAD;
         let response = app
             .clone()
             .oneshot(browser_request(method, "/logout?state=&unknown=x")?)
             .await?;
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.status(),
+            if is_head {
+                StatusCode::OK
+            } else {
+                StatusCode::SEE_OTHER
+            }
+        );
         assert_no_cache(&response);
         if is_head {
             assert!(body::to_bytes(response.into_body(), 4096).await?.is_empty());
         } else {
-            assert_eq!(response_json(response).await?["logout"], "ok");
+            assert!(response.headers()[header::LOCATION]
+                .to_str()?
+                .starts_with("/logout/confirm?transaction="));
         }
     }
     for uri in [
@@ -171,7 +180,7 @@ async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
         );
         assert_no_cache(&response);
     }
-    for uri in ["/authorize", "/logout"] {
+    for uri in ["/authorize"] {
         let response = app
             .clone()
             .oneshot(browser_request(Method::POST, uri)?)

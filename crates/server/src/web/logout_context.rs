@@ -2,12 +2,13 @@ use super::logout_id_token_hint::{client_id_from_id_token_hint, decode_id_token_
 use super::oauth_errors::{no_cache_json_error_with_iss, registry_state_error_response};
 use super::AppState;
 use axum::{http::StatusCode, response::Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::oidc::{IdTokenClaims, OidcConfig, OidcLogoutEvent};
+use crate::oidc::OidcConfig;
 
-#[derive(Deserialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub(super) struct LogoutQuery {
+    pub(super) client_id: Option<String>,
     pub(super) id_token_hint: Option<String>,
     pub(super) post_logout_redirect_uri: Option<String>,
     pub(super) state: Option<String>,
@@ -15,43 +16,6 @@ pub(super) struct LogoutQuery {
 
 pub(super) struct LogoutContext {
     pub(super) client_id: String,
-    claims: IdTokenClaims,
-}
-
-fn oidc_session_store_error_response(issuer_base: &str, error: &str) -> Response {
-    tracing::error!(error, "OIDC session store operation failed during logout");
-    no_cache_json_error_with_iss(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "temporarily_unavailable",
-        Some("failed to update OIDC logout session"),
-        issuer_base,
-    )
-}
-
-pub(super) async fn logout_events_from_context(
-    state: &AppState,
-    context: &LogoutContext,
-    issuer_base: &str,
-) -> Result<Vec<OidcLogoutEvent>, Response> {
-    let Some(sessions) = state.oidc.sessions.as_ref() else {
-        return Ok(Vec::new());
-    };
-    let claims = &context.claims;
-    let sid = claims.sid.as_deref().unwrap_or("");
-    if !sid.trim().is_empty() {
-        return sessions
-            .try_logout_by_sid_async(sid.to_string())
-            .await
-            .map(|event| event.into_iter().collect())
-            .map_err(|err| oidc_session_store_error_response(issuer_base, &err));
-    }
-    if !claims.sub.trim().is_empty() {
-        return sessions
-            .try_logout_by_user_async(claims.sub.clone())
-            .await
-            .map_err(|err| oidc_session_store_error_response(issuer_base, &err));
-    }
-    Ok(Vec::new())
 }
 
 pub(super) fn resolve_logout_context(
@@ -60,36 +24,50 @@ pub(super) fn resolve_logout_context(
     query: &LogoutQuery,
     issuer_base: &str,
 ) -> Result<Option<LogoutContext>, Response> {
-    if query.id_token_hint.is_none() && query.post_logout_redirect_uri.is_some() {
+    let hinted_client = query
+        .id_token_hint
+        .as_deref()
+        .map(|token| {
+            let claims = decode_id_token_hint(cfg, token, state.cfg.jose_header_max_len).map_err(
+                |error| {
+                    no_cache_json_error_with_iss(
+                        error.status,
+                        error.error,
+                        Some(error.public_description()),
+                        issuer_base,
+                    )
+                },
+            )?;
+            client_id_from_id_token_hint(&claims).map_err(|description| {
+                no_cache_json_error_with_iss(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_request",
+                    Some(&description),
+                    issuer_base,
+                )
+            })
+        })
+        .transpose()?;
+    if matches!((&query.client_id, &hinted_client), (Some(explicit), Some(hinted)) if explicit != hinted)
+    {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            Some("id_token_hint is required when post_logout_redirect_uri is provided"),
+            Some("client_id does not match id_token_hint"),
             issuer_base,
         ));
     }
-
-    let Some(id_token_hint) = query.id_token_hint.as_deref() else {
+    let Some(client_id) = hinted_client.or_else(|| query.client_id.clone()) else {
+        if query.post_logout_redirect_uri.is_some() {
+            return Err(no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some("a client identity is required for post_logout_redirect_uri"),
+                issuer_base,
+            ));
+        }
         return Ok(None);
     };
-    let claims = decode_id_token_hint(cfg, id_token_hint, state.cfg.jose_header_max_len).map_err(
-        |error| {
-            no_cache_json_error_with_iss(
-                error.status,
-                error.error,
-                Some(error.public_description()),
-                issuer_base,
-            )
-        },
-    )?;
-    let client_id = client_id_from_id_token_hint(&claims).map_err(|description| {
-        no_cache_json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some(&description),
-            issuer_base,
-        )
-    })?;
     if state
         .clients
         .try_get(&client_id)
@@ -104,7 +82,7 @@ pub(super) fn resolve_logout_context(
         ));
     }
 
-    Ok(Some(LogoutContext { client_id, claims }))
+    Ok(Some(LogoutContext { client_id }))
 }
 
 pub(super) fn validate_post_logout_redirect_uri(
