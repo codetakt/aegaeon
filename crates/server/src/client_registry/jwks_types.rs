@@ -8,9 +8,18 @@ pub(super) struct FetchedJwks {
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub(super) struct FetchedJwk {
     pub(super) kty: String,
-    #[serde(rename = "use", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "use",
+        default,
+        deserialize_with = "present_metadata",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(super) key_use: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_metadata",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub(super) key_ops: Option<Vec<String>>,
     pub(super) kid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,4 +61,13 @@ impl KidGuard {
             .iter()
             .any(|(kid, fingerprint)| self.kid_fps.get(kid).is_some_and(|old| old != fingerprint))
     }
+}
+
+// serde's default is used only for absence; present null must fail T's decoding.
+fn present_metadata<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }

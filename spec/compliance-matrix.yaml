@@ -1062,6 +1062,22 @@ rfc_7517:
   notes:
   - "signature_capability_requires_sig_use \u304C use=enc \u3092\u62D2\u5426\u3057\
     \u3001DCR \u30C6\u30B9\u30C8\u304C\u7F72\u540D\u7528\u30AD\u30FC\u3092\u8981\u6C42"
+- id: 7517-004
+  section: '4.2, 4.3, 6'
+  requirement: MUST
+  description: Preserve case-sensitive JWK usage strings, reject duplicate operations and inconsistent known use/key_ops pairs
+  module: crates/jose/src/jwk/usage.rs
+  tests:
+  - crates/jose/tests/jwk_usage.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests/usage_metadata.rs
+  ci_check: cargo test -p aegaeon-jose --test jwk_usage && cargo test -p aegaeon-server --lib jwk_usage
+  status: partial
+  runtime_link: crates/jose/src/jwk.rs
+  notes:
+  - "Verification requires absent/exact sig use and absent key_ops or a duplicate-free sign/verify subset containing verify. Restricting unrelated or unknown combinations is consumer policy, not a universal RFC MUST."
+  - "Present null and invalid types are rejected before remote DTO projection. Real RSA/EC finite tests compare identical signed bytes/material through inline and fetched/reloaded client keys (RSA assertions, EC Request Objects), and upstream cached selection."
+  - "No proof-status upgrade or all-domain claim. Mixed-set quarantine, material/curve validation, generic kid/alg null typing, and private registration input ownership remain separate work."
 - id: 7517-003
   section: '5.5'
   requirement: MUST

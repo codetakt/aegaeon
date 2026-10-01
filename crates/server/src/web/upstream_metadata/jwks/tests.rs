@@ -364,3 +364,5 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
     assert!(!header(Some("ec")).unfamiliar_kid(&cold.get(&server.url, Some("ec")).await?));
     Ok(())
 }
+
+mod usage_metadata;

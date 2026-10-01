@@ -40,6 +40,12 @@ impl FetchedJwksValidationError {
                 aegaeon_jose::jwk::JwkError::UnsupportedKeyType(_) => "validation_unsupported_kty",
                 aegaeon_jose::jwk::JwkError::DuplicateKid(_) => "validation_duplicate_kid",
                 aegaeon_jose::jwk::JwkError::KidRequired => "validation_kid_missing",
+                aegaeon_jose::jwk::JwkError::DuplicateKeyOperation(_) => {
+                    "validation_duplicate_key_op"
+                }
+                aegaeon_jose::jwk::JwkError::InconsistentKeyUsage => {
+                    "validation_inconsistent_key_usage"
+                }
                 aegaeon_jose::jwk::JwkError::NotAnObject => "validation_parse_error",
             },
             FetchedJwksValidationError::DuplicateKid(_) => "validation_duplicate_kid",
@@ -141,18 +147,7 @@ pub(super) fn select_jwk(jwks: &FetchedJwks, kid: Option<&str>) -> Option<Fetche
 }
 
 fn fetched_jwk_signature_capable(jwk: &FetchedJwk) -> bool {
-    if jwk
-        .key_use
-        .as_deref()
-        .is_some_and(|key_use| key_use.eq_ignore_ascii_case("enc"))
-    {
-        return false;
-    }
-
-    jwk.key_ops.as_ref().is_none_or(|ops| {
-        ops.iter()
-            .any(|op| op.eq_ignore_ascii_case("sign") || op.eq_ignore_ascii_case("verify"))
-    })
+    aegaeon_jose::jwk::verification_usage_allowed(jwk.key_use.as_deref(), jwk.key_ops.as_deref())
 }
 
 pub(super) fn jwk_alg_allows(
