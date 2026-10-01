@@ -182,10 +182,10 @@ fn validate_entity_statement_self_signed_missing_jwks() {
 }
 
 #[test]
-fn validate_entity_statement_subordinate_no_jwks_ok() {
+fn validate_entity_statement_subordinate_requires_jwks() {
     let now = 1_700_000_000_i64;
     let mut stmt =
         sample_subordinate_statement("https://ta.example.com", "https://rp.example.com", now);
-    stmt.jwks = None; // subordinate statements don't require JWKS
-    assert!(validate_entity_statement(&stmt, now).is_ok());
+    stmt.jwks = None;
+    assert!(matches!(validate_entity_statement(&stmt, now), Err(FederationError::MissingField("jwks"))));
 }

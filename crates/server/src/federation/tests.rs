@@ -157,6 +157,22 @@ fn sign_entity_statement_for_test(
     format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature))
 }
 
+fn assert_federation_signature_only(jwt: &str, key: &InMemoryKeyManager) {
+    let parts: Vec<_> = jwt.split('.').collect();
+    assert_eq!(parts.len(), 3);
+    let jwk = must_ok(Jwk::from_value(must_some(
+        FederationKeyManager::federation_public_jwk(key),
+    )));
+    let decoded = must_ok(decode_jwk_material(&jwk));
+    let signature = must_ok(URL_SAFE_NO_PAD.decode(parts[2]));
+    assert!(aegaeon_crypto::signature::verify_ecdsa_p256_sha256(
+        &decoded.data,
+        format!("{}.{}", parts[0], parts[1]).as_bytes(),
+        &signature,
+    )
+    .is_ok());
+}
+
 struct SignedDirectChain {
     leaf_key: InMemoryKeyManager,
     anchor_jwks: Value,
@@ -229,13 +245,22 @@ fn sample_entity_config(entity_id: &str, now: i64) -> EntityStatement {
         iat: now - 100,
         exp: now + 3600,
         jwks: Some(sample_jwks_value()),
-        metadata: Some(HashMap::from([(
-            "openid_relying_party".to_string(),
-            json!({
-                "redirect_uris": ["https://rp.example.com/callback"],
-                "grant_types": ["authorization_code"]
-            }),
-        )])),
+        metadata: Some(HashMap::from([
+            (
+                "openid_relying_party".to_string(),
+                json!({
+                    "redirect_uris": ["https://rp.example.com/callback"],
+                    "grant_types": ["authorization_code"]
+                }),
+            ),
+            (
+                "federation_entity".to_string(),
+                json!({
+                    "federation_fetch_endpoint": format!("{}/.well-known/openid-federation/fetch", entity_id.trim_end_matches('/')),
+                    "federation_list_endpoint": format!("{}/.well-known/openid-federation/list", entity_id.trim_end_matches('/')),
+                }),
+            ),
+        ])),
         metadata_policy: None,
         constraints: None,
         trust_marks: None,
@@ -401,6 +426,11 @@ impl FederationFetcher for MockFetcher {
 mod entity_statement {
     use super::*;
     include!("tests/entity_statement.rs");
+}
+
+mod profile {
+    use super::*;
+    include!("tests/profile.rs");
 }
 
 mod raw_payload {

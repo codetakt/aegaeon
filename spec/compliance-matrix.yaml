@@ -5143,6 +5143,56 @@ openid_federation_rp:
   - Fresh resolution, custom resolver callbacks, and cached paths use signed configuration bytes with exact string matching.
   - Signed regression fixtures cover each subject position, invalid hints, detached hints, and cache fallback; this is not formal proof evidence or full statement-profile conformance.
 
+- id: fed-rp-002
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: Verified Entity Statements MUST enforce common claim kind, presence, shape, and original-member key identification
+  module: crates/server/src/federation/profile/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/federation/tests/statement_profile.rs
+  status: implemented
+  runtime_link: crates/server/src/federation.rs
+  notes:
+  - Exact signature-verified bytes retain structural-backend and duplicate/trailing admission before raw-aware checks and typed correspondence.
+  - Includes HTTPS identifier syntax, required C/S JWKS and all-original-key unique string kid, optional claim shapes, immediate metadata null refusal, Trust Mark envelope/type equality, and unsupported critical claim refusal.
+  - Entity Statement trust_chain and peer_trust_chain protected headers are explicitly prohibited independently of generic unknown-header handling.
+  - Strict existing JWK material handling remains; no complete mixed-key admission, Trust Mark accreditation, full critical/constraints policy, NumericDate, or edition conformance claim.
+  - Unverified parsing remains structural; typed validation cannot recover discarded unknown claims or raw presence.
+- id: fed-rp-003
+  section: '5.1.1, 8.1, 8.2'
+  requirement: MUST
+  description: Known superior entities MUST advertise their fetch and list endpoints in their own signed configurations
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/federation/fetcher/url_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - Common canonical validation applies to fresh, custom, and cached paths; detached or subordinate metadata cannot supply missing superior endpoints.
+  - Fetch URL construction requires an advertised endpoint, preserves query/sub encoding and retrieval protection, and has no inferred fallback.
+  - Seven known federation endpoint values receive syntax checks; no endpoint availability or new producer operation is established.
+  - First/terminal path positions do not assert global leaf/rootless roles. Signed tests use in-process fetchers and repositories.
+- id: fed-rp-004
+  section: '3.2'
+  requirement: MUST
+  description: Ordinary upstream OIDC Federation consumption MUST reject aud and trust_anchor claims and require signed provider-role metadata
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/web/upstream_tests/federation_signing.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - OIDC restrictions common to Federation 1.0 and Federation Connect 1.1 section 3.2; no new edition or Explicit Registration profile adopted.
+  - Raw claim presence including null is rejected at every selected-chain position on fresh and cached use; signed first configuration must contain object openid_provider metadata.
+  - Generic Federation core may accept those ordinary extension claims and cache such a chain; cache storage does not constitute OIDC authorization.
+  - Existing resolved discovery issuer/endpoint/JWKS matching remains required; repository and web admission tests are not live HTTP or browser evidence.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

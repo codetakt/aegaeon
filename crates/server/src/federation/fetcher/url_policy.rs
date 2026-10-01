@@ -1,4 +1,5 @@
 use super::super::{EntityStatement, FederationError};
+use serde_json::Value;
 
 const MAX_OUTBOUND_ALLOWED_DOMAINS: usize = 256;
 
@@ -38,6 +39,7 @@ pub fn validate_entity_url(entity_id: &str) -> Result<url::Url, FederationError>
             "entity_id URL must not include fragment".into(),
         ));
     }
+    crate::federation::profile::validate_identifier(entity_id)?;
     if crate::ssrf::validate_url_host_not_non_routable_literal(&parsed).is_err() {
         return Err(FederationError::Validation(
             "entity_id URL must not target non-routable hosts".into(),
@@ -62,10 +64,8 @@ pub fn entity_configuration_url(entity_id: &str) -> Result<String, FederationErr
 
 /// Construct the subordinate statement fetch URL.
 ///
-/// Authorities may publish a concrete
-/// `metadata.federation_entity.federation_fetch_endpoint`. When present, this
-/// endpoint is used and the `sub` query parameter is appended. When absent, the
-/// default `/.well-known/openid-federation/fetch` endpoint is used.
+/// Requires an advertised `metadata.federation_entity.federation_fetch_endpoint`
+/// and appends the `sub` query parameter. There is no inferred fetch endpoint.
 ///
 /// The `sub_entity_id` is percent-encoded in the query parameter to prevent
 /// injection attacks (C-3 SSRF).
@@ -79,56 +79,30 @@ pub fn subordinate_statement_url(
     authority_config: &EntityStatement,
     sub_entity_id: &str,
 ) -> Result<String, FederationError> {
-    if let Some(endpoint) = configured_federation_fetch_endpoint(authority_config)? {
-        return Ok(subordinate_statement_url_from_endpoint(
-            endpoint,
-            sub_entity_id,
-        ));
-    }
-    default_subordinate_statement_url(authority_entity_id, sub_entity_id)
-}
-
-fn default_subordinate_statement_url(
-    authority_entity_id: &str,
-    sub_entity_id: &str,
-) -> Result<String, FederationError> {
-    let mut parsed = validate_entity_url(authority_entity_id)?;
-    let base_path = parsed.path().trim_end_matches('/');
-    parsed.set_path(&format!("{base_path}/.well-known/openid-federation/fetch"));
+    validate_entity_url(authority_entity_id)?;
+    let endpoint = configured_federation_fetch_endpoint(authority_config)?;
     Ok(subordinate_statement_url_from_endpoint(
-        parsed,
+        endpoint,
         sub_entity_id,
     ))
 }
 
 fn configured_federation_fetch_endpoint(
     authority_config: &EntityStatement,
-) -> Result<Option<url::Url>, FederationError> {
-    let Some(metadata) = authority_config.metadata.as_ref() else {
-        return Ok(None);
-    };
-    let Some(federation_entity) = metadata.get("federation_entity") else {
-        return Ok(None);
-    };
-    let federation_entity = federation_entity.as_object().ok_or_else(|| {
-        FederationError::Validation("metadata.federation_entity must be an object".into())
-    })?;
-    let Some(endpoint) = federation_entity.get("federation_fetch_endpoint") else {
-        return Ok(None);
-    };
-    let endpoint = endpoint
-        .as_str()
-        .filter(|value| !value.trim().is_empty())
+) -> Result<url::Url, FederationError> {
+    let endpoint = authority_config
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("federation_entity"))
+        .and_then(Value::as_object)
+        .and_then(|metadata| metadata.get("federation_fetch_endpoint"))
+        .and_then(Value::as_str)
         .ok_or_else(|| {
-            FederationError::Validation(
-                "federation_fetch_endpoint must be a non-empty string".into(),
-            )
+            FederationError::Validation("missing advertised federation_fetch_endpoint".into())
         })?;
-    let parsed = url::Url::parse(endpoint.trim()).map_err(|_| {
-        FederationError::Validation("federation_fetch_endpoint must be a valid URL".into())
-    })?;
+    let parsed = crate::federation::profile::validate_endpoint(endpoint)?;
     validate_configured_fetch_endpoint_url(&parsed)?;
-    Ok(Some(parsed))
+    Ok(parsed)
 }
 
 fn validate_configured_fetch_endpoint_url(parsed: &url::Url) -> Result<(), FederationError> {
@@ -278,16 +252,11 @@ mod tests {
     }
 
     #[test]
-    fn subordinate_statement_url_defaults_to_authority_well_known_fetch_endpoint() {
+    fn subordinate_statement_url_requires_advertised_fetch_endpoint() {
         let authority = authority_config("https://ta.example", None);
-
-        let url = subordinate_statement_url("https://ta.example", &authority, "https://rp.example")
-            .expect("default subordinate statement URL should be valid");
-
-        let parsed = url::Url::parse(&url).expect("generated URL should parse");
-        assert_eq!(
-            parsed.as_str(),
-            "https://ta.example/.well-known/openid-federation/fetch?sub=https%3A%2F%2Frp.example"
+        assert!(
+            subordinate_statement_url("https://ta.example", &authority, "https://rp.example")
+                .is_err()
         );
     }
 

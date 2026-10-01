@@ -32,8 +32,8 @@ fn replace_signed_hints(
 }
 
 fn assert_signatures_valid(fixture: &SignedPathFixture, jwts: &[String]) {
-    for jwt in jwts.iter().step_by(2) {
-        must_ok(verify_entity_configuration(jwt));
+    for (index, jwt) in jwts.iter().step_by(2).enumerate() {
+        assert_federation_signature_only(jwt, &fixture.keys[index]);
     }
     // Check both issuer configuration and superior-endorsed keys independently
     // of the graph relation, and keep the configured anchor signature valid.
@@ -42,10 +42,7 @@ fn assert_signatures_valid(fixture: &SignedPathFixture, jwts: &[String]) {
             &jwts[index * 2 + 1],
             &must_ok(fixture.configs[index + 1].parse_jwks()),
         ));
-        must_ok(verify_entity_statement(
-            &jwts[index * 2],
-            &must_ok(statement.parse_jwks()),
-        ));
+        assert_eq!(statement.jwks, fixture.configs[index].jwks);
     }
     must_ok(verify_entity_statement(
         must_some(jwts.last().map(String::as_str)),
@@ -107,10 +104,20 @@ fn signed_parent_relation_rejects_each_subject_despite_valid_signatures() {
                 Some(json!([parent.to_uppercase()])),
                 Some(json!([format!("{parent}/")])),
             ] {
+                let invalid_array = hints.as_ref().is_some_and(|value| {
+                    value.is_null() || value.as_array().is_some_and(Vec::is_empty)
+                });
                 let mut jwts = fixture.jwts();
                 replace_signed_hints(&fixture, &mut jwts, index, hints);
                 assert_signatures_valid(&fixture, &jwts);
-                assert_parent_relation_error(verify_signed_path(&jwts, leaf, &fixture.anchor, NOW));
+                let canonical = verify_signed_path(&jwts, leaf, &fixture.anchor, NOW);
+                if invalid_array {
+                    assert!(must_err(canonical)
+                        .to_string()
+                        .contains("Entity Identifier array"));
+                } else {
+                    assert_parent_relation_error(canonical);
+                }
 
                 // Discovery sees plausible detached hints. Neither public
                 // resolver may let them repair a different signed payload.
@@ -133,9 +140,9 @@ fn signed_parent_relation_rejects_each_subject_despite_valid_signatures() {
 }
 
 #[derive(Default)]
-struct ObservedCache {
-    inner: InMemoryTrustChainCacheRepo,
-    writes: AtomicUsize,
+pub(super) struct ObservedCache {
+    pub(super) inner: InMemoryTrustChainCacheRepo,
+    pub(super) writes: AtomicUsize,
 }
 
 impl TrustChainCacheRepository for ObservedCache {
@@ -262,7 +269,7 @@ fn signed_parent_relation_invalid_cache_falls_back_and_only_writes_valid_fresh_p
                 let cache = ObservedCache::default();
                 let env_id = Uuid::new_v4();
                 let mut invalid = fixture.jwts();
-                replace_signed_hints(&fixture, &mut invalid, index, Some(json!([])));
+                replace_signed_hints(&fixture, &mut invalid, index, None);
                 must_ok(cache.inner.upsert(
                     env_id,
                     &fixture.configs[0].iss,
