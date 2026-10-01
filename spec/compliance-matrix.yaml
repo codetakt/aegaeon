@@ -3874,7 +3874,7 @@ rfc_9207:
   - client
   notes:
   - "AS-side: authorization responses include iss equal to the configured issuer identifier and metadata advertises authorization_response_iss_parameter_supported=true (see 9207-002 and metadata tests)."
-  - "Client-side: upstream validation of the iss parameter is tracked in the OAuth client/RP federation roadmap; implementation is outside this repo."
+  - "RP-side: upstream transactions preserve exact issuer bytes and freeze the iss requirement from the profile or discovery support; success and error callbacks exact-check every present iss. See docs/specs/oidc-rp-brokering-spec.md and upstream_authorize/issuer_tests.rs."
 - id: 9207-002
   requirement: MUST
   description: Authorization response MUST include iss parameter
