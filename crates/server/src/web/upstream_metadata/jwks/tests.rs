@@ -14,10 +14,11 @@ fn keyset(kid: &str) -> String {
         .to_string()
 }
 fn header(kid: Option<&str>) -> AdmittedUpstreamIdTokenHeader {
-    let token = format!(
-        "{}.e30.c2ln",
-        URL_SAFE_NO_PAD.encode(json!({"alg":"RS256","kid":kid}).to_string())
-    );
+    let mut fields = json!({"alg":"RS256"});
+    if let Some(kid) = kid {
+        fields["kid"] = json!(kid);
+    }
+    let token = format!("{}.e30.c2ln", URL_SAFE_NO_PAD.encode(fields.to_string()));
     admit_upstream_id_token_header(
         &token,
         &crate::web::upstream_tests::base_discovery("https://issuer.example").expect("discovery"),

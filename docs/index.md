@@ -87,7 +87,7 @@ Audience: contributors, maintainers
 | `docs/policies/dcr-everparse-self-check.md` | policy | DCR EverParse Runtime Posture (Self-Check) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/dcr-policy.md` | policy | Dynamic Client Registration (DCR) — BCP Policy Gates | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/dependency-policy.md` | policy | Dependency Policy & Supply-Chain Checks | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
-| `docs/policies/jose-header-policy.md` | policy | JOSE Protected Header Length Policy | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
+| `docs/policies/jose-header-policy.md` | policy | JOSE Protected Header Length Policy | current implementation baseline | 2026-10-02 | Governance | contributors, maintainers |
 | `docs/policies/jwt-bearer-policy.md` | policy | JWT Bearer Grant Policy (RFC 7523) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/management-platform-quality-profile.md` | policy | Management Platform Quality Profile | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/oauth-doc-only-rfcs.md` | policy | OAuth Supporting Standards and Client Guidance | current implementation baseline | 2026-09-07 | Governance | contributors, maintainers |
@@ -289,7 +289,7 @@ Audience: contributors, maintainers
 | `docs/verification/jose/README.md` | index | JOSE Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/json-lowstar-ffi-contracts.md` | verification | JSON Low*/FFI Contract Summary | current implementation baseline | 2025-11-16 | Verification | verification reviewers, contributors |
 | `docs/verification/jose/phase4-verification-summary.md` | verification | Phase 4 - Verification & Testing Summary | historical record | 2026-09-08 | Verification | verification reviewers, contributors |
-| `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-06-18 | Verification | verification reviewers, contributors |
+| `docs/verification/jose/raw-json-boundary.md` | verification | Raw JSON Claim Boundary | current implementation baseline | 2026-10-02 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/README.md` | index | Kani Verification (Status + How to Run) | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
 | `docs/verification/kani/authorization-revision-bounds.md` | verification | Application authorization revision bounds | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |
 | `docs/verification/kani/evidence-admission.md` | verification | Kani Evidence Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, maintainers |

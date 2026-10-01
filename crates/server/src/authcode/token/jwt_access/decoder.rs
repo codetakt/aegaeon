@@ -13,51 +13,18 @@ use super::types::{
 pub(super) fn deserialize_jwt_access_token_header(
     payload: &[u8],
 ) -> Result<JwtAccessTokenHeader, JwtAccessTokenParseError> {
-    let policy = raw_json::backend_policy_for_surface(RawJsonSurface::JwtAccessTokenHeader)
-        .map_err(|_| {
+    use aegaeon_jose::protected_header::{admit_jwt_access_token_header, HeaderAdmissionError};
+    let header = admit_jwt_access_token_header(payload).map_err(|error| match error {
+        HeaderAdmissionError::BackendPolicy(_) => {
             JwtAccessTokenParseError::backend_policy(RawJsonSurface::JwtAccessTokenHeader)
-        })?;
-    match policy.backend {
-        RawJsonBackend::SerdeCompat => Err(JwtAccessTokenParseError::backend_policy(
-            RawJsonSurface::JwtAccessTokenHeader,
-        )),
-        RawJsonBackend::VerifiedStructuralV1 => {
-            deserialize_jwt_access_token_header_verified_structural(payload)
         }
-    }
-}
-
-fn deserialize_jwt_access_token_header_verified_structural(
-    payload: &[u8],
-) -> Result<JwtAccessTokenHeader, JwtAccessTokenParseError> {
-    let parse_result = ffi_raw_json_structural::parse_raw_json_structural(payload)
-        .map_err(|_| JwtAccessTokenParseError::InvalidToken)?;
-    decode_jwt_access_token_header_from_structural(payload, &parse_result)
-        .map_err(|_| JwtAccessTokenParseError::InvalidToken)
-}
-
-fn decode_jwt_access_token_header_from_structural(
-    payload: &[u8],
-    parse_result: &RawJsonStructuralParseResult,
-) -> Result<JwtAccessTokenHeader, ()> {
-    let mut header = JwtAccessTokenHeader::default();
-    let mut seen = HashSet::with_capacity(parse_result.members.len());
-
-    for member in &parse_result.members {
-        let key = decode_structural_key_bytes(&member.key)?;
-        if !seen.insert(key.clone()) {
-            return Err(());
-        }
-
-        match key.as_str() {
-            "alg" => header.alg = parse_optional_header_string(payload, member)?,
-            "typ" => header.typ = parse_optional_header_string(payload, member)?,
-            "kid" => header.kid = parse_optional_header_string(payload, member)?,
-            _ => {}
-        }
-    }
-
-    Ok(header)
+        HeaderAdmissionError::Json(_) => JwtAccessTokenParseError::InvalidToken,
+    })?;
+    Ok(JwtAccessTokenHeader {
+        alg: header.alg().map(str::to_string),
+        typ: header.typ().map(str::to_string),
+        kid: header.kid().map(str::to_string),
+    })
 }
 
 fn decode_structural_key_bytes(raw_key: &[u8]) -> Result<String, ()> {

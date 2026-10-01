@@ -30,7 +30,16 @@ const SCOPE: &str = "openid profile email offline_access";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
 async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, String)> {
+    fixture_with_auth_method(pool, env, "none").await
+}
+
+async fn fixture_with_auth_method(
+    pool: &PgPool,
+    env: &TestEnvironment,
+    auth_method: &str,
+) -> TestResult<(AppState, String)> {
     let mut client = sample_registered_client(CLIENT);
+    client.token_endpoint_auth_method = auth_method.to_string();
     client.allowed_scopes = SCOPE.split(' ').map(str::to_string).collect();
     client.allowed_grant_types.push("refresh_token".to_string());
     let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
@@ -55,9 +64,10 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
     )
     .await?;
     sqlx::query(
-        "UPDATE aegaeon.oauth_profiles SET allowed_grant_types = $1 WHERE environment_id = $2",
+        "UPDATE aegaeon.oauth_profiles SET allowed_grant_types = $1, token_endpoint_auth_methods_allowed = $2 WHERE environment_id = $3",
     )
     .bind(vec!["authorization_code", "refresh_token"])
+    .bind(vec![auth_method])
     .bind(env.environment_id)
     .execute(pool)
     .await?;
@@ -66,6 +76,7 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, 
         strict_authorize_redirect: false,
         // RFC 9126 permits a public PKCE client registered with method `none`.
         require_client_auth_par: false,
+        private_key_jwt_enabled: auth_method == "private_key_jwt",
         oidc_enabled: true,
         oidc_require_nonce: true,
         id_token_time_to_live_seconds: 300,

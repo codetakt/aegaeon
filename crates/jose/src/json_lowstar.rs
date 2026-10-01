@@ -51,7 +51,7 @@ fn invalid_jose_header_value_type_error(key: &str) -> JsonError {
     ))
 }
 
-fn decode_structural_key_bytes(raw_key: &[u8]) -> Result<String, JsonError> {
+pub(crate) fn decode_structural_key_bytes(raw_key: &[u8]) -> Result<String, JsonError> {
     let mut quoted = Vec::with_capacity(raw_key.len() + 2);
     quoted.push(b'"');
     quoted.extend_from_slice(raw_key);
@@ -188,7 +188,7 @@ fn map_structural_adapter_error_to_raw_json_object_error(error: JsonError) -> Ra
     }
 }
 
-fn map_structural_parse_error_to_json_error(
+pub(crate) fn map_structural_parse_error_to_json_error(
     error: ffi_structural::RawJsonStructuralParseError,
 ) -> JsonError {
     match error {
@@ -406,7 +406,11 @@ pub(crate) fn parse_json_header_pairs_compat(
     Ok(jose_header_string_members_to_pairs(members))
 }
 
-/// Parse JSON header bytes using Low* verified implementation
+/// Normalize a narrow JSON string/null member object through the LowStar bridge.
+///
+/// This low-level pair adapter does not implement complete protected-header
+/// admission and cannot represent arbitrary ignored JSON extensions. Protocol
+/// consumers use [`crate::protected_header::admit_protected_header`] first.
 ///
 /// # Errors
 ///
@@ -417,7 +421,12 @@ pub fn parse_json_header_lowstar(bytes: &[u8]) -> Result<Vec<(String, String)>, 
     // key + (string | null) representation without promoting a broad JSON AST
     // on the verified structural path.
     let raw_members = parse_json_header_string_members(bytes)?;
+    normalize_header_members_lowstar(raw_members)
+}
 
+pub(crate) fn normalize_header_members_lowstar(
+    raw_members: Vec<JoseHeaderStringMember>,
+) -> Result<Vec<(String, String)>, JsonError> {
     // Step 2: Convert to json_member_c array
     let mut member_data = Vec::with_capacity(raw_members.len());
     let mut members = Vec::new();
