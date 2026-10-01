@@ -10,8 +10,13 @@ mod jwks;
 
 #[cfg(test)]
 pub(super) use discovery::parse_upstream_discovery_body;
-pub(super) use discovery::{fetch_upstream_discovery_cached, validate_upstream_discovery};
-pub(super) use federation::verify_upstream_federation_metadata_blocking;
+pub(super) use discovery::{
+    fetch_upstream_discovery_cached, validate_upstream_discovery,
+    validate_upstream_discovery_requirements,
+};
+pub(super) use federation::{
+    acquire_upstream_federation_chain, resolve_upstream_metadata_with, EffectiveUpstreamMetadata,
+};
 #[cfg(test)]
 pub(super) use federation::{
     validate_upstream_discovery_matches_federation_metadata,

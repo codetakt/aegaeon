@@ -5,9 +5,7 @@ use super::upstream_id_token::{
     refreshed_upstream_id_token_signature_failure, validate_upstream_id_token,
     verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
 };
-use super::upstream_metadata::{
-    fetch_upstream_jwks_cached, verify_upstream_federation_metadata_blocking,
-};
+use super::upstream_metadata::fetch_upstream_jwks_cached;
 use super::upstream_refresh_links::{
     authenticate_upstream_refresh_caller, load_upstream_refresh_link, UpstreamRefreshLink,
     UpstreamRefreshQuery,
@@ -30,7 +28,7 @@ use std::net::SocketAddr;
 use crate::oidc::IdToken;
 use crate::util;
 
-mod exchange;
+pub(super) mod exchange;
 mod profile;
 use exchange::{perform_upstream_refresh_exchange, UpstreamRefreshExchange};
 use profile::resolve_upstream_refresh_profile;
@@ -48,7 +46,7 @@ fn next_upstream_refresh_generation(current: i64, issuer_base: &str) -> Result<i
     })
 }
 
-async fn validate_upstream_refresh_exchange(
+pub(super) async fn validate_upstream_refresh_exchange(
     state: &AppState,
     issuer_base: &str,
     link: &UpstreamRefreshLink,
@@ -59,7 +57,7 @@ async fn validate_upstream_refresh_exchange(
     };
     let jwks = fetch_upstream_jwks_cached(
         &exchange.client,
-        &exchange.discovery.jwks_uri,
+        &exchange.metadata.discovery.jwks_uri,
         &state.upstream.jwks_cache,
         state.cfg.upstream().outbound_allowed_domains(),
     )
@@ -72,19 +70,13 @@ async fn validate_upstream_refresh_exchange(
             issuer_base,
         )
     })?;
-    verify_upstream_federation_metadata_blocking(
-        state.clone(),
-        link.upstream_issuer.clone(),
-        link.link_env_id,
-        exchange.discovery.clone(),
-        Some(jwks.clone()),
-        issuer_base.to_string(),
-    )
-    .await?;
+    exchange
+        .metadata
+        .validate_signing_keys(&jwks, issuer_base)?;
     let (claims, alg_name) = verify_upstream_id_token_claims(
         id_token_str,
         &jwks,
-        &exchange.discovery,
+        &exchange.metadata.discovery,
         state.cfg.jose_header_max_len,
     )
     .map_err(|error| {

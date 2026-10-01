@@ -11,12 +11,12 @@ pub(in crate::web) struct UpstreamAuthorizeQuery {
     max_age: Option<i64>,
 }
 
-pub(super) struct UpstreamAuthorizeInput {
-    pub(super) return_to: Option<String>,
-    pub(super) scopes: Vec<String>,
-    pub(super) scope: String,
-    pub(super) acr: Option<String>,
-    pub(super) max_age: Option<i64>,
+pub(in crate::web) struct UpstreamAuthorizeInput {
+    pub(in crate::web) return_to: Option<String>,
+    pub(in crate::web) scopes: Vec<String>,
+    pub(in crate::web) scope: String,
+    pub(in crate::web) acr: Option<String>,
+    pub(in crate::web) max_age: Option<i64>,
 }
 
 pub(super) fn parse_upstream_authorize_input(
