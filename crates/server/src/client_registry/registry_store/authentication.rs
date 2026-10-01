@@ -40,10 +40,9 @@ impl ClientRegistry {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(Self::basic_auth_payload(auth_header)?)
             .ok()?;
-        let credentials = String::from_utf8(decoded).ok()?;
-        let mut parts = credentials.splitn(2, ':');
-        let client_id = parts.next()?.to_string();
-        let client_secret = parts.next()?.to_string();
+        let mut parts = decoded.splitn(2, |byte| *byte == b':');
+        let client_id = crate::oauth_basic::decode_component(parts.next()?)?;
+        let client_secret = crate::oauth_basic::decode_component(parts.next()?)?;
         Some((client_id, client_secret))
     }
 

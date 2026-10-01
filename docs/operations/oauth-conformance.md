@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-09-11
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -228,3 +228,26 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+## OAuth Basic credential encoding
+
+RFC 6749 section 2.3.1 and Appendix B require each logical client ID and secret
+to be independently encoded with `application/x-www-form-urlencoded` before
+joining them with a colon and applying Basic base64 encoding. A space becomes
+`+`; a literal plus becomes `%2B`, a colon `%3A`, and a percent sign `%25`.
+UTF-8 bytes use percent encoding. For example, client ID `client+id` and secret
+`s: %` produce the pre-base64 value `client%2Bid:s%3A+%25`.
+
+Aegaeon's Basic authentication consumers split the decoded Basic payload at its
+first literal colon and decode each component exactly once. Malformed percent
+escapes and invalid UTF-8 fail authentication. Neither a decoding failure nor an
+authentication failure triggers a retry using raw credentials. Registrations
+continue to store logical credentials; do not rename clients or rewrite stored
+secrets to their encoded wire representation.
+
+Clients that previously sent raw reserved characters must switch to this RFC
+encoding. Ordinary generated credentials using ASCII letters, digits, hyphens
+and underscores continue to work unchanged. Aegaeon also encodes its configured
+logical credentials for Basic authentication on both upstream authorization-code
+and refresh-token requests. `client_secret_post` continues to use the request's
+normal form serialization. No storage migration or new configuration is needed.

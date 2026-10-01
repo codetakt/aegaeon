@@ -18,6 +18,8 @@ use crate::authcode::store::ClientBoundRevocationOutcome;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
+#[cfg(test)]
+mod basic_auth_tests;
 mod client_auth;
 mod forms;
 mod introspection;

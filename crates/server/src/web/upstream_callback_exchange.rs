@@ -11,7 +11,7 @@ use super::upstream_token_response::{
 use super::{normalize_issuer, AppState, UPSTREAM_MAX_BODY_BYTES};
 use aegaeon_jose::jwk::JwkSet;
 use axum::{http::StatusCode, response::Response};
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 
 use crate::oidc::{IdToken, OidcDiscovery};
 use crate::upstream::{upstream_subject_link_hash, UpstreamAuthRequest};
@@ -74,13 +74,11 @@ async fn fetch_upstream_callback_discovery(
     Ok((client, discovery))
 }
 
-async fn exchange_upstream_callback_token(
+fn build_callback_token_request(
     client: &Client,
     request: &UpstreamAuthRequest,
     code: &str,
-    issuer_base: &str,
-    allowed_domains: &[String],
-) -> Result<UpstreamTokenResponse, Response> {
+) -> RequestBuilder {
     let mut form = vec![
         ("grant_type", "authorization_code".to_string()),
         ("code", code.to_string()),
@@ -101,6 +99,25 @@ async fn exchange_upstream_callback_token(
     if let Some(verifier) = request.code_verifier.as_deref() {
         form.push(("code_verifier", verifier.to_string()));
     }
+    let mut token_req = client.post(&request.token_endpoint).form(&form);
+    if request.client_auth_method == "client_secret_basic" {
+        if let Some(secret) = request.client_secret.as_ref() {
+            token_req = token_req.basic_auth(
+                crate::oauth_basic::encode_component(&request.client_id),
+                Some(crate::oauth_basic::encode_component(secret)),
+            );
+        }
+    }
+    token_req
+}
+
+async fn exchange_upstream_callback_token(
+    client: &Client,
+    request: &UpstreamAuthRequest,
+    code: &str,
+    issuer_base: &str,
+    allowed_domains: &[String],
+) -> Result<UpstreamTokenResponse, Response> {
     validate_upstream_outbound_url(
         &request.token_endpoint,
         "upstream token_endpoint",
@@ -114,12 +131,7 @@ async fn exchange_upstream_callback_token(
             issuer_base,
         )
     })?;
-    let mut token_req = client.post(&request.token_endpoint).form(&form);
-    if request.client_auth_method == "client_secret_basic" {
-        if let Some(secret) = request.client_secret.as_ref() {
-            token_req = token_req.basic_auth(&request.client_id, Some(secret));
-        }
-    }
+    let token_req = build_callback_token_request(client, request, code);
     let token_response = token_req.send().await.map_err(|_| {
         json_error_with_iss(
             StatusCode::BAD_GATEWAY,
@@ -244,3 +256,6 @@ pub(super) async fn perform_upstream_callback_exchange(
         id_token,
     })
 }
+
+#[cfg(test)]
+mod basic_auth_tests;

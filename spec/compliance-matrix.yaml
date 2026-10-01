@@ -294,6 +294,24 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-015
+  section: '2.3.1 and Appendix B'
+  requirement: MUST
+  description: OAuth Basic credentials MUST form-encode client ID and password independently before Basic serialization.
+  module: crates/server/src/oauth_basic.rs
+  tests:
+  - crates/server/src/oauth_basic.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/registry_core/basic_auth.rs
+  - crates/server/src/web/token_lifecycle/basic_auth_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/basic_auth_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/basic_auth_tests.rs
+  ci_check: client-auth-verification
+  status: implemented
+  runtime_link: crates/server/src/client_registry/registry_store/authentication.rs
+  notes:
+  - The AS decodes each credential exactly once after splitting the base64-decoded payload at the first literal colon; malformed percent escapes and invalid UTF-8 reject without raw fallback.
+  - Both upstream authorization-code and refresh Basic request builders form-encode each logical credential before reqwest Basic serialization.
+  - Finite registry, HTTP introspection and built-request header regressions cover reserved characters, UTF-8, once-only decoding and authentication-method separation; they do not establish formal proof discharge.
 rfc_6750:
 - id: 6750-001
   section: '2.1'
