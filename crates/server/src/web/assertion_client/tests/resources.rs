@@ -49,7 +49,7 @@ async fn resource_requests(state: &AppState) -> TestResult {
                     if valid {
                         let mut excluded = f.clone();
                         excluded.push(("unknown", "nonempty"));
-                        reject(state, "/par", &excluded, Some(&basic())).await?;
+                        reject_request(state, "/par", &excluded, Some(&basic())).await?;
                     }
                     "/par"
                 }

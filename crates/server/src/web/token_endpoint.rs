@@ -31,7 +31,7 @@ mod client_auth;
 pub(in crate::web) use assertion_subject::private_key_jwt_client_id;
 mod policy;
 pub(super) use client_auth::{
-    client_auth_presence, multiple_client_auth_methods_present, token_auth_presence,
+    client_auth_presence, client_authentication_conflict_response, token_auth_presence,
     token_client_auth_method, validate_private_key_jwt_client_assertion, ClientAuthPresence,
 };
 use client_auth::{token_resolve_client_id, token_validate_client_authentication};

@@ -1,12 +1,43 @@
-# OAuth sender binding and unsupported authorization details
+# OAuth authentication errors, sender binding and authorization details
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
 Owner: Operations
 
 Audience: operators, maintainers
+
+## Client authentication errors
+
+For recognized Basic, client_secret_post and private_key_jwt authentication,
+`/token`, `/device_authorization`, `/par`, `/introspect` and `/revoke` return
+`401 invalid_client` with one Basic `WWW-Authenticate` challenge when client
+authentication fails. Token and device authorization now include this challenge;
+their existing JSON envelope and no-cache headers are preserved. A Basic challenge
+on a body-authentication failure advertises a supported HTTP scheme, as permitted
+by RFC 6749 §5.2; it does not change the client's registered authentication method.
+RFC 7662 §2.3 also requires 401 for invalid introspection client credentials.
+
+After form and header admission, Basic combined with a nonempty client_secret
+and no client assertion returns `400 invalid_request` without a challenge.
+Clients that previously received `401 invalid_client` for this combination at
+PAR, introspection or revocation must handle the corrected category. A client
+assertion combined with Basic, client_secret_post, or both returns
+`401 invalid_client` with a Basic challenge (RFC 7521 §4.2.1). Either remaining
+client assertion field counts; empty form values are omitted and whitespace
+remains a supplied value. The JWT bearer grant's `assertion` field is separate.
+
+Mixtures are rejected before assertion validation and replay reservation.
+An assertion authenticated successfully before a later profile rejection remains
+consumed; clients need a fresh assertion when retrying. Internal backend errors
+remain generic server errors without an authentication challenge.
+
+This correction does not establish conformance for bare/empty Basic, unsupported
+schemes, duplicate/nontext headers or their admission ordering. Resource-server
+errors, diagnostic character restrictions and dynamic registration error
+classification have separate contracts. Existing profile-error realms and late
+revocation/JWT-introspection refusals retain their behavior.
 
 ## DPoP responses
 

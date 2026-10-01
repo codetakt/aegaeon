@@ -43,7 +43,11 @@ async fn invalid_claims(state: &AppState) -> TestResult {
                         .for_each(|(_, v)| *v = id);
                 }
             }
-            reject(state, path, &f, None).await?;
+            if path == "/par" && key == "sub" && c[key] == "" {
+                reject_request(state, path, &f, None).await?;
+            } else {
+                reject(state, path, &f, None).await?;
+            }
         }
         for payload in [
             "{}",
@@ -72,7 +76,7 @@ async fn invalid_claims(state: &AppState) -> TestResult {
         reject(state, path, &fields(path, &oversized_header), None).await?;
         let oversized_assertion =
             "A".repeat(super::super::router::SERVER_REQUEST_BODY_LIMIT_BYTES + 1);
-        reject(state, path, &fields(path, &oversized_assertion), None).await?;
+        reject_request(state, path, &fields(path, &oversized_assertion), None).await?;
         let valid = sign(&claims(state, path)?)?;
         let mut parts: Vec<_> = valid.split('.').map(str::to_string).collect();
         parts[2] = URL_SAFE_NO_PAD.encode([0_u8; 256]);
@@ -112,7 +116,7 @@ async fn invalid_claims(state: &AppState) -> TestResult {
         reject(state, path, &fields(path, &valid), Some(&basic())).await?;
         let mut f = fields(path, &valid);
         f.push(("client_assertion", &valid));
-        reject(state, path, &f, None).await?;
+        reject_request(state, path, &f, None).await?;
     }
     Ok(())
 }
@@ -153,7 +157,14 @@ async fn assertion_subject_parser_backend_failure_is_server_error() -> TestResul
         let result = async {
             for path in PATHS {
                 let jwt = sign(&claims(&state, path)?)?;
-                let (status, body) = send(&state, path, &fields(path, &jwt), None).await?;
+                let (status, headers, body) = send_response(
+                    &state,
+                    path,
+                    &serde_urlencoded::to_string(fields(path, &jwt))?,
+                    None,
+                )
+                .await?;
+                assert_client_challenge(path, &headers, false)?;
                 assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{path}: {body}");
                 assert_eq!(body["error"], "server_error");
             }

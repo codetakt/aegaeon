@@ -137,7 +137,7 @@ async fn basic_admission(state: &AppState) -> TestResult {
         }
         let mut whitespace_secret = base.clone();
         whitespace_secret.push(("client_secret", " "));
-        reject(state, path, &whitespace_secret, Some(&basic())).await?;
+        reject_request(state, path, &whitespace_secret, Some(&basic())).await?;
         let empty_password = format!("Basic {}", STANDARD.encode(format!("{BASIC}:")));
         reject(state, path, &base, Some(&empty_password)).await?;
     }
@@ -217,10 +217,10 @@ async fn assertions(state: &AppState) -> TestResult {
             if let Some(value) = value {
                 f.push((required, value));
             }
-            reject(state, path, &f, Some(&basic())).await?;
+            reject_request(state, path, &f, Some(&basic())).await?;
         }
     }
-    reject(state, "/device_authorization", &[("client_id", "")], None).await?;
+    reject_request(state, "/device_authorization", &[("client_id", "")], None).await?;
     Ok(())
 }
 #[tokio::test]
