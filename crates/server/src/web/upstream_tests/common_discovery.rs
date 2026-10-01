@@ -297,7 +297,7 @@ fn parse_upstream_jwks_body_accepts_valid_jwks() -> TestResult {
                     "kid": "upstream-rs256",
                     "use": "sig",
                     "alg": "RS256",
-                    "n": "00",
+                    "n": "AQAB",
                     "e": "AQAB"
                 }
             ]

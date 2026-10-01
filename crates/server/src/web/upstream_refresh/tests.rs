@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 type ResultTest<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
+mod signing_keys;
 
 struct Fixture {
     pool: PgPool,
@@ -66,7 +67,9 @@ impl Fixture {
             env.environment_id,
             version,
         );
-        let discovery = upstream_tests::base_discovery(&request.issuer)?;
+        let mut discovery = upstream_tests::base_discovery(&request.issuer)?;
+        // Cached keys still undergo current outbound URL admission.
+        discovery.jwks_uri = "http://127.0.0.1:9/jwks".into();
         let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
             "refresh-context".into(),
             include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem"),

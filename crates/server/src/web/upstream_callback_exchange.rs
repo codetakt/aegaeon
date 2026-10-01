@@ -1,5 +1,8 @@
 use super::oauth_errors::json_error_with_iss;
-use super::upstream_id_token::{decode_upstream_id_token, UpstreamIdTokenDecodeInput};
+use super::upstream_id_token::{
+    admit_upstream_id_token_header, decode_upstream_id_token, upstream_id_token_signature_failure,
+    UpstreamIdTokenDecodeInput,
+};
 use super::upstream_metadata::{
     build_upstream_http_client, fetch_upstream_discovery_cached, fetch_upstream_jwks_cached,
     validate_upstream_outbound_url, verify_upstream_federation_metadata_blocking,
@@ -174,6 +177,46 @@ async fn verify_upstream_callback_federation(
     .await
 }
 
+async fn fetch_upstream_callback_jwks(
+    state: &AppState,
+    client: &Client,
+    request: &UpstreamAuthRequest,
+    discovery: &OidcDiscovery,
+    id_token_str: &str,
+    issuer_base: &str,
+) -> Result<JwkSet, Response> {
+    let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
+    let header =
+        admit_upstream_id_token_header(id_token_str, discovery, state.cfg.jose_header_max_len)
+            .map_err(upstream_id_token_signature_failure)
+            .map_err(|error| {
+                json_error_with_iss(
+                    error.status,
+                    "server_error",
+                    Some(&error.message),
+                    issuer_base,
+                )
+            })?;
+    let jwks = fetch_upstream_jwks_cached(
+        client,
+        &request.jwks_uri,
+        &state.upstream.jwks_cache,
+        &state.upstream.jwks_fetches,
+        &header,
+        allowed_domains,
+    )
+    .await
+    .map_err(|message| {
+        json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some(&message),
+            issuer_base,
+        )
+    })?;
+    Ok(jwks)
+}
+
 pub(super) async fn perform_upstream_callback_exchange(
     state: &AppState,
     request: &UpstreamAuthRequest,
@@ -203,21 +246,15 @@ pub(super) async fn perform_upstream_callback_exchange(
             issuer_base,
         ));
     };
-    let jwks = fetch_upstream_jwks_cached(
+    let jwks = fetch_upstream_callback_jwks(
+        state,
         &client,
-        &request.jwks_uri,
-        &state.upstream.jwks_cache,
-        allowed_domains,
+        request,
+        &discovery,
+        id_token_str,
+        issuer_base,
     )
-    .await
-    .map_err(|message| {
-        json_error_with_iss(
-            StatusCode::BAD_GATEWAY,
-            "server_error",
-            Some(&message),
-            issuer_base,
-        )
-    })?;
+    .await?;
     verify_upstream_callback_federation(state, request, &discovery, &jwks, issuer_base).await?;
     let id_token = decode_upstream_id_token(UpstreamIdTokenDecodeInput {
         token: id_token_str,
