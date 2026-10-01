@@ -1,6 +1,6 @@
 # Formal Verification Evidence Assessment
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -26,7 +26,9 @@ no new proof or security execution is attested by that documentation change.
 | Security tests | Identified artifact/configuration, threat coverage, executed results and reviewed findings/skips |
 | Distribution | Build/proof/test correspondence, evidence integrity and an approved release-specific decision |
 
-The [claim index](../claim-index.md) and runbooks locate existing assets. Their
-counts measure an inventory; they do not establish model adequacy, standards
-completeness or implementation refinement. Confidence in a release must follow
-from the contract's closed obligations and evidence, not a total lemma/module count.
+The [historical claim index](../claim-index.md) preserves an earlier inventory;
+runbooks locate existing assets. For current matrix entries, use the
+[separate report procedure](../../runbooks/verification-ops.md#current-matrix-inventory).
+Inventory counts do not establish model adequacy, standards completeness or
+implementation refinement. Confidence in a release must follow from the
+contract's closed obligations and evidence, not a total lemma/module count.

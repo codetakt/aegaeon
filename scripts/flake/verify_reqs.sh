@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Nix-wrapped VerifiedReqs integrity checks.
 # Runs: schema validation, future claim-gate validation, evidence-manifest
-# validator checks, proof-reference check, claim-index freshness, runtime-link
-# drift detection (warning mode).
+# validator checks, proof-reference check, runtime-link drift detection
+# (warning mode).
 set -euo pipefail
 
 python3 -m unittest discover -s tests/ci -p 'test_kani_*.py'
 python3 -m unittest discover -s tests/ci -p 'test_assumption_graph*.py'
 python3 scripts/validation/check_kani_citations.py
-python3 -m pytest -q scripts/validation/test_verify_verified_reqs.py
+python3 -m pytest -q scripts/validation/test_verify_verified_reqs.py \
+	scripts/validation/test_generate_claim_index.py
 
 # The Nix derivation supplies the pinned archive. An unset path must never turn
 # a CI invocation into the validators' metadata-only mode.
@@ -107,9 +108,8 @@ PY
 	echo "--- Proof-reference check (refinement traces required for MUST-level) ---"
 	python3 scripts/validation/verify_verified_reqs.py --strict --require-trace-must
 
-	echo ""
-	echo "--- Claim index freshness ---"
-	python3 scripts/validation/generate_claim_index.py --check
+	# claim-index.md is a preserved historical snapshot, not a current gate input.
+	# The current matrix schema and strict proof references are checked above.
 
 	echo ""
 	echo "--- Runtime-link drift check (warning mode; crypto fail-close) ---"

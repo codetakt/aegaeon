@@ -1,6 +1,6 @@
 # Trusted Computing Base (TCB) Inventory
 
-Last updated: 2026-08-05
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -11,11 +11,12 @@ Audience: security reviewers, maintainers
 > **Status note (2026-03-08):** This document describes the broader system/security TCB. It must not be read as redefining the formal verification boundary, which is owned by `docs/verification/claims/assurance-case/claim-definition.md` and `docs/verification/claims/assumptions/current-register.md`.
 
 ## Document Version
-- Version: 1.1.2
-- Date: 2026-08-05
-- Changes: corrected the kernel CSPRNG access description and documented the
-  declared DRBG and direct UUID identifier boundaries
-- Prior: 1.0.0 (2025-09-02, Sprint 8 - External Conformance & Beta)
+- Version: 1.1.3
+- Date: 2026-10-01
+- Changes: distinguish the preserved historical inventory from current matrix reports
+- Prior: 1.1.2 (2026-08-05, corrected the kernel CSPRNG access description and
+  documented the declared DRBG and direct UUID identifier boundaries)
+- Earlier: 1.0.0 (2025-09-02, Sprint 8 - External Conformance & Beta)
 
 ## Executive Summary
 
@@ -212,9 +213,13 @@ This document identifies and catalogs all components within Aegaeon's Trusted Co
 - **Kani**: bounded model-checking harnesses over JOSE/DPoP/token/federation
   code paths
 
-The authoritative, regenerated snapshot of these figures is
-`docs/verification/claims/assurance-case/verification-scope.md` and
-`docs/verification/claims/claim-index.md`; this section is a summary only.
+Evidence classes are described in
+`docs/verification/claims/assurance-case/verification-scope.md`.
+The [claim index](../verification/claims/claim-index.md) preserves a historical
+inventory. For a current mechanical inventory, inspect
+`spec/compliance-matrix.yaml` or follow the
+[separate report procedure](../verification/runbooks/verification-ops.md#current-matrix-inventory).
+This section remains a summary; inventory counts do not establish a product claim.
 
 ### Empirical Validation
 - **dudect Results**: No timing leaks detected (p>0.01)

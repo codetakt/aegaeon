@@ -1,6 +1,6 @@
 # Formal Verification Scope And Proof Quality
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -109,9 +109,11 @@ must be reported separately rather than using an ambiguous common level number.
 
 An empirical-only matrix entry uses `implemented`, not `verified`. A formal
 reference is necessary for `verified` under existing matrix rules, but is not
-sufficient for foundation activation. The generated
-[claim index](../claim-index.md) reports the inventory without selecting the
-contract's obligations.
+sufficient for foundation activation. The
+[historical claim index](../claim-index.md) preserves an earlier matrix inventory.
+For a current mechanical inventory, use the
+[separate report procedure](../../runbooks/verification-ops.md#current-matrix-inventory).
+Neither inventory selects the contract's obligations.
 
 ### 1.7 MUST-Level Coverage
 

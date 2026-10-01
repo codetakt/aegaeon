@@ -1,6 +1,6 @@
 # Runtime Linkage — Proof-to-Implementation Traceability
 
-Last updated: 2026-07-08
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -185,7 +185,7 @@ as part of the `verify_reqs.sh` CI script.
 |----------|---------------|
 | [claim-definition.md](../claims/assurance-case/claim-definition.md) | Verification scope and claim statements |
 | [current-register.md](../claims/assumptions/current-register.md) | Assumption Register (6 tracked linkage assume vals across 4 files: 2 HACL* linkage, 1 EverParse linkage, 2 OIDC hash runtime linkage, 1 WASM host; crypto hardness is stated as named bad events with external register premises; the builder-injected C.Loops premises and lax-loaded provider sources are indexed by the assumption graph) |
-| [claim-index.md](../claims/claim-index.md) | Per-entry quality/strength breakdown + runtime linkage statistics |
+| [claim-index.md](../claims/claim-index.md) | Preserved historical quality/strength and runtime-linkage inventory |
 | [verification-ops.md](verification-ops.md) | Operational guide for maintaining VerifiedReqs |
 | `scripts/validation/populate_runtime_link.py` | Auto-populate tool with FSTAR\_TO\_RUST\_MAP |
 | `scripts/validation/check_runtime_liveness.py` | Liveness classification |
@@ -198,7 +198,9 @@ as part of the `verify_reqs.sh` CI script.
 
 Phase E requires an explicit refinement trace from formal specs to runtime
 implementations. The authoritative mapping today is the `runtime_link` field
-in `spec/compliance-matrix.yaml` (see `../claims/claim-index.md` for a synthesized view).
+in `spec/compliance-matrix.yaml`. For a synthesized view of the current matrix,
+generate a [separate inventory report](verification-ops.md#current-matrix-inventory);
+the preserved claim index is historical.
 
 Status: The refinement proof layer is pending; this document is the working
 location for that trace. New refinement evidence should be added alongside the
