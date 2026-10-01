@@ -22,7 +22,11 @@ impl StoredTrustAnchor {
     ///
     /// Returns [`FederationError`] when the stored JWKS value cannot be parsed.
     pub fn to_trust_anchor(&self) -> Result<TrustAnchor, FederationError> {
-        let jwks = JwkSet::from_value(self.jwks.clone())?;
+        let jwks = JwkSet::from_verification_value(self.jwks.clone())?;
+        jwks.ensure_unique_kid()?;
+        if jwks.verification_keys().next().is_none() {
+            return Err(FederationError::NoSuitableKey);
+        }
         Ok(TrustAnchor {
             entity_id: self.entity_id.clone(),
             jwks,

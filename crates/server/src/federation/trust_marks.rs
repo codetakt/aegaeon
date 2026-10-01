@@ -23,44 +23,13 @@ pub fn verify_trust_mark(
     let alg = &parsed.header.alg;
     let ctx = JoseContext::default();
 
-    let mut last_err = None;
-    let mut verified_payload = None;
-
-    for key in issuer_jwks.signature_keys() {
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
-        }
-
-        let decoded = match decode_jwk_material(key) {
-            Ok(decoded) => decoded,
-            Err(err) => {
-                last_err = Some(err);
-                continue;
-            }
-        };
-        let verification_key = match verification_key_for_alg(key, &decoded, alg) {
-            Ok(key) => key,
-            Err(err) => {
-                last_err = Some(err);
-                continue;
-            }
-        };
-
-        match jws::verify_compact_with_context(&trust_mark.trust_mark, verification_key, &ctx) {
-            Ok(payload_bytes) => {
-                verified_payload = Some(payload_bytes);
-                break;
-            }
-            Err(err) => {
-                last_err = Some(FederationError::Jws(err));
-            }
-        }
-    }
-
+    let key = issuer_jwks
+        .select_verification_key(parsed.header.kid.as_deref())?
+        .ok_or(FederationError::NoSuitableKey)?;
+    let decoded = decode_jwk_material(key)?;
+    let verification_key = verification_key_for_alg(key, &decoded, alg)?;
     let payload_bytes =
-        verified_payload.ok_or_else(|| last_err.unwrap_or(FederationError::NoSuitableKey))?;
+        jws::verify_compact_with_context(&trust_mark.trust_mark, verification_key, &ctx)?;
     let claims = raw_payload::parse_trust_mark_claims_payload(&payload_bytes)?;
     validate_trust_mark_claims(&claims, expected_subject, &trust_mark.id, now)?;
     Ok(claims)

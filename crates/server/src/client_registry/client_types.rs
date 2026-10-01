@@ -5,6 +5,7 @@ use super::unix_epoch_now_i64;
 #[derive(Clone, Debug)]
 pub struct RegisteredClientJwks {
     set: JwkSet,
+    verification: JwkSet,
     value: serde_json::Value,
 }
 
@@ -27,7 +28,13 @@ impl RegisteredClientJwks {
         if set.signature_keys().next().is_none() {
             return Err("jwks must include signature-capable keys".to_string());
         }
-        Ok(Self { set, value })
+        let verification = JwkSet::from_verification_value(value.clone())
+            .map_err(|_| "invalid jwks envelope".to_string())?;
+        Ok(Self {
+            set,
+            verification,
+            value,
+        })
     }
 
     #[must_use]
@@ -36,18 +43,11 @@ impl RegisteredClientJwks {
     }
 
     pub(super) fn select(&self, kid: Option<&str>) -> Option<&Jwk> {
-        match kid {
-            Some(kid) => self
-                .set
-                .keys()
-                .iter()
-                .find(|jwk| jwk.kid() == Some(kid) && jwk.is_signature_capable()),
-            None => {
-                let mut keys = self.set.signature_keys();
-                let key = keys.next()?;
-                keys.next().is_none().then_some(key)
-            }
-        }
+        self.set.ensure_unique_kid().ok()?;
+        self.verification
+            .select_verification_key(kid)
+            .ok()
+            .flatten()
     }
 }
 

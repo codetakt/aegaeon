@@ -10,12 +10,13 @@ const EC: &str = include_str!("../../tests/fixtures/p256-private.pk8.pem");
 #[cfg(test)]
 pub(crate) fn material(algorithm: Algorithm) -> (Value, EncodingKey) {
     match algorithm {
-        Algorithm::RS256 => {
+        Algorithm::RS256 | Algorithm::PS256 => {
             let key = crate::oidc::OidcSigningKey::from_rsa_pem(KID.into(), RSA)
                 .expect("RSA signing fixture");
             let mut value =
                 serde_json::to_value(key.jwks()).expect("public JWKS")["keys"][0].clone();
             value.as_object_mut().expect("JWK object").remove("use");
+            value["alg"] = json!(format!("{algorithm:?}"));
             (
                 value,
                 EncodingKey::from_rsa_pem(RSA.as_bytes()).expect("RSA encoding key"),
@@ -90,4 +91,73 @@ pub(crate) fn keyset(key: &Value, metadata: &Value) -> Value {
     let mut other = key.clone();
     other["kid"] = json!("other-key");
     json!({"keys":[target,other]})
+}
+
+/// Unusable siblings must not poison a valid public verification candidate.
+#[cfg(test)]
+pub(crate) fn unusable_siblings(key: &Value) -> Vec<Value> {
+    let mut cases = vec![
+        json!(null),
+        json!(7),
+        json!([]),
+        json!({}),
+        json!({"kty":"OKP","kid":"ignored","crv":"Ed25519","x":"AA"}),
+        json!({"kty":"oct","kid":"ignored","k":"not-retained"}),
+    ];
+    let fields = [
+        ("kty", json!(null)),
+        ("kty", json!(1)),
+        ("kid", json!(null)),
+        ("kid", json!(1)),
+        ("alg", json!(null)),
+        ("alg", json!(1)),
+        ("alg", json!("unknown")),
+        ("use", json!(null)),
+        ("use", json!("enc")),
+        ("key_ops", json!(["sign"])),
+        ("key_ops", json!(["verify", "verify"])),
+        ("key_ops", json!(null)),
+        ("key_ops", json!(["verify", 1])),
+    ];
+    for (field, value) in fields {
+        let mut bad = key.clone();
+        bad["kid"] = json!("ignored");
+        bad[field] = value;
+        cases.push(bad);
+    }
+    let names: &[&str] = if key["kty"] == "RSA" {
+        &["n", "e"]
+    } else {
+        &["x", "y", "crv"]
+    };
+    for field in names {
+        for value in [
+            json!(null),
+            json!(1),
+            json!(""),
+            json!("AA=="),
+            json!("!"),
+            json!("AA"),
+        ] {
+            let mut bad = key.clone();
+            bad["kid"] = json!("ignored");
+            bad[*field] = value;
+            cases.push(bad);
+        }
+        let mut bad = key.clone();
+        bad["kid"] = json!("ignored");
+        bad.as_object_mut().unwrap().remove(*field);
+        cases.push(bad);
+    }
+    cases
+}
+
+/// Deterministic public-shape fixture for cache identity tests only, not signatures.
+#[cfg(test)]
+pub(crate) fn public_shape_modulus(marker: &str) -> String {
+    let mut bytes = vec![0xff; 256];
+    for (slot, byte) in bytes[1..255].iter_mut().zip(marker.as_bytes()) {
+        *slot = *byte;
+    }
+    URL_SAFE_NO_PAD.encode(bytes)
 }

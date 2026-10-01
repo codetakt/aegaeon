@@ -1,21 +1,24 @@
 use std::collections::HashMap;
-#[cfg(test)]
-use std::collections::HashSet;
 
 #[cfg(any(test, kani))]
 use super::jwks_types::CacheEntry;
 use super::jwks_types::{FetchedJwk, FetchedJwks};
-use super::{jwt_algorithm_name, metrics, sha256_hex};
+use super::{jwt_algorithm_name, metrics};
 use tracing::warn;
 
 pub(super) fn validate_fetched_jwks(jwks: &FetchedJwks) -> Result<(), FetchedJwksValidationError> {
     let value =
         serde_json::to_value(jwks).map_err(|_| FetchedJwksValidationError::NotJsonObject)?;
-    let set =
-        aegaeon_jose::jwk::JwkSet::from_value(value).map_err(FetchedJwksValidationError::Parse)?;
+    let set = aegaeon_jose::jwk::JwkSet::from_verification_value(value)
+        .map_err(FetchedJwksValidationError::Parse)?;
+    if jwks.has_duplicate_kid() {
+        return Err(FetchedJwksValidationError::DuplicateKid(
+            aegaeon_jose::jwk::JwkError::DuplicateKid("duplicate".into()),
+        ));
+    }
     set.ensure_unique_kid()
         .map_err(FetchedJwksValidationError::DuplicateKid)?;
-    if set.signature_keys().next().is_none() {
+    if set.keys().is_empty() || set.keys().len() != jwks.keys.len() {
         return Err(FetchedJwksValidationError::NoSignatureKeys);
     }
     Ok(())
@@ -96,32 +99,12 @@ pub(super) fn record_validation_failure(
 }
 
 pub(super) fn build_kid_fingerprints(jwks: &FetchedJwks) -> HashMap<String, String> {
-    jwks.keys
-        .iter()
-        .filter_map(|key| {
-            let kid = key.kid.as_ref()?;
-            let material = format!(
-                "{}|{}|{}|{}|{}",
-                key.kty,
-                key.n.as_deref().unwrap_or(""),
-                key.e.as_deref().unwrap_or(""),
-                key.x.as_deref().unwrap_or(""),
-                key.y.as_deref().unwrap_or("")
-            );
-            Some((kid.clone(), sha256_hex(material.as_bytes())))
-        })
-        .collect()
+    jwks.legacy_fingerprints().clone()
 }
 
 #[cfg(test)]
 pub(super) fn has_duplicate_kid(jwks: &FetchedJwks) -> bool {
-    jwks.keys
-        .iter()
-        .filter_map(|key| key.kid.as_deref())
-        .try_fold(HashSet::new(), |mut seen, kid| {
-            seen.insert(kid).then_some(seen)
-        })
-        .is_none()
+    jwks.has_duplicate_kid()
 }
 
 #[cfg(any(test, kani))]
@@ -130,6 +113,7 @@ pub(super) fn kid_reuse_changed(prev: &CacheEntry, new_map: &HashMap<String, Str
 }
 
 pub(super) fn select_jwk(jwks: &FetchedJwks, kid: Option<&str>) -> Option<FetchedJwk> {
+    validate_fetched_jwks(jwks).ok()?;
     if let Some(kid) = kid {
         return jwks
             .keys

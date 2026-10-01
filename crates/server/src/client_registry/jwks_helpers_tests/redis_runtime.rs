@@ -130,3 +130,38 @@ fn jwks_redis_shared_runtime_state_unavailable_fails_closed() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL-backed Redis integration test"]
+fn jwk_mixed_redis_guard_includes_rejected_original_members() -> TestResult {
+    let redis_url = test_jwks_redis_url().ok_or("isolated Redis required")?;
+    let uri = unique_jwks_uri("mixed-original-members");
+    let state_a = redis_jwks_runtime_state(&redis_url)?;
+    let state_b = redis_jwks_runtime_state(&redis_url)?;
+    let (key, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    let mut original = serde_json::json!({"keys":[key,{"kty":"oct","kid":"ignored","n":"AA"}]});
+    let first: FetchedJwks =
+        serde_json::from_value(original.clone()).expect("valid first public fixture");
+    original["keys"][1]["n"] = serde_json::json!("AQ");
+    let second: FetchedJwks =
+        serde_json::from_value(original).expect("valid second public fixture");
+    assert_eq!(first.keys.len(), 1);
+    assert_eq!(second.keys.len(), 1);
+    let policy = JwksRuntimePolicy::default();
+    assert!(!shared_kid_reuse_changed_with_state(
+        &state_a,
+        &policy,
+        &uri,
+        &super::super::jwks_validation::build_kid_fingerprints(&first)
+    )
+    .expect("shared guard result"));
+    assert!(shared_kid_reuse_changed_with_state(
+        &state_b,
+        &policy,
+        &uri,
+        &super::super::jwks_validation::build_kid_fingerprints(&second)
+    )
+    .expect("shared guard result"));
+    clear_jwks_redis_keys(&redis_url, &uri)?;
+    Ok(())
+}

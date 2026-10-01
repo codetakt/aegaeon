@@ -10,7 +10,7 @@ use tracing_subscriber::prelude::*;
 
 fn body(kid: &str, modulus: &str) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({"keys":[{
-        "kty":"RSA", "kid":kid, "alg":"RS256", "n":modulus, "e":"AQAB"
+        "kty":"RSA", "kid":kid, "alg":"RS256", "n":crate::test_utils::jwk_usage::public_shape_modulus(modulus), "e":"AQAB"
     }]}))
     .expect("test JWKS encoding")
 }
@@ -367,7 +367,7 @@ fn changed_local_kid_material_is_not_admitted_or_returned_as_stale() {
             .keys[0]
             .n
             .as_deref(),
-        Some("AA")
+        Some(crate::test_utils::jwk_usage::public_shape_modulus("AA").as_str())
     );
     assert!(matches!(
         circuit_phase_with_state(&state, &uri),

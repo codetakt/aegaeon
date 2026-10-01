@@ -13,13 +13,10 @@ pub(in crate::web) struct AdmittedUpstreamIdTokenHeader {
 
 impl AdmittedUpstreamIdTokenHeader {
     pub(in crate::web) fn unfamiliar_kid(&self, jwks: &JwkSet) -> bool {
-        self.header.kid.as_deref().is_some_and(|kid| {
-            !kid.is_empty()
-                && !jwks
-                    .keys()
-                    .iter()
-                    .any(|key| key.kid.as_deref() == Some(kid))
-        })
+        self.header
+            .kid
+            .as_deref()
+            .is_some_and(|kid| !kid.is_empty() && !jwks.observed_kid(kid))
     }
 }
 
