@@ -18,6 +18,7 @@ use super::prompt::Prompt;
 use super::AppState;
 
 pub(super) struct AuthorizeRequestContext {
+    pub(super) observation: crate::runtime_configuration::AuthorizationObservation,
     pub(super) request_id: String,
     pub(super) req: AuthzReq,
     pub(super) par_authorize_continuation: Option<String>,
@@ -122,6 +123,7 @@ async fn authorize_parse_request_context(
     issuer_base: &str,
 ) -> Result<
     (
+        crate::runtime_configuration::AuthorizationObservation,
         AuthzReq,
         Prompt,
         crate::form_post::ResponseMode,
@@ -133,6 +135,16 @@ async fn authorize_parse_request_context(
         .map_err(|error| error.into_response(issuer_base))?;
     let raw = RawAuthzQuery::from_admitted(&admitted)
         .map_err(|error| error.into_response(issuer_base))?;
+    let selected_client_id = raw.client_id.as_deref().unwrap_or("");
+    // PAR has historically trimmed this selector; plain and direct JAR have not.
+    let selected_client_id = if raw.request_uri.is_some() {
+        selected_client_id.trim()
+    } else {
+        selected_client_id
+    };
+    let observation = observe_authorization(state, selected_client_id, issuer_base).await?;
+    let selected_state = state_for_authorization_observation(state, &observation);
+    let state = &selected_state;
     let response_mode_raw = raw.response_mode.clone();
     let parsed = parse_authorize_request_with_runtime_blocking(
         raw,
@@ -165,6 +177,7 @@ async fn authorize_parse_request_context(
     let prompt =
         authorize_prompt_from_request(state, &req, parsed.prompt, response_mode, issuer_base)?;
     Ok((
+        observation,
         req,
         prompt,
         response_mode,
@@ -172,45 +185,21 @@ async fn authorize_parse_request_context(
     ))
 }
 
-async fn authorize_resolve_profile(
+fn authorize_resolve_profile(
     state: &AppState,
     req: &AuthzReq,
     response_mode: crate::form_post::ResponseMode,
     issuer_base: &str,
+    observation: &crate::runtime_configuration::AuthorizationObservation,
 ) -> Result<oauth_profile::ResolvedProfile, Response> {
-    let profile = match oauth_profile::resolve_downstream_profile(
-        &state.db_pool,
-        issuer_base,
-        &req.client_id,
-    )
-    .await
-    {
-        Ok(profile) => profile,
-        Err(oauth_profile::ProfileError::MissingProfile) => {
-            record_downstream_profile_rejection("profile_missing", "authorize");
-            return Err(authorize_error_response(
-                authorize_error_context(state, req, response_mode, issuer_base),
-                "invalid_request",
-                Some("oauth profile is required"),
-            ));
-        }
-        Err(oauth_profile::ProfileError::InvalidIssuer) => {
-            record_downstream_profile_rejection("issuer_invalid", "authorize");
-            return Err(authorize_error_response(
-                authorize_error_context(state, req, response_mode, issuer_base),
-                "server_error",
-                Some("issuer is invalid"),
-            ));
-        }
-        Err(oauth_profile::ProfileError::Database(_)) => {
-            record_downstream_profile_rejection("lookup_failed", "authorize");
-            return Err(authorize_error_response(
-                authorize_error_context(state, req, response_mode, issuer_base),
-                "server_error",
-                Some("oauth profile lookup failed"),
-            ));
-        }
-    };
+    let profile = observation.profile.clone().ok_or_else(|| {
+        record_downstream_profile_rejection("profile_missing", "authorize");
+        authorize_error_response(
+            authorize_error_context(state, req, response_mode, issuer_base),
+            "invalid_request",
+            Some("oauth profile is required"),
+        )
+    })?;
     record_downstream_profile_usage(&profile, "authorize");
     Ok(profile)
 }
@@ -311,12 +300,24 @@ pub(super) async fn build_authorize_request_context(
     issuer_base: &str,
     request_id: String,
 ) -> Result<AuthorizeRequestContext, Response> {
-    let (req, prompt, response_mode, par_authorize_continuation) =
+    let (observation, req, prompt, response_mode, par_authorize_continuation) =
         authorize_parse_request_context(state, uri, issuer_base).await?;
-    let profile = authorize_resolve_profile(state, &req, response_mode, issuer_base).await?;
+    let selected_state = state_for_authorization_observation(state, &observation);
+    let state = &selected_state;
+    let profile = authorize_resolve_profile(state, &req, response_mode, issuer_base, &observation)?;
     authorize_enforce_profile_issuer(state, &req, response_mode, &profile, issuer_base)?;
     let policy = authorize_validate_policy(state, &req, response_mode, &profile, issuer_base)?;
+    #[cfg(test)]
+    if let Some(barriers) = state
+        .runtime_authority
+        .authorization_context_barriers
+        .as_ref()
+    {
+        barriers.observed.wait().await;
+        barriers.resume.wait().await;
+    }
     Ok(AuthorizeRequestContext {
+        observation,
         request_id,
         client_id_for_error: req.client_id.clone(),
         state_for_echo: req.state.clone(),
@@ -329,4 +330,48 @@ pub(super) async fn build_authorize_request_context(
         pkce_required: policy.pkce_required,
         profile_pkce_required: policy.profile_pkce_required,
     })
+}
+
+/// All later session, issuance and error consumers use this same request view.
+pub(super) fn state_for_authorization_observation(
+    state: &AppState,
+    observation: &crate::runtime_configuration::AuthorizationObservation,
+) -> AppState {
+    let mut selected = state.clone();
+    selected.clients = observation.selected_clients.clone();
+    selected
+}
+
+async fn observe_authorization(
+    state: &AppState,
+    client_id: &str,
+    issuer: &str,
+) -> Result<crate::runtime_configuration::AuthorizationObservation, Response> {
+    let refused = || {
+        super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            Some("authorization configuration snapshot unavailable"),
+            issuer,
+        )
+    };
+    let runtime = state
+        .runtime_authority
+        .authorization_runtime()
+        .ok_or_else(refused)?;
+    if !runtime.uses_instances(&state.cfg, state.oidc.config.as_ref()) {
+        return Err(refused());
+    }
+    runtime
+        .observe(
+            &state.db_pool,
+            state.environment_id,
+            issuer,
+            client_id,
+            state.clients.as_ref(),
+            #[cfg(test)]
+            state.runtime_authority.authorization_read_barriers.as_ref(),
+        )
+        .await
+        .map_err(|_| refused())
 }

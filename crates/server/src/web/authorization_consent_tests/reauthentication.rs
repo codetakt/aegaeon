@@ -254,10 +254,6 @@ async fn run(mode: &str) -> TestResult {
     let result = async {
         let (state, sid) = fixture(&pool, &env).await?;
         user(&pool, &env).await?;
-        let mut client = state.clients.try_get(CLIENT)?.ok_or("client missing")?;
-        client.jwks_pem =
-            Some(include_str!("../../../tests/fixtures/rsa2048-public.pem").to_string());
-        assert!(state.clients.try_update(client)?);
         if mode.ends_with("negative") {
             return negative::scenario(&state, &sid, mode).await;
         }

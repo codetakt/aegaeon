@@ -1,9 +1,14 @@
 //! Shared database-backed HTTP test fixtures. No production request checks are bypassed.
+mod authorization;
 mod projections;
 use super::AppState;
 use crate::{
     client_registry::{ClientRegistry, RegisteredClient},
     management::types::PolicyDocument,
+};
+pub(crate) use authorization::{
+    derive_test_authorization_runtime, reload_authorization_runtime, seed_oidc_configuration,
+    update_test_policy,
 };
 pub(crate) use projections::seed_test_projection;
 use serde_json::json;
@@ -22,10 +27,12 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
-    let cfg = Arc::new(crate::config::ServerConfig {
+    let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..crate::config::ServerConfig::default()
-    });
+    };
+    // These local HTTP fixtures do not run behind a TLS-terminating proxy.
+    baseline.security_policy.transport.enforce_trusted_proxy = false;
     let key_manager: Arc<dyn crate::kms::KeyManager> =
         Arc::new(crate::kms::InMemoryKeyManager::new());
     let token_issuer =
@@ -36,16 +43,13 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
     let par_endpoint = Arc::new(test_par_endpoint()?);
     let par_store = par_endpoint.store();
     let clients = Arc::new(ClientRegistry::new_process_local_for_tests());
-    let revision =
-        crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
-            &pool,
-            &env.issuer_host,
-        )
-        .await?;
-    let runtime_authority = crate::web::RuntimeAuthorityState::from_database_revision(
-        Arc::new(env.issuer_host.clone()),
-        revision,
-    );
+    let loaded =
+        crate::runtime_configuration::load_database_runtime_configuration(&pool, &env.issuer_host)
+            .await?;
+    let derived = derive_test_authorization_runtime(loaded, baseline).await?;
+    let cfg = derived.configuration();
+    let oidc_config = derived.oidc();
+    let runtime_authority = crate::web::RuntimeAuthorityState::from_authorization_runtime(derived);
     runtime_authority
         .try_synchronize_client_projection_from_database(&pool, clients.as_ref())
         .await?;
@@ -82,7 +86,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
         oidc: crate::web::OidcState {
-            config: None,
+            config: oidc_config,
             sessions: None,
             userinfo_endpoint: None,
         },
@@ -289,6 +293,7 @@ pub(crate) async fn cleanup_test_environment(
         "DELETE FROM aegaeon.clients WHERE environment_id = $1",
         "DELETE FROM aegaeon.oauth_profiles WHERE environment_id = $1",
         "DELETE FROM aegaeon.environment_policies WHERE environment_id = $1",
+        "DELETE FROM aegaeon.runtime_keys WHERE environment_id = $1",
     ] {
         sqlx::query(sql)
             .bind(env.environment_id)

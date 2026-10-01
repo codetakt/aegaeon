@@ -15,6 +15,7 @@ async fn shared_redis_offline_consent_http_repeated_claim_profiles_and_refresh()
         // Default source-rate rejection has its own real Redis regression.
         Arc::make_mut(&mut state.cfg).database.authorization_admission =
             crate::config::AuthorizationAdmissionLimits::new(4096, 2048, 512)?;
+        reload_authorization_runtime(&mut state).await?;
         crate::web::token_exchange::tests::use_redis(&mut state)?;
         let oidc = state.oidc.config.as_ref().ok_or("OIDC configuration")?.as_ref().clone();
         state.tokens.issuer = Arc::new(crate::authcode::TokenIssuer::with_stores(Arc::clone(&state.keys.access_token), state.tokens.issuer.code_store.clone(), state.tokens.store.as_ref().clone())

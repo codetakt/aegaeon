@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 const DOWNSTREAM_PROFILE_QUERY: &str = r"
 SELECT
+  rt.environment_id, rt.configuration_version_id,
   c.oauth_profile_id AS requested_profile_id,
   cp.id AS bound_profile_id,
   dp.id AS default_profile_id,
@@ -245,4 +246,37 @@ fn resolved_profile_from_row(
 fn issuer_host_from_url(issuer: &str) -> Result<String, ProfileError> {
     let url = url::Url::parse(issuer).map_err(|_| ProfileError::InvalidIssuer)?;
     crate::util::canonical_url_host_port(&url).ok_or(ProfileError::InvalidIssuer)
+}
+
+pub(crate) struct ObservedDownstreamProfile {
+    pub(crate) environment_id: Uuid,
+    pub(crate) configuration_id: Uuid,
+    pub(crate) requested_profile_id: Option<Uuid>,
+    pub(crate) effective: ResolvedProfile,
+}
+
+pub(crate) async fn observe_downstream_profile_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issuer_host: &str,
+    client_id: &str,
+) -> Result<Option<ObservedDownstreamProfile>, sqlx::Error> {
+    let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
+        .bind(issuer_host)
+        .bind(client_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let effective = match resolved_profile_from_effective_row(&row) {
+        Ok(profile) => profile,
+        Err(ProfileError::MissingProfile | ProfileError::InvalidIssuer) => return Ok(None),
+        Err(ProfileError::Database(error)) => return Err(error),
+    };
+    Ok(Some(ObservedDownstreamProfile {
+        environment_id: row.try_get("environment_id")?,
+        configuration_id: row.try_get("configuration_version_id")?,
+        requested_profile_id: row.try_get("requested_profile_id")?,
+        effective,
+    }))
 }

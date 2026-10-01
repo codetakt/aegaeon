@@ -13,6 +13,11 @@ pub struct RuntimeAuthorityState {
     issuer_host: Arc<String>,
     revision: Arc<RwLock<RuntimeAuthorityRevision>>,
     admission_revalidation: RuntimeAuthorityAdmissionRevalidation,
+    authorization_runtime: Option<crate::runtime_configuration::AuthorizationRuntime>,
+    #[cfg(test)]
+    pub(crate) authorization_read_barriers: Option<AuthorizationReadBarriers>,
+    #[cfg(test)]
+    pub(crate) authorization_context_barriers: Option<AuthorizationReadBarriers>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +37,27 @@ impl RuntimeAuthorityState {
             issuer_host,
             revision: Arc::new(RwLock::new(revision)),
             admission_revalidation: RuntimeAuthorityAdmissionRevalidation::Database,
+            authorization_runtime: None,
+            #[cfg(test)]
+            authorization_read_barriers: None,
+            #[cfg(test)]
+            authorization_context_barriers: None,
         }
+    }
+
+    #[must_use]
+    pub fn from_authorization_runtime(
+        runtime: crate::runtime_configuration::AuthorizationRuntime,
+    ) -> Self {
+        let mut authority = Self::from_database_revision(runtime.issuer_host(), runtime.revision());
+        authority.authorization_runtime = Some(runtime);
+        authority
+    }
+
+    pub(crate) fn authorization_runtime(
+        &self,
+    ) -> Option<&crate::runtime_configuration::AuthorizationRuntime> {
+        self.authorization_runtime.as_ref()
     }
 
     #[cfg(test)]
@@ -50,6 +75,10 @@ impl RuntimeAuthorityState {
                 ),
             )),
             admission_revalidation: RuntimeAuthorityAdmissionRevalidation::TestOnly,
+            authorization_runtime: None,
+            authorization_read_barriers: None,
+            #[cfg(test)]
+            authorization_context_barriers: None,
         }
     }
 
@@ -370,4 +399,11 @@ mod tests {
         );
         Ok(())
     }
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct AuthorizationReadBarriers {
+    pub(crate) observed: Arc<tokio::sync::Barrier>,
+    pub(crate) resume: Arc<tokio::sync::Barrier>,
 }
