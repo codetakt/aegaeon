@@ -7,6 +7,7 @@ pub(crate) const KID: &str = "usage-key";
 const RSA: &str = include_str!("../../tests/fixtures/rsa2048-private.pk8.pem");
 const EC: &str = include_str!("../../tests/fixtures/p256-private.pk8.pem");
 
+#[cfg(test)]
 pub(crate) fn material(algorithm: Algorithm) -> (Value, EncodingKey) {
     match algorithm {
         Algorithm::RS256 => {
@@ -30,6 +31,21 @@ pub(crate) fn material(algorithm: Algorithm) -> (Value, EncodingKey) {
                 "x":URL_SAFE_NO_PAD.encode(&point[1..33]),
                 "y":URL_SAFE_NO_PAD.encode(&point[33..65])}),
                 EncodingKey::from_ec_pem(EC.as_bytes()).expect("EC encoding key"),
+            )
+        }
+        Algorithm::ES384 => {
+            use aws_lc_rs::signature::{EcdsaKeyPair, KeyPair, ECDSA_P384_SHA384_ASN1_SIGNING};
+            let rng = aws_lc_rs::rand::SystemRandom::new();
+            let der = EcdsaKeyPair::generate_pkcs8(&ECDSA_P384_SHA384_ASN1_SIGNING, &rng)
+                .expect("P-384 fixture generation");
+            let pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P384_SHA384_ASN1_SIGNING, der.as_ref())
+                .expect("P-384 fixture key");
+            let point = pair.public_key().as_ref();
+            (
+                json!({"kty":"EC","kid":KID,"alg":"ES384","crv":"P-384",
+                    "x":URL_SAFE_NO_PAD.encode(&point[1..49]),
+                    "y":URL_SAFE_NO_PAD.encode(&point[49..97])}),
+                EncodingKey::from_ec_der(der.as_ref()),
             )
         }
         _ => panic!("unsupported fixture algorithm"),

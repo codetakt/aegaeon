@@ -27,6 +27,7 @@ struct Fixture {
     user: String,
     caller: String,
     link_id: Uuid,
+    claims_issued_at: u64,
 }
 
 impl Fixture {
@@ -91,11 +92,13 @@ impl Fixture {
             user,
             caller,
             link_id,
+            claims_issued_at: crate::web::now_epoch_secs()?,
         })
     }
 
     fn claims(&self) -> ResultTest<Value> {
-        let now = crate::web::now_epoch_secs()?;
+        // Reissuing fixture claims must preserve the original authentication time.
+        let now = self.claims_issued_at;
         Ok(
             json!({"iss":self.request.issuer,"sub":"private-subject","aud":"client","iat":now,"exp":now+3600,"auth_time":now-60,"nonce":"nonce"}),
         )
@@ -294,7 +297,10 @@ fn run(
         assert!(!log.contains(secret), "sensitive value reached warning log");
     }
     let cleanup = runtime.block_on(fixture.cleanup());
-    result?;
+    result.map_err(|error| {
+        let original_context_mismatch = log.contains("original authentication context mismatch");
+        format!("{error}; original_context_mismatch={original_context_mismatch}")
+    })?;
     cleanup
 }
 fn error(response: Response) -> String {

@@ -366,3 +366,5 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
 }
 
 mod usage_metadata;
+
+mod algorithm_binding;
