@@ -20,6 +20,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
 mod client_scope_ceiling;
+mod form_parameters;
 mod legacy_commit;
 mod legacy_request;
 mod projection_pool;

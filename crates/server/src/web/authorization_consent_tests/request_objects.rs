@@ -2,6 +2,7 @@ use super::*;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde_json::json;
 mod prompt_validation;
+mod response_modes;
 mod substitution;
 
 pub(super) fn signed_request(state: &AppState, mode: &str) -> TestResult<String> {

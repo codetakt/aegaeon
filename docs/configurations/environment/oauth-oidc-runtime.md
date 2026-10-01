@@ -1,6 +1,6 @@
 # Server Environment: OAuth And OIDC Runtime Settings
 
-Last updated: 2026-07-08
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -241,3 +241,40 @@ its verified value must match the authenticated client. See
 | --- | --- | --- | --- |
 | `AEGAEON_PAR_EXPIRES_IN` | _removed_ | `environment` | Removed startup-environment fallback `expires_in` for `request_uri` values (seconds, valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.parExpiresInSeconds` is authoritative. |
 | `AEGAEON_PAR_REDIS_URL` | _unset_ | `system` | Redis URL for shared PAR `request_uri` storage. Required by the supported server runtime so reservation and consumption are coordinated outside process memory. |
+
+## OAuth form admission
+
+At `/token`, `/par`, `/device_authorization`, `/introspect`, and `/revoke`,
+zero-length decoded form values are omitted before field typing, authentication,
+and extension parsing (RFC 6749 sections 3.1 and 3.2). Thus `scope=` and a
+valueless `scope` behave as omission; `scope=&scope=api.read` has one effective
+value. Two nonempty recognized singleton occurrences reject, including encoded
+spellings of the same name. Unknown parameters are ignored where permitted;
+Request Object PAR still excludes effective outer authorization fields.
+Repeated `resource` and `audience` values retain the endpoint's target resolver
+rules. Empty `max_age` at PAR is absent, not a numeric conversion error.
+
+Whitespace is nonempty. Client identifiers and supported `grant_type` values
+are compared exactly, including extension URIs. Refresh/device tokens, JWT grant
+assertions, and token-exchange subject tokens are not trimmed before validation.
+Resource URIs reject raw whitespace/control characters and retain valid input
+spelling, including percent-encoded characters, without URL canonicalization. Clients that sent upper-case
+or padded grant types must send the registered spelling. Supported authorization
+`response_mode` values are exactly `query` and `form_post`; omitted or empty OAuth
+parameters select `query`. Request Object JSON claim typing is unchanged, and
+an empty JSON response-mode string remains invalid.
+
+Empty form credentials do not add an authentication method. Basic with
+`client_id=&client_secret=` behaves like Basic without those form parameters;
+an empty Basic password remains an authentication attempt. If both assertion
+form values are empty, both are absent. Nonempty incomplete, malformed, or
+whitespace assertion credentials still reject without falling back to a public
+client. Required effective values remain required, including plain PAR's
+`client_id`, token requests' `grant_type`, and lifecycle requests' `token`.
+
+The existing Axum form decoder, 2 MiB raw request-body limit, method and transport
+gates are unchanged: empty and ignored fields still occupy raw body bytes.
+These five form entrances have no separate raw parameter-count limit. Browser
+authorization retains its own admission limits. Local login, password, CSRF,
+and management forms do not use this OAuth omission rule. These runtime changes
+and finite route tests do not extend formal proof coverage.

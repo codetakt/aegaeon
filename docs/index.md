@@ -71,7 +71,7 @@ Audience: contributors, maintainers
 | `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/management-plane.md` | configuration | Server Environment: Management Plane Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/network-and-policy.md` | configuration | Server Environment: Network And Runtime Policy Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
+| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/configurations/environment.md` | configuration | Server Environment Variables | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/networking.md` | configuration | Networking & TLS enforcement (reverse proxy) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/configurations/target-scope-validation.md` | configuration | Target rule scope validation | current implementation baseline | 2026-10-01 | Identity | operators, OAuth client developers, verification reviewers |
@@ -361,7 +361,7 @@ Audience: contributors, maintainers
 | `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
-| `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
+| `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |

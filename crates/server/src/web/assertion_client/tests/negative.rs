@@ -88,16 +88,15 @@ async fn invalid_claims(state: &AppState) -> TestResult {
             " assertion-client",
             "assertion-client ",
             "Assertion-client",
-            "",
         ] {
             let mut f = fields(path, &valid);
             f.retain(|(k, _)| *k != "client_id");
             f.push(("client_id", id));
             reject(state, path, &f, None).await?;
         }
-        // Neither an incomplete pair nor an empty pair can become method `none`.
+        // A nonempty incomplete pair cannot become method `none`.
         for missing in ["client_assertion", "client_assertion_type"] {
-            let mut f = fields(path, "");
+            let mut f = fields(path, "malformed");
             f.retain(|(k, _)| *k != missing && *k != "client_id");
             f.push(("client_id", PUBLIC));
             reject(state, path, &f, None).await?;

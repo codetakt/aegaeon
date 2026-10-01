@@ -26,7 +26,6 @@ async fn load_refresh_token_for_client(
         .issuer_req
         .refresh_token
         .as_deref()
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .ok_or_else(|| {

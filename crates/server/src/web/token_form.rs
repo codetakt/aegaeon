@@ -5,6 +5,14 @@ use crate::util;
 use super::oauth_errors::no_cache_json_error_with_iss;
 use super::token_response::token_error_response;
 
+/// Apply RFC 6749 omission semantics after transport/body admission. Nonempty
+/// decoded values (including whitespace) and repeated extension values stay exact.
+/// Callers must enforce any raw byte/count limits before this operation.
+pub(super) fn effective_oauth_form(mut params: Vec<(String, String)>) -> Vec<(String, String)> {
+    params.retain(|(_, value)| !value.is_empty());
+    params
+}
+
 pub(super) struct TokenForm {
     pub(super) grant_type: String,
     pub(super) code: Option<String>,
@@ -28,7 +36,7 @@ fn token_param(
 ) -> Result<Option<String>, Response> {
     let mut value: Option<String> = None;
     for (param_key, param_value) in params {
-        if param_key != key {
+        if param_key != key || param_value.is_empty() {
             continue;
         }
         if value.is_some() {
@@ -76,7 +84,7 @@ pub(super) fn token_form_from_params(
     params: &[(String, String)],
     issuer_base: &str,
 ) -> Result<TokenForm, Response> {
-    // RFC 6749 §3.2: empty values are omitted; duplicates are still invalid.
+    // RFC 6749 §3.2: only nonempty occurrences participate in singleton checks.
     // No runtime RAR type has a semantic handler. RFC 9396 §7 constraints
     // must not disappear while consuming a code or rotating a refresh token.
     if optional_token_param(params, "authorization_details", issuer_base)?

@@ -88,14 +88,8 @@ fn split_scopes(scope: Option<&str>) -> Vec<String> {
     })
 }
 
-fn trim_non_empty(value: Option<&str>) -> Option<&str> {
-    value
-        .map(str::trim)
-        .filter(|candidate| !candidate.is_empty())
-}
-
 fn validate_optional_resource_indicator(resource: Option<&str>) -> Result<Option<String>, String> {
-    trim_non_empty(resource)
+    resource
         .map(crate::util::validate_resource_indicator)
         .transpose()
 }
