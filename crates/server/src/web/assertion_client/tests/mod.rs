@@ -1,5 +1,6 @@
 //! Real signatures and actual routes; required PostgreSQL never silently skips.
 mod client_auth_errors;
+mod error_encoding;
 mod negative;
 mod oauth_forms;
 mod oauth_grants;

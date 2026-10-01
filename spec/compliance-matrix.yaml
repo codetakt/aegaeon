@@ -202,13 +202,18 @@ rfc_6749:
   - crates/server/src/web/grant_error_tests/devices.rs
   - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
   - crates/server/src/web/assertion_client/tests/negative.rs
+  - crates/server/src/oauth_error/tests.rs
+  - crates/server/src/web/oauth_error_encoding_tests.rs
+  - crates/server/src/web/assertion_client/tests/error_encoding.rs
   ci_check: token-error-codes
   status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
   - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; global/profile activation remains outside these finite checks."
-  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; bare/empty/unsupported schemes, duplicate/nontext header admission and diagnostic alphabet handling remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
+  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; bare/empty/unsupported schemes, duplicate/nontext header admission remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
+
+  - "Outgoing dynamic error fields share the RFC 6749 A.7/A.8 alphabet rule before JSON, query, form-post, challenge or public model serialization. Invalid descriptions replace each scalar with question mark; empty descriptions are omitted and malformed codes become server_error. Finite transport/router tests include upstream and DCR paths and preserve state/status/effects; this does not establish all error categories, ingress challenges or formal wire/model composition."
 
 - id: 6749-010
   section: '10.3'

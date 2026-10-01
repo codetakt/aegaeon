@@ -99,10 +99,10 @@ fn enforce_registered_par_scope_subset(
     let requested = crate::oauth_scope::parse_optional_scope_string(scope).map_err(|error| {
         let mut response = (
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": "invalid_scope",
-                "error_description": error.to_string(),
-            })),
+            Json(crate::oauth_error::json_body(
+                "invalid_scope",
+                Some(&error.to_string()),
+            )),
         )
             .into_response();
         util::apply_no_cache_headers(&mut response);
@@ -173,10 +173,7 @@ pub(super) fn par_error_response_body_and_status(e: &crate::par::ParError) -> (V
         )
     } else {
         (
-            json!({
-                "error": e.error.as_str(),
-                "error_description": e.error_description.as_deref(),
-            }),
+            crate::oauth_error::json_body(&e.error, e.error_description.as_deref()),
             StatusCode::BAD_REQUEST,
         )
     }

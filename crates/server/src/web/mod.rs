@@ -35,6 +35,8 @@ mod logout_id_token_hint;
 pub mod management;
 mod metadata;
 mod oauth_audit;
+#[cfg(test)]
+mod oauth_error_encoding_tests;
 mod oauth_errors;
 mod oidc_request_input;
 #[cfg(test)]

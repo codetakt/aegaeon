@@ -70,8 +70,12 @@ pub struct ParResponse {
 /// PAR error response
 #[derive(Debug, Serialize)]
 pub struct ParError {
+    #[serde(serialize_with = "crate::oauth_error::serialize_code")]
     pub error: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "crate::oauth_error::description_is_empty",
+        serialize_with = "crate::oauth_error::serialize_description"
+    )]
     pub error_description: Option<String>,
 }
 

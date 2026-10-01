@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::super::authorize_request::{
     request_object_extra_string, request_object_resolution_error_json_response,
@@ -249,10 +249,10 @@ fn parse_par_authorization_details(
         .map_err(|description| {
             let mut response = (
                 StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": "invalid_authorization_details",
-                    "error_description": description,
-                })),
+                Json(crate::oauth_error::json_body(
+                    "invalid_authorization_details",
+                    Some(&description),
+                )),
             )
                 .into_response();
             util::apply_no_cache_headers(&mut response);

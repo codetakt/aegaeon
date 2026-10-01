@@ -34,9 +34,7 @@ impl Kind {
 fn error(status: StatusCode, code: &str, description: &str) -> Response {
     let mut response = (
         status,
-        Json(serde_json::json!({
-            "error": code, "error_description": description,
-        })),
+        Json(crate::oauth_error::json_body(code, Some(description))),
     )
         .into_response();
     crate::util::apply_no_cache_headers(&mut response);

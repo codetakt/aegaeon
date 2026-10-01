@@ -3,7 +3,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::json;
 
 use crate::util;
 
@@ -75,12 +74,38 @@ pub(in crate::web) fn request_object_resolution_error_json_response(
 ) -> Response {
     let mut response = (
         err.status,
-        Json(json!({
-            "error": err.error,
-            "error_description": err.error_description,
-        })),
+        Json(crate::oauth_error::json_body(
+            err.error,
+            Some(&err.error_description),
+        )),
     )
         .into_response();
     util::apply_no_cache_headers(&mut response);
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn oauth_error_encoding_request_object_direct_json_keeps_status(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let error = RequestObjectResolutionError {
+            status: StatusCode::BAD_REQUEST,
+            error: "invalid_target",
+            error_description: "bad\"\\é".into(),
+        };
+        let response = request_object_resolution_error_json_response(&error);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()[axum::http::header::CACHE_CONTROL],
+            "no-store"
+        );
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(response.into_body(), 65536).await?)?;
+        assert_eq!(body["error"], "invalid_target");
+        assert_eq!(body["error_description"], "bad???");
+        assert_eq!(error.error_description, "bad\"\\é");
+        Ok(())
+    }
 }
