@@ -11,7 +11,7 @@
 #include "verified_core.h"
 #include "verified_core_exports.h"
 
-#include <string.h>  /* memset */
+#include <string.h>  /* memcpy, memset */
 #include <stddef.h>  /* NULL */
 
 /* ================================================================
@@ -218,6 +218,13 @@ vc_result vc_pkce_challenge_verify(vc_slice verifier,
         return r;
     }
 
+    /* Generation reuses vc_pkce_buf, which may also be the supplied
+     * challenge (a borrowed result from an earlier generate call).
+     * Preserve the supplied bytes before generation can overwrite them.
+     * No disjointness between the input slices is required. */
+    uint8_t supplied_challenge[VC_PKCE_CHALLENGE_LEN];
+    memcpy(supplied_challenge, challenge.data, sizeof(supplied_challenge));
+
     /* Generate expected challenge */
     vc_result gen = vc_pkce_challenge_generate(verifier, method);
     if (gen.code != VC_OK) {
@@ -225,7 +232,7 @@ vc_result vc_pkce_challenge_verify(vc_slice verifier,
     }
 
     /* Constant-time comparison prevents timing side-channels */
-    if (vc_ct_eq(gen.data.data, challenge.data, VC_PKCE_CHALLENGE_LEN)) {
+    if (vc_ct_eq(gen.data.data, supplied_challenge, VC_PKCE_CHALLENGE_LEN)) {
         r.code = VC_OK;
     } else {
         r.code = VC_INVALID_CLAIMS;

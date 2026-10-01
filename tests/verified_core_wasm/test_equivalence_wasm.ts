@@ -604,6 +604,15 @@ try {
   fail(`DPoP exact iat values: ${error.message}`);
 }
 
+// The raw ABI regression also checks borrowed and overlapping input slices.
+try {
+  const { checkPkceAliasing } = await import("./pkce_alias_test.ts");
+  const checks = await checkPkceAliasing(wasmPath);
+  pass(`PKCE raw ABI alias and validation regression: ${checks} checks`);
+} catch (error) {
+  fail(`PKCE raw ABI regression: ${error.message}`);
+}
+
 // ���─ Summary ──────────────────────────────────────────────────────────
 
 console.log("");
