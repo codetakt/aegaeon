@@ -6,9 +6,11 @@ mod auth_session;
 mod auth_session_flow;
 #[cfg(test)]
 mod authorization_consent_tests;
+mod authorization_snapshot;
 mod authorization_transactions;
 mod authorize_context;
 mod authorize_endpoint;
+mod authorize_input;
 mod authorize_login_redirect;
 mod authorize_reauthentication;
 mod authorize_request;

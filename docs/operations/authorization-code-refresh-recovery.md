@@ -1,6 +1,6 @@
 # Authorization-code and refresh state transitions
 
-Last updated: 2026-09-30
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -92,12 +92,23 @@ not reset a decided transaction to pending.
 
 `prompt=login` and `max_age=0` require active authentication for the current
 request, including PAR and signed Request Objects. The server retains the
-immutable request and a five-minute login transaction in
+admitted query or POST form, exact resolved request and a five-minute login transaction in
 `aegaeon.authorization_logins`. Successful local login completes it for the new
 session; authorization consumes the matching receipt once. Signed prompt values
 are preserved, while that receipt prevents an endless login redirect. Consent
 continuation inherits the receipt only from its bound session and request.
 Positive `max_age` limits and required ACR still apply independently.
+
+The local login return contains only `/authorize?aeg_login_continue=<opaque>`.
+Authorization parameters and compact Request Objects stay in the server-side
+snapshot. Preserve this exact return URI: appended parameters, duplicate tokens,
+foreign paths and malformed tokens are rejected. A failed local password attempt
+reuses the same transaction. The server reloads its bound request and revalidates
+current client policy before completing login or transferring a step-up challenge.
+Resume binds the receipt to the new session identifier, subject, authentication
+time and ACR before atomic consumption. Consent retains the same request and
+receipt, and checks the current session again. Consumed PAR or JAR replay state,
+changed policy, expired records and storage failure cannot issue a code.
 
 Apply both authorization migrations with `atlas migrate apply --env local`
 before starting the new server, using the deployment's existing revision-schema
@@ -112,6 +123,28 @@ The bounded retention below also applies to pending, completed and consumed logi
 Do not reset completed/consumed records, reuse another browser's continuation,
 or accept an old completed step-up challenge instead of checking the current
 session's age and ACR.
+
+## Authorization continuation rollout
+
+New GET and POST interactions write strict version-2 `request_snapshot`
+envelopes in the existing authorization-login and authorization-consent JSONB
+columns. The envelope retains the admitted input, resolved request, prompt,
+response mode, authoritative PAR continuation and any bound login receipt.
+No new SQL migration or environment setting is needed for this envelope;
+the existing authorization migrations and startup schema gate still apply.
+
+Deploy the reader and writer together across serving nodes, or stop admitting
+new authorization interactions and drain pending login and consent transactions
+for five minutes before replacing readers. Absent, older, unknown or malformed
+envelopes require a new authorization request; live rows are not backfilled.
+Older readers cannot reconstruct the request from the opaque return URI or
+canonical locator and cannot match the new snapshot. Rollback also requires
+restarting pending interactions. Do not reset or rewrite completed records.
+
+Direct requests and signed Request Objects retain their selected response mode
+through login and consent. Plain PAR response-mode persistence remains a separate
+limitation of the current PAR record format; authorization POST does not change
+that format. Validate composed PAR behavior when deploying its successor.
 
 ## Authorization transaction limits and retention
 

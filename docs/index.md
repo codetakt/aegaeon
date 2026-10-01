@@ -71,7 +71,7 @@ Audience: contributors, maintainers
 | `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/management-plane.md` | configuration | Server Environment: Management Plane Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/network-and-policy.md` | configuration | Server Environment: Network And Runtime Policy Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
+| `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/configurations/environment.md` | configuration | Server Environment Variables | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/networking.md` | configuration | Networking & TLS enforcement (reverse proxy) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/configurations/target-scope-validation.md` | configuration | Target rule scope validation | current implementation baseline | 2026-10-01 | Identity | operators, OAuth client developers, verification reviewers |
@@ -343,7 +343,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
-| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-09-30 | Operations | operators, maintainers, OAuth client developers |
+| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-02 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |

@@ -71,37 +71,31 @@ fn browser_cookie(headers: &HeaderMap) -> Result<String, Response> {
     Ok(cookies[0].1.to_string())
 }
 
-/// Returns the token and URI with only the internal login continuation removed.
-fn continuation(value: &str) -> Result<Option<(String, String)>, Response> {
+/// An opaque continuation has one spelling and carries no protocol parameters.
+fn continuation(value: &str) -> Result<Option<String>, Response> {
     let uri: Uri = value.parse().map_err(|_| invalid())?;
     super::request_admission::validate_raw_query(
         uri.query(),
         super::request_admission::DEFAULT_QUERY_LIMITS,
     )
     .map_err(|_| invalid())?;
-    let mut token = None;
-    let mut query = url::form_urlencoded::Serializer::new(String::new());
-    for (key, value) in url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes()) {
-        if key == PARAM {
-            if token.is_some() || !valid_token(&value) {
-                return Err(invalid());
-            }
-            token = Some(value.into_owned());
-        } else {
-            query.append_pair(&key, &value);
-        }
+    let pairs =
+        url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes()).collect::<Vec<_>>();
+    if !pairs.iter().any(|(key, _)| key == PARAM) {
+        return Ok(None);
     }
-    if token.is_some() && (uri.path() != "/authorize" || uri.authority().is_some()) {
+    if pairs.len() != 1
+        || pairs[0].0 != PARAM
+        || !valid_token(&pairs[0].1)
+        || value != format!("/authorize?{PARAM}={}", pairs[0].1)
+    {
         return Err(invalid());
     }
-    Ok(token.map(|token| (token, format!("{}?{}", uri.path(), query.finish()))))
+    Ok(Some(pairs[0].1.to_string()))
 }
 
 pub(super) fn snapshot(ctx: &AuthorizeRequestContext) -> Result<Value, Response> {
-    Ok(
-        json!({"request": serde_json::to_value(&ctx.req).map_err(|_| unavailable())?,
-        "prompt": ctx.prompt, "response_mode": format!("{:?}",ctx.response_mode)}),
-    )
+    super::authorization_snapshot::AuthorizationSnapshot::encode(ctx).map_err(|_| unavailable())
 }
 
 fn session_snapshot(sid: &str, session: &super::auth_session::AuthSession) -> Value {
@@ -112,30 +106,43 @@ fn session_snapshot(sid: &str, session: &super::auth_session::AuthSession) -> Va
 pub(super) async fn create(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
-    uri: &Uri,
 ) -> Result<(String, String), Response> {
-    let canonical = {
-        let mut query = url::form_urlencoded::Serializer::new(String::new());
-        for (key, value) in url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes()) {
-            if key == PARAM {
-                return Err(invalid());
-            }
-            if key != "aeg_par_continue" {
-                query.append_pair(&key, &value);
-            }
-        }
-        if let Some(value) = ctx.par_authorize_continuation.as_deref() {
-            query.append_pair("aeg_par_continue", value);
-        }
-        format!("/authorize?{}", query.finish())
-    };
+    // A consumed receipt cannot start a replacement interaction. This also
+    // preserves the former URI-token guard when a positive max_age has elapsed.
+    if ctx.reauthenticated {
+        return Err(invalid());
+    }
     let token = random_token()?;
     let browser = random_token()?;
-    storage::create(state, ctx, &canonical, &token, &browser).await?;
+    storage::create(state, ctx, "/authorize", &token, &browser).await?;
     Ok((
-        format!("{canonical}&{PARAM}={token}"),
+        format!("/authorize?{PARAM}={token}"),
         format!("{COOKIE}={browser}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300"),
     ))
+}
+
+async fn rebuild(
+    state: &AppState,
+    pending: &storage::Pending,
+    request_id: String,
+) -> Result<AuthorizeRequestContext, Response> {
+    let saved = super::authorization_snapshot::AuthorizationSnapshot::decode(&pending.snapshot)
+        .map_err(|_| invalid())?;
+    if saved.reauthenticated || !saved.matches_client(&pending.client_id) {
+        return Err(invalid());
+    }
+    let ctx = super::authorize_context::build_authorize_input_context(
+        state,
+        saved.input,
+        saved.par_continuation,
+        &state.issuer,
+        request_id,
+    )
+    .await?;
+    if ctx.req.client_id != pending.client_id || snapshot(&ctx)? != pending.snapshot {
+        return Err(invalid());
+    }
+    Ok(ctx)
 }
 
 pub(super) async fn bind_form(
@@ -144,24 +151,33 @@ pub(super) async fn bind_form(
     return_to: Option<&str>,
     csrf: &str,
 ) -> Result<(), Response> {
-    let Some((token, uri)) = return_to.map(continuation).transpose()?.flatten() else {
+    let Some(token) = return_to.map(continuation).transpose()?.flatten() else {
         return Ok(());
     };
     let browser = browser_cookie(headers)?;
-    storage::bind_form(state, &token, &uri, &browser, csrf).await
+    let pending = storage::load(state, &token, &browser, None).await?;
+    let saved = super::authorization_snapshot::AuthorizationSnapshot::decode(&pending.snapshot)
+        .map_err(|_| invalid())?;
+    if saved.reauthenticated || !saved.matches_client(&pending.client_id) {
+        return Err(invalid());
+    }
+    storage::bind_form(state, &pending, &token, &browser, csrf).await
 }
 
+/// Return only the revalidated, bound request for the local step-up adapter.
 pub(super) async fn complete(
     state: &AppState,
     headers: &HeaderMap,
     return_to: Option<&str>,
     csrf: &str,
     sid: &str,
-) -> Result<(), Response> {
-    let Some((token, uri)) = return_to.map(continuation).transpose()?.flatten() else {
-        return Ok(());
+) -> Result<Option<AuthorizeRequestContext>, Response> {
+    let Some(token) = return_to.map(continuation).transpose()?.flatten() else {
+        return Ok(None);
     };
     let browser = browser_cookie(headers)?;
+    let pending = storage::load(state, &token, &browser, None).await?;
+    let ctx = rebuild(state, &pending, pending.id.to_string()).await?;
     let session = state
         .browser_auth
         .auth_sessions
@@ -171,23 +187,25 @@ pub(super) async fn complete(
         .ok_or_else(invalid)?;
     storage::complete(
         state,
+        &pending,
         &token,
-        &uri,
         &browser,
         csrf,
         &session_snapshot(sid, &session),
     )
-    .await
+    .await?;
+    Ok(Some(ctx))
 }
 
-pub(super) async fn resume(
+/// Load first, then reapply policy and compare, and finally atomically consume.
+pub(super) async fn resume_context(
     state: &AppState,
     headers: &HeaderMap,
     uri: &Uri,
-    ctx: &AuthorizeRequestContext,
-) -> Result<bool, Response> {
-    let Some((token, canonical)) = continuation(&uri.to_string())? else {
-        return Ok(false);
+    request_id: String,
+) -> Result<Option<AuthorizeRequestContext>, Response> {
+    let Some(token) = continuation(&uri.to_string())? else {
+        return Ok(None);
     };
     let browser = browser_cookie(headers)?;
     let sid = super::form_helpers::auth_session_cookie(headers)
@@ -200,14 +218,28 @@ pub(super) async fn resume(
         .await
         .map_err(|_| unavailable())?
         .ok_or_else(invalid)?;
-    storage::consume(
-        state,
-        ctx,
-        &token,
-        &canonical,
-        &browser,
-        &session_snapshot(&sid, &session),
-    )
-    .await?;
-    Ok(true)
+    let session = session_snapshot(&sid, &session);
+    let pending = storage::load(state, &token, &browser, Some(&session)).await?;
+    let mut ctx = rebuild(state, &pending, request_id).await?;
+    storage::consume(state, &pending, &token, &browser, &session).await?;
+    ctx.reauthenticated = true;
+    ctx.reauthentication_session = Some(session);
+    Ok(Some(ctx))
+}
+
+/// The session selected for the subsequent decision must still be the receipt's
+/// session, including subject, authentication time and ACR (also after consent).
+pub(super) fn verify_session(
+    ctx: &AuthorizeRequestContext,
+    sid: Option<&str>,
+    session: Option<&super::auth_session::AuthSession>,
+) -> Result<(), Response> {
+    if !ctx.reauthenticated {
+        return Ok(());
+    }
+    let actual = session_snapshot(sid.ok_or_else(invalid)?, session.ok_or_else(invalid)?);
+    if ctx.reauthentication_session.as_ref() != Some(&actual) {
+        return Err(invalid());
+    }
+    Ok(())
 }

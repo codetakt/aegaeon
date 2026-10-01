@@ -75,7 +75,7 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/consent",
             post(super::authorize_endpoint::consent_submit),
         )
-        .route("/authorize", get(super::authorize))
+        .route("/authorize", get(super::authorize).post(super::authorize))
         .route("/token", post(super::token))
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
