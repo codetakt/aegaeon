@@ -39,7 +39,7 @@ fn is_compact_jws(token: &str) -> bool {
 /// Normalise Request Object input to a compact signed JWT for verification.
 ///
 /// - If the input is a compact JWE, this decrypts it using RSA-OAEP + A256GCM
-///   and returns the nested compact JWS payload.
+///   with a protected JWT content type and returns the nested compact JWS payload.
 /// - Otherwise, returns the original string.
 ///
 /// This is intentionally strict: encrypted Request Objects must decrypt to a
@@ -61,9 +61,10 @@ pub fn normalize_request_object_for_verification(
     let key = request_object_decryption_key_pkcs8_der
         .ok_or(RequestObjectEnvelopeError::EncryptionNotSupported)?;
     let context = JoseContext::new(jose_header_max_len);
-    let plaintext =
-        aegaeon_jose::jwe::decrypt_rsa_oaep_a256gcm_pkcs8_with_context(token, key, context)
-            .map_err(|_| RequestObjectEnvelopeError::DecryptionFailed)?;
+    let plaintext = aegaeon_jose::jwe::decrypt_nested_jwt_rsa_oaep_a256gcm_pkcs8_with_context(
+        token, key, context,
+    )
+    .map_err(|_| RequestObjectEnvelopeError::DecryptionFailed)?;
 
     let inner = String::from_utf8(plaintext)
         .map_err(|_| RequestObjectEnvelopeError::DecryptedPayloadInvalidUtf8)?;

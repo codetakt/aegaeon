@@ -228,3 +228,19 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+### Encrypted Request Object headers
+
+When Request Object encryption is configured, `/authorize` and `/par` accept a
+single RSA-OAEP/A256GCM compact JWE containing a signed compact Request Object.
+Its protected header must explicitly contain `alg: "RSA-OAEP"`,
+`enc: "A256GCM"`, and `cty: "JWT"`. The JWT content type also accepts
+`application/jwt` and ASCII case variants; no whitespace or media-type parameters
+are accepted. The inner signed Request Object still undergoes all normal client,
+key, signature, claims, redirect and PKCE validation before authorization.
+
+Clients with missing algorithm or content-type metadata must send a newly
+signed/encrypted valid request. Editing a protected header invalidates its
+authentication tag. This correction requires no database or key migration.
+See the [JOSE header policy](../policies/jose-header-policy.md#jwe-and-encrypted-request-objects)
+for library compatibility and generic non-JWT JWE behavior.

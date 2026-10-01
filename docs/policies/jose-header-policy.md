@@ -229,3 +229,33 @@ signing APIs to produce a newly signed value and then parse it if needed. Editin
 a parsed view does not re-sign it. The new error variant also requires updates
 to exhaustive matches. These changes prevent reuse of a signature over a
 reserialized, incomplete protected header.
+
+## JWE and Encrypted Request Objects
+
+The supported JWE decryptor requires explicit string `alg: "RSA-OAEP"` and
+`enc: "A256GCM"` (RFC 7516 sections 4.1.1–4.1.2). Algorithm names are case
+sensitive. Missing, null, nonstring, empty, unsupported or duplicate fields
+are rejected before private-key unwrap. Generic byte decryption keeps `cty`
+optional and permits unrelated string content types.
+
+Encrypted Request Objects require protected `cty: "JWT"` identifying the
+signed JWT inside the envelope. `jwt`, `application/jwt`, and ASCII case
+variants are equivalent (RFC 7519 section 5.2; RFC 7515 section 4.1.10).
+Whitespace, parameters, wildcards and other subtypes are not equivalent.
+The purpose-specific
+`decrypt_nested_jwt_rsa_oaep_a256gcm_pkcs8_with_context` API checks this content
+type through the same complete header admission and decryptor as the generic
+API. It returns plaintext only after authentication with the original protected
+segment as AAD. It does not verify the inner JWT.
+
+Both `/authorize` and `/par` pass the decrypted compact signed JWT through the
+existing signature, algorithm, registered client/key, claim, redirect, PKCE and
+lifetime checks. Only one JWE envelope is supported. Ordinary signed Request
+Objects do not acquire a `cty` requirement.
+
+Clients that omitted `alg`, or encrypted a Request Object without an accepted
+protected `cty`, must create a new correctly authenticated request. Existing
+ciphertext cannot be repaired by editing its header. No database or key migration
+is required. The new `JweError` variants affect exhaustive Rust matches. Finite
+cryptographic and router/store tests do not establish a formal proof of this
+composed path.

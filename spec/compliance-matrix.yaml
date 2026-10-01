@@ -983,7 +983,7 @@ rfc_7515:
   - "Linear scaling: ~650-700 ns per field"
 rfc_7516:
 - id: 7516-001
-  section: '4.1.1'
+  section: '4.1.2'
   requirement: MUST
   description: JWE MUST contain enc header parameter
   module: fstar/jose/Jose.Jwe_header.fst
@@ -1004,6 +1004,18 @@ rfc_7516:
   notes:
   - "test_jwe_rsa_oaep_a256gcm_rejects_missing_enc \u3068 ..._unsupported_enc\
     \ \u304C enc \u5FC5\u9808\u3068\u8A31\u5BB9\u30EA\u30B9\u30C8\u3092\u78BA\u8A8D"
+- id: 7516-ALG-REQUIRED
+  section: '4.1.1'
+  requirement: MUST
+  description: The supported JWE decryptor requires explicit RSA-OAEP alg before key unwrap
+  module: crates/jose/src/jwe.rs
+  tests:
+  - crates/jose/tests/jwe_required_headers.rs
+  ci_check: cargo test -p aegaeon-jose --test jwe_required_headers
+  status: implemented
+  runtime_link: crates/jose/src/jwe.rs
+  notes:
+  - "Real authenticated envelopes exercise omitted, mistyped, duplicate and unsupported alg/enc; a bounded unwrap control checks early refusal. These are finite Rust/native checks, not proof of the composed decryptor."
 - id: 7516-002
   section: '5.1'
   requirement: MUST
@@ -5963,21 +5975,22 @@ openid_jar:
 - id: OIDC-5-001
   section: Request Object (JAR) Encryption
   requirement: MAY
-  description: When configured, the OP accepts encrypted Request Objects (compact JWE RSA-OAEP/A256GCM) that decrypt to a nested signed JWT before applying RFC 9101 validation
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+  description: When configured, encrypted Request Objects require explicit RSA-OAEP/A256GCM and authenticated JWT content type before inner signed JWT validation
+  module: crates/server/src/request_object/envelope.rs
   proof:
-  - type: plan
-    document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   - type: fstar
     file: fstar/par/RequestObject.fst
     invariant: lemma_merge_request_object_wins
   tests:
-  - crates/server/src/web/token_exchange_tests/request_object_retention.rs
-  ci_check: cargo test -p aegaeon-server --lib web::token_exchange_tests::request_object_retention
-  status: verified
-  runtime_link: crates/server/src/web/token_exchange_tests/request_object_retention.rs
+  - crates/jose/tests/jwe_required_headers.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
+  ci_check: cargo test -p aegaeon-server --lib encrypted_request_object_headers -- --include-ignored
+  status: partial
+  runtime_link: crates/server/src/request_object/envelope.rs
   notes:
-  - Verified by `crates/server/src/web/token_exchange_tests/request_object_retention.rs::jar_par_binding_encrypted_request_object_valid_flow`.
+  - "Protected cty accepts JWT or application/jwt with ASCII case-insensitive comparison, without whitespace or parameters (RFC7519 section5.2, RFC7515 section4.1.10, RFC9101 section4). Generic non-JWT JWE keeps cty optional."
+  - "Authenticated envelope tests cover authorize/PAR, consent, code redemption, inner signature/client/claim refusal and no grant-store/browser effect on rejected requests. They require PostgreSQL and Redis."
+  - "The cited merge lemma does not establish native RSA-OAEP/AES-GCM, cty admission or router/store composition. The previous encrypted-flow test citation was absent from its source; this row is partial and finite runtime evidence is separate from model proof."
 - id: OIDC-5-002
   section: Request Object (JAR) RS256 interoperability
   requirement: SHOULD
