@@ -1,4 +1,5 @@
 mod authorization_context;
+mod bearer_errors;
 mod snapshot_boundary;
 mod validation_errors;
 use super::super::test_support::{

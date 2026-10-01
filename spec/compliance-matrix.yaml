@@ -1337,15 +1337,15 @@ rfc_7591:
     file: fstar/jose/Jose.Dcr.fst
     invariant: validate_dcr_metadata_core
   tests:
-  - crates/server/src/web/dcr_registration.rs
+  - crates/server/src/web/dcr_configuration/tests/bearer_errors.rs
   ci_check: cargo test -p aegaeon-server --lib
   status: verified
   runtime_link: crates/server/src/web/dcr_registration.rs
   trace:
     kind: exempt
-    note: "HTTP status-code mapping is not modeled in F*; unauthorized registration rejection is covered by dcr_registration inline tests."
+    note: "HTTP status-code mapping is not modeled in F*; registration Bearer refusals are exercised by actual-router PostgreSQL tests in bearer_errors.rs."
   notes:
-  - "Unauthorized clients receive 401; PKCE policy violations assert registration_requires_authorization_header and registration_enforces_public_pkce_policy."
+  - "Required initial authentication returns 401 for absent/unsupported authentication or a nonmatching token; malformed supported authentication is a separate 400 invalid_request. Bearer response details are tracked by implemented row 7591-007, not established by the cited metadata model."
 - id: 7591-005
   section: '3.2.2'
   requirement: MUST
@@ -1363,6 +1363,22 @@ rfc_7591:
   notes:
   - "Typed validation maps plain redirect shape/value errors to invalid_redirect_uri, invalid statements to invalid_software_statement, and absent optional SSA verification to local-policy unapproved_software_statement. Other metadata and existing SSA conflicts remain invalid_client_metadata. Internal parser/verifier failures use fixed 500 server_error."
   - "Real PostgreSQL router tests cover create/update rejection without row, secret, audit or RAT changes and signed-statement success controls. Deterministic clock/key and mapper tests are direct seams, not evidence of malformed configuration reaching a normally constructed HTTP server. This does not establish initial/RAT challenge handling, full SSA metadata semantics or post-commit credential recovery."
+
+- id: 7591-007
+  section: '3.1'
+  requirement: MUST
+  description: Required initial and registration access tokens preserve Bearer authentication error and challenge categories
+  module: crates/server/src/web/dcr_bearer.rs
+  proof:
+  - type: policy
+    rule: registration_bearer_error_categories
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/bearer_errors.rs
+  ci_check: cargo test -p aegaeon-server --lib web::dcr_configuration::tests::bearer_errors -- --include-ignored
+  status: implemented
+  notes:
+  - "RFC 6750 sections 2, 3 and 3.1; RFC 7592 sections 2.1–2.3; OIDC Registration section 4.4. No supported authentication yields empty 401 with bare Bearer realm; malformed header yields 400 invalid_request; nonmatching token yields 401 invalid_token. Protected matched DCR routes attach the invalid_request challenge to rejected query access_token presentation."
+  - "Actual-router PostgreSQL tests cover header/query/route/precedence cases, distinct initial and owner roles, successful lifecycle and unchanged client/secret/registration/audit state after refusals. Direct handler query, closed-pool lookup and internal mapper seams are separately identified. Open registration, backend errors and post-commit synchronization semantics remain distinct; no full token grammar, permission policy or recovery assurance is claimed."
 
 rfc_8414:
 - id: 8414-001

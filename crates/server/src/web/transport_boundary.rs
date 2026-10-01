@@ -1,10 +1,11 @@
-use super::request_admission::enforce_no_credentials_in_request_uri;
+use super::dcr_bearer::{query_rejection_response, requires_bearer_for_matched_route};
+use super::request_admission::{uri_credential_policy_for_request, validate_uri_credentials};
 use super::AppState;
 use crate::middleware::tls::TransportRejectionKind;
 use crate::util;
 use axum::{
     body::Body,
-    extract::{ConnectInfo, State},
+    extract::{ConnectInfo, MatchedPath, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -33,10 +34,19 @@ pub(super) async fn transport_security_middleware(
             Err(kind) => return transport_rejection_for_route(&state, kind, req.uri().path()),
         }
     }
-    if let Err(resp) =
-        enforce_no_credentials_in_request_uri(req.method(), req.uri(), state.issuer.as_str())
-    {
-        return resp;
+    if let Err(error) = validate_uri_credentials(
+        req.uri(),
+        uri_credential_policy_for_request(req.method(), req.uri().path()),
+    ) {
+        return query_rejection_response(
+            error,
+            state.issuer.as_str(),
+            requires_bearer_for_matched_route(
+                &state,
+                req.method(),
+                req.extensions().get::<MatchedPath>(),
+            ),
+        );
     }
     next.run(req).await
 }

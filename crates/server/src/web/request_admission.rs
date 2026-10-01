@@ -149,17 +149,19 @@ impl QueryCredentialPolicy {
     }
 }
 
-fn is_uri_credential_key(key: &str) -> bool {
+fn uri_credential_kind(key: &str) -> Option<UriCredentialRejection> {
     let canonical = key
         .chars()
         .filter(|ch| *ch != '_' && *ch != '-')
         .flat_map(char::to_lowercase)
         .collect::<String>();
 
+    if canonical == "accesstoken" {
+        return Some(UriCredentialRejection::AccessToken);
+    }
     matches!(
         canonical.as_str(),
-        "accesstoken"
-            | "activationtoken"
+        "activationtoken"
             | "actortoken"
             | "actortokentype"
             | "apikey"
@@ -193,14 +195,50 @@ fn is_uri_credential_key(key: &str) -> bool {
             | "token"
             | "usercode"
     )
+    .then_some(UriCredentialRejection::OtherCredential)
 }
 
-fn contains_disallowed_uri_credential_key(query: &str, policy: QueryCredentialPolicy) -> bool {
-    !query.trim().is_empty()
-        && form_urlencoded::parse(query.as_bytes()).any(|(key, _)| {
-            let key = key.trim();
-            is_uri_credential_key(key) && !policy.permits(key)
-        })
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum UriCredentialRejection {
+    BoundedQuery(BoundedQueryRejection),
+    AccessToken,
+    OtherCredential,
+}
+
+impl UriCredentialRejection {
+    pub(super) fn response(self, issuer_base: &str) -> Response {
+        match self {
+            Self::BoundedQuery(error) => bounded_query_error_response(error, issuer_base),
+            Self::AccessToken | Self::OtherCredential => no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some("credentials or tokens must not be included in the request URI"),
+                issuer_base,
+            ),
+        }
+    }
+}
+
+pub(super) fn validate_uri_credentials(
+    uri: &Uri,
+    policy: QueryCredentialPolicy,
+) -> Result<(), UriCredentialRejection> {
+    validate_raw_query(uri.query(), DEFAULT_QUERY_LIMITS)
+        .map_err(UriCredentialRejection::BoundedQuery)?;
+    let mut rejection = None;
+    for (key, _) in form_urlencoded::parse(uri.query().unwrap_or("").as_bytes()) {
+        let key = key.trim();
+        if !policy.permits(key) {
+            match uri_credential_kind(key) {
+                Some(UriCredentialRejection::AccessToken) => {
+                    return Err(UriCredentialRejection::AccessToken)
+                }
+                Some(error) => rejection = Some(error),
+                None => {}
+            }
+        }
+    }
+    rejection.map_or(Ok(()), Err)
 }
 
 pub(super) fn enforce_no_credentials_in_uri_with_policy(
@@ -208,18 +246,7 @@ pub(super) fn enforce_no_credentials_in_uri_with_policy(
     issuer_base: &str,
     policy: QueryCredentialPolicy,
 ) -> Result<(), Response> {
-    let query = uri.query().unwrap_or("");
-    validate_raw_query(uri.query(), DEFAULT_QUERY_LIMITS)
-        .map_err(|error| bounded_query_error_response(error, issuer_base))?;
-    if contains_disallowed_uri_credential_key(query, policy) {
-        return Err(no_cache_json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("credentials or tokens must not be included in the request URI"),
-            issuer_base,
-        ));
-    }
-    Ok(())
+    validate_uri_credentials(uri, policy).map_err(|error| error.response(issuer_base))
 }
 
 pub(super) fn enforce_no_credentials_in_uri(uri: &Uri, issuer_base: &str) -> Result<(), Response> {
@@ -248,18 +275,6 @@ pub(super) fn uri_credential_policy_for_request(
         }
         _ => QueryCredentialPolicy::reject_all(),
     }
-}
-
-pub(super) fn enforce_no_credentials_in_request_uri(
-    method: &http::Method,
-    uri: &Uri,
-    issuer_base: &str,
-) -> Result<(), Response> {
-    enforce_no_credentials_in_uri_with_policy(
-        uri,
-        issuer_base,
-        uri_credential_policy_for_request(method, uri.path()),
-    )
 }
 
 pub(super) fn enforce_no_credentials_in_authorize_uri(
@@ -319,6 +334,47 @@ mod tests {
     use super::*;
 
     type TestResult = Result<(), String>;
+
+    #[test]
+    fn typed_uri_refusals_preserve_sensitive_key_exceptions() -> TestResult {
+        for (path, key) in [
+            ("/authorize", "request"),
+            ("/logout", "id_token_hint"),
+            ("/auth/activate", "token"),
+            ("/auth/password/reset", "token"),
+            ("/device", "user_code"),
+            ("/oauth/upstream/example/callback", "code"),
+        ] {
+            let uri = format!("{path}?{key}=synthetic")
+                .parse::<Uri>()
+                .map_err(|error| error.to_string())?;
+            assert_eq!(
+                validate_uri_credentials(
+                    &uri,
+                    uri_credential_policy_for_request(&http::Method::GET, path)
+                ),
+                Ok(())
+            );
+            let uri = format!("{path}?{key}=synthetic&ACCESS-TOKEN=")
+                .parse::<Uri>()
+                .map_err(|error| error.to_string())?;
+            assert_eq!(
+                validate_uri_credentials(
+                    &uri,
+                    uri_credential_policy_for_request(&http::Method::GET, path)
+                ),
+                Err(UriCredentialRejection::AccessToken)
+            );
+        }
+        let uri = "/register?registration_access_token="
+            .parse::<Uri>()
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            validate_uri_credentials(&uri, QueryCredentialPolicy::reject_all()),
+            Err(UriCredentialRejection::OtherCredential)
+        );
+        Ok(())
+    }
 
     #[test]
     fn bounded_query_rejects_oversized_inputs() -> TestResult {
