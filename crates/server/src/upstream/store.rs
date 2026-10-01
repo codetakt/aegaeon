@@ -134,37 +134,54 @@ impl UpstreamAuthStore {
             .map_err(|err| format!("upstream auth store worker failed: {err}"))?
     }
 
-    pub fn try_consume(&self, state: &str) -> Result<Option<UpstreamAuthRequest>, String> {
+    pub fn try_consume_bound(
+        &self,
+        state: &str,
+        browser_digest: &str,
+        redirect_uri: &str,
+    ) -> Result<Option<UpstreamAuthRequest>, String> {
+        if !valid_browser_binding_digest(browser_digest) {
+            return Ok(None);
+        }
         match &self.backend {
             #[cfg(test)]
             UpstreamAuthStoreBackend::InMemory(entries) => {
                 let mut entries = entries
                     .write()
                     .map_err(|err| format!("upstream auth store lock poisoned: {err}"))?;
-                let Some(request) = entries.remove(state) else {
+                let Some(request) = entries.get(state) else {
                     return Ok(None);
                 };
-                if !upstream_auth_request_is_fresh_at(&request, SystemTime::now()) {
+                if request.browser_binding_digest.as_deref() != Some(browser_digest)
+                    || request.redirect_uri != redirect_uri
+                    || !upstream_auth_request_is_fresh_at(request, SystemTime::now())
+                {
                     return Ok(None);
                 }
-                Ok(Some(request))
+                Ok(entries.remove(state))
             }
-            UpstreamAuthStoreBackend::Redis(backend) => backend.consume(state).map_err(|err| {
-                let message = err.to_string();
-                log_upstream_auth_storage_error(&err, "consume");
-                message
-            }),
+            UpstreamAuthStoreBackend::Redis(backend) => backend
+                .consume_bound(state, browser_digest, redirect_uri)
+                .map_err(|err| {
+                    let message = err.to_string();
+                    log_upstream_auth_storage_error(&err, "consume");
+                    message
+                }),
         }
     }
 
-    pub async fn try_consume_async(
+    pub async fn try_consume_bound_async(
         &self,
         state: String,
+        browser_digest: String,
+        redirect_uri: String,
     ) -> Result<Option<UpstreamAuthRequest>, String> {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || store.try_consume(&state))
-            .await
-            .map_err(|err| format!("upstream auth store worker failed: {err}"))?
+        tokio::task::spawn_blocking(move || {
+            store.try_consume_bound(&state, &browser_digest, &redirect_uri)
+        })
+        .await
+        .map_err(|err| format!("upstream auth store worker failed: {err}"))?
     }
 
     pub fn try_cleanup_expired(&self) -> Result<(), String> {
@@ -194,4 +211,11 @@ pub(super) fn upstream_auth_request_is_fresh_at(
     now: SystemTime,
 ) -> bool {
     now < request.expires_at
+}
+
+pub(super) fn valid_browser_binding_digest(digest: &str) -> bool {
+    digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }

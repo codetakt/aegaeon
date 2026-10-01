@@ -9,6 +9,7 @@ fn make_auth_request(
 ) -> crate::upstream::UpstreamAuthRequest {
     let now = std::time::SystemTime::now();
     crate::upstream::UpstreamAuthRequest {
+        browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),
         state: state.to_string(),
         nonce: "nonce".to_string(),
         code_verifier: None,
@@ -44,7 +45,7 @@ fn upstream_auth_store_insert_and_consume() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
     let req = make_auth_request("s1", std::time::Duration::from_secs(60));
     store.try_insert(req)?;
-    let consumed = require_some(store.try_consume("s1")?, "expected state s1 to be consumed")?;
+    let consumed = require_some(store.try_consume_bound("s1", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?, "expected state s1 to be consumed")?;
     assert_eq!(consumed.state, "s1");
     Ok(())
 }
@@ -69,9 +70,9 @@ fn upstream_auth_store_consume_is_single_use() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
     let req = make_auth_request("s2", std::time::Duration::from_secs(60));
     store.try_insert(req)?;
-    assert!(store.try_consume("s2")?.is_some());
+    assert!(store.try_consume_bound("s2", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_some());
     assert!(
-        store.try_consume("s2")?.is_none(),
+        store.try_consume_bound("s2", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none(),
         "second consume must return None"
     );
     Ok(())
@@ -182,14 +183,14 @@ fn upstream_auth_store_consume_rejects_expired() -> TestResult {
     let req = make_auth_request("s3", std::time::Duration::from_secs(0));
     store.try_insert(req)?;
     // SystemTime::now() >= expires_at -> expired.
-    assert!(store.try_consume("s3")?.is_none());
+    assert!(store.try_consume_bound("s3", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none());
     Ok(())
 }
 
 #[test]
 fn upstream_auth_store_consume_rejects_unknown_state() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
-    assert!(store.try_consume("nonexistent")?.is_none());
+    assert!(store.try_consume_bound("nonexistent", &aegaeon_crypto::hash::sha256_hex(b"browser-secret"), "https://rp.example/callback")?.is_none());
     Ok(())
 }
 

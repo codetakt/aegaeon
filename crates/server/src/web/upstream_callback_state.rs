@@ -1,6 +1,9 @@
 use super::oauth_errors::json_error_with_iss;
 use super::{no_cache_redirect_response, normalize_issuer, AppState};
-use axum::{http::StatusCode, response::Response};
+use axum::{
+    http::{HeaderMap, StatusCode},
+    response::Response,
+};
 use serde::Deserialize;
 
 use crate::upstream::UpstreamAuthRequest;
@@ -16,7 +19,7 @@ pub(super) struct UpstreamCallbackQuery {
 }
 
 pub(super) struct UpstreamCallbackContext {
-    pub(super) code: String,
+    pub(super) code: Option<String>,
     pub(super) request: UpstreamAuthRequest,
 }
 
@@ -30,35 +33,22 @@ fn upstream_auth_store_unavailable_response(error: &str, issuer_base: &str) -> R
     )
 }
 
-pub(super) async fn handle_upstream_callback_error(
-    state: &AppState,
+pub(super) fn handle_upstream_callback_error(
     params: &UpstreamCallbackQuery,
+    request: &UpstreamAuthRequest,
     issuer_base: &str,
 ) -> Option<Response> {
     let error = params.error.as_deref()?;
     let description = params.error_description.as_deref();
-    if let Some(state_value) = params.state.as_deref() {
-        match state
-            .upstream
-            .auth_store
-            .try_consume_async(state_value.to_string())
-            .await
-        {
-            Ok(Some(request)) => {
-                if let Some(return_to) = request.return_to.as_deref() {
-                    let url = util::append_error_and_state(
-                        return_to,
-                        error,
-                        description,
-                        Some(state_value),
-                        issuer_base,
-                    );
-                    return Some(no_cache_redirect_response(&url));
-                }
-            }
-            Ok(None) => {}
-            Err(err) => return Some(upstream_auth_store_unavailable_response(&err, issuer_base)),
-        }
+    if let Some(return_to) = request.return_to.as_deref() {
+        let url = util::append_error_and_state(
+            return_to,
+            error,
+            description,
+            Some(&request.state),
+            issuer_base,
+        );
+        return Some(no_cache_redirect_response(&url));
     }
     Some(json_error_with_iss(
         StatusCode::BAD_REQUEST,
@@ -87,15 +77,35 @@ fn require_upstream_callback_param<'a>(
 pub(super) async fn consume_upstream_callback_context(
     state: &AppState,
     params: &UpstreamCallbackQuery,
+    headers: &HeaderMap,
+    connection: &str,
     issuer_base: &str,
 ) -> Result<UpstreamCallbackContext, Response> {
     let state_value =
         require_upstream_callback_param(params.state.as_deref(), "state", issuer_base)?;
-    let code = require_upstream_callback_param(params.code.as_deref(), "code", issuer_base)?;
+    let code = if params.error.is_some() {
+        None
+    } else {
+        Some(
+            require_upstream_callback_param(params.code.as_deref(), "code", issuer_base)?
+                .to_string(),
+        )
+    };
+    let browser_digest = super::upstream_browser_binding::browser_digest(headers, state_value)
+        .ok_or_else(|| {
+            json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some("upstream browser binding is invalid"),
+                issuer_base,
+            )
+        })?;
+    let redirect_uri =
+        super::upstream_authorize::build_upstream_redirect_uri(state.base_url.as_str(), connection);
     let request = match state
         .upstream
         .auth_store
-        .try_consume_async(state_value.to_string())
+        .try_consume_bound_async(state_value.to_string(), browser_digest, redirect_uri)
         .await
     {
         Ok(Some(request)) => request,
@@ -109,10 +119,7 @@ pub(super) async fn consume_upstream_callback_context(
         }
         Err(err) => return Err(upstream_auth_store_unavailable_response(&err, issuer_base)),
     };
-    Ok(UpstreamCallbackContext {
-        code: code.to_string(),
-        request,
-    })
+    Ok(UpstreamCallbackContext { code, request })
 }
 
 pub(super) fn validate_upstream_callback_issuer(

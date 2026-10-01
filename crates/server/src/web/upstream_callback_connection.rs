@@ -183,6 +183,7 @@ mod tests {
     fn callback_request() -> UpstreamAuthRequest {
         let issued_at = SystemTime::UNIX_EPOCH;
         UpstreamAuthRequest {
+            browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),
             state: "state".to_string(),
             nonce: "nonce".to_string(),
             code_verifier: None,

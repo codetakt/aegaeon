@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-07-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -68,6 +68,46 @@ provider publishes `end_session_endpoint`, the value is admitted fail-closed und
 outbound policy as the mandatory discovery endpoints. This avoids a weaker logout-only URL path and
 prevents the server from appending relay state to a provider-supplied URL that already carries a
 query or fragment.
+
+## Upstream Authorization Browser Binding
+
+Each authorization stores the SHA-256 digest of an independent 256-bit random browser secret.
+The secret is sent only in a per-transaction `__Host-aegaeon-upstream-<state-sha256>` cookie with
+`Secure; HttpOnly; SameSite=Lax; Path=/`, no Domain, and a lifetime bounded by the configured
+authorization lifetime. Positive fractional seconds round up for cookie expiry; the store enforces
+the transaction deadline independently. The secret is never included in the upstream authorization
+URL or persisted in Redis. The cookie-issuing redirect sends `Cache-Control: no-store` and
+`Pragma: no-cache`.
+Different pending authorizations use distinct cookies so separate browser tabs can finish independently.
+
+Success and upstream-error callbacks require exactly one well-formed matching cookie across all
+Cookie headers. The store atomically checks the digest, the original callback URI reconstructed
+from the configured base URL and connection route, and expiry before consuming the transaction.
+Missing, malformed, duplicated or mismatched cookies and wrong routes do not consume it. State
+alone is insufficient. Only one matching callback can proceed, and backend failures fail closed.
+Issuer validation also applies before an upstream error can redirect to the saved return location.
+Every response after consumption expires that transaction's cookie, preserving other pending
+transaction cookies and any new login session cookie. Existing successful-login connection
+currentness, PKCE, nonce, token validation and session checks still apply.
+
+This implements Aegaeon's browser binding for the OAuth client CSRF protections in
+[RFC 6749 section 10.12](https://www.rfc-editor.org/rfc/rfc6749#section-10.12) and
+[RFC 9700 section 4.7](https://www.rfc-editor.org/rfc/rfc9700#section-4.7).
+
+### Upgrade And API Compatibility
+
+Upstream authorization keys now use storage version `upstream-auth:v2`. Deploy authorization
+writers and callback consumers together, draining or stopping old instances before resuming
+upstream login traffic. Mixed old/new callback instances are unsupported: the new namespace
+prevents old state-only consumers from accepting new transactions, but old instances retain their
+old behavior for old records. In-flight legacy authorizations must be restarted. Old records
+without a valid browser digest are never accepted by the new callback gate and can expire naturally.
+No database migration or new configuration setting is required.
+
+Rust callers constructing `UpstreamAuthRequest` must provide `browser_binding_digest`.
+The state-only `try_consume` / `try_consume_async` APIs are replaced by
+`try_consume_bound` / `try_consume_bound_async`, requiring the browser digest and expected callback
+URI. The serialized digest remains optional for legacy decoding; absence never grants access.
 
 ## Front-Channel Upstream Logout Relay
 

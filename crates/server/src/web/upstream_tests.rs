@@ -6,3 +6,5 @@ include!("upstream_tests/id_token.rs");
 include!("upstream_tests/stores_helpers.rs");
 include!("upstream_tests/federation_signing.rs");
 include!("upstream_tests/federation_list.rs");
+
+mod browser_binding;
