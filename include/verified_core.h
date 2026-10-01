@@ -98,8 +98,9 @@ typedef struct vc_result {
  * @param verifier  43–128 byte ASCII string of unreserved characters.
  * @param method    Must be VC_PKCE_METHOD_S256.
  * @return vc_result with 43-byte base64url challenge on success.
- *         The data slice points to an internal static buffer and remains
- *         valid until the next call to vc_pkce_challenge_generate.
+ *         The data slice points to an internal static buffer that is
+ *         reused by the next successful generation, including generation
+ *         performed by vc_pkce_challenge_verify.
  *         Call vc_free_slice() when done (currently a no-op).
  */
 vc_result vc_pkce_challenge_generate(vc_slice verifier, uint32_t method);
@@ -108,7 +109,10 @@ vc_result vc_pkce_challenge_generate(vc_slice verifier, uint32_t method);
  * Verify a PKCE code challenge against a code verifier (constant-time).
  *
  * @param verifier   Original code_verifier (43–128 bytes).
- * @param challenge  The code_challenge to verify (must be 43 bytes).
+ * @param challenge  The code_challenge to verify (must be 43 bytes). It may
+ *                   overlap verifier or be a borrowed generation result;
+ *                   verification preserves its supplied bytes before
+ *                   regenerating the expected challenge.
  * @param method     Must be VC_PKCE_METHOD_S256.
  * @return vc_result with code == VC_OK on match.
  */
