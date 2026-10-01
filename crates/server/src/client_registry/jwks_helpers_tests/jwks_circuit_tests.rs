@@ -1,20 +1,9 @@
 use super::*;
 
 fn cache_entry_with_fetch_age(age: std::time::Duration) -> CacheEntry {
-    let jwks = FetchedJwks {
-        keys: vec![FetchedJwk {
-            kty: "RSA".into(),
-            key_use: None,
-            key_ops: None,
-            kid: Some("cache-key".into()),
-            alg: Some("RS256".into()),
-            n: Some("00".into()),
-            e: Some("AQAB".into()),
-            x: None,
-            y: None,
-            crv: None,
-        }],
-    };
+    let (key, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    let jwks =
+        serde_json::from_value(serde_json::json!({"keys":[key]})).expect("valid public fixture");
     cache_test_entry(jwks, std::time::Instant::now() - age)
 }
 

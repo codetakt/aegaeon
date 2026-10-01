@@ -1,8 +1,8 @@
 use super::*;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-fn verify(registry: &ClientRegistry, token: &str, algorithm: Algorithm) -> bool {
-    if algorithm == Algorithm::RS256 {
+pub(super) fn verify(registry: &ClientRegistry, token: &str, algorithm: Algorithm) -> bool {
+    if matches!(algorithm, Algorithm::RS256 | Algorithm::PS256) {
         registry
             .try_validate_private_key_jwt(
                 CLIENT,
@@ -104,7 +104,7 @@ fn jwk_binding_registry_signed_rsa_p256_p384_inline_fetch_and_cache() {
                 .lock()
                 .unwrap()
                 .get(&uri)
-                .map(|entry| serde_json::to_vec(&entry.jwks).unwrap());
+                .map(|entry| entry.jwks.to_fixture_bytes().unwrap());
             if let Some(bytes) = cached {
                 if algorithm != Algorithm::RS256 {
                     assert_eq!(
@@ -116,7 +116,10 @@ fn jwk_binding_registry_signed_rsa_p256_p384_inline_fetch_and_cache() {
                 let reloaded = registry();
                 reloaded.jwks_state.inner.cache.lock().unwrap().insert(
                     uri.clone(),
-                    cache_test_entry(serde_json::from_slice(&bytes).unwrap(), Instant::now()),
+                    cache_test_entry(
+                        FetchedJwks::from_fixture_bytes(&bytes).unwrap(),
+                        Instant::now(),
+                    ),
                 );
                 assert!(reloaded.register(client(algorithm, None, Some(uri))));
                 assert_eq!(
@@ -126,10 +129,7 @@ fn jwk_binding_registry_signed_rsa_p256_p384_inline_fetch_and_cache() {
                 );
             } else {
                 assert!(!expected, "valid names must produce a cached body");
-                assert!(
-                    variant.get("crv").is_none(),
-                    "only missing required crv fails set admission"
-                );
+                assert!(!expected, "ineligible material cannot enter the cache");
             }
         }
         let mut parts: Vec<String> = token.split('.').map(str::to_owned).collect();

@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+mod admission;
+
+#[derive(Clone, serde::Serialize)]
 pub(super) struct FetchedJwks {
     pub(super) keys: Vec<FetchedJwk>,
+    #[serde(skip)]
+    observed_kids: Vec<Option<String>>,
+    #[serde(skip)]
+    legacy_fingerprints: HashMap<String, String>,
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
@@ -21,13 +27,19 @@ pub(super) struct FetchedJwk {
         skip_serializing_if = "Option::is_none"
     )]
     pub(super) key_ops: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) kid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) alg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) n: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) e: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) x: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) y: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) crv: Option<String>,
 }
 

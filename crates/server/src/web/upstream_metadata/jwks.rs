@@ -1,7 +1,7 @@
 use super::super::upstream_id_token::AdmittedUpstreamIdTokenHeader;
 use super::super::UPSTREAM_MAX_BODY_BYTES;
 use super::validate_upstream_outbound_url;
-use aegaeon_jose::jwk::{JwkSet, KeyMaterial};
+use aegaeon_jose::jwk::JwkSet;
 use reqwest::Client;
 use serde_json::Value;
 
@@ -24,23 +24,12 @@ pub(in crate::web) fn parse_upstream_jwks_body(body: &[u8]) -> Result<JwkSet, St
     })?;
     let value = serde_json::from_slice::<Value>(body)
         .map_err(|_| "upstream jwks response invalid".to_string())?;
-    let jwks = JwkSet::from_value(value).map_err(|_| "upstream jwks invalid".to_string())?;
+    let jwks =
+        JwkSet::from_verification_value(value).map_err(|_| "upstream jwks invalid".to_string())?;
     jwks.ensure_unique_kid()
         .map_err(|_| "upstream jwks invalid".to_string())?;
     if jwks.signature_keys().next().is_none() {
         return Err("upstream jwks has no signature-capable keys".to_string());
-    }
-    for key in jwks.keys() {
-        let components = match &key.material {
-            KeyMaterial::Rsa { n, e } => [n, e],
-            KeyMaterial::Ec { x, y, .. } => [x, y],
-        };
-        if components
-            .into_iter()
-            .any(|value| !crate::upstream::canonical_base64url_segment(value))
-        {
-            return Err("upstream jwks key material encoding invalid".to_string());
-        }
     }
     Ok(jwks)
 }
@@ -114,20 +103,9 @@ pub(in crate::web) fn select_upstream_signing_key<'a>(
     jwks: &'a JwkSet,
     kid: Option<&str>,
 ) -> Result<&'a aegaeon_jose::jwk::Jwk, String> {
-    let signing_keys: Vec<&aegaeon_jose::jwk::Jwk> = jwks.signature_keys().collect();
-    if signing_keys.is_empty() {
-        return Err("upstream jwks has no signature keys".to_string());
-    }
-    if let Some(kid) = kid {
-        return signing_keys
-            .into_iter()
-            .find(|key| key.kid.as_deref() == Some(kid))
-            .ok_or_else(|| "upstream jwks missing expected kid".to_string());
-    }
-    if signing_keys.len() == 1 {
-        return Ok(signing_keys[0]);
-    }
-    Err("upstream jwks requires kid".to_string())
+    jwks.select_verification_key(kid)
+        .map_err(|_| "upstream jwks has duplicate kids".to_string())?
+        .ok_or_else(|| "upstream jwks has no unique eligible key".to_string())
 }
 
 #[cfg(test)]

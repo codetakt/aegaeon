@@ -32,13 +32,7 @@ fn decode_jwk_material_rsa() {
 
 #[test]
 fn decode_jwk_material_unsupported_curve() {
-    let jwk_value = json!({
-        "kty": "EC",
-        "crv": "P-384",
-        "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "y": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "kid": "test"
-    });
+    let (jwk_value,_) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::ES384);
     let jwk = must_ok(Jwk::from_value(jwk_value));
     let err = must_err(decode_jwk_material(&jwk));
     assert!(matches!(err, FederationError::UnsupportedAlgorithm(_)));

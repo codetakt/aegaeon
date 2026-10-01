@@ -30,7 +30,7 @@ fn select_upstream_signing_key_requires_kid_when_multiple() -> TestResult {
         select_upstream_signing_key(&jwks, None),
         "expected missing kid error",
     )?;
-    assert!(err.contains("requires kid"));
+    assert!(err.contains("no unique eligible key"));
     Ok(())
 }
 
@@ -50,6 +50,6 @@ fn select_upstream_signing_key_rejects_unknown_kid() -> TestResult {
         select_upstream_signing_key(&jwks, Some("missing")),
         "expected missing kid error",
     )?;
-    assert!(err.contains("missing expected kid"));
+    assert!(err.contains("no unique eligible key"));
     Ok(())
 }

@@ -119,9 +119,13 @@ mod tests {
                 shared_state_max_age_secs: 3600,
                 ..JwksRuntimePolicy::default()
             };
-            let jwks: FetchedJwks =
-                serde_json::from_str(r#"{"keys":[{"kty":"RSA","kid":"A","n":"AA","e":"AQAB"}]}"#)
-                    .unwrap();
+            let jwks: FetchedJwks = serde_json::from_value({
+                let (mut key, _) =
+                    crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+                key["kid"] = serde_json::json!("A");
+                serde_json::json!({"keys":[key]})
+            })
+            .unwrap();
             let guard = Arc::new(KidGuard {
                 kid_fps: crate::client_registry::jwks_validation::build_kid_fingerprints(&jwks),
                 admitted_at: anchor,

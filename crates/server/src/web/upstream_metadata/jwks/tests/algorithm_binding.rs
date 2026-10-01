@@ -76,7 +76,13 @@ async fn jwk_binding_upstream_signed_rsa_p256_p384_fetch_cache_and_discovery() -
                     &admitted,
                     &[],
                 )
-                .await?;
+                .await;
+                if !expected {
+                    assert!(set.is_err(), "all-ineligible set must fail retrieval");
+                    assert!(h.cache.try_get(&server.url)?.is_none());
+                    break;
+                }
+                let set = set?;
                 let result = verify_upstream_id_token_claims(&token, &set, &discovery, 4096);
                 if expected {
                     let (claims, _) = result.map_err(|e| format!("exact {algorithm:?}: {e:?}"))?;

@@ -181,43 +181,13 @@ pub fn verify_entity_statement(
     let alg = &parsed.header.alg;
     let ctx = JoseContext::default();
 
-    let mut last_err = None;
-    for key in issuer_jwks.signature_keys() {
-        // If JWS header specifies kid, only try matching keys
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
-        }
-
-        let decoded = match decode_jwk_material(key) {
-            Ok(d) => d,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        let vk = match verification_key_for_alg(key, &decoded, alg) {
-            Ok(vk) => vk,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        match jws::verify_compact_with_context(jws_compact, vk, &ctx) {
-            Ok(payload_bytes) => {
-                let stmt = raw_payload::parse_entity_statement_payload(&payload_bytes)?;
-                return Ok(stmt);
-            }
-            Err(e) => {
-                last_err = Some(FederationError::Jws(e));
-            }
-        }
-    }
-
-    Err(last_err.unwrap_or(FederationError::NoSuitableKey))
+    let key = issuer_jwks
+        .select_verification_key(parsed.header.kid.as_deref())?
+        .ok_or(FederationError::NoSuitableKey)?;
+    let decoded = decode_jwk_material(key)?;
+    let vk = verification_key_for_alg(key, &decoded, alg)?;
+    let payload_bytes = jws::verify_compact_with_context(jws_compact, vk, &ctx)?;
+    raw_payload::parse_entity_statement_payload(&payload_bytes)
 }
 
 /// Verify a self-signed Entity Configuration.
@@ -307,3 +277,6 @@ pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(),
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod mixed_jwks_tests;

@@ -50,9 +50,9 @@ curves before deployment. Even a valid signature is refused when these names
 do not match. Signature and claims validation still apply. No schema migration,
 automatic key rewriting or new algorithm support is introduced.
 
-This correction binds declared names. Mixed-set admission, `kid`/`alg` null
-handling, key material validity, selection ambiguity and public-registration
-input ownership remain separate concerns.
+Verification consumers ignore unusable individual keys while retaining usable
+siblings. The admission and selection rules below also apply to Federation
+Entity Statement and Trust Mark keys, subject to their existing algorithm limits.
 
 ## Verification-use metadata
 
@@ -73,21 +73,72 @@ Other material, algorithm, signature, issuer and claims checks still apply.
 
 Publishers using `SIG`, sign-only operations, explicit null, or other
 incompatible metadata must correct their published keys before deployment.
-Omitted usage fields remain omitted during cache serialization and valid old
-cache records remain readable. There is no cache namespace change or automatic
-purge. Malformed mixed-set quarantine, generic `kid`/`alg` null handling, key
-material/curve validity and private-input ownership in public registration are
-separate concerns; this metadata correction does not establish those properties.
+Omitted usage fields remain omitted in the internal public-field projection.
+The process-local cache retains admitted keys and the original fingerprint map;
+there is no distributed JWKS-body storage format, namespace change or automatic
+purge. Public registration input ownership remains a separate concern.
 
-For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` retain
-their public names and now mean eligibility for **verification** under this
-metadata policy. `JwkError` adds `DuplicateKeyOperation(String)` and
-`InconsistentKeyUsage`; downstream exhaustive matches must handle both.
+For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` check
+usage metadata only. `Jwk::from_value` and `JwkSet::from_value` remain strict
+structural parsers; they do not establish valid cryptographic material.
+`JwkSet::from_verification_value` admits supported public verification material,
+while `verification_keys` and `select_verification_key` also revalidate typed
+keys. Raw-byte callers must reject recursive duplicate object names and trailing
+bytes before projecting JSON into a `Value`.
+
+## Mixed sets and public material
+
+Verification admission rejects malformed set envelopes and ignores individual
+unsupported, malformed or unusable members. Empty and all-rejected sets cannot
+verify or replace a successfully cached body. Present `kid` and `alg` must be
+strings; explicit null is unusable. Unknown key types, unsupported curves,
+incompatible usage or algorithms, and invalid public material are ignored.
+Uninterpreted extensions and rejected key material are not retained in the
+verification view.
+
+Public components require canonical unpadded base64url. RSA modulus and exponent
+must use minimal positive unsigned encodings: an odd modulus of 2048–16384
+significant bits and an odd exponent between 3 and 2^33−1. The lower modulus bound
+follows RFC 7518 sections 3.3 and 3.5; the upper and exponent bounds describe the
+supported parser, not universal RFC maxima. Admission encodes bounded PKCS#1 DER
+and invokes the crypto provider's public-key parser. Actual signature algorithms
+may impose tighter limits, including an 8192-bit maximum. EC admission requires
+exactly 32-byte P-256 or 48-byte P-384 coordinates and a finite on-curve point;
+it never pads or truncates coordinates.
+
+A requested `kid` must select an eligible key. Without `kid`, exactly one eligible
+candidate must exist before narrowing by the token's algorithm. Duplicate string
+key IDs in the original set reject product-consumer selection, including IDs of
+ignored or non-signing members. This is Aegaeon's identity policy, not a universal
+RFC 7517 prohibition. Original observed IDs also suppress unnecessary upstream
+refreshes without permitting verification with rejected keys.
+
+Client JWKS guards retain the legacy `kty|n|e|x|y` fingerprint of each representable
+original public projection, including rejected or non-signing members. A cache
+hit or failed-refresh fallback preserves that map and its existing security
+deadline. A successful identifying 304 retains the map and performs the existing
+local/shared admission, which can establish a new guard anchor and deadline.
+Filtering and fixture serialization do not renew a guard. Remote JSON cannot
+supply internal guard metadata.
+
+Federation OP metadata comparison uses admitted public identities, distinguishing
+missing from empty `kid`. For each identity, fetched effective algorithms must
+be a subset of those allowed by signed metadata. Repeated no-ID identities combine
+their allowed algorithms for this comparison; they remain separate candidates for
+signature selection. Missing metadata `jwks` is absent; explicit null is invalid.
+
+Existing inline registration still uses its strict structural admission and
+preserves the original JSON for persistence and responses. A derived verification
+view prevents legacy invalid material from verifying while allowing previously
+admitted records to reload. This does not repair public registration of private
+material or sanitize its original JSON. Publishers should correct unusable keys
+before deployment. Other RSA ingress paths, Federation profile and chain rules,
+and full product assurance require separate validation.
 
 ## Security Notes
 
 - HTTPS and routable targets are required for `jwks_uri` and redirects; configure a CA bundle when an additional trust anchor is needed.
-- Cap response size; malformed or structurally invalid JWKS responses fail admission.
+- Cap response size; malformed envelopes, duplicate object names and trailing bytes fail admission.
 - Keep `kid` unique per key material; do not reuse `kid` with different keys unless explicitly allowed by policy.
 - In multi-node deployments, use `AEGAEON_JWKS_REDIS_URL` whenever remote client JWKS can affect
   `private_key_jwt` or JWT bearer verification. Redis coordinates circuit state, half-open probes,

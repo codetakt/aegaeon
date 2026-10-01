@@ -9,7 +9,7 @@ const AUDIENCE: &str = "https://issuer.example/token";
 
 fn registry() -> ClientRegistry {
     let policy = ClientAssertionRuntimePolicy::try_new(
-        ["RS256".to_string()],
+        ["RS256".to_string(), "PS256".to_string()],
         false,
         60,
         aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
@@ -36,7 +36,7 @@ fn client(algorithm: Algorithm, inline: Option<Value>, uri: Option<String>) -> R
         post_logout_redirect_uris: vec![],
         backchannel_logout_uri: None,
         backchannel_logout_session_required: false,
-        token_endpoint_auth_method: if algorithm == Algorithm::RS256 {
+        token_endpoint_auth_method: if matches!(algorithm, Algorithm::RS256 | Algorithm::PS256) {
             "private_key_jwt"
         } else {
             "none"
@@ -48,7 +48,8 @@ fn client(algorithm: Algorithm, inline: Option<Value>, uri: Option<String>) -> R
                 .expect("set retains an eligible second key")
         }),
         jwks_uri: uri,
-        token_endpoint_auth_signing_alg: (algorithm == Algorithm::RS256).then(|| "RS256".into()),
+        token_endpoint_auth_signing_alg: (matches!(algorithm, Algorithm::RS256 | Algorithm::PS256))
+            .then(|| format!("{algorithm:?}")),
         allowed_scopes: vec!["openid".into()],
         allowed_grant_types: vec!["authorization_code".into(), "client_credentials".into()],
         registration_access_token: None,
@@ -58,7 +59,7 @@ fn client(algorithm: Algorithm, inline: Option<Value>, uri: Option<String>) -> R
 
 fn assertion(algorithm: Algorithm, key: &jsonwebtoken::EncodingKey) -> String {
     let now = unix_epoch_now_i64("usage test clock").expect("clock");
-    let claims = if algorithm == Algorithm::RS256 {
+    let claims = if matches!(algorithm, Algorithm::RS256 | Algorithm::PS256) {
         json!({"iss":CLIENT,"sub":CLIENT,"aud":AUDIENCE,
             "iat":now,"exp":now+120,"jti":"usage-assertion"})
     } else {
@@ -140,11 +141,16 @@ fn jwk_usage_remote_rsa_assertions_and_ec_request_objects_recheck_serialized_cac
             server.join().expect("bounded local request");
             let bytes = {
                 let cache = fetched.jwks_state.inner.cache.lock().expect("cache lock");
-                serde_json::to_vec(&cache.get(&uri).expect("admitted cache entry").jwks)
+                cache
+                    .get(&uri)
+                    .expect("admitted cache entry")
+                    .jwks
+                    .to_fixture_bytes()
                     .expect("serialized cached set")
             };
             let reloaded = registry();
-            let jwks: FetchedJwks = serde_json::from_slice(&bytes).expect("cache reload");
+            let jwks: FetchedJwks =
+                FetchedJwks::from_fixture_bytes(&bytes).expect("cache fixture reload");
             reloaded
                 .jwks_state
                 .inner
@@ -185,11 +191,11 @@ fn jwk_usage_fetched_metadata_preserves_absence_and_rejects_null_before_projecti
         json!({"key_ops":[1]}),
     ] {
         let bytes = serde_json::to_vec(&keyset(&key, &metadata)).expect("invalid set bytes");
-        assert!(
+        let admitted =
             crate::util::deserialize_json_without_duplicate_object_keys::<FetchedJwks>(&bytes)
-                .is_err(),
-            "{metadata}"
-        );
+                .expect("valid sibling survives");
+        assert!(select_jwk(&admitted, Some(crate::test_utils::jwk_usage::KID)).is_none());
+        assert!(select_jwk(&admitted, Some("other-key")).is_some());
     }
     for raw in [
         r#"{"keys":[{"kty":"RSA","n":"AQAB","e":"AQAB","use":"sig","\u0075se":"sig"}]}"#,
@@ -202,9 +208,16 @@ fn jwk_usage_fetched_metadata_preserves_absence_and_rejects_null_before_projecti
             .is_err()
         );
     }
-    let escaped = br#"{"keys":[{"kty":"RSA","n":"AQAB","e":"AQAB","\u0075se":"s\u0069g","key_ops":["ver\u0069fy"]}]}"#;
-    let parsed: FetchedJwks = crate::util::deserialize_json_without_duplicate_object_keys(escaped)
-        .expect("escaped exact metadata");
+    let mut escaped_key = key.clone();
+    escaped_key["use"] = json!("sig");
+    escaped_key["key_ops"] = json!(["verify"]);
+    let escaped = json!({"keys":[escaped_key]})
+        .to_string()
+        .replace("\"use\"", "\"\\u0075se\"")
+        .replace("verify", "ver\\u0069fy");
+    let parsed: FetchedJwks =
+        crate::util::deserialize_json_without_duplicate_object_keys(escaped.as_bytes())
+            .expect("escaped exact metadata");
     assert!(select_jwk(&parsed, None).is_some());
 }
 
@@ -227,7 +240,7 @@ fn jwk_usage_direct_fetched_mutations_cannot_grant_verification() {
 }
 
 #[test]
-fn jwk_usage_remote_fetch_rejects_malformed_usage_even_with_an_eligible_key() {
+fn jwk_usage_remote_fetch_ignores_malformed_usage_beside_an_eligible_key() {
     let _env = env_lock().expect("environment lock");
     let _proxy = EnvVarGuard::new("NO_PROXY", Some("127.0.0.1,localhost,::1"));
     let (key, _) = material(Algorithm::RS256);
@@ -247,12 +260,12 @@ fn jwk_usage_remote_fetch_rejects_malformed_usage_even_with_an_eligible_key() {
             "max-age=300",
         );
         let registry = registry();
-        assert!(
-            fetch_jwks_with_state(&registry.jwks_state, &registry.jwks_policy, &uri).is_none(),
-            "{metadata}"
-        );
+        let admitted = fetch_jwks_with_state(&registry.jwks_state, &registry.jwks_policy, &uri)
+            .expect("valid sibling survives");
+        assert!(select_jwk(&admitted, Some(crate::test_utils::jwk_usage::KID)).is_none());
+        assert!(select_jwk(&admitted, Some("other-key")).is_some());
         server.join().expect("bounded local request");
-        assert!(!registry
+        assert!(registry
             .jwks_state
             .inner
             .cache
@@ -263,3 +276,5 @@ fn jwk_usage_remote_fetch_rejects_malformed_usage_even_with_an_eligible_key() {
 }
 
 mod algorithm_binding;
+
+mod mixed_sets;

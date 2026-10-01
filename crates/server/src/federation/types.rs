@@ -59,7 +59,7 @@ impl EntityStatement {
             .jwks
             .as_ref()
             .ok_or(FederationError::MissingField("jwks"))?;
-        Ok(JwkSet::from_value(jwks_value.clone())?)
+        Ok(JwkSet::from_verification_value(jwks_value.clone())?)
     }
 }
 
