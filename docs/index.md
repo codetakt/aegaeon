@@ -240,7 +240,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/verification/README.md` | index | Verification Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, contributors |
-| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/README.md` | index | Verification Claims Overview | current implementation baseline | 2026-10-01 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/admin-ui-assurance-case.md` | claim | Admin UI Assurance Case | current implementation baseline | 2026-05-20 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumption-boundary-overview.md` | claim | Assumption Boundary Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assumptions/README.md` | index | F* Assumption Register Details | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
@@ -254,11 +254,11 @@ Audience: contributors, maintainers
 | `docs/verification/claims/assurance-case/assurance-contract.md` | claim | Server Assurance Contract | current implementation baseline | 2026-09-07 | Verification / Security | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/claim-definition.md` | claim | Formal Verification Claim Definition | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/contract-status.md` | claim | Server Assurance Contract Status | snapshot | 2026-09-12 | Verification / Security / Release Engineering | maintainers, verification reviewers, release managers |
-| `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/evidence-confidence.md` | claim | Formal Verification Evidence Assessment | current implementation baseline | 2026-10-01 | Verification / Security | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/security-property-mapping.md` | claim | Formal Verification Security Property Mapping | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case/standards-baseline.md` | claim | Server Assurance Standards Baseline | current implementation baseline | 2026-09-07 | Verification / Protocol Engineering | implementers, verification reviewers, release managers |
 | `docs/verification/claims/assurance-case/tcb-and-out-of-scope.md` | claim | Formal Verification TCB and Out-of-Scope Boundaries | current implementation baseline | 2026-09-07 | Verification / Security | verification reviewers, maintainers |
-| `docs/verification/claims/assurance-case/verification-scope.md` | claim | Formal Verification Scope And Proof Quality | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/assurance-case/verification-scope.md` | claim | Formal Verification Scope And Proof Quality | current implementation baseline | 2026-10-01 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-case.md` | claim | Formal Verification Assurance Case | current implementation baseline | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/assurance-evaluation.md` | claim | Assurance Evaluation Rules | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | contract reviewers, evidence producers, release decision makers |
 | `docs/verification/claims/assurance-statement.md` | claim | Aegaeon Technical Assurance Statement Specification | current implementation baseline | 2026-09-07 | Verification / Security / Release Engineering | users, adoption reviewers, implementers, verification and release owners |
@@ -312,10 +312,10 @@ Audience: contributors, maintainers
 | `docs/verification/runbooks/ffi-contracts/external-boundaries-and-runtime-checks.md` | runbook | FFI External Boundaries And Runtime Checks | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/ffi-contracts.md` | runbook | FFI Contract Register | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/hacl-integration.md` | runbook | HACL* Integration Documentation | current implementation baseline | 2026-03-08 | Verification | verification contributors, maintainers |
-| `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/tamarin-evidence-admission.md` | runbook | Tamarin Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
-| `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-09-07 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/README.md` | index | Verification Workplan Analysis | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/blockers.md` | verification | Verification blockers and upstream dependency analysis | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
@@ -375,7 +375,7 @@ Audience: contributors, maintainers
 | `docs/security/security-review/runtime-hardening-and-testing.md` | security | Security Review Runtime Hardening And Testing | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review/threat-vulnerability-and-formal-review.md` | security | Security Review Threat, Vulnerability, And Formal Review | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
 | `docs/security/security-review.md` | security | Security Review | snapshot | 2026-07-08 | Security | security reviewers, maintainers |
-| `docs/security/tcb-inventory.md` | security | Trusted Computing Base (TCB) Inventory | current implementation baseline | 2026-08-05 | Security | security reviewers, maintainers |
+| `docs/security/tcb-inventory.md` | security | Trusted Computing Base (TCB) Inventory | current implementation baseline | 2026-10-01 | Security | security reviewers, maintainers |
 
 ## Development
 

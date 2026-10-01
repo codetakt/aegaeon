@@ -1,6 +1,6 @@
 # Verification Claims Overview
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -37,7 +37,7 @@ the detailed registers for audit and evidence review.
 - `[claim]` Evidence interpretation:
   [Formal claim overview](formal-claim-overview.md),
   [Detailed assurance case](assurance-case/README.md), and
-  [Claim index](claim-index.md).
+  [Historical claim inventory](claim-index.md).
 - `[claim]` Assumptions:
   [Assumption boundary overview](assumption-boundary-overview.md) and
   [Detailed assumption register](assumptions/README.md).
@@ -53,6 +53,9 @@ the detailed registers for audit and evidence review.
 - `[model]` Future wording criteria:
   [Verification maturity model](verification-maturity-model.md) and
   [Verification maturity status](verification-maturity-status/README.md).
+
+For a current mechanical inventory of matrix entries, use the
+[separate report procedure](../runbooks/verification-ops.md#current-matrix-inventory).
 
 ## Reading Rule of Thumb
 

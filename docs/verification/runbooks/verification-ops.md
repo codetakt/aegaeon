@@ -1,6 +1,6 @@
 # Verification Ops Guide
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -53,6 +53,21 @@ verified allowlist is in effect for the relevant IdP/RP/chain instance.
 Boundary-closure exceptions (including the promoted OIDC `RS256 Required Slice`
 and `RS256 Interop Slice`) must be recorded in the allowlist, the boundary
 roadmap, and the compliance matrix before any claim wording changes.
+
+### Current matrix inventory
+
+The [historical claim index](../claims/claim-index.md) preserves the September 14
+snapshot. Inspect `spec/compliance-matrix.yaml` for current entries, or generate
+and compare a separate report from the repository root:
+
+```bash
+python3 scripts/validation/generate_claim_index.py --output artifacts/verification/claim-index-current.md
+python3 scripts/validation/generate_claim_index.py --check --output artifacts/verification/claim-index-current.md
+```
+
+Both modes require an explicit output path and reject the historical snapshot
+and its filesystem aliases. These commands inventory matrix entries and their
+references; they do not add evidence or establish a release claim.
 
 ---
 
@@ -257,7 +272,7 @@ matrix and liveness classification.
 | `scripts/validation/verify_verified_reqs.py` | CI validation script for VerifiedReqs invariant |
 | `spec/compliance-matrix.yaml` | Source of truth for all requirement entries |
 | `spec/compliance-matrix.schema.json` | YAML schema for matrix entries |
-| [claim-index.md](../claims/claim-index.md) | Auto-generated quality and strength breakdown of all verified entries |
+| [claim-index.md](../claims/claim-index.md) | Preserved historical quality and strength inventory |
 | [model-fidelity-register.md](../claims/model-fidelity-register.md) | Human-readable F* model fidelity classifications |
 | [model-fidelity.yaml](../claims/model-fidelity.yaml) | Machine-readable F* model fidelity inventory used by the strict validator |
 | [runtime-linkage.md](runtime-linkage.md) | Proof-to-implementation traceability, feature flags, liveness |
