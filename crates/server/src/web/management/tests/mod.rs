@@ -54,3 +54,5 @@ include!("bootstrap_and_profiles.rs");
 include!("policy_and_runtime.rs");
 
 mod initialization;
+
+mod upstream_metadata;

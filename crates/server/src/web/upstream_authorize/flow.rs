@@ -21,14 +21,14 @@ pub(in crate::web) fn build_upstream_redirect_uri(base_url: &str, connection: &s
     )
 }
 
-pub(super) struct UpstreamAuthorizeFlowState {
+pub(in crate::web) struct UpstreamAuthorizeFlowState {
     redirect_uri: String,
     state_token: String,
     nonce: String,
     code_challenge: Option<String>,
 }
 
-pub(super) async fn store_upstream_authorize_request(
+pub(in crate::web) async fn store_upstream_authorize_request(
     state: &AppState,
     connection_id: &str,
     input: &UpstreamAuthorizeInput,
@@ -73,7 +73,8 @@ pub(super) async fn store_upstream_authorize_request(
         redirect_uri: redirect_uri.clone(),
         return_to: input.return_to.clone(),
         max_age: input.max_age,
-        require_iss_parameter: context.profile.require_iss_parameter,
+        require_iss_parameter: context.profile.require_iss_parameter
+            || discovery.authorization_response_iss_parameter_supported == Some(true),
         jit_provisioning_policy: context.connection.jit_provisioning_policy.clone(),
         attribute_mappings: context.connection.attribute_mappings.clone(),
         claim_release_policy: context.connection.claim_release_policy.clone(),
@@ -104,7 +105,7 @@ pub(super) async fn store_upstream_authorize_request(
     })
 }
 
-pub(super) fn build_upstream_authorize_redirect_response(
+pub(in crate::web) fn build_upstream_authorize_redirect_response(
     issuer_base: &str,
     discovery: &OidcDiscovery,
     client_id: &str,

@@ -70,7 +70,7 @@ pub(in crate::web) fn verify_upstream_id_token_claims(
     if !discovery
         .id_token_signing_alg_values_supported
         .iter()
-        .any(|value| value.eq_ignore_ascii_case(alg_name))
+        .any(|value| value == alg_name)
     {
         return Err(UpstreamIdTokenSignatureError::AlgNotSupported);
     }
