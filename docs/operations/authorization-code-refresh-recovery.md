@@ -43,6 +43,16 @@ request. Login, reauthentication and consent continuations retain that selection
 A `form_post` grant returns the code, state and issuer in an HTML POST form to
 the registered redirect URI, rather than a code-bearing redirect query.
 
+The outer `client_id` on authorization and its continuations must exactly match
+the issued identifier and the client that pushed the request (RFC 6749 sections
+1.9, 2.2 and 4.1.1; RFC 9126 section 4). Leading or trailing whitespace, including
+percent-encoded whitespace, is not removed. Unknown or mismatched selectors are
+refused without reserving or consuming the pushed request or its continuation.
+Clients relying on earlier whitespace tolerance must correct the identifier and
+restart authorization; expired requests require a new push. No data migration
+or new configuration setting is needed. Empty values still follow the common
+omission rule, and duplicate nonempty values are rejected.
+
 PAR request and reservation keys now use namespace `par/v2` and its versioned
 request-URI digest. They retain the authorization-code-grant Redis hash tag for
 atomic consumption with code issuance. New readers never fall back to `par/v1`:

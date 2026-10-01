@@ -136,12 +136,6 @@ async fn authorize_parse_request_context(
     let raw = RawAuthzQuery::from_admitted(&admitted)
         .map_err(|error| error.into_response(issuer_base))?;
     let selected_client_id = raw.client_id.as_deref().unwrap_or("");
-    // PAR has historically trimmed this selector; plain and direct JAR have not.
-    let selected_client_id = if raw.request_uri.is_some() {
-        selected_client_id.trim()
-    } else {
-        selected_client_id
-    };
     let observation = observe_authorization(state, selected_client_id, issuer_base).await?;
     let selected_state = state_for_authorization_observation(state, &observation);
     let state = &selected_state;

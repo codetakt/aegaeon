@@ -1481,6 +1481,19 @@ rfc_8414:
   - Metadata and OIDC discovery omit registration_endpoint while environment policy has DCR disabled; when enabled, both builders wire registration_endpoint to the live DCR route.
   - EverParse artefacts under generated/everparse/ (kept fresh by verification.yml:everparse-dcr) guarantee the registration payload parser remains in sync with published metadata.
 rfc_9126:
+- id: 9126-exact-client-selector
+  section: '4'
+  requirement: MUST
+  description: Preserve the exact outer client identifier during pushed authorization and continuation
+  module: crates/server/src/web/authorize_request/par.rs
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/client_identifiers.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/client_identifiers/controls.rs
+  status: partial
+  notes:
+  - "The decoded nonempty selector is used without trimming for runtime observation and PAR reservation/resume comparison; wrong selectors leave the stored request and continuation usable by the exact client."
+  - "Real PostgreSQL/Redis router controls cover fresh and resumed plain/signed requests, query/form_post grants and redemption, empty/duplicate inputs, a second registered client, and direct authorization controls."
+  - "Finite tests do not establish full-domain assurance or composition with separately changed authorization POST handling. Existing PAR v2 cutover obligations remain."
 - id: 9126-pushed-response-semantics
   section: '2.1, 3, 4'
   requirement: MUST
