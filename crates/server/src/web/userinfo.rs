@@ -197,10 +197,8 @@ pub(super) fn userinfo_error_response(
             )
         }
     };
-    let mut body = serde_json::json!({ "error": error_code, "iss": issuer_base });
-    if let Some(description) = description {
-        body["error_description"] = serde_json::json!(description);
-    }
+    let mut body = crate::oauth_error::json_body(error_code, description.as_deref());
+    body["iss"] = serde_json::json!(issuer_base);
     let mut response = (status, Json(body)).into_response();
     if matches!(
         error_code,

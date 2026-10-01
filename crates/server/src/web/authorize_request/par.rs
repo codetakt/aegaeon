@@ -21,10 +21,8 @@ pub(in crate::web) fn par_authorize_error_response(
     issuer_base: &str,
     err: &crate::par::ParError,
 ) -> Response {
-    let mut body = json!({ "error": err.error.as_str(), "iss": issuer_base });
-    if let Some(desc) = err.error_description.as_deref() {
-        body["error_description"] = json!(desc);
-    }
+    let mut body = crate::oauth_error::json_body(&err.error, err.error_description.as_deref());
+    body["iss"] = json!(issuer_base);
     let mut response = (StatusCode::BAD_REQUEST, Json(body)).into_response();
     util::apply_no_cache_headers(&mut response);
     response
