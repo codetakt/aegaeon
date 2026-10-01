@@ -36,6 +36,24 @@ Monitoring:
 - The JWKS fetcher exports counters/latency series and circuit labels.
   See: `docs/operations/monitoring/README.md`.
 
+## Declared algorithms and curves
+
+Client JWKs and upstream OIDC signing keys must use the exact registered
+algorithm and curve names. A present JWK `alg` must match the token algorithm;
+an absent `alg` retains the existing unspecified-metadata behavior. EC keys
+used for `ES256` must declare `P-256`, and keys used for `ES384` must declare
+`P-384`, including fetched client keys. Upstream discovery must advertise the
+exact token algorithm, such as `RS256`, `ES256`, or `ES384`.
+
+Publishers must correct case aliases, surrounding whitespace and misdeclared
+curves before deployment. Even a valid signature is refused when these names
+do not match. Signature and claims validation still apply. No schema migration,
+automatic key rewriting or new algorithm support is introduced.
+
+This correction binds declared names. Mixed-set admission, `kid`/`alg` null
+handling, key material validity, selection ambiguity and public-registration
+input ownership remain separate concerns.
+
 ## Verification-use metadata
 
 Inline client JWKS, fetched client JWKS (including cached/reloaded entries),

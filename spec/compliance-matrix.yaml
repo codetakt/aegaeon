@@ -1078,6 +1078,22 @@ rfc_7517:
   - "Verification requires absent/exact sig use and absent key_ops or a duplicate-free sign/verify subset containing verify. Restricting unrelated or unknown combinations is consumer policy, not a universal RFC MUST."
   - "Present null and invalid types are rejected before remote DTO projection. Real RSA/EC finite tests compare identical signed bytes/material through inline and fetched/reloaded client keys (RSA assertions, EC Request Objects), and upstream cached selection."
   - "No proof-status upgrade or all-domain claim. Mixed-set quarantine, material/curve validation, generic kid/alg null typing, and private registration input ownership remain separate work."
+- id: 7517-005
+  section: '4.4, 6; RFC 7518 6.2.1.1'
+  requirement: MUST
+  description: Match declared JWK algorithms and EC curves exactly before signature verification
+  module: crates/server/src/client_registry/request_object_keys.rs
+  tests:
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata/algorithm_binding.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests/algorithm_binding.rs
+  - crates/server/src/web/upstream_refresh/tests/signing_keys/algorithm_binding.rs
+  ci_check: cargo test -p aegaeon-server --lib jwk_binding
+  status: partial
+  runtime_link: crates/server/src/web/upstream_id_token/signature.rs
+  notes:
+  - "Remote client EC keys require exact P-256/ES256 or P-384/ES384 binding. Upstream JWK alg/crv and discovery advertised algorithm membership are case-sensitive; absent JWK alg remains unspecified."
+  - "Finite genuine RSA/P-256/P-384 signature tests cover registry APIs, local HTTP JWKS fetch/cache and upstream verification. The PostgreSQL callback/session test requires the isolated database lane and is ignored by the ordinary command."
+  - "No proof-status upgrade or complete JWKS assurance. Mixed-set/null/material/ambiguity, fingerprint/refresh ownership and registration secret/certificate handling remain separate obligations."
 - id: 7517-003
   section: '5.5'
   requirement: MUST

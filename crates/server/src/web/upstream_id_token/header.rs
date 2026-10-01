@@ -49,7 +49,7 @@ pub(in crate::web) fn admit_upstream_id_token_header(
     if !discovery
         .id_token_signing_alg_values_supported
         .iter()
-        .any(|value| value.eq_ignore_ascii_case(alg_name))
+        .any(|value| value == alg_name)
     {
         return Err(UpstreamIdTokenSignatureError::AlgNotSupported);
     }

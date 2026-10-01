@@ -145,6 +145,14 @@ pub(super) fn resolve_request_object_key_with_state(
             if !jwk_alg_allows(jwk.alg.as_deref(), alg) {
                 return None;
             }
+            let expected_curve = match alg {
+                jsonwebtoken::Algorithm::ES256 => "P-256",
+                jsonwebtoken::Algorithm::ES384 => "P-384",
+                _ => return None,
+            };
+            if jwk.crv.as_deref() != Some(expected_curve) {
+                return None;
+            }
             let x = jwk.x.as_ref()?;
             let y = jwk.y.as_ref()?;
             jsonwebtoken::DecodingKey::from_ec_components(x, y).ok()
