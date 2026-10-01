@@ -151,6 +151,7 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                         State(state.clone()),
                         remote,
                         uri,
+                        http::Method::GET,
                         request_headers,
                     )
                     .await

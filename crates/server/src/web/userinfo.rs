@@ -25,6 +25,7 @@ pub(super) async fn userinfo_get(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
+    method: http::Method,
     headers: HeaderMap,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
@@ -71,7 +72,7 @@ pub(super) async fn userinfo_get(
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
-        &http::Method::GET,
+        &method,
         &uri_for_dpop,
         &headers,
     ) {

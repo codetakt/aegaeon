@@ -313,7 +313,6 @@ impl DpopMiddleware {
     ) -> Result<DpopBinding, DpopError> {
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
             .ok_or(DpopError::InvalidProof)?;
-        let method_upper = method.as_str().to_ascii_uppercase();
         let uri_string = expected_htu(&self.origin, uri.path());
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -326,7 +325,7 @@ impl DpopMiddleware {
 
         let verified_proof = verify_dpop_with_iat_window(
             proof,
-            &method_upper,
+            method.as_str(),
             &uri_string,
             now,
             expected_ath.as_deref(),

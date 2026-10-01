@@ -9,6 +9,7 @@ use axum::{
 };
 use serde_json::Value;
 
+mod request_method;
 mod sender_contract;
 mod transport_contract;
 mod userinfo_post;
