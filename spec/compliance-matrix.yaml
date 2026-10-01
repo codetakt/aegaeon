@@ -1466,7 +1466,7 @@ rfc_9126:
 - id: 9126-002
   section: '2.1'
   requirement: MUST
-  description: Clients MUST authenticate at PAR endpoint
+  description: Confidential clients MUST authenticate at PAR endpoint
   module: fstar/par/Client_auth.fst
   proof:
   - type: fstar
@@ -1474,11 +1474,15 @@ rfc_9126:
     invariant: handle_par_request
   tests:
   - crates/server/src/par/tests/client_auth.rs
+  - crates/server/src/web/par_endpoint/authentication_tests.rs
+  - crates/server/src/par/storage/redis_store.rs
   ci_check: par-client-auth
   status: partial
   runtime_link: crates/server/src/client_registry.rs
   notes:
-  - Covered by par_http_test (auth failure/success cases).
+  - Registered authentication methods are enforced independently of global authentication flags; public clients require policy/profile permission.
+  - HTTP and Redis regressions in crates/server/src/web/par_endpoint/authentication_tests.rs cover missing, wrong and successful authentication and secret-free storage.
+  - Legacy PAR secrets are discarded on read; existing Redis bytes expire under their original TTL. See docs/operations/oauth-conformance.md.
 - id: 9126-003
   section: '2.2'
   requirement: MUST

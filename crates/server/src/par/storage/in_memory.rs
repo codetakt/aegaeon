@@ -37,9 +37,10 @@ impl ParRequestStore for InMemoryParRequestStore {
     fn insert(
         &self,
         request_uri: &str,
-        stored: StoredParRequest,
+        mut stored: StoredParRequest,
         _ttl: Duration,
     ) -> Result<(), ParStorageError> {
+        stored.request.client_secret = None;
         self.write_requests()?
             .insert(request_uri.to_string(), stored);
         Ok(())

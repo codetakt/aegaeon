@@ -14,7 +14,6 @@ use crate::util;
 pub(super) struct ParClientContext {
     pub(super) client_id: String,
     pub(super) client_auth_method: &'static str,
-    pub(super) client_secret_for_store: Option<String>,
     pub(super) client_authenticated: bool,
 }
 
@@ -35,6 +34,12 @@ pub(super) async fn authenticate_par_client(
         form.client_assertion_type.as_deref(),
         form.client_assertion.as_deref(),
     );
+    if auth.is_some() && !presence.basic {
+        return Err(util::invalid_client_response(
+            "oauth",
+            "Unsupported client authentication scheme",
+        ));
+    }
     if multiple_client_auth_methods_present(presence) {
         return Err(util::invalid_client_response(
             "oauth",
@@ -69,7 +74,23 @@ pub(super) async fn authenticate_par_client(
         ));
     };
 
-    let authenticated_secret = if presence.basic {
+    let registered_client = state
+        .clients
+        .try_get(&client_id)
+        .map_err(|error| {
+            registry_state_error_response(state.issuer.as_str(), "par_get_auth_client", error)
+        })?
+        .ok_or_else(|| util::invalid_client_response("oauth", "Client authentication failed"))?;
+    let registered_method = registered_client.token_endpoint_auth_method.trim();
+    let presented_method = token_client_auth_method(presence);
+    if !registered_method.eq_ignore_ascii_case(presented_method) {
+        return Err(util::invalid_client_response(
+            "oauth",
+            "Client authentication failed or was not provided",
+        ));
+    }
+
+    let secret_authenticated = if presence.basic {
         auth.map(|value| {
             state
                 .clients
@@ -85,7 +106,7 @@ pub(super) async fn authenticate_par_client(
         .transpose()?
         .flatten()
         .filter(|(auth_client_id, _)| auth_client_id == &client_id)
-        .map(|(_, secret)| secret)
+        .is_some()
     } else if presence.post {
         state
             .clients
@@ -97,13 +118,9 @@ pub(super) async fn authenticate_par_client(
                     error,
                 )
             })?
-            .and_then(|auth_client_id| {
-                (auth_client_id == client_id)
-                    .then(|| form.client_secret.clone())
-                    .flatten()
-            })
+            .is_some_and(|auth_client_id| auth_client_id == client_id)
     } else {
-        None
+        false
     };
     let pkjwt_authenticated = if presence.private_key_jwt {
         validate_private_key_jwt_client_assertion(
@@ -119,7 +136,7 @@ pub(super) async fn authenticate_par_client(
     } else {
         false
     };
-    let client_authenticated = authenticated_secret.is_some() || pkjwt_authenticated;
+    let client_authenticated = secret_authenticated || pkjwt_authenticated;
     if presence.any() && !client_authenticated {
         return Err(util::invalid_client_response(
             "oauth",
@@ -136,7 +153,6 @@ pub(super) async fn authenticate_par_client(
     Ok(ParClientContext {
         client_id,
         client_auth_method: token_client_auth_method(presence),
-        client_secret_for_store: authenticated_secret,
         client_authenticated,
     })
 }

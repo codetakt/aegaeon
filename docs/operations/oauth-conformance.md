@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-09-11
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -228,3 +228,30 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+## PAR authentication and stored credentials
+
+Under RFC 9126 section 2.1, clients registered with `client_secret_basic`,
+`client_secret_post`, or `private_key_jwt` must authenticate at `/par` with their
+registered method. Disabling `requireClientAuthPar` or `requireClientAuthToken`
+does not waive that requirement. A client registered with `none` can push a
+request only when the PAR policy and downstream profile allow unauthenticated
+clients. Unknown clients and incorrect or multiple authentication methods fail
+before a request URI is stored.
+
+New PAR records contain the validated authorization request and the internal
+authentication outcome, without the plaintext `client_secret`. Later
+reservation and login continuation use this outcome without carrying a password
+forward; authorization still applies current client policy. This credential
+minimization does not redefine signed Request Object contents.
+
+Upgrade all PAR writers together. Older writers can still put plaintext secrets
+in Redis during a mixed-version rollout. Readers accept legacy records but
+discard their `client_secret`; reads and reservations do not scrub the existing
+Redis bytes. Existing records expire within their original configured
+`policy.parExpiresInSeconds` lifetime (default 90 seconds, maximum 600 seconds),
+measured from the last old-writer insertion. This change does not establish that
+an existing deployment has purged old secrets. Include retained Redis backups
+and snapshots in the deployment's credential-retention review. No key rotation,
+configuration change, or persistent schema migration is required by the format
+change itself.
