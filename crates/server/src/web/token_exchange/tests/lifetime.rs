@@ -2,8 +2,8 @@ use super::*;
 use std::time::{Duration, SystemTime};
 
 #[tokio::test]
-#[ignore = "requires private PostgreSQL and Redis; waits for the configured lineage horizon"]
-async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> TestResult {
+#[ignore = "requires private PostgreSQL and Redis; waits for the configured refresh lifetime"]
+async fn shared_redis_token_exchange_source_output_and_refresh_expire_online() -> TestResult {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(2)
         .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
@@ -15,11 +15,13 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             "exchange-lifetime-{}",
             uuid::Uuid::new_v4()
         ));
+        // Allow client authentication and Redis publication time on busy runners.
+        // The lineage horizon remains 75 seconds (access + refresh + code TTLs).
         let issuer = crate::authcode::TokenIssuer::try_from_shared_store_env_with_ttls(
             Arc::clone(&state.keys.access_token),
-            3,
-            12,
-            60,
+            15,
+            45,
+            15,
             &namespace,
         )?
         .with_issuer(env.issuer_url.clone())
@@ -50,7 +52,13 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             .ok_or("root")?;
         let (status, output) =
             exchange(&state, source, &[("audience", "internal-api")], true).await?;
-        assert_eq!(status, StatusCode::OK, "live exchange: {output}");
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "live exchange: {output}; source expires at {:?}, now {:?}",
+            meta.expires_at,
+            SystemTime::now(),
+        );
         let token = output["access_token"].as_str().ok_or("output")?;
         let output_meta = state
             .tokens
@@ -97,8 +105,12 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             next_record.exchange_grant.as_ref().and_then(|g| g.root()),
             Some(root)
         );
+        // Rotation retains the earlier refresh deadline. This HTTP case checks
+        // that deadline; the independent root guard has a dedicated script test.
+        assert!(next_record.expires_at < root.expires_at);
         tokio::time::sleep(
-            root.expires_at
+            next_record
+                .expires_at
                 .duration_since(SystemTime::now())
                 .unwrap_or(Duration::ZERO)
                 + Duration::from_millis(30),
@@ -110,7 +122,11 @@ async fn shared_redis_token_exchange_source_output_and_root_expire_online() -> T
             true,
         )
         .await?;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "expired root: {body}");
+        assert!(
+            SystemTime::now() < root.expires_at,
+            "root must still be live"
+        );
+        assert_eq!(status, StatusCode::BAD_REQUEST, "expired refresh: {body}");
         assert!(state.tokens.store.try_get_refresh_token(next)?.is_none());
         Ok(())
     }

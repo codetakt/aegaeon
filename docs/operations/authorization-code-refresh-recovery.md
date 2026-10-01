@@ -1,6 +1,6 @@
 # Authorization-code and refresh state transitions
 
-Last updated: 2026-09-14
+Last updated: 2026-09-30
 
 Status: current implementation baseline
 
@@ -232,6 +232,20 @@ Validate the restored schema head and client flow in isolation first; switching
 the executable or renaming a runtime namespace alone is not a validated recovery.
 
 ## Code exchange and refresh
+
+The authorization-code storage and standalone consume scripts validate their
+version counter before any write. A present counter must be Redis's canonical
+signed decimal integer and leave room for `INCR`; `9223372036854775807`, malformed
+text and non-string keys are rejected. Counters longer than 20 bytes are rejected
+before their contents are loaded into Lua. Redis ACLs for both scripts must also
+allow `TYPE`, `STRLEN` and `GET` on version counter keys. Storage ACLs must also
+allow `TYPE` on each enabled `state`/`nonce` index key; those indexes must be absent
+or sorted sets before markers or a code are created.
+These failures report backing-store unavailability while retaining the existing
+code/marker state. Investigate the affected Redis key types and counter contents
+under the deployment's recovery procedure; do not recreate consumed codes.
+This preflight does not add rollback for other Redis failures or lost replies.
+The key format and valid-counter behavior remain unchanged.
 
 Authorization-code exchange retains the original stored JSON through validation
 and compares those bytes during the Redis commit. Valid legacy JSON does not need
