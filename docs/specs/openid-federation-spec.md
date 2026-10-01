@@ -44,6 +44,56 @@ accepted in runtime configuration documents. Federation cache TTL/capacity and o
 allowlist policy remain environment-scoped database policy because they govern active RP-side
 runtime behaviour.
 
+## Metadata Policy Resolution
+
+`TrustChain::resolved_metadata` implements the common metadata policy rules in
+OpenID Federation 1.0 and 1.1 section 6.1. It requires a previously verified,
+canonical alternating configuration/subordinate chain. Its layout and identity
+checks do not authenticate a manually constructed typed chain.
+
+Every supplied policy must have three nonempty object levels, including policies
+for undeclared entity types. Policies merge from the most superior statement to
+the immediate superior by entity type, exact parameter name and operator.
+Repeated value/default must be structurally equal; add/superset use union,
+one_of/subset use intersection, and essential uses OR. Each input and intermediate
+merge is validated independently of metadata presence. An empty merged one_of
+is an error; an empty subset is permitted.
+
+Immediate-superior metadata replaces or adds parameters only within types declared
+by the leaf configuration. Other ancestor metadata does not propagate to the leaf.
+The merged policy is applied once, in value/add/default/one_of/subset/superset/essential
+order. Resolved metadata is a derived result; retained signed statements are unchanged.
+
+Upgrade behavior: value:null removes a field; default cannot be null and applies
+only to absence, after add. subset_of filters an array, potentially to an empty
+array, which satisfies essential presence. Null top-level metadata parameters,
+empty supplied policies and contradictory operator combinations are rejected.
+The historical `intersect` operator is a local compatibility alias for subset_of,
+not a standard operator. When both occur, their operands are intersected before
+combination validation. Previously accepted contradictory alias combinations may fail.
+
+Set operators support homogeneous arrays of strings, objects or numbers, including
+empty arrays. one_of accepts string/object/number metadata. value/default also
+support objects and arbitrary arrays; essential supports objects. Structural equality
+ignores object key order and retains array order. Decimal comparison uses Number's
+representation without converting integers to floating point. Precision already lost
+while parsing original JSON remains outside this typed API's guarantee.
+
+The public `apply_metadata_policy` helper keeps generic JSON representations.
+`apply_metadata_policy_for_entity_type` additionally processes `scope` for
+`openid_relying_party` and `oauth_client` as token arrays and returns a space-separated
+string, including an empty string for an empty set. Tokens follow the RFC 6749 ASCII
+scope-token alphabet with single SP separators; invalid or empty interior tokens fail.
+Scope policy set operands, value and default use arrays of valid tokens. Other strings
+and OP `scopes_supported` do not receive this representation conversion.
+
+Unknown noncritical operators are ignored after structural validation. Critical
+declarations remain rejected by raw statement admission; these helpers cannot validate
+critical declarations or recover duplicate members discarded during JSON parsing.
+Local anchor policy pinning, complete-chain/cache admission timing and authoritative
+use of resolved metadata by every OIDC consumer remain separate integration boundaries.
+This functional resolver does not establish full Federation conformance.
+
 ## Entity Fetch
 
 The fetcher constructs the standard entity-configuration URL by appending
