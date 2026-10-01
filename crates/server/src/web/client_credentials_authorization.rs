@@ -103,21 +103,7 @@ pub(super) async fn authorize(
             &ctx.params,
             ctx.form.scope.as_deref(),
         )
-        .map_err(|error| match error {
-            ClientCredentialsAuthorizationError::InvalidTarget => token_error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_target",
-                Some("client is not authorized for the requested target"),
-            ),
-            ClientCredentialsAuthorizationError::InvalidScope => token_error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid_scope",
-                Some("scope exceeds client-credentials authority or defaults are absent"),
-            ),
-            ClientCredentialsAuthorizationError::MalformedPolicy => {
-                unavailable(state, "invalid client-credentials policy")
-            }
-        })?;
+        .map_err(|error| authorization_error_response(state, error))?;
     let mut ids = selection.introspection_clients.clone();
     ids.push(ctx.client_id.clone());
     ids.sort();
@@ -179,6 +165,27 @@ pub(super) async fn authorize(
         .introspection_clients
         .sort_by(|left, right| left.client_id.cmp(&right.client_id));
     AuthorizedClientCredentials::new(grant).map_err(|error| unavailable(state, error))
+}
+
+fn authorization_error_response(
+    state: &AppState,
+    error: ClientCredentialsAuthorizationError,
+) -> Response {
+    match error {
+        ClientCredentialsAuthorizationError::InvalidTarget => token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_target",
+            Some("client is not authorized for the requested target"),
+        ),
+        ClientCredentialsAuthorizationError::InvalidScope => token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_scope",
+            Some("scope exceeds client-credentials authority or defaults are absent"),
+        ),
+        ClientCredentialsAuthorizationError::MalformedPolicy => {
+            unavailable(state, "invalid client-credentials policy")
+        }
+    }
 }
 
 /// None denotes a legacy/other-grant token and receives no new authority.
