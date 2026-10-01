@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use super::metadata_policy::apply_metadata_policy;
+use super::metadata_policy::{apply_resolved, resolve_policies};
 use super::FederationError;
 
 /// OpenID Federation Entity Statement claims.
@@ -188,40 +188,82 @@ impl TrustChain {
             .ok_or_else(|| FederationError::Validation("trust chain is empty".into()))
     }
 
-    fn subordinate_policies(&self) -> Vec<&HashMap<String, Value>> {
-        self.chain
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| index % 2 == 1)
-            .filter_map(|(_, stmt)| stmt.metadata_policy.as_ref())
-            .collect()
-    }
-
-    /// Resolve leaf metadata by applying all ancestor metadata policies.
+    /// Resolve policies, overlay immediate-superior metadata, then apply once.
+    ///
+    /// Requires a cryptographically verified canonical alternating C/S/C path.
+    /// Typed construction alone does not authenticate statements. This method
+    /// checks layout and identities, but does not verify signatures or expiry.
+    /// The result is derived metadata and carries no signature of its own.
     ///
     /// # Errors
-    ///
-    /// Returns [`FederationError`] when a metadata policy is malformed or rejects metadata.
+    /// Returns an error for malformed layout, policy or resulting metadata.
     pub fn resolved_metadata(&self) -> Result<Option<HashMap<String, Value>>, FederationError> {
-        let leaf_metadata = match &self.leaf()?.metadata {
-            Some(metadata) => metadata.clone(),
-            None => return Ok(None),
+        self.validate_metadata_layout()?;
+        let policies = self
+            .chain
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .rev()
+            .filter_map(|statement| statement.metadata_policy.as_ref());
+        let policies = resolve_policies(policies)?;
+        let Some(mut resolved) = self.leaf()?.metadata.clone() else {
+            return Ok(None);
         };
-
-        let mut policies = self.subordinate_policies();
-        if policies.is_empty() {
-            return Ok(Some(leaf_metadata));
-        }
-        policies.reverse();
-
-        let mut resolved = leaf_metadata;
-        for policy in &policies {
-            for (entity_type, type_policy) in *policy {
-                if let Some(metadata) = resolved.get_mut(entity_type) {
-                    *metadata = apply_metadata_policy(metadata, type_policy)?;
+        if let Some(overlay) = &self.chain[1].metadata {
+            for (entity_type, metadata) in &mut resolved {
+                let target = metadata.as_object_mut().ok_or_else(|| {
+                    FederationError::MetadataPolicy("metadata must be an object".into())
+                })?;
+                if target.values().any(Value::is_null) {
+                    return Err(FederationError::MetadataPolicy(
+                        "null metadata parameter".into(),
+                    ));
+                }
+                if let Some(superior) = overlay.get(entity_type) {
+                    let superior = superior.as_object().ok_or_else(|| {
+                        FederationError::MetadataPolicy(
+                            "superior metadata must be an object".into(),
+                        )
+                    })?;
+                    target.extend(superior.clone());
                 }
             }
         }
+        for (entity_type, metadata) in &mut resolved {
+            *metadata = apply_resolved(
+                metadata,
+                policies.get(entity_type).unwrap_or(&Default::default()),
+                Some(entity_type),
+            )?;
+        }
         Ok(Some(resolved))
+    }
+
+    fn validate_metadata_layout(&self) -> Result<(), FederationError> {
+        self.leaf()?;
+        let invalid = || {
+            FederationError::Validation(
+                "metadata resolution requires a canonical C/S/C chain".into(),
+            )
+        };
+        if self.chain.len() < 3 || self.chain.len().is_multiple_of(2) {
+            return Err(invalid());
+        }
+        if !self.leaf()?.is_self_signed()
+            || self.trust_anchor_config()?.iss != self.anchor.entity_id
+        {
+            return Err(invalid());
+        }
+        for edge in self.chain.windows(3).step_by(2) {
+            if !edge[2].is_self_signed()
+                || edge[1].is_self_signed()
+                || edge[1].sub != edge[0].sub
+                || edge[1].iss != edge[2].iss
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(())
     }
 }

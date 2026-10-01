@@ -485,3 +485,8 @@ mod purpose {
 
 #[path = "tests/admission.rs"]
 mod admission;
+
+mod policy_resolution {
+    use super::*;
+    include!("tests/policy_resolution.rs");
+}
