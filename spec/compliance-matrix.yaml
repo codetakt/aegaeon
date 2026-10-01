@@ -5836,8 +5836,8 @@ openid_logout:
   section: Back-Channel Logout
   requirement: MUST
   description: Logout Token must include required claims (iss, sub or sid, aud, iat,
-    events)
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+    exp, jti, events)
+  module: crates/server/src/web/backchannel_logout.rs
   proof:
   - type: fstar
     file: fstar/oidc/Logout.Spec.fst
@@ -5846,16 +5846,22 @@ openid_logout:
     document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   tests:
   - crates/server/src/oidc/session/tests.rs
+  - crates/server/src/web/backchannel_logout/tests/profile.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery.rs
+  - crates/server/src/web/backchannel_logout/tests/kms.rs
   ci_check: oidc-backchannel-logout-claims
-  status: verified
-  runtime_link: crates/server/src/oidc/session/tests.rs
+  status: partial
+  runtime_link: crates/server/src/web/backchannel_logout.rs
   trace:
     kind: guard
     fstar: fstar/oidc/Logout.Spec.fst#build_backchannel_logout_token_claims
     rust: crates/server/src/web/backchannel_logout.rs#build_backchannel_logout_claims
-    test: crates/server/src/web/upstream_tests/oauth_forms_logout.rs
+    test: crates/server/src/web/backchannel_logout/tests/profile.rs
   notes:
-  - Verified by `crates/server/src/oidc/session/tests.rs` (iss/aud/iat/events + sub/sid policy).
+  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
+  - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
+  - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
+  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
 - id: OIDC-3-004
   section: Back-Channel Logout
   requirement: MUST

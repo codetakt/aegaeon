@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01T10:57:22.919537+00:00",
+  "generated": "2026-10-01T17:54:03.025798+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -270,7 +270,6 @@
       "entries": [
         "OIDC-3-001",
         "OIDC-3-002",
-        "OIDC-3-003",
         "OIDC-3-004"
       ],
       "critical": false
