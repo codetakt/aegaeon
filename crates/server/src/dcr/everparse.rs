@@ -3,6 +3,7 @@ use std::fmt;
 
 use super::registration::ClientRegistration;
 use super::{JWT_BEARER_GRANT_TYPE, TOKEN_EXCHANGE_GRANT_TYPE};
+use crate::policy::DEVICE_CODE_GRANT_TYPE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DcrEverparseSelfCheckError {
@@ -123,6 +124,7 @@ fn grant_type_bit(grant: &str) -> Result<u32, DcrEverparseSelfCheckError> {
         "client_credentials" => Ok(0x4),
         JWT_BEARER_GRANT_TYPE => Ok(0x8),
         TOKEN_EXCHANGE_GRANT_TYPE => Ok(0x10),
+        DEVICE_CODE_GRANT_TYPE => Ok(0x20),
         other => Err(DcrEverparseSelfCheckError::Encode(format!(
             "unsupported grant_type for EverParse encoding: {other}"
         ))),
