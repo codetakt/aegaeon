@@ -5,7 +5,8 @@ Parses spec/compliance-matrix.yaml and produces a Markdown document with
 proof-quality and strength breakdowns. Use --check with the same --output
 to compare a separate report with the current matrix. The historical
 docs/verification/claims/claim-index.md snapshot is a protected record;
-neither mode may use it as the output. CI validates proof references directly.
+neither mode may use it or the matrix input as the output. CI validates
+proof references directly.
 """
 
 from __future__ import annotations
@@ -283,19 +284,26 @@ def main() -> int:
         "--output",
         type=pathlib.Path,
         required=True,
-        help="Report file to generate or compare; the historical claim index is protected",
+        help=(
+            "Report file to generate or compare; "
+            "historical claim index and matrix input are protected"
+        ),
     )
     args = parser.parse_args()
 
     try:
         output = args.output.resolve()
-        historical = HISTORICAL_OUTPUT.resolve()
-        try:
-            same_file = output.samefile(historical)
-        except FileNotFoundError:
-            same_file = False
-        if output == historical or same_file:
-            parser.error("the historical claim index is protected; choose a separate --output path")
+        for protected_path, label in (
+            (HISTORICAL_OUTPUT, "historical claim index"),
+            (MATRIX_FILE, "compliance matrix input"),
+        ):
+            protected = protected_path.resolve()
+            try:
+                same_file = output.samefile(protected)
+            except FileNotFoundError:
+                same_file = False
+            if output == protected or same_file:
+                parser.error(f"the {label} is protected; choose a separate --output path")
     except (OSError, RuntimeError) as exc:
         parser.error(f"cannot validate --output path: {exc}")
 

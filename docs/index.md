@@ -302,7 +302,7 @@ Audience: contributors, maintainers
 | `docs/verification/oidc/README.md` | index | OIDC Verification Overview | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/lowstar-runtime-policy.md` | verification | OIDC Low\* Runtime Promotion Policy | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/oidc-1-formal-verification-dod.md` | verification | OIDC-1 Formal Verification Scope & Definition of Done | current implementation baseline | 2026-07-07 | Verification | verification reviewers, contributors |
-| `docs/verification/oidc/rs256-interop-slice.md` | verification | OIDC `RS256 Interop Slice` | current implementation baseline | 2026-07-24 | Verification | verification reviewers, contributors |
+| `docs/verification/oidc/rs256-interop-slice.md` | verification | OIDC `RS256 Interop Slice` | current implementation baseline | 2026-10-01 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/rs256-required-slice.md` | verification | OIDC `RS256 Required Slice` | current implementation baseline | 2026-07-24 | Verification | verification reviewers, contributors |
 | `docs/verification/runbooks/README.md` | index | Verification Runbooks Overview | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/extraction-status.md` | runbook | KaRaMeL Extraction and Verified Core Status | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |

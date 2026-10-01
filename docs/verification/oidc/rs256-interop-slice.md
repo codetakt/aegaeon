@@ -1,6 +1,6 @@
 # OIDC `RS256 Interop Slice`
 
-Last updated: 2026-07-24
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
