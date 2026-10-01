@@ -76,7 +76,7 @@ incompatible metadata must correct their published keys before deployment.
 Omitted usage fields remain omitted in the internal public-field projection.
 The process-local cache retains admitted keys and the original fingerprint map;
 there is no distributed JWKS-body storage format, namespace change or automatic
-purge. Public registration input ownership remains a separate concern.
+purge. Public client input ownership is described below.
 
 For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` check
 usage metadata only. `Jwk::from_value` and `JwkSet::from_value` remain strict
@@ -127,13 +127,22 @@ be a subset of those allowed by signed metadata. Repeated no-ID identities combi
 their allowed algorithms for this comparison; they remain separate candidates for
 signature selection. Missing metadata `jwks` is absent; explicit null is invalid.
 
-Existing inline registration still uses its strict structural admission and
-preserves the original JSON for persistence and responses. A derived verification
-view prevents legacy invalid material from verifying while allowing previously
-admitted records to reload. This does not repair public registration of private
-material or sanitize its original JSON. Publishers should correct unusable keys
-before deployment. Other RSA ingress paths, Federation profile and chain rules,
-and full product assurance require separate validation.
+New inline and fetched registered-client JWKS reject the whole set if any
+immediate JWK object contains `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`, or `k`,
+including null or wrong-type values and unsupported siblings. This is Aegaeon's
+public-input policy implementing the public-key registration requirement; it
+does not change generic JOSE parsing or upstream/Federation key admission.
+Rejected refreshes can use an independently valid safe cached body under existing
+fallback limits. No rejected body creates a key-reuse guard.
+
+Previously admitted stored inline sets load through a separate projection that
+removes only these fields. Public fields, key order, certificate metadata and
+unknown extensions are preserved, and supported public verification is unchanged.
+DCR reads return that public representation; new POST/PUT input is rejected rather
+than silently sanitized. Invalid public structure remains an error. Certificate
+metadata consistency and mixed signing/encryption-purpose requirements remain
+separate work; this change neither validates certificates nor retrieves `x5u`.
+Arbitrary secret data hidden in extensions is outside this finite field rule.
 
 ## Security Notes
 
@@ -286,3 +295,40 @@ Both IDs must be positive; a non-root UID with primary group 0 is rejected.
 The container integration driver excludes these namespace-only modules from its
 ordinary ignored sweeps; the dedicated runner executes them and propagates any
 failure. The fixture's namespace checks remain mandatory in both modes.
+
+## Upgrade stored public client keys
+
+The `20261002090000_public_client_jwk_storage.sql` Atlas migration removes the
+identified fields from every stored DCR inline set, including inactive clients
+and environments. It changes only affected `jwks` values, preserves remaining
+JSON and key order, and installs a constraint against reintroduction by older or
+alternate writers. The constraint checks the set envelope, object members and
+forbidden fields; it is not a cryptographic validator. Malformed envelopes or
+non-object key members block the transaction before any row changes.
+
+1. Stop all old runtime and writer instances. This upgrade does not support a
+   mixed-version rolling deployment; retain the existing startup migration guard.
+2. Run `psql "$AEGAEON_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/database/public-client-jwks-dry-run.sql` using the normal protected
+   database connection procedure. It is read-only and reports UUID row locations,
+   zero-based key indices, known field names and counts, never key values or
+   credential hashes. Resolve structural blockers through a separately reviewed
+   repair before continuing.
+3. Take the existing controlled recovery/backup measures, then apply the Atlas
+   migration and deploy the matching binary. Do not edit Atlas history or disable
+   its startup checks to force compatibility.
+4. Repeat the dry-run: its summary must have zero private-member and blocker
+   counts. Check runtime readiness and projection reload for every affected issuer.
+
+An active JWKS rewrite changes the client projection fingerprint and produces the
+existing runtime-authority notification. Stable configuration authority is
+separate; private-field removal alone does not require user reauthorization in
+the inspected grant paths. Migration and legacy loading do not rotate registration
+access tokens or change client secrets/scopes/grants. A normal successful DCR PUT
+still rotates its registration token. Existing post-commit runtime-sync failures
+can return 503 after that rotation; this change does not repair that separate
+response/recovery behavior or imply rollback from a 503.
+
+The migration does not erase WAL, backups, historical evidence or old in-flight
+copies. Follow normal controlled retention and recovery procedures and preserve
+sealed verification evidence. Finite migration/router tests are not a complete
+deployment or secret-eradication claim.

@@ -2937,3 +2937,32 @@ CREATE TABLE aegaeon.application_authorizations (
     end_user_record_id uuid REFERENCES aegaeon.end_users(id) ON DELETE SET NULL,
     PRIMARY KEY (environment_id, client_id, subject)
 );
+
+-- Public-client ownership only; this is not a cryptographic JWK validator.
+CREATE FUNCTION aegaeon.client_jwks_are_public(value jsonb) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    member jsonb;
+BEGIN
+    IF value IS NULL THEN
+        RETURN true;
+    END IF;
+    IF jsonb_typeof(value) IS DISTINCT FROM 'object'
+       OR jsonb_typeof(value -> 'keys') IS DISTINCT FROM 'array' THEN
+        RETURN false;
+    END IF;
+    FOR member IN SELECT element FROM jsonb_array_elements(value -> 'keys') AS elements(element)
+    LOOP
+        IF jsonb_typeof(member) IS DISTINCT FROM 'object'
+           OR member ?| ARRAY['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] THEN
+            RETURN false;
+        END IF;
+    END LOOP;
+    RETURN true;
+END;
+$$;
+
+ALTER TABLE aegaeon.dynamic_client_registrations
+    ADD CONSTRAINT dynamic_client_registrations_public_jwks
+    CHECK (aegaeon.client_jwks_are_public(jwks));

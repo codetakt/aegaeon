@@ -12,7 +12,8 @@ impl<'de> Deserialize<'de> for FetchedJwks {
 }
 
 impl FetchedJwks {
-    pub(in crate::client_registry) fn from_value(value: &Value) -> Result<Self, &'static str> {
+    pub(in crate::client_registry) fn from_value(value: &Value) -> Result<Self, String> {
+        crate::client_registry::public_jwks::validate_public_client_jwks(value)?;
         let set =
             JwkSet::from_verification_value(value.clone()).map_err(|_| "invalid JWKS envelope")?;
         set.ensure_unique_kid().map_err(|_| "duplicate JWKS kid")?;
