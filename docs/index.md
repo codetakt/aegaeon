@@ -68,7 +68,7 @@ Audience: contributors, maintainers
 | `docs/configurations/client-credentials.md` | configuration | Client credentials target authorization | current implementation baseline | 2026-09-30 | Identity | operators, OAuth client developers, verification reviewers |
 | `docs/configurations/environment/README.md` | index | Server Environment Reference | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/core-system.md` | configuration | Server Environment: Core System Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
-| `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
+| `docs/configurations/environment/federation-observability-and-test.md` | configuration | Server Environment: Federation, Observability, And Test Settings | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/configurations/environment/management-plane.md` | configuration | Server Environment: Management Plane Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/network-and-policy.md` | configuration | Server Environment: Network And Runtime Policy Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/configurations/environment/oauth-oidc-runtime.md` | configuration | Server Environment: OAuth And OIDC Runtime Settings | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |

@@ -1,6 +1,6 @@
 # Server Environment: Federation, Observability, And Test Settings
 
-Last updated: 2026-07-08
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -40,6 +40,28 @@ any public endpoint or compliance claim is activated.
 | `AEGAEON_UPSTREAM_JWKS_CACHE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback. In the supported runtime, `policy.upstreamJwksCacheTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
+
+Upstream ID Tokens must name only this connection's configured client ID as
+an audience. A string and an array containing that same ID are equivalent;
+repeated copies of the same ID are accepted. Empty audiences and any additional
+audience are rejected, including when `azp` matches the client ID. The current
+configuration grants no trust to additional audiences. A provider's signature,
+shared issuer or another registered client does not grant such trust.
+
+Aegaeon's local policy requires a supplied `azp` to equal the client ID exactly,
+regardless of the audience representation; missing `azp` is allowed. All audience
+and `azp` comparisons are case-sensitive without trimming or URI normalization.
+OpenID Connect Core 1.0 incorporating errata set 2 (2023-12-15), §§2 and 3.1.3.7,
+permits the audience representations and requires rejection of untrusted
+additional audiences. Its `azp` validation guidance depends on extensions;
+this local comparison policy does not implement an additional extension or
+require `azp` on every ID Token.
+
+This tightens admission on both login and refresh: tokens previously accepted
+with other audiences now fail. Configure the upstream provider to issue ID
+Tokens solely for this RP's client ID before upgrading. No migration or new
+setting is required. Explicitly managed trust in additional audiences remains
+a future feature.
 
 ## Discovery metadata (mTLS aliases)
 

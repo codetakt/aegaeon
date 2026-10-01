@@ -1,5 +1,5 @@
 use super::{
-    hash::verify_optional_hash, is_https_url, unix_time_now_i64, Error, IdToken,
+    hash::verify_optional_hash, is_https_url, unix_time_now_i64, Audience, Error, IdToken,
     IdTokenValidationContext, Result,
 };
 
@@ -45,16 +45,7 @@ impl IdToken {
             return Err(Error::InvalidRequest("Issuer must be https".into()));
         }
 
-        if !self.claims.aud.contains(ctx.client_id) {
-            return Err(Error::InvalidRequest("Invalid audience".into()));
-        }
-
-        if self.claims.aud.is_multiple() {
-            match &self.claims.azp {
-                Some(azp) if azp == ctx.client_id => {}
-                _ => return Err(Error::InvalidRequest("Invalid or missing azp".into())),
-            }
-        }
+        self.validate_audience_and_authorized_party(ctx.client_id)?;
 
         if self.claims.exp <= self.claims.iat {
             return Err(Error::InvalidRequest(
@@ -130,6 +121,34 @@ impl IdToken {
             &self.signing_alg,
             "c_hash",
         )?;
+
+        Ok(())
+    }
+
+    fn validate_audience_and_authorized_party(&self, client_id: &str) -> Result<()> {
+        // OIDC Core errata set 2, section 3.1.3.7: reject additional audiences
+        // not trusted by this RP. The current context grants trust only to its
+        // own client ID; azp does not grant trust in another audience.
+        let audience_is_trusted = match &self.claims.aud {
+            Audience::Single(value) => value == client_id,
+            Audience::Multiple(values) => {
+                !values.is_empty() && values.iter().all(|value| value == client_id)
+            }
+        };
+        if !audience_is_trusted {
+            return Err(Error::InvalidRequest("Invalid audience".into()));
+        }
+
+        // Aegaeon's supplied-azp comparison policy is independent of audience
+        // representation. Core does not universally require azp to be present.
+        if self
+            .claims
+            .azp
+            .as_deref()
+            .is_some_and(|azp| azp != client_id)
+        {
+            return Err(Error::InvalidRequest("Invalid azp".into()));
+        }
 
         Ok(())
     }

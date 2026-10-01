@@ -5494,6 +5494,8 @@ openid_core:
     invariant: oidc_token_prop
   tests:
   - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/oidc/id_token/tests/audience.rs
+  - crates/server/src/web/upstream_tests/id_token/audience.rs
   ci_check: verify-fstar
   status: verified
   runtime_link: crates/server/src/authcode/token/tests/oidc_id_token.rs
@@ -5505,6 +5507,8 @@ openid_core:
   notes:
   - F* verification includes `IdToken.fst` (which includes `IdToken.Spec`) via `nix build .#verify-fstar`.
   - Runtime behaviour is exercised by OIDC E2E tests (issuer/audience/nonce validation paths).
+  - "OIDC Core 1.0 errata set 2 (2023-12-15), sections 2 and 3.1.3.7: string and one-element array audiences are equivalent; untrusted additional audiences must reject. Aegaeon currently trusts only the expected client ID, including self-only duplicates. A supplied azp must match exactly as local policy; missing azp is allowed. Core azp guidance is extension-dependent, not a universal multiple-audience presence rule."
+  - "The cited F* model retains its older audience-membership and multiple-array azp predicates. Those predicates do not establish this runtime trust policy or representation equivalence. New public validator and signed upstream callback/refresh validation tests are finite implementation evidence; model correspondence remains open, with no proof-status upgrade."
 - id: OIDC-1-003
   section: Hash claims
   requirement: MUST

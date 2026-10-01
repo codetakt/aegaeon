@@ -346,3 +346,6 @@ fn verified_claim_profile_rejects_null_digest_hash_runtime() -> TestResult {
     ));
     Ok(())
 }
+
+#[path = "tests/audience.rs"]
+mod audience;
