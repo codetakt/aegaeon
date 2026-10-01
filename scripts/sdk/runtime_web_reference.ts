@@ -184,6 +184,77 @@ function parseJsonUtf8(bytes, label) {
   }
 }
 
+function rootIatNumberToken(text, payload) {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    !Object.prototype.hasOwnProperty.call(payload, "iat") ||
+    typeof payload.iat !== "number"
+  ) {
+    throw new TypeError("dpop payload iat must be a JSON number in the root claims object");
+  }
+  // The caller has validated text with JSON.parse. Keep string tokens unchanged
+  // and quote number tokens; JSON.parse still resolves structure and last keys.
+  const shadow = text.replace(
+    /"(?:[^"\\]|\\[\s\S])*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/g,
+    (token) => token[0] === "\"" ? token : `"${token}"`,
+  );
+  return JSON.parse(shadow).iat;
+}
+
+// text is a canonical signed decimal integer without leading zeroes or -0.
+function compareDpopExponentText(text, bound) {
+  const negative = text[0] === "-";
+  const boundNegative = bound < 0n;
+  if (negative !== boundNegative) {
+    return negative ? -1 : 1;
+  }
+  const digits = negative ? text.slice(1) : text;
+  const boundDigits = (boundNegative ? -bound : bound).toString();
+  const order = digits.length === boundDigits.length
+    ? (digits === boundDigits ? 0 : digits < boundDigits ? -1 : 1)
+    : (digits.length < boundDigits.length ? -1 : 1);
+  return negative ? -order : order;
+}
+
+function exactDpopIatSeconds(token) {
+  const match = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(token);
+  if (!match) {
+    throw new TypeError("dpop payload iat has no valid JSON number token");
+  }
+  const fraction = match[3] ?? "";
+  const digits = (match[2] + fraction).replace(/^0+/, "");
+  if (digits.length === 0) {
+    return 0n;
+  }
+  if (match[1] === "-") {
+    throw new RangeError("dpop payload iat must be non-negative");
+  }
+  const coefficient = digits.replace(/0+$/, "");
+  if (coefficient.length > 20) {
+    throw new RangeError("dpop payload iat must fit an unsigned 64-bit integer");
+  }
+  const rawExponent = match[4] ?? "0";
+  const exponentDigits = rawExponent.replace(/^[+-]?0*/, "") || "0";
+  const exponent = rawExponent[0] === "-" && exponentDigits !== "0"
+    ? `-${exponentDigits}` : exponentDigits;
+  const lower = BigInt(fraction.length) - BigInt(digits.length - coefficient.length);
+  const upper = lower + 20n - BigInt(coefficient.length);
+  if (compareDpopExponentText(exponent, lower) < 0) {
+    throw new RangeError("dpop payload iat must denote an integer second");
+  }
+  if (compareDpopExponentText(exponent, upper) > 0) {
+    throw new RangeError("dpop payload iat must fit an unsigned 64-bit integer");
+  }
+  // Only the bounded canonical exponent reaches BigInt; the power is 0..19.
+  const seconds = BigInt(coefficient) * 10n ** (BigInt(exponent) - lower);
+  if (seconds > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError("dpop payload iat must fit an unsigned 64-bit integer");
+  }
+  return seconds;
+}
+
 function parseCompactJws(compactBytes, label) {
   const compact = decodeUtf8(compactBytes);
   const parts = compact.split(".");
@@ -200,6 +271,7 @@ function parseCompactJws(compactBytes, label) {
     compact,
     header,
     payload,
+    payloadBytes,
     signingInput: encodeUtf8(`${headerB64}.${payloadB64}`),
     signatureBytes,
   };
@@ -227,6 +299,21 @@ function normalizeIntegerSeconds(value, fieldName, { required = false } = {}) {
     return { present: true, seconds: BigInt(value) };
   }
   throw new TypeError(`${fieldName} must be a non-negative integer number or bigint`);
+}
+
+function normalizeDpopU64Seconds(value, fieldName) {
+  const seconds = normalizeIntegerSeconds(value, fieldName, { required: true }).seconds;
+  if (seconds > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`${fieldName} must fit an unsigned 64-bit integer`);
+  }
+  return seconds;
+}
+
+function normalizeDpopU32Seconds(value, fieldName) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new RangeError(`${fieldName} must be an unsigned 32-bit integer number`);
+  }
+  return value;
 }
 
 function parseMaybeString(value, fieldName) {
@@ -1004,7 +1091,7 @@ class WebReferenceCoreRuntime {
     this.writeU32(resultPtr + 20, parsed.htuHandle);
     this.writeU32(resultPtr + 24, parsed.jtiHandle);
     this.writeU32(resultPtr + 28, parsed.athHandle);
-    this.writeU64(resultPtr + 32, parsed.iatSeconds);
+    this.writeU64(resultPtr + 32, normalizeDpopU64Seconds(parsed.iatSeconds, "iatSeconds"));
     this.writeU32(resultPtr + 40, parsed.statusCode);
     this.writeU32(resultPtr + 44, 0);
   }
@@ -1071,7 +1158,9 @@ class WebReferenceCoreRuntime {
       const htu = parseMaybeString(payload.htu, "dpop payload htu");
       const jti = parseMaybeString(payload.jti, "dpop payload jti");
       const ath = parseMaybeString(payload.ath, "dpop payload ath");
-      const iat = normalizeIntegerSeconds(payload.iat, "dpop payload iat", { required: true });
+      const iatSeconds = exactDpopIatSeconds(
+        rootIatNumberToken(decodeUtf8(parsed.payloadBytes), payload),
+      );
       if (algorithmBit == null) {
         throw new TypeError("dpop protected header alg is not supported");
       }
@@ -1094,7 +1183,7 @@ class WebReferenceCoreRuntime {
         htuHandle: this.registerHandleString(htu),
         jtiHandle: jti == null ? 0 : this.registerHandleString(jti),
         athHandle: ath == null ? 0 : this.registerHandleString(ath),
-        iatSeconds: iat.seconds,
+        iatSeconds,
         statusCode: 0,
       });
       return 0;
@@ -1156,10 +1245,10 @@ class WebReferenceCoreRuntime {
     this.writeU32(ptr + 36, fields.allowedAlgorithmsBitmask ?? 0);
     this.writeU32(ptr + 40, fields.flags ?? 0);
     this.writeU32(ptr + 44, fields.reserved0 ?? 0);
-    this.writeU64(ptr + 48, fields.iatSeconds ?? 0n);
-    this.writeU64(ptr + 56, fields.nowUnixTimeSeconds ?? 0n);
-    this.writeU32(ptr + 64, fields.maxAgeSeconds ?? 0);
-    this.writeU32(ptr + 68, fields.maxFutureSkewSeconds ?? 0);
+    this.writeU64(ptr + 48, normalizeDpopU64Seconds(fields.iatSeconds ?? 0n, "iatSeconds"));
+    this.writeU64(ptr + 56, normalizeDpopU64Seconds(fields.nowUnixTimeSeconds ?? 0n, "nowUnixTimeSeconds"));
+    this.writeU32(ptr + 64, normalizeDpopU32Seconds(fields.maxAgeSeconds ?? 0, "maxAgeSeconds"));
+    this.writeU32(ptr + 68, normalizeDpopU32Seconds(fields.maxFutureSkewSeconds ?? 0, "maxFutureSkewSeconds"));
     return ptr;
   }
 
@@ -1185,9 +1274,9 @@ class WebReferenceCoreRuntime {
     this.writeU32(ptr + 12, fields.accessTokenHandle ?? 0);
     this.writeU32(ptr + 16, fields.replayNamespaceHandle ?? 0);
     this.writeU32(ptr + 20, fields.padding0 ?? 0);
-    this.writeU64(ptr + 24, fields.nowUnixTimeSeconds ?? 0n);
-    this.writeU32(ptr + 32, fields.maxAgeSeconds ?? 0);
-    this.writeU32(ptr + 36, fields.maxFutureSkewSeconds ?? 0);
+    this.writeU64(ptr + 24, normalizeDpopU64Seconds(fields.nowUnixTimeSeconds ?? 0n, "nowUnixTimeSeconds"));
+    this.writeU32(ptr + 32, normalizeDpopU32Seconds(fields.maxAgeSeconds ?? 0, "maxAgeSeconds"));
+    this.writeU32(ptr + 36, normalizeDpopU32Seconds(fields.maxFutureSkewSeconds ?? 0, "maxFutureSkewSeconds"));
     this.writeU32(ptr + 40, fields.flags ?? 0);
     this.writeU32(ptr + 44, fields.allowedAlgorithmsBitmask ?? 0);
     this.writeU32(ptr + 48, fields.reserved0 ?? 0);
