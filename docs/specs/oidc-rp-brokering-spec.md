@@ -69,6 +69,29 @@ This boundary implements the signing-key endorsement requirements common to Open
 1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
 complete header, statement-profile, metadata-policy, or constraints conformance.
 
+## Federation JWT Purpose And Key Identification
+
+Entity Statement verification, including Entity Configurations and every statement retained in a
+trust chain, requires the exact protected header `typ: entity-statement+jwt`. Trust Mark
+verification requires `typ: trust-mark+jwt`. Missing, null, empty, or differently typed/purposed
+values are rejected even when the signature could otherwise verify. No alternative Trust Mark
+media-type profile is configured.
+
+Both verification boundaries require a nonempty string `kid` that exactly selects a supplied
+signing key. An absent key ID cannot fall back to the only available key. Type and key identifiers
+are case sensitive; key IDs are opaque and are not trimmed, including IDs containing whitespace.
+Duplicate protected headers remain rejected by the existing JWS parser. These requirements are
+scoped to Federation verification and do not change generic JWS, ID Token, or DPoP handling.
+
+Fresh and cached trust-chain verification use the same checks. Existing cached statements with
+missing or invalid purpose/key identification are rejected and trigger fresh resolution; there is
+no database migration. The explicitly unverified Entity Statement payload parser remains a
+discovery/parser API and does not establish acceptance.
+
+This implements the JWT purpose and key-identification requirements common to OpenID Federation
+1.0 and 1.1 sections 3, 3.2, and 7. It does not change the adopted edition or establish full statement
+profile conformance, Trust Mark issuer accreditation, or delegation validation.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The

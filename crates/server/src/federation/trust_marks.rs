@@ -11,7 +11,8 @@ use super::{
 ///
 /// # Errors
 ///
-/// Returns [`FederationError`] when signature verification fails, the payload is malformed, or
+/// Returns [`FederationError`] when the protected header has the wrong purpose or no nonempty
+/// key ID, signature verification fails, the payload is malformed, or
 /// trust mark claims violate subject, identifier, or temporal requirements.
 pub fn verify_trust_mark(
     trust_mark: &TrustMark,
@@ -20,6 +21,7 @@ pub fn verify_trust_mark(
     now: i64,
 ) -> Result<TrustMarkClaims, FederationError> {
     let parsed = Jws::from_compact(&trust_mark.trust_mark)?;
+    let header_kid = super::headers::required_signing_kid(&parsed.header, "trust-mark+jwt")?;
     let alg = &parsed.header.alg;
     let ctx = JoseContext::default();
 
@@ -27,10 +29,8 @@ pub fn verify_trust_mark(
     let mut verified_payload = None;
 
     for key in issuer_jwks.signature_keys() {
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
+        if key.kid.as_deref() != Some(header_kid) {
+            continue;
         }
 
         let decoded = match decode_jwk_material(key) {
