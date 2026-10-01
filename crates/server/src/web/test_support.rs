@@ -8,7 +8,7 @@ use crate::{
 };
 pub(crate) use authorization::{
     derive_test_authorization_runtime, reload_authorization_runtime, seed_oidc_configuration,
-    update_test_policy,
+    seed_request_object_encryption_key, update_test_policy,
 };
 pub(crate) use projections::seed_test_projection;
 use serde_json::json;
