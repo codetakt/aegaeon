@@ -72,7 +72,7 @@ fn jwks_runtime_knob_bounds_are_finite() {
 #[test]
 fn jwks_process_local_cache_pruning_evicts_oldest_entries() {
     let now = std::time::Instant::now();
-    let mut cache = HashMap::from([
+    let entries = [
         (
             "old".to_string(),
             test_cache_entry(now - std::time::Duration::from_secs(30)),
@@ -85,7 +85,11 @@ fn jwks_process_local_cache_pruning_evicts_oldest_entries() {
             "new".to_string(),
             test_cache_entry(now - std::time::Duration::from_secs(10)),
         ),
-    ]);
+    ];
+    let mut cache = super::super::jwks_runtime_state::JwksLocalCache::default();
+    for (uri, entry) in entries {
+        cache.insert(uri, entry);
+    }
 
     jwks_gc::prune_cache_to_capacity(&mut cache, 2);
 
@@ -199,14 +203,7 @@ fn jwks_background_refresh_coordination_is_capacity_bounded() -> TestResult {
 }
 
 fn test_cache_entry(fetched_at: std::time::Instant) -> CacheEntry {
-    CacheEntry {
-        etag: None,
-        expires_at: None,
-        fetched_at,
-        jwks: FetchedJwks { keys: Vec::new() },
-        kid_fps: HashMap::new(),
-        last_modified: None,
-    }
+    cache_test_entry(FetchedJwks { keys: Vec::new() }, fetched_at)
 }
 
 #[test]
@@ -239,14 +236,7 @@ fn jwks_fetch_uses_injected_runtime_state() -> TestResult {
     )?
     .insert(
         uri.to_string(),
-        CacheEntry {
-            etag: None,
-            expires_at: None,
-            fetched_at: std::time::Instant::now(),
-            jwks,
-            kid_fps: HashMap::new(),
-            last_modified: None,
-        },
+        cache_test_entry(jwks, std::time::Instant::now()),
     );
 
     assert!(fetch_jwks_with_state(&state_with_cache, &policy, uri).is_some());
@@ -272,7 +262,7 @@ fn jwks_background_refresh_is_singleflight_by_uri() -> TestResult {
         refreshes.insert(uri.to_string());
     }
 
-    spawn_jwks_refresh_once(JwksRuntimePolicy::default(), uri, None, None);
+    spawn_jwks_refresh_once(JwksRuntimePolicy::default(), uri);
 
     let still_in_flight = test_lock(
         jwks_runtime_state()

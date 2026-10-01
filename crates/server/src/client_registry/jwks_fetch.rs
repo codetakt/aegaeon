@@ -14,12 +14,14 @@ pub(super) fn fetch_jwks_with_state(
     super::jwks_gc::maybe_run_gc_with_state(state, policy);
 
     let ctx = JwksFetchContext::new(state, policy, uri);
-    // The process-local body cache is a positive, freshness-bound cache only.
-    // Shared runtime state remains authoritative for fetch admission: once this
-    // probe misses or the body is expired, Redis/in-memory circuit state decides
-    // whether the process may perform network IO. There is intentionally no
-    // stale-if-error path here.
+    // A fresh, valid process-local body can satisfy the initial probe. After a
+    // miss, shared runtime state decides whether a refresh is admitted. If that
+    // refresh fails, the reread body must still be fresh. An admitted 2xx body
+    // and a revalidated owned candidate both return directly.
     let memory = probe_memory_cache(&ctx);
+    if memory.authoritative_failure {
+        return None;
+    }
     if let Some(hit) = memory.hit {
         return Some(hit);
     }
@@ -29,7 +31,7 @@ pub(super) fn fetch_jwks_with_state(
         return None;
     }
 
-    refresh_and_read_memory_cache(&ctx, memory.cached_etag, memory.cached_last_mod)
+    refresh_and_read_memory_cache(&ctx)
 }
 
 fn record_circuit_fetch_refusal(ctx: &JwksFetchContext<'_>) {
