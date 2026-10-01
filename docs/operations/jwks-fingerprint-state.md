@@ -1,6 +1,6 @@
 # Shared Client JWKS Fingerprint State
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -90,7 +90,9 @@ namespace fixtures. These tests require a separate namespace and disposable
 backend. On hosts that restrict unprivileged
 user namespaces, use `--sudo-netns`: Cargo still builds as the invoking user;
 passwordless sudo creates and checks a network namespace, then drops supplementary
-groups and returns to the original UID/GID before starting fixtures. No host
+groups and returns to the original UID/GID before starting fixtures. Both IDs
+must be positive; UID or primary GID 0 is rejected before privilege changes or
+fixture startup. No host
 network settings are changed, and a failed isolation setup fails the command.
 
 Use `--server /path/to/valkey-server` or another Redis binary to select a backend.

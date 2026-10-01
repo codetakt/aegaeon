@@ -43,7 +43,7 @@ def inside_namespace(
             raise RuntimeError("fixture namespace contains a non-loopback route")
     if run_as is not None:
         uid, gid = run_as
-        if os.geteuid() != 0 or uid <= 0 or gid < 0:
+        if os.geteuid() != 0 or uid <= 0 or gid <= 0:
             raise RuntimeError("privileged namespace must drop to the invoking non-root user")
         os.setgroups([])
         os.setgid(gid)
