@@ -1683,6 +1683,7 @@ rfc_9449:
     invariant: validate_htu
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_uri_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-htu-match
   status: verified
@@ -1692,6 +1693,9 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Htu_validation.fst#validate_htu
     rust: crates/ffi/src/lib.rs#validate_dpop_htu_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "The cited F* predicate and Rust spec oracle retain exact-string equality semantics. They do not prove HTTP URI parsing, RFC 3986 normalization, or its composition with production signature verification."
+  - "Both production FFI verification APIs compare validated HTTP(S) URI components using RFC 9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Runtime normalization and its composition remain distinct assurance obligations; signed Ed25519 fixtures exercise finite positive and rejection cases. Server claims-only tests are separate evidence."
 - id: 9449-007
   section: '4.3'
   requirement: MUST
