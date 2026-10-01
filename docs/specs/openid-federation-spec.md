@@ -90,9 +90,51 @@ and OP `scopes_supported` do not receive this representation conversion.
 Unknown noncritical operators are ignored after structural validation. Critical
 declarations remain rejected by raw statement admission; these helpers cannot validate
 critical declarations or recover duplicate members discarded during JSON parsing.
-Local anchor policy pinning, complete-chain/cache admission timing and authoritative
-use of resolved metadata by every OIDC consumer remain separate integration boundaries.
-This functional resolver does not establish full Federation conformance.
+Fresh and cached chain APIs now require policy resolution before returning success.
+Authoritative use of resolved metadata by every OIDC consumer remains a separate
+integration boundary; successful chain admission does not establish full Federation
+conformance.
+
+## Optional Local Anchor Pins and Complete-Chain Admission
+
+The nullable `TrustAnchor.metadata_policy` and management `metadataPolicy` field
+are an optional local equality pin. Absence means no additional pin; configured
+anchor identity/keys, signatures, time/path checks and every signed subordinate
+policy still apply. A valid chain with no signed policies is permitted.
+
+When a pin is supplied, the anchor-issued subordinate statement must contain the
+same policy. Object key order is ignored and array order remains significant.
+Unknown noncritical operators remain part of the pin's original JSON comparison.
+The pin is validated using the same three-level grammar and operator combinations
+as signed policies, but is never merged or applied as an extra ancestor policy.
+Empty objects, explicit null, scalars and malformed nested policies are rejected.
+Management creation returns 400 before writing the anchor or success audit;
+production repository upserts and stored-to-runtime conversion also validate pins.
+
+**Upgrade:** Missing pins previously prevented all chains through those anchors;
+now they allow otherwise valid configured-anchor chains. Administrators who used
+a missing pin to disable an anchor must remove that configured anchor before
+upgrading. Valid nonempty pins retain their exact restriction. Malformed existing
+pins remain readable and deletable by authorized administrators but cannot authorize
+chains; correct or recreate them through management. No values are silently rewritten,
+no migration or cache purge is required, and an invalid stored anchor still prevents
+conversion of that environment's full configured-anchor list.
+
+The common raw signed-path admission checks policy grammar, merge, immediate-superior
+overlay and application after signature/path/pin validation and before returning
+success. Policy errors participate in existing bounded authority-hint backtracking.
+Caches reverify original JWS against current keys/pins and policies before returning
+a hit; a rejected hit follows existing fresh resolution. Custom fresh callbacks are
+independently checked before cache upsert. Signed claims and cached raw evidence are
+not replaced with derived metadata, and freely constructed public chain types attest
+no validation by themselves.
+
+Management chain refresh rechecks acquired raw JWS against the expected leaf and
+configured anchor, including policy resolution, before cache renewal and success
+audit. Refused stored evidence may remain for inspection but is not renewed or
+accepted. Existing role/environment checks, explicit-now behavior and cache write
+failure semantics remain. Complete-chain cache TTL versus signed time remains a
+separate temporal obligation; this change does not alter it.
 
 ## Entity Fetch
 

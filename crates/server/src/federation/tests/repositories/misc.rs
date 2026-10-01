@@ -87,7 +87,7 @@ fn resolve_chain_up_intermediate_no_hints_continues() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut fetcher = MockFetcher::new();

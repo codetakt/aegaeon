@@ -5,7 +5,9 @@ use super::super::super::super::{
 use super::{
     audit::write_trust_anchor_created_audit,
     persistence::{ensure_federation_trust_anchor_unique, insert_federation_trust_anchor},
-    validation::{normalized_trust_anchor_entity_id, validate_trust_anchor_jwks},
+    validation::{
+        normalized_trust_anchor_entity_id, validate_trust_anchor_jwks, validate_trust_anchor_policy,
+    },
 };
 use crate::management::types::{CreateFederationTrustAnchorRequest, FederationTrustAnchor};
 use crate::web::management::state::ManagementSession;
@@ -32,6 +34,7 @@ pub(super) async fn create_federation_trust_anchor_inner(
     .await?;
     let entity_id = normalized_trust_anchor_entity_id(&req.entity_id, request_id)?;
     validate_trust_anchor_jwks(&req.jwks, request_id)?;
+    validate_trust_anchor_policy(req.metadata_policy.as_ref(), request_id)?;
     ensure_federation_trust_anchor_unique(pool, scope, &entity_id, request_id).await?;
 
     let mut tx = begin_management_transaction(pool, request_id).await?;
