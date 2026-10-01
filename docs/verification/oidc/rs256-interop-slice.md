@@ -108,9 +108,13 @@ The promotion record must be backed by command output captured from the reposito
 Before a release claim references this slice, refresh the evidence bundle and record the artifact
 path or CI run ID for the following checks:
 
+Generate the matrix inventory as a separate local report. The explicit output
+below is not a product assurance statement and does not replace the preserved
+historical `docs/verification/claims/claim-index.md` snapshot.
+
 ```bash
 python3 scripts/validation/validate_compliance_matrix.py --check
-python3 scripts/validation/generate_claim_index.py
+python3 scripts/validation/generate_claim_index.py --output artifacts/verification/claim-index-current.md
 python3 scripts/validation/check_runtime_drift.py --generate
 cargo test -p aegaeon-server --lib web::token_exchange_tests::request_object_retention -- --nocapture
 cargo test -p aegaeon-server --lib par::tests::request_lifecycle -- --nocapture
