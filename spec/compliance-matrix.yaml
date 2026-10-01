@@ -458,6 +458,20 @@ rfc_7636:
     fstar: fstar/pkce/Pkce.fst#verify_pkce_s256
     rust: crates/server/src/authcode/token.rs#verify_pkce
     test: crates/server/tests/spec_oracle_test.rs
+- id: 7636-challenge-admission
+  section: '4.2, 4.3, 4.6; RFC 9700 section 4.8.2'
+  requirement: MUST
+  description: Validate challenge syntax before retention and reject a verifier without an original challenge
+  module: crates/server/src/util/pkce.rs
+  tests:
+  - crates/server/src/authcode/token/tests/pkce_admission.rs
+  - crates/server/src/web/assertion_client/tests/pkce.rs
+  status: partial
+  notes:
+  - "Runtime syntax admission requires 43-128 ASCII unreserved bytes and S256; an omitted method is refused, including PAR."
+  - "Both-absent parsing remains conditional; current persisted profiles require PKCE. The public issuer API retains its explicitly optional path."
+  - "Syntax admission does not prove an S256 preimage or injectivity; redemption compares the derived S256 value with the exact stored challenge."
+  - "Malformed retained challenges and verifier-without-challenge fail closed independently of the runtime PKCE requirement. Finite route/API/store tests do not extend formal proof scope."
 - id: 7636-003
   section: '4.3'
   requirement: MUST

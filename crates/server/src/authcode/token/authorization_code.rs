@@ -65,6 +65,9 @@ pub enum AuthorizationCodeIssueError {
     #[error("PKCE required")]
     PkceRequired,
 
+    #[error("invalid PKCE code_challenge syntax")]
+    InvalidPkceChallenge,
+
     #[error("PKCE required (S256)")]
     PkceS256Required,
 
@@ -258,6 +261,9 @@ impl TokenIssuer {
             (Some(challenge), Some(method)) => {
                 if method != "S256" {
                     return Err(AuthorizationCodeIssueError::PkceS256Required);
+                }
+                if !crate::util::valid_pkce_challenge(&challenge) {
+                    return Err(AuthorizationCodeIssueError::InvalidPkceChallenge);
                 }
                 (Some(challenge), Some(method))
             }

@@ -72,6 +72,22 @@ pub(super) fn authorize_request_from_plain_query(
         runtime.issuer_base,
     )?;
 
+    if input
+        .code_challenge
+        .as_deref()
+        .is_some_and(|value| !util::valid_pkce_challenge(value))
+        || (input.code_challenge.is_some()
+            && input.code_challenge_method.as_deref() != Some("S256"))
+        || (input.code_challenge.is_none() && input.code_challenge_method.is_some())
+    {
+        return Err(authorize_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("valid PKCE challenge and S256 method required"),
+            runtime.issuer_base,
+        ));
+    }
+
     Ok(AuthzReq {
         response_type,
         client_id,

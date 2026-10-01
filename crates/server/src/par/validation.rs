@@ -5,10 +5,14 @@ use super::{ParError, ParRequest, ParStore, ValidatedParRequest};
 use crate::client_registry::verify_client_secret_material;
 
 fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
-    if request.code_challenge.is_none() {
+    if request
+        .code_challenge
+        .as_deref()
+        .is_none_or(|value| !crate::util::valid_pkce_challenge(value))
+    {
         return Err(ParError {
             error: "invalid_request".to_string(),
-            error_description: Some("PKCE (S256) code_challenge required".to_string()),
+            error_description: Some("valid PKCE (S256) code_challenge required".to_string()),
         });
     }
     if request
