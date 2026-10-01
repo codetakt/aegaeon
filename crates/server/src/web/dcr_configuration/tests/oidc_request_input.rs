@@ -1,6 +1,8 @@
 //! Actual router regressions reuse the existing database/active-client fixture.
 //! These check GET input compatibility and HEAD routing, not complete POST flows.
 use super::*;
+use crate::management::types::PolicyDocument;
+use crate::web::test_support::seed_oidc_configuration;
 use axum::extract::ConnectInfo;
 use std::net::SocketAddr;
 
@@ -37,25 +39,14 @@ async fn oidc_input_real_router_preserves_get_head_and_early_rejections() -> Tes
 async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
     let client = sample_registered_client("oidc-input-client");
     create_test_registration(pool, env, &client, "synthetic-registration-token").await?;
-    let pem = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/rsa2048-private.pk8.pem"
-    ));
-    let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem("oidc-input-test".into(), pem)?;
-    let mut state = test_app_state(pool.clone(), env).await?;
-    state.oidc.config = Some(std::sync::Arc::new(crate::oidc::OidcConfig {
-        issuer: env.issuer_url.clone(),
-        id_token_ttl_secs: 300,
-        discovery_enabled: true,
-        userinfo_enabled: true,
-        logout_enabled: true,
-        backchannel_logout_enabled: false,
-        logout_session_ttl_secs: 600,
-        backchannel_logout_timeout_secs: 2,
-        require_nonce: false,
-        signing_key,
-        request_object_encryption_key: None,
-    }));
+    let policy = PolicyDocument {
+        oidc_enabled: true,
+        oidc_enable_logout: true,
+        id_token_time_to_live_seconds: 300,
+        ..PolicyDocument::default()
+    };
+    seed_oidc_configuration(pool, env, policy, "oidc-input-test").await?;
+    let state = test_app_state(pool.clone(), env).await?;
     let app = crate::web::router::build_router(state);
     let query = url::form_urlencoded::Serializer::new(String::new())
         .append_pair("response_type", "code")

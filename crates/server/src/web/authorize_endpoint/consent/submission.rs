@@ -1,7 +1,9 @@
 use super::super::session::{authorize_decide_session, resolve_authorize_session_state};
 use super::{has_prompt, storage};
 use crate::web::{
-    authorize_context::build_authorize_request_context, form_helpers::auth_session_cookie, AppState,
+    authorize_context::{build_authorize_request_context, state_for_authorization_observation},
+    form_helpers::auth_session_cookie,
+    AppState,
 };
 use axum::{
     extract::{rejection::FormRejection, Form, State},
@@ -69,6 +71,8 @@ async fn process(
     let uri = pending.uri.parse().map_err(|_| storage::invalid())?;
     let mut ctx =
         build_authorize_request_context(state, &uri, &state.issuer, pending.id.to_string()).await?;
+    let selected_state = state_for_authorization_observation(state, &ctx.observation);
+    let state = &selected_state;
     // Only a consent row already bound to this subject/session may carry the
     // receipt. Do not re-consume its login continuation or trust an HTTP flag.
     ctx.reauthenticated = pending
