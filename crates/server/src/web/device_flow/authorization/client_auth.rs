@@ -10,7 +10,7 @@ use super::super::super::oauth_errors::{
     registry_state_error_response,
 };
 use super::super::super::{
-    multiple_client_auth_methods_present, token_auth_presence,
+    multiple_client_auth_methods_present, private_key_jwt_client_id, token_auth_presence,
     validate_private_key_jwt_client_assertion, AppState, ClientAuthPresence, TokenForm,
 };
 
@@ -42,6 +42,7 @@ fn device_client_id_from_basic(
 }
 
 fn resolve_device_authorization_client_id(
+    state: &AppState,
     auth_header: Option<&str>,
     auth_presence: ClientAuthPresence,
     form: &TokenForm,
@@ -49,11 +50,21 @@ fn resolve_device_authorization_client_id(
 ) -> Result<String, Response> {
     let client_id_from_basic =
         device_client_id_from_basic(auth_header, auth_presence, issuer_base)?;
-    let client_id_from_form = form
-        .client_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty());
+    let assertion_id = if auth_presence.private_key_jwt {
+        Some(
+            private_key_jwt_client_id(
+                state,
+                form.client_id.as_deref(),
+                form.client_assertion_type.as_deref(),
+                form.client_assertion.as_deref(),
+            )?
+            .ok_or_else(|| device_invalid_client_response(issuer_base))?,
+        )
+    } else {
+        None
+    };
+    let client_id_from_basic = client_id_from_basic.or(assertion_id);
+    let client_id_from_form = form.client_id.as_deref();
     match (client_id_from_form, client_id_from_basic.as_deref()) {
         (Some(form_id), Some(basic_id)) if form_id != basic_id => {
             Err(device_invalid_client_response(issuer_base))
@@ -176,8 +187,13 @@ pub(super) async fn authenticate_device_authorization_client(
         ));
     }
 
-    let client_id =
-        resolve_device_authorization_client_id(auth_header, auth_presence, form, issuer_base)?;
+    let client_id = resolve_device_authorization_client_id(
+        state,
+        auth_header,
+        auth_presence,
+        form,
+        issuer_base,
+    )?;
     let registered = state
         .clients
         .try_get(&client_id)

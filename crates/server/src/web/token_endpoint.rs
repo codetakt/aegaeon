@@ -26,7 +26,9 @@ use super::{
     transport_rejection, AppState, DEVICE_CODE_GRANT_TYPE, TOKEN_EXCHANGE_GRANT_TYPE,
 };
 
+mod assertion_subject;
 mod client_auth;
+pub(in crate::web) use assertion_subject::private_key_jwt_client_id;
 mod policy;
 pub(super) use client_auth::{
     client_auth_presence, multiple_client_auth_methods_present, token_auth_presence,
@@ -104,7 +106,7 @@ pub(super) async fn build_token_context(
     };
     let auth_header =
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
-    let (client_id, client_auth_presence) = token_resolve_client_id(auth_header, &form)?;
+    let (client_id, client_auth_presence) = token_resolve_client_id(state, auth_header, &form)?;
     let captured_state = if matches!(
         grant_type.as_str(),
         TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials"

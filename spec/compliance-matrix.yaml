@@ -2095,6 +2095,7 @@ rfc_7521:
   - client
   notes:
   - "Assertion-based client authentication is implemented for JWT assertions via RFC 7523 (private_key_jwt)."
+  - "RFC 7521 section 4.2 permits omitted outer client_id at token, device authorization, introspection and revocation when the assertion subject identifies the fully authenticated client. Plain PAR independently requires outer client_id (RFC 9126 section 2.1); signed Request Object PAR binds its verified client_id to the authenticated client (section 3)."
   - "Assertion authorization grants are supported for JWT bearer (RFC 7523) when the management policy `allowedGrantTypes` includes `urn:ietf:params:oauth:grant-type:jwt-bearer`; other assertion types are not supported."
   - "Client-side assertion usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
@@ -2130,6 +2131,7 @@ rfc_7521:
     invariant: pkjwt_subject_is_client_id
   tests:
   - crates/server/src/client_registry/jwks_helpers_tests/registry_core.rs
+  - crates/server/src/web/assertion_client/tests/mod.rs
   status: verified
   runtime_link: crates/server/src/client_registry.rs
   trace:
@@ -2137,6 +2139,8 @@ rfc_7521:
     fstar: fstar/auth/Pkjwt.fst#pkjwt_subject_is_client_id
     rust: crates/server/src/client_registry/assertions/private_key_jwt.rs#private_key_jwt_subject_policy_matches
     test: crates/jose/tests/jwt_validate.rs
+  notes:
+  - "Router tests cover exact outer/subject matching and omitted outer identification; the unverified subject is a bounded lookup hint only. This finite runtime coverage does not extend the existing model proof domain."
   applies_to:
   - as
 

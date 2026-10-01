@@ -2,8 +2,8 @@ use super::super::oauth_errors::{
     authorization_header, invalid_client_header_error, registry_state_error_response,
 };
 use super::super::{
-    client_auth_presence, multiple_client_auth_methods_present, token_client_auth_method,
-    validate_private_key_jwt_client_assertion, AppState,
+    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    token_client_auth_method, validate_private_key_jwt_client_assertion, AppState,
 };
 use super::forms::{IntrospectForm, RevokeForm};
 use axum::{http::HeaderMap, response::Response};
@@ -14,6 +14,50 @@ use crate::util;
 pub(super) struct EndpointClientAuthContext {
     pub(super) client_id: Option<String>,
     pub(super) client_auth_method: &'static str,
+}
+
+/// Pin only the lookup registration before authentication. Token state remains
+/// unread, and the assertion is still fully validated against this snapshot.
+pub(super) fn introspection_request_state(
+    state: &AppState,
+    headers: &HeaderMap,
+    form: &IntrospectForm,
+) -> Result<AppState, Response> {
+    let auth = authorization_header(headers)
+        .map_err(|err| invalid_client_header_error("token_introspection", "Authorization", err))?;
+    let presence = client_auth_presence(
+        auth,
+        form.client_secret.as_deref(),
+        form.client_assertion_type.as_deref(),
+        form.client_assertion.as_deref(),
+    );
+    if multiple_client_auth_methods_present(presence) {
+        return Err(util::invalid_client_response(
+            "token_introspection",
+            "Multiple client authentication methods are not allowed",
+        ));
+    }
+    let lookup_id = if presence.private_key_jwt {
+        Some(
+            private_key_jwt_client_id(
+                state,
+                form.client_id.as_deref(),
+                form.client_assertion_type.as_deref(),
+                form.client_assertion.as_deref(),
+            )?
+            .ok_or_else(|| {
+                util::invalid_client_response("token_introspection", "Client authentication failed")
+            })?,
+        )
+    } else {
+        auth.and_then(crate::client_registry::ClientRegistry::decode_basic_auth_credentials)
+            .map(|(id, _)| id)
+            .or_else(|| form.client_id.clone())
+    };
+    super::super::client_credentials_authorization::request_state(
+        state,
+        &lookup_id.as_deref().into_iter().collect::<Vec<_>>(),
+    )
 }
 
 #[expect(
@@ -78,7 +122,13 @@ pub(super) async fn introspection_requesting_client_id(
         None
     };
     let pkjwt_client_id = if presence.private_key_jwt {
-        let Some(client_id) = form.client_id.as_deref() else {
+        let Some(client_id) = private_key_jwt_client_id(
+            state,
+            form.client_id.as_deref(),
+            form.client_assertion_type.as_deref(),
+            form.client_assertion.as_deref(),
+        )?
+        else {
             return Err(util::invalid_client_response(
                 "token_introspection",
                 "Client authentication failed",
@@ -86,7 +136,7 @@ pub(super) async fn introspection_requesting_client_id(
         };
         validate_private_key_jwt_client_assertion(
             state,
-            client_id,
+            &client_id,
             form.client_assertion_type.as_deref(),
             form.client_assertion.as_deref(),
             format!("{}/introspect", state.issuer.trim_end_matches('/')),
@@ -212,7 +262,13 @@ pub(super) async fn revocation_requesting_client_id(
         None
     };
     let pkjwt_client_id = if presence.private_key_jwt {
-        let Some(client_id) = form.client_id.as_deref() else {
+        let Some(client_id) = private_key_jwt_client_id(
+            state,
+            form.client_id.as_deref(),
+            form.client_assertion_type.as_deref(),
+            form.client_assertion.as_deref(),
+        )?
+        else {
             return Err(util::invalid_client_response(
                 "token_revocation",
                 "Client authentication failed",
@@ -220,7 +276,7 @@ pub(super) async fn revocation_requesting_client_id(
         };
         validate_private_key_jwt_client_assertion(
             state,
-            client_id,
+            &client_id,
             form.client_assertion_type.as_deref(),
             form.client_assertion.as_deref(),
             format!("{}/revoke", state.issuer.trim_end_matches('/')),

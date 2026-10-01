@@ -130,9 +130,10 @@ use shared::{
 #[cfg(test)]
 use test_prelude::*;
 use token_endpoint::{
-    client_auth_presence, multiple_client_auth_methods_present, resolve_session_user, token,
-    token_auth_presence, token_client_auth_method, validate_private_key_jwt_client_assertion,
-    validate_token_scope_subset, ClientAuthPresence, TokenEndpointContext,
+    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    resolve_session_user, token, token_auth_presence, token_client_auth_method,
+    validate_private_key_jwt_client_assertion, validate_token_scope_subset, ClientAuthPresence,
+    TokenEndpointContext,
 };
 use token_form::{optional_token_param, required_token_param, TokenForm};
 use token_lifecycle::{introspect, revoke};
@@ -171,3 +172,7 @@ mod upstream_tests;
 
 #[cfg(test)]
 mod oauth_conformance_tests;
+
+#[cfg(test)]
+#[path = "assertion_client/tests/mod.rs"]
+mod assertion_client_tests;

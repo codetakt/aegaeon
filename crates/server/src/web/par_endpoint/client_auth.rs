@@ -4,8 +4,8 @@ use super::super::oauth_errors::{
     authorization_header, invalid_client_header_error, registry_state_error_response,
 };
 use super::super::{
-    client_auth_presence, multiple_client_auth_methods_present, token_client_auth_method,
-    validate_private_key_jwt_client_assertion, AppState,
+    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    token_client_auth_method, validate_private_key_jwt_client_assertion, AppState,
 };
 use super::form::ParForm;
 use crate::client_registry::ClientRegistry;
@@ -46,6 +46,14 @@ pub(super) async fn authenticate_par_client(
             "Multiple client authentication methods are not allowed",
         ));
     }
+    if form.request.is_none() && form.client_id.is_none() {
+        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("client_id is required for a plain pushed authorization request"),
+            state.issuer.as_str(),
+        ));
+    }
     let client_id_from_basic = match (presence.basic, auth) {
         (true, Some(header)) => Some(
             ClientRegistry::decode_basic_auth_credentials(header)
@@ -56,6 +64,22 @@ pub(super) async fn authenticate_par_client(
         ),
         _ => None,
     };
+    let assertion_id = if presence.private_key_jwt {
+        Some(
+            private_key_jwt_client_id(
+                state,
+                form.client_id.as_deref(),
+                form.client_assertion_type.as_deref(),
+                form.client_assertion.as_deref(),
+            )?
+            .ok_or_else(|| {
+                util::invalid_client_response("oauth", "Client authentication failed")
+            })?,
+        )
+    } else {
+        None
+    };
+    let client_id_from_basic = client_id_from_basic.or(assertion_id);
     let client_id = match (form.client_id.as_deref(), client_id_from_basic.as_deref()) {
         (Some(form_id), Some(basic_id)) if form_id != basic_id => {
             return Err(util::invalid_client_response(
