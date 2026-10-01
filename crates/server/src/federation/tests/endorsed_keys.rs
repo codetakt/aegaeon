@@ -1,5 +1,10 @@
 const NOW: i64 = 1_700_000_000;
 
+mod signed_parent {
+    use super::*;
+    include!("signed_parent.rs");
+}
+
 struct SignedPathFixture {
     keys: Vec<InMemoryKeyManager>,
     configs: Vec<EntityStatement>,
