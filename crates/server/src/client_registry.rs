@@ -25,6 +25,7 @@ mod jwks_validators;
 #[cfg(kani)]
 mod kani_helpers;
 mod metrics;
+pub(crate) mod public_jwks;
 mod registry_store;
 mod request_object_keys;
 

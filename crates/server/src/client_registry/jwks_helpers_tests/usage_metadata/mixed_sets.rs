@@ -15,7 +15,12 @@ fn jwk_mixed_registry_real_signatures_survive_unusable_siblings_and_cache_hits()
     ] {
         let (key, signer) = material(algorithm);
         let token = assertion(algorithm, &signer);
-        for bad in unusable_siblings(&key) {
+        for mut bad in unusable_siblings(&key) {
+            // Client public sets reject secret-bearing siblings; this positive
+            // mixed-set control retains unsupported public-only siblings.
+            if let Some(object) = bad.as_object_mut() {
+                object.remove("k");
+            }
             for keys in [
                 vec![key.clone(), bad.clone()],
                 vec![bad.clone(), key.clone()],
@@ -221,3 +226,5 @@ fn jwk_mixed_remote_rejects_duplicate_names_in_ignored_members_and_trailing_byte
 }
 
 mod revalidation;
+
+mod public_material;

@@ -1077,7 +1077,7 @@ rfc_7517:
   notes:
   - "Verification requires absent/exact sig use and absent key_ops or a duplicate-free sign/verify subset containing verify. Restricting unrelated or unknown combinations is consumer policy, not a universal RFC MUST."
   - "Present null and invalid types are rejected before remote DTO projection. Real RSA/EC finite tests compare identical signed bytes/material through inline and fetched/reloaded client keys (RSA assertions, EC Request Objects), and upstream cached selection."
-  - "No proof-status upgrade or all-domain claim. Mixed-set material admission is covered by 7517-006; private registration input ownership remains separate work."
+  - "No proof-status upgrade or all-domain claim. Mixed-set material admission is covered by 7517-006; client public-secret ownership is recorded separately in 7591-006."
 - id: 7517-005
   section: '4.4, 6; RFC 7518 6.2.1.1'
   requirement: MUST
@@ -1093,7 +1093,7 @@ rfc_7517:
   notes:
   - "Remote client EC keys require exact P-256/ES256 or P-384/ES384 binding. Upstream JWK alg/crv and discovery advertised algorithm membership are case-sensitive; absent JWK alg remains unspecified."
   - "Finite genuine RSA/P-256/P-384 signature tests cover registry APIs, local HTTP JWKS fetch/cache and upstream verification. The PostgreSQL callback/session test requires the isolated database lane and is ignored by the ordinary command."
-  - "No proof-status upgrade or complete JWKS assurance. Mixed-set selection and fingerprint/refresh regression coverage is recorded in 7517-006; registration secret/certificate handling remains separate."
+  - "No proof-status upgrade or complete JWKS assurance. Mixed-set selection and fingerprint/refresh regression coverage is recorded in 7517-006; client secret ownership is recorded in 7591-006; certificate handling remains separate."
 - id: 7517-006
   section: '5, 6; RFC 7518 2, 3.3, 3.5, 6.2.1, 6.3.1'
   requirement: SHOULD
@@ -1114,7 +1114,7 @@ rfc_7517:
   - "RFC 7517 section 5 recommends ignoring unsupported or unusable members. Original duplicate-kid refusal and exactly-one-candidate selection before token-algorithm narrowing are Aegaeon policies."
   - "Public admission validates canonical unsigned RSA components via bounded DER and the provider parser, with a 2048-bit protocol floor and supported 16384-bit/exponent limits; actual verifiers may impose tighter bounds. EC points require independent exact coordinate widths and finite on-curve material."
   - "Finite genuine RSA, RSA-PSS, P-256 and P-384 signatures cover supported client/upstream paths; Federation retains its existing RS256/PS256/ES256 verifier limits. Observed original kids and legacy guard fingerprints survive filtering, cache/304/fallback and internal fixture roundtrip. The actual Redis regression is ignored unless the isolated Redis lane is explicitly run."
-  - "Strict structural APIs and original inline registration JSON remain unchanged. This does not close public private-material admission/storage, other RSA ingress paths, Federation profile or cross-branch composition obligations, or establish formal/product assurance."
+  - "Generic strict structural APIs remain unchanged. Client public-secret ownership is separately recorded in 7591-006; other RSA ingress, certificate, Federation profile and cross-branch composition obligations remain. No formal/product assurance is established."
 - id: 7517-003
   section: '5.5'
   requirement: MUST
@@ -1264,6 +1264,24 @@ rfc_7519:
   - "validate_not_yet_valid_token \u304C nbf \u30C1\u30A7\u30C3\u30AF\u3092\u30AB\
     \u30D0\u30FC"
 rfc_7591:
+- id: 7591-006
+  section: '2; OIDC Registration 1.0 errata2 2; RFC 7518 6.2.2, 6.3.2, 6.4'
+  requirement: MUST
+  description: Public client JWK Sets must not contain private or symmetric key values
+  module: crates/server/src/client_registry/public_jwks.rs
+  tests:
+  - crates/server/src/client_registry/public_jwks/tests.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata/mixed_sets/public_material.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks/migration.rs
+  - crates/server/src/web/dcr_configuration/tests/public_jwks/router.rs
+  ci_check: cargo test -p aegaeon-server --lib public_client
+  status: partial
+  runtime_link: crates/server/src/client_registry/client_types.rs
+  notes:
+  - "Aegaeon rejects whole new inline and fetched client sets on presence of d,p,q,dp,dq,qi,oth,k in any immediate JWK object, regardless of value/type/key family, before value-reflecting parser diagnostics. This presence policy is local; generic JOSE, upstream and Federation remain separate."
+  - "A crate-private legacy loader projects only those fields for DCR and runtime loading. A transactional all-row migration preserves remaining public JSON/order and unrelated credentials/grants, fails on structural blockers and adds a public-envelope/no-secret-member constraint."
+  - "Actual-router/PG migration tests require an explicitly enabled isolated PostgreSQL lane with disposable-database creation. Certificate metadata, mixed-purpose use, arbitrary extension contents and historical copies remain outside this finite guarantee; no proof-status promotion."
 - id: 7591-001
   section: '2'
   requirement: MUST

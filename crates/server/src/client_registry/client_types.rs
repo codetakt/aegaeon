@@ -15,8 +15,20 @@ impl RegisteredClientJwks {
     /// # Errors
     ///
     /// Returns an error when the JWKS is malformed, has duplicate `kid` values,
-    /// omits a required `kid`, or contains no signature-capable key.
+    /// omits a required `kid`, contains standard private/symmetric members,
+    /// or contains no signature-capable key.
     pub fn from_value(value: serde_json::Value, require_kid: bool) -> Result<Self, String> {
+        super::public_jwks::validate_public_client_jwks(&value)?;
+        Self::from_public_value(value, require_kid)
+    }
+
+    /// Load previously admitted storage without exposing standard private members.
+    pub(crate) fn from_stored_value(mut value: serde_json::Value) -> Result<Self, String> {
+        super::public_jwks::remove_private_members(&mut value);
+        Self::from_public_value(value, false)
+    }
+
+    fn from_public_value(value: serde_json::Value, require_kid: bool) -> Result<Self, String> {
         let set =
             JwkSet::from_value(value.clone()).map_err(|err| format!("invalid jwks: {err}"))?;
         set.ensure_unique_kid()
