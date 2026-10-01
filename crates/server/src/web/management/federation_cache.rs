@@ -9,7 +9,7 @@ pub(super) use entity_cache::{
     store_refreshed_federation_entity_cache_entry,
 };
 pub(super) use errors::federation_trust_anchor_not_found;
-pub(super) use time::duration_secs_i64;
+pub(super) use time::{duration_secs_i64, unix_epoch_now_i64};
 pub(super) use trust_anchors::{
     delete_federation_trust_anchor_row, load_federation_trust_anchor_entry,
     load_visible_federation_trust_anchor,
