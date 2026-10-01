@@ -35,7 +35,7 @@ fn policy() -> JwksRuntimePolicy {
 
 // Each fixture serves exactly one bounded local request; it cannot hang forever
 // when the client fails before reaching the listener.
-fn response_fixture(
+pub(super) fn response_fixture(
     status: u16,
     bytes: Vec<u8>,
     cache_control: &str,

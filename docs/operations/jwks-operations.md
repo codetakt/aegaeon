@@ -36,6 +36,36 @@ Monitoring:
 - The JWKS fetcher exports counters/latency series and circuit labels.
   See: `docs/operations/monitoring/README.md`.
 
+## Verification-use metadata
+
+Inline client JWKS, fetched client JWKS (including cached/reloaded entries),
+and upstream OIDC signing keys use exact, case-sensitive usage metadata.
+`use` must be absent or exactly `sig` to permit signature verification.
+If `key_ops` is present, it must include exactly `verify` and may additionally
+include `sign`; empty, sign-only, unknown, duplicate, or unrelated operations
+cannot grant verification. Restricting combinations to `sign` and `verify` is
+Aegaeon's consumer policy; RFC 7517 section 4.3 recommends against unrelated
+combinations rather than universally prohibiting them.
+
+Present `use` must be a string and present `key_ops` an array of strings.
+Explicit `null` is invalid. The strict parser rejects duplicate operations and
+known contradictions between `use` and `key_ops`. Unknown extension values are
+retained without trimming or case normalization but do not grant verification.
+Other material, algorithm, signature, issuer and claims checks still apply.
+
+Publishers using `SIG`, sign-only operations, explicit null, or other
+incompatible metadata must correct their published keys before deployment.
+Omitted usage fields remain omitted during cache serialization and valid old
+cache records remain readable. There is no cache namespace change or automatic
+purge. Malformed mixed-set quarantine, generic `kid`/`alg` null handling, key
+material/curve validity and private-input ownership in public registration are
+separate concerns; this metadata correction does not establish those properties.
+
+For Rust callers, `Jwk::is_signature_capable` and `JwkSet::signature_keys` retain
+their public names and now mean eligibility for **verification** under this
+metadata policy. `JwkError` adds `DuplicateKeyOperation(String)` and
+`InconsistentKeyUsage`; downstream exhaustive matches must handle both.
+
 ## Security Notes
 
 - HTTPS and routable targets are required for `jwks_uri` and redirects; configure a CA bundle when an additional trust anchor is needed.
