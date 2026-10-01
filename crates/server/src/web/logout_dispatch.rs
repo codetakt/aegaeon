@@ -12,11 +12,24 @@ pub(super) async fn dispatch_backchannel_logout_if_enabled(
     }
 
     for event in logout_events {
-        let report = dispatch_backchannel_logout_async(cfg, state.clients.as_ref(), &event).await;
+        let report = dispatch_backchannel_logout_async(
+            cfg,
+            state.clients.as_ref(),
+            state.oidc.sessions.as_ref(),
+            &event,
+        )
+        .await;
         if report.has_failures() {
             tracing::warn!(
                 targeted_clients = report.targeted_clients,
                 delivered = report.delivered,
+                sent = report.sent,
+                already_delivered = report.already_delivered,
+                deferred = report.deferred,
+                terminal_undelivered = report.terminal_undelivered,
+                legacy_unknown = report.legacy_unknown,
+                storage_failures = report.storage_failures,
+                unknown_outcomes = report.unknown_outcomes,
                 skipped_unregistered_clients = report.skipped_unregistered_clients,
                 skipped_without_logout_uri = report.skipped_without_logout_uri,
                 rejected_logout_uri = report.rejected_logout_uri,
@@ -29,6 +42,13 @@ pub(super) async fn dispatch_backchannel_logout_if_enabled(
             tracing::info!(
                 targeted_clients = report.targeted_clients,
                 delivered = report.delivered,
+                sent = report.sent,
+                already_delivered = report.already_delivered,
+                deferred = report.deferred,
+                terminal_undelivered = report.terminal_undelivered,
+                legacy_unknown = report.legacy_unknown,
+                storage_failures = report.storage_failures,
+                unknown_outcomes = report.unknown_outcomes,
                 "backchannel logout dispatch completed"
             );
         }

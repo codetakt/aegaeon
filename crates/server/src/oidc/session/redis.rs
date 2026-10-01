@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 pub(super) const OIDC_LOGOUT_SESSION_REDIS_URL_ENV: &str = "AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL";
 
+#[path = "redis/delivery.rs"]
+mod delivery;
 mod keyspace;
 #[path = "redis/maintenance.rs"]
 mod maintenance;

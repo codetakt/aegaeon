@@ -275,22 +275,19 @@ fn backchannel_logout_dispatch_reports_skipped_clients() -> TestResult {
         None,
         false,
     ));
-    let event = OidcLogoutEvent {
-        sid: "sid-123".to_string(),
-        user_id: "user-123".to_string(),
-        jti: "logout-jti".to_string(),
-        client_ids: vec![
-            "missing-client".to_string(),
-            "registered-without-uri".to_string(),
-        ],
-    };
+    let sessions = crate::oidc::OidcSessionStore::new_process_local_for_tests();
+    let sid = sessions.get_or_create_session("user-123", "browser");
+    sessions.add_client(&sid, "missing-client");
+    sessions.add_client(&sid, "registered-without-uri");
+    let event = sessions.logout_by_sid(&sid).ok_or("event missing")?;
 
-    let report = dispatch_backchannel_logout(&cfg, &clients, &event);
+    let report = dispatch_backchannel_logout(&cfg, &clients, Some(&sessions), &event);
 
     assert_eq!(
         report,
         BackchannelLogoutDispatchReport {
             targeted_clients: 2,
+            terminal_undelivered: 2,
             skipped_unregistered_clients: 1,
             skipped_without_logout_uri: 1,
             ..BackchannelLogoutDispatchReport::default()
@@ -301,7 +298,7 @@ fn backchannel_logout_dispatch_reports_skipped_clients() -> TestResult {
 }
 
 #[test]
-fn backchannel_logout_dispatch_reports_token_build_failure() -> TestResult {
+fn backchannel_logout_dispatch_rejects_unowned_event() -> TestResult {
     let cfg = test_oidc_logout_config(upstream_signing_key()?);
     let clients = ClientRegistry::new_process_local_for_tests();
     clients.register(backchannel_test_client(
@@ -316,13 +313,14 @@ fn backchannel_logout_dispatch_reports_token_build_failure() -> TestResult {
         client_ids: vec!["backchannel-client".to_string()],
     };
 
-    let report = dispatch_backchannel_logout(&cfg, &clients, &event);
+    let sessions = crate::oidc::OidcSessionStore::new_process_local_for_tests();
+    let report = dispatch_backchannel_logout(&cfg, &clients, Some(&sessions), &event);
 
     assert_eq!(
         report,
         BackchannelLogoutDispatchReport {
             targeted_clients: 1,
-            token_build_failures: 1,
+            legacy_unknown: 1,
             ..BackchannelLogoutDispatchReport::default()
         }
     );
