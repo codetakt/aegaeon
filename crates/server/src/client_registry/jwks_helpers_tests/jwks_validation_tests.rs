@@ -38,7 +38,10 @@ fn test_parse_cache_control_max_age() {
         CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=184467440737095516150"),
     );
-    assert_eq!(parse_cache_control(&h4), None);
+    assert_eq!(
+        parse_cache_control(&h4),
+        Some(MAX_JWKS_CACHE_CONTROL_MAX_AGE_SECS)
+    );
 }
 
 #[test]
@@ -110,18 +113,11 @@ fn decode_fetched_jwks_body_rejects_duplicate_nested_object_key() {
 
 #[test]
 fn test_kid_reuse_changed_detected() {
-    let prev = CacheEntry {
-        etag: None,
-        expires_at: None,
-        fetched_at: std::time::Instant::now(),
-        jwks: FetchedJwks { keys: vec![] },
-        kid_fps: {
-            let mut m = HashMap::new();
-            m.insert("k1".into(), "fp1".into());
-            m
-        },
-        last_modified: None,
-    };
+    let mut prev = cache_test_entry(FetchedJwks { keys: vec![] }, std::time::Instant::now());
+    std::sync::Arc::get_mut(&mut prev.guard)
+        .unwrap()
+        .kid_fps
+        .insert("k1".into(), "fp1".into());
     let mut new_map = HashMap::new();
     new_map.insert("k1".into(), "fp2".into());
     assert!(kid_reuse_changed(&prev, &new_map));

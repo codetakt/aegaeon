@@ -2,7 +2,9 @@ use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
 
-use super::jwks_types::{CacheEntry, FetchedJwk, FetchedJwks};
+#[cfg(any(test, kani))]
+use super::jwks_types::CacheEntry;
+use super::jwks_types::{FetchedJwk, FetchedJwks};
 use super::{jwt_algorithm_name, metrics, sha256_hex};
 use tracing::warn;
 
@@ -116,12 +118,9 @@ pub(super) fn has_duplicate_kid(jwks: &FetchedJwks) -> bool {
         .is_none()
 }
 
+#[cfg(any(test, kani))]
 pub(super) fn kid_reuse_changed(prev: &CacheEntry, new_map: &HashMap<String, String>) -> bool {
-    new_map.iter().any(|(kid, new_fp)| {
-        prev.kid_fps
-            .get(kid)
-            .is_some_and(|prev_fp| prev_fp != new_fp)
-    })
+    prev.guard.conflicts(new_map)
 }
 
 pub(super) fn select_jwk(jwks: &FetchedJwks, kid: Option<&str>) -> Option<FetchedJwk> {

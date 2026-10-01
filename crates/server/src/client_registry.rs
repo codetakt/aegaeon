@@ -21,6 +21,7 @@ mod jwks_runtime_state;
 mod jwks_types;
 mod jwks_url;
 mod jwks_validation;
+mod jwks_validators;
 #[cfg(kani)]
 mod kani_helpers;
 mod metrics;

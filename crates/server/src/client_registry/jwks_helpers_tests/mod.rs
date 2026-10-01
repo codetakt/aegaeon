@@ -245,3 +245,47 @@ mod jwks_validation_tests;
 
 mod redis_runtime;
 mod registry_env;
+
+mod owned_result_tests;
+
+mod associated_acquisition_tests;
+mod https_fixture;
+
+// Controlled typed-state fixtures, with explicit independent times/lifetimes.
+fn cache_test_entry(jwks: FetchedJwks, fetched_at: std::time::Instant) -> CacheEntry {
+    let metadata = super::jwks_cache_control::CacheMetadata::from_headers(
+        &HeaderMap::new(),
+        super::jwks_validators::DateContext::capture(),
+    );
+    let guard = std::sync::Arc::new(super::jwks_types::KidGuard {
+        kid_fps: super::jwks_validation::build_kid_fingerprints(&jwks),
+        admitted_at: fetched_at,
+        deadline: fetched_at + std::time::Duration::from_secs(86_400),
+    });
+    CacheEntry {
+        validators: super::jwks_validators::JwksValidators::default(),
+        effective_target: None,
+        metadata,
+        freshness: super::jwks_cache_control::Freshness {
+            receipt: fetched_at,
+            initial_age: Some(0),
+            lifetime: Some(300_000_000_000),
+            no_cache: false,
+        },
+        retain_until: fetched_at + std::time::Duration::from_secs(86_400),
+        fetched_at,
+        jwks,
+        guard,
+    }
+}
+
+fn fixture_fresh_for(entry: &mut CacheEntry, duration: std::time::Duration) {
+    entry.freshness.receipt = std::time::Instant::now();
+    entry.freshness.initial_age = Some(0);
+    entry.freshness.lifetime = Some(duration.as_nanos());
+    entry.freshness.no_cache = false;
+}
+
+mod cache_policy_tests;
+
+mod refresh_failure_tests;
