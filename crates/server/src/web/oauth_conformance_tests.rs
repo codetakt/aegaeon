@@ -61,16 +61,41 @@ async fn rar_constraints_are_never_ignored_by_any_token_grant() -> TestResult {
 }
 
 #[tokio::test]
-async fn rar_duplicates_are_invalid_even_when_empty() -> TestResult {
-    let params = vec![
-        ("grant_type".into(), "client_credentials".into()),
+async fn rar_omits_empty_values_before_duplicate_and_constraint_checks() -> TestResult {
+    let omitted = vec![("grant_type".into(), "client_credentials".into())];
+    let mut empty = omitted.clone();
+    empty.extend([
         ("authorization_details".into(), "".into()),
         ("authorization_details".into(), "".into()),
-    ];
-    let response = token_form_from_params(&params, "https://issuer.example")
-        .err()
-        .ok_or("duplicate accepted")?;
-    error(response, StatusCode::BAD_REQUEST, "invalid_request").await
+    ]);
+    assert_eq!(
+        super::token_form::effective_oauth_form(empty.clone()),
+        omitted
+    );
+    assert!(token_form_from_params(&empty, "https://issuer.example").is_ok());
+    assert!(token_form_from_params(&omitted, "https://issuer.example").is_ok());
+    for values in [["[]", "[]"], ["[]", "null"]] {
+        let mut params = omitted.clone();
+        params.extend(values.map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty duplicate accepted")?;
+        error(response, StatusCode::BAD_REQUEST, "invalid_request").await?;
+    }
+    for value in ["[]", " "] {
+        let mut params = omitted.clone();
+        params.extend(["", value, ""].map(|value| ("authorization_details".into(), value.into())));
+        let response = token_form_from_params(&params, "https://issuer.example")
+            .err()
+            .ok_or("nonempty constraint was omitted")?;
+        error(
+            response,
+            StatusCode::BAD_REQUEST,
+            "invalid_authorization_details",
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[test]

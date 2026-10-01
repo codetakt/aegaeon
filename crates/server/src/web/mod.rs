@@ -176,3 +176,6 @@ mod oauth_conformance_tests;
 #[cfg(test)]
 #[path = "assertion_client/tests/mod.rs"]
 mod assertion_client_tests;
+
+#[cfg(test)]
+mod grant_error_tests;

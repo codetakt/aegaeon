@@ -116,10 +116,16 @@ if not expires_at_ms or not poll_interval_secs then
   return redis.error_reply("invalid device code record")
 end
 
-if values[1] ~= client_id
-  or values[2] ~= environment_present
+if values[2] ~= environment_present
   or (environment_present == "1" and values[3] ~= environment_id) then
   return {"expired_token"}
+end
+
+if values[1] ~= client_id then
+  if now_ms >= expires_at_ms or values[13] == "1" or values[9] == "expired" then
+    return {"expired_token"}
+  end
+  return {"invalid_grant"}
 end
 
 if now_ms >= expires_at_ms then

@@ -71,7 +71,15 @@ impl InMemoryDeviceCodeStore {
         }
 
         if entry.client_id != client_id {
-            return DevicePollResult::ExpiredToken;
+            // Refuse without changing poll timing, approval or consumption.
+            return if SystemTime::now() >= entry.expires_at
+                || entry.consumed
+                || matches!(entry.status, DeviceAuthzStatus::Expired)
+            {
+                DevicePollResult::ExpiredToken
+            } else {
+                DevicePollResult::InvalidGrant
+            };
         }
 
         if SystemTime::now() >= entry.expires_at {

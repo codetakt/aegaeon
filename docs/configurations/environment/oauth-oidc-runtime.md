@@ -278,3 +278,30 @@ These five form entrances have no separate raw parameter-count limit. Browser
 authorization retains its own admission limits. Local login, password, CSRF,
 and management forms do not use this OAuth omission rule. These runtime changes
 and finite route tests do not extend formal proof coverage.
+
+## OAuth grant error categories
+
+After form admission, client authentication and profile lookup, `/token` rejects
+unknown grant identifiers with HTTP 400 `unsupported_grant_type` (RFC 6749
+section 5.2). Recognition uses the exact wire spelling of the six dispatched
+grants; password, case variants, padded identifiers and unknown extension URIs
+are unsupported. Missing or empty `grant_type` remains `invalid_request`.
+A supported grant denied by the applicable client/profile allowlist remains
+`unauthorized_client`; disabled extension checks retain `unsupported_grant_type`
+when reached. This distinction does not change configuration activation or
+allowlist defaults.
+
+A validly authenticated client presenting another client's authorization code
+receives HTTP 400 `invalid_grant`. This refusal leaves the code available for its
+owner, who must still satisfy redirect, PKCE and all other grant checks. A live
+device code presented by another client also returns `invalid_grant` without
+changing poll timing, backoff, approval or consumption (RFC 8628 section 3.5).
+Wrong-environment device lookups remain indistinguishable from expired codes.
+Pending, slow-down, denial, expiration and resource-target errors keep their
+existing categories; success consumes the approved device code once.
+
+The public Rust `DevicePollResult` enum adds `InvalidGrant`; downstream exhaustive
+matches must handle this variant. Stored device records and database schemas do
+not change, and no data migration is required. Finite PostgreSQL/Redis route
+tests and process-local store tests cover these distinctions; they do not extend
+formal proof coverage or establish complete error-profile conformance.

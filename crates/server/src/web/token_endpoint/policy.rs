@@ -62,7 +62,17 @@ pub(super) async fn token_resolve_policy(
             }
         };
     record_downstream_profile_usage(&profile, "token");
-    if grant_type == "password" {
+    // Wire grant identifiers are case-sensitive and are not configuration values.
+    // Authentication and profile lookup above retain their existing precedence.
+    if !matches!(
+        grant_type,
+        "authorization_code"
+            | "refresh_token"
+            | "client_credentials"
+            | "urn:ietf:params:oauth:grant-type:jwt-bearer"
+            | super::super::TOKEN_EXCHANGE_GRANT_TYPE
+            | super::super::DEVICE_CODE_GRANT_TYPE
+    ) {
         record_downstream_profile_rejection("grant_type_not_allowed", "token");
         return Err(token_error_response(
             StatusCode::BAD_REQUEST,

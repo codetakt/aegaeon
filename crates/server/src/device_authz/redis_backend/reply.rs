@@ -5,6 +5,7 @@ pub(super) fn redis_poll_result(reply: &[String]) -> DevicePollResult {
         Some("authorization_pending") => DevicePollResult::AuthorizationPending,
         Some("slow_down") => DevicePollResult::SlowDown,
         Some("access_denied") => DevicePollResult::AccessDenied,
+        Some("invalid_grant") => DevicePollResult::InvalidGrant,
         Some("invalid_target") => DevicePollResult::InvalidTarget,
         Some("approved") if reply.len() >= 7 => DevicePollResult::Approved {
             user_id: reply[1].clone(),

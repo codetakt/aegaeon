@@ -120,7 +120,7 @@ pub(super) fn validate_client_grant(
     authorization_code_grant_allowed: bool,
 ) -> Result<(), TokenGrantError> {
     if client_id != stored_client_id {
-        return Err(error(TokenGrantErrorCode::InvalidClient, "Client mismatch"));
+        return Err(error(TokenGrantErrorCode::InvalidGrant, "Client mismatch"));
     }
     if !authorization_code_grant_allowed {
         return Err(error(
