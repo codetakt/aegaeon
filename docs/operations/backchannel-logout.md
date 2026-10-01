@@ -1,4 +1,4 @@
-# Back-Channel Logout Token profile
+# Back-Channel Logout Tokens and delivery
 
 Last updated: 2026-10-02
 
@@ -30,16 +30,75 @@ parties that previously accepted only `typ: JWT` for Logout Tokens must accept
 `logout+jwt` and validate expiration along with the signature, issuer, audience,
 event and session/subject binding. Ordinary ID Tokens retain `typ: JWT`.
 
-Tokens preserve the existing logout event's `jti`, issuer, recipient audience,
-`sid`, and empty `http://schemas.openid.net/event/backchannel-logout` event object.
-They include `sub` unless the recipient registration requires session-based logout.
-They never contain `nonce`. A renewed signature or issuance timestamp does not
-make a retransmission a new logical logout event for replay handling.
+Each recipient receives a distinct random token `jti`. The existing logout event
+identifier remains the logical event identifier in Aegaeon's session store. Tokens
+include the issuer, recipient audience, `sid`, and empty
+`http://schemas.openid.net/event/backchannel-logout` event object. They include
+`sub` unless the recipient registration requires session-based logout, and never
+contain `nonce`. Aegaeon stores the canonical signed token before sending it;
+retries use exactly the same bytes, including `jti`, `iat`, `exp` and signature.
 
-## Delivery and upgrade scope
+## Retained outcomes and bounded retries
 
-Delivery remains best effort, with the configured per-recipient timeout and
-existing URI checks. This profile correction does not establish reliable retry,
-fan-out consistency or recipient idempotency. Local logout effects and stable
-event identifier ownership retain their existing behavior. No database migration
-is required.
+Delivery state belongs to the retained logged-out session in the shared Redis
+store. Aegaeon checks the event identity, associated client, current registration
+and ownership before each send. A change to the issuer, registered URI or
+session-based subject-release choice terminally suppresses delivery. Current
+TLS, DNS and SSRF checks still apply. Successful recipients are not sent another
+token for that event; other recipients retain independent outcomes. Local logout
+effects remain independent of remote delivery success.
+
+Only HTTP 200 and 204 acknowledge delivery. Other 2xx, redirects and permanent
+refusals are terminal; redirects are not followed. Connection and timeout failures
+and HTTP 408, 429, 500, 502, 503 and 504 can become eligible for a later retry.
+There are at most three attempts, with at least five seconds after the first
+recoverable failure and ten seconds after the second. A valid `Retry-After`
+delta or HTTP date can increase that delay. Duplicate, malformed or overflowing
+values, or a due time at or beyond the token/session horizon, end retry eligibility.
+
+Retries are demand driven: a later invocation of the existing logout dispatch
+path may send a due retry. There is no background scheduler or guarantee of
+eventual delivery. The in-flight deadline is the earlier of the remaining
+horizon and the claim time plus the configured HTTP timeout plus five seconds.
+A lost owner can be replaced only after that deadline plus a further five-second
+uncertainty delay. Stale preflight and completion operations cannot replace a
+new owner's result. A matching owner can record a known acknowledgement after
+its lease expires while the token and parent are still valid, unless another
+operation has already terminalized the record. An expired preflight check changes
+no state and permits no send. A lost response or failed outcome write can leave the remote
+result unknown. A worker paused after its last ownership check can still send
+late; these local leases do not establish remote exactly-once delivery or prevent
+all overlapping requests. Relying parties must apply the protocol's replay rules.
+
+No read, retry or takeover extends token expiration or the parent's original
+retention deadline. Seconds remain exact integers in stored state. Production
+Redis time supplies the state-transition clock; retry delays round fractional
+seconds upward before adding their minimum interval. HTTP delta `Retry-After`
+uses the same conservative rounding on the response clock. Fixed integer test
+clocks do not round upward. Ownership checks retain the observed whole second,
+so rounding a due time does not move the preflight clock into the future. All
+due times must remain strictly before the original token/session horizon.
+
+Dispatch reports distinguish actual sends, newly recorded acknowledgements,
+already delivered recipients, deferred attempts, terminal failures, legacy or
+missing state, storage failures and unknown outcomes. A prior acknowledgement
+is not counted as a fresh delivery. A retained successful outcome remains known
+after token expiration, until the original parent retention ends; it permits no
+further send. Expired or missing parent history is not counted as success.
+
+## Coordinated upgrade
+
+The first logout of an active session records the delivery protocol version.
+Already logged-out records without that marker have unknown delivery history:
+Aegaeon suppresses their retransmission until their existing retention expires,
+without asserting that their recipients logged out. It does not backfill history
+or recreate state from an old event supplied by a caller.
+
+Roll out all writers and serving instances together. Old instances can send
+without observing the new delivery state, so mixed versions do not establish
+these delivery guarantees. This is an additive Redis storage change with no
+SQL migration or new environment setting; a database migration alone cannot
+reconstruct historical outcomes. The runtime protocol is not represented by
+the existing Kani session model; dispatch in that model configuration is
+explicitly unavailable and sends nothing. Historical formal evidence does not
+establish this implementation's full composition or product assurance.

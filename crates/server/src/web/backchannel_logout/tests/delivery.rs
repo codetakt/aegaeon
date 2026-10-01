@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 struct Recipient {
     key: OidcSigningKey,
     accepted: Arc<AtomicUsize>,
+    sid: String,
+    event_jti: String,
 }
 
 async fn receive_logout(
@@ -30,7 +32,17 @@ async fn receive_logout(
         "sid-only" => None,
         _ => panic!("unexpected audience"),
     };
-    let claims = verify_logout(&recipient.key, token, audience, sub).expect("recipient claims");
+    let claims = decoded;
+    assert_eq!(claims["sid"], recipient.sid);
+    assert_ne!(claims["jti"], recipient.event_jti);
+    assert_eq!(claims["sub"].as_str(), sub);
+    assert_eq!(claims["iss"], ISSUER);
+    assert_eq!(
+        claims["exp"].as_u64(),
+        claims["iat"].as_u64().and_then(|iat| iat.checked_add(300))
+    );
+    assert_eq!(claims["events"], json!({BACKCHANNEL_LOGOUT_EVENT_URI:{}}));
+    assert!(claims.get("nonce").is_none());
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -41,9 +53,9 @@ async fn receive_logout(
     StatusCode::OK
 }
 
-struct LoopbackFlag(Option<std::ffi::OsString>);
+pub(super) struct LoopbackFlag(Option<std::ffi::OsString>);
 impl LoopbackFlag {
-    fn enable() -> Self {
+    pub(super) fn enable() -> Self {
         let previous = std::env::var_os(BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS_ENV);
         std::env::set_var(BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS_ENV, "true");
         Self(previous)
@@ -62,7 +74,7 @@ impl Drop for LoopbackFlag {
     }
 }
 
-fn client(
+pub(super) fn client(
     client_id: &str,
     uri: &str,
     require_sid: bool,
@@ -98,12 +110,19 @@ fn logout_profile_http_recipient_accepts_sync_and_async_delivery() -> TestResult
         .build()?;
     runtime.block_on(async {
         let key = local_key()?;
+        let sessions = crate::oidc::OidcSessionStore::new_process_local_for_tests();
+        let sid = sessions.get_or_create_session("subject", "browser");
+        sessions.add_client(&sid, "with-sub");
+        sessions.add_client(&sid, "sid-only");
+        let event = sessions.logout_by_sid(&sid).expect("logout event");
         let accepted = Arc::new(AtomicUsize::new(0));
         let app = Router::new()
             .route("/logout", post(receive_logout))
             .with_state(Recipient {
                 key: key.clone(),
                 accepted: accepted.clone(),
+                sid: sid.clone(),
+                event_jti: event.jti.clone(),
             });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let uri = format!("http://{}/logout", listener.local_addr()?);
@@ -113,22 +132,19 @@ fn logout_profile_http_recipient_accepts_sync_and_async_delivery() -> TestResult
         let clients = ClientRegistry::new_process_local_for_tests();
         clients.register(client("with-sub", &uri, false));
         clients.register(client("sid-only", &uri, true));
-        let event = OidcLogoutEvent {
-            sid: "session".to_string(),
-            user_id: "subject".to_string(),
-            jti: "logout-event".to_string(),
-            client_ids: vec!["with-sub".to_string(), "sid-only".to_string()],
-        };
         let cfg = config(key);
-        let synchronous =
-            tokio::task::block_in_place(|| dispatch_backchannel_logout(&cfg, &clients, &event));
-        let asynchronous = dispatch_backchannel_logout_async(&cfg, &clients, &event).await;
-        for report in [synchronous, asynchronous] {
-            assert_eq!(report.targeted_clients, 2);
-            assert_eq!(report.delivered, 2);
-            assert!(!report.has_failures());
-        }
-        assert_eq!(accepted.load(Ordering::SeqCst), 4);
+        let synchronous = tokio::task::block_in_place(|| {
+            dispatch_backchannel_logout(&cfg, &clients, Some(&sessions), &event)
+        });
+        let asynchronous =
+            dispatch_backchannel_logout_async(&cfg, &clients, Some(&sessions), &event).await;
+        assert_eq!(synchronous.targeted_clients, 2);
+        assert_eq!(synchronous.delivered, 2);
+        assert!(!synchronous.has_failures());
+        assert_eq!(asynchronous.delivered, 0);
+        assert_eq!(asynchronous.already_delivered, 2);
+        assert!(!asynchronous.has_failures());
+        assert_eq!(accepted.load(Ordering::SeqCst), 2);
         Ok(())
     })
 }

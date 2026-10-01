@@ -2,6 +2,7 @@ use super::*;
 use crate::oidc::OidcSigningKey;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::Value;
+use std::sync::Arc;
 
 type TestResult<T = ()> = anyhow::Result<T>;
 const PRIVATE_PEM: &str = include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem");
@@ -9,6 +10,7 @@ const KID: &str = "logout-signing-key";
 const ISSUER: &str = "https://issuer.example";
 
 mod delivery;
+mod delivery_state;
 #[cfg(feature = "kms-aws")]
 mod kms;
 mod profile;

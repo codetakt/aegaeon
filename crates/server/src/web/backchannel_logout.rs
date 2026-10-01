@@ -1,6 +1,7 @@
 use serde_json::json;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 use crate::client_registry::ClientRegistry;
@@ -10,7 +11,7 @@ use crate::oidc::{OidcConfig, OidcLogoutEvent};
 // Local issuance policy, independent of session-retention and ID Token TTLs.
 const BACKCHANNEL_LOGOUT_TOKEN_LIFETIME_SECS: i64 = 300;
 
-#[cfg(test)]
+#[cfg(all(test, not(kani)))]
 mod tests;
 
 const BACKCHANNEL_LOGOUT_EVENT_URI: &str = "http://schemas.openid.net/event/backchannel-logout";
@@ -21,6 +22,7 @@ const BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS_ENV: &str =
 const BACKCHANNEL_LOGOUT_HOST_LOCAL_BOOTSTRAP_ENV_KEYS: &[&str] =
     &[BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS_ENV];
 
+#[cfg(test)]
 fn build_backchannel_logout_claims(
     cfg: &OidcConfig,
     client_id: &str,
@@ -99,6 +101,7 @@ fn build_backchannel_logout_token(
         .map_err(|_| "failed to sign logout_token".to_string())
 }
 
+#[cfg(test)]
 async fn build_backchannel_logout_token_async(
     cfg: &OidcConfig,
     client_id: &str,
@@ -162,6 +165,14 @@ fn backchannel_logout_uri_targets_loopback_http(uri: &Url) -> bool {
 pub(super) struct BackchannelLogoutDispatchReport {
     pub(super) targeted_clients: usize,
     pub(super) delivered: usize,
+    pub(super) sent: usize,
+    pub(super) already_delivered: usize,
+    pub(super) deferred: usize,
+    pub(super) terminal_undelivered: usize,
+    pub(super) legacy_unknown: usize,
+    pub(super) storage_failures: usize,
+    pub(super) unknown_outcomes: usize,
+    pub(super) disabled_clients: usize,
     pub(super) skipped_unregistered_clients: usize,
     pub(super) skipped_without_logout_uri: usize,
     pub(super) rejected_logout_uri: usize,
@@ -181,7 +192,12 @@ impl BackchannelLogoutDispatchReport {
 
     #[must_use]
     pub(super) const fn has_failures(&self) -> bool {
-        self.skipped_unregistered_clients > 0
+        self.terminal_undelivered > 0
+            || self.legacy_unknown > 0
+            || self.storage_failures > 0
+            || self.unknown_outcomes > 0
+            || self.deferred > 0
+            || self.skipped_unregistered_clients > 0
             || self.skipped_without_logout_uri > 0
             || self.rejected_logout_uri > 0
             || self.token_build_failures > 0
@@ -190,224 +206,38 @@ impl BackchannelLogoutDispatchReport {
     }
 }
 
-struct BackchannelLogoutTarget {
-    client_id: String,
-    uri: String,
-    sub: Option<String>,
-}
+#[cfg(not(kani))]
+mod delivery;
+#[cfg(all(test, not(kani)))]
+pub(super) use delivery::dispatch_backchannel_logout;
+#[cfg(not(kani))]
+pub(super) use delivery::dispatch_backchannel_logout_async;
 
-fn resolve_backchannel_logout_target(
-    clients: &ClientRegistry,
-    event: &OidcLogoutEvent,
-    client_id: &str,
-    report: &mut BackchannelLogoutDispatchReport,
-) -> Option<BackchannelLogoutTarget> {
-    let registered = match clients.try_get(client_id) {
-        Ok(Some(registered)) => registered,
-        Ok(None) => {
-            report.skipped_unregistered_clients += 1;
-            tracing::debug!(
-                client_id = %client_id,
-                "backchannel logout skipped unregistered client"
-            );
-            return None;
-        }
-        Err(error) => {
-            report.delivery_failures += 1;
-            tracing::error!(
-                client_id = %client_id,
-                error = %error,
-                "backchannel logout client registry lookup failed"
-            );
-            return None;
-        }
-    };
-    let Some(uri) = registered.backchannel_logout_uri.clone() else {
-        report.skipped_without_logout_uri += 1;
-        tracing::debug!(
-            client_id = %client_id,
-            "backchannel logout skipped client without backchannel_logout_uri"
-        );
-        return None;
-    };
-    if let Err(err) = validate_backchannel_logout_dispatch_uri(&uri) {
-        report.rejected_logout_uri += 1;
-        tracing::warn!(client_id = %client_id, error = %err, "backchannel logout uri rejected");
-        return None;
-    }
-
-    let sub = (!registered.backchannel_logout_session_required).then(|| event.user_id.clone());
-    Some(BackchannelLogoutTarget {
-        client_id: client_id.to_string(),
-        uri,
-        sub,
-    })
-}
-
-#[cfg(test)]
-pub(super) fn dispatch_backchannel_logout(
-    cfg: &OidcConfig,
-    clients: &ClientRegistry,
-    event: &OidcLogoutEvent,
-) -> BackchannelLogoutDispatchReport {
-    let mut report = BackchannelLogoutDispatchReport::for_event(event);
-    let timeout = Duration::from_secs(cfg.backchannel_logout_timeout_secs.max(1));
-    let mut http = reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .redirect(crate::ssrf::build_redirect_policy(None));
-    if !allow_http_loopback_backchannel_logout_for_tests() {
-        http = http
-            .dns_resolver(Arc::new(crate::ssrf::NonRoutableDnsResolver))
-            .https_only(true);
-    }
-    let http = match http.build() {
-        Ok(http) => http,
-        Err(err) => {
-            report.http_client_init_failed = true;
-            tracing::error!(
-                error = %err,
-                "backchannel logout HTTP client initialization failed"
-            );
-            return report;
-        }
-    };
-
-    for client_id in &event.client_ids {
-        let Some(target) =
-            resolve_backchannel_logout_target(clients, event, client_id, &mut report)
-        else {
-            continue;
-        };
-        let token = match build_backchannel_logout_token(
-            cfg,
-            &target.client_id,
-            &event.sid,
-            target.sub.as_deref(),
-            &event.jti,
-        ) {
-            Ok(token) => token,
-            Err(err) => {
-                report.token_build_failures += 1;
-                tracing::warn!(
-                    client_id = %client_id,
-                    error = %err,
-                    "backchannel logout token build failed"
-                );
-                continue;
-            }
-        };
-
-        match http
-            .post(&target.uri)
-            .form(&[("logout_token", token)])
-            .send()
-        {
-            Ok(resp) if resp.status().is_success() => {
-                report.delivered += 1;
-            }
-            Ok(resp) => {
-                report.delivery_failures += 1;
-                tracing::warn!(
-                    client_id = %client_id,
-                    status = %resp.status(),
-                    "backchannel logout delivery failed"
-                );
-            }
-            Err(err) => {
-                report.delivery_failures += 1;
-                tracing::warn!(
-                    client_id = %client_id,
-                    error = %err,
-                    "backchannel logout delivery error"
-                );
-            }
-        }
-    }
-
-    report
-}
-
+#[cfg(kani)]
 pub(super) async fn dispatch_backchannel_logout_async(
-    cfg: &OidcConfig,
-    clients: &ClientRegistry,
+    _cfg: &OidcConfig,
+    _clients: &ClientRegistry,
+    _sessions: Option<&crate::oidc::OidcSessionStore>,
     event: &OidcLogoutEvent,
 ) -> BackchannelLogoutDispatchReport {
-    let mut report = BackchannelLogoutDispatchReport::for_event(event);
-    let timeout = Duration::from_secs(cfg.backchannel_logout_timeout_secs.max(1));
-    let mut http = reqwest::Client::builder()
-        .timeout(timeout)
-        .redirect(crate::ssrf::build_redirect_policy(None));
-    if !allow_http_loopback_backchannel_logout_for_tests() {
-        http = http
-            .dns_resolver(Arc::new(crate::ssrf::NonRoutableDnsResolver))
-            .https_only(true);
+    // The paused model has no delivery ownership semantics. Explicitly unavailable; never send.
+    BackchannelLogoutDispatchReport {
+        targeted_clients: event.client_ids.len(),
+        storage_failures: event.client_ids.len(),
+        ..BackchannelLogoutDispatchReport::default()
     }
-    let http = match http.build() {
-        Ok(http) => http,
-        Err(err) => {
-            report.http_client_init_failed = true;
-            tracing::error!(
-                error = %err,
-                "backchannel logout HTTP client initialization failed"
-            );
-            return report;
-        }
-    };
+}
 
-    for client_id in &event.client_ids {
-        let Some(target) =
-            resolve_backchannel_logout_target(clients, event, client_id, &mut report)
-        else {
-            continue;
-        };
-        let token = match build_backchannel_logout_token_async(
-            cfg,
-            &target.client_id,
-            &event.sid,
-            target.sub.as_deref(),
-            &event.jti,
-        )
-        .await
-        {
-            Ok(token) => token,
-            Err(err) => {
-                report.token_build_failures += 1;
-                tracing::warn!(
-                    client_id = %target.client_id,
-                    error = %err,
-                    "backchannel logout token build failed"
-                );
-                continue;
-            }
-        };
-
-        match http
-            .post(&target.uri)
-            .form(&[("logout_token", token)])
-            .send()
-            .await
-        {
-            Ok(resp) if resp.status().is_success() => {
-                report.delivered += 1;
-            }
-            Ok(resp) => {
-                report.delivery_failures += 1;
-                tracing::warn!(
-                    client_id = %target.client_id,
-                    status = %resp.status(),
-                    "backchannel logout delivery failed"
-                );
-            }
-            Err(err) => {
-                report.delivery_failures += 1;
-                tracing::warn!(
-                    client_id = %target.client_id,
-                    error = %err,
-                    "backchannel logout delivery error"
-                );
-            }
-        }
+#[cfg(all(test, kani))]
+pub(super) fn dispatch_backchannel_logout(
+    _cfg: &OidcConfig,
+    _clients: &ClientRegistry,
+    _sessions: Option<&crate::oidc::OidcSessionStore>,
+    event: &OidcLogoutEvent,
+) -> BackchannelLogoutDispatchReport {
+    BackchannelLogoutDispatchReport {
+        targeted_clients: event.client_ids.len(),
+        storage_failures: event.client_ids.len(),
+        ..BackchannelLogoutDispatchReport::default()
     }
-
-    report
 }

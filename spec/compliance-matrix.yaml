@@ -5858,16 +5858,16 @@ openid_logout:
     rust: crates/server/src/web/backchannel_logout.rs#build_backchannel_logout_claims
     test: crates/server/src/web/backchannel_logout/tests/profile.rs
   notes:
-  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
+  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and uses a distinct random recipient token jti, preserves sid and conditional sub, and omits nonce. The logical event jti remains parent-owned.
   - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
   - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
-  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
+  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; retained delivery and recipient-jti tests are finite runtime observations, with full composition and supplier obligations remaining separate.
 - id: OIDC-3-004
-  section: Back-Channel Logout
-  requirement: MUST
-  description: Back-channel logout must guarantee idempotent, order-independent retries
-    and safety
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+  section: Back-Channel Logout 2.5
+  requirement: SHOULD
+  description: Retransmit Back-Channel Logout Requests only for suspected recoverable
+    failures, with an appropriate delay to avoid overwhelming the RP
+  module: crates/server/src/oidc/session/delivery/transition.rs
   proof:
   - type: tamarin
     lemma: backchannel_logout_jti_stable
@@ -5876,14 +5876,21 @@ openid_logout:
     document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   tests:
   - crates/server/src/oidc/session/tests.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/protocol.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/redis.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery_state/http/scenarios.rs
   ci_check: oidc-backchannel-logout-retries
-  status: verified
-  runtime_link: crates/server/src/oidc/session/tests.rs
+  status: partial
+  runtime_link: crates/server/src/oidc/session/delivery/transition.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (backchannel_logout_jti_stable); retry idempotency has no F* function-level counterpart."
   notes:
-  - Verified by `crates/server/src/oidc/session/tests.rs` (jti reuse across retries, fan-out determinism).
+  - Back-Channel Logout 1.0 errata set 1 section 2.5 says the OP SHOULD delay retransmission appropriately for suspected recoverable failures and SHOULD NOT retransmit in all other cases. Unconditional retry and eventual delivery are not protocol requirements.
+  - Independent product obligations for idempotency, order independence and safety remain unresolved under the adopted assurance authority. Correcting the protocol attribution and requirement strength does not weaken their original scope or discharge them; historical proof references remain partial evidence.
+  - Runtime policy retains canonical signed bytes and independent recipient outcomes, requires current ownership and registration, and bounds demand-driven attempts to three with minimum 5/10-second delays. HTTP 200/204 acknowledge delivery; selected recoverable failures and valid Retry-After can defer another attempt within the original token/session horizon.
+  - Finite local and actual Redis/HTTP tests cover replay suppression, concurrency, stale owners, uncertainty, status and delay classification, precision, corruption and legacy records. They do not establish remote exactly-once delivery, all schedules, or whole-product assurance.
+  - Historical Tamarin and Kani session models do not cover the new runtime delivery protocol. Kani-configured dispatch explicitly sends nothing and reports storage unavailable; no new formal discharge is claimed. Coordinated rollout is required, and unmarked retained events remain legacy/unknown.
 - id: OIDC-3-005
   section: Boundary safety
   requirement: MUST

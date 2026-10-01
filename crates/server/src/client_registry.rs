@@ -264,3 +264,13 @@ fn should_sample(percent: u8) -> bool {
 
 #[cfg(test)]
 mod jwks_helpers_tests;
+
+/// Reuse the strict HTTP-date parser and its captured two-digit-year context for Retry-After.
+pub(crate) fn retry_after_http_date_seconds(
+    value: reqwest::header::HeaderValue,
+    now: std::time::SystemTime,
+) -> Option<u64> {
+    let context = jwks_validators::DateContext::from_system_time(now);
+    let date = jwks_validators::parse_http_date(value, context).ok()?;
+    u64::try_from(date.unix_nanos()?.checked_div(1_000_000_000)?).ok()
+}
