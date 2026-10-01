@@ -655,12 +655,14 @@ rfc_7009:
   - crates/server/src/web/token_lifecycle/tests/cases.rs
   - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
+  - crates/server/src/authcode/store/tests/refresh_grant_family.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
   ci_check: revocation-cascade
   status: verified
   runtime_link: crates/server/src/web/token_lifecycle.rs
   notes:
   - Revoking a refresh token deactivates the associated access token (revocation_introspection_http_test).
-  - "With retainRefreshChain enabled, HTTP introspection shares resource/UserInfo checks for a recorded rotated, missing or tombstoned refresh parent. This does not extend grant-wide ancestor revocation, refresh retention or expiry coverage; disabled retention preserves the existing rotation policy. The cited cascade model does not discharge those remaining runtime obligations."
+  - "Runtime refresh grants now share independently retained versioned authority. Revocation/reuse denies every generation regardless of retainRefreshChain; optional parent policy can additionally reject rotated or missing parents. Atomic publication extends exact retention, and denial precedes bounded cleanup. Legacy dependent records require reauthorization. The cited cascade model does not establish this storage schema, retention, failure or concurrency implementation; finite tests are not a formal discharge of those obligations."
 rfc_7662:
 - id: 7662-001
   section: '2'
@@ -749,8 +751,8 @@ rfc_7662:
     test: crates/server/tests/introspection_schema_test.rs
   notes:
   - Active tokens return RFC 7662 fields (client_id, token_type, exp).
-  - "After token-store and caller-visibility checks, HTTP introspection enforces the selected retainRefreshChain parent policy. Invalid recorded parents yield inactive JSON or signed JWT inner bodies; parent-store failures return no-cache 503. No parent or disabled retention preserves existing behavior."
-  - "Redis/PostgreSQL lifecycle tests exercise actual regular grant commits and rotations; signed introspection fixtures verify the configured Ed25519 signature. Final response metrics distinguish inactive application currentness from active responses and exclude backend/signing errors. These finite tests do not prove all active criteria or close grant-wide ancestor revocation obligations."
+  - "HTTP introspection establishes caller visibility before independent refresh-grant authority and optional retainRefreshChain parent checks. Denied or missing authority yields inactive JSON or signed JWT inner bodies; authorized caller storage failures return no-cache 503. Disabling retention skips only the optional parent check; rootless independent access requires consistent metadata."
+  - "Redis/PostgreSQL lifecycle tests exercise actual regular grant commits and rotations; signed introspection fixtures verify the configured Ed25519 signature. Final response metrics distinguish inactive application currentness from active responses and exclude backend/signing errors. These finite tests do not prove all active criteria or formally discharge the durable grant revocation, retention or concurrency obligations."
   - The cited models describe their abstract response and issuance/revocation facts;
     they do not establish the new client-credentials authority or currentness decision.
     Runtime inactive responses also cover unauthorized disclosure and absent or stale authority.

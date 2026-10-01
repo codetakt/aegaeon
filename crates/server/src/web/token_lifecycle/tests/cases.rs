@@ -12,27 +12,45 @@ async fn refresh_parent_introspection_tracks_regular_grant_rotation() -> TestRes
             state
                 .tokens
                 .store
-                .store_issued_grant(a1.clone(), Some(r1.clone()), m1.clone())?;
+                .store_issued_grant(a1.clone(), Some(r1.clone()), m1)?;
+            let r1 = state
+                .tokens
+                .store
+                .try_get_refresh_token(&r1.token)?
+                .ok_or("stored refresh missing")?;
             observe(state, &a1.token, true).await?;
-            let (a2, r2, m2) = grant(state, true, None);
-            let r2 = r2.ok_or("refresh missing")?;
+            let mut prepared = r1.clone();
+            let r2 = prepared.rotate();
+            let (mut a2, _, mut m2) = grant(state, false, None);
+            a2.refresh_grant = r2.refresh_grant.clone();
+            m2.refresh_grant = r2.refresh_grant.clone();
+            m2.refresh_parent = Some(r2.token.clone());
             state
                 .tokens
                 .store
                 .store_refreshed_grant(&r1.token, a2.clone(), r2.clone(), m2.clone())
-                .map_err(|e| format!("first rotation failed: {e:?}"))?;
+                .map_err(|e| format!("first rotation: {e:?}"))?;
             observe(state, &a1.token, !retain).await?;
             observe(state, &a2.token, true).await?;
-            let (a3, r3, m3) = grant(state, true, None);
-            let r3 = r3.ok_or("refresh missing")?;
+            let mut prepared = r2.clone();
+            let r3 = prepared.rotate();
+            let (mut a3, _, mut m3) = grant(state, false, None);
+            a3.refresh_grant = r3.refresh_grant.clone();
+            m3.refresh_grant = r3.refresh_grant.clone();
+            m3.refresh_parent = Some(r3.token.clone());
             state
                 .tokens
                 .store
                 .store_refreshed_grant(&r2.token, a3.clone(), r3.clone(), m3.clone())
-                .map_err(|e| format!("second rotation failed: {e:?}"))?;
+                .map_err(|e| format!("second rotation: {e:?}"))?;
             observe(state, &a1.token, !retain).await?;
             observe(state, &a2.token, !retain).await?;
             observe(state, &a3.token, true).await?;
+            let m1 = state
+                .tokens
+                .store
+                .try_get_bearer_meta(&a1.token)?
+                .ok_or("metadata missing")?;
             assert_eq!(
                 state
                     .tokens
@@ -40,11 +58,9 @@ async fn refresh_parent_introspection_tracks_regular_grant_rotation() -> TestRes
                     .try_revoke_token_for_client(&r3.token, Some(OWNER))?,
                 ClientBoundRevocationOutcome::Revoked
             );
-            observe(state, &a3.token, false).await?;
-            // Existing ancestor revocation coverage is a separate obligation.
-            // Disabling retention does not make this change revoke older access tokens.
-            observe(state, &a1.token, !retain).await?;
-            observe(state, &a2.token, !retain).await?;
+            for access in [&a1, &a2, &a3] {
+                observe(state, &access.token, false).await?;
+            }
             for meta in [&m1, &m2, &m3] {
                 let sync = state.tokens.validator.validate_refresh_parent(meta);
                 let asynchronous = state
@@ -53,7 +69,7 @@ async fn refresh_parent_introspection_tracks_regular_grant_rotation() -> TestRes
                     .validate_refresh_parent_async(meta)
                     .await;
                 assert_eq!(sync, asynchronous);
-                assert_eq!(sync.is_err(), retain);
+                assert!(sync.is_err(), "grant denial always applies");
             }
             Ok(())
         }
@@ -116,6 +132,7 @@ async fn refresh_parent_introspection_rejects_missing_and_tombstoned_parent() ->
             let (access, refresh, meta) = grant(state, true, None);
             let refresh = refresh.ok_or("refresh missing")?;
             state.tokens.store.store_issued_grant(access.clone(), Some(refresh.clone()), meta.clone())?;
+            let meta = state.tokens.store.try_get_bearer_meta(&access.token)?.ok_or("metadata missing")?;
             observe(state,&access.token,true).await?;
             let mut conn = fixture.connection()?;
             if missing { let _: usize = conn.del(fixture.key("refresh",&refresh.token))?; }

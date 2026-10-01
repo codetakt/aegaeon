@@ -111,6 +111,12 @@ impl RedisTokenStoreBackend {
         if let Some(root) =
             Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(root_refresh))?
         {
+            self.revoke_refresh_grant(
+                conn,
+                root.refresh_grant.as_ref(),
+                &root.client_id,
+                &root.user_id,
+            )?;
             self.revoke_exchange_root(conn, root.exchange_grant.as_ref())?;
         }
         let mut stack = vec![root_refresh.to_string()];
@@ -139,6 +145,12 @@ impl RedisTokenStoreBackend {
                 Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&refresh))?;
             let refresh_exists = refresh_token.is_some();
             if let Some(token) = refresh_token {
+                self.revoke_refresh_grant(
+                    conn,
+                    token.refresh_grant.as_ref(),
+                    &token.client_id,
+                    &token.user_id,
+                )?;
                 self.revoke_exchange_root(conn, token.exchange_grant.as_ref())?;
                 mutation.delete_refresh_token(refresh.clone());
                 mutation.revoke_until(refresh.clone(), token.expires_at, now);

@@ -330,3 +330,11 @@ separate consent model describes parsed-request and session bindings; database
 and HTTP regressions cover consent acquisition, but do not prove Rust/SQL
 correspondence. Direct issuer tests start with an already-authorized grant and
 do not themselves establish consent acquisition.
+
+## Durable refresh-grant revocation
+
+See [refresh-grant revocation and coordinated upgrade](refresh-grant-revocation.md)
+for the independent grant decision, legacy storage compatibility, read-only
+inventory, drain/restart requirements and failure handling. Revoking a known
+refresh generation denies every access generation from that grant regardless of
+`retainRefreshChain`; ordinary rotation alone retains the optional parent policy.

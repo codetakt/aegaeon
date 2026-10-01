@@ -33,6 +33,12 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(token))?
         {
+            self.revoke_refresh_grant(
+                conn,
+                refresh.refresh_grant.as_ref(),
+                &refresh.client_id,
+                &refresh.user_id,
+            )?;
             self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
             mutation.delete_refresh_token(token.to_string());
             mutation.revoke_until(token.to_string(), refresh.expires_at, now);

@@ -69,10 +69,21 @@ impl RedisTokenStoreBackend {
         };
 
         let previous = decode_redis_json::<RefreshToken>(&expected_previous_payload)?;
+        if !self.refresh_grant_active(
+            conn,
+            previous.refresh_grant.as_ref(),
+            &previous.client_id,
+            &previous.user_id,
+            previous.expires_at,
+            SystemTime::now(),
+        )? {
+            return Ok(REFRESH_ROTATION_OUTCOME_INVALID.into());
+        }
         if previous.rotated {
             return Ok(REFRESH_ROTATION_OUTCOME_REUSED.to_string());
         }
-        if previous.application_grant != new_refresh.application_grant
+        if previous.refresh_grant != new_refresh.refresh_grant
+            || previous.application_grant != new_refresh.application_grant
             || previous.exchange_grant != new_refresh.exchange_grant
             || scope_set(previous.scope.as_deref()) != scope_set(new_refresh.scope.as_deref())
         {
@@ -141,8 +152,26 @@ impl RedisTokenStoreBackend {
                 (String::new(), "", 0, dummy_key.clone(), dummy_key.clone())
             };
 
+        let deadline = match grant {
+            Some((access, meta)) => {
+                super::super::refresh_grants::descendant_deadline(access, meta, Some(new_refresh))
+                    .map_err(|error| TokenStoreStorageError::InvariantViolation(error.into()))?
+            }
+            None => new_refresh.expires_at,
+        };
+        let Some(grant_commit) = self.descendant_grant_commit(
+            conn,
+            new_refresh.refresh_grant.as_ref(),
+            &new_refresh.client_id,
+            &new_refresh.user_id,
+            deadline,
+        )?
+        else {
+            return Ok(REFRESH_ROTATION_OUTCOME_INVALID.into());
+        };
         invoke_refresh_rotation_commit(
             conn,
+            &grant_commit,
             RefreshRotationCommitKeys {
                 mutation_barrier: self.keyspace.lock_key().as_str(),
                 previous_refresh: previous_refresh_key.as_str(),
@@ -269,6 +298,16 @@ impl RedisTokenStoreBackend {
                 return Ok((Err(RefreshRotationError::Invalid), None));
             };
 
+            if !self.refresh_grant_active(
+                conn,
+                refresh.refresh_grant.as_ref(),
+                &refresh.client_id,
+                &refresh.user_id,
+                refresh.expires_at,
+                now,
+            )? {
+                return Ok((Err(RefreshRotationError::Invalid), None));
+            }
             if refresh.rotated {
                 let child_count =
                     self.revoke_refresh_family_direct(conn, token, now, &mut mutation)?;

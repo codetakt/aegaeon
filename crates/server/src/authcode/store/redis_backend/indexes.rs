@@ -1,4 +1,6 @@
-use super::super::redis_support::{access_token_expires_at, system_time_epoch_secs};
+#[cfg(test)]
+use super::super::redis_support::access_token_expires_at;
+use super::super::redis_support::system_time_epoch_secs;
 use super::RedisTokenStoreBackend;
 use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
@@ -54,6 +56,7 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
+    #[cfg(test)]
     pub(super) fn index_access_cmd(&self, pipe: &mut redis::Pipeline, token: &AccessToken) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_access_key(&token.user_id))
@@ -84,6 +87,7 @@ impl RedisTokenStoreBackend {
             .ignore();
     }
 
+    #[cfg(test)]
     pub(super) fn index_refresh_cmd(&self, pipe: &mut redis::Pipeline, token: &RefreshToken) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_refresh_key(&token.user_id))
@@ -114,6 +118,7 @@ impl RedisTokenStoreBackend {
             .ignore();
     }
 
+    #[cfg(test)]
     pub(super) fn index_bearer_cmd(&self, pipe: &mut redis::Pipeline, meta: &BearerTokenMeta) {
         pipe.cmd("SADD")
             .arg(self.keyspace.subject_bearer_key(&meta.user_id))
