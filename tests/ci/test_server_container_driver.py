@@ -63,7 +63,7 @@ class ServerContainerDriverTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             return [json.loads(line) for line in log.read_text().splitlines()]
 
-    def selected(self, record: dict) -> list[str]:
+    def selected(self, record: dict, cases: tuple[str, ...] = CASES) -> list[str]:
         args = record["args"]
         if record["tool"] != "cargo" or "--lib" not in args:
             return []
@@ -73,7 +73,7 @@ class ServerContainerDriverTests(unittest.TestCase):
         skips = [back[i + 1] for i, arg in enumerate(back) if arg == "--skip"]
         return [
             case
-            for case in CASES
+            for case in cases
             if all(pattern in case for pattern in patterns)
             and not any(skip in case for skip in skips)
         ]
@@ -120,6 +120,25 @@ class ServerContainerDriverTests(unittest.TestCase):
                     mixed.append(name)
                     self.assertIn("shared_redis_", name, f"{source}: {reason}")
         self.assertTrue(mixed, "mixed test inventory must not be empty")
+
+    def test_namespace_fixtures_are_left_to_their_dedicated_runner(self) -> None:
+        declaration = re.compile(
+            r'#\[ignore\s*=\s*"requires scripts/validation/test_client_jwks_cache.py"\]'
+            r"\s*(?:async\s+)?fn\s+(\w+)"
+        )
+        source_root = ROOT / "crates/server/src"
+        cases = tuple(
+            "::".join((*source.relative_to(source_root).with_suffix("").parts, name))
+            for source in (source_root / "client_registry/jwks_helpers_tests").glob("*.rs")
+            for name in declaration.findall(source.read_text())
+        )
+        self.assertTrue(cases, "namespace fixture inventory must not be empty")
+        for scope in ("all", "redis", "postgres"):
+            with self.subTest(scope=scope):
+                records = self.run_scope(scope)
+                self.assertEqual(
+                    [case for record in records for case in self.selected(record, cases)], []
+                )
 
 
 if __name__ == "__main__":
