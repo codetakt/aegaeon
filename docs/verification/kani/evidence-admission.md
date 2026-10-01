@@ -214,8 +214,35 @@ only. Structural binding is never displayed as admission. The evidential mode do
 `nix build .#verify-kani` (`scripts/flake/verify_kani_check.sh`) runs the
 full-scope admission, replays the records, and runs the evidential citation check;
 the derivation fails on any required rejection or runner fault. The hosted
-`Kani (Pure Harness)` job runs the same script with the pinned Nix toolchain and
-uploads `artifacts/kani-evidence/`; the hosted `Kani Model Checking` job now runs
+`Kani (Pure Harness)` job uses `scripts/verify/verify_kani_ci.sh` to build that
+same derivation, then replays its complete output and checks citations against
+the current checkout. A cached or substituted output must pass both admissions;
+the stored source paths and results are preserved. Each invocation uploads its
+build status, logs and copied records in `kani-pure-artifacts`.
+
+The wrapper retains failed Nix builds with `--keep-failed` beneath a fresh
+caller-selected `--option build-dir` root, recorded before the build, beneath
+`/nix/var/nix/builds`. The caller requires a secure canonical `/nix/var/nix`
+anchor and validates `builds` when present; the daemon creates a missing
+`builds` child and the fresh invocation directory. `RUNNER_TEMP` never selects
+the build parent: its ancestors may be inaccessible to Nix build users. There
+is no alternate parent, permission relaxation or global configuration change.
+Artifacts remain in their separately configured location. Each invocation also
+records the Nix binary version, configured `build-dir` value and parent metadata.
+
+Raw failure records are collected only from a single retained-directory notice
+within that root, associated with the requested derivation's activity. Builder
+output can become a top-level structured Nix message, so logs alone do not
+authenticate a path. The collector enforces the independent root bound,
+validates the Nix directory layout, rejects symlinks and copies only
+`source/artifacts/kani-evidence` into a fresh output.
+Missing, ambiguous or inaccessible records are reported as a failed capture;
+the failed build always remains a failed job. Failure records are diagnostic
+and cannot become an admitted gate through collection.
+
+In full PR validation, Core delegates this derivation to the dedicated job;
+local and standalone Core flake checks still include it. The hosted
+`Kani Model Checking` job runs
 the diagnostic groups with the same pinned toolchain and uploads its records —
 it is labelled diagnostic and is not evidence. `scripts/flake/verify_reqs.sh` runs
 `tests/ci/test_kani_*.py` (real 0.66.0 fixtures under
