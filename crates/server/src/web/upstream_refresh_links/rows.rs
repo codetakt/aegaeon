@@ -1,5 +1,6 @@
 use super::super::upstream_refresh_token_envelope::{
     open_upstream_refresh_token, upstream_refresh_token_envelope_error_response,
+    UpstreamRefreshGrant, UpstreamRefreshTokenEnvelopeError,
 };
 use super::errors::{
     corrupted_account_link_row_error, corrupted_upstream_client_row_error, internal_server_error,
@@ -36,13 +37,13 @@ pub(super) fn open_refresh_token_from_row(
     row: &PgRow,
     identity: &AccountLinkIdentity,
     issuer_base: &str,
-) -> Result<String, Response> {
+) -> Result<UpstreamRefreshGrant, Response> {
     let encrypted_refresh_token = row
         .try_get::<Vec<u8>, _>("upstream_refresh_token_encrypted")
         .map_err(|_| internal_server_error(issuer_base, "upstream refresh token is corrupted"))?;
 
     let client = read_upstream_client_from_row(row, issuer_base)?;
-    open_upstream_refresh_token(
+    let grant = open_upstream_refresh_token(
         encrypted_refresh_token.as_slice(),
         identity.environment_id,
         identity.upstream_issuer.as_str(),
@@ -56,7 +57,20 @@ pub(super) fn open_refresh_token_from_row(
             "failed to decrypt upstream refresh token",
             issuer_base,
         )
-    })
+    })?;
+    let active_issuer: String = row
+        .try_get("issuer_url")
+        .map_err(|_| corrupted_upstream_client_row_error(issuer_base))?;
+    if !grant.original.matches_client(&client.client_id)
+        || active_issuer != identity.upstream_issuer
+    {
+        return Err(upstream_refresh_token_envelope_error_response(
+            UpstreamRefreshTokenEnvelopeError::ReauthenticationRequired,
+            "upstream reauthentication required",
+            issuer_base,
+        ));
+    }
+    Ok(grant)
 }
 
 pub(super) fn read_upstream_client_from_row(

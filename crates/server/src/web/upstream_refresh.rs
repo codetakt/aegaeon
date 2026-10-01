@@ -1,4 +1,4 @@
-use super::oauth_errors::json_error_with_iss;
+use super::oauth_errors::no_cache_json_error_with_iss as json_error_with_iss;
 use super::request_admission::enforce_no_credentials_in_uri;
 use super::transport_boundary::transport_rejection_for_route;
 use super::upstream_id_token::{
@@ -113,9 +113,13 @@ async fn validate_upstream_refresh_exchange(
             jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         },
     )
+    .and_then(|()| {
+        link.original_authentication
+            .validate_refreshed_id_token(&id_token)
+            .map_err(|_| "original authentication context mismatch".to_string())
+    })
     .map_err(|error| {
         tracing::warn!(
-            upstream_issuer = %link.upstream_issuer,
             error = %error,
             "upstream refreshed id_token validation failed"
         );
@@ -144,6 +148,7 @@ async fn persist_upstream_refresh_exchange(
             link.upstream_sub_hash.as_str(),
             link.upstream_connection_id,
             next_generation,
+            &link.original_authentication,
         )
         .map_err(|error| {
             upstream_refresh_token_envelope_error_response(
@@ -309,3 +314,6 @@ pub(super) async fn upstream_refresh(
     }
     build_upstream_refresh_response(&link, &exchange.token_response)
 }
+
+#[cfg(test)]
+mod tests;
