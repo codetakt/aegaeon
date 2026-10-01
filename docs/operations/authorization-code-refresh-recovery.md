@@ -237,9 +237,10 @@ The authorization-code storage and standalone consume scripts validate their
 version counter before any write. A present counter must be Redis's canonical
 signed decimal integer and leave room for `INCR`; `9223372036854775807`, malformed
 text and non-string keys are rejected. Counters longer than 20 bytes are rejected
-before their contents are loaded into Lua. Redis ACLs for these scripts must allow
-`STRLEN` on counter keys. Storage also checks that each enabled
-`state`/`nonce` index is absent or a sorted set before creating markers or a code.
+before their contents are loaded into Lua. Redis ACLs for both scripts must also
+allow `TYPE`, `STRLEN` and `GET` on version counter keys. Storage ACLs must also
+allow `TYPE` on each enabled `state`/`nonce` index key; those indexes must be absent
+or sorted sets before markers or a code are created.
 These failures report backing-store unavailability while retaining the existing
 code/marker state. Investigate the affected Redis key types and counter contents
 under the deployment's recovery procedure; do not recreate consumed codes.
