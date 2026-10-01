@@ -4,20 +4,25 @@ use std::hash::BuildHasher;
 use super::super::registration::ClientRegistration;
 use super::jwks::{runtime_supported_client_jwt_alg, validate_inline_jwks};
 use super::uris::{validate_jwks_uri, validate_redirect_uris, validate_server_callback_uri};
-use super::{reject_bcp, with_bcp_metric};
+use super::{reject_bcp, with_bcp_metric, RegistrationValidationError};
 
-pub(super) fn validate_registration_uris(meta: &ClientRegistration) -> Result<(), String> {
+pub(super) fn validate_registration_uris(
+    meta: &ClientRegistration,
+) -> Result<(), RegistrationValidationError> {
     if let Some(ref uris) = meta.redirect_uris {
-        with_bcp_metric("redirect_invalid", validate_redirect_uris(uris))?;
+        with_bcp_metric("redirect_invalid", validate_redirect_uris(uris))
+            .map_err(RegistrationValidationError::RedirectUri)?;
     }
     if let Some(ref uris) = meta.post_logout_redirect_uris {
-        with_bcp_metric("post_logout_redirect_invalid", validate_redirect_uris(uris))?;
+        with_bcp_metric("post_logout_redirect_invalid", validate_redirect_uris(uris))
+            .map_err(RegistrationValidationError::Metadata)?;
     }
     if let Some(ref uri) = meta.backchannel_logout_uri {
         with_bcp_metric(
             "backchannel_logout_uri_invalid",
             validate_server_callback_uri(uri, "backchannel_logout_uri"),
-        )?;
+        )
+        .map_err(RegistrationValidationError::Metadata)?;
     }
     if meta.backchannel_logout_session_required == Some(true)
         && meta
@@ -28,7 +33,8 @@ pub(super) fn validate_registration_uris(meta: &ClientRegistration) -> Result<()
         return reject_bcp(
             "backchannel_logout_uri_invalid",
             "backchannel_logout_session_required requires backchannel_logout_uri",
-        );
+        )
+        .map_err(RegistrationValidationError::Metadata);
     }
     Ok(())
 }
