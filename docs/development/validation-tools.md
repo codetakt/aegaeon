@@ -120,8 +120,12 @@ exit status. Failure logs are retained separately. `SBOM_TIMEOUT_SECONDS` defaul
 to 60 and terminates the generator and its descendants on expiry.
 
 Callers can set `SBOM_RESULT_FILE` to receive the completed run's exact artifact
-path and SHA-256 in JSON. The security scanner uses that record and checks its
-digest, so another invocation updating the shared pointer cannot select its SBOM.
+path and SHA-256 in JSON. The record is written before any shared pointer is
+updated. If record creation or replacement fails, existing pointers stay
+unchanged and the completed inventory remains available in its run directory.
+The result path must not be one of these shared symlinks. The security scanner uses
+that record and checks its digest, so another invocation updating the shared
+pointer cannot select its SBOM.
 
 `ENABLE_COSIGN_SIGNING=1` requires cosign, successful signing, and nonempty signature
 and certificate outputs before publishing the new pointer. The helper records
