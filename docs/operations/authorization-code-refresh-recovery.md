@@ -1,12 +1,35 @@
 # Authorization-code and refresh state transitions
 
-Last updated: 2026-09-30
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
 Owner: Operations
 
 Audience: operators, maintainers, OAuth client developers
+
+## PKCE admission and retained binding
+
+Plain authorization, PAR, signed Request Objects and the public code issuer
+validate every supplied `code_challenge` as 43–128 ASCII bytes drawn from letters,
+digits and `-._~` (RFC 7636 section 4.2). Only `S256` is supported. An omitted
+method means `plain` and is refused; a method without a challenge is also
+refused. Empty form/query values are omitted before validation. Existing
+plain-authorization parsing and public-issuer APIs retain the conditional
+both-absent path. Persisted OAuth profiles currently require PKCE, so an actual
+configured authorization request still requires it, including for confidential
+clients. The public issuer API permits neither field when its caller explicitly
+makes PKCE optional. PAR and signed Request Objects require the PKCE fields.
+
+Admission checks syntax only: it does not establish that a challenge has an
+S256 preimage. Redemption checks the verifier syntax and compares its S256
+value with the exact retained challenge. It neither decodes nor normalizes the
+challenge. A supplied verifier without an original challenge is rejected even
+when PKCE is optional (RFC 9700 section 4.8.2). Malformed retained challenges or
+orphan methods fail closed; restart authorization rather than repairing records.
+PKCE validation failures issue no token and leave a live code unconsumed. A
+successful exchange atomically consumes it. Errors after consumption do not
+restore the code.
 
 ## Explicit authorization consent
 

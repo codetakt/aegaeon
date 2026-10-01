@@ -19,7 +19,10 @@ async fn authorization_snapshot_refuses_a_mismatched_environment() -> TestResult
             ("redirect_uri", client.redirect_uris[0].as_str()),
             ("iss", env.issuer_url.as_str()),
             ("state", "boundary-state"),
-            ("code_challenge", "boundary-challenge"),
+            (
+                "code_challenge",
+                "boundary-challenge-AAAAAAAAAAAAAAAAAAAAAAAA",
+            ),
             ("code_challenge_method", "S256"),
         ])?;
         let uri = format!("/authorize?{query}").parse()?;

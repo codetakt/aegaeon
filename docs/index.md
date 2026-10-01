@@ -343,7 +343,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
-| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-09-30 | Operations | operators, maintainers, OAuth client developers |
+| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-02 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |

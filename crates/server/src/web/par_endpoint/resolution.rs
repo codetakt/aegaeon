@@ -90,9 +90,17 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
             issuer_base,
         ));
     };
+    if !util::valid_pkce_challenge(&code_challenge) {
+        return Err(no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("invalid PKCE code_challenge syntax"),
+            issuer_base,
+        ));
+    }
     let code_challenge_method = draft
         .code_challenge_method
-        .unwrap_or_else(|| "S256".to_string());
+        .unwrap_or_else(|| "plain".to_string());
     if code_challenge_method != "S256" {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,

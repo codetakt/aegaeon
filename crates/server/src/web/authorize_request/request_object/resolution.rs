@@ -58,6 +58,12 @@ pub(in crate::web) fn resolve_authorize_request_object(
         "code_challenge_method",
     )?;
 
+    if !crate::util::valid_pkce_challenge(&code_challenge) || code_challenge_method != "S256" {
+        return Err(RequestObjectResolutionError::invalid_request(
+            "valid PKCE challenge and S256 method required",
+        ));
+    }
+
     crate::request_object::everparse_self_check_request_object_claims_with_runtime(
         &claims,
         issuer_base,

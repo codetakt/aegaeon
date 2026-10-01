@@ -151,8 +151,21 @@ pub(super) fn validate_pkce_binding(
     challenge_method: Option<&str>,
 ) -> Result<(), TokenGrantError> {
     let Some(challenge) = challenge else {
-        return Ok(());
+        return if verifier.is_none() && challenge_method.is_none() {
+            Ok(())
+        } else {
+            Err(error(
+                TokenGrantErrorCode::InvalidGrant,
+                "PKCE challenge missing",
+            ))
+        };
     };
+    if !crate::util::valid_pkce_challenge(challenge) {
+        return Err(error(
+            TokenGrantErrorCode::InvalidGrant,
+            "Invalid stored PKCE challenge",
+        ));
+    }
     if challenge_method != Some("S256") {
         return Err(error(
             TokenGrantErrorCode::InvalidGrant,

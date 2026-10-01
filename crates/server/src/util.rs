@@ -5,7 +5,9 @@ mod clock;
 mod dpop_thumbprint;
 mod http_headers;
 mod json_admission;
+mod pkce;
 mod redirect;
+pub(crate) use pkce::valid_pkce_challenge;
 mod resource;
 mod secrets;
 pub use bearer::{
