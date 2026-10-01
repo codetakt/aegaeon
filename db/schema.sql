@@ -641,6 +641,10 @@ CREATE TABLE aegaeon.account_links (
     upstream_refresh_token_encrypted bytea,
     upstream_refresh_token_connection_id uuid,
     upstream_refresh_token_generation bigint DEFAULT 0 NOT NULL,
+    binding_provenance text DEFAULT 'legacy_unreviewed' NOT NULL,
+    binding_revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT account_links_binding_provenance_valid CHECK (binding_provenance IN ('legacy_unreviewed', 'jit_v2', 'administrator_confirmed')),
+    CONSTRAINT account_links_binding_revision_positive CHECK (binding_revision > 0),
     CONSTRAINT account_links_refresh_token_binding_complete CHECK ((((upstream_refresh_token_encrypted IS NULL) AND (upstream_refresh_token_connection_id IS NULL) AND (upstream_refresh_token_generation = 0)) OR ((upstream_refresh_token_encrypted IS NOT NULL) AND (upstream_refresh_token_connection_id IS NOT NULL) AND (upstream_refresh_token_generation > 0))))
 );
 
@@ -2937,3 +2941,42 @@ CREATE TABLE aegaeon.application_authorizations (
     end_user_record_id uuid REFERENCES aegaeon.end_users(id) ON DELETE SET NULL,
     PRIMARY KEY (environment_id, client_id, subject)
 );
+
+-- Allocation only: no owner or historical trust assertion. No end-user cascade.
+CREATE TABLE aegaeon.upstream_subject_reservations (
+    environment_id uuid NOT NULL REFERENCES aegaeon.environments(id) ON DELETE CASCADE,
+    subject text COLLATE "C" NOT NULL,
+    PRIMARY KEY (environment_id, subject),
+    CONSTRAINT upstream_subject_reservations_namespace CHECK (
+        pg_catalog.left(subject, 12) = 'upstream:v2:'
+    )
+);
+
+CREATE FUNCTION aegaeon.reserve_upstream_subject() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'UPDATE'
+       AND NEW.environment_id IS NOT DISTINCT FROM OLD.environment_id
+       AND NEW.subject COLLATE "C" IS NOT DISTINCT FROM OLD.subject COLLATE "C" THEN
+        RETURN NEW;
+    END IF;
+    IF pg_catalog.left(NEW.subject, 12) COLLATE "C" <> 'upstream:v2:' THEN
+        RETURN NEW;
+    END IF;
+    BEGIN
+        INSERT INTO aegaeon.upstream_subject_reservations (environment_id, subject)
+        VALUES (NEW.environment_id, NEW.subject);
+    EXCEPTION WHEN unique_violation THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23505',
+            MESSAGE = 'upstream subject allocation conflicts with an existing reservation',
+            CONSTRAINT = 'upstream_subject_reservations_pkey';
+    END;
+    RETURN NEW;
+END;
+$$;
+
+-- Observe final NEW values after any BEFORE trigger, including old writers.
+CREATE TRIGGER end_users_reserve_upstream_subject
+AFTER INSERT OR UPDATE ON aegaeon.end_users
+FOR EACH ROW EXECUTE FUNCTION aegaeon.reserve_upstream_subject();

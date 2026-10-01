@@ -262,3 +262,6 @@ async fn persist_bound_upstream_callback(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests;

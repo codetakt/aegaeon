@@ -79,83 +79,15 @@ fn upstream_auth_store_consume_is_single_use() -> TestResult {
 }
 
 #[test]
-fn select_upstream_jit_reuse_candidate_rejects_email_collision_for_reject_policy() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::RejectExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let matches = vec![UpstreamResolvedUser {
-        end_user_id: uuid::Uuid::new_v4(),
-        subject: "existing-subject".to_string(),
-        status: "ACTIVE".to_string(),
-        account_link_connection_id: None,
-    }];
-    let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
-        "expected reject-existing-email collision",
-    )?;
-    assert_eq!(
-        err,
-        "upstream email is already associated with a different local user"
-    );
-    Ok(())
-}
-
-#[test]
-fn select_upstream_jit_reuse_candidate_reuses_single_matching_user() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let existing_id = uuid::Uuid::new_v4();
-    let matches = vec![UpstreamResolvedUser {
-        end_user_id: existing_id,
-        subject: "existing-subject".to_string(),
-        status: "ACTIVE".to_string(),
-        account_link_connection_id: None,
-    }];
-    let candidate = select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches)
-        .map_err(ToString::to_string)?;
-    let candidate = require_some(candidate, "expected reuse candidate")?;
-    assert_eq!(candidate.end_user_id, existing_id);
-    Ok(())
-}
-
-#[test]
-fn select_upstream_jit_reuse_candidate_rejects_multiple_reuse_matches() -> TestResult {
-    let policy = UpstreamJitProvisioningPolicy {
-        enabled: true,
-        require_verified_email: true,
-        domain_allowlist: Vec::new(),
-        collision_policy: UpstreamJitProvisioningCollisionPolicy::ReuseExistingEmail,
-        initial_status: UpstreamJitProvisioningInitialStatus::Active,
-    };
-    let matches = vec![
-        UpstreamResolvedUser {
-            end_user_id: uuid::Uuid::new_v4(),
-            subject: "first".to_string(),
-            status: "ACTIVE".to_string(),
-            account_link_connection_id: None,
-        },
-        UpstreamResolvedUser {
-            end_user_id: uuid::Uuid::new_v4(),
-            subject: "second".to_string(),
-            status: "ACTIVE".to_string(),
-            account_link_connection_id: None,
-        },
-    ];
-    let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
-        "expected multiple reuse matches to be rejected",
-    )?;
-    assert_eq!(err, "upstream email resolves to multiple local users");
-    Ok(())
+fn upstream_jit_email_match_is_never_identity_authority() {
+    assert!(reject_upstream_jit_email_matches(&[]).is_ok());
+    for subject in ["existing-subject", "upstream:https://issuer.example:alice"] {
+        let existing = UpstreamResolvedUser {
+            end_user_id: uuid::Uuid::new_v4(), subject: subject.into(),
+            status: "ACTIVE".into(), account_link_connection_id: None,
+        };
+        assert!(reject_upstream_jit_email_matches(&[existing]).is_err());
+    }
 }
 
 #[test]
