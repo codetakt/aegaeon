@@ -17,15 +17,7 @@ pub(super) fn oidc_key_material_from_runtime_keys(
     let signing_key = signing_key
         .with_runtime_retiring_public_jwks(retiring_oidc_signing_public_jwks(runtime_keys)?)?;
 
-    let request_object_encryption_key = runtime_keys
-        .active_key(RuntimeKeyUsage::OidcRequestObjectDecryption)
-        .map(managed_oidc_request_object_encryption_key)
-        .transpose()?;
-
-    ensure_request_object_encryption_key_does_not_conflict(
-        &signing_key,
-        request_object_encryption_key.as_ref(),
-    )?;
+    let request_object_encryption_key = managed_request_object_keyring(runtime_keys)?;
 
     Ok((signing_key, request_object_encryption_key))
 }
@@ -40,15 +32,7 @@ pub(super) async fn oidc_key_material_from_runtime_keys_async(
     let signing_key = signing_key
         .with_runtime_retiring_public_jwks(retiring_oidc_signing_public_jwks(runtime_keys)?)?;
 
-    let request_object_encryption_key = runtime_keys
-        .active_key(RuntimeKeyUsage::OidcRequestObjectDecryption)
-        .map(managed_oidc_request_object_encryption_key)
-        .transpose()?;
-
-    ensure_request_object_encryption_key_does_not_conflict(
-        &signing_key,
-        request_object_encryption_key.as_ref(),
-    )?;
+    let request_object_encryption_key = managed_request_object_keyring(runtime_keys)?;
 
     Ok((signing_key, request_object_encryption_key))
 }
@@ -157,7 +141,10 @@ async fn managed_aws_kms_signing_key_async(
 fn managed_oidc_request_object_encryption_key(
     key: &RuntimeKey,
 ) -> Result<OidcRequestObjectEncryptionKey, OidcConfigError> {
-    if key.provider != RuntimeKeyProvider::DatabaseEncrypted {
+    if key.provider != RuntimeKeyProvider::DatabaseEncrypted
+        || key.algorithm != RuntimeKeyAlgorithm::RsaOaepA256Gcm
+        || key.usage != RuntimeKeyUsage::OidcRequestObjectDecryption
+    {
         return Err(OidcConfigError::ManagedKeyUnsupportedProvider(
             key.kid.clone(),
         ));
@@ -168,28 +155,56 @@ fn managed_oidc_request_object_encryption_key(
     Ok(encryption_key)
 }
 
-fn ensure_request_object_encryption_key_does_not_conflict(
-    signing_key: &OidcSigningKey,
-    request_object_encryption_key: Option<&OidcRequestObjectEncryptionKey>,
-) -> Result<(), OidcConfigError> {
-    let Some(enc_key) = request_object_encryption_key else {
-        return Ok(());
+fn managed_request_object_keyring(
+    runtime_keys: &RuntimeKeySet,
+) -> Result<Option<OidcRequestObjectEncryptionKey>, OidcConfigError> {
+    let usage = RuntimeKeyUsage::OidcRequestObjectDecryption;
+    let Some(active) = runtime_keys.active_key(usage) else {
+        // Retiring keys do not reactivate a disabled encryption capability.
+        return Ok(None);
     };
-    if enc_key.kid() == signing_key.kid() {
-        return Err(OidcConfigError::RequestObjectEncryptionKidConflicts(
-            signing_key.kid().to_string(),
-        ));
+    let now = crate::util::now_unix_epoch_secs_i64()
+        .map_err(|_| OidcConfigError::RequestObjectKeySetUnavailable)?;
+    let candidates = std::iter::once(active)
+        .chain(runtime_keys.active_retiring_keys_at(usage, now))
+        .collect::<Vec<_>>();
+    let mut kids = std::collections::BTreeSet::new();
+    for key in &candidates {
+        if !kids.insert(key.kid.as_str()) {
+            return Err(OidcConfigError::RequestObjectEncryptionKidConflicts(
+                key.kid.clone(),
+            ));
+        }
     }
-    signing_key
-        .jwks()
-        .keys
+    for usage in [
+        RuntimeKeyUsage::OidcIdTokenSigning,
+        RuntimeKeyUsage::JwtAccessTokenSigning,
+        RuntimeKeyUsage::JwtIntrospectionSigning,
+    ] {
+        for key in runtime_keys
+            .active_key(usage)
+            .into_iter()
+            .chain(runtime_keys.active_retiring_keys_at(usage, now))
+        {
+            if kids.contains(key.kid.as_str()) {
+                return Err(OidcConfigError::RequestObjectEncryptionKidConflicts(
+                    key.kid.clone(),
+                ));
+            }
+        }
+    }
+    let active = managed_oidc_request_object_encryption_key(active)?;
+    let retiring = candidates
         .into_iter()
-        .find(|jwk| jwk.kid == enc_key.kid())
-        .map_or(Ok(()), |jwk| {
-            Err(OidcConfigError::RequestObjectEncryptionKidConflicts(
-                jwk.kid,
-            ))
+        .skip(1)
+        .map(|key| {
+            let deadline = key
+                .retiring_expires_at_epoch_secs
+                .ok_or(OidcConfigError::RequestObjectKeySetUnavailable)?;
+            Ok((managed_oidc_request_object_encryption_key(key)?, deadline))
         })
+        .collect::<Result<Vec<_>, OidcConfigError>>()?;
+    Ok(Some(active.with_retiring(retiring)))
 }
 
 fn decrypt_managed_pkcs8_der(key: &RuntimeKey) -> Result<Vec<u8>, OidcConfigError> {

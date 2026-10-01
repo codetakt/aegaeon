@@ -38,16 +38,16 @@ struct AuthorizePolicyDecision {
 }
 
 pub(super) fn authorize_request_object_deps(state: &AppState) -> RequestObjectAuthorizeDeps<'_> {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref());
     RequestObjectAuthorizeDeps {
         clients: state.clients.as_ref(),
         request_object_jti_store: state.protocol.request_object_jti_store.as_ref(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
@@ -57,17 +57,16 @@ pub(super) fn authorize_request_object_deps(state: &AppState) -> RequestObjectAu
 }
 
 fn owned_authorize_request_object_deps(state: &AppState) -> OwnedRequestObjectAuthorizeDeps {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-            .map(|der| der.to_vec())
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref().cloned());
     OwnedRequestObjectAuthorizeDeps {
         clients: state.clients.clone(),
         request_object_jti_store: state.protocol.request_object_jti_store.clone(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state

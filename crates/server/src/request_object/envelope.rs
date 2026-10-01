@@ -42,6 +42,9 @@ fn is_compact_jws(token: &str) -> bool {
 ///   with a protected JWT content type and returns the nested compact JWS payload.
 /// - Otherwise, returns the original string.
 ///
+/// This explicit-single-key API leaves key selection and protected `kid` policy
+/// to its caller. Live server routes use the managed key set entrypoint.
+///
 /// This is intentionally strict: encrypted Request Objects must decrypt to a
 /// nested signed JWT (JWS) so we can apply the RFC 9101 validation rules.
 ///
@@ -66,6 +69,28 @@ pub fn normalize_request_object_for_verification(
     )
     .map_err(|_| RequestObjectEnvelopeError::DecryptionFailed)?;
 
+    normalize_decrypted_payload(plaintext)
+}
+
+pub(crate) fn normalize_request_object_with_keyring(
+    token: &str,
+    key: Option<&crate::oidc::config::OidcRequestObjectEncryptionKey>,
+    jose_header_max_len: usize,
+) -> Result<String, RequestObjectEnvelopeError> {
+    if !is_compact_jwe(token) {
+        return Ok(token.to_string());
+    }
+    let key = key.ok_or(RequestObjectEnvelopeError::EncryptionNotSupported)?;
+    let plaintext = aegaeon_jose::jwe::decrypt_nested_jwt_rsa_oaep_a256gcm_with_key_resolver(
+        token,
+        |kid| key.select_pkcs8(kid),
+        JoseContext::new(jose_header_max_len),
+    )
+    .map_err(|_| RequestObjectEnvelopeError::DecryptionFailed)?;
+    normalize_decrypted_payload(plaintext)
+}
+
+fn normalize_decrypted_payload(plaintext: Vec<u8>) -> Result<String, RequestObjectEnvelopeError> {
     let inner = String::from_utf8(plaintext)
         .map_err(|_| RequestObjectEnvelopeError::DecryptedPayloadInvalidUtf8)?;
     if !is_compact_jws(&inner) {

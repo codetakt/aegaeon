@@ -5809,6 +5809,27 @@ openid_jwks:
   notes:
   - "OIDC signing keys support overlap through ACTIVE/RETIRING runtime keys in `aegaeon.runtime_keys`; duplicate kid values fail closed at runtime."
   - "The two Kani harnesses check the cfg(kani) model of the pure JWKS helpers (crates/pure kani_impl: u8 identifiers, at most 5 keys, one symbolic bool per harness), not the production String/Vec implementation; correspondence to the runtime helper is not proved. They run as the diagnostic group `jwks-rotation-models` of spec/kani-evidence.json and are not admitted evidence; /jwks endpoint tests cover the runtime path."
+- id: OIDC-10-003
+  section: '10.2, 10.2.1'
+  requirement: SHOULD
+  description: Eligible retiring private Request Object keys remain usable through the managed decryption consumer path while an active successor exists.
+  module: crates/server/src/oidc/config/runtime_keys.rs
+  proof: []
+  tests:
+  - crates/server/src/oidc/config/tests/decryption_keyring.rs
+  - crates/server/src/web/management/request_object_keyring_tests.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
+  - crates/jose/tests/jwe_required_headers.rs
+  ci_check: cargo test -p aegaeon-server request_object_keyring -- --include-ignored
+  status: implemented
+  runtime_link: crates/server/src/request_object/envelope.rs
+  notes:
+  - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
+  - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
+  - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."
+  - "request_object_keyring_rotation_expiry_through_authorize_and_par and request_object_keyring_rotation_revocation_through_authorize_and_par use actual PostgreSQL management transitions, runtime loading and public routes; stale snapshots return 503 and request restart. Runtime reconstruction in tests is not a process-restart or uninterrupted-availability guarantee."
+  - "No new retention/cache formula, external cache purge, key rollback, formal proof or full rotation assurance is established."
+
 openid_logout:
 - id: OIDC-3-001
   section: RP-Initiated Logout

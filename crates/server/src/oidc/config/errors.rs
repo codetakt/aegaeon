@@ -63,6 +63,9 @@ pub enum OidcConfigError {
     #[error("OIDC request object encryption kid conflicts with an existing kid: {0}")]
     RequestObjectEncryptionKidConflicts(String),
 
+    #[error("OIDC request object key set unavailable")]
+    RequestObjectKeySetUnavailable,
+
     #[error("failed to read OIDC additional JWKS file: {0}")]
     AdditionalJwksRead(std::io::Error),
 
