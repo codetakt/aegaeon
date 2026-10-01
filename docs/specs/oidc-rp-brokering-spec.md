@@ -154,6 +154,43 @@ and bulk-relink flows fail closed when a moved link stores an upstream refresh t
 operator explicitly chooses `clear` or `retain`. Low-confidence reassignment and reassignment to a
 non-`ACTIVE` target user also require explicit operator acknowledgement.
 
+## New Upstream Identity Provisioning
+
+The exact environment, issuer and SHA-256 of `issuer || NUL || sub` identify an account link.
+OIDC Core 1.0 section 5.7 treats the issuer/subject pair as the stable identity; neither email nor
+`email_verified` establishes ownership of a local account. An unlinked validated identity receives
+an opaque local subject: `upstream:v2:` followed by 32 cryptographically random bytes in unpadded
+base64url. Local-user creation is insert-only. Permanent environment-scoped reservations for the exact
+`upstream:v2:` namespace survive deletion and renaming. An AFTER trigger covers every insertion
+and actual identity change into that namespace, including management writers; unchanged identity
+updates do not allocate again. A random subject collision aborts the login without
+updating the colliding user. A concurrent link conflict also aborts and rolls back the newly
+created user; the caller can start a new login to resolve the exact winning link.
+
+The user, account link, profile projection, refresh envelope and required audits share the callback
+PostgreSQL transaction. A browser session is created only after that transaction commits. Existing
+public subjects, exact link hashes and refresh-token encryption/AAD are preserved.
+
+`reject_existing_email` refuses a case-insensitive email match with a non-deleted local account,
+including a user whose subject matches the old delimiter-derived spelling. Email uniqueness across
+the database is not promised.
+Enabled `reuse_existing_email` is rejected at configuration save, activation and runtime loading.
+An admitted callback still carrying that legacy policy refuses unlinked provisioning before
+mutations. Disabled configurations can retain the value for diagnosis. Configure
+`reject_existing_email` and use deliberate, privileged account linking where appropriate.
+Verified-email, domain allowlist and initial-status gates remain additional conditions.
+
+New links record `bindingProvenance=jit_v2` and `bindingRevision=1`. Explicit management creation
+records `administrator_confirmed`. Management owner changes, including bulk relink and conflict
+resolution, set that provenance and advance the positive revision in the same audited transaction;
+bigint overflow aborts. Reads, previews, no-ops and callback touches do not re-attest a binding.
+Migration and old writers default to `legacy_unreviewed`, revision 1, without guessed backfills.
+These values record a local authority source, not proof of historical ownership or product assurance.
+
+Existing exact links are still resolved before JIT. Historical binding review, enforcement of that
+review, and remediation of previously issued authentication state remain open. See the
+[coordinated upgrade guide](../operations/upstream-identity-provisioning-upgrade.md).
+
 ## Mapping And Claim Release Requirements
 
 Attribute mapping supports direct copy, lower-case normalization, and group mapping for supported

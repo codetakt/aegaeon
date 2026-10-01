@@ -39,7 +39,7 @@ Audience: contributors, maintainers
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/operations.md` | spec | Management Plane Operations | current implementation baseline | 2026-10-01 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane-phase1.md` | spec | Management Plane Phase 1 Specification | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/oidc-rp-brokering-spec.md` | spec | OIDC RP Brokering Specification | current implementation baseline | 2026-10-01 | Product / Engineering | implementers, reviewers |
@@ -366,6 +366,7 @@ Audience: contributors, maintainers
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |
+| `docs/operations/upstream-identity-provisioning-upgrade.md` | runbook | Upstream Identity Provisioning Upgrade | current implementation baseline | 2026-10-01 | Engineering | operators, reviewers |
 
 ## Security
 

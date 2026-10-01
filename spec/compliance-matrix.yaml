@@ -5645,6 +5645,10 @@ openid_core:
   - crates/server/src/web/upstream_callback.rs
   - crates/server/src/web/upstream_callback_connection.rs
   - crates/server/src/web/management/connections/preparation/update.rs
+  - crates/server/src/web/upstream_callback/tests/cases.rs
+  - crates/server/src/web/upstream_callback/tests/reservations.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/upstream_subject_reservations_pg.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/account_link_provenance_pg.rs
   - crates/server/src/web/upstream_refresh/tests/cases.rs
   - crates/server/src/web/upstream_refresh_token_envelope/tests.rs
   - crates/server/src/web/upstream_metadata/jwks/tests.rs
@@ -5670,6 +5674,8 @@ openid_core:
   - "OIDC Core 1.0 errata set 2 section 10.1.1 describes re-retrieval for unfamiliar kid. Shared strict header admission permits one configured-URL retrieval for an absent nonempty kid; known-key signature/claim failures never trigger a forced retry. The provider SHOULD retain recently decommissioned keys; that is separate from consumer retrieval."
   - "All upstream key retrievals share a bounded per-process coordinator with one in-flight request per exact URL and a 30-second monotonic attempt-start cooldown, including failure/cancellation. Protected slots cannot be evicted for new URLs. Successful fetches replace sets; failed fetches do not renew old TTL. Upstream RSA n/e and EC x/y require nonempty canonical unpadded base64url before replacement, without changing generic key-size, curve or algorithm policy. Current endpoint policy and final-set Federation checks remain mandatory."
   - "Real HTTP, signed token/Federation, PostgreSQL callback/rotation and injected-clock concurrency tests are finite runtime observations. They do not prove scheduler fairness, fleet-wide rate limits, cryptographic assumptions, database isolation, supply or complete deployment composition; the existing F* model does not cover this coordinator."
+  - "OIDC Core section 5.7 identity boundary: new unlinked callbacks use insert-only opaque local subjects and refuse email-based reuse, including enabled legacy reuse policies. New upstream:v2: allocations have permanent environment-scoped reservations enforced for every database writer; this does not close all-subject or issuer/environment lifecycle non-reassignment. New bindings carry provenance/revision; historical link review/enforcement and previously issued state remediation remain open. This runtime change is not a refinement proof of the cited refresh model."
+
 - id: OIDC-1-010
   section: Verification boundary
   requirement: MUST

@@ -1,6 +1,6 @@
 # Management Plane Operations
 
-Last updated: 2026-07-08
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -221,3 +221,17 @@ Storage:
 - Environment-scoped `rateLimit` configuration.
 - Simple limits are acceptable initially (IP/client-based).
 - Rejections should be recorded as security/audit events.
+
+## Account-link binding provenance
+
+Account-link summaries add `bindingProvenance` (`legacy_unreviewed`, `jit_v2`, or
+`administrator_confirmed`) and positive `bindingRevision`. Explicit account-link creation starts at
+revision 1 with administrator provenance. Single/bulk relink and conflict resolution advance the
+revision only when the owner changes; overflow fails the whole transaction. No-op, preview and
+read operations never attest historical bindings. Existing role, environment, audit and explicit
+refresh-token clear/retain requirements continue to apply.
+
+The fields describe how Aegaeon recorded a binding. They do not certify historical ownership.
+Migration preserves old rows as `legacy_unreviewed`; operator decisions must not be inferred from
+email, subject spelling or these counters. See the
+[upgrade guide](../../operations/upstream-identity-provisioning-upgrade.md) before deployment.

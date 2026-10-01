@@ -23,6 +23,26 @@ pub(super) fn validate_runtime_configuration_document(
             "issuerUrl does not match environment",
         ));
     }
+    if let Some(jit) = document
+        .federation
+        .as_ref()
+        .and_then(|federation| federation.jit_provisioning.as_ref())
+        .filter(|jit| jit.enabled)
+    {
+        let collision = crate::upstream::UpstreamJitProvisioningCollisionPolicy::parse(
+            jit.collision_policy
+                .as_deref()
+                .unwrap_or("reject_existing_email"),
+        )
+        .map_err(|_| {
+            RuntimeConfigurationError::InvalidDocument(
+                "configurationDocument.federation.jitProvisioning.collisionPolicy is invalid",
+            )
+        })?;
+        collision
+            .validate_for_enabled_jit()
+            .map_err(RuntimeConfigurationError::InvalidDocument)?;
+    }
     Ok(())
 }
 
