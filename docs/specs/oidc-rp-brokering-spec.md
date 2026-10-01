@@ -69,6 +69,23 @@ This boundary implements the signing-key endorsement requirements common to Open
 1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
 complete header, statement-profile, metadata-policy, or constraints conformance.
 
+## Federation Signed Parent Relation
+
+Every subordinate statement's issuer must exactly match an `authority_hints` entry in its
+subject's signed Entity Configuration. The comparison is case sensitive and does not normalize
+URLs or remove trailing slashes. Missing, null, empty, or nonmatching hints reject that path even
+when its signatures and key endorsements are valid. Additional hints are permitted when one
+matches the immediate superior. A configured terminal anchor may itself have superiors; its
+hints do not add another edge to the selected path.
+
+Fresh resolution, custom resolver callbacks, and cache reconstruction check this relation from
+retained compact JWS. Final path validation uses signed hints; detached parsed hints cannot replace
+them. Invalid cache entries still trigger fresh resolution, and invalid fresh paths
+are neither returned as accepted nor written to the cache. Existing caches need no migration.
+
+This implements the parent-relation requirement common to OpenID Federation 1.0 and 1.1 section
+3.2. It does not select a Federation edition or establish full statement-profile conformance.
+
 ## Federation JWT Purpose And Key Identification
 
 Entity Statement verification, including Entity Configurations and every statement retained in a
