@@ -77,7 +77,7 @@ process/proxy boundary rather than an issuer policy snapshot.
 | `AEGAEON_ALLOW_DEMO_AUTHORIZE_LOGIN` | `0` | `test` | Enables the demo `/authorize` login shortcut. Keep disabled outside local demos/tests; normal deployments should use the server-handled credential surfaces. |
 | `AEGAEON_AUTHORIZATION_CODE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback authorization code lifetime in seconds (valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.authorizationCodeTimeToLiveSeconds` is authoritative. |
 | `AEGAEON_STATE_NONCE_TTL_SECS` | _removed_ | `environment` | Removed legacy alias. It is no longer read as a fallback; the supported runtime uses `policy.authorizationCodeTimeToLiveSeconds` and rejects this startup-managed policy variable when it is set. |
-| `AEGAEON_AUTH_CODE_REDIS_URL` | _unset_ | `system` | Redis URL for shared authorization-code, `state`, and `nonce` storage. Must match `AEGAEON_TOKEN_STORE_REDIS_URL` so authorization-code exchange can consume the code and commit issued tokens atomically. |
+| `AEGAEON_AUTH_CODE_REDIS_URL` | _unset_ | `system` | Redis URL for shared single-use authorization codes and `state`/`nonce` observation markers. Repeated RP values refresh their marker TTL; they do not reject issuance. Must match `AEGAEON_TOKEN_STORE_REDIS_URL` so authorization-code exchange can consume the code and commit issued tokens atomically. |
 
 ## Token lifetimes
 

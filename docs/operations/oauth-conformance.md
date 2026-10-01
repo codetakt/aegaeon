@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-09-11
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -228,3 +228,37 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+## RP state and nonce observations
+
+Distinct authorization transactions may carry the same admissible RP-supplied
+`state` or `nonce`, including requests from the same client. Aegaeon preserves
+these decoded values in their own authorization-code context, response and ID
+Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
+sections 4.1.1, 4.1.2 and 10.12 and OpenID Connect Core sections 3.1.2.1 and
+3.1.3.7 leave the RP responsible for its state/nonce validation and
+unpredictability obligations. Existing required-presence, encoding, length and
+profile checks still apply.
+
+Redis and the process-local test backend retain distinct recently observed
+state/nonce markers. Successful repeated values refresh the existing marker's
+last-observation TTL and Redis sorted-index expiry. The TTL continues to derive
+from `policy.authorizationCodeTimeToLiveSeconds`. `try_state_count`,
+`try_nonce_count` and the historical `AuthCodeSnapshot.used_states`/`used_nonces`
+fields describe retained observations, not transaction totals, accepted code
+counts or prevented attacks. Membership never authorizes or rejects issuance.
+The public `AuthorizationCodeIssueError::StateUsed` and `NonceUsed` variants
+remain for source compatibility; normal issuance no longer emits them.
+
+Authorization codes remain distinct and single-use, bound to their original
+client, redirect URI and PKCE verifier. Repeating state/nonce does not permit
+reuse of a PAR handle or a signed Request Object's `jti`. The existing Redis
+code/PAR/JTI commit preflights version-counter and index errors before mutation.
+No extra replay store or configuration variable is introduced.
+
+Stored codes and the Redis keyspace remain readable without a flush, backfill
+or identifier change. Update every authorization-serving instance for consistent
+repeat acceptance: older instances still reject repeated values. Finite router
+and Redis regressions cover repeated values and transaction isolation; older
+proof-model assumptions of globally unique RP values are not evidence for this
+behavior and require separate reassessment.
