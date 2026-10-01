@@ -5,6 +5,9 @@ use std::hash::BuildHasher;
 use super::registration::ClientRegistration;
 use crate::metrics_support::{metric_or_local, OptionalCounterVec};
 
+mod error;
+pub(crate) use error::RegistrationValidationError;
+
 mod config;
 mod grant_policy;
 mod jwks;
@@ -93,6 +96,16 @@ pub fn validate_registration_with_config<S: BuildHasher>(
     allowed_algs: &HashSet<String, S>,
     config: &DcrValidationConfig,
 ) -> Result<(), String> {
+    validate_registration_with_config_detailed(meta, require_kid, allowed_algs, config)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn validate_registration_with_config_detailed<S: BuildHasher>(
+    meta: &ClientRegistration,
+    require_kid: bool,
+    allowed_algs: &HashSet<String, S>,
+    config: &DcrValidationConfig,
+) -> Result<(), RegistrationValidationError> {
     let raw_method = meta
         .token_endpoint_auth_method
         .as_deref()
@@ -101,9 +114,13 @@ pub fn validate_registration_with_config<S: BuildHasher>(
     let method_normalized = method.to_ascii_lowercase();
 
     metadata::validate_registration_uris(meta)?;
-    metadata::validate_registration_scope(meta)?;
-    metadata::validate_client_key_material(meta, require_kid, allowed_algs, &method_normalized)?;
-    sender_policy::validate_sender_constraint_policy(meta, &method_normalized, config)?;
-    metadata::validate_id_token_signed_response_alg(meta)?;
+    metadata::validate_registration_scope(meta).map_err(RegistrationValidationError::Metadata)?;
+    metadata::validate_client_key_material(meta, require_kid, allowed_algs, &method_normalized)
+        .map_err(RegistrationValidationError::Metadata)?;
+    sender_policy::validate_sender_constraint_policy(meta, &method_normalized, config)
+        .map_err(RegistrationValidationError::Metadata)?;
+    metadata::validate_id_token_signed_response_alg(meta)
+        .map_err(RegistrationValidationError::Metadata)?;
     grant_policy::validate_grant_response_policy(meta, config)
+        .map_err(RegistrationValidationError::Metadata)
 }

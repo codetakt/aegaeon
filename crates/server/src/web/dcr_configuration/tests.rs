@@ -1,5 +1,6 @@
 mod authorization_context;
 mod snapshot_boundary;
+mod validation_errors;
 use super::super::test_support::{
     cleanup_test_environment as cleanup_test_dcr_environment, finish_test,
     sample_registered_client, setup_test_environment as setup_test_dcr_environment, test_app_state,

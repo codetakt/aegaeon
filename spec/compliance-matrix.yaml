@@ -1346,6 +1346,24 @@ rfc_7591:
     note: "HTTP status-code mapping is not modeled in F*; unauthorized registration rejection is covered by dcr_registration inline tests."
   notes:
   - "Unauthorized clients receive 401; PKCE policy violations assert registration_requires_authorization_header and registration_enforces_public_pkce_policy."
+- id: 7591-005
+  section: '3.2.2'
+  requirement: MUST
+  description: Registration validation errors preserve redirect, metadata and software statement categories and distinguish internal failures
+  module: crates/server/src/web/dcr_profile_validation.rs
+  proof:
+  - type: policy
+    rule: registration_validation_error_categories
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/validation_errors.rs
+  - crates/server/src/web/dcr_profile_validation/software_statement/error_tests.rs
+  - crates/server/src/dcr/software_statement/internal_tests.rs
+  ci_check: cargo test -p aegaeon-server --lib web::dcr_configuration::tests::validation_errors -- --include-ignored
+  status: implemented
+  notes:
+  - "Typed validation maps plain redirect shape/value errors to invalid_redirect_uri, invalid statements to invalid_software_statement, and absent optional SSA verification to local-policy unapproved_software_statement. Other metadata and existing SSA conflicts remain invalid_client_metadata. Internal parser/verifier failures use fixed 500 server_error."
+  - "Real PostgreSQL router tests cover create/update rejection without row, secret, audit or RAT changes and signed-statement success controls. Deterministic clock/key and mapper tests are direct seams, not evidence of malformed configuration reaching a normally constructed HTTP server. This does not establish initial/RAT challenge handling, full SSA metadata semantics or post-commit credential recovery."
+
 rfc_8414:
 - id: 8414-001
   section: '2'
