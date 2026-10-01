@@ -2,7 +2,11 @@
 
 Last updated: 2026-10-01
 
-Status: implementation contract
+Status: current implementation baseline
+
+Owner: Identity
+
+Audience: operators, OAuth client developers, verification reviewers
 
 Target rules must fit the issuing OAuth client's registered `allowedScopes`.
 This applies to every `tokenExchange.rules[].scopes[].targetScope` and every
