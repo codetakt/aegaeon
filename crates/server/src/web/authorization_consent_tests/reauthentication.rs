@@ -2,6 +2,7 @@
 use super::*;
 use std::collections::BTreeMap;
 mod negative;
+mod pushed_response_modes;
 
 const PASSWORD: &str = "local-reauthentication-test-password";
 
@@ -14,6 +15,8 @@ struct Page {
     status: StatusCode,
     location: Option<String>,
     body: String,
+    cache_control: Option<String>,
+    pragma: Option<String>,
 }
 
 impl Browser {
@@ -54,6 +57,16 @@ impl Browser {
             self.cookies.insert(key.to_string(), value.to_string());
         }
         Ok(Page {
+            cache_control: response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .map(|v| v.to_str().map(str::to_owned))
+                .transpose()?,
+            pragma: response
+                .headers()
+                .get(header::PRAGMA)
+                .map(|v| v.to_str().map(str::to_owned))
+                .transpose()?,
             status: response.status(),
             location: response
                 .headers()

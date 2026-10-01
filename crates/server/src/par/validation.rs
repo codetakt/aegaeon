@@ -156,6 +156,12 @@ impl ParStore {
     ) -> Result<ValidatedParRequest, ParError> {
         #[cfg(test)]
         self.validate_test_process_local_client(&request)?;
+        crate::form_post::parse_response_mode(request.response_mode.as_deref()).map_err(|_| {
+            ParError {
+                error: "invalid_request".to_string(),
+                error_description: Some("response_mode is not supported".to_string()),
+            }
+        })?;
         validate_pkce(&request)?;
 
         Ok(ValidatedParRequest::new(request))

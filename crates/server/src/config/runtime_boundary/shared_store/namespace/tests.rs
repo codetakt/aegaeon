@@ -27,7 +27,7 @@ fn redis_atomic_group_prefix_co_locates_authorization_code_grant_surfaces() {
     let prefixes = [
         namespace.redis_atomic_group_prefix(group, "authcode", "v2"),
         namespace.redis_atomic_group_prefix(group, "token-store", "v3"),
-        namespace.redis_atomic_group_prefix(group, "par", "v1"),
+        namespace.redis_atomic_group_prefix(group, "par", "v2"),
         namespace.redis_atomic_group_prefix(group, "request-object-jti", "replay:v1"),
         namespace.redis_atomic_group_prefix(group, "oidc-logout-session", "v3"),
     ];

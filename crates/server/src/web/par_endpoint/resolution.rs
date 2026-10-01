@@ -21,6 +21,7 @@ pub(in crate::web) struct ParResolvedParameters {
     pub(super) resource: Option<String>,
     pub(super) redirect_uri: String,
     pub(super) response_type: String,
+    pub(super) response_mode: Option<String>,
     pub(super) iss: Option<String>,
     pub(super) state: Option<String>,
     pub(super) code_challenge: String,
@@ -39,6 +40,7 @@ pub(in crate::web) struct ParResolvedDraft {
     pub(in crate::web) resource: Option<String>,
     pub(in crate::web) redirect_uri: Option<String>,
     pub(in crate::web) response_type: Option<String>,
+    pub(in crate::web) response_mode: Option<String>,
     pub(in crate::web) iss: Option<String>,
     pub(in crate::web) state: Option<String>,
     pub(in crate::web) code_challenge: Option<String>,
@@ -73,15 +75,25 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
             issuer_base,
         ));
     };
-    let response_type = draft.response_type.unwrap_or_else(|| "code".to_string());
-    if response_type != "code" {
-        return Err(no_cache_json_error_with_iss(
+    crate::form_post::parse_response_mode(draft.response_mode.as_deref()).map_err(|_| {
+        no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            Some("response_type must be 'code'"),
+            Some("response_mode is not supported"),
             issuer_base,
-        ));
-    }
+        )
+    })?;
+    let response_type = draft
+        .response_type
+        .filter(|value| value == "code")
+        .ok_or_else(|| {
+            no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some("response_type must be 'code'"),
+                issuer_base,
+            )
+        })?;
     let Some(code_challenge) = draft.code_challenge else {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
@@ -114,6 +126,7 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
         resource: draft.resource,
         redirect_uri,
         response_type,
+        response_mode: draft.response_mode,
         iss: draft.iss,
         state: draft.state,
         code_challenge,
@@ -129,13 +142,11 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
     })
 }
 
-pub(super) async fn resolve_par_parameters(
-    state: &AppState,
+fn resolve_par_form_resource(
     form: &ParForm,
-    client_id: &str,
     issuer_base: &str,
-) -> Result<ParResolvedParameters, Response> {
-    let mut resource = if form.request.is_some() {
+) -> Result<Option<String>, Response> {
+    if form.request.is_some() {
         if !form.resource.is_empty() {
             return Err(no_cache_json_error_with_iss(
                 StatusCode::BAD_REQUEST,
@@ -144,7 +155,7 @@ pub(super) async fn resolve_par_parameters(
                 issuer_base,
             ));
         }
-        None
+        Ok(None)
     } else {
         util::parse_single_resource_indicator(&form.resource).map_err(|description| {
             no_cache_json_error_with_iss(
@@ -153,12 +164,22 @@ pub(super) async fn resolve_par_parameters(
                 Some(&description),
                 issuer_base,
             )
-        })?
-    };
+        })
+    }
+}
+
+pub(super) async fn resolve_par_parameters(
+    state: &AppState,
+    form: &ParForm,
+    client_id: &str,
+    issuer_base: &str,
+) -> Result<ParResolvedParameters, Response> {
+    let mut resource = resolve_par_form_resource(form, issuer_base)?;
     let supported_authorization_details =
         state.cfg.authorization_details_types_supported.as_slice();
     let mut redirect_uri = form.redirect_uri.clone();
     let mut response_type = form.response_type.clone();
+    let mut response_mode = form.response_mode.clone();
     let mut iss = form.iss.clone();
     let mut scope = form.scope.clone();
     let mut prompt = form.prompt.clone();
@@ -198,6 +219,7 @@ pub(super) async fn resolve_par_parameters(
         .await?;
         redirect_uri = Some(resolved.redirect_uri);
         response_type = Some(resolved.response_type);
+        response_mode = resolved.request_object_claims.response_mode.clone();
         // Keep the signed JWT issuer in its claims; this field binds the AS.
         iss = Some(resolved.authorization_server_issuer);
         scope = Some(resolved.scope);
@@ -220,6 +242,7 @@ pub(super) async fn resolve_par_parameters(
             resource,
             redirect_uri,
             response_type,
+            response_mode,
             iss,
             state: state_param,
             code_challenge,

@@ -58,6 +58,7 @@ mod tests {
                 client_id: "client".to_string(),
                 redirect_uri: "https://client.example/cb".to_string(),
                 response_type: "code".to_string(),
+                response_mode: None,
                 iss: None,
                 resource: None,
                 state: Some("state".to_string()),
@@ -136,6 +137,23 @@ mod tests {
         }
         value["request"]["prompt"] = serde_json::json!(["consent"]);
         assert!(serde_json::from_value::<StoredParRequestRecord>(value).is_err());
+        Ok(())
+    }
+    #[test]
+    fn stored_record_response_mode_roundtrip_excludes_credentials(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for mode in [None, Some("query"), Some("form_post")] {
+            let mut stored = sample_stored_request();
+            stored.request.response_mode = mode.map(str::to_owned);
+            stored.request.client_secret = Some("mode-secret-sentinel".into());
+            let encoded = serde_json::to_string(&StoredParRequestRecord::try_from(stored)?)?;
+            assert!(!encoded.contains("secret"));
+            let restored = StoredParRequest::try_from(serde_json::from_str::<
+                StoredParRequestRecord,
+            >(&encoded)?)?;
+            assert_eq!(restored.request.response_mode.as_deref(), mode);
+            assert!(restored.request.client_secret.is_none());
+        }
         Ok(())
     }
 }

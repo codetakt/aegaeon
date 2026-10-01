@@ -1481,6 +1481,21 @@ rfc_8414:
   - Metadata and OIDC discovery omit registration_endpoint while environment policy has DCR disabled; when enabled, both builders wire registration_endpoint to the live DCR route.
   - EverParse artefacts under generated/everparse/ (kept fresh by verification.yml:everparse-dcr) guarantee the registration payload parser remains in sync with published metadata.
 rfc_9126:
+- id: 9126-pushed-response-semantics
+  section: '2.1, 3, 4'
+  requirement: MUST
+  description: Validate effective pushed inputs and preserve the selected response mode through authorization
+  module: crates/server/src/web/par_endpoint/resolution.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/pushed_modes.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/pushed_response_modes/failures.rs
+  - crates/server/src/par/storage/record.rs
+  status: partial
+  notes:
+  - "Effective request_uri is refused; response_type must be explicitly code; query/form_post selection comes from the form or verified Request Object and survives reservation, login and consent."
+  - "PAR v2 isolates request/reservation records and digest domains from v1 while preserving the authorization-code-grant atomic hash tag. Coordinated rollout or draining and re-push are required."
+  - "Finite real-route PostgreSQL/Redis tests and serialization controls do not establish all-store, clock or distributed composition or extend formal proof scope."
 - id: 9126-001
   section: '2'
   requirement: MUST
