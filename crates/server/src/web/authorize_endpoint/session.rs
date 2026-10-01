@@ -59,7 +59,7 @@ fn authorize_error_context<'a>(
     )
 }
 
-fn authorize_selected_acr(
+pub(in crate::web) fn authorize_selected_acr(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     issuer_base: &str,
@@ -135,6 +135,11 @@ pub(super) async fn authorize_decide_session(
             .map_err(|err| auth_session_store_lookup_error_response(issuer_base, &err))?,
         None => None,
     };
+    super::super::authorize_reauthentication::verify_session(
+        ctx,
+        cookie_session_id.as_deref(),
+        current_session.as_ref(),
+    )?;
     let selected_acr = authorize_selected_acr(state, ctx, issuer_base)?;
     let max_age = authorize_requested_max_age(&ctx.req);
     let session_acr = current_session
@@ -171,7 +176,6 @@ pub(super) async fn authorize_decide_session(
             client_id = %ctx.client_id_for_error,
             event = "stepup_required",
             reason = reason,
-            prompt = %ctx.prompt,
             "step-up authentication required"
         );
     }

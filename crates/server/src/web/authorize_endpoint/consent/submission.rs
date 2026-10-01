@@ -1,7 +1,7 @@
 use super::super::session::{authorize_decide_session, resolve_authorize_session_state};
 use super::{has_prompt, storage};
 use crate::web::{
-    authorize_context::{build_authorize_request_context, state_for_authorization_observation},
+    authorize_context::{build_authorize_input_context, state_for_authorization_observation},
     form_helpers::auth_session_cookie,
     AppState,
 };
@@ -68,18 +68,26 @@ async fn process(
         .map_err(|_| storage::unavailable())?
         .ok_or_else(|| storage::rejected("consent_session_unavailable"))?;
     let pending = storage::load(state, &sid, &browser.user_id, token).await?;
-    let uri = pending.uri.parse().map_err(|_| storage::invalid())?;
-    let mut ctx =
-        build_authorize_request_context(state, &uri, &state.issuer, pending.id.to_string()).await?;
+    if pending.uri != "/authorize" {
+        return Err(storage::invalid());
+    }
+    let saved =
+        crate::web::authorization_snapshot::AuthorizationSnapshot::decode(&pending.snapshot)
+            .map_err(|_| storage::invalid())?;
+    let mut ctx = build_authorize_input_context(
+        state,
+        saved.input,
+        saved.par_continuation,
+        &state.issuer,
+        pending.id.to_string(),
+    )
+    .await?;
     let selected_state = state_for_authorization_observation(state, &ctx.observation);
     let state = &selected_state;
     // Only a consent row already bound to this subject/session may carry the
     // receipt. Do not re-consume its login continuation or trust an HTTP flag.
-    ctx.reauthenticated = pending
-        .snapshot
-        .get("reauthenticated")
-        .and_then(serde_json::Value::as_bool)
-        .ok_or_else(storage::invalid)?;
+    ctx.reauthenticated = saved.reauthenticated;
+    ctx.reauthentication_session = saved.authentication_session;
     // Rebuilding the context above also revalidates the resolved prompt.
     if !has_prompt(&ctx, "consent")
         || super::snapshot(&ctx).map_err(|_| storage::unavailable())? != pending.snapshot

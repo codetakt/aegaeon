@@ -45,11 +45,43 @@ impl OidcEndpoint {
 }
 
 /// Admitted values may contain request objects or ID tokens: deliberately no Debug.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(in crate::web) struct OidcParameters {
     pairs: Vec<(String, String)>,
 }
 
 impl OidcParameters {
+    /// Revalidate decoded values loaded from a private transaction envelope.
+    pub(in crate::web) fn validate_authorization(&self) -> Result<(), OidcInputError> {
+        let limits = DEFAULT_QUERY_LIMITS;
+        if self.pairs.len() > limits.max_params() {
+            return Err(OidcInputError::TooManyParameters);
+        }
+        let mut total = 0_usize;
+        for (index, (key, value)) in self.pairs.iter().enumerate() {
+            if key.len() > limits.max_key_bytes() || value.len() > limits.max_value_bytes() {
+                return Err(OidcInputError::ParametersTooLarge);
+            }
+            total = total
+                .saturating_add(key.len())
+                .saturating_add(value.len())
+                .saturating_add(2);
+            if value.is_empty()
+                || !OidcEndpoint::Authorize.recognizes(key)
+                || (!OidcEndpoint::Authorize.repeatable(key)
+                    && self.pairs[..index].iter().any(|(other, _)| other == key))
+            {
+                return Err(OidcInputError::InvalidParameterValue);
+            }
+        }
+        // Every original encoding has at least these decoded bytes and separators.
+        if total.saturating_sub(1) > limits.max_bytes() {
+            return Err(OidcInputError::ParametersTooLarge);
+        }
+        Ok(())
+    }
+
     pub(in crate::web) fn as_pairs(&self) -> &[(String, String)] {
         &self.pairs
     }
