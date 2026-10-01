@@ -2,7 +2,7 @@ use super::super::oauth_errors::{
     authorization_header, invalid_client_header_error, registry_state_error_response,
 };
 use super::super::{
-    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    client_auth_presence, client_authentication_conflict_response, private_key_jwt_client_id,
     token_client_auth_method, validate_private_key_jwt_client_assertion, AppState,
 };
 use super::forms::{IntrospectForm, RevokeForm};
@@ -31,11 +31,10 @@ pub(super) fn introspection_request_state(
         form.client_assertion_type.as_deref(),
         form.client_assertion.as_deref(),
     );
-    if multiple_client_auth_methods_present(presence) {
-        return Err(util::invalid_client_response(
-            "token_introspection",
-            "Multiple client authentication methods are not allowed",
-        ));
+    if let Some(response) =
+        client_authentication_conflict_response(presence, "token_introspection", None)
+    {
+        return Err(response);
     }
     let lookup_id = if presence.private_key_jwt {
         Some(
@@ -77,11 +76,10 @@ pub(super) async fn introspection_requesting_client_id(
         form.client_assertion_type.as_deref(),
         form.client_assertion.as_deref(),
     );
-    if multiple_client_auth_methods_present(presence) {
-        return Err(util::invalid_client_response(
-            "token_introspection",
-            "Multiple client authentication methods are not allowed",
-        ));
+    if let Some(response) =
+        client_authentication_conflict_response(presence, "token_introspection", None)
+    {
+        return Err(response);
     }
     let client_auth_method = token_client_auth_method(presence);
     let basic_client_id = if presence.basic {
@@ -216,11 +214,10 @@ pub(super) async fn revocation_requesting_client_id(
         form.client_assertion_type.as_deref(),
         form.client_assertion.as_deref(),
     );
-    if multiple_client_auth_methods_present(presence) {
-        return Err(util::invalid_client_response(
-            "token_revocation",
-            "Multiple client authentication methods are not allowed",
-        ));
+    if let Some(response) =
+        client_authentication_conflict_response(presence, "token_revocation", None)
+    {
+        return Err(response);
     }
     let client_auth_method = token_client_auth_method(presence);
 

@@ -201,3 +201,17 @@ pub(super) fn no_cache_json_error_with_iss(
     util::apply_no_cache_headers(&mut response);
     response
 }
+
+/// Advertise the supported HTTP scheme only for a recognized client-auth failure.
+pub(super) fn with_basic_client_challenge(mut response: Response, realm: &'static str) -> Response {
+    response.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        HeaderValue::from_str(&format!(
+            "Basic realm=\"{realm}\", error=\"invalid_client\""
+        ))
+        .unwrap_or_else(|_| {
+            HeaderValue::from_static("Basic realm=\"oauth\", error=\"invalid_client\"")
+        }),
+    );
+    response
+}

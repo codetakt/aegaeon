@@ -3,8 +3,12 @@ use axum::{http::StatusCode, response::Response};
 use crate::client_registry::{ClientAssertionValidationError, ClientRegistry};
 use crate::util;
 
-use super::super::oauth_errors::json_error_with_iss;
-use super::super::token_response::{token_error_response, token_registry_state_error_response};
+use super::super::oauth_errors::{
+    json_error_with_iss, no_cache_json_error_with_iss, with_basic_client_challenge,
+};
+use super::super::token_response::{
+    token_error_response, token_invalid_client_response, token_registry_state_error_response,
+};
 use super::super::{AppState, CLIENT_ASSERTION_TYPE_JWT_BEARER, TOKEN_EXCHANGE_GRANT_TYPE};
 use super::TokenForm;
 
@@ -73,8 +77,31 @@ pub(in crate::web) fn client_auth_presence(
     ClientAuthPresence::from_parts(basic_present, post_present, pkjwt_present)
 }
 
-pub(in crate::web) fn multiple_client_auth_methods_present(presence: ClientAuthPresence) -> bool {
-    presence.multiple_methods_present()
+/// Classify only mechanisms admitted by the existing form/header parsers.
+/// An assertion mixture has RFC 7521's invalid_client category; ordinary
+/// password mixtures retain RFC 6749's invalid_request category.
+pub(in crate::web) fn client_authentication_conflict_response(
+    presence: ClientAuthPresence,
+    realm: &'static str,
+    issuer: Option<&str>,
+) -> Option<Response> {
+    if !presence.multiple_methods_present() {
+        return None;
+    }
+    let description = "multiple client authentication methods are not allowed";
+    let (status, error) = if presence.private_key_jwt {
+        (StatusCode::UNAUTHORIZED, "invalid_client")
+    } else {
+        (StatusCode::BAD_REQUEST, "invalid_request")
+    };
+    let mut response = match issuer {
+        Some(issuer) => no_cache_json_error_with_iss(status, error, Some(description), issuer),
+        None => token_error_response(status, error, Some(description)),
+    };
+    if presence.private_key_jwt {
+        response = with_basic_client_challenge(response, realm);
+    }
+    Some(response)
 }
 
 pub(in crate::web) async fn validate_private_key_jwt_client_assertion(
@@ -147,20 +174,14 @@ pub(super) fn token_resolve_client_id(
     form: &TokenForm,
 ) -> Result<(String, ClientAuthPresence), Response> {
     let presence = token_auth_presence(auth_header, form);
-    if multiple_client_auth_methods_present(presence) {
-        return Err(token_error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("multiple client authentication methods are not allowed"),
-        ));
+    if let Some(response) = client_authentication_conflict_response(presence, "oauth", None) {
+        return Err(response);
     }
     let client_id_from_basic = match (presence.basic, auth_header) {
         (true, Some(header)) => Some(
             ClientRegistry::decode_basic_auth_credentials(header)
                 .map(|(id, _)| id)
-                .ok_or_else(|| {
-                    token_error_response(StatusCode::UNAUTHORIZED, "invalid_client", None)
-                })?,
+                .ok_or_else(token_invalid_client_response)?,
         ),
         _ => None,
     };
@@ -172,9 +193,7 @@ pub(super) fn token_resolve_client_id(
                 form.client_assertion_type.as_deref(),
                 form.client_assertion.as_deref(),
             )?
-            .ok_or_else(|| {
-                token_error_response(StatusCode::UNAUTHORIZED, "invalid_client", None)
-            })?,
+            .ok_or_else(token_invalid_client_response)?,
         )
     } else {
         None
@@ -186,11 +205,7 @@ pub(super) fn token_resolve_client_id(
         client_id_from_basic.as_deref(),
     ) {
         (Some(form_id), Some(basic_id)) if form_id != basic_id => {
-            return Err(token_error_response(
-                StatusCode::UNAUTHORIZED,
-                "invalid_client",
-                None,
-            ));
+            return Err(token_invalid_client_response());
         }
         (Some(form_id), _) => form_id.to_string(),
         (None, Some(basic_id)) => basic_id.to_string(),
@@ -269,39 +284,23 @@ pub(super) async fn token_validate_client_authentication(
             token_registry_state_error_response("token_is_registered_client", error)
         })?;
     if !client_registered {
-        return Err(token_error_response(
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            None,
-        ));
+        return Err(token_invalid_client_response());
     }
     let client_confidential = state
         .clients
         .try_is_confidential(client_id)
         .map_err(|error| token_registry_state_error_response("token_is_confidential", error))?;
     if client_auth_method == "none" && client_confidential {
-        return Err(token_error_response(
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            None,
-        ));
+        return Err(token_invalid_client_response());
     }
     if client_auth_method != "none" && !client_authenticated {
-        return Err(token_error_response(
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            None,
-        ));
+        return Err(token_invalid_client_response());
     }
     let require_client_auth =
         matches!(grant_type, "client_credentials" | TOKEN_EXCHANGE_GRANT_TYPE)
             || (state.cfg.require_client_auth_token && client_confidential);
     if require_client_auth && !client_authenticated {
-        return Err(token_error_response(
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            None,
-        ));
+        return Err(token_invalid_client_response());
     }
     Ok(())
 }

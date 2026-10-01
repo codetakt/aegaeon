@@ -1,6 +1,6 @@
 use super::*;
 
-async fn authenticated_lifecycle(state: &AppState, token: &str) -> TestResult {
+pub(super) async fn authenticated_lifecycle(state: &AppState, token: &str) -> TestResult {
     for (path, active) in [
         ("/introspect", true),
         ("/revoke", false),
@@ -110,7 +110,11 @@ async fn assertion_subject_does_not_supply_anonymous_public_client_identity() ->
         for path in ["/token", "/device_authorization", "/revoke", "/par"] {
             let mut f = fields(path, "");
             f.retain(|(k, _)| !k.starts_with("client_assertion") && *k != "client_id");
-            reject(&state, path, &f, None).await?;
+            if path == "/revoke" {
+                reject(&state, path, &f, None).await?;
+            } else {
+                reject_request(&state, path, &f, None).await?;
+            }
         }
         let (status, body) = send(
             &state,

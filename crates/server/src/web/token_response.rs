@@ -26,6 +26,11 @@ pub(super) fn token_error_response(
     token_json_response(status, body)
 }
 
+pub(super) fn token_invalid_client_response() -> Response {
+    let response = token_error_response(StatusCode::UNAUTHORIZED, "invalid_client", None);
+    super::oauth_errors::with_basic_client_challenge(response, "oauth")
+}
+
 pub(super) fn token_internal_error_response(
     context: &'static str,
     description: Option<&str>,

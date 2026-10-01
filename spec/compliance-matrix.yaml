@@ -200,12 +200,16 @@ rfc_6749:
   - crates/server/src/web/grant_error_tests/policy.rs
   - crates/server/src/web/grant_error_tests/codes.rs
   - crates/server/src/web/grant_error_tests/devices.rs
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
   ci_check: token-error-codes
   status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
-  - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; adjacent authentication challenges and global/profile activation remain outside these finite checks."
+  - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; global/profile activation remains outside these finite checks."
+  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; bare/empty/unsupported schemes, duplicate/nontext header admission and diagnostic alphabet handling remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
+
 - id: 6749-010
   section: '10.3'
   requirement: MUST
@@ -2148,13 +2152,18 @@ rfc_7521:
     rule: invalid_assertion_maps_to_invalid_client
   tests:
   - crates/server/src/web/request_admission.rs
-  status: verified
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); token-endpoint error-code mapping is not modeled in F*."
   applies_to:
   - as
+  notes:
+  - "Historical protocol-level proof references are retained at their original scope. Fresh finite HTTP tests do not establish wire/model composition or complete client-authentication admission conformance."
+  - "Recognized client-authentication failures use 401 invalid_client with a Basic challenge on token, device authorization, PAR, introspection and revocation. Assertion mixtures use invalid_client; ordinary Basic plus post uses 400 invalid_request without a challenge. Existing header admission, RS/DCR errors and description alphabet handling remain separate limitations; these endpoint tests do not extend the protocol proof to wire serialization."
 
 - id: 7521-202
   section: '4.2'
@@ -2536,12 +2545,16 @@ rfc_7523:
     rule: pkjwt_invalid_maps_to_invalid_client
   tests:
   - crates/server/src/web/request_admission.rs
-  status: verified
+  - crates/server/src/web/assertion_client/tests/client_auth_errors.rs
+  - crates/server/src/web/assertion_client/tests/negative.rs
+  status: partial
   runtime_link: crates/server/src/web/mod.rs
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); token-endpoint error-code mapping is not modeled in F*."
   notes:
+  - "Historical protocol-level proof references are retained at their original scope. Fresh finite HTTP tests do not establish wire/model composition or complete client-authentication admission conformance."
+  - "Recognized client-authentication failures use 401 invalid_client with a Basic challenge on token, device authorization, PAR, introspection and revocation. Assertion mixtures use invalid_client; ordinary Basic plus post uses 400 invalid_request without a challenge. Existing header admission, RS/DCR errors and description alphabet handling remain separate limitations; these endpoint tests do not extend the protocol proof to wire serialization."
   - "When client authentication is required and private_key_jwt validation fails, the token endpoint returns invalid_client."
 
 - id: 7523-401

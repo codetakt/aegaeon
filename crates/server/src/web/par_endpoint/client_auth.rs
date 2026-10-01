@@ -4,7 +4,7 @@ use super::super::oauth_errors::{
     authorization_header, invalid_client_header_error, registry_state_error_response,
 };
 use super::super::{
-    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    client_auth_presence, client_authentication_conflict_response, private_key_jwt_client_id,
     token_client_auth_method, validate_private_key_jwt_client_assertion, AppState,
 };
 use super::form::ParForm;
@@ -40,11 +40,8 @@ pub(super) async fn authenticate_par_client(
             "Unsupported client authentication scheme",
         ));
     }
-    if multiple_client_auth_methods_present(presence) {
-        return Err(util::invalid_client_response(
-            "oauth",
-            "Multiple client authentication methods are not allowed",
-        ));
+    if let Some(response) = client_authentication_conflict_response(presence, "oauth", None) {
+        return Err(response);
     }
     if form.request.is_none() && form.client_id.is_none() {
         return Err(super::super::oauth_errors::no_cache_json_error_with_iss(

@@ -7,10 +7,10 @@ use crate::client_registry::ClientRegistry;
 
 use super::super::super::oauth_errors::{
     authorization_header, no_cache_header_error, no_cache_json_error_with_iss,
-    registry_state_error_response,
+    registry_state_error_response, with_basic_client_challenge,
 };
 use super::super::super::{
-    multiple_client_auth_methods_present, private_key_jwt_client_id, token_auth_presence,
+    client_authentication_conflict_response, private_key_jwt_client_id, token_auth_presence,
     validate_private_key_jwt_client_assertion, AppState, ClientAuthPresence, TokenForm,
 };
 
@@ -20,11 +20,14 @@ pub(super) struct DeviceAuthorizationClientContext {
 }
 
 fn device_invalid_client_response(issuer_base: &str) -> Response {
-    no_cache_json_error_with_iss(
-        StatusCode::UNAUTHORIZED,
-        "invalid_client",
-        None,
-        issuer_base,
+    with_basic_client_challenge(
+        no_cache_json_error_with_iss(
+            StatusCode::UNAUTHORIZED,
+            "invalid_client",
+            None,
+            issuer_base,
+        ),
+        "oauth",
     )
 }
 
@@ -178,13 +181,10 @@ pub(super) async fn authenticate_device_authorization_client(
     let auth_header = authorization_header(headers)
         .map_err(|err| no_cache_header_error(issuer_base, "Authorization", err))?;
     let auth_presence = token_auth_presence(auth_header, form);
-    if multiple_client_auth_methods_present(auth_presence) {
-        return Err(no_cache_json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("multiple client authentication methods are not allowed"),
-            issuer_base,
-        ));
+    if let Some(response) =
+        client_authentication_conflict_response(auth_presence, "oauth", Some(issuer_base))
+    {
+        return Err(response);
     }
 
     let client_id = resolve_device_authorization_client_id(

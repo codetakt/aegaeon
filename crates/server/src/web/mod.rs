@@ -130,7 +130,7 @@ use shared::{
 #[cfg(test)]
 use test_prelude::*;
 use token_endpoint::{
-    client_auth_presence, multiple_client_auth_methods_present, private_key_jwt_client_id,
+    client_auth_presence, client_authentication_conflict_response, private_key_jwt_client_id,
     resolve_session_user, token, token_auth_presence, token_client_auth_method,
     validate_private_key_jwt_client_assertion, validate_token_scope_subset, ClientAuthPresence,
     TokenEndpointContext,

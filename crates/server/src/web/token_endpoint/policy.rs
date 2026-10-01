@@ -7,7 +7,9 @@ use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::profile_policy::{
     record_downstream_profile_rejection, record_downstream_profile_usage,
 };
-use super::super::token_response::{token_error_response, token_registry_state_error_response};
+use super::super::token_response::{
+    token_error_response, token_invalid_client_response, token_registry_state_error_response,
+};
 use super::super::AppState;
 
 pub(super) struct TokenEndpointPolicyContext {
@@ -109,11 +111,7 @@ pub(super) async fn token_resolve_policy(
         .any(|method| method == client_auth_method)
     {
         record_downstream_profile_rejection("token_auth_method_not_allowed", "token");
-        return Err(token_error_response(
-            StatusCode::UNAUTHORIZED,
-            "invalid_client",
-            None,
-        ));
+        return Err(token_invalid_client_response());
     }
     let sender_constraint = oauth_profile::merge_sender_constraints(
         state.cfg.security_policy.sender_constrained,

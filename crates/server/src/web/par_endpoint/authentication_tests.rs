@@ -231,14 +231,15 @@ async fn exercise(state: &mut AppState) -> TestResult {
         &[("client_secret", "wrong")],
     )
     .await?;
-    rejected(
+    let (status, body) = send(
         state,
-        &mut conn,
         "client_secret_basic",
         Some(&basic),
         &[("client_secret", SECRET)],
     )
     .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"], "invalid_request");
     rejected(state, &mut conn, "none", None, &[("client_secret", SECRET)]).await?;
     let jwt = assertion(state)?;
     let assertion_fields = [
