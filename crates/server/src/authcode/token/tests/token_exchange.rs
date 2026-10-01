@@ -43,8 +43,8 @@ fn test_token_exchange_rejects_wrong_client_without_consuming_code() -> TestResu
         issuer.exchange_code_for_tokens(attacker_attempt, None),
         "token exchange result",
     ) {
-        TokenResponse::Error { error, .. } => assert_eq!(error, "invalid_client"),
-        other => fail_test!("expected invalid_client error for mismatched client_id, got {other:?}"),
+        TokenResponse::Error { error, .. } => assert_eq!(error, "invalid_grant"),
+        other => fail_test!("expected invalid_grant error for mismatched client_id, got {other:?}"),
     }
 
     // Legitimate client can still redeem after the failed attacker attempt.

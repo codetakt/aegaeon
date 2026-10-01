@@ -197,11 +197,15 @@ rfc_6749:
     invariant: token_exchange
   tests:
   - crates/server/src/authcode/token/tests/token_exchange.rs
+  - crates/server/src/web/grant_error_tests/policy.rs
+  - crates/server/src/web/grant_error_tests/codes.rs
+  - crates/server/src/web/grant_error_tests/devices.rs
   ci_check: token-error-codes
   status: partial
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+  - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; adjacent authentication challenges and global/profile activation remain outside these finite checks."
 - id: 6749-010
   section: '10.3'
   requirement: MUST

@@ -64,6 +64,9 @@ fn device_poll_rejection_response(result: &DevicePollResult) -> Response {
         DevicePollResult::SlowDown => {
             token_error_response(StatusCode::BAD_REQUEST, "slow_down", None)
         }
+        DevicePollResult::InvalidGrant => {
+            token_error_response(StatusCode::BAD_REQUEST, "invalid_grant", None)
+        }
         DevicePollResult::ExpiredToken => {
             token_error_response(StatusCode::BAD_REQUEST, "expired_token", None)
         }
