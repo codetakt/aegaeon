@@ -1,6 +1,6 @@
 # DPoP リプレイストア運用ガイド
 
-Last updated: 2026-07-01
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -8,7 +8,7 @@ Owner: Operations
 
 Audience: operators, maintainers
 
-本ドキュメントは DPoP 送信者制約のリプレイ対策を Redis で運用するための手順と推奨設定をまとめたものです。Verified Core（F*/Low*/WASM）は `replay_ticket` を返すだけでストレージは扱わないため、アプリケーションが確実に fail-close するようホスト側で制御します。
+本ドキュメントは DPoP 送信者制約のリプレイ対策を Redis で運用するための手順と推奨設定をまとめたものです。Rust FFI は署名と freshness 等を検査して `jti` と任意の nonce を返します。リプレイ記録と nonce policy は Rust middleware が適用し、保存失敗時は fail-closed にします。
 
 ## 1. 環境変数
 
@@ -27,12 +27,40 @@ Redis に接続できない場合、アプリケーションは **503 (temporari
 
 ## 2. キー設計と TTL
 
-1. Verified Core は `method`/`uri`/`jti`/`jkt`/`ath` などを含む `replay_ticket` を返す。
-2. Rust ミドルウェアが以下を連結し SHA-256 でハッシュ化、base64url エンコードした値をキーに使用します。
-   ```text
-   dpop:v1:{namespace}:{base64url(SHA256(method || uri || jti || jkt || ath-or-'-'))}
-   ```
-3. TTL は active policy の `dpopIatWindowSeconds + jwtLeewaySeconds`（既定で 360 秒）。`SET <key> 1 NX PX <ttl_ms>` で保存し、既存キーがあればリプレイとして拒否します。
+1. FFI の proof 検証後、Rust middleware が nonce policy を適用します。FFI 自体は `jti` の再利用を検査しません。
+2. リプレイキーは既存の environment namespace と、長さ付きで連結した `jkt` / `jti` から導出します。共有 Redis の namespace・キー形式は変更しません。
+3. 成功した proof の保存直前に、TTL を次の最大値まで引き上げます。
+   - `2 * MAX_DPOP_IAT_WINDOW_SECS + 1` 秒（現在は `2 * 300 + 1 = 601` 秒）
+   - 直接構築された middleware の window に対する `2 * iat_window_secs + 1` 秒
+   - 呼び出し元が指定した、より長い保存期間
+4. `SET <key> 1 NX PX <ttl_ms>` で原子的に保存し、既存キーがあればリプレイとして拒否します。算術 overflow や保存失敗は受理前に拒否し、TTL を切り詰めません。
+
+freshness は整数秒で `abs(now - iat) <= window` と判定します。未来側の端で受理した proof は
+最大で window の 2 倍先まで有効なため、片側 window と JWT leeway の加算では不足します。
+DPoP freshness に JWT leeway は加算されません。追加の 1 秒は包含する最終秒と保存時刻の端数を
+覆い、production の最大 window を使う下限は、共有ストアを使う instance 間の対応範囲内の
+window 拡大にも備えます。NumericDate の意味を変更する場合はこの導出を再評価します。
+
+nonce enforcement の有効・無効にかかわらず同じ TTL 下限を適用します。nonce の短い有効期間へ
+リプレイ TTL を縮めず、nonce が一回限りとは仮定しません。production は nonce が有効でも
+`iat` freshness を検査します。これは RFC 9449 sections 4.3 / 11.1 に対する Aegaeon の
+single-use policy であり、全 DPoP 配置に無条件の replay-store MUST があるという主張ではありません。
+
+継続して受理する一意な proof のレートを毎秒 R 件とすると、下限で保持するキー数の目安は
+`601 * R` です（期限切れ処理・メモリ overhead は別）。従来の既定 360 秒から保存量が増えるため、
+既存の no-eviction 要件を満たす容量を確保します。全 replica が同じ共有ストアを使い、受理期間内に
+記録が失われないこと、および時計が信頼できることが前提です。有限の相対 TTL は任意の後方時計変更を
+解決せず、本修正はこれらの前提を証明するものではありません。
+
+### 更新時の admission 停止と待機
+
+旧 instance が受理した proof の短い記録は、新 instance から復元・延長できません。
+継続的な厳密リプレイ排除が必要な運用では、最後の旧 instance を停止する前に DPoP admission を停止し、
+旧 instance による最後の受理から最大の従来 acceptance horizon が経過してから、修正済み instance
+だけで再開します。現在の supported maximum では、上記の時計前提の下で 601 秒待機します。
+既存 namespace の維持により残存記録は引き継ぎますが、期限切れの記録は復活しません。
+rolling deployment だけで過去の replay history が直ちに更新されるとは扱いません。
+新しい設定や storage schema は不要です。
 
 ## 3. Redis 推奨設定
 

@@ -1292,9 +1292,11 @@ fn parse_dpop_claims(payload: &[u8]) -> Option<DpopClaims> {
 /// - HTTP method (htm) matches
 /// - URI (htu) matches
 /// - Issued-at time (iat) is within acceptable window
-/// - JTI hasn't been seen before (replay prevention)
 ///
-/// Returns verified proof material on success for replay and nonce handling.
+/// Returns the verified `jti` and optional nonce on success. This function does
+/// not access replay storage or enforce nonce policy. The caller must atomically
+/// record the proof identifier for the entire remaining acceptance interval and
+/// apply its nonce policy before accepting the request.
 #[cfg(not(kani))]
 #[must_use]
 pub fn verify_dpop(
