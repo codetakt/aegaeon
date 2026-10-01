@@ -73,6 +73,7 @@ mod upstream_callback_exchange;
 mod upstream_callback_session_failure_audit;
 mod upstream_callback_state;
 mod upstream_callback_users;
+mod upstream_endpoint_query;
 mod upstream_id_token;
 mod upstream_logout_incidents;
 mod upstream_logout_relay;

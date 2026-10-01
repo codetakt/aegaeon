@@ -10,3 +10,6 @@ include!("upstream_tests/federation_list.rs");
 mod browser_binding;
 
 pub(super) mod issuer_identity;
+
+#[path = "upstream_tests/endpoint_query.rs"]
+mod endpoint_query;

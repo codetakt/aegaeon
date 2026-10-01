@@ -151,14 +151,17 @@ fn build_refresh_token_request(
     link: &UpstreamRefreshLink,
     auth_method: &str,
     form: &[(&'static str, String)],
-) -> RequestBuilder {
+) -> Result<RequestBuilder, String> {
+    super::super::upstream_endpoint_query::validate_token_endpoint_query(
+        &discovery.token_endpoint,
+    )?;
     let mut token_req = client.post(&discovery.token_endpoint).form(form);
     if auth_method == "client_secret_basic" {
         if let Some(secret) = link.upstream_client_secret.as_ref() {
             token_req = token_req.basic_auth(&link.upstream_client_id, Some(secret));
         }
     }
-    token_req
+    Ok(token_req)
 }
 
 async fn send_refresh_token_request(
@@ -235,7 +238,10 @@ pub(super) async fn perform_upstream_refresh_exchange(
         .map_err(|message| {
             upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
         })?;
-    let token_req = build_refresh_token_request(&client, &discovery, link, &auth_method, &form);
+    let token_req = build_refresh_token_request(&client, &discovery, link, &auth_method, &form)
+        .map_err(|message| {
+            upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
+        })?;
     let upstream_response = send_refresh_token_request(token_req, link, issuer_base).await?;
     let body = read_refresh_token_response_body(upstream_response, issuer_base).await?;
     let token_response = parse_validated_refresh_response(&body, issuer_base)?;
@@ -246,3 +252,6 @@ pub(super) async fn perform_upstream_refresh_exchange(
         token_response,
     })
 }
+
+#[cfg(test)]
+mod query_tests;

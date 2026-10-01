@@ -60,8 +60,8 @@ fn validate_upstream_endpoint_url(value: &str, label: &str) -> Result<Url, Strin
     if !url.username().is_empty() || url.password().is_some() {
         return Err(format!("{label} must not contain credentials"));
     }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(format!("{label} must not include query or fragment"));
+    if url.fragment().is_some() {
+        return Err(format!("{label} must not include fragment"));
     }
     if upstream_test_http_loopback_allowed(&url) {
         return Ok(url);
