@@ -64,10 +64,10 @@ pub(super) async fn change_other_environment(
             .await?;
     sqlx::query("INSERT INTO aegaeon.oauth_profiles (environment_id,configuration_version_id,name,profile_type,is_default,require_pkce,sender_constrained,allowed_grant_types,token_endpoint_auth_methods_allowed) VALUES ($1,$2,'exchange-fixture','DOWNSTREAM',true,true,'NONE',ARRAY['authorization_code'],ARRAY['none'])")
         .bind(other.environment_id).bind(loaded.active_configuration_version_id).execute(pool).await?;
+    let mut seeded = exchange::fixture(pool, &other).await?;
     patch(app, pool, &other, session, json!({"tokenExchange":exchange::policy(&other.issuer_url)?,
         "senderConstraint":"none", "jwtAccessTokensEnabled":true, "retainRefreshChain":true,
         "allowedGrantTypes":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:token-exchange"]})).await?;
-    let mut seeded = exchange::fixture(pool, &other).await?;
     if redis {
         exchange::use_redis(&mut seeded)?;
     }

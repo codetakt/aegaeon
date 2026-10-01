@@ -1,5 +1,6 @@
 pub mod client_credentials;
 mod grant_types;
+pub(crate) mod scope_boundary;
 pub mod token_exchange;
 
 pub use grant_types::{

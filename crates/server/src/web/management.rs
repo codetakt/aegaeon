@@ -66,6 +66,7 @@ mod scope;
 mod security;
 mod session_support;
 mod state;
+mod target_scope_boundary;
 mod team_support;
 #[cfg(test)]
 mod test_prelude;

@@ -34,6 +34,12 @@ pub(super) fn dcr_database_error_response(error: &DcrDatabaseError, issuer_base:
         "dynamic client registration database operation failed"
     );
     match error {
+        DcrDatabaseError::ScopePolicy(message) => no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_client_metadata",
+            Some(message),
+            issuer_base,
+        ),
         DcrDatabaseError::ConcurrentModification => no_cache_json_error_with_iss(
             StatusCode::CONFLICT,
             "invalid_request",

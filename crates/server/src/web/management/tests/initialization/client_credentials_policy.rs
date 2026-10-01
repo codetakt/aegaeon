@@ -63,6 +63,17 @@ async fn pg_client_credentials_policy_activates_and_preserves_separate_exchange_
             )
             .await?;
             assert_eq!(initial.state.policy.client_credentials, Default::default());
+            let mut client = crate::web::test_support::sample_registered_client("worker");
+            client.allowed_scopes = vec!["orders.read".into()];
+            crate::dcr_persistence::create_dynamic_registration(
+                &pool,
+                &initialized.issuer_host,
+                &client,
+                &["code".into()],
+                "worker-test-registration",
+                "register-worker",
+            )
+            .await?;
             let (app, session) = management_session(&pool).await?;
             let catalog = serde_json::json!({"version":1,"targets":[{
             "audience":"orders-api","resourceAliases":["https://orders.example/api"]}],"rules":[]});

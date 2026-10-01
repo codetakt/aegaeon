@@ -56,6 +56,15 @@ pub(super) async fn load_activation_context(
         request_id,
     )?;
 
+    crate::web::management::target_scope_boundary::validate_policy_scopes(
+        tx,
+        environment.scope.environment,
+        environment.active_configuration_version_id,
+        &activated_configuration.state.policy,
+        request_id,
+    )
+    .await?;
+
     Ok(ActivationLoadedContext {
         environment,
         previous_policy,

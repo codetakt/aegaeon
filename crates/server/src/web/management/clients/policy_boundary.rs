@@ -60,7 +60,16 @@ pub(in crate::web::management::clients) async fn validate_client_policy_boundary
         &scope_allowlist,
         request_id,
         "allowedScopes must be a subset of the active scopeAllowlist",
+    )?;
+    let violations = crate::policy::scope_boundary::client_violations(
+        tx,
+        environment_id,
+        &input.client_identifier,
+        &input.allowed_scopes,
     )
+    .await
+    .map_err(|_| management_internal_error(request_id, "Failed to validate target rule scopes"))?;
+    super::super::target_scope_boundary::require_valid_scopes(&violations, request_id)
 }
 
 fn reject_non_subset(

@@ -802,3 +802,5 @@ mod authority_boundaries;
 mod signed_introspection;
 
 mod authorization_runtime;
+
+mod uri_target;
