@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 mod fetcher;
+mod headers;
 mod keys;
 mod metadata_policy;
 mod raw_payload;
@@ -172,22 +173,21 @@ pub fn parse_entity_statement_unverified(
 /// # Errors
 ///
 /// Returns [`FederationError`] when no suitable key is available, signature verification fails, or
-/// the payload cannot be parsed as an entity statement.
+/// the protected header lacks the Entity Statement purpose or a nonempty key ID, or the
+/// payload cannot be parsed as an entity statement.
 pub fn verify_entity_statement(
     jws_compact: &str,
     issuer_jwks: &JwkSet,
 ) -> Result<EntityStatement, FederationError> {
     let parsed = Jws::from_compact(jws_compact)?;
+    let header_kid = headers::required_signing_kid(&parsed.header, "entity-statement+jwt")?;
     let alg = &parsed.header.alg;
     let ctx = JoseContext::default();
 
     let mut last_err = None;
     for key in issuer_jwks.signature_keys() {
-        // If JWS header specifies kid, only try matching keys
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
+        if key.kid.as_deref() != Some(header_kid) {
+            continue;
         }
 
         let decoded = match decode_jwk_material(key) {
