@@ -1,9 +1,7 @@
 use serde_json::Value;
 
-use crate::federation::trust_chain::validate_entity_configuration_link;
 use crate::federation::{
-    validate_entity_statement, verify_entity_configuration, EntityStatement, FederationError,
-    TrustAnchor, TrustChain,
+    admit_entity_configuration, EntityStatement, FederationError, TrustAnchor, TrustChain,
 };
 
 use super::super::types::{StoredEntityCache, StoredTrustChain};
@@ -13,10 +11,7 @@ pub(super) fn reconstruct_entity_configuration_from_cache(
     expected_entity_id: &str,
     now: i64,
 ) -> Result<EntityStatement, FederationError> {
-    let stmt = verify_entity_configuration(&cached.entity_configuration_jws)?;
-    validate_entity_statement(&stmt, now)?;
-    validate_entity_configuration_link(&stmt, expected_entity_id)?;
-    Ok(stmt)
+    admit_entity_configuration(&cached.entity_configuration_jws, expected_entity_id, now)
 }
 
 pub(in crate::federation) fn reconstruct_chain_from_cache(

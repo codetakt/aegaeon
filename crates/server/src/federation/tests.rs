@@ -482,3 +482,6 @@ mod purpose {
     use super::*;
     include!("tests/purpose.rs");
 }
+
+#[path = "tests/admission.rs"]
+mod admission;

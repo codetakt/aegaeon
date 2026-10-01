@@ -43,7 +43,7 @@ Audience: contributors, maintainers
 | `docs/specs/management-plane/overview.md` | spec | Management Plane Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane-phase1.md` | spec | Management Plane Phase 1 Specification | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/oidc-rp-brokering-spec.md` | spec | OIDC RP Brokering Specification | current implementation baseline | 2026-10-01 | Product / Engineering | implementers, reviewers |
-| `docs/specs/openid-federation-spec.md` | spec | OpenID Connect Federation 1.0 Runtime Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/openid-federation-spec.md` | spec | OpenID Connect Federation 1.0 Runtime Specification | current implementation baseline | 2026-10-02 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-local-credential-plane.md` | spec | Primary Authority Local Credential Plane Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-user-management.md` | spec | Primary Authority User Management Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot（v1） | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
