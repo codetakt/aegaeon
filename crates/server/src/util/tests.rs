@@ -7,6 +7,35 @@ use std::time::UNIX_EPOCH;
 
 type TestResult = Result<(), String>;
 
+#[test]
+fn protected_header_shared_utility_admits_before_projection() {
+    let _guard = RAW_JSON_ENV_GUARD.lock().expect("environment guard");
+    for (extra, accepted) in [
+        (
+            r#""extension":{"nested":[null,false,4]},"\u2603":"ignored","jku":"https://keys.example/jwks","jwk":{"kty":"OKP"}"#,
+            true,
+        ),
+        (r#""crit":null"#, false),
+        (r#""b64":true"#, false),
+        (r#""zip":"DEF""#, false),
+        (r#""kid":null"#, false),
+        (r#""cty":false"#, false),
+        (r#""extension":null,"\u0065xtension":1"#, false),
+    ] {
+        let bytes = format!("{{\"alg\":\"RS256\",{extra}}}");
+        let token = format!(
+            "{}.e30.c2ln",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+        );
+        let result = decode_compact_jwt_header_without_duplicate_keys_with_max_len(&token, 4096);
+        assert_eq!(result.is_ok(), accepted);
+        if let Ok(header) = result {
+            assert_eq!(header.alg, jsonwebtoken::Algorithm::RS256);
+            assert!(header.jku.is_none() && header.jwk.is_none());
+        }
+    }
+}
+
 macro_rules! fail_test {
     ($($arg:tt)*) => {
         return Err(format!($($arg)*))

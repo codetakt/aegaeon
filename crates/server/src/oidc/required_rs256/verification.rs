@@ -68,6 +68,7 @@ pub(super) fn map_jws_error(err: JwsError) -> RequiredRs256Error {
         | JwsError::AlgorithmMismatch
         | JwsError::HeaderTooLong
         | JwsError::InvalidKid
+        | JwsError::ParsedFieldsChanged
         | JwsError::UnsupportedCriticalHeader(_)
         | JwsError::UnsupportedHeader(_)
         | JwsError::AlgorithmNotAllowed(_)

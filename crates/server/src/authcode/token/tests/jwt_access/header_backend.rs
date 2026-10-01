@@ -104,6 +104,6 @@ fn test_jwt_access_token_validator_rejects_non_string_typ_with_verified_structur
         std::env::remove_var(key);
     }
 
-    assert_eq!(err, "invalid_token_typ");
+    assert_eq!(err, "Invalid token signature");
     Ok(())
 }

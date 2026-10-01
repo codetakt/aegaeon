@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01T15:10:45.934433+00:00",
+  "generated": "2026-10-01T17:39:01.451610+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -24,7 +24,7 @@
       "critical": true
     },
     "crates/jose/src/json_lowstar.rs": {
-      "sha256": "b3cfa0f1f2423674d9d0d2c8616796424a90a7fe505e7e8be81b9cb8b1453536",
+      "sha256": "7b9b95e654a4fc5c43131ed6c1d3c07918d9e59bb9d6ccb46785344ba89d302b",
       "entries": [
         "7515-005",
         "7515-KID-LENGTH",
@@ -33,7 +33,7 @@
       "critical": false
     },
     "crates/jose/src/jwe.rs": {
-      "sha256": "e599099fa38d1f86350c54be716dcc236fcf301f8b423c737e58d5c21ea4f338",
+      "sha256": "69801126861190f074507886c1235f8e378343778695ac644c6b87b1097750d8",
       "entries": [
         "7515-CRIT-NOT-SUPPORTED",
         "7516-001"
@@ -50,7 +50,7 @@
       "critical": false
     },
     "crates/jose/src/jws.rs": {
-      "sha256": "d4a79920d4822cf2dbed59268e04ec92185581b33cccfce0ff18618eb5643bfb",
+      "sha256": "a1fc363dfc7ce3c2564a7e7ad6f4017302aa6423a05b7e24d162c04b2eb05113",
       "entries": [
         "7515-001",
         "7518-001"
@@ -74,7 +74,7 @@
       "critical": false
     },
     "crates/jose/src/request_object.rs": {
-      "sha256": "542d560c548a0565841476445b2b5e73daaabd8b50ec1d0175a2b917234dab18",
+      "sha256": "fdbe916842bba9ca7c58043404589e7f854c67b87312403e36242bedd0bb90b3",
       "entries": [
         "OIDC-5-002"
       ],
@@ -88,14 +88,14 @@
       "critical": false
     },
     "crates/jose/src/tlv.rs": {
-      "sha256": "0893151c5e52627aef06522d8c4c646568e447ac8a9cc7b20d5376602b8f59b9",
+      "sha256": "df8b9dacf010c88d355adc5b95200494c0b10a54120591828e35baf18fb4733f",
       "entries": [
         "7515-ALG-ALLOWLIST"
       ],
       "critical": false
     },
     "crates/jose/tests/tlv_parity.rs": {
-      "sha256": "8f9cf8f740dd9c91662f7067a124a0e17da16481ff20e25c9e80c167121a0c92",
+      "sha256": "affab284e33310899a7d2a779e760319d0e5c571200086afd25f6addb9aeec97",
       "entries": [
         "7515-006"
       ],

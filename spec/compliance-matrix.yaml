@@ -6172,6 +6172,8 @@ rfc_7515_7516_jose_headers:
   tests:
   - crates/jose/src/jwe.rs
   - crates/jose/src/jws.rs
+  - crates/jose/tests/protected_header_admission.rs
+  - crates/ffi/tests/raw_json_structural_runtime_test.rs
   ci_check: jose-lowstar-pipeline
   status: verified
   runtime_link: crates/jose/src/jwe.rs
@@ -6182,7 +6184,9 @@ rfc_7515_7516_jose_headers:
     test: crates/jose/src/jws.rs
   notes:
   - "The JWS AST parser rejects crit on already decoded JSON; the cited lemma exposes algorithm and kid postconditions. It does not establish protected-byte decoding or complete wire-level JWS verification."
-  - crit rejected in both JOSE header parsers; see roadmap specification refresh section
+  - Complete common protected-header admission rejects every presence of crit, b64 and zip before projection, key selection or verification. Rejecting b64 true is unsupported-extension policy, not an RFC prohibition on true.
+  - Unknown noncritical values and Unicode names are ignored after syntax and decoded top-level duplicate checks. Consumed fields require strings; cryptographic input remains the original compact bytes.
+  - Runtime tests cover the composed native wrapper and Rust scanner; cited AST lemmas do not prove ignored-value syntax, Rust stack/resource behavior, or the full consumer and supplier composition.
   - Inline unit tests jwe_header_rejects_crit and verify_compact_rejects_crit_header confirm crit is rejected on both TLV and JSON paths.
 
 security_review:
