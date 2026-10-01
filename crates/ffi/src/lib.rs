@@ -1165,12 +1165,10 @@ impl<'de> Deserialize<'de> for DpopHeader {
                         // RFC 7515 section 4.1.11: no critical extensions are
                         // implemented, and even an empty crit list is invalid.
                         "crit" => return Err(de::Error::custom("unsupported DPoP crit")),
-                        "b64" => {
-                            // RFC 7797 section 7 prohibits unencoded JWT payloads.
-                            if !map.next_value::<bool>()? {
-                                return Err(de::Error::custom("unencoded DPoP payload"));
-                            }
-                        }
+                        // RFC 7797 section 6 requires crit whenever b64 is
+                        // present, including true. This profile supports no
+                        // critical extensions; section 7 also forbids false for JWTs.
+                        "b64" => return Err(de::Error::custom("unsupported DPoP b64")),
                         _ => {
                             let _: IgnoredAny = map.next_value()?;
                         }

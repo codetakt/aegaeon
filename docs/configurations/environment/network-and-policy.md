@@ -74,9 +74,17 @@ value. Protected-header and JWK member names must be unique, including escaped
 aliases. Aegaeon implements no critical DPoP extensions, so any `crit` parameter
 is rejected; unknown noncritical fields remain permitted (RFC 9449 sections
 4.2–4.3 and RFC 7515 sections 4 and 4.1.11). JWT payloads must remain base64url
-encoded: if `b64` is supplied, it must be Boolean `true` (RFC 7797 section 7).
+encoded. Aegaeon rejects any `b64` parameter, including Boolean `true`: RFC 7797
+section 6 requires a `crit` declaration whenever `b64` is present, and this
+profile does not implement that critical extension. RFC 7797 allows `b64:true`
+with its required critical declaration; section 7 prohibits `b64:false` for
+JWTs. The refusal of all `b64` values is Aegaeon's supported-profile boundary.
 These checks apply to both public FFI DPoP verification entry points as well as
 the server's production verification path.
+
+Earlier versions accepted `b64:true` without its required critical declaration.
+Clients using it must omit `b64`, keep the payload base64url encoded, and sign a
+new proof. No storage migration or configuration change is needed.
 
 ## Authorization endpoint behaviour
 
