@@ -6,6 +6,7 @@ fn resolve_trust_chain_for_test(
     fetcher: &dyn FederationFetcher,
     now: i64,
 ) -> Result<TrustChain, FederationError> {
+    let _guard = raw_json_env_guard();
     block_on_test_future(crate::federation::resolve_trust_chain(
         leaf_entity_id,
         trust_anchors,
@@ -35,7 +36,12 @@ fn resolve_trust_chain_direct() {
         sample_subordinate_statement(ta_id, leaf_id, now),
     );
 
-    let chain = must_ok(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let chain = must_ok(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert_eq!(must_ok(chain.depth()), 1);
     assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
     assert_eq!(must_ok(chain.trust_anchor_config()).iss, ta_id);
@@ -169,7 +175,12 @@ fn resolve_trust_chain_intermediate() {
         sample_subordinate_statement(ta_id, int_id, now),
     );
 
-    let chain = must_ok(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let chain = must_ok(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert_eq!(must_ok(chain.depth()), 2);
     assert_eq!(chain.chain.len(), 5); // leaf, sub1, int, sub2, ta
     assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
@@ -202,6 +213,34 @@ impl FederationFetcher for RevisitedEntityGuardFetcher {
             }
             self.inner.fetch_entity_configuration(entity_id).await
         })
+    }
+
+    fn fetch_entity_configuration_with_jws<'a>(
+        &'a self,
+        entity_id: &'a str,
+    ) -> FederationFetchFuture<'a, FetchedEntityConfiguration> {
+        Box::pin(async move {
+            let statement = self.fetch_entity_configuration(entity_id).await?;
+            Ok(FetchedEntityConfiguration::with_jws(
+                statement,
+                must_some(self.inner.entity_config_jwts.get(entity_id).cloned()),
+            ))
+        })
+    }
+
+    fn fetch_subordinate_statement_with_jws<'a>(
+        &'a self,
+        authority_entity_id: &'a str,
+        authority_config: &'a EntityStatement,
+        subordinate_entity_id: &'a str,
+        issuer_jwks: &'a JwkSet,
+    ) -> FederationFetchFuture<'a, FetchedSubordinateStatement> {
+        self.inner.fetch_subordinate_statement_with_jws(
+            authority_entity_id,
+            authority_config,
+            subordinate_entity_id,
+            issuer_jwks,
+        )
     }
 
     fn fetch_subordinate_statement<'a>(
@@ -373,7 +412,12 @@ fn resolve_trust_chain_no_path() {
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config(leaf_id, leaf_config);
 
-    let err = must_err(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let err = must_err(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert!(matches!(err, FederationError::ChainResolution(_)));
 }
 
@@ -393,7 +437,12 @@ fn resolve_trust_chain_rejects_excessive_authority_hint_fanout() {
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config(leaf_id, leaf_config);
 
-    let err = must_err(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let err = must_err(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert!(
         matches!(&err, FederationError::ChainResolution(message) if message.contains("too many authority_hints")),
         "unexpected error: {err}"
@@ -417,7 +466,12 @@ fn resolve_trust_chain_no_authority_hints() {
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config(leaf_id, leaf_config);
 
-    let err = must_err(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let err = must_err(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert!(matches!(
         err,
         FederationError::MissingField("authority_hints")
@@ -442,7 +496,12 @@ fn resolve_trust_chain_expired_leaf() {
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config(leaf_id, leaf_config);
 
-    let err = must_err(resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now));
+    let err = must_err(resolve_trust_chain_for_test(
+        leaf_id,
+        &trust_anchors,
+        &fetcher,
+        now,
+    ));
     assert!(matches!(err, FederationError::Expired));
 }
 

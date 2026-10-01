@@ -1,7 +1,7 @@
 use std::future::Future;
 use uuid::Uuid;
 
-use crate::federation::trust_chain::resolve_trust_chain_with_jwts;
+use crate::federation::trust_chain::{resolve_trust_chain_with_jwts, verify_signed_path};
 use crate::federation::{
     FederationError, FederationFetcher, ResolvedTrustChain, TrustAnchor, TrustChain,
 };
@@ -15,7 +15,6 @@ use super::metrics::{
 };
 use super::reconstruction::{
     cached_chain_jwts_owned, chain_jwts_to_value, reconstruct_chain_from_cache,
-    validate_cached_trust_chain, validate_resolved_chain_jws_alignment,
 };
 
 /// Resolve a trust chain with caching support using a [`FederationFetcher`].
@@ -133,7 +132,7 @@ where
             .get(environment_id, leaf_entity_id, &anchor.entity_id, now)
             .await?
         {
-            match reconstruct_cached_resolved_trust_chain(&cached, &anchor, now) {
+            match reconstruct_cached_resolved_trust_chain(&cached, leaf_entity_id, &anchor, now) {
                 Ok(resolved) => return Ok(resolved),
                 Err(error) => {
                     record_federation_cache_validation_failure("trust_chain");
@@ -148,10 +147,14 @@ where
             }
         }
 
-        match resolve_fresh(vec![anchor.clone()]).await {
+        let fresh = resolve_fresh(vec![anchor.clone()])
+            .await
+            .and_then(|resolved| {
+                let chain = verify_signed_path(&resolved.chain_jwts, leaf_entity_id, &anchor, now)?;
+                Ok(ResolvedTrustChain::new(chain, resolved.chain_jwts))
+            });
+        match fresh {
             Ok(resolved) => {
-                validate_resolved_chain_jws_alignment(&resolved)?;
-
                 let chain_jwts = chain_jwts_to_value(&resolved.chain_jwts);
                 let expires_at = trust_chain_cache_expires_at(
                     now,
@@ -200,13 +203,17 @@ where
 
 fn reconstruct_cached_resolved_trust_chain(
     cached: &super::super::types::StoredTrustChain,
+    leaf_entity_id: &str,
     anchor: &TrustAnchor,
     now: i64,
 ) -> Result<ResolvedTrustChain, FederationError> {
-    let chain = reconstruct_chain_from_cache(cached, anchor)
-        .and_then(|chain| validate_cached_trust_chain(chain, cached, now))?;
+    if cached.leaf_entity_id != leaf_entity_id {
+        return Err(FederationError::Validation(
+            "cached leaf does not match requested entity".into(),
+        ));
+    }
+    let chain = reconstruct_chain_from_cache(cached, anchor, now)?;
     let chain_jwts = cached_chain_jwts_owned(&cached.chain_jwts)?;
     let resolved = ResolvedTrustChain::new(chain, chain_jwts);
-    validate_resolved_chain_jws_alignment(&resolved)?;
     Ok(resolved)
 }
