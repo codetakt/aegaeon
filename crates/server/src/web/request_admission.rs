@@ -28,6 +28,19 @@ pub(in crate::web) struct BoundedQueryLimits {
 }
 
 impl BoundedQueryLimits {
+    pub(in crate::web) const fn max_bytes(self) -> usize {
+        self.max_bytes
+    }
+    pub(in crate::web) const fn max_params(self) -> usize {
+        self.max_params
+    }
+    pub(in crate::web) const fn max_key_bytes(self) -> usize {
+        self.max_key_bytes
+    }
+    pub(in crate::web) const fn max_value_bytes(self) -> usize {
+        self.max_value_bytes
+    }
+
     pub(in crate::web) const fn new(
         max_bytes: usize,
         max_params: usize,

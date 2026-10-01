@@ -1,7 +1,4 @@
-use axum::{
-    http::{StatusCode, Uri},
-    response::Response,
-};
+use axum::{http::Uri, response::Response};
 
 use crate::authcode::types::AuthorizationRequest as AuthzReq;
 use crate::oauth_profile;
@@ -14,10 +11,10 @@ use super::authorize_validation::{
     authorize_error_response, validate_authorize_request, AuthorizeErrorContext,
     AuthorizeValidationContext,
 };
-use super::oauth_errors::{json_error_with_iss, registry_state_error_response};
+use super::oauth_errors::registry_state_error_response;
+use super::oidc_request_input::{admit_oidc_query, OidcEndpoint};
 use super::profile_policy::{record_downstream_profile_rejection, record_downstream_profile_usage};
 use super::prompt::Prompt;
-use super::request_admission::{validate_raw_query, DEFAULT_QUERY_LIMITS};
 use super::AppState;
 
 pub(super) struct AuthorizeRequestContext {
@@ -132,23 +129,10 @@ async fn authorize_parse_request_context(
     ),
     Response,
 > {
-    let raw_query = uri.query().unwrap_or("");
-    validate_raw_query(uri.query(), DEFAULT_QUERY_LIMITS).map_err(|error| {
-        json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some(&error.description("authorize request")),
-            issuer_base,
-        )
-    })?;
-    let raw: RawAuthzQuery = serde_urlencoded::from_str(raw_query).map_err(|_| {
-        json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("query string malformed"),
-            issuer_base,
-        )
-    })?;
+    let admitted = admit_oidc_query(OidcEndpoint::Authorize, uri)
+        .map_err(|error| error.into_response(issuer_base))?;
+    let raw = RawAuthzQuery::from_admitted(&admitted)
+        .map_err(|error| error.into_response(issuer_base))?;
     let response_mode_raw = raw.response_mode.clone();
     let parsed = parse_authorize_request_with_runtime_blocking(
         raw,

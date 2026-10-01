@@ -5,6 +5,7 @@ use super::logout_context::{
 };
 use super::logout_dispatch::dispatch_backchannel_logout_if_enabled;
 use super::oauth_errors::{no_cache_header_error, no_cache_json_error_with_iss};
+use super::oidc_request_input::{admit_oidc_query, OidcEndpoint};
 use super::request_admission::enforce_no_credentials_in_logout_uri;
 use super::upstream_logout_incidents::{
     hash_upstream_logout_secret, invalid_logout_relay_state_response,
@@ -127,7 +128,6 @@ pub(super) async fn logout(
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
     headers: axum::http::HeaderMap,
-    Query(query): Query<LogoutQuery>,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
@@ -137,6 +137,13 @@ pub(super) async fn logout(
     if let Err(response) = enforce_no_credentials_in_logout_uri(&uri, issuer_base) {
         return response;
     }
+
+    let query: LogoutQuery = match admit_oidc_query(OidcEndpoint::Logout, &uri)
+        .and_then(|parameters| parameters.deserialize())
+    {
+        Ok(query) => query,
+        Err(error) => return error.into_response(issuer_base),
+    };
 
     let Some(cfg) = state.oidc.config.as_ref().filter(|cfg| cfg.logout_enabled) else {
         return no_cache_json_error_with_iss(StatusCode::NOT_FOUND, "not_found", None, issuer_base);

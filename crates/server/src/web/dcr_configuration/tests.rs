@@ -259,3 +259,5 @@ async fn test_router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum
         test_app_state(pool.clone(), env).await?,
     ))
 }
+
+mod oidc_request_input;

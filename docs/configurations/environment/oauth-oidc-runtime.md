@@ -58,6 +58,27 @@ and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETI
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.
 
+## Browser endpoint query admission
+
+`/authorize` and `/logout` use strict form decoding for GET and implicit HEAD
+queries. Percent escapes must be complete hexadecimal pairs and the decoded
+text must be valid UTF-8 ([RFC 6749 Appendix B](https://www.rfc-editor.org/rfc/rfc6749#appendix-B)).
+`+` decodes to a space; `%2B` decodes to a literal plus.
+
+Empty values are treated as omitted. Unknown parameters, including repeated
+unknown names, are ignored after decoding and size checks. Repeated recognized
+singleton parameters are rejected, including encoded spellings of the same name
+([RFC 6749 section 3.1](https://www.rfc-editor.org/rfc/rfc6749#section-3.1)).
+Repeated `resource` values reach the existing single-resource policy and return
+`invalid_target`; they are not silently collapsed.
+
+Limits remain 16 KiB of raw query, 64 nonempty encoded parameters, 64 decoded
+bytes per name and 8 KiB per value. Ignored and empty parameters count toward
+these limits. Transport and URI credential checks still apply. Admission errors
+return no-cache `invalid_request` responses without echoing supplied values.
+Clients that relied on replacement-character decoding must send valid UTF-8;
+no server configuration or database migration is required.
+
 ## private_key_jwt and request objects (JAR)
 
 | Variable | Default | Scope | Notes |
