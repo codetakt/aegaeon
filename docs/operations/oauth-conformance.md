@@ -94,6 +94,40 @@ and redirect validation functions retain their signatures and diagnostics, while
 HTTP handlers consume typed causes from the same validation pass. No storage or
 configuration migration is required for this error-category change.
 
+## Dynamic registration Bearer authentication
+
+Required initial-access-token checks on POST `/register` and owner-token checks
+on GET, HEAD, PUT and DELETE `/register/:client_id` use the RFC 6750 sections 2–3
+response contract (see also RFC 7592 sections 2.1–2.3 and OIDC Registration
+section 4.4). Missing or whitespace-only Authorization, or a single textual
+unsupported scheme, returns an empty 401 with exactly
+`WWW-Authenticate: Bearer realm="aegaeon"`. Duplicate/nontext Authorization,
+bare Bearer and extra Bearer token words return `400 invalid_request`; a
+structurally admitted but nonmatching token returns `401 invalid_token`.
+Error-bearing responses have one Bearer realm/error challenge, fixed JSON
+description, issuer and no-store/no-cache. The empty 401 also has no-store/no-cache.
+
+Rejected `access_token` query parameters, including empty values and aliases
+already rejected by URI admission, receive a Bearer `invalid_request` challenge
+on enabled protected DCR routes and their supported methods. Query tokens never
+authenticate. Other forbidden credential keys, generic query limits, unrelated
+routes, lookalike paths and unsupported methods retain generic URI refusal.
+Open initial registration retains its behavior, including ignoring unused
+Authorization headers. Disabled DCR remains a handler-level 404; outer transport
+or URI admission can still reject a request first.
+
+Transport, runtime, body-limit, path and content-type checks keep their existing
+precedence. Authenticated metadata errors and internal failures do not acquire
+Bearer challenges. A matching owner token still authorizes read/update/delete;
+unknown clients and wrong client/issuer/token combinations return the same 401.
+Initial and owner tokens are distinct credentials. No new permission policy or
+recovery after a committed mutation is established by these error responses.
+
+Upgrade clients to inspect status and `WWW-Authenticate` before assuming an
+error body is JSON: missing or unsupported authentication now has an empty body.
+Existing case-insensitive Bearer names, accepted whitespace and token formats
+remain unchanged. No configuration or database migration is required.
+
 ## DPoP responses
 
 RFC 9449 §§5, 7.1 and 9 distinguish authorization-server and resource-server
