@@ -1,6 +1,6 @@
 # JWKS Operations
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -143,6 +143,11 @@ Expired keys are no longer returned after refresh failure. These changes can
 increase request volume for origins whose headers previously allowed accidental
 reuse; no database migration or new runtime configuration is required.
 
+Backend client JWKS requests never send `Referer`, including same-origin
+redirects. A registered URI or intermediate redirect URI is therefore not copied
+into the next request's headers; query parameters remain part of their own
+requested target only.
+
 The parser follows the field grammar and age calculation in
 [RFC 9111 sections 4 and 5](https://www.rfc-editor.org/rfc/rfc9111.html#section-4),
 with the stricter application retention policy described above. Validator and
@@ -172,6 +177,7 @@ Linux hosts that restrict unprivileged user namespaces. Compilation still runs
 as the caller; sudo only creates the network namespace and configures loopback.
 After verifying the isolated interfaces and routes, the runner drops all
 supplementary groups and restores the caller's UID/GID before starting fixtures.
+Both IDs must be positive; a non-root UID with primary group 0 is rejected.
 The container integration driver excludes these namespace-only modules from its
 ordinary ignored sweeps; the dedicated runner executes them and propagates any
 failure. The fixture's namespace checks remain mandatory in both modes.

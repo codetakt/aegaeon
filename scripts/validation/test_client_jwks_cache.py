@@ -41,7 +41,7 @@ def inside_namespace(
             raise RuntimeError("fixture namespace contains a non-loopback route")
     if drop_identity is not None:
         uid, gid = drop_identity
-        if uid <= 0 or gid < 0 or os.geteuid() != 0:
+        if uid <= 0 or gid <= 0 or os.geteuid() != 0:
             raise RuntimeError("invalid unprivileged fixture identity")
         os.setgroups([])
         os.setgid(gid)

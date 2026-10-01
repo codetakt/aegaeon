@@ -14,6 +14,7 @@ pub(super) fn build_jwks_refresh_client(
     let mut builder = reqwest::blocking::Client::builder()
         .use_rustls_tls()
         .redirect(reqwest::redirect::Policy::none())
+        .referer(false)
         .danger_accept_invalid_certs(insecure)
         .timeout(std::time::Duration::from_secs(timeout_secs));
     if !jwks_http_loopback_allowed_for_tests(policy, uri) {

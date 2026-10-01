@@ -25,12 +25,59 @@ fn actual_https_direct_and_safe_redirect() {
             Some(b"*/*".as_slice())
         );
         assert!(observations[0].header("accept-encoding").is_none());
+        assert!(observations[0].header("referer").is_none());
         if expected == 2 {
             assert!(observations[1].text().starts_with("GET /next HTTP/1.1\r\n"));
-            assert_eq!(
-                observations[1].header("referer").as_deref(),
-                Some(ORIGINAL.as_bytes())
+            assert!(observations[1].header("referer").is_none());
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires scripts/validation/test_client_jwks_cache.py"]
+fn redirect_hops_never_disclose_source_queries_in_headers() {
+    let _env = env_lock().unwrap();
+    let original = "https://1.1.1.1/jwks?token=registered-query-secret";
+    for intermediate in [
+        "https://1.1.1.1/intermediate?token=redirect-query-secret",
+        "https://8.8.8.8/intermediate?token=redirect-query-secret",
+    ] {
+        for destination in ["https://1.1.1.1/final", "https://8.8.8.8/final"] {
+            let fixture = Fixture::new(
+                vec![
+                    Step::redirect(intermediate),
+                    Step::redirect(destination),
+                    Step::ok("A"),
+                ],
+                false,
             );
+            assert_eq!(
+                kid(fetch_jwks_with_state(
+                    &new_state(),
+                    &fixture.policy(),
+                    original
+                ))
+                .as_deref(),
+                Some("A")
+            );
+            let observations = fixture.finish();
+            assert_eq!(observations.len(), 3);
+            assert!(observations[0]
+                .text()
+                .starts_with("GET /jwks?token=registered-query-secret HTTP/1.1\r\n"));
+            assert!(observations[1]
+                .text()
+                .starts_with("GET /intermediate?token=redirect-query-secret HTTP/1.1\r\n"));
+            assert!(observations[2]
+                .text()
+                .starts_with("GET /final HTTP/1.1\r\n"));
+            for observation in observations {
+                assert!(observation.header("referer").is_none());
+                let request = observation.text();
+                let (_, headers) = request.split_once("\r\n").unwrap();
+                assert!(!headers.contains("registered-query-secret"));
+                assert!(!headers.contains("redirect-query-secret"));
+            }
         }
     }
 }
@@ -496,13 +543,10 @@ fn conditional_redirect_recovers_at_original_with_no_validator_or_referer_leak()
         "authorization",
         "proxy-authorization",
         "accept-encoding",
+        "referer",
     ] {
         assert!(observations[3].header(name).is_none(), "leaked {name}");
     }
-    assert_eq!(
-        observations[3].header("referer").as_deref(),
-        Some(ORIGINAL.as_bytes())
-    );
 }
 
 #[test]
@@ -594,10 +638,9 @@ fn redirect_status_locations_follow_limit_cycles_and_query_fragments() {
     assert_eq!(obs.len(), 3);
     assert!(obs[1].text().starts_with("GET /jwks?a=1 "));
     assert!(obs[2].text().starts_with("GET /jwks?a=1 "));
-    assert_eq!(
-        obs[2].header("referer").as_deref(),
-        Some(b"https://1.1.1.1/jwks?a=1".as_slice())
-    );
+    assert!(obs
+        .iter()
+        .all(|observation| observation.header("referer").is_none()));
 }
 
 #[test]

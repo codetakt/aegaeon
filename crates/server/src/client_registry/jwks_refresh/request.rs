@@ -1,6 +1,6 @@
 use iri_string::types::{UriAbsoluteString, UriReferenceStr};
 use reqwest::blocking::{Client, Request, Response};
-use reqwest::header::{HeaderValue, IF_MODIFIED_SINCE, IF_NONE_MATCH, LOCATION, REFERER};
+use reqwest::header::{HeaderValue, IF_MODIFIED_SINCE, IF_NONE_MATCH, LOCATION};
 use reqwest::StatusCode;
 use url::Url;
 
@@ -61,17 +61,6 @@ pub(super) fn redirect_location(bound: &BoundResponse) -> Result<Option<Url>, Re
         .map_err(|_| RequestError::Transport)
 }
 
-fn referer(previous: &Url, next: &Url) -> Option<HeaderValue> {
-    if previous.scheme() == "https" && next.scheme() == "http" {
-        return None;
-    }
-    let mut value = previous.clone();
-    let _ = value.set_username("");
-    let _ = value.set_password(None);
-    value.set_fragment(None);
-    HeaderValue::from_str(value.as_str()).ok()
-}
-
 pub(super) fn original_request(client: &Client, uri: &str) -> Result<Request, RequestError> {
     client.get(uri).build().map_err(|_| RequestError::Transport)
 }
@@ -83,7 +72,6 @@ pub(super) fn execute_phase(
     conditional: Option<&(Option<HeaderValue>, Option<HeaderValue>)>,
 ) -> Result<BoundResponse, RequestError> {
     let mut url = original_url.clone();
-    let mut previous = None;
     let mut follows = 0;
     loop {
         let mut builder = client.get(url.clone());
@@ -95,13 +83,7 @@ pub(super) fn execute_phase(
                 builder = builder.header(IF_MODIFIED_SINCE, date.clone());
             }
         }
-        if let Some(previous) = previous.as_ref() {
-            if let Some(value) = referer(previous, &url) {
-                builder = builder.header(REFERER, value);
-            }
-        }
         let request = builder.build().map_err(|_| RequestError::Transport)?;
-        let sent_url = request.url().clone();
         let target = target_identity(request.url()).ok_or(RequestError::Correspondence)?;
         if follows == 0 && target != original_target {
             return Err(RequestError::Correspondence);
@@ -133,9 +115,9 @@ pub(super) fn execute_phase(
         }
         crate::ssrf::validate_redirect_target(&next, None).map_err(|_| RequestError::Transport)?;
         // No previous request/default/proxy/conditional headers are copied.
+        // Backend JWKS requests never send Referer, including same-origin hops.
         // Release the intermediate response before the next explicitly built GET.
         drop(bound);
-        previous = Some(sent_url);
         url = next;
         follows += 1;
     }
