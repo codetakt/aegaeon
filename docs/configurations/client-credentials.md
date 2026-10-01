@@ -165,3 +165,8 @@ policy, persistence or runtime correspondence. Local regression results and
 formal obligation discharge are distinct. Formal verification requires a new
 source-bound evaluation of the changed target, identity, scope, storage,
 activation and composition obligations.
+
+## Save-time scope ceilings
+
+See [target rule scope validation](target-scope-validation.md) for transactional
+validation, detailed errors and the required zero-violation upgrade dry-run.

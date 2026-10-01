@@ -183,3 +183,8 @@ foreign-environment rejection. Consent-route regressions repeat fresh code redem
 and refresh with two, three and nested custom claims. Their authenticated sessions
 are fixtures; deployed authorization flows and process restart still require
 E2E acceptance.
+
+## Save-time scope ceilings
+
+See [target rule scope validation](target-scope-validation.md) for transactional
+validation, detailed errors and the required zero-violation upgrade dry-run.

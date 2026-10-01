@@ -51,6 +51,14 @@ pub(super) async fn patch_policies_inner(
         load_policy_patch_base_context(&mut tx, scope, base_configuration_version_id, request_id)
             .await?;
     let draft = build_policy_patch_configuration(current_document, &environment, req, request_id)?;
+    crate::web::management::target_scope_boundary::validate_policy_scopes(
+        &mut tx,
+        environment.scope.environment,
+        environment.active_configuration_version_id,
+        &draft.configuration.state.policy,
+        request_id,
+    )
+    .await?;
     let (configuration_version_id, updated_at) = create_policy_patch_configuration_version(
         &mut tx,
         &environment,

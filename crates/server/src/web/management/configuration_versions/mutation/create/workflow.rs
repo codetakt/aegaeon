@@ -67,6 +67,19 @@ pub(super) async fn create_configuration_version_inner(
         &environment_context.issuer_url,
         request_id,
     )?;
+    let policy =
+        crate::web::management::configuration_documents::require_configuration_policy_for_request(
+            &req.configuration_document,
+            request_id,
+        )?;
+    crate::web::management::target_scope_boundary::validate_policy_scopes(
+        &mut tx,
+        scope.environment,
+        environment_context.active_configuration_version_id,
+        &policy,
+        request_id,
+    )
+    .await?;
     let prepared_document =
         prepare_configuration_document(&req.configuration_document, request_id)?;
 

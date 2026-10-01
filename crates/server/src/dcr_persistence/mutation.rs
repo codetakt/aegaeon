@@ -16,6 +16,7 @@ pub(super) async fn insert_client_row(
     client: &RegisteredClient,
     _response_types: &[String],
 ) -> Result<(), DcrDatabaseError> {
+    validate_rule_scopes(tx, environment.environment_id, client).await?;
     sqlx::query(
         r"
 INSERT INTO aegaeon.clients (
@@ -56,6 +57,7 @@ pub(super) async fn update_client_row(
     client: &RegisteredClient,
     _response_types: &[String],
 ) -> Result<(), DcrDatabaseError> {
+    validate_rule_scopes(tx, stored.environment_id, client).await?;
     sqlx::query(
         r"
 UPDATE aegaeon.clients
@@ -344,4 +346,28 @@ fn client_type_for_auth_method(method: &str) -> &'static str {
 
 fn client_name(client: &RegisteredClient) -> String {
     format!("Dynamic client {}", client.client_id)
+}
+
+async fn validate_rule_scopes(
+    tx: &mut Transaction<'_, Postgres>,
+    environment: Uuid,
+    client: &RegisteredClient,
+) -> Result<(), DcrDatabaseError> {
+    let violations = crate::policy::scope_boundary::client_violations(
+        tx,
+        environment,
+        &client.client_id,
+        &client.allowed_scopes,
+    )
+    .await?;
+    if violations.is_empty() {
+        return Ok(());
+    }
+    Err(DcrDatabaseError::ScopePolicy(
+        violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; "),
+    ))
 }

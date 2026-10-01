@@ -115,12 +115,13 @@ async fn scenario(schedule: Schedule, redis: bool) -> ManagementTestResult {
         let configured = serde_json::to_value(exchange::policy(&env.issuer_url)?)?;
         let empty = json!({"version":1,"targets":[],"rules":[]});
         let initial_policy = if matches!(schedule, Schedule::EnableExchangePolicy) { empty } else { configured.clone() };
+        // Register the caller before saving rules that reference its scope ceiling.
+        let mut seeded = exchange::fixture(&pool, &env).await?;
         patch(&app, &pool, &env, &session, json!({
             "tokenExchange": initial_policy, "senderConstraint":"none", "jwtAccessTokensEnabled":true,
             "retainRefreshChain":true,
             "allowedGrantTypes":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:token-exchange"]
         })).await?;
-        let mut seeded = exchange::fixture(&pool, &env).await?;
         if redis { exchange::use_redis(&mut seeded)?; }
         let before = reload(&pool, &env, &seeded).await?;
         let original = exchange::grant(&before).await?;

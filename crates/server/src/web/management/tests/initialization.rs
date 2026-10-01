@@ -15,6 +15,7 @@ mod database_cleanup;
 mod exchange_policy;
 mod exchange_reload;
 mod fingerprints;
+mod target_scope_boundary;
 
 use database_cleanup::{cleanup, finish};
 

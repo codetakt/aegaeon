@@ -60,6 +60,9 @@ pub enum DcrDatabaseError {
     #[error("dynamic client registration database schema preflight failed: {0}")]
     SchemaPreflight(String),
 
+    #[error("{0}")]
+    ScopePolicy(String),
+
     #[error("dynamic client registration changed concurrently")]
     ConcurrentModification,
 
