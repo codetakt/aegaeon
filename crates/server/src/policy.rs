@@ -1,3 +1,4 @@
+pub mod client_credentials;
 mod grant_types;
 pub mod token_exchange;
 

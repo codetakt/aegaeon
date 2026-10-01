@@ -43,7 +43,10 @@ an earlier authorization horizon caps a subsequently increased configured TTL.
 ## Management policy
 
 Configure `tokenExchange` through the existing versioned management policy API,
-then activate the configuration. It is stored in `environment_policies`; there
+then activate the configuration. The target catalog is also used by
+[client-credentials target authorization](client-credentials.md). Its caller
+rules and introspection bindings are separate; exchange permission does not
+grant client-credentials authority. It is stored in `environment_policies`; there
 is no environment-variable override. The default is version 1 with empty
 `targets` and `rules`, which grants no authority to change audience.
 

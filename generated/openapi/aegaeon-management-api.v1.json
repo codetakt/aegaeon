@@ -10261,6 +10261,88 @@
           }
         }
       },
+      "ClientCredentialsPolicy": {
+        "type": "object",
+        "required": [
+          "version",
+          "resourceServers",
+          "rules"
+        ],
+        "properties": {
+          "resourceServers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientCredentialsResourceServer"
+            }
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientCredentialsRule"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 1,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClientCredentialsResourceServer": {
+        "type": "object",
+        "required": [
+          "targetAudience",
+          "introspectionClients"
+        ],
+        "properties": {
+          "introspectionClients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetAudience": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClientCredentialsRule": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "targetAudience",
+          "scopes",
+          "defaultScopes",
+          "defaultTarget"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "defaultScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultTarget": {
+            "type": "boolean"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetAudience": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ClientMutationResponse": {
         "type": "object",
         "required": [
@@ -12317,6 +12399,9 @@
             "format": "int32",
             "minimum": 0
           },
+          "clientCredentials": {
+            "$ref": "#/components/schemas/ClientCredentialsPolicy"
+          },
           "clientJwtAllowedAlgs": {
             "type": "array",
             "items": {
@@ -12795,6 +12880,16 @@
             ],
             "format": "int32",
             "minimum": 0
+          },
+          "clientCredentials": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientCredentialsPolicy"
+              }
+            ]
           },
           "clientJwtAllowedAlgs": {
             "type": [

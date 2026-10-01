@@ -180,6 +180,7 @@ fn store_jwt_access_token(token_store: &TokenStore, token: &str) -> TestResult {
         token_store,
         AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
             token: token.to_string(),
             token_type: "Bearer".to_string(),
             client_id: "client".to_string(),
@@ -224,6 +225,7 @@ fn is_refresh_revoked(token_store: &TokenStore, token: &str) -> Result<bool, Str
 fn access_token_introspection_exp_rejects_unrepresentable_expiry() {
     let access_token = AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
         token: "access".to_string(),
         token_type: "Bearer".to_string(),
         client_id: "client".to_string(),

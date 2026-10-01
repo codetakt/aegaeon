@@ -83,6 +83,18 @@ pub(super) async fn persist_access_with_meta_async(
         expires_at,
         refresh_parent,
     });
+    meta.client_credentials_grant = exchange_subject
+        .client_credentials_grant
+        .as_ref()
+        .map(|grant| grant.attenuate(&meta.granted_scopes))
+        .transpose()
+        .map_err(ExchangeCommitError::from)?;
+    access.client_credentials_digest = meta
+        .client_credentials_grant
+        .as_ref()
+        .map(crate::policy::client_credentials::ClientCredentialsGrant::digest)
+        .transpose()
+        .map_err(ExchangeCommitError::from)?;
     meta.exchange_grant = exchange_grant;
     meta.application_grant = application_grant;
     store

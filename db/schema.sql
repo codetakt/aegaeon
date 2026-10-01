@@ -1196,6 +1196,7 @@ CREATE TABLE aegaeon.environment_policies (
     client_secret_default_expiration_days integer DEFAULT 90 CONSTRAINT environment_policies_client_secret_default_expiration__not_null NOT NULL,
     client_secret_max_expiration_days integer DEFAULT 365 NOT NULL,
     token_exchange jsonb DEFAULT '{"version": 1, "targets": [], "rules": []}'::jsonb NOT NULL,
+    client_credentials jsonb DEFAULT '{"version": 1, "resourceServers": [], "rules": []}'::jsonb NOT NULL,
     CONSTRAINT environment_policies_client_jwt_algs_verified_shape CHECK ((aegaeon.text_array_is_normalized_set(client_jwt_allowed_algs, false) AND (client_jwt_allowed_algs <@ ARRAY['RS256'::text]))),
     CONSTRAINT environment_policies_credential_lifecycle_bounds CHECK (((activation_token_default_ttl_seconds >= 300) AND (activation_token_default_ttl_seconds <= recovery_token_max_ttl_seconds) AND (password_reset_token_default_ttl_seconds >= 300) AND (password_reset_token_default_ttl_seconds <= recovery_token_max_ttl_seconds) AND (recovery_token_max_ttl_seconds >= 300) AND (recovery_token_max_ttl_seconds <= 604800) AND (client_secret_default_expiration_days > 0) AND (client_secret_default_expiration_days <= client_secret_max_expiration_days) AND (client_secret_max_expiration_days > 0) AND (client_secret_max_expiration_days <= 365))),
     CONSTRAINT environment_policies_crypto_profile CHECK ((crypto_profile = 'verified'::text)),

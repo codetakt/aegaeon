@@ -174,6 +174,7 @@ pub struct ServerConfig {
     /// RFC 8693 OAuth 2.0 Token Exchange (urn:ietf:params:oauth:grant-type:token-exchange).
     pub enable_token_exchange: bool,
     pub token_exchange: crate::policy::token_exchange::TokenExchangePolicy,
+    pub client_credentials: crate::policy::client_credentials::ClientCredentialsPolicy,
     /// RFC 8628 OAuth 2.0 Device Authorization Grant (opt-in).
     pub enable_device_authz: bool,
     /// Management-policy grant allowlist projected into runtime metadata and admission checks.
@@ -286,6 +287,7 @@ impl ServerConfig {
             allow_jwt_bearer_client_subject: false,
             enable_token_exchange: false,
             token_exchange: Default::default(),
+            client_credentials: Default::default(),
             enable_device_authz: false,
             allowed_grant_types: default_grant_types(),
             enable_jwt_access_tokens: false,

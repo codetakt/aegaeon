@@ -9,6 +9,7 @@ mod refresh_rotation;
 mod revocation;
 mod token_consistency;
 pub(crate) use exchange_commit::{validate_exchange_subject, ExchangeCommitError};
+pub(crate) use token_consistency::bearer_metadata_matches_access_token;
 mod token_outcome;
 mod token_records;
 mod token_state;

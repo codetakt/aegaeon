@@ -14,3 +14,5 @@ mod sender_response;
 include!("tests/jwt_bearer.rs");
 include!("tests/oidc_id_token.rs");
 include!("tests/token_exchange.rs");
+
+mod client_credentials_introspection;

@@ -29,6 +29,51 @@ impl ClientRegistry {
         selected
     }
 
+    /// Pin only selected authentication identities while sharing replay and JWKS state.
+    /// Lock order is identical to runtime projection publication.
+    pub(crate) fn try_request_snapshot(
+        &self,
+        ids: &[&str],
+    ) -> Result<Self, ClientRegistryStateError> {
+        let clients = self
+            .clients
+            .read()
+            .map_err(|_| ClientRegistryStateError::LockPoisoned("clients"))?;
+        let credentials = self
+            .client_secret_credentials
+            .read()
+            .map_err(|_| ClientRegistryStateError::LockPoisoned("client_secret_credentials"))?;
+        let fingerprint = self
+            .runtime_snapshot_fingerprint
+            .read()
+            .map_err(|_| ClientRegistryStateError::LockPoisoned("runtime_snapshot_fingerprint"))?;
+        Ok(Self {
+            clients: Arc::new(RwLock::new(
+                ids.iter()
+                    .filter_map(|id| {
+                        clients
+                            .get(*id)
+                            .map(|client| ((*id).to_string(), client.clone()))
+                    })
+                    .collect(),
+            )),
+            client_secret_credentials: Arc::new(RwLock::new(
+                ids.iter()
+                    .filter_map(|id| {
+                        credentials
+                            .get(*id)
+                            .map(|secrets| ((*id).to_string(), secrets.clone()))
+                    })
+                    .collect(),
+            )),
+            runtime_snapshot_fingerprint: Arc::new(RwLock::new(fingerprint.clone())),
+            jwt_replay_store: self.jwt_replay_store.clone(),
+            client_assertion_policy: self.client_assertion_policy.clone(),
+            jwks_policy: self.jwks_policy.clone(),
+            jwks_state: self.jwks_state.clone(),
+        })
+    }
+
     #[cfg(test)]
     pub(super) fn with_replay_store_and_policy(
         jwt_replay_store: Arc<dyn ReplayStore>,

@@ -85,6 +85,7 @@ fn seed_grant(state: &AppState) -> TestResult<String> {
     let now = SystemTime::now();
     let access = AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
         token: token.clone(),
         token_type: "Bearer".to_string(),
         client_id: CLIENT_ID.to_string(),

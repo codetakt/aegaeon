@@ -35,7 +35,8 @@ fn unsupported_stored_rar_refresh_is_not_rotated() -> TestResult {
 
 #[test]
 fn test_resource_indicator_sets_audience_on_code_exchange() -> TestResult {
-    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
+    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
+        .with_issuer("https://issuer.example".into());
     let resource = "https://api.example.com/resource".to_string();
 
     let auth_req = AuthorizationRequest {
@@ -252,14 +253,13 @@ fn test_resource_indicator_invalid_target_rejected_for_code_exchange() -> TestRe
 
 #[test]
 fn test_resource_indicator_sets_audience_on_client_credentials() -> TestResult {
-    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
+    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
+        .with_issuer("https://issuer.example".into());
     let resource = "https://api.example.com/resource".to_string();
 
     let access_token = match must_ok!(
         issuer.issue_client_credentials_token(
-            "test_client",
-            Some("read".to_string()),
-            Some(resource.as_str()),
+            issuer.client_credentials_permit_for_tests("test_client", &["read".into()], &resource),
             None,
         ),
         "client credentials token",

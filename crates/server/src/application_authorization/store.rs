@@ -128,3 +128,23 @@ pub async fn is_current(
             .is_some_and(|current| grant.is_restriction_of(&current)),
     )
 }
+
+/// Bind a CC authorization to the identity already locked by `lock_current`.
+/// This must use the same publication transaction: no second pool acquisition or
+/// additional publication lock is needed, and the locked projection cannot be replaced.
+pub(crate) async fn publication_client_identity_matches(
+    guard: &mut PublicationGuard,
+    grant: &Grant,
+    expected_registration_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let identity: Option<Option<Uuid>> = sqlx::query_scalar(
+        "SELECT client_record_id FROM aegaeon.application_authorizations \
+         WHERE environment_id=$1 AND client_id=$2 AND subject=$3 AND enabled",
+    )
+    .bind(grant.environment_id)
+    .bind(&grant.client_id)
+    .bind(&grant.subject)
+    .fetch_optional(&mut **guard)
+    .await?;
+    Ok(identity.flatten() == Some(expected_registration_id))
+}

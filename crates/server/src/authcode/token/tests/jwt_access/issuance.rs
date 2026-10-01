@@ -1,8 +1,9 @@
 #[test]
 fn test_access_tokens_default_to_opaque() -> TestResult {
-    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
+    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
+        .with_issuer("https://issuer.example".into());
     let response = must_ok!(
-        issuer.issue_client_credentials_token("client", Some("read".to_string()), None, None),
+        issuer.issue_client_credentials_token(issuer.client_credentials_permit_for_tests("client", &["read".into()], "client"), None),
         "client credentials token",
     );
 
@@ -26,7 +27,7 @@ fn test_jwt_access_token_claims_when_enabled() -> TestResult {
         .with_jwt_access_tokens_enabled(true);
 
     let response = must_ok!(
-        token_issuer.issue_client_credentials_token("client", Some("read".to_string()), None, None),
+        token_issuer.issue_client_credentials_token(token_issuer.client_credentials_permit_for_tests("client", &["read".into()], "client"), None),
         "client credentials token",
     );
 
@@ -63,7 +64,7 @@ fn test_jwt_access_token_issuance_requires_public_verification_material() -> Tes
             .with_jwt_access_tokens_enabled(true);
 
     let response = must_ok!(
-        token_issuer.issue_client_credentials_token("client", Some("read".to_string()), None, None),
+        token_issuer.issue_client_credentials_token(token_issuer.client_credentials_permit_for_tests("client", &["read".into()], "client"), None),
         "client credentials token",
     );
 
@@ -113,9 +114,7 @@ async fn application_service_claim_release_and_dpop_type_follow_actual_grant() -
     ] {
         let response = token_issuer
             .issue_client_credentials_application_token_async(
-                "service-client",
-                Some("read".into()),
-                Some(audience),
+                token_issuer.client_credentials_permit_for_tests("service-client", &["read".into()], audience),
                 Some(&cnf),
                 Some(&binding),
                 Some(&grant),

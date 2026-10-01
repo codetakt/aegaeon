@@ -5,6 +5,7 @@ use super::{
 use crate::authcode::types::{
     AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding, TokenResponse,
 };
+use crate::policy::client_credentials::{AuthorizedClientCredentials, ClientCredentialsGrant};
 use std::{borrow::Cow, time::SystemTime};
 
 #[derive(Clone, Copy)]
@@ -25,6 +26,7 @@ impl SubjectTokenGrantKind {
 }
 
 struct SubjectTokenGrantRequest<'a> {
+    client_credentials_grant: Option<&'a ClientCredentialsGrant>,
     application_grant: Option<&'a crate::application_authorization::inorii::Grant>,
     kind: SubjectTokenGrantKind,
     client_id: &'a str,
@@ -76,93 +78,89 @@ impl SubjectTokenGrantError {
 }
 
 impl TokenIssuer {
-    /// Issue an access token using the Client Credentials grant (RFC 6749 §4.4).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the signing backend cannot mint the access token.
+    /// Issue an RFC 6749 client-credentials token from a consumed authorization permit.
     pub fn issue_client_credentials_token(
         &self,
-        client_id: &str,
-        scope: Option<String>,
-        resource: Option<&str>,
+        permit: AuthorizedClientCredentials,
         cnf: Option<&CnfClaim>,
     ) -> Result<TokenResponse, String> {
-        self.issue_client_credentials_token_bound(client_id, scope, resource, cnf, None)
+        self.issue_client_credentials_token_bound(permit, cnf, None)
     }
 
-    /// Issue a client-credentials access token with persisted sender-binding metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the signing backend cannot mint the access token.
+    /// Issue a client-credentials token with persisted sender binding.
     pub fn issue_client_credentials_token_bound(
         &self,
-        client_id: &str,
-        scope: Option<String>,
-        resource: Option<&str>,
+        permit: AuthorizedClientCredentials,
         cnf: Option<&CnfClaim>,
         sender_binding: Option<&SenderBinding>,
     ) -> Result<TokenResponse, String> {
+        let grant = permit.into_grant();
         self.issue_subject_token(SubjectTokenGrantRequest {
+            client_credentials_grant: Some(&grant),
             application_grant: None,
             kind: SubjectTokenGrantKind::ClientCredentials,
-            client_id,
-            subject: client_id,
-            scope,
-            resource,
+            client_id: &grant.caller.client_id,
+            subject: &grant.caller.client_id,
+            scope: Some(grant.scopes.join(" ")),
+            resource: Some(&grant.audience),
             cnf,
             sender_binding,
         })
     }
 
-    /// Issue a client-credentials access token with persisted sender-binding metadata,
-    /// committing token-store state on the blocking worker pool.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the signing backend cannot mint the access token.
+    /// Issue a client-credentials token, committing on the blocking worker pool.
     pub async fn issue_client_credentials_token_bound_async(
         &self,
-        client_id: String,
-        scope: Option<String>,
-        resource: Option<String>,
+        permit: AuthorizedClientCredentials,
         cnf: Option<CnfClaim>,
         sender_binding: Option<SenderBinding>,
     ) -> Result<TokenResponse, String> {
-        self.issue_subject_token_async(SubjectTokenGrantRequest {
-            application_grant: None,
-            kind: SubjectTokenGrantKind::ClientCredentials,
-            client_id: &client_id,
-            subject: &client_id,
-            scope,
-            resource: resource.as_deref(),
-            cnf: cnf.as_ref(),
-            sender_binding: sender_binding.as_ref(),
-        })
+        self.issue_client_credentials_application_token_async(
+            permit,
+            cnf.as_ref(),
+            sender_binding.as_ref(),
+            None,
+        )
         .await
     }
 
     pub(crate) async fn issue_client_credentials_application_token_async(
         &self,
-        client_id: &str,
-        scope: Option<String>,
-        resource: Option<&str>,
+        permit: AuthorizedClientCredentials,
         cnf: Option<&CnfClaim>,
         sender_binding: Option<&SenderBinding>,
         application_grant: Option<&crate::application_authorization::inorii::Grant>,
     ) -> Result<TokenResponse, String> {
+        let grant = permit.into_grant();
         self.issue_subject_token_async(SubjectTokenGrantRequest {
+            client_credentials_grant: Some(&grant),
             kind: SubjectTokenGrantKind::ClientCredentials,
-            client_id,
-            subject: client_id,
-            scope,
-            resource,
+            client_id: &grant.caller.client_id,
+            subject: &grant.caller.client_id,
+            scope: Some(grant.scopes.join(" ")),
+            resource: Some(&grant.audience),
             cnf,
             sender_binding,
             application_grant,
         })
         .await
+    }
+
+    /// Unchecked authority fixture for isolated issuer tests; not a runtime API.
+    #[cfg(test)]
+    pub(crate) fn client_credentials_permit_for_tests(
+        &self,
+        client: &str,
+        scopes: &[String],
+        audience: &str,
+    ) -> AuthorizedClientCredentials {
+        let grant = ClientCredentialsGrant::fixture(
+            self.issuer.as_deref().unwrap_or("https://issuer.example"),
+            client,
+            audience,
+            scopes,
+        );
+        AuthorizedClientCredentials::new(grant).expect("valid isolated issuer authority fixture")
     }
 
     /// Issue an access token using the JWT Bearer grant (RFC 7523 §2.1).
@@ -200,6 +198,7 @@ impl TokenIssuer {
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token(SubjectTokenGrantRequest {
             application_grant: None,
+            client_credentials_grant: None,
             kind: SubjectTokenGrantKind::JwtBearer,
             client_id,
             subject,
@@ -227,6 +226,7 @@ impl TokenIssuer {
     ) -> Result<TokenResponse, String> {
         self.issue_subject_token_async(SubjectTokenGrantRequest {
             application_grant: None,
+            client_credentials_grant: None,
             kind: SubjectTokenGrantKind::JwtBearer,
             client_id: &client_id,
             subject: &subject,
@@ -311,6 +311,7 @@ impl TokenIssuer {
         req: SubjectTokenGrantRequest<'_>,
     ) -> Result<PreparedSubjectToken, SubjectTokenGrantError> {
         let SubjectTokenGrantRequest {
+            client_credentials_grant,
             application_grant,
             kind,
             client_id,
@@ -325,11 +326,23 @@ impl TokenIssuer {
             return Err(SubjectTokenGrantError::invalid_scope(kind));
         }
 
-        let resource = match validate_optional_resource_indicator(resource) {
-            Ok(value) => value,
-            Err(err) => {
-                return Err(SubjectTokenGrantError::invalid_target(err));
+        let resource = match client_credentials_grant {
+            Some(grant) => {
+                if grant.validate().is_err()
+                    || self.issuer.as_deref() != Some(grant.issuer.as_str())
+                {
+                    return Err(SubjectTokenGrantError::invalid_target(
+                        "client-credentials permit issuer mismatch".into(),
+                    ));
+                }
+                Some(grant.audience.clone())
             }
+            None => match validate_optional_resource_indicator(resource) {
+                Ok(value) => value,
+                Err(err) => {
+                    return Err(SubjectTokenGrantError::invalid_target(err));
+                }
+            },
         };
 
         let expires_in = self.access_token_ttl_secs;
@@ -363,6 +376,10 @@ impl TokenIssuer {
 
         let access_token = AccessToken {
             exchange_root: None,
+            client_credentials_digest: client_credentials_grant
+                .map(ClientCredentialsGrant::digest)
+                .transpose()
+                .map_err(SubjectTokenGrantError::server)?,
             token: access_token_str.clone(),
             token_type: AccessToken::type_for_confirmation(cnf).to_string(),
             client_id: client_id.to_string(),
@@ -389,6 +406,7 @@ impl TokenIssuer {
         });
 
         meta.application_grant = application_grant.cloned();
+        meta.client_credentials_grant = client_credentials_grant.cloned();
         Ok(PreparedSubjectToken {
             access_token,
             meta,

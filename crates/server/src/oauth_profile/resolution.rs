@@ -130,6 +130,22 @@ pub async fn resolve_downstream_profile(
     resolved_profile_from_effective_row(&row)
 }
 
+/// Resolve the same downstream profile inside an existing authority snapshot.
+pub(crate) async fn resolve_downstream_profile_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issuer: &str,
+    client_id: &str,
+) -> Result<ResolvedProfile, ProfileError> {
+    let issuer_host = issuer_host_from_url(issuer)?;
+    let row = sqlx::query(DOWNSTREAM_PROFILE_QUERY)
+        .bind(issuer_host)
+        .bind(client_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(ProfileError::MissingProfile)?;
+    resolved_profile_from_effective_row(&row)
+}
+
 /// # Errors
 ///
 /// Returns [`ProfileError::InvalidIssuer`] when the issuer URL cannot be

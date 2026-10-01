@@ -4,6 +4,7 @@ fn apply_policy_patch_normalizes_lists_and_clears_optional_strings() {
     let policy = default_policy_document();
     let patch = PolicyPatchRequest {
         token_exchange: None,
+        client_credentials: None,
         base_configuration_version_id: "00000000-0000-0000-0000-000000000000".to_string(),
         pkce_required: None,
         dcr_enabled: None,

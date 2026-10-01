@@ -98,6 +98,7 @@ SELECT
   upstream_discovery_cache_max_entries,
   upstream_jwks_cache_max_entries
 , token_exchange
+, client_credentials
 FROM aegaeon.environment_policies
 WHERE environment_id = $1
 ";

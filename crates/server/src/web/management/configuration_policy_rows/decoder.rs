@@ -22,6 +22,16 @@ impl<'a> PolicyRowDecoder<'a> {
         Ok(policy)
     }
 
+    pub(super) fn client_credentials_field(
+        &self,
+    ) -> Result<crate::policy::client_credentials::ClientCredentialsPolicy, Response> {
+        let sqlx::types::Json(policy) = self
+            .row
+            .try_get("client_credentials")
+            .map_err(|_| self.decode_error())?;
+        Ok(policy)
+    }
+
     pub(super) fn bool_field(&self, column: &str) -> Result<bool, Response> {
         self.row.try_get(column).map_err(|_| self.decode_error())
     }

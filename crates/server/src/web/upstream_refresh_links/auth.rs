@@ -122,17 +122,17 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         .validate_bearer_token_with_meta_async(normalized_auth)
         .await
         .map_err(|err| bearer_validation_error_response(issuer_base, challenge_scheme, &err))?;
-    let meta = meta.ok_or_else(|| {
-        let mut response = json_error_with_iss(
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            Some("bearer token metadata unavailable"),
+    let meta =
+        meta.ok_or_else(|| missing_bearer_metadata_response(issuer_base, challenge_scheme))?;
+    if !crate::web::client_credentials_authorization::current(state, &meta).await? {
+        return Err(upstream_refresh_policy_error(
+            &TokenPolicyError::Validation(BearerTokenValidationError::Invalid(
+                "client-credentials authority is no longer current".into(),
+            )),
             issuer_base,
-        );
-        apply_oauth_authenticate_header(&mut response, challenge_scheme, "invalid_token");
-        util::apply_no_cache_headers(&mut response);
-        response
-    })?;
+            challenge_scheme,
+        ));
+    }
     // RFC 9449 section 7.2: a proof cannot turn Bearer presentation into DPoP.
     if matches!(meta.sender_binding, Some(SenderBinding::DPoP { .. }))
         != (challenge_scheme == "DPoP")
@@ -169,6 +169,18 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
         user_id: meta.user_id.clone(),
         caller_client_id: meta.client_id.clone(),
     })
+}
+
+fn missing_bearer_metadata_response(issuer_base: &str, challenge_scheme: &'static str) -> Response {
+    let mut response = json_error_with_iss(
+        StatusCode::UNAUTHORIZED,
+        "invalid_token",
+        Some("bearer token metadata unavailable"),
+        issuer_base,
+    );
+    apply_oauth_authenticate_header(&mut response, challenge_scheme, "invalid_token");
+    util::apply_no_cache_headers(&mut response);
+    response
 }
 
 fn upstream_refresh_policy_error(

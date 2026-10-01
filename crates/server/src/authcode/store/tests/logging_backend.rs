@@ -16,6 +16,7 @@ fn token_store_logs_only_secret_fingerprints() -> StoreTestResult {
     let store = TokenStore::new_process_local_for_tests();
     let access = AccessToken {
         exchange_root: None,
+        client_credentials_digest: None,
         token: access_token.to_string(),
         token_type: "Bearer".to_string(),
         client_id: "test-client".to_string(),

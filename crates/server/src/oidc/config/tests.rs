@@ -131,6 +131,7 @@ fn encrypt_managed_oidc_key_handle(
 fn oidc_policy(enabled: bool) -> PolicyDocument {
     PolicyDocument {
         token_exchange: Default::default(),
+        client_credentials: Default::default(),
         pkce_required: true,
         dcr_enabled: false,
         dcr_everparse_runtime_enabled: false,

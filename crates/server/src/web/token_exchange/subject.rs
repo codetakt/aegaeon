@@ -50,6 +50,13 @@ pub(super) async fn resolve_token_exchange_subject(
             Some("subject_token metadata is inconsistent"),
         ));
     }
+    if !super::super::client_credentials_authorization::current(state, &subject_meta).await? {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("subject_token authority is no longer current"),
+        ));
+    }
     if subject_access.client_id != ctx.client_id || subject_meta.client_id != ctx.client_id {
         return Err(token_error_response(
             StatusCode::BAD_REQUEST,

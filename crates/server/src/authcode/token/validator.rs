@@ -129,6 +129,19 @@ impl TokenValidator {
                     "token store metadata lookup failed: {err}"
                 ))
             })?;
+        if access.client_credentials_digest.is_some()
+            || meta
+                .as_ref()
+                .is_some_and(|meta| meta.client_credentials_grant.is_some())
+        {
+            let Some(meta) = meta.as_ref() else {
+                return Err(BearerTokenValidationError::invalid(
+                    "client-credentials authority missing",
+                ));
+            };
+            crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
+                .map_err(BearerTokenValidationError::invalid)?;
+        }
         if let (Some(ref verified), Some(ref meta)) = (&verified, &meta) {
             if !Self::aud_matches(&verified.payload, &meta.audience) {
                 return Err(BearerTokenValidationError::invalid(
@@ -207,6 +220,19 @@ impl TokenValidator {
                     "token store metadata lookup failed: {err}"
                 ))
             })?;
+        if access.client_credentials_digest.is_some()
+            || meta
+                .as_ref()
+                .is_some_and(|meta| meta.client_credentials_grant.is_some())
+        {
+            let Some(meta) = meta.as_ref() else {
+                return Err(BearerTokenValidationError::invalid(
+                    "client-credentials authority missing",
+                ));
+            };
+            crate::authcode::store::bearer_metadata_matches_access_token(&access, meta)
+                .map_err(BearerTokenValidationError::invalid)?;
+        }
         if let (Some(ref verified), Some(ref meta)) = (&verified, &meta) {
             if !Self::aud_matches(&verified.payload, &meta.audience) {
                 return Err(BearerTokenValidationError::invalid(
@@ -306,24 +332,37 @@ impl TokenValidator {
         }
     }
 
-    /// Introspect token (RFC 7662)
+    /// Inspect legacy stored-token status without an online authority backend.
+    /// Either stored client-credentials marker, and any lookup failure, yields inactive.
+    /// Use the HTTP
+    /// introspection endpoint for authenticated current-policy evaluation (RFC 7662).
     #[must_use]
     pub fn introspect_token(&self, token: &str) -> serde_json::Value {
-        match self.token_store.try_verify_access_token(token) {
-            Ok(Some(access_token)) => access_token_introspection_exp(&access_token).map_or_else(
-                || json!({ "active": false }),
-                |exp| {
-                    json!({
-                        "active": true,
-                        "scope": access_token.scope,
-                        "client_id": access_token.client_id,
-                        "username": access_token.user_id,
-                        "token_type": "Bearer",
-                        "exp": exp,
-                    })
-                },
-            ),
-            Ok(None) | Err(_) => json!({ "active": false }),
+        let Ok(Some(access_token)) = self.token_store.try_verify_access_token(token) else {
+            return json!({ "active": false });
+        };
+        if access_token.client_credentials_digest.is_some() {
+            return json!({ "active": false });
         }
+        match self.token_store.try_get_bearer_meta(token) {
+            Ok(Some(meta)) if meta.client_credentials_grant.is_some() => {
+                return json!({ "active": false });
+            }
+            Err(_) => return json!({ "active": false }),
+            Ok(_) => {}
+        }
+        access_token_introspection_exp(&access_token).map_or_else(
+            || json!({ "active": false }),
+            |exp| {
+                json!({
+                    "active": true,
+                    "scope": access_token.scope,
+                    "client_id": access_token.client_id,
+                    "username": access_token.user_id,
+                    "token_type": "Bearer",
+                    "exp": exp,
+                })
+            },
+        )
     }
 }
