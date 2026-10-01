@@ -285,3 +285,5 @@ async fn pg_initialization_runtime_fingerprints_ignore_search_path() -> Manageme
     }.await;
     finish(result, cleanup(control, pool, &name).await)
 }
+
+mod registration_metadata;

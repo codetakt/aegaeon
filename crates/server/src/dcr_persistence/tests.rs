@@ -117,7 +117,7 @@ fn dynamic_registration_schema_deficit_reports_missing_contract_items() {
             "missing indexes: dynamic_client_registrations_env_identifier_unique, ",
             "dynamic_client_registrations_env_token_hash_unique; ",
             "missing constraints: dynamic_client_registrations_token_hash_shape); ",
-            "apply the aegaeon schema baseline (atlas migrate apply --env local)"
+            "apply the registration metadata migration 20261002110000 (atlas migrate apply --env local)"
         )
     );
 }
@@ -132,7 +132,11 @@ fn dynamic_registration_schema_deficit_reports_missing_table_clearly() {
         deficit.describe(true),
         concat!(
             "missing or inaccessible aegaeon.dynamic_client_registrations; ",
-            "apply the aegaeon schema baseline (atlas migrate apply --env local)"
+            "apply the registration metadata migration 20261002110000 (atlas migrate apply --env local)"
         )
     );
 }
+
+mod metadata_migration;
+
+mod strict_preflight;

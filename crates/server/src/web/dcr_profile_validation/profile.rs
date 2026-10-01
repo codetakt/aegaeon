@@ -7,22 +7,6 @@ use crate::dcr::ClientRegistration;
 use crate::oauth_profile;
 use crate::policy::SenderConstraint;
 
-fn normalize_dcr_list(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-        .collect()
-}
-
-fn normalize_dcr_response_types(values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .map(|value| oauth_profile::normalize_response_type(value))
-        .filter(|value| !value.is_empty())
-        .collect()
-}
-
 fn declared_sender_methods(meta: &ClientRegistration) -> Vec<String> {
     let mut declared = std::collections::BTreeSet::new();
     if let Some(methods) = meta.sender_constrained_methods.as_ref() {
@@ -57,15 +41,7 @@ pub(super) fn validate_registration_against_profile(
     meta: &ClientRegistration,
     profile: &oauth_profile::ResolvedProfile,
 ) -> Result<(), ProfileRegistrationViolation> {
-    let grant_types = meta.grant_types.as_ref().map_or_else(
-        || {
-            vec![
-                "authorization_code".to_string(),
-                "refresh_token".to_string(),
-            ]
-        },
-        |values| normalize_dcr_list(values),
-    );
+    let grant_types = crate::dcr::metadata_contract::effective_grant_types(meta);
     if grant_types.is_empty() {
         return Err(ProfileRegistrationViolation::new(
             "grant_types_empty",
@@ -82,22 +58,14 @@ pub(super) fn validate_registration_against_profile(
         ));
     }
 
-    let response_types = meta.response_types.as_ref().map_or_else(
-        || vec!["code".to_string()],
-        |values| normalize_dcr_response_types(values),
-    );
-    if response_types.is_empty() {
-        return Err(ProfileRegistrationViolation::new(
-            "response_types_empty",
-            "response_types must not be empty",
-        ));
-    }
-    if response_types.iter().any(|response| response != "code") {
-        return Err(ProfileRegistrationViolation::new(
-            "response_types_not_allowed",
-            "response_types contains values not allowed by oauth profile",
-        ));
-    }
+    let response_types = crate::dcr::metadata_contract::effective_response_types(meta);
+    crate::dcr::metadata_contract::validate_grant_response_relation(&grant_types, &response_types)
+        .map_err(|_| {
+            ProfileRegistrationViolation::new(
+                "response_types_not_allowed",
+                "response_types does not match the registered grants",
+            )
+        })?;
 
     let auth_method = meta
         .token_endpoint_auth_method

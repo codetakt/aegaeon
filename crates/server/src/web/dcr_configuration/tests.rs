@@ -266,3 +266,5 @@ async fn test_router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum
 }
 
 mod oidc_request_input;
+
+mod metadata_consistency;

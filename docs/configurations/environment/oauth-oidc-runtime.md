@@ -230,6 +230,16 @@ supported PostgreSQL-backed runtime and refresh the in-process runtime snapshot 
 The local snapshot remains an optimization; PostgreSQL is the authoritative registry, and the
 monitor exits if a node cannot converge to the DB projection.
 
+New registrations default to `authorization_code` only; refresh must be requested
+explicitly. Code grants require nonempty redirects and `["code"]` responses;
+non-code grants use `[]` responses and may omit redirects. Owner updates preserve
+omitted/null response sets, including `[]`, so grant transitions require matching
+explicit responses. Duplicate grants/redirects, raw ASCII whitespace/control in
+URIs, dual key sources, and `none` authentication with client credentials or token
+exchange are rejected. See the [metadata upgrade runbook](../../operations/registration-metadata-upgrade.md)
+for management synchronization, SQL and strict local all-row preflight, versioned schema requirements,
+predecessor repair and captured-authorization effects.
+
 The DCR self-check is required when `policy.dcrEverparseRuntimeEnabled` is enabled
 or the server is built with `verified-claim`. A required unavailable or rejecting
 native parser produces an internal registration error. The check encodes a

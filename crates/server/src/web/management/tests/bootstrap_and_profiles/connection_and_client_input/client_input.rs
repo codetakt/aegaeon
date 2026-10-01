@@ -34,10 +34,7 @@ fn validate_management_client_input_normalizes_lists_and_auth_method() {
     input.client_identifier = " client-1 ".to_string();
     input.name = " Client One ".to_string();
     input.client_type = " CONFIDENTIAL ".to_string();
-    input.allowed_grant_types = vec![
-        " AUTHORIZATION_CODE ".to_string(),
-        "authorization_code".to_string(),
-    ];
+    input.allowed_grant_types = vec![" AUTHORIZATION_CODE ".to_string()];
     input.allowed_scopes = vec![" read ".to_string(), "read".to_string()];
     input.token_endpoint_authentication_method = " CLIENT_SECRET_POST ".to_string();
 
@@ -168,4 +165,17 @@ fn validate_management_client_input_rejects_password_grant() {
     input.allowed_grant_types = vec!["password".to_string()];
 
     assert!(validate_management_client_input(&mut input, "req-1").is_err());
+}
+
+#[test]
+fn management_client_rejects_duplicate_grants_and_public_authenticated_grants() {
+    let mut input = valid_client_input();
+    input.allowed_grant_types = vec!["authorization_code".into(); 2];
+    assert!(validate_management_client_input(&mut input, "req-1").is_err());
+    input.client_type = "PUBLIC".into();
+    input.token_endpoint_authentication_method = "none".into();
+    for grant in ["client_credentials", crate::policy::TOKEN_EXCHANGE_GRANT_TYPE] {
+        input.allowed_grant_types = vec![grant.into()];
+        assert!(validate_management_client_input(&mut input, "req-1").is_err());
+    }
 }

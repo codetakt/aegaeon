@@ -976,7 +976,8 @@ CREATE TABLE aegaeon.dynamic_client_registrations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT dynamic_client_registrations_hash_algorithm CHECK ((registration_access_token_hash_algorithm = 'sha256'::text)),
-    CONSTRAINT dynamic_client_registrations_response_types_shape CHECK ((response_types = ARRAY['code'::text])),
+    CONSTRAINT dynamic_client_registrations_responses_v2 CHECK ((response_types = ARRAY[]::text[] OR response_types = ARRAY['code'::text])),
+    CONSTRAINT dynamic_client_registrations_key_source_v1 CHECK ((jwks IS NULL OR jwks_uri IS NULL)),
     CONSTRAINT dynamic_client_registrations_token_hash_shape CHECK (((length(registration_access_token_hash) = 64) AND (registration_access_token_hash = lower(registration_access_token_hash)) AND (registration_access_token_hash ~ '^[0-9a-f]{64}$'::text)))
 );
 

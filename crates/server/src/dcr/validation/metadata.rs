@@ -9,8 +9,12 @@ use super::{reject_bcp, with_bcp_metric, RegistrationValidationError};
 pub(super) fn validate_registration_uris(
     meta: &ClientRegistration,
 ) -> Result<(), RegistrationValidationError> {
-    if let Some(ref uris) = meta.redirect_uris {
-        with_bcp_metric("redirect_invalid", validate_redirect_uris(uris))
+    let redirects = meta.redirect_uris.as_deref().unwrap_or_default();
+    let requires_redirect = super::super::metadata_contract::effective_grant_types(meta)
+        .iter()
+        .any(|grant| grant == "authorization_code");
+    if requires_redirect || !redirects.is_empty() {
+        with_bcp_metric("redirect_invalid", validate_redirect_uris(redirects))
             .map_err(RegistrationValidationError::RedirectUri)?;
     }
     if let Some(ref uris) = meta.post_logout_redirect_uris {
@@ -57,6 +61,12 @@ pub(super) fn validate_client_key_material<S: BuildHasher>(
     allowed_algs: &HashSet<String, S>,
     method_normalized: &str,
 ) -> Result<(), String> {
+    if meta.jwks.is_some() && meta.jwks_uri.is_some() {
+        return reject_bcp(
+            "key_source_conflict",
+            "jwks and jwks_uri must not both be supplied",
+        );
+    }
     if let Some(jwks_uri) = meta.jwks_uri.as_deref() {
         with_bcp_metric("jwks_uri_invalid", validate_jwks_uri(jwks_uri))?;
     }

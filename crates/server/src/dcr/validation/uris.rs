@@ -1,5 +1,17 @@
 use crate::config::try_env_flag;
 
+fn validate_raw_uri(uri: &str, field_name: &str) -> Result<(), String> {
+    if uri
+        .bytes()
+        .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+    {
+        return Err(format!(
+            "{field_name} must not contain ASCII whitespace or control characters"
+        ));
+    }
+    Ok(())
+}
+
 fn env_flag_fail_closed(key: &str, default: bool) -> bool {
     try_env_flag(key, default).unwrap_or_else(|err| {
         tracing::warn!(error = %err, key, "invalid DCR runtime flag ignored");
@@ -7,12 +19,12 @@ fn env_flag_fail_closed(key: &str, default: bool) -> bool {
     })
 }
 
-pub(super) fn validate_server_callback_uri(uri: &str, field_name: &str) -> Result<(), String> {
-    let trimmed = uri.trim();
-    if trimmed.is_empty() {
+pub(crate) fn validate_server_callback_uri(uri: &str, field_name: &str) -> Result<(), String> {
+    validate_raw_uri(uri, field_name)?;
+    if uri.is_empty() {
         return Err(format!("{field_name} must not be blank"));
     }
-    let parsed = url::Url::parse(trimmed).map_err(|_| format!("invalid {field_name}"))?;
+    let parsed = url::Url::parse(uri).map_err(|_| format!("invalid {field_name}"))?;
     if parsed.fragment().is_some() {
         return Err(format!("{field_name} must not include fragment"));
     }
@@ -31,12 +43,12 @@ pub(super) fn validate_server_callback_uri(uri: &str, field_name: &str) -> Resul
     Ok(())
 }
 
-pub(super) fn validate_jwks_uri(uri: &str) -> Result<(), String> {
-    let trimmed = uri.trim();
-    if trimmed.is_empty() {
+pub(crate) fn validate_jwks_uri(uri: &str) -> Result<(), String> {
+    validate_raw_uri(uri, "jwks_uri")?;
+    if uri.is_empty() {
         return Err("jwks_uri must not be blank".to_string());
     }
-    let parsed = url::Url::parse(trimmed).map_err(|_| "invalid jwks_uri".to_string())?;
+    let parsed = url::Url::parse(uri).map_err(|_| "invalid jwks_uri".to_string())?;
     if parsed.fragment().is_some() {
         return Err("jwks_uri must not include fragment".to_string());
     }
@@ -70,7 +82,12 @@ pub fn validate_redirect_uris(uris: &[String]) -> Result<(), String> {
     if uris.is_empty() {
         return Err("redirect_uris empty".into());
     }
+    let mut distinct = std::collections::HashSet::new();
     for u in uris {
+        if !distinct.insert(u) {
+            return Err("redirect_uris must not contain duplicates".into());
+        }
+        validate_raw_uri(u, "redirect_uri")?;
         let parsed = url::Url::parse(u).map_err(|_| "invalid redirect_uri".to_string())?;
         if parsed.fragment().is_some() {
             return Err("redirect_uri must not include fragment".into());
