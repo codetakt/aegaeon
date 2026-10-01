@@ -69,6 +69,32 @@ outbound policy as the mandatory discovery endpoints. This avoids a weaker logou
 prevents the server from appending relay state to a provider-supplied URL that already carries a
 query or fragment.
 
+## Upstream Issuer Identity
+
+The stored connection issuer is an exact identifier. HTTPS URL validation rejects credentials,
+query, fragment, whitespace, control characters and backslashes without rewriting the identifier.
+`https://issuer.example` and `https://issuer.example/` are distinct valid identifiers. Case,
+explicit default ports and percent-encoding spelling are also significant. Discovery, federation
+metadata, callback `iss`, ID Token validation, refresh and active connection currentness compare
+against the exact identifier; metadata cache keys preserve it.
+
+Discovery transport removes one terminating slash before appending
+`/.well-known/openid-configuration`, as specified by OpenID Connect Discovery 1.0 section 4.1.
+Transport URL processing does not alter the expected issuer. Existing outbound protections apply.
+The management database's supported issuer domain remains unchanged; accepting a path in the
+internal validator does not enable path issuers in managed connections.
+
+Each authorization freezes whether callback `iss` is required: the resolved profile requires it,
+or discovery advertises `authorization_response_iss_parameter_supported=true`. A profile that
+requires `iss` still rejects metadata without that support. Both success and error callbacks enforce
+the frozen requirement, and every present `iss` must exactly match even when omission is permitted.
+Later metadata cannot lower the stored requirement (RFC 9207 sections 2–2.2).
+
+Deploy authorization writers and callback consumers together and restart pending upstream logins.
+Older transactions whose normalized issuer differs from the stored connection fail currentness
+checks; their identifier is never reinterpreted. Metadata caches are nonauthoritative and cached
+issuer mismatches fail closed. This update requires no schema migration or identity-link rename.
+
 ## Upstream Authorization Browser Binding
 
 Each authorization stores the SHA-256 digest of an independent 256-bit random browser secret.

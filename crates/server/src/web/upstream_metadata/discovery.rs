@@ -1,4 +1,4 @@
-use super::super::{normalize_issuer, UPSTREAM_MAX_BODY_BYTES};
+use super::super::{validate_upstream_issuer, UPSTREAM_MAX_BODY_BYTES};
 use super::{validate_upstream_metadata_endpoint, validate_upstream_outbound_url};
 use reqwest::Client;
 
@@ -6,15 +6,29 @@ use crate::oidc::OidcDiscovery;
 use crate::upstream::NonAuthoritativeMetadataCache;
 use crate::{oauth_profile, util};
 
+pub(in crate::web) fn upstream_discovery_url(issuer: &str) -> Result<String, String> {
+    validate_upstream_issuer(issuer).ok_or_else(|| "upstream issuer invalid".to_string())?;
+    Ok(format!(
+        "{}/.well-known/openid-configuration",
+        issuer.strip_suffix('/').unwrap_or(issuer)
+    ))
+}
+
+fn validate_discovery_issuer(discovery: &OidcDiscovery, issuer: &str) -> Result<(), String> {
+    let validated_issuer = validate_upstream_issuer(&discovery.issuer)
+        .ok_or_else(|| "upstream discovery issuer invalid".to_string())?;
+    if validated_issuer != issuer {
+        return Err("upstream discovery issuer mismatch".to_string());
+    }
+    Ok(())
+}
+
 async fn fetch_upstream_discovery(
     client: &Client,
     issuer: &str,
     allowed_domains: &[String],
 ) -> Result<OidcDiscovery, String> {
-    let url = format!(
-        "{}/.well-known/openid-configuration",
-        issuer.trim_end_matches('/')
-    );
+    let url = upstream_discovery_url(issuer)?;
     validate_upstream_outbound_url(&url, "upstream discovery endpoint", allowed_domains)?;
     let response = client
         .get(&url)
@@ -55,9 +69,11 @@ pub(in crate::web) async fn fetch_upstream_discovery_cached(
     allowed_domains: &[String],
 ) -> Result<OidcDiscovery, String> {
     if let Some(cached) = cache.try_get(issuer)? {
+        validate_discovery_issuer(&cached, issuer)?;
         return Ok(cached);
     }
     let discovery = fetch_upstream_discovery(client, issuer, allowed_domains).await?;
+    validate_discovery_issuer(&discovery, issuer)?;
     cache.try_insert(issuer, discovery.clone())?;
     Ok(discovery)
 }
@@ -69,11 +85,7 @@ pub(in crate::web) fn validate_upstream_discovery(
     upstream_auth_method: &str,
     allowed_domains: &[String],
 ) -> Result<(), String> {
-    let normalized_issuer = normalize_issuer(&discovery.issuer)
-        .ok_or_else(|| "upstream discovery issuer invalid".to_string())?;
-    if normalized_issuer != issuer {
-        return Err("upstream discovery issuer mismatch".to_string());
-    }
+    validate_discovery_issuer(discovery, issuer)?;
     validate_upstream_metadata_endpoint(
         &discovery.authorization_endpoint,
         "authorization_endpoint",
@@ -135,4 +147,34 @@ pub(in crate::web) fn validate_upstream_discovery(
         return Err("upstream discovery does not support PKCE S256".to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn upstream_issuer_discovery_transport_removes_one_terminating_slash() {
+        for (issuer, expected) in [
+            (
+                "https://issuer.example",
+                "https://issuer.example/.well-known/openid-configuration",
+            ),
+            (
+                "https://issuer.example/",
+                "https://issuer.example/.well-known/openid-configuration",
+            ),
+            (
+                "https://issuer.example/path/",
+                "https://issuer.example/path/.well-known/openid-configuration",
+            ),
+            (
+                "https://issuer.example/path//",
+                "https://issuer.example/path//.well-known/openid-configuration",
+            ),
+        ] {
+            assert_eq!(
+                super::upstream_discovery_url(issuer).as_deref(),
+                Ok(expected)
+            );
+        }
+    }
 }
