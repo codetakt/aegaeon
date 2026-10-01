@@ -11,7 +11,7 @@ fn reconstruct_chain_valid() {
     let anchor = TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: must_ok(JwkSet::from_value(signed_chain.anchor_jwks.clone())),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     };
 
     let cached = StoredTrustChain {
@@ -24,7 +24,11 @@ fn reconstruct_chain_valid() {
         expires_at: now + 3600,
     };
 
-    let chain = must_ok(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
+    let chain = must_ok(reconstruct_chain_from_cache(
+        &cached,
+        &anchor,
+        cached.resolved_at,
+    ));
     assert_eq!(chain.chain.len(), 3);
     assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
 }
@@ -35,32 +39,35 @@ fn reconstruct_chain_from_cache_rejects_malformed_statement_shape() {
     let now = 1_700_000_000_i64;
     let ta_id = "https://ta.example.com";
     let leaf_id = "https://rp.example.com";
-    let malformed_jws = make_test_jws(&json!({"alg": "ES256"}), &json!({
-        "iss": leaf_id,
-        "sub": leaf_id,
-        "iat": "not-an-integer",
-        "exp": now + 3600
-    }));
+    let malformed_jws = make_test_jws(
+        &json!({"alg": "ES256"}),
+        &json!({
+            "iss": leaf_id,
+            "sub": leaf_id,
+            "iat": "not-an-integer",
+            "exp": now + 3600
+        }),
+    );
     let cached = StoredTrustChain {
         id: Uuid::new_v4(),
         environment_id: Uuid::new_v4(),
         leaf_entity_id: leaf_id.to_string(),
         anchor_entity_id: ta_id.to_string(),
-        chain_jwts: json!([
-            malformed_jws.clone(),
-            malformed_jws.clone(),
-            malformed_jws
-        ]),
+        chain_jwts: json!([malformed_jws.clone(), malformed_jws.clone(), malformed_jws]),
         resolved_at: now,
         expires_at: now + 3600,
     };
     let anchor = TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
+    let err = must_err(reconstruct_chain_from_cache(
+        &cached,
+        &anchor,
+        cached.resolved_at,
+    ));
 
     assert!(matches!(err, FederationError::Json(_)));
 }
@@ -80,10 +87,14 @@ fn reconstruct_chain_empty_array() {
     let anchor = TrustAnchor {
         entity_id: "anchor".to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
+    let err = must_err(reconstruct_chain_from_cache(
+        &cached,
+        &anchor,
+        cached.resolved_at,
+    ));
     assert!(matches!(err, FederationError::Validation(_)));
 }
 
@@ -102,10 +113,14 @@ fn reconstruct_chain_not_array() {
     let anchor = TrustAnchor {
         entity_id: "anchor".to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
+    let err = must_err(reconstruct_chain_from_cache(
+        &cached,
+        &anchor,
+        cached.resolved_at,
+    ));
     assert!(matches!(err, FederationError::Validation(_)));
 }
 

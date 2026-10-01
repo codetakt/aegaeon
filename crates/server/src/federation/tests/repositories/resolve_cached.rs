@@ -48,12 +48,12 @@ fn requested_anchor_order_fixture(
         TrustAnchor {
             entity_id: first_ta_id.to_string(),
             jwks: must_ok(JwkSet::from_value(first_chain.anchor_jwks.clone())),
-            metadata_policy: Some(json!({})),
+            metadata_policy: None,
         },
         TrustAnchor {
             entity_id: second_ta_id.to_string(),
             jwks: must_ok(JwkSet::from_value(second_chain.anchor_jwks.clone())),
-            metadata_policy: Some(json!({})),
+            metadata_policy: None,
         },
     ];
 
@@ -71,7 +71,7 @@ fn resolve_cached_fresh_resolution() {
         let signed_chain = signed_direct_chain(ta_id, leaf_id, now);
 
         let anchor_repo = InMemoryTrustAnchorRepo::new();
-        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, None));
 
         let chain_cache = InMemoryTrustChainCacheRepo::new();
         let config = FederationCacheConfig::default();
@@ -188,7 +188,7 @@ fn resolve_cached_uses_cache() {
     let signed_chain = signed_direct_chain(ta_id, leaf_id, now);
 
     let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, None));
 
     // Pre-populate chain cache
     let chain_cache = InMemoryTrustChainCacheRepo::new();
@@ -236,12 +236,7 @@ fn resolve_cached_revalidates_cached_statement_temporal_bounds() {
     ]);
 
     let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(
-        env_id,
-        ta_id,
-        &fresh_signed_chain.anchor_jwks,
-        Some(&json!({})),
-    ));
+    must_ok(anchor_repo.upsert(env_id, ta_id, &fresh_signed_chain.anchor_jwks, None));
 
     let chain_cache = InMemoryTrustChainCacheRepo::new();
     must_ok(chain_cache.upsert(env_id, leaf_id, ta_id, &expired_jwts, now + 3600));
@@ -283,7 +278,7 @@ fn resolve_cached_rejects_cached_chain_continuity_mismatch() {
         sign_entity_statement_for_test(&anchor_key, &signed_chain.subordinate_statement);
 
     let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, None));
 
     let chain_cache = InMemoryTrustChainCacheRepo::new();
     must_ok(chain_cache.upsert(
@@ -328,7 +323,7 @@ fn resolve_cached_rejects_cached_allowed_leaf_entity_types_violation() {
     );
 
     let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, None));
 
     let chain_cache = InMemoryTrustChainCacheRepo::new();
     must_ok(chain_cache.upsert(
@@ -369,7 +364,7 @@ fn resolve_cached_cache_write_expires_at_shortest_statement_exp() {
             sign_entity_statement_for_test(&signed_chain.leaf_key, &signed_chain.leaf_config);
 
         let anchor_repo = InMemoryTrustAnchorRepo::new();
-        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, None));
         let chain_cache = InMemoryTrustChainCacheRepo::new();
         let config = FederationCacheConfig {
             trust_chain_cache_ttl: Duration::from_secs(3600),

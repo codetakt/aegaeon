@@ -14,6 +14,7 @@ mod client_credentials_reload;
 mod database_cleanup;
 mod exchange_policy;
 mod exchange_reload;
+mod federation_policy;
 mod fingerprints;
 mod target_scope_boundary;
 

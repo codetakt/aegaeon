@@ -1,8 +1,6 @@
 use super::super::super::{federation_management_error_response, management_internal_error};
 use super::super::time::unix_epoch_now_i64;
-use crate::federation::{
-    resolve_trust_chain_with_jwts, FederationError, HttpFederationFetcher, TrustAnchor,
-};
+use crate::federation::{verify_signed_path, FederationError, TrustAnchor};
 use crate::management::types::FederationTrustChainEntry;
 use axum::response::Response;
 
@@ -26,32 +24,34 @@ fn serialize_trust_chain_payload(
     ))
 }
 
-pub(in crate::web::management) async fn resolve_refreshed_trust_chain_payload(
+pub(in crate::web::management) async fn resolve_refreshed_trust_chain_payload<F, Fut>(
     existing: &FederationTrustChainEntry,
     trust_anchors: Vec<TrustAnchor>,
-    outbound_allowed_domains: Vec<String>,
     request_id: &str,
-) -> Result<serde_json::Value, Response> {
+    acquire: F,
+) -> Result<serde_json::Value, Response>
+where
+    F: FnOnce(String, Vec<TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<String>, FederationError>>,
+{
     let now_epoch = unix_epoch_now_i64(request_id)?;
     let leaf_entity_id = existing.leaf_entity_id.clone();
-    let expected_anchor_entity_id = existing.anchor_entity_id.clone();
-    let fetcher =
-        HttpFederationFetcher::try_with_optional_allowed_domains(&outbound_allowed_domains)
-            .map_err(|error| federation_management_error_response(error, request_id))?;
-    let resolved =
-        resolve_trust_chain_with_jwts(&leaf_entity_id, &trust_anchors, &fetcher, now_epoch)
-            .await
-            .map_err(|error| federation_management_error_response(error, request_id))?;
-
-    if resolved.trust_chain.anchor.entity_id != expected_anchor_entity_id {
-        return Err(federation_management_error_response(
-            FederationError::ChainResolution(format!(
-                "resolved trust anchor '{}' does not match cached anchor '{}'",
-                resolved.trust_chain.anchor.entity_id, expected_anchor_entity_id
-            )),
-            request_id,
-        ));
-    }
-
-    serialize_trust_chain_payload(&resolved.chain_jwts, request_id)
+    let anchor = trust_anchors
+        .iter()
+        .find(|anchor| anchor.entity_id == existing.anchor_entity_id)
+        .cloned()
+        .ok_or_else(|| {
+            federation_management_error_response(
+                FederationError::ChainResolution("cached trust anchor is not configured".into()),
+                request_id,
+            )
+        })?;
+    let raw = acquire(leaf_entity_id.clone(), trust_anchors, now_epoch)
+        .await
+        .map_err(|error| federation_management_error_response(error, request_id))?;
+    // Acquisition cannot vouch for a typed chain. Reverify retained signed
+    // bytes, exact expected leaf/anchor and policies before any refresh write.
+    verify_signed_path(&raw, &leaf_entity_id, &anchor, now_epoch)
+        .map_err(|error| federation_management_error_response(error, request_id))?;
+    serialize_trust_chain_payload(&raw, request_id)
 }

@@ -40,7 +40,7 @@ impl SignedPathFixture {
         let anchor = TrustAnchor {
             entity_id: last.iss.clone(),
             jwks: must_ok(last.parse_jwks()),
-            metadata_policy: Some(json!({})),
+            metadata_policy: None,
         };
         Self {
             keys,
@@ -559,7 +559,7 @@ fn signed_policy_resolution_preserves_raw_direct_and_multi_edge_paths() {
 }
 
 #[test]
-fn signed_policy_resolution_detects_conflicts_after_signature_admission() {
+fn signed_policy_resolution_rejects_conflicts_before_return() {
     let _guard = raw_json_env_guard();
     block_on_test_future(async {
         let mut fixture = SignedPathFixture::new(1);
@@ -568,15 +568,31 @@ fn signed_policy_resolution_detects_conflicts_after_signature_admission() {
         fixture.anchor.metadata_policy = Some(upper.clone());
         fixture.subordinates[1].metadata_policy = Some(must_ok(serde_json::from_value(upper)));
         fixture.subordinates[0].metadata_policy = Some(must_ok(serde_json::from_value(lower)));
-        let result = must_ok(
-            resolve_trust_chain_with_jwts(
-                &fixture.configs[0].iss,
-                &[fixture.anchor.clone()],
-                &fixture.fetcher(),
-                NOW,
-            )
-            .await,
-        );
-        assert!(result.trust_chain.resolved_metadata().is_err());
+        let cache = signed_parent::ObservedCache::default();
+        assert!(resolve_trust_chain_jwts_cached_with(
+            &fixture.configs[0].iss,
+            Uuid::new_v4(),
+            vec![fixture.anchor.clone()],
+            &cache,
+            &FederationCacheConfig::default(),
+            NOW,
+            |_| std::future::ready(Ok(fixture.detached()))
+        )
+        .await
+        .is_err());
+        assert_eq!(cache.writes.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let result = resolve_trust_chain_with_jwts(
+            &fixture.configs[0].iss,
+            &[fixture.anchor.clone()],
+            &fixture.fetcher(),
+            NOW,
+        )
+        .await;
+        assert!(result.is_err());
     });
+}
+
+mod chain_policy_admission {
+    use super::*;
+    include!("chain_policy_admission.rs");
 }

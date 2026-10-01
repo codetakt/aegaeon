@@ -49,12 +49,10 @@ fn canonicalize_json(value: &Value) -> Value {
 /// preserves array element order, providing a strictly less permissive
 /// comparison than full unordered-set equivalence.
 ///
-/// **Optionality note:** In the F* model, `trust_anchor.ta_policy` is
-/// non-optional — every anchor has a policy, and
-/// `anchor_sub_policy_consistent` requires `anchor_sub.policy = Some
-/// ta.ta_policy`.  The Rust validation keeps the storage type optional for
-/// deserialization compatibility, but chain validation rejects `None` before
-/// this comparison and therefore preserves the same proof shape.
+/// A local anchor pin is optional. When supplied, this comparison preserves
+/// its original JSON structure; the signed policy is resolved independently.
+/// This local restriction is not a Federation requirement or a statement that
+/// the historical non-optional formal model covers the current optional API.
 pub(super) fn policy_equiv(a: &Value, b: &Value) -> bool {
     canonicalize_json(a) == canonicalize_json(b)
 }
@@ -179,4 +177,20 @@ pub(super) fn apply_resolved(
         }
     }
     Ok(Value::Object(result))
+}
+
+/// Validate an optional local anchor equality pin without applying it.
+/// Original values remain authoritative for the separate pin comparison.
+pub(crate) fn validate_metadata_policy_pin(policy: Option<&Value>) -> Result<(), FederationError> {
+    let Some(policy) = policy else {
+        return Ok(());
+    };
+    let types = policy
+        .as_object()
+        .filter(|types| !types.is_empty())
+        .ok_or_else(|| error("anchor metadata policy must be a nonempty object"))?;
+    for (entity_type, policy) in types {
+        parse_type(policy, Some(entity_type))?;
+    }
+    Ok(())
 }

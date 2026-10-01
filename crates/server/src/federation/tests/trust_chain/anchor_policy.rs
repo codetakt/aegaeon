@@ -24,7 +24,7 @@ fn max_path_length_direct_chain_allowed() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
@@ -54,7 +54,7 @@ fn allowed_leaf_entity_types_direct_chain_rejects_disallowed_leaf_metadata() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
@@ -85,7 +85,7 @@ fn allowed_leaf_entity_types_intermediate_chain_rejects_ancestor_constraint() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut leaf_config = sample_entity_config(leaf_id, now);
@@ -127,7 +127,7 @@ fn allowed_leaf_entity_types_accepts_matching_leaf_metadata() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
@@ -150,213 +150,89 @@ fn allowed_leaf_entity_types_accepts_matching_leaf_metadata() {
     );
 }
 
-// ── Anchor Policy Matching ────────────────────────────────────────
+// ── Optional local anchor policy pin ─────────────────────────────
 
-#[test]
-fn anchor_policy_mismatch_skips_anchor() {
-    let now = 1_700_000_000_i64;
+fn resolve_pinned_policy(
+    pin: Option<Value>,
+    signed_policy: Option<Value>,
+) -> Result<TrustChain, FederationError> {
+    let now = 1_700_000_000;
     let ta_id = "https://ta.example.com";
     let leaf_id = "https://rp.example.com";
-
-    let anchor_policy = json!({
-        "grant_types": { "subset_of": ["authorization_code"] }
-    });
-
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
+    let anchor = TrustAnchor {
+        entity_id: ta_id.into(),
         jwks: sample_jwks(),
-        metadata_policy: Some(anchor_policy),
-    }];
-
-    // Sub stmt has a *different* policy than the anchor
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    sub_stmt.metadata_policy = Some(HashMap::from([(
-        "grant_types".to_string(),
-        json!({ "subset_of": ["implicit"] }),
-    )]));
-
+        metadata_policy: pin,
+    };
+    let mut subordinate = sample_subordinate_statement(ta_id, leaf_id, now);
+    subordinate.metadata_policy =
+        signed_policy.map(|policy| must_ok(serde_json::from_value(policy)));
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
     fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
+    fetcher.add_subordinate_stmt(ta_id, leaf_id, subordinate);
+    resolve_trust_chain_for_test(leaf_id, &[anchor], &fetcher, now)
+}
 
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_err(),
-        "policy mismatch should cause chain resolution to fail"
-    );
+fn valid_pin() -> Value {
+    json!({"openid_relying_party":{"grant_types":{"subset_of":["authorization_code","refresh_token"]}}})
 }
 
 #[test]
 fn anchor_policy_match_succeeds() {
-    let now = 1_700_000_000_i64;
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-
-    let policy = json!({
-        "grant_types": { "subset_of": ["authorization_code"] }
-    });
-
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
-        jwks: sample_jwks(),
-        metadata_policy: Some(policy.clone()),
-    }];
-
-    // Sub stmt has the *same* policy as the anchor
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    sub_stmt.metadata_policy = Some(HashMap::from([(
-        "grant_types".to_string(),
-        json!({ "subset_of": ["authorization_code"] }),
-    )]));
-
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
-    fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
-
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_ok(),
-        "matching policy should allow chain resolution"
-    );
+    assert!(resolve_pinned_policy(Some(valid_pin()), Some(valid_pin())).is_ok());
 }
 
 #[test]
-fn anchor_policy_none_rejects_before_chain_validation() {
-    let now = 1_700_000_000_i64;
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
-        jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
-    }];
-
-    // Sub stmt has a policy, but the trust anchor policy is absent.
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    sub_stmt.metadata_policy = Some(HashMap::from([(
-        "grant_types".to_string(),
-        json!({ "subset_of": ["authorization_code"] }),
-    )]));
-
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
-    fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
-
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_err(),
-        "missing trust-anchor metadata_policy must fail closed"
-    );
+fn anchor_policy_mismatch_skips_anchor() {
+    let other =
+        json!({"openid_relying_party":{"grant_types":{"subset_of":["authorization_code"]}}});
+    assert!(resolve_pinned_policy(Some(valid_pin()), Some(other)).is_err());
 }
 
 #[test]
-fn anchor_policy_empty_vs_sub_none_rejects() {
-    // Anchor has Some({}) (empty policy), subordinate has None.
-    // Per F* anchor_sub_policy_consistent: anchor_sub.policy = Some ta.ta_policy
-    // requires subordinate to carry Some(...), even when the anchor policy is {}.
-    // None ≠ Some({}) — strict F* alignment.
-    let now = 1_700_000_000_i64;
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
-        jwks: sample_jwks(),
-        metadata_policy: Some(json!({})), // empty policy
-    }];
-
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    sub_stmt.metadata_policy = None;
-
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
-    fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
-
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_err(),
-        "subordinate must carry policy when anchor requires one, even if anchor policy is empty"
-    );
+fn anchor_policy_none_allows_signed_or_absent_policy() {
+    assert!(resolve_pinned_policy(None, Some(valid_pin())).is_ok());
+    assert!(resolve_pinned_policy(None, None).is_ok());
 }
 
 #[test]
 fn anchor_policy_present_vs_sub_none_rejects() {
-    // Anchor has a real policy, subordinate has None → mismatch
-    let now = 1_700_000_000_i64;
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
-        jwks: sample_jwks(),
-        metadata_policy: Some(json!({
-            "grant_types": { "subset_of": ["authorization_code"] }
-        })),
-    }];
-
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    sub_stmt.metadata_policy = None;
-
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
-    fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
-
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_err(),
-        "anchor with real policy should reject subordinate with no policy"
-    );
+    assert!(resolve_pinned_policy(Some(valid_pin()), None).is_err());
 }
 
 #[test]
-fn anchor_policy_key_order_invariant() {
-    // Anchor and subordinate have same policy but keys in different order.
-    // canonicalize_json sorts keys, so they should match.
-    let now = 1_700_000_000_i64;
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
+fn anchor_policy_invalid_empty_null_and_nested_forms_reject() {
+    for invalid in [
+        json!({}),
+        Value::Null,
+        json!(true),
+        json!({"openid_relying_party":{}}),
+        json!({"openid_relying_party":{"x":{}}}),
+        json!({"openid_relying_party":{"x":{"add":[true]}}}),
+    ] {
+        assert!(resolve_pinned_policy(Some(invalid), None).is_err());
+    }
+}
 
-    // Note: serde_json::json! macro produces BTreeMap-ordered keys,
-    // but HashMap serialization order is unspecified, so this tests
-    // that canonicalize_json handles the difference.
-    let anchor_policy = json!({
-        "id_token_signed_response_alg": { "one_of": ["ES256"] },
-        "grant_types": { "subset_of": ["authorization_code"] }
-    });
+#[test]
+fn anchor_policy_array_order_remains_significant() {
+    let reordered = json!({"openid_relying_party":{"grant_types":{"subset_of":["refresh_token","authorization_code"]}}});
+    assert!(resolve_pinned_policy(Some(valid_pin()), Some(reordered)).is_err());
+}
 
-    let trust_anchors = vec![TrustAnchor {
-        entity_id: ta_id.to_string(),
-        jwks: sample_jwks(),
-        metadata_policy: Some(anchor_policy),
-    }];
-
-    let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
-    // HashMap insertion order differs from JSON key order
-    let mut policy_map = HashMap::new();
-    policy_map.insert(
-        "grant_types".to_string(),
-        json!({ "subset_of": ["authorization_code"] }),
-    );
-    policy_map.insert(
-        "id_token_signed_response_alg".to_string(),
-        json!({ "one_of": ["ES256"] }),
-    );
-    sub_stmt.metadata_policy = Some(policy_map);
-
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
-    fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
-    fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
-
-    let result = resolve_trust_chain_for_test(leaf_id, &trust_anchors, &fetcher, now);
-    assert!(
-        result.is_ok(),
-        "key order should not affect policy equivalence"
-    );
+#[test]
+fn anchor_policy_key_order_invariant_and_unknown_operators_retained() {
+    let pin: Value = must_ok(serde_json::from_str(
+        r#"{"openid_relying_party":{"x":{"extension":{"b":2,"a":1},"essential":false}}}"#,
+    ));
+    let reordered: Value = must_ok(serde_json::from_str(
+        r#"{"openid_relying_party":{"x":{"essential":false,"extension":{"a":1,"b":2}}}}"#,
+    ));
+    assert!(resolve_pinned_policy(Some(pin.clone()), Some(reordered)).is_ok());
+    assert!(resolve_pinned_policy(
+        Some(pin),
+        Some(json!({"openid_relying_party":{"x":{"essential":false}}}))
+    )
+    .is_err());
 }
