@@ -1,3 +1,33 @@
+// Redis INCR parses canonical signed decimal text, not a Lua double. Preserve
+// the complete i64 domain while rejecting the maximum positive value, whose
+// increment would overflow. This does not establish rollback after other errors.
+const INCREMENT_PREFLIGHT: &str = r#"
+local function increment_is_safe(key)
+  local kind = redis.call("TYPE", key).ok
+  if kind == "none" then
+    return true
+  end
+  if kind ~= "string" then
+    return false
+  end
+  -- Bound the Lua copy and parsing work before loading a malformed value.
+  if redis.call("STRLEN", key) > 20 then
+    return false
+  end
+  local text = redis.call("GET", key)
+  if text == "0" then
+    return true
+  end
+  local negative = string.sub(text, 1, 1) == "-"
+  local digits = negative and string.sub(text, 2) or text
+  if not string.match(digits, "^[1-9][0-9]*$") then
+    return false
+  end
+  local limit = negative and "9223372036854775808" or "9223372036854775806"
+  return #digits < #limit or (#digits == #limit and digits <= limit)
+end
+"#;
+
 const STORE_CODE_IF_ABSENT: &str = r#"
 if ARGV[4] == "1" and redis.call("EXISTS", KEYS[2]) == 1 then
   return "state"
@@ -16,6 +46,21 @@ if ARGV[9] == "1" and redis.call("GET", KEYS[8]) ~= ARGV[12] then
 end
 if ARGV[10] == "1" and redis.call("EXISTS", KEYS[9]) == 1 then
   return "request_object_jti"
+end
+if not increment_is_safe(KEYS[4]) then
+  return redis.error_reply("invalid authorization code version counter")
+end
+if ARGV[4] == "1" then
+  local kind = redis.call("TYPE", KEYS[5]).ok
+  if kind ~= "none" and kind ~= "zset" then
+    return redis.error_reply("invalid authorization code state index type")
+  end
+end
+if ARGV[5] == "1" then
+  local kind = redis.call("TYPE", KEYS[6]).ok
+  if kind ~= "none" and kind ~= "zset" then
+    return redis.error_reply("invalid authorization code nonce index type")
+  end
 end
 if ARGV[4] == "1" then
   redis.call("SET", KEYS[2], ARGV[6], "PX", ARGV[2])
@@ -44,6 +89,9 @@ const STORE_CODE_IF_ABSENT_ARG_COUNT: usize = 12;
 const CONSUME_CODE: &str = r#"
 local payload = redis.call("GET", KEYS[1])
 if payload then
+  if not increment_is_safe(KEYS[2]) then
+    return redis.error_reply("invalid authorization code version counter")
+  end
   redis.call("DEL", KEYS[1])
   redis.call("INCR", KEYS[2])
 end
@@ -125,11 +173,11 @@ pub(super) fn invoke_store_code_if_absent(
 }
 
 pub(super) fn store_code_if_absent_script() -> redis::Script {
-    redis::Script::new(STORE_CODE_IF_ABSENT)
+    redis::Script::new(&format!("{INCREMENT_PREFLIGHT}{STORE_CODE_IF_ABSENT}"))
 }
 
 pub(super) fn consume_code_script() -> redis::Script {
-    redis::Script::new(CONSUME_CODE)
+    redis::Script::new(&format!("{INCREMENT_PREFLIGHT}{CONSUME_CODE}"))
 }
 
 pub(super) fn release_lock_if_owner_script() -> redis::Script {
@@ -251,3 +299,6 @@ mod tests {
         assert!(script.contains("return 0"));
     }
 }
+
+#[cfg(test)]
+mod redis_preflight_tests;
