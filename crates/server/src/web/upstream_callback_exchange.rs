@@ -114,6 +114,15 @@ async fn exchange_upstream_callback_token(
             issuer_base,
         )
     })?;
+    super::upstream_endpoint_query::validate_token_endpoint_query(&request.token_endpoint)
+        .map_err(|message| {
+            json_error_with_iss(
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                Some(&message),
+                issuer_base,
+            )
+        })?;
     let mut token_req = client.post(&request.token_endpoint).form(&form);
     if request.client_auth_method == "client_secret_basic" {
         if let Some(secret) = request.client_secret.as_ref() {
@@ -244,3 +253,6 @@ pub(super) async fn perform_upstream_callback_exchange(
         id_token,
     })
 }
+
+#[cfg(test)]
+mod query_tests;

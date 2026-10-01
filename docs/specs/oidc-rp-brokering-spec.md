@@ -53,7 +53,7 @@ following discovery members are admitted under the same endpoint policy:
 - optional `end_session_endpoint`
 
 Each admitted endpoint MUST be an absolute URL with a host, MUST use `https`, MUST NOT contain
-userinfo credentials, and MUST NOT contain a query or fragment component. Rust test builds may use
+userinfo credentials, and MUST NOT contain a fragment component. Existing query components are permitted. Rust test builds may use
 loopback `http` endpoints for local mock providers only; this exception is not part of the
 production runtime boundary.
 
@@ -66,8 +66,33 @@ target checks and redirect policy.
 OIDC treats `end_session_endpoint` as optional. Aegaeon keeps that protocol optionality, but if the
 provider publishes `end_session_endpoint`, the value is admitted fail-closed under the same upstream
 outbound policy as the mandatory discovery endpoints. This avoids a weaker logout-only URL path and
-prevents the server from appending relay state to a provider-supplied URL that already carries a
-query or fragment.
+retains the same fragment, credentials, transport and host restrictions on logout URLs.
+
+## Upstream Endpoint Query Retention
+
+RFC 6749 sections 3.1 and 3.2 require retaining an endpoint's existing query when adding request
+parameters. Aegaeon preserves the encoded query prefix, ordering, repeated vendor keys, blank values
+and escapes. Authorization and end-session builders inspect form-decoded names: an absent generated
+parameter is appended, exactly one equal value is reused without rewriting its bytes, and a
+conflicting or duplicate occurrence is rejected. Encoded name aliases receive the same check;
+malformed name encoding or an applicable value that cannot be decoded exactly is rejected.
+Unrelated vendor values remain opaque.
+
+Authorization checks cover every parameter actually emitted, including conditional `acr_values`,
+`max_age` and `prompt`. Endpoint `request` and `request_uri` parameters are rejected because this
+RP path does not process provider-supplied Request Objects. These checks run before inserting the
+authorization transaction, so rejection does not issue a redirect or browser cookie.
+
+Code exchange and refresh retain the endpoint URL query while sending mandatory form fields in the
+body. As a local ambiguity policy, token endpoint queries cannot contain `grant_type`, `code`,
+`redirect_uri`, `code_verifier`, `refresh_token`, `client_id`, `client_secret`, `client_assertion`,
+`client_assertion_type` or `scope`. JWKS and discovery GET calls do not inject OAuth form fields.
+Exact metadata/Federation endpoint comparisons and cache keys retain query spelling; queries are
+not stripped or normalized to make endpoints agree. Issuer identifiers remain query-free.
+
+No configuration or schema migration is required. Previously rejected provider query endpoints work
+only when all instances handling that transaction have this behavior. These finite runtime tests do
+not establish deployment-wide acceptance or extend formal proof claims.
 
 ## Upstream Issuer Identity
 
@@ -140,8 +165,9 @@ URI. The serialized digest remains optional for legacy decoding; absence never g
 When brokered upstream logout is enabled for a connection, Aegaeon appends `logout_hint`,
 `post_logout_redirect_uri`, and relay `state` only after the discovered `end_session_endpoint` has
 passed endpoint admission and the stored endpoint still satisfies the current active upstream
-outbound policy at logout time. A preexisting query or fragment on that endpoint suppresses the
-front-channel redirect target fail-closed.
+outbound policy at logout time. Existing vendor query fields are preserved. A fragment or a
+conflicting/duplicate generated parameter suppresses the front-channel target fail-closed, before
+creating an incident or relay record.
 
 Unknown or incomplete upstream logout results remain handled by the logout-recovery model in
 `federation-logout-recovery-spec.md`; endpoint admission does not claim that the upstream OP actually

@@ -87,6 +87,27 @@ pub(super) async fn store_upstream_authorize_request(
         issued_at,
         expires_at,
     };
+    let flow = UpstreamAuthorizeFlowState {
+        redirect_uri,
+        state_token,
+        nonce,
+        code_challenge,
+        browser_secret,
+        expires_at,
+        ttl_secs: state.upstream.auth_store.ttl().as_secs(),
+    };
+    // Resolve endpoint collisions before inserting transaction state or issuing a cookie.
+    build_upstream_authorize_url(
+        issuer_base,
+        discovery,
+        &context.connection.client_id,
+        input,
+        &flow,
+        matches!(
+            context.active_logout_recovery_policy,
+            Some(crate::upstream::UpstreamLogoutRecoveryPolicy::ForcePromptLogin)
+        ),
+    )?;
     if let Err(err) = state
         .upstream
         .auth_store
@@ -102,15 +123,7 @@ pub(super) async fn store_upstream_authorize_request(
         ));
     }
 
-    Ok(UpstreamAuthorizeFlowState {
-        redirect_uri,
-        state_token,
-        nonce,
-        code_challenge,
-        browser_secret,
-        expires_at,
-        ttl_secs: state.upstream.auth_store.ttl().as_secs(),
-    })
+    Ok(flow)
 }
 
 pub(super) fn build_upstream_authorize_redirect_response(
@@ -121,36 +134,14 @@ pub(super) fn build_upstream_authorize_redirect_response(
     flow: &UpstreamAuthorizeFlowState,
     force_prompt_login: bool,
 ) -> Result<Response, Response> {
-    let mut auth_url = Url::parse(&discovery.authorization_endpoint).map_err(|_| {
-        json_error_with_iss(
-            StatusCode::BAD_GATEWAY,
-            "server_error",
-            Some("authorization_endpoint invalid"),
-            issuer_base,
-        )
-    })?;
-    {
-        let mut pairs = auth_url.query_pairs_mut();
-        pairs.append_pair("response_type", "code");
-        pairs.append_pair("client_id", client_id);
-        pairs.append_pair("redirect_uri", &flow.redirect_uri);
-        pairs.append_pair("scope", &input.scope);
-        pairs.append_pair("state", &flow.state_token);
-        pairs.append_pair("nonce", &flow.nonce);
-        if let Some(challenge) = flow.code_challenge.as_ref() {
-            pairs.append_pair("code_challenge", challenge);
-            pairs.append_pair("code_challenge_method", "S256");
-        }
-        if let Some(acr) = input.acr.as_ref() {
-            pairs.append_pair("acr_values", acr);
-        }
-        if let Some(max_age) = input.max_age {
-            pairs.append_pair("max_age", &max_age.to_string());
-        }
-        if force_prompt_login {
-            pairs.append_pair("prompt", "login");
-        }
-    }
+    let auth_url = build_upstream_authorize_url(
+        issuer_base,
+        discovery,
+        client_id,
+        input,
+        flow,
+        force_prompt_login,
+    )?;
 
     let mut response = no_cache_redirect_response(auth_url.as_str());
     let remaining = cookie_max_age(flow.expires_at, SystemTime::now(), flow.ttl_secs);
@@ -163,6 +154,55 @@ pub(super) fn build_upstream_authorize_redirect_response(
         response.headers_mut().append(header::SET_COOKIE, value);
     }
     Ok(response)
+}
+
+fn build_upstream_authorize_url(
+    issuer_base: &str,
+    discovery: &OidcDiscovery,
+    client_id: &str,
+    input: &UpstreamAuthorizeInput,
+    flow: &UpstreamAuthorizeFlowState,
+    force_prompt_login: bool,
+) -> Result<Url, Response> {
+    let query_error = |message: &str| {
+        json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some(message),
+            issuer_base,
+        )
+    };
+    let mut url = Url::parse(&discovery.authorization_endpoint)
+        .map_err(|_| query_error("authorization_endpoint invalid"))?;
+    let max_age = input.max_age.map(|value| value.to_string());
+    let mut parameters = vec![
+        ("response_type", "code"),
+        ("client_id", client_id),
+        ("redirect_uri", &flow.redirect_uri),
+        ("scope", &input.scope),
+        ("state", &flow.state_token),
+        ("nonce", &flow.nonce),
+    ];
+    if let Some(challenge) = flow.code_challenge.as_deref() {
+        parameters.push(("code_challenge", challenge));
+        parameters.push(("code_challenge_method", "S256"));
+    }
+    if let Some(acr) = input.acr.as_deref() {
+        parameters.push(("acr_values", acr));
+    }
+    if let Some(age) = max_age.as_deref() {
+        parameters.push(("max_age", age));
+    }
+    if force_prompt_login {
+        parameters.push(("prompt", "login"));
+    }
+    super::super::upstream_endpoint_query::append_endpoint_parameters(
+        &mut url,
+        &parameters,
+        &["request", "request_uri"],
+    )
+    .map_err(|message| query_error(&message))?;
+    Ok(url)
 }
 
 fn cookie_max_age(expires_at: SystemTime, now: SystemTime, ttl_secs: u64) -> u64 {
@@ -189,3 +229,6 @@ mod tests {
         assert_eq!(cookie_max_age(now - Duration::from_secs(1), now, 1), 0);
     }
 }
+
+#[cfg(test)]
+mod query_tests;

@@ -3,7 +3,7 @@
 // UpstreamAuthStore round-trip tests
 // -----------------------------------------------------------------------
 
-fn make_auth_request(
+pub(super) fn make_auth_request(
     state: &str,
     ttl: std::time::Duration,
 ) -> crate::upstream::UpstreamAuthRequest {
@@ -362,18 +362,14 @@ fn validate_https_endpoint_rejects_credentials() {
 }
 
 #[test]
-fn validate_https_endpoint_rejects_query_or_fragment() {
-    for endpoint in [
-        "https://example.com/path?state=bad",
-        "https://example.com/path#fragment",
-    ] {
-        let result = validate_https_endpoint(endpoint, "test");
-        assert!(result.is_err(), "{endpoint} should be rejected");
-        let Err(err) = result else {
-            return;
-        };
-        assert!(err.contains("query or fragment"));
-    }
+fn validate_https_endpoint_accepts_query_and_rejects_fragment() {
+    assert!(validate_https_endpoint("https://example.com/path?vendor=%2f&vendor=", "test").is_ok());
+    let result = validate_https_endpoint("https://example.com/path#fragment", "test");
+    assert!(result.is_err(), "fragment should be rejected");
+    let Err(err) = result else {
+        return;
+    };
+    assert!(err.contains("fragment"));
 }
 
 #[test]

@@ -31,3 +31,8 @@ crates/server/src/web/management/account_link/read/filters.rs:        upstream_s
 # authority. This inventory records the resolver's defaulting contract.
 crates/server/src/web/authorize_context.rs:    Prompt::parse(raw.unwrap_or_default()).map_err(|description| {
 crates/server/src/web/par_endpoint/resolution.rs:    if let Err(description) = Prompt::parse(draft.prompt.clone().unwrap_or_default()) {
+
+# An absent optional endpoint query is an empty parameter sequence for appending
+# generated request fields. URL parsing and applicable form decoding failures
+# remain errors; neither malformed input nor persistence failures are defaulted.
+crates/server/src/web/upstream_endpoint_query.rs:        .unwrap_or_default()

@@ -96,6 +96,9 @@ pub(in crate::web) fn validate_upstream_discovery(
         "token_endpoint",
         allowed_domains,
     )?;
+    super::super::upstream_endpoint_query::validate_token_endpoint_query(
+        &discovery.token_endpoint,
+    )?;
     validate_upstream_metadata_endpoint(&discovery.jwks_uri, "jwks_uri", allowed_domains)?;
     if let Some(endpoint) = discovery.end_session_endpoint.as_deref() {
         validate_upstream_metadata_endpoint(endpoint, "end_session_endpoint", allowed_domains)?;

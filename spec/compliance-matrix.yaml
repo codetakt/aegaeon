@@ -294,6 +294,24 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-015
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: As an upstream OAuth client, retain existing endpoint query components when adding request parameters.
+  module: crates/server/src/web/upstream_endpoint_query.rs
+  proof: []
+  tests:
+  - crates/server/src/web/upstream_endpoint_query/tests.rs
+  - crates/server/src/web/upstream_authorize/flow/query_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/query_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/query_tests.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/upstream_endpoint_query.rs
+  notes:
+  - "Finite upstream authorization/logout builder and local HTTP token/refresh/JWKS tests; no formal proof or deployed-product closure is asserted."
+  - "Encoded vendor query bytes are retained. Exact generated-field equality and duplicate/conflict rejection are local ambiguity policy; token body field names and unprocessed authorization request/request_uri names cannot be injected through endpoint queries."
+  - "Issuer syntax, exact metadata/Federation agreement, cache identity and SSRF/allowlist/transport checks remain separate requirements."
 rfc_6750:
 - id: 6750-001
   section: '2.1'
