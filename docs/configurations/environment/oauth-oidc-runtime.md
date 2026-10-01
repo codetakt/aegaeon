@@ -230,6 +230,18 @@ supported PostgreSQL-backed runtime and refresh the in-process runtime snapshot 
 The local snapshot remains an optimization; PostgreSQL is the authoritative registry, and the
 monitor exits if a node cannot converge to the DB projection.
 
+The DCR self-check is required when `policy.dcrEverparseRuntimeEnabled` is enabled
+or the server is built with `verified-claim`. A required unavailable or rejecting
+native parser produces an internal registration error. The check encodes a
+projection of parsed metadata into a length-prefixed binary buffer; it checks that
+buffer's structure, not the original JSON or all grant/response relationships.
+The runtime grant mask uses `0x1` for authorization code, `0x2` for refresh,
+`0x4` for client credentials, `0x8` for JWT bearer, `0x10` for token exchange and
+`0x20` for the RFC 8628 device grant. Combinations preserve each bit. These are
+internal representation values, not OAuth wire values. The generated parser's
+`UINT32` grant field accepts this representation without a layout change;
+registration and device endpoint policy checks still determine admission.
+
 ## PAR (Pushed Authorization Requests)
 
 Plain `/par` forms require `client_id` even with Basic or assertion authentication.
