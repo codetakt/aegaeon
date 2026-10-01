@@ -2923,6 +2923,23 @@ rfc_8628:
   - "User approval endpoint with GET /device (form), POST /device/approve, POST /device/deny."
   - "CSRF protection via device_csrf_store. Supports verification_uri_complete pre-fill."
 
+- id: 8628-106
+  section: '3.3.1, 5.4'
+  requirement: SHOULD
+  description: Display the user code and ask the user to compare it with the device in their possession before approval
+  module: crates/server/src/web/device_flow/verification/actions.rs
+  tests:
+  - crates/server/src/device_authz/tests/rendering.rs
+  - crates/server/src/web/grant_error_tests/devices/confirmation/admission.rs
+  - crates/server/src/web/grant_error_tests/devices/confirmation/rendering.rs
+  ci_check: cargo test -p aegaeon-server --lib device_confirmation -- --include-ignored
+  status: partial
+  runtime_link: crates/server/src/device_authz/rendering.rs
+  notes:
+  - "Exact confirm_device=yes is an additional browser policy enforced before approval; missing, duplicate or other values refuse. Denial remains independent. Existing session/CSRF/rate/code checks and store normalization remain."
+  - "Finite router tests use PostgreSQL configuration and Redis device/token state, with process-local browser session/CSRF/rate fixtures. They cover canonical display, exact confirmation refusal with pending state unchanged, positive token issuance and reuse refusal. No proof-status upgrade or cryptographic possession claim."
+  - "Old open forms must be reopened after upgrade. Code generation, alphabet, entropy, expiry and storage contracts are unchanged; no database/Redis migration."
+
 rfc_8693:
 - id: 8693-001
   requirement: TRACKING

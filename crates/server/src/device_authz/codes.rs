@@ -65,7 +65,7 @@ pub(super) fn user_code_char_from_random_byte(byte: u8) -> Option<char> {
 }
 
 /// Normalize a user code for comparison: uppercase, strip hyphens and whitespace.
-pub(super) fn normalize_user_code(code: &str) -> String {
+pub(crate) fn normalize_user_code(code: &str) -> String {
     code.chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
         .map(|c| c.to_ascii_uppercase())
@@ -73,7 +73,7 @@ pub(super) fn normalize_user_code(code: &str) -> String {
 }
 
 /// Format a user code as `XXXX-XXXX` for display.
-pub(super) fn format_user_code(code: &str) -> String {
+pub(crate) fn format_user_code(code: &str) -> String {
     if code.len() == USER_CODE_LENGTH {
         format!("{}-{}", &code[..4], &code[4..])
     } else {

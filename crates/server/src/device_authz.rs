@@ -29,12 +29,13 @@ mod types;
 
 #[cfg(test)]
 use codes::{
-    format_user_code, generate_device_code, hash_device_code, normalize_user_code,
-    user_code_char_from_random_byte, USER_CODE_ALPHABET,
+    generate_device_code, hash_device_code, user_code_char_from_random_byte, USER_CODE_ALPHABET,
 };
 
 #[cfg(test)]
 use redis_backend::{RedisDeviceCodeKeyspace, RedisDeviceCodeStoreBackend};
+
+pub(crate) use codes::{format_user_code, normalize_user_code};
 
 pub use csrf::{CsrfTokenStore, CsrfTokenStoreError};
 pub use rate_limit::VerificationRateLimiter;

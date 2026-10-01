@@ -66,3 +66,40 @@ fn render_user_code_form_escapes_xss_in_prefill() {
     assert!(!html.contains("<img onerror"));
     assert!(html.contains("&lt;img"));
 }
+
+#[test]
+fn device_confirmation_renderer_escapes_every_displayed_and_hidden_value() {
+    let hostile = "<&\"'>";
+    let escaped = "&lt;&amp;&quot;&#x27;&gt;";
+    let html = render_confirm_page(hostile, hostile, hostile, Some(hostile), Some(hostile));
+    assert!(!html.contains(hostile));
+    assert_eq!(html.matches(escaped).count(), 8);
+    assert!(html.contains("I have this device and its displayed code matches the code above."));
+}
+
+#[test]
+fn device_confirmation_checkbox_is_unchecked_required_and_deny_is_independent() {
+    let html = render_confirm_page("csrf", "ACDE-FGHJ", "client", None, None);
+    let approve = html
+        .split("action=\"/device/approve\"")
+        .nth(1)
+        .expect("approve form")
+        .split("</form>")
+        .next()
+        .expect("approve form end");
+    assert!(approve.contains(
+        "type=\"checkbox\" id=\"confirm_device\" name=\"confirm_device\" value=\"yes\" required"
+    ));
+    assert!(!approve.contains("checked"));
+    let deny = html
+        .split("action=\"/device/deny\"")
+        .nth(1)
+        .expect("deny form")
+        .split("</form>")
+        .next()
+        .expect("deny form end");
+    assert!(!deny.contains("confirm_device"));
+    assert!(!deny.contains("required"));
+    assert!(deny.contains("name=\"csrf_token\" value=\"csrf\""));
+    assert!(deny.contains("name=\"user_code\" value=\"ACDE-FGHJ\""));
+}

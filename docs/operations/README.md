@@ -29,6 +29,8 @@ sender constraints, and release handling.
   explicit offline consent, grant scope, resource binding and recovery.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —
   runtime authority, environment, and startup troubleshooting.
+- `[runbook]` [Device authorization confirmation](device-authorization.md) —
+  browser approval, independent denial, code display and upgrade behavior.
 - `[runbook]` [JWKS operations](jwks-operations.md) — key distribution,
   caching, pinning, and circuit behaviour.
 - `[runbook]` [Shared client JWKS fingerprint state](jwks-fingerprint-state.md) —

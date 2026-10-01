@@ -31,6 +31,19 @@ pub(super) fn result_form_user_code(params: &[(String, String)]) -> Option<Strin
     form_field(params, "user_code").ok().flatten()
 }
 
+/// Check exact confirmation after the existing CSRF, rate and session gates.
+/// Duplicate values fail even when every submitted value is `yes`.
+pub(super) fn require_device_confirmation(params: &[(String, String)]) -> Result<(), Response> {
+    match form_field(params, "confirm_device") {
+        Ok(Some(value)) if value == "yes" => Ok(()),
+        _ => Err(device_result_page_response(
+            StatusCode::BAD_REQUEST,
+            "Confirmation Required",
+            "Confirm that you have the device and its displayed code matches before approving.",
+        )),
+    }
+}
+
 pub(super) async fn validate_result_form_csrf(
     state: &AppState,
     headers: &HeaderMap,
