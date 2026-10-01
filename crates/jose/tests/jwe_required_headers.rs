@@ -199,3 +199,90 @@ fn nested_jwt_content_type_and_generic_bytes_have_distinct_contracts() -> TestRe
     }
     Ok(())
 }
+
+#[test]
+fn nested_jwt_key_resolver_runs_once_after_admission_and_preserves_aad() -> TestResult {
+    use aegaeon_jose::jwe::{
+        decrypt_nested_jwt_rsa_oaep_a256gcm_with_key_resolver as resolve, JweError,
+    };
+    let fixture = EnvelopeFixture::new()?;
+    for header in [
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":"Exact"}"#,
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","\u006bid":"Exact"}"#,
+    ] {
+        let token = fixture.seal(header, b"a.b.c")?;
+        let mut count = 0;
+        assert_eq!(
+            resolve(
+                &token,
+                |kid| {
+                    count += 1;
+                    assert_eq!(kid, Some("Exact"));
+                    Ok(fixture.key.as_slice())
+                },
+                JoseContext::default()
+            )?,
+            b"a.b.c"
+        );
+        assert_eq!(count, 1);
+        let mut segments: Vec<_> = token.split('.').map(str::to_owned).collect();
+        segments[0] = URL_SAFE_NO_PAD.encode(header.replace("Exact", "Other"));
+        assert_eq!(
+            resolve(
+                &segments.join("."),
+                |_| Ok(fixture.key.as_slice()),
+                JoseContext::default()
+            ),
+            Err(JweError::ContentDecryption)
+        );
+        assert_eq!(
+            resolve(
+                &token,
+                |_| Err(JweError::KeySelection),
+                JoseContext::default()
+            ),
+            Err(JweError::KeySelection)
+        );
+    }
+    for header in [
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"text/plain","kid":"Exact"}"#,
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":"Exact","kid":"Other"}"#,
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":7}"#,
+        r#"{"alg":"RSA1_5","enc":"A256GCM","cty":"JWT","kid":"Exact"}"#,
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","crit":["kid"],"kid":"Exact"}"#,
+    ] {
+        let token = fixture.seal(header, b"a.b.c")?;
+        assert!(resolve(
+            &token,
+            |_| panic!("invalid header must precede resolver"),
+            JoseContext::default()
+        )
+        .is_err());
+    }
+    let token = fixture.seal(
+        r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT"}"#,
+        b"a.b.c",
+    )?;
+    // Optional kid is faithfully passed; the live server, not this lower-level
+    // mechanism, owns the mandatory-kid policy.
+    assert_eq!(
+        resolve(
+            &token,
+            |kid| {
+                assert!(kid.is_none());
+                Ok(fixture.key.as_slice())
+            },
+            JoseContext::default()
+        )?,
+        b"a.b.c"
+    );
+    let mut segments: Vec<_> = token.split('.').map(str::to_owned).collect();
+    segments[2] = "AA".into();
+    assert!(resolve(
+        &segments.join("."),
+        |_| panic!("invalid shape must precede resolver"),
+        JoseContext::default()
+    )
+    .is_err());
+    Ok(())
+}

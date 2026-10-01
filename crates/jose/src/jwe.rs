@@ -31,6 +31,8 @@ pub enum JweError {
     ContentDecryption,
     #[error("key unwrap failed")]
     KeyUnwrap,
+    #[error("decryption key selection failed")]
+    KeySelection,
     #[error("invalid RSA private key")]
     InvalidPrivateKey,
 
@@ -43,6 +45,7 @@ struct JweHeader {
     alg: Option<String>,
     enc: Option<String>,
     cty: Option<String>,
+    kid: Option<String>,
 }
 
 impl JweHeader {
@@ -51,6 +54,7 @@ impl JweHeader {
         let mut alg: Option<String> = None;
         let mut enc: Option<String> = None;
         let mut cty: Option<String> = None;
+        let mut kid: Option<String> = None;
 
         for (key, value) in pairs {
             match key.as_str() {
@@ -58,14 +62,15 @@ impl JweHeader {
                 "enc" => enc = Some(value),
                 "cty" => cty = Some(value),
                 // Complete admission has already checked types and extensions.
-                "kid" | "typ" => {}
+                "kid" => kid = Some(value),
+                "typ" => {}
                 // Fail closed if the upstream policy ever allows these to surface.
                 "crit" | "zip" => return Err(JweError::UnsupportedHeader(key)),
                 other => return Err(JweError::UnsupportedHeader(other.to_string())),
             }
         }
 
-        let header = Self { alg, enc, cty };
+        let header = Self { alg, enc, cty, kid };
         header.validate()?;
         Ok(header)
     }
@@ -130,6 +135,7 @@ pub fn decrypt_rsa_oaep_a256gcm_pkcs8_with_context(
 /// Header admission and content type refusal precede key unwrap. Plaintext is
 /// returned only after authentication with the exact original protected segment.
 /// The caller must still parse and verify the inner signed JWT and its claims.
+/// This explicit-single-key API leaves key selection and `kid` policy to the caller.
 ///
 /// # Errors
 ///
@@ -143,6 +149,36 @@ pub fn decrypt_nested_jwt_rsa_oaep_a256gcm_pkcs8_with_context(
     decrypt_pkcs8(jwe, pkcs8_private_key, context, true)
 }
 
+/// Decrypt a nested JWT using exactly one caller-selected private key.
+///
+/// The resolver runs once after complete protected-header, algorithm, content-type
+/// and compact-shape admission, before RSA unwrap. Its optional `kid` is admitted
+/// but remains unauthenticated lookup input until AEAD succeeds. The original
+/// protected segment is retained as AAD; callers must verify the inner signed JWT.
+///
+/// # Errors
+///
+/// Returns header/decryption errors or the resolver's generic key-selection error.
+pub fn decrypt_nested_jwt_rsa_oaep_a256gcm_with_key_resolver<'a, F>(
+    jwe: &str,
+    resolve: F,
+    context: JoseContext,
+) -> Result<Vec<u8>, JweError>
+where
+    F: FnOnce(Option<&str>) -> Result<&'a [u8], JweError>,
+{
+    decrypt_with_key_unwrapper_with_context(
+        jwe,
+        |kid, encrypted_key| {
+            let key = resolve(kid)?;
+            aegaeon_crypto::jwe::rsa_oaep_unwrap(key, encrypted_key)
+                .map_err(|_| JweError::KeyUnwrap)
+        },
+        context,
+        true,
+    )
+}
+
 fn decrypt_pkcs8(
     jwe: &str,
     pkcs8_private_key: &[u8],
@@ -151,7 +187,7 @@ fn decrypt_pkcs8(
 ) -> Result<Vec<u8>, JweError> {
     decrypt_with_key_unwrapper_with_context(
         jwe,
-        |encrypted_key| {
+        |_, encrypted_key| {
             aegaeon_crypto::jwe::rsa_oaep_unwrap(pkcs8_private_key, encrypted_key)
                 .map_err(|_| JweError::KeyUnwrap)
         },
@@ -189,7 +225,7 @@ fn decrypt_with_key_unwrapper_with_context<F>(
     require_jwt: bool,
 ) -> Result<Vec<u8>, JweError>
 where
-    F: Fn(&[u8]) -> Result<Vec<u8>, JweError>,
+    F: FnOnce(Option<&str>, &[u8]) -> Result<Vec<u8>, JweError>,
 {
     let segments: Vec<&str> = jwe.split('.').collect();
     if segments.len() != 5 {
@@ -232,7 +268,7 @@ where
         return Err(JweError::InvalidSerialization);
     }
 
-    let mut cek = unwrap(&encrypted_key)?;
+    let mut cek = unwrap(header.kid.as_deref(), &encrypted_key)?;
     if cek.len() != 32 {
         cek.fill(0);
         return Err(JweError::InvalidCekLength);
@@ -276,7 +312,7 @@ mod tests {
             let called = std::cell::Cell::new(false);
             let result = decrypt_with_key_unwrapper_with_context(
                 &token,
-                |_| {
+                |_, _| {
                     called.set(true);
                     Err(JweError::KeyUnwrap)
                 },

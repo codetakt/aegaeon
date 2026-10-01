@@ -13,7 +13,8 @@ pub(super) use additional_jwks::{merge_signing_public_jwks, validated_additional
 pub(super) use rsa::rsa_public_jwk_from_private_der;
 #[cfg(test)]
 use rsa::rsa_public_jwk_from_private_pem;
-use rsa::rsa_request_object_encryption_public_jwk_from_pkcs8_der;
+mod encryption;
+pub use encryption::OidcRequestObjectEncryptionKey;
 
 #[derive(Clone)]
 enum OidcSigningBackend {
@@ -306,61 +307,6 @@ impl OidcSigningKey {
         validated_additional_signing_jwks(jwks, Some(self.kid.as_str()))?;
         self.additional_public_jwks = additional;
         Ok(self)
-    }
-}
-
-#[derive(Clone)]
-pub struct OidcRequestObjectEncryptionKey {
-    kid: String,
-    pkcs8_der: Arc<Vec<u8>>,
-    public_jwk: Jwk,
-}
-
-impl std::fmt::Debug for OidcRequestObjectEncryptionKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OidcRequestObjectEncryptionKey")
-            .field("kid", &self.kid)
-            .field("public_jwk", &self.public_jwk)
-            .finish_non_exhaustive()
-    }
-}
-
-impl OidcRequestObjectEncryptionKey {
-    /// # Errors
-    ///
-    /// Returns an error when the `kid` is invalid, DER content is not a
-    /// supported RSA PKCS#8 private key, or the public JWK cannot be derived.
-    pub(crate) fn from_rsa_pkcs8_der(
-        kid: String,
-        private_der: &[u8],
-    ) -> Result<Self, OidcConfigError> {
-        if !kid_is_valid(&kid) {
-            return Err(OidcConfigError::InvalidRequestObjectEncryptionKid);
-        }
-
-        let public_jwk =
-            rsa_request_object_encryption_public_jwk_from_pkcs8_der(&kid, private_der)?;
-
-        Ok(Self {
-            kid,
-            pkcs8_der: Arc::new(private_der.to_vec()),
-            public_jwk,
-        })
-    }
-
-    #[must_use]
-    pub fn kid(&self) -> &str {
-        &self.kid
-    }
-
-    #[must_use]
-    pub(crate) fn pkcs8_der(&self) -> &[u8] {
-        self.pkcs8_der.as_ref()
-    }
-
-    #[must_use]
-    pub(crate) fn public_jwk(&self) -> &Jwk {
-        &self.public_jwk
     }
 }
 
