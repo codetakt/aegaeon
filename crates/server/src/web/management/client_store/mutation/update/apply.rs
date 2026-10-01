@@ -69,6 +69,20 @@ pub(in crate::web::management) async fn update_client_row(
         .await
         .map_err(|_| management_internal_error(request_id, "Failed to update client"))?;
 
+    if row.is_some() {
+        let response_types =
+            crate::dcr::metadata_contract::response_types_for_grants(&input.allowed_grant_types);
+        sqlx::query(
+            "UPDATE aegaeon.dynamic_client_registrations SET response_types = $1 WHERE environment_id = $2 AND client_id = $3",
+        )
+        .bind(response_types)
+        .bind(environment_id)
+        .bind(client_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| management_internal_error(request_id, "Failed to update registration metadata"))?;
+    }
+
     row.map(|row| client_from_row_result(&row, request_id))
         .transpose()
 }

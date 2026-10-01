@@ -115,3 +115,5 @@ mod everparse;
 mod redirect_uris;
 mod software_statement;
 mod validation;
+
+mod metadata_contract;

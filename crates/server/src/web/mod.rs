@@ -55,7 +55,7 @@ mod state;
 #[cfg(test)]
 mod test_prelude;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 mod token_authorization_code;
 mod token_client_credentials;
 mod token_device_code;

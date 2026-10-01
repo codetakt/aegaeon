@@ -8,19 +8,13 @@ fn generate_secret() -> String {
     aegaeon_crypto::rand::random_base64url(32)
 }
 
-fn default_registration_grant_types() -> Vec<String> {
-    vec![
-        "authorization_code".to_string(),
-        "refresh_token".to_string(),
-    ]
-}
+use crate::dcr::metadata_contract::default_registration_grants;
 
 fn sanitized_backchannel_logout_uri(
     value: Option<&str>,
     fallback: Option<&String>,
 ) -> Option<String> {
     value
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .or_else(|| fallback.cloned())
@@ -127,7 +121,7 @@ pub(super) fn build_registered_client_from_metadata_with_secret_state(
             existing.is_some_and(|client| client.backchannel_logout_session_required)
         });
     let allowed_grant_types = meta.grant_types.clone().unwrap_or_else(|| {
-        existing.map_or_else(default_registration_grant_types, |client| {
+        existing.map_or_else(default_registration_grants, |client| {
             client.allowed_grant_types.clone()
         })
     });

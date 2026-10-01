@@ -33,6 +33,14 @@ pub(super) fn stored_client_from_row(
         .transpose()
         .map_err(DcrDatabaseError::CorruptRegistration)?;
 
+    let allowed_grant_types: Vec<String> = row.try_get("allowed_grant_types")?;
+    let response_types: Vec<String> = row.try_get("response_types")?;
+    crate::dcr::metadata_contract::validate_grant_response_relation(
+        &allowed_grant_types,
+        &response_types,
+    )
+    .map_err(DcrDatabaseError::CorruptRegistration)?;
+
     Ok(DcrStoredClient {
         team_id: row.try_get("team_id")?,
         tenant_id: row.try_get("tenant_id")?,
@@ -40,7 +48,7 @@ pub(super) fn stored_client_from_row(
         configuration_version_id: row.try_get("configuration_version_id")?,
         database_client_id: row.try_get("database_client_id")?,
         registration_access_token_hash: row.try_get("registration_access_token_hash")?,
-        response_types: row.try_get("response_types")?,
+        response_types,
         has_active_client_secret: row.try_get("has_active_client_secret")?,
         client: RegisteredClient {
             client_id: row.try_get("client_identifier")?,
@@ -56,7 +64,7 @@ pub(super) fn stored_client_from_row(
             jwks_uri: row.try_get("jwks_uri")?,
             token_endpoint_auth_signing_alg: row.try_get("token_endpoint_auth_signing_alg")?,
             allowed_scopes: row.try_get("allowed_scopes")?,
-            allowed_grant_types: row.try_get("allowed_grant_types")?,
+            allowed_grant_types,
             registration_access_token: None,
             client_id_issued_at: Some(client_id_issued_at),
         },

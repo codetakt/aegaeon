@@ -5,7 +5,8 @@ use std::collections::BTreeSet;
 const DCR_SCHEMA_NAME: &str = "aegaeon";
 const DCR_TABLE_NAME: &str = "dynamic_client_registrations";
 const DCR_TABLE_QUALIFIED_NAME: &str = "aegaeon.dynamic_client_registrations";
-const DCR_MIGRATION_HINT: &str = "the aegaeon schema baseline (atlas migrate apply --env local)";
+const DCR_MIGRATION_HINT: &str =
+    "the registration metadata migration 20261002110000 (atlas migrate apply --env local)";
 const DCR_BEARER_TABLE_NAME: &str = "environment_dcr_bearer_tokens";
 const DCR_BEARER_TABLE_QUALIFIED_NAME: &str = "aegaeon.environment_dcr_bearer_tokens";
 const DCR_BEARER_MIGRATION_HINT: &str =
@@ -32,6 +33,8 @@ pub(crate) const REQUIRED_DCR_INDEXES: &[&str] = &[
     "dynamic_client_registrations_env_token_hash_unique",
 ];
 pub(crate) const REQUIRED_DCR_CONSTRAINTS: &[&str] = &[
+    "dynamic_client_registrations_responses_v2",
+    "dynamic_client_registrations_key_source_v1",
     "dynamic_client_registrations_pkey",
     "dynamic_client_registrations_hash_algorithm",
     "dynamic_client_registrations_token_hash_shape",

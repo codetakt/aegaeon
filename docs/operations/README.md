@@ -19,6 +19,9 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Registration metadata consistency upgrade](registration-metadata-upgrade.md) —
+  effective defaults, all-row preflight and guarded predecessor repairs.
+
 - `[runbook]` [Launch against a matching migration inventory](schema-guarded-launch.md) —
   immutable executable binding, guarded OCI entrypoints, and upgrade/rollback scope.
 - `[runbook]` [Configuration membership recovery](configuration-membership-recovery.md) —

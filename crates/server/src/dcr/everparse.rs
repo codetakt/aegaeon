@@ -214,20 +214,12 @@ pub(super) fn encode_dcr_registration_request(
     push_u32_le(&mut out, token_auth_method_tag(&method));
 
     // client_metadata.grant_types (bitmask)
-    let grants = meta.grant_types.clone().unwrap_or_else(|| {
-        vec![
-            "authorization_code".to_string(),
-            "refresh_token".to_string(),
-        ]
-    });
+    let grants = super::metadata_contract::effective_grant_types(meta);
     push_u8(&mut out, u8::from(meta.grant_types.is_some()));
     push_u32_le(&mut out, grant_types_mask(&grants)?);
 
     // client_metadata.response_types (bitmask)
-    let responses = meta
-        .response_types
-        .clone()
-        .unwrap_or_else(|| vec!["code".to_string()]);
+    let responses = super::metadata_contract::effective_response_types(meta);
     push_u8(&mut out, u8::from(meta.response_types.is_some()));
     push_u32_le(&mut out, response_types_mask(&responses)?);
 
@@ -256,7 +248,6 @@ pub(super) fn encode_dcr_registration_request(
     let jwks_uri_bytes = meta
         .jwks_uri
         .as_deref()
-        .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::as_bytes);
     optional_bytes(&mut out, jwks_uri_bytes)?;

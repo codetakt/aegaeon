@@ -1395,8 +1395,28 @@ rfc_7591:
   status: implemented
   notes:
   - "RFC 7591 section 2 requires grant_type metadata to match the token endpoint grant identifier; RFC 8628 section 3.4 defines that identifier. Bit 0x20 and the native self-check are local implementation contracts, not RFC requirements. dcr_everparse_grant_masks_preserve_existing_and_device_bits checks all six masks, combinations and duplicate OR behavior; defaults/auth tags and unknown identifiers have separate controls."
-  - "dcr_everparse_native_device_self_check_and_truncation_control requires actual native parser acceptance and truncated-buffer rejection. dcr_device_self_check_registers_updates_and_authorizes covers real-router PostgreSQL create/update, inherited device metadata, stored/reloaded grants and device authorization admission for code+device. Device-only is tested only at the encoder/native seam."
+  - "dcr_everparse_native_device_self_check_and_truncation_control requires actual native parser acceptance and truncated-buffer rejection. dcr_device_self_check_registers_updates_and_authorizes covers real-router PostgreSQL create/update, inherited device metadata, stored/reloaded grants and device authorization admission for code+device. This row’s device-only evidence is limited to the encoder/native seam; row 7591-009 covers device-only registration metadata."
   - "Disabled/unknown-grant refusals preserve stored state and owner RAT. Required-parser failure rendering is a direct mapper test, not an unavailable-parser build. Runtime policy or verified-claim requires the self-check; optional disabled behavior is tested only in the compatibility build. The parser checks binary structure, not original JSON or complete registration semantics; no new formal assurance is claimed."
+
+- id: 7591-009
+  section: '2, 2.1, 3.2.1'
+  requirement: MUST
+  description: Effective registered grants, responses, redirect identifiers and key source remain consistent through validation, storage and response
+  module: crates/server/src/dcr/metadata_contract.rs
+  proof: []
+  tests:
+  - crates/server/src/dcr/tests/metadata_contract.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/lifecycle.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/refusals.rs
+  - crates/server/src/dcr_persistence/tests/metadata_migration.rs
+  - crates/server/src/dcr_persistence/tests/strict_preflight.rs
+  - crates/server/src/web/management/tests/initialization/registration_metadata.rs
+  ci_check: cargo test -p aegaeon-server --lib metadata -- --include-ignored
+  status: implemented
+  notes:
+  - "RFC 7591 sections 2 and 3.2.1 govern code-only omitted grant defaults, source exclusivity and returning registered substitutions; section 2.1 recommends grant/response consistency. Exact code/empty response sets, duplicate rejection and preserved omitted/null PUT responses are local choices. RFC 6749 section 4.4 requires confidential client credentials; authenticated token exchange is existing local policy."
+  - "Router/PostgreSQL tests cover effective defaults, empty responses, transitions, typed refusals without writes, secret preservation and management transaction synchronization. Migration tests execute actual predecessor schema, all-row guard, exact offline repair template, deterministic corrections and fingerprint consequences. These finite tests do not establish full protocol compliance, key strength or formal assurance."
+  - "The upgrade runbook distinguishes reachable predecessor HTTP repair from guarded offline administrator repair for retained rows. Both the SQL relationship/envelope report and strict read-only local URI/JWK scan must have zero blocking findings with writers stopped. The SQL migration does not execute the Rust parsers. Explicit grant-subset repair changes rights; migration itself does not. Strict public-JWK projection, full owner update roundtripping, software-statement precedence and postcommit token recovery remain separate."
 
 rfc_8414:
 - id: 8414-001

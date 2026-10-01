@@ -21,6 +21,7 @@ pub(crate) use sender_methods::{
     runtime_supported_sender_constrained_method, RUNTIME_SUPPORTED_DCR_SENDER_METHODS,
 };
 pub use uris::validate_redirect_uris;
+pub(crate) use uris::{validate_jwks_uri, validate_server_callback_uri};
 
 pub(in crate::dcr::validation) static REG_BCP_NONCOMPLIANT: std::sync::LazyLock<
     OptionalCounterVec,

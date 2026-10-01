@@ -18,7 +18,7 @@ pub(super) async fn validate_registration_policy_or_response(
     issuer_base: &str,
     meta: &ClientRegistration,
     existing: Option<&crate::client_registry::RegisteredClient>,
-) -> Result<(), Response> {
+) -> Result<ClientRegistration, Response> {
     validate_registration_policy_with_existing_response_types_or_response(
         state,
         issuer_base,
@@ -35,7 +35,7 @@ pub(super) async fn validate_registration_policy_with_existing_response_types_or
     meta: &ClientRegistration,
     existing: Option<&crate::client_registry::RegisteredClient>,
     existing_response_types: Option<&[String]>,
-) -> Result<(), Response> {
+) -> Result<ClientRegistration, Response> {
     let effective = effective_registration_metadata_with_response_types(
         meta,
         existing,
@@ -53,7 +53,8 @@ pub(super) async fn validate_registration_policy_with_existing_response_types_or
         &state.dcr_scope_allowlist,
     )?;
     let profile = resolve_dcr_profile(state, issuer_base).await?;
-    validate_registration_profile_or_response(&effective, &profile)
+    validate_registration_profile_or_response(&effective, &profile)?;
+    Ok(effective)
 }
 
 #[cfg(test)]
@@ -163,5 +164,46 @@ mod tests {
             .ok_or_else(|| "refresh_token must be rejected by the profile".to_string())?;
         assert_eq!(err.code, "grant_types_not_allowed");
         Ok(())
+    }
+    #[test]
+    fn dcr_update_preserves_empty_responses_and_requires_explicit_transition() {
+        let existing = existing_client(vec!["client_credentials".into()]);
+        let omitted = effective_registration_metadata_with_response_types(
+            &ClientRegistration::default(),
+            Some(&existing),
+            Some(&[]),
+        );
+        assert_eq!(omitted.grant_types, Some(vec!["client_credentials".into()]));
+        assert_eq!(omitted.response_types, Some(vec![]));
+        let change = ClientRegistration {
+            grant_types: Some(vec!["authorization_code".into()]),
+            ..Default::default()
+        };
+        let inherited = effective_registration_metadata_with_response_types(
+            &change,
+            Some(&existing),
+            Some(&[]),
+        );
+        assert_eq!(inherited.response_types, Some(vec![]));
+        assert!(
+            crate::dcr::metadata_contract::validate_grant_response_relation(
+                inherited.grant_types.as_deref().expect("effective grants"),
+                inherited
+                    .response_types
+                    .as_deref()
+                    .expect("preserved responses"),
+            )
+            .is_err()
+        );
+        let explicit = ClientRegistration {
+            response_types: Some(vec!["code".into()]),
+            ..change
+        };
+        let resolved = effective_registration_metadata_with_response_types(
+            &explicit,
+            Some(&existing),
+            Some(&[]),
+        );
+        assert_eq!(resolved.response_types, Some(vec!["code".into()]));
     }
 }
