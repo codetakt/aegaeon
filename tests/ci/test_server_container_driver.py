@@ -121,18 +121,25 @@ class ServerContainerDriverTests(unittest.TestCase):
                     self.assertIn("shared_redis_", name, f"{source}: {reason}")
         self.assertTrue(mixed, "mixed test inventory must not be empty")
 
-    def test_namespace_fixtures_are_left_to_their_dedicated_runner(self) -> None:
+    def test_namespace_fixtures_are_left_to_their_dedicated_runners(self) -> None:
         declaration = re.compile(
-            r'#\[ignore\s*=\s*"requires scripts/validation/test_client_jwks_cache.py"\]'
+            r'#\[ignore\s*=\s*"requires scripts/validation/(test_\w+\.py)"\]'
             r"\s*(?:async\s+)?fn\s+(\w+)"
         )
         source_root = ROOT / "crates/server/src"
-        cases = tuple(
-            "::".join((*source.relative_to(source_root).with_suffix("").parts, name))
-            for source in (source_root / "client_registry/jwks_helpers_tests").glob("*.rs")
-            for name in declaration.findall(source.read_text())
-        )
-        self.assertTrue(cases, "namespace fixture inventory must not be empty")
+        declared: dict[str, list[str]] = {
+            "test_client_jwks_cache.py": [],
+            "test_jwks_fingerprint_ledger.py": [],
+        }
+        for source in (source_root / "client_registry").rglob("*.rs"):
+            for runner, name in declaration.findall(source.read_text()):
+                self.assertIn(runner, declared, f"unrecognized namespace runner in {source}")
+                declared[runner].append(
+                    "::".join((*source.relative_to(source_root).with_suffix("").parts, name))
+                )
+        for runner, fixtures in declared.items():
+            self.assertTrue(fixtures, f"{runner}: namespace fixture inventory must not be empty")
+        cases = tuple(case for fixtures in declared.values() for case in fixtures)
         for scope in ("all", "redis", "postgres"):
             with self.subTest(scope=scope):
                 records = self.run_scope(scope)

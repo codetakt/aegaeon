@@ -9,12 +9,13 @@ AEGAEON_DATABASE_URL="${AEGAEON_DATABASE_URL:-$DEFAULT_AEGAEON_DATABASE_URL}"
 AEGAEON_TEST_REDIS_URL="${AEGAEON_TEST_REDIS_URL:-redis://localhost:6379/0}"
 SCOPE="${1:-${AEGAEON_SERVER_CONTAINER_TEST_SCOPE:-all}}"
 
-# These fixtures have their own required namespace runner in CI. They must not
+# These fixtures have their own required namespace runners in CI. They must not
 # run in a broad ignored sweep against the host's network or Compose services.
 NAMESPACE_TEST_SKIPS=(
 	--skip client_registry::jwks_helpers_tests::associated_acquisition_tests::
 	--skip client_registry::jwks_helpers_tests::cache_policy_tests::
 	--skip client_registry::jwks_helpers_tests::refresh_failure_tests::
+	--skip client_registry::jwks_runtime_state::redis_kid::behavior_tests::
 )
 
 usage() {
