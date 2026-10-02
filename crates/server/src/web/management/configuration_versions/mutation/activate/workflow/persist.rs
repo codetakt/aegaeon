@@ -114,7 +114,18 @@ fn ensure_required_runtime_keys_present(
 ) -> Result<(), Response> {
     let missing = required_runtime_key_usages(policy)
         .into_iter()
-        .filter(|usage| runtime_keys.active_key(*usage).is_none())
+        .filter(|usage| {
+            if *usage == RuntimeKeyUsage::JwtIntrospectionSigning {
+                runtime_keys
+                    .active_key_for_algorithm(
+                        *usage,
+                        crate::runtime_keys::RuntimeKeyAlgorithm::EdDsa,
+                    )
+                    .is_none()
+            } else {
+                runtime_keys.active_key(*usage).is_none()
+            }
+        })
         .map(RuntimeKeyUsage::as_db_str)
         .collect::<Vec<_>>();
     if missing.is_empty() {
@@ -246,4 +257,80 @@ fn ensure_jwt_key_manager_constructible(
                 Some(request_id),
             )
         })
+}
+
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+    use base64::Engine as _;
+
+    #[test]
+    fn introspection_configuration_keeps_legacy_required_slot_and_disabled_staging(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
+            .lock()
+            .map_err(|_| "env lock")?;
+        let previous = std::env::var_os(crate::key_encryption::KEY_ENCRYPTION_KEY_ENV);
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(value) => {
+                        std::env::set_var(crate::key_encryption::KEY_ENCRYPTION_KEY_ENV, value)
+                    }
+                    None => std::env::remove_var(crate::key_encryption::KEY_ENCRYPTION_KEY_ENV),
+                }
+            }
+        }
+        let _restore = Restore(previous);
+        std::env::set_var(
+            crate::key_encryption::KEY_ENCRYPTION_KEY_ENV,
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x73; 32]),
+        );
+        let rsa = crate::kms::managed_slot_tests::rsa_key(
+            &crate::kms::managed_slot_tests::rsa_pkcs8(2048)?,
+            "rsa-staged",
+            crate::runtime_keys::RuntimeKeyStatus::Active,
+        )?;
+        let keys = RuntimeKeySet::try_new(vec![rsa.clone()])?;
+        let mut policy = PolicyDocument {
+            oidc_enabled: false,
+            jwt_access_tokens_enabled: false,
+            jwt_introspection_enabled: false,
+            ..PolicyDocument::default()
+        };
+        assert!(
+            ensure_required_runtime_keys_present(&keys, &policy, rsa.environment_id, "staged")
+                .is_ok()
+        );
+        assert!(ensure_jwt_key_managers_constructible(
+            &keys,
+            &policy,
+            rsa.environment_id,
+            "staged"
+        )
+        .is_ok());
+        policy.jwt_introspection_enabled = true;
+        assert!(ensure_required_runtime_keys_present(
+            &keys,
+            &policy,
+            rsa.environment_id,
+            "enabled"
+        )
+        .is_err());
+        assert!(ensure_jwt_key_managers_constructible(
+            &keys,
+            &policy,
+            rsa.environment_id,
+            "enabled"
+        )
+        .is_err());
+        assert!(keys
+            .validate_allowed_signing_algorithms(&["EdDSA".into()])
+            .is_err());
+        let mut invalid = rsa;
+        invalid.provider = crate::runtime_keys::RuntimeKeyProvider::AwsKms;
+        assert!(RuntimeKeySet::try_new(vec![invalid]).is_err());
+        Ok(())
+    }
 }

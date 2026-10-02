@@ -182,8 +182,7 @@ fn managed_request_object_keyring(
         RuntimeKeyUsage::JwtIntrospectionSigning,
     ] {
         for key in runtime_keys
-            .active_key(usage)
-            .into_iter()
+            .active_keys(usage)
             .chain(runtime_keys.active_retiring_keys_at(usage, now))
         {
             if kids.contains(key.kid.as_str()) {

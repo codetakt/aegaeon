@@ -4263,6 +4263,7 @@ rfc_9701:
   notes:
   - "The standalone Kani wrapper does not exercise HTTP content negotiation; its citation was removed. The remaining verified inventory status refers to the cited F* model, not implementation refinement."
   - Content negotiation via Accept header; opt-in per the active management policy `jwtIntrospectionEnabled`.
+  - "Purpose-specific RS256/EdDSA key slots support provisioning and explicit manager selection. The HTTP path still selects EdDSA; this foundation does not complete section 6's RS256 response default or per-recipient signing metadata."
 - id: 9701-002
   section: '4'
   requirement: MUST

@@ -63,3 +63,111 @@ fn disabled_key_managers_are_used_for_disabled_runtime_surfaces() -> TestResult 
     ));
     Ok(())
 }
+
+#[test]
+fn introspection_startup_selects_legacy_eddsa_with_dual_slots() -> TestResult {
+    use aegaeon_server::runtime_keys::{
+        RuntimeKey, RuntimeKeyAlgorithm as Alg, RuntimeKeyProvider, RuntimeKeyStatus,
+        RuntimeKeyUsage as Usage,
+    };
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    let _lock = env_lock()?;
+    let _database = EnvVarGuard::new("AEGAEON_DATABASE_URL", Some(TEST_DATABASE_URL));
+    let _stores = set_base_shared_runtime_store_env();
+    let kek = [0x32; 32];
+    let _kek = EnvVarGuard::new(
+        "AEGAEON_KEY_ENCRYPTION_KEY",
+        Some(&URL_SAFE_NO_PAD.encode(kek)),
+    );
+    let mut cfg = BootstrapConfig::try_from_env()?.into_runtime_baseline();
+    let mut policy = aegaeon_server::management::types::PolicyDocument {
+        jwt_introspection_enabled: true,
+        jwt_access_tokens_enabled: false,
+        ..Default::default()
+    };
+    cfg.apply_management_policy(&policy)?;
+    let output = std::process::Command::new("openssl")
+        .args([
+            "genpkey",
+            "-algorithm",
+            "RSA",
+            "-pkeyopt",
+            "rsa_keygen_bits:2048",
+        ])
+        .output()?;
+    if !output.status.success() {
+        return Err("fixture generation".into());
+    }
+    let der = pem::parse(output.stdout)?.into_contents();
+    use ring::signature::KeyPair as _;
+    let primitive = ring::signature::RsaKeyPair::from_pkcs8(&der).map_err(|_| "fixture key")?;
+    let public_blocks = simple_asn1::from_der(primitive.public_key().as_ref())?;
+    let [simple_asn1::ASN1Block::Sequence(_, fields)] = public_blocks.as_slice() else {
+        return Err("fixture public key".into());
+    };
+    let [simple_asn1::ASN1Block::Integer(_, n), simple_asn1::ASN1Block::Integer(_, e)] =
+        fields.as_slice()
+    else {
+        return Err("fixture public components".into());
+    };
+    let public = aegaeon_server::jwk_types::Jwk {
+        kty: "RSA".into(),
+        use_: Some("sig".into()),
+        kid: "rsa".into(),
+        alg: Some("RS256".into()),
+        n: Some(URL_SAFE_NO_PAD.encode(n.to_biguint().ok_or("n")?.to_bytes_be())),
+        e: Some(URL_SAFE_NO_PAD.encode(e.to_biguint().ok_or("e")?.to_bytes_be())),
+        x: None,
+        y: None,
+        crv: None,
+    };
+    let mut rsa = RuntimeKey {
+        environment_id: uuid::Uuid::from_u128(432),
+        usage: Usage::JwtIntrospectionSigning,
+        algorithm: Alg::Rs256,
+        provider: RuntimeKeyProvider::DatabaseEncrypted,
+        status: RuntimeKeyStatus::Active,
+        retiring_expires_at_epoch_secs: None,
+        kid: "rsa".into(),
+        public_jwk: public,
+        key_handle: String::new(),
+        provider_configuration: serde_json::json!({}),
+    };
+    rsa.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+        &URL_SAFE_NO_PAD.encode(der),
+        &kek,
+        rsa.key_handle_encryption_context(),
+    )?;
+    let ed = aegaeon_crypto::signing::Ed25519SigningKey::generate().map_err(|_| "fixture")?;
+    let mut edkey = rsa.clone();
+    edkey.algorithm = Alg::EdDsa;
+    edkey.kid = "ed".into();
+    edkey.public_jwk = aegaeon_server::jwk_types::Jwk {
+        kty: "OKP".into(),
+        use_: Some("sig".into()),
+        kid: "ed".into(),
+        alg: Some("EdDSA".into()),
+        n: None,
+        e: None,
+        x: Some(URL_SAFE_NO_PAD.encode(ed.public_key)),
+        y: None,
+        crv: Some("Ed25519".into()),
+    };
+    edkey.key_handle = aegaeon_server::key_encryption::encrypt_key_handle(
+        &URL_SAFE_NO_PAD.encode(ed.pkcs8),
+        &kek,
+        edkey.key_handle_encryption_context(),
+    )?;
+    for keys in [vec![edkey.clone()], vec![rsa.clone(), edkey]] {
+        let (manager, secondary) = runtime_key_managers(&cfg, &RuntimeKeySet::try_new(keys)?)?;
+        assert!(secondary.is_none());
+        assert_eq!(manager.jwt_signing_alg(), "EdDSA");
+        assert_eq!(manager.key_id(), "ed");
+    }
+    let rsa_only = RuntimeKeySet::try_new(vec![rsa])?;
+    assert!(runtime_key_managers(&cfg, &rsa_only).is_err());
+    policy.jwt_introspection_enabled = false;
+    cfg.apply_management_policy(&policy)?;
+    assert!(runtime_key_managers(&cfg, &rsa_only).is_ok());
+    Ok(())
+}

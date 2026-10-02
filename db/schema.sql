@@ -1409,7 +1409,7 @@ CREATE TABLE aegaeon.runtime_keys (
     activated_at timestamp with time zone,
     revoked_at timestamp with time zone,
     retiring_expires_at timestamp with time zone,
-    CONSTRAINT runtime_keys_algorithm_matches_usage CHECK ((((usage = 'OIDC_ID_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'RS256'::text)) OR ((usage = 'OIDC_REQUEST_OBJECT_DECRYPTION'::aegaeon.runtime_key_usage) AND (algorithm = 'RSA-OAEP+A256GCM'::text)) OR ((usage = ANY (ARRAY['JWT_ACCESS_TOKEN_SIGNING'::aegaeon.runtime_key_usage, 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage])) AND (algorithm = 'EdDSA'::text)))),
+    CONSTRAINT runtime_keys_algorithm_matches_usage CHECK ((((usage = 'OIDC_ID_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'RS256'::text)) OR ((usage = 'OIDC_REQUEST_OBJECT_DECRYPTION'::aegaeon.runtime_key_usage) AND (algorithm = 'RSA-OAEP+A256GCM'::text)) OR ((usage = 'JWT_ACCESS_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'EdDSA'::text)) OR ((usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text]))))),
     CONSTRAINT runtime_keys_algorithm_non_empty CHECK ((btrim(algorithm) <> ''::text)),
     CONSTRAINT runtime_keys_key_handle_non_empty CHECK ((btrim(key_handle) <> ''::text)),
     CONSTRAINT runtime_keys_kid_non_empty CHECK ((btrim(kid) <> ''::text)),
@@ -2126,14 +2126,14 @@ CREATE UNIQUE INDEX runtime_keys_environment_kid_unique ON aegaeon.runtime_keys 
 -- Name: runtime_keys_one_active_per_environment_usage; Type: INDEX; Schema: aegaeon; Owner: -
 --
 
-CREATE UNIQUE INDEX runtime_keys_one_active_per_environment_usage ON aegaeon.runtime_keys USING btree (environment_id, usage) WHERE (status = 'ACTIVE'::aegaeon.runtime_key_status);
+CREATE UNIQUE INDEX runtime_keys_one_active_per_environment_usage ON aegaeon.runtime_keys USING btree (environment_id, usage) WHERE ((status = 'ACTIVE'::aegaeon.runtime_key_status) AND (usage <> 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
 
 
 --
 -- Name: runtime_keys_one_next_per_environment_usage; Type: INDEX; Schema: aegaeon; Owner: -
 --
 
-CREATE UNIQUE INDEX runtime_keys_one_next_per_environment_usage ON aegaeon.runtime_keys USING btree (environment_id, usage) WHERE (status = 'NEXT'::aegaeon.runtime_key_status);
+CREATE UNIQUE INDEX runtime_keys_one_next_per_environment_usage ON aegaeon.runtime_keys USING btree (environment_id, usage) WHERE ((status = 'NEXT'::aegaeon.runtime_key_status) AND (usage <> 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
 
 
 --
@@ -2937,3 +2937,7 @@ CREATE TABLE aegaeon.application_authorizations (
     end_user_record_id uuid REFERENCES aegaeon.end_users(id) ON DELETE SET NULL,
     PRIMARY KEY (environment_id, client_id, subject)
 );
+
+CREATE UNIQUE INDEX runtime_keys_introspection_one_active_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'ACTIVE'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));
+
+CREATE UNIQUE INDEX runtime_keys_introspection_one_next_per_algorithm ON aegaeon.runtime_keys USING btree (environment_id, usage, algorithm) WHERE ((status = 'NEXT'::aegaeon.runtime_key_status) AND (usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage));

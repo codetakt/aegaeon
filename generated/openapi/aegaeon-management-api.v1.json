@@ -9737,6 +9737,10 @@
           "usage"
         ],
         "properties": {
+          "algorithm": {
+            "type": "string",
+            "description": "Select a NEXT algorithm slot. Omission requires a sole NEXT key for the usage."
+          },
           "baseConfigurationVersionId": {
             "type": "string",
             "format": "uuid"
@@ -10890,7 +10894,7 @@
               "string",
               "null"
             ],
-            "description": "Usage-bound algorithm: RS256 for OIDC signing, RSA-OAEP+A256GCM for OIDC\nrequest-object decryption, and EdDSA for OAuth JWT signing."
+            "description": "Usage-bound algorithm: RS256 for OIDC signing, RSA-OAEP+A256GCM for OIDC\nrequest-object decryption, EdDSA for access signing, RS256 or EdDSA for introspection.\nOmission retains EdDSA for introspection key creation."
           },
           "baseConfigurationVersionId": {
             "type": "string",

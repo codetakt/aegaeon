@@ -53,7 +53,8 @@ environment variables or the public `keyStore` configuration document. Use the m
 `POST /api/v1/teams/{teamId}/environments/{environmentId}/runtimeKeys` to create `databaseEncrypted`
 `OIDC_ID_TOKEN_SIGNING` (`RS256`) or `OIDC_REQUEST_OBJECT_DECRYPTION`
 (`RSA-OAEP+A256GCM`) keys from PKCS#8 RSA private key PEM. Responses and audit records include only
-public metadata and derived public JWK. Use `runtimeKeys/activateNext` for usage-scoped promotion
+public metadata and derived public JWK. Use `runtimeKeys/activateNext` for usage-scoped promotion (with explicit `algorithm` when
+introspection has both RS256 and EdDSA NEXT keys)
 and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETIRING runtime-key set
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.

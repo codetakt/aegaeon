@@ -33,13 +33,13 @@ macro_rules! must_some {
     };
 }
 
-struct EnvVarGuard {
+pub(super) struct EnvVarGuard {
     key: &'static str,
     previous: Option<OsString>,
 }
 
 impl EnvVarGuard {
-    fn new(key: &'static str, value: Option<&str>) -> Self {
+    pub(super) fn new(key: &'static str, value: Option<&str>) -> Self {
         let previous = std::env::var_os(key);
         match value {
             Some(value) => std::env::set_var(key, value),
@@ -230,7 +230,7 @@ fn public_jwt_key_manager_signs_and_verifies() -> TestResult {
     Ok(())
 }
 
-fn managed_eddsa_runtime_key(
+pub(super) fn managed_eddsa_runtime_key(
     kid: &str,
     status: RuntimeKeyStatus,
     encrypted_key_handle: String,

@@ -251,7 +251,7 @@ async fn scenario(removal: Removal) -> TestResult {
             .bind(env.environment_id).fetch_one(&pool).await?;
         let activated = activate_next_runtime_key_inner(&pool,
             &TeamEnvironmentPath::for_tests(env.team_id, env.environment_id),
-            &ActivateRuntimeKeyRequest {base_configuration_version_id:config.to_string(),usage:"OIDC_REQUEST_OBJECT_DECRYPTION".into(),comment:None},
+            &ActivateRuntimeKeyRequest { algorithm: None,base_configuration_version_id:config.to_string(),usage:"OIDC_REQUEST_OBJECT_DECRYPTION".into(),comment:None},
             &state::ManagementSession::human(admin,1),"keyring-activate").await
             .map_err(|r| std::io::Error::other(format!("activate refused: {}",r.status())))?;
         assert_eq!(activated.runtime_key.kid,"fresh-encryption");
