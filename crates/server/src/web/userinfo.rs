@@ -1,9 +1,13 @@
 use super::form_helpers::{form_parse_error_response, singleton_form_field};
 use super::oauth_errors::{
     apply_oauth_authenticate_header, authorization_header, bearer_header_error,
-    bearer_json_error_with_iss, dpop_invalid_token_response, no_cache_json_error_with_iss,
+    dpop_invalid_token_response, no_cache_json_error_with_iss,
 };
-use super::request_admission::{enforce_content_type, enforce_no_credentials_in_uri};
+use super::request_admission::enforce_content_type;
+use super::resource_authentication::{
+    admit_resource_presentation, enforce_resource_uri, no_resource_authentication,
+    presented_resource_scheme, resource_invalid_request, resource_request_error,
+};
 use super::transport_boundary::transport_rejection_for_route;
 use super::{
     dpop_binding_from_request, trusted_mtls_fingerprint, AppState, X_FORWARDED_CLIENT_CERT_HEADER,
@@ -41,23 +45,18 @@ pub(super) async fn userinfo_get(
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection_for_route(&state, kind, uri.path());
     }
-    if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
+    if let Err(resp) = enforce_resource_uri(&uri, issuer_base, &headers) {
         return resp;
     }
 
     let auth_header = match authorization_header(&headers) {
-        Ok(header) => match header {
-            Some(header) if !header.trim().is_empty() => header.to_string(),
-            _ => {
-                return bearer_json_error_with_iss(
-                    StatusCode::UNAUTHORIZED,
-                    "invalid_token",
-                    Some("authorization header required"),
-                    issuer_base,
-                );
-            }
-        },
+        Ok(Some(header)) => header,
+        Ok(None) => return no_resource_authentication(),
         Err(err) => return bearer_header_error(issuer_base, "Authorization", err),
+    };
+    let credentials = match admit_resource_presentation(Some(auth_header), issuer_base) {
+        Ok(credentials) => credentials,
+        Err(response) => return response,
     };
 
     let path = uri
@@ -82,16 +81,22 @@ pub(super) async fn userinfo_get(
 
     let mtls = match trusted_mtls_fingerprint(&state, &headers) {
         Ok(mtls) => mtls,
-        Err(err) => return bearer_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err),
+        Err(err) => {
+            return resource_invalid_request(
+                issuer_base,
+                credentials.scheme,
+                &err.description(X_FORWARDED_CLIENT_CERT_HEADER),
+            )
+        }
     };
 
     match endpoint
-        .fetch_userinfo_with_metadata(&auth_header, binding.as_ref(), mtls.as_deref())
+        .fetch_userinfo_with_metadata(auth_header, binding.as_ref(), mtls.as_deref())
         .await
     {
         Ok((userinfo, meta)) => {
             if let Err(response) =
-                super::application_authorization::check_resource(&state, &meta, &auth_header).await
+                super::application_authorization::check_resource(&state, &meta, auth_header).await
             {
                 return response;
             }
@@ -99,9 +104,7 @@ pub(super) async fn userinfo_get(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => {
-            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
-        }
+        Err(err) => userinfo_error_response(err, issuer_base, credentials.scheme.as_str()),
     }
 }
 
@@ -140,32 +143,14 @@ fn userinfo_auth_header(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     match (header, body_token) {
-        (Some(_), Some(_)) => Err(bearer_json_error_with_iss(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("access token must not be supplied via multiple transport methods"),
+        (Some(_), Some(_)) => Err(resource_invalid_request(
             issuer_base,
+            presented_resource_scheme(headers),
+            "access token must not be supplied via multiple transport methods",
         )),
         (Some(header), None) => Ok(header.to_string()),
         (None, Some(token)) => Ok(format!("Bearer {token}")),
-        (None, None) => Err(bearer_json_error_with_iss(
-            StatusCode::UNAUTHORIZED,
-            "invalid_token",
-            Some("authorization header or access_token required"),
-            issuer_base,
-        )),
-    }
-}
-
-fn userinfo_challenge_scheme(auth_header: &str) -> &'static str {
-    let scheme_is_dpop = auth_header
-        .split_whitespace()
-        .next()
-        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("DPoP"));
-    if scheme_is_dpop {
-        "DPoP"
-    } else {
-        "Bearer"
+        (None, None) => Err(no_resource_authentication()),
     }
 }
 
@@ -236,21 +221,26 @@ pub(super) async fn userinfo_post(
         return transport_rejection_for_route(&state, kind, uri.path());
     }
 
-    if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
+    if let Err(resp) = enforce_resource_uri(&uri, issuer_base, &headers) {
         return resp;
     }
     if let Err(resp) =
         enforce_content_type(&headers, "application/x-www-form-urlencoded", issuer_base)
     {
-        return resp;
+        return resource_request_error(resp, &headers);
     }
     let form = match parse_userinfo_form(form, issuer_base) {
         Ok(form) => form,
-        Err(resp) => return resp,
+        Err(resp) => return resource_request_error(resp, &headers),
     };
 
     let auth_header = match userinfo_auth_header(&headers, &form, issuer_base) {
         Ok(header) => header,
+        Err(response) => return response,
+    };
+
+    let credentials = match admit_resource_presentation(Some(&auth_header), issuer_base) {
+        Ok(credentials) => credentials,
         Err(response) => return response,
     };
 
@@ -276,7 +266,13 @@ pub(super) async fn userinfo_post(
 
     let mtls = match trusted_mtls_fingerprint(&state, &headers) {
         Ok(mtls) => mtls,
-        Err(err) => return bearer_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err),
+        Err(err) => {
+            return resource_invalid_request(
+                issuer_base,
+                credentials.scheme,
+                &err.description(X_FORWARDED_CLIENT_CERT_HEADER),
+            )
+        }
     };
 
     match endpoint
@@ -293,8 +289,6 @@ pub(super) async fn userinfo_post(
             util::apply_no_cache_headers(&mut response);
             response
         }
-        Err(err) => {
-            userinfo_error_response(err, issuer_base, userinfo_challenge_scheme(&auth_header))
-        }
+        Err(err) => userinfo_error_response(err, issuer_base, credentials.scheme.as_str()),
     }
 }

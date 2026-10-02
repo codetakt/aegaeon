@@ -145,7 +145,7 @@ impl OidcDiscovery {
             device_authorization_endpoint: device_authorization_endpoint(base_url, runtime),
 
             // EdDSA only — ffi::verify_dpop hardcodes Ed25519 (HACL*/EverCrypt).
-            dpop_signing_alg_values_supported: Some(vec!["EdDSA".to_string()]),
+            dpop_signing_alg_values_supported: Some(vec![ffi::DPOP_SIGNING_ALGORITHM.to_string()]),
 
             // RFC 9700 BCP
             authorization_response_iss_parameter_supported: Some(true),

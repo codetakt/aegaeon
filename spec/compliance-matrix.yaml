@@ -425,6 +425,28 @@ rfc_6750:
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - AccessToken::is_expired enforces TTL; covered by crates/server/src/web/resource_endpoint/policy.rs.
+- id: 6750-008
+  section: '3, 3.1'
+  requirement: SHOULD
+  description: Missing or unsupported resource authentication omits error details; admitted credential and proof failures retain their applicable challenge.
+  module: crates/server/src/web/resource_authentication.rs
+  proof: []
+  tests:
+  - crates/server/src/web/resource_authentication/tests/presentation.rs
+  - crates/server/src/web/resource_authentication/tests/policy.rs
+  - crates/server/src/web/resource_authentication/tests/effects.rs
+  - crates/server/src/web/resource_authentication/tests/boundaries.rs
+  - crates/server/src/web/resource_authentication/tests/backend.rs
+  - crates/server/src/web/resource_authentication/tests/metrics.rs
+  - crates/ffi/tests/dpop_proof_test.rs
+  ci_check: protected-resource-authentication-errors
+  status: implemented
+  runtime_link: crates/server/src/web/resource_authentication.rs
+  notes:
+  - "Missing/blank/unsupported credentials return empty401 with Bearer realm only. Known malformed schemes return400; invalid tokens and insufficient scopes retain the presented scheme. DPoP resource challenges advertise the native verifier's EdDSA algorithm (RFC9449 sections7.1/7.2)."
+  - "URI-token refusal is local policy. Supported matched resource routes and enabled UserInfo add applicable challenges; generic query/transport contracts remain separate. UserInfo POST retains body Bearer and form-extraction rules."
+  - "Finite router controls use isolated PG authority/claims, synthetic in-memory token issuance/replay, native signed proofs and an owned Redis nonce namespace. Early refusals preserve proof/nonce state; admitted later token/scope failures can consume replay. Direct certificate-handler controls are distinguished from earlier router ingress rejection."
+  - "See docs/operations/resource-authentication-errors.md. No formal discharge, full upstream refresh, external parser/proxy composition or successful HEAD-proof claim is made."
 rfc_7636:
 - id: 7636-001
   section: '4.1'

@@ -1,6 +1,9 @@
 #![allow(unsafe_code)]
 // Safety: this crate owns the FFI boundary; unsafe usage is confined here by policy.
 
+/// Sole JWS algorithm accepted by the production DPoP verifier.
+pub const DPOP_SIGNING_ALGORITHM: &str = "EdDSA";
+
 #[cfg(not(kani))]
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 #[cfg(not(kani))]
@@ -1334,7 +1337,10 @@ pub fn verify_dpop_with_iat_window(
 
     // Parse header to obtain the public key and algorithm
     let header: DpopHeader = serde_json::from_slice(&header_bytes).ok()?;
-    if header.alg != "EdDSA" || header.jwk.kty != "OKP" || header.jwk.crv != "Ed25519" {
+    if header.alg != DPOP_SIGNING_ALGORITHM
+        || header.jwk.kty != "OKP"
+        || header.jwk.crv != "Ed25519"
+    {
         return None;
     }
     if header

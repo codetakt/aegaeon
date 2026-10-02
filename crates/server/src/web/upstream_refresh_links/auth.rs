@@ -6,8 +6,11 @@ use axum::{
 };
 
 use super::super::oauth_errors::{
-    apply_oauth_authenticate_header, authorization_header, bearer_validation_error_response,
-    dpop_invalid_token_response, json_error_with_iss, no_cache_header_error,
+    apply_oauth_authenticate_header, authorization_header, bearer_header_error,
+    bearer_validation_error_response, dpop_invalid_token_response, json_error_with_iss,
+};
+use super::super::resource_authentication::{
+    admit_resource_presentation, resource_invalid_request,
 };
 use super::super::{
     dpop_binding_from_request, trusted_mtls_fingerprint, AppState, RESOURCE_SCOPES,
@@ -18,56 +21,6 @@ use crate::authcode::types::SenderBinding;
 use crate::authcode::{BearerTokenValidationError, TokenPolicyContext, TokenPolicyError};
 use crate::util;
 
-struct RefreshAuthorizationHeader {
-    challenge_scheme: &'static str,
-    normalized_auth: String,
-}
-
-fn malformed_authorization_header_response(issuer_base: &str) -> Response {
-    json_error_with_iss(
-        StatusCode::UNAUTHORIZED,
-        "invalid_token",
-        Some("malformed authorization header"),
-        issuer_base,
-    )
-}
-
-fn refresh_authorization_header(
-    auth_header: &str,
-    issuer_base: &str,
-) -> Result<RefreshAuthorizationHeader, Response> {
-    let mut header_parts = auth_header.split_whitespace();
-    let scheme = header_parts
-        .next()
-        .ok_or_else(|| malformed_authorization_header_response(issuer_base))?;
-    let token_part = header_parts
-        .next()
-        .ok_or_else(|| malformed_authorization_header_response(issuer_base))?;
-    if token_part.is_empty() || header_parts.next().is_some() {
-        return Err(malformed_authorization_header_response(issuer_base));
-    }
-    let challenge_scheme = if scheme.eq_ignore_ascii_case("DPoP") {
-        "DPoP"
-    } else {
-        "Bearer"
-    };
-    let normalized_auth = match scheme.to_ascii_lowercase().as_str() {
-        "bearer" | "dpop" => format!("Bearer {token_part}"),
-        _ => {
-            return Err(json_error_with_iss(
-                StatusCode::UNAUTHORIZED,
-                "invalid_token",
-                Some("authorization scheme must be Bearer or DPoP"),
-                issuer_base,
-            ));
-        }
-    };
-    Ok(RefreshAuthorizationHeader {
-        challenge_scheme,
-        normalized_auth,
-    })
-}
-
 pub(in crate::web) async fn authenticate_upstream_refresh_caller(
     state: &AppState,
     uri: &Uri,
@@ -75,28 +28,10 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
     issuer_base: &str,
 ) -> Result<UpstreamRefreshCaller, Response> {
     let auth_header = authorization_header(headers)
-        .map_err(|err| {
-            let description = err.description("Authorization");
-            json_error_with_iss(
-                StatusCode::UNAUTHORIZED,
-                "invalid_request",
-                Some(&description),
-                issuer_base,
-            )
-        })?
-        .ok_or_else(|| {
-            json_error_with_iss(
-                StatusCode::UNAUTHORIZED,
-                "invalid_request",
-                Some("bearer token required"),
-                issuer_base,
-            )
-        })?;
-
-    let RefreshAuthorizationHeader {
-        challenge_scheme,
-        normalized_auth,
-    } = refresh_authorization_header(auth_header, issuer_base)?;
+        .map_err(|err| bearer_header_error(issuer_base, "Authorization", err))?;
+    let credentials = admit_resource_presentation(auth_header, issuer_base)?;
+    let challenge_scheme = credentials.scheme.as_str();
+    let normalized_auth = credentials.normalized_authorization();
 
     let path = uri
         .path_and_query()
@@ -113,8 +48,13 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
     )
     .map_err(|error| dpop_error_response(issuer_base, DpopEndpointRole::ResourceServer, error))?;
     let binding_jkt = binding.as_ref().map(|binding| binding.jkt.as_str());
-    let mtls_fingerprint = trusted_mtls_fingerprint(state, headers)
-        .map_err(|err| no_cache_header_error(issuer_base, X_FORWARDED_CLIENT_CERT_HEADER, err))?;
+    let mtls_fingerprint = trusted_mtls_fingerprint(state, headers).map_err(|err| {
+        resource_invalid_request(
+            issuer_base,
+            credentials.scheme,
+            &err.description(X_FORWARDED_CLIENT_CERT_HEADER),
+        )
+    })?;
 
     let (_, meta) = state
         .tokens
@@ -166,6 +106,7 @@ pub(in crate::web) async fn authenticate_upstream_refresh_caller(
     }
 
     Ok(UpstreamRefreshCaller {
+        scheme: credentials.scheme,
         user_id: meta.user_id.clone(),
         caller_client_id: meta.client_id.clone(),
     })
@@ -209,7 +150,29 @@ fn upstream_refresh_policy_error(
         }
     };
     let mut response = json_error_with_iss(status, error, Some(&description), issuer_base);
-    apply_oauth_authenticate_header(&mut response, challenge_scheme, error);
+    if !status.is_server_error() {
+        apply_oauth_authenticate_header(&mut response, challenge_scheme, error);
+    }
     util::apply_no_cache_headers(&mut response);
     response
+}
+
+#[cfg(test)]
+mod resource_policy_error_tests {
+    use super::*;
+    #[test]
+    fn upstream_refresh_internal_policy_errors_never_challenge() {
+        for error in [
+            TokenPolicyError::TokenStoreUnavailable("private fixture detail".into()),
+            TokenPolicyError::Validation(BearerTokenValidationError::Internal(
+                "private fixture detail".into(),
+            )),
+        ] {
+            let response = upstream_refresh_policy_error(&error, "https://issuer.example", "DPoP");
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert!(!response.headers().contains_key("www-authenticate"));
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert_eq!(response.headers()["pragma"], "no-cache");
+        }
+    }
 }
