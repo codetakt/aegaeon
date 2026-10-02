@@ -338,6 +338,7 @@ pub(crate) fn finish_test(result: TestResult, cleanup: Result<(), sqlx::Error>) 
 
 pub(crate) fn sample_registered_client(client_id: &str) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://client.example.com/callback".to_string()],
@@ -355,3 +356,5 @@ pub(crate) fn sample_registered_client(client_id: &str) -> RegisteredClient {
         client_id_issued_at: Some(1_700_000_000),
     }
 }
+
+pub(crate) mod native_dpop;

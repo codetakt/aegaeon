@@ -1,19 +1,35 @@
 use super::*;
 
-async fn flow(state: &AppState) -> TestResult {
+async fn flow(state: &AppState, native: bool) -> TestResult {
     let key = aegaeon_crypto::signing::Ed25519SigningKey::generate()?;
-    let proof = signed_dpop_with_key(&key)?;
+    let proof = flow_proof(state, &key, native)?;
     let jkt =
         crate::util::compute_dpop_jkt_from_proof_with_max_len(&proof, 8192).ok_or("thumbprint")?;
     let initial = grant_with_proof(state, Some(&proof)).await?;
     assert_eq!(initial["token_type"], "DPoP");
+    if native {
+        crate::web::test_support::native_dpop::set_minimum(
+            state,
+            CLIENT,
+            "exchange-test-registration-token",
+            false,
+        )
+        .await?;
+    }
     let refresh = initial["refresh_token"].as_str().ok_or("refresh")?;
     let fields = [
         ("grant_type", "refresh_token"),
         ("client_id", CLIENT),
         ("refresh_token", refresh),
     ];
-    for proof in [None, Some(signed_dpop_proof()?)] {
+    for proof in [
+        None,
+        Some(flow_proof(
+            state,
+            &aegaeon_crypto::signing::Ed25519SigningKey::generate()?,
+            native,
+        )?),
+    ] {
         let (status, body) = request_with_proof(state, &fields, true, proof.as_deref()).await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "refresh binding: {body}");
         assert!(
@@ -25,8 +41,13 @@ async fn flow(state: &AppState) -> TestResult {
                 .rotated
         );
     }
-    let (status, refreshed) =
-        request_with_proof(state, &fields, true, Some(&signed_dpop_with_key(&key)?)).await?;
+    let (status, refreshed) = request_with_proof(
+        state,
+        &fields,
+        true,
+        Some(&flow_proof(state, &key, native)?),
+    )
+    .await?;
     assert_eq!(status, StatusCode::OK, "refresh: {refreshed}");
     assert_eq!(refreshed["token_type"], "DPoP");
     for body in [&initial, &refreshed] {
@@ -46,7 +67,16 @@ async fn flow(state: &AppState) -> TestResult {
         .as_str()
         .ok_or("subject")?
         .to_string();
-    for _ in 0..2 {
+    for index in 0..2 {
+        if native {
+            crate::web::test_support::native_dpop::set_minimum(
+                state,
+                CLIENT,
+                "exchange-test-registration-token",
+                index == 0,
+            )
+            .await?;
+        }
         let fields = [
             ("grant_type", TOKEN_EXCHANGE_GRANT_TYPE),
             ("client_id", CLIENT),
@@ -57,11 +87,25 @@ async fn flow(state: &AppState) -> TestResult {
             ),
             ("audience", "internal-api"),
         ];
-        let (status, body) =
-            request_with_proof(state, &fields, true, Some(&signed_dpop_proof()?)).await?;
+        let (status, body) = request_with_proof(
+            state,
+            &fields,
+            true,
+            Some(&flow_proof(
+                state,
+                &aegaeon_crypto::signing::Ed25519SigningKey::generate()?,
+                native,
+            )?),
+        )
+        .await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "different key: {body}");
-        let (status, body) =
-            request_with_proof(state, &fields, true, Some(&signed_dpop_with_key(&key)?)).await?;
+        let (status, body) = request_with_proof(
+            state,
+            &fields,
+            true,
+            Some(&flow_proof(state, &key, native)?),
+        )
+        .await?;
         assert_eq!(status, StatusCode::OK, "same-key exchange: {body}");
         assert_eq!(body["token_type"], "DPoP");
         assert_eq!(jwt(&body)?["cnf"], json!({"jkt":jkt}));
@@ -85,7 +129,7 @@ async fn shared_redis_token_exchange_dpop_code_refresh_reexchange() -> TestResul
     let result = async {
         let mut state = fixture(&pool, &env).await?;
         use_redis(&mut state)?;
-        flow(&state).await
+        flow(&state, false).await
     }
     .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
@@ -112,7 +156,42 @@ async fn shared_redis_bound_refresh_enforced_when_policy_option_disabled() -> Te
         assert_eq!(enforcing_profiles, 0);
         // Valid issuance, missing/wrong-key refusals without consumption, then
         // same-key refresh and exchange controls, under the disabled options.
-        flow(&state).await
+        flow(&state, false).await
     }.await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+fn flow_proof(
+    state: &AppState,
+    key: &aegaeon_crypto::signing::Ed25519KeyData,
+    native: bool,
+) -> TestResult<String> {
+    if native {
+        crate::web::test_support::native_dpop::proof(state, key, json!({}))
+    } else {
+        signed_dpop_with_key(key)
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL and Redis; actual native code, bound refresh and token exchange after false lowering"]
+async fn shared_redis_client_dpop_minimum_native_exchange_preserves_stored_bindings_after_lowering(
+) -> TestResult {
+    let pool = test_pg_pool().await?.ok_or("PostgreSQL required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let mut state = fixture(&pool, &env).await?;
+        use_redis(&mut state)?;
+        crate::web::test_support::native_dpop::install(&mut state)?;
+        crate::web::test_support::native_dpop::set_minimum(
+            &state,
+            CLIENT,
+            "exchange-test-registration-token",
+            true,
+        )
+        .await?;
+        flow(&state, true).await
+    }
+    .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }

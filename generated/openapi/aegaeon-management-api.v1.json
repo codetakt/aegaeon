@@ -10193,6 +10193,7 @@
       "Client": {
         "type": "object",
         "required": [
+          "dpopBoundAccessTokens",
           "id",
           "environmentId",
           "clientIdentifier",
@@ -10227,6 +10228,9 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "dpopBoundAccessTokens": {
+            "type": "boolean"
           },
           "environmentId": {
             "type": "string",
@@ -10671,6 +10675,9 @@
               "string",
               "null"
             ]
+          },
+          "dpopBoundAccessTokens": {
+            "type": "boolean"
           },
           "name": {
             "type": "string"
@@ -13963,6 +13970,9 @@
               "string",
               "null"
             ]
+          },
+          "dpopBoundAccessTokens": {
+            "type": "boolean"
           },
           "name": {
             "type": [

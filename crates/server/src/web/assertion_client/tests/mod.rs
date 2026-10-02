@@ -44,6 +44,14 @@ const PATHS: [&str; 5] = [
 ];
 
 async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppState> {
+    fixture_with_minimum(pool, env, false).await
+}
+
+async fn fixture_with_minimum(
+    pool: &sqlx::PgPool,
+    env: &TestEnvironment,
+    minimum: bool,
+) -> TestResult<AppState> {
     let grants = vec![
         "authorization_code",
         "refresh_token",
@@ -51,7 +59,7 @@ async fn fixture(pool: &sqlx::PgPool, env: &TestEnvironment) -> TestResult<AppSt
         crate::policy::JWT_BEARER_GRANT_TYPE,
         super::DEVICE_CODE_GRANT_TYPE,
     ];
-    register_clients(pool, env, &grants).await?;
+    register_clients(pool, env, &grants, minimum).await?;
     sqlx::query("UPDATE aegaeon.oauth_profiles SET allowed_grant_types=$1, token_endpoint_auth_methods_allowed=$2 WHERE environment_id=$3")
         .bind(&grants).bind(vec!["private_key_jwt","client_secret_basic","client_secret_post","none"]).bind(env.environment_id).execute(pool).await?;
     let mut state = test_app_state(pool.clone(), env).await?;
@@ -335,6 +343,7 @@ async fn register_clients(
     pool: &sqlx::PgPool,
     env: &TestEnvironment,
     grants: &[&str],
+    minimum: bool,
 ) -> TestResult {
     let key = crate::oidc::OidcSigningKey::from_rsa_pem(
         "assertion-test".into(),
@@ -348,6 +357,7 @@ async fn register_clients(
         (OTHER, "private_key_jwt"),
     ] {
         let mut client = sample_registered_client(id);
+        client.dpop_bound_access_tokens = minimum;
         client.token_endpoint_auth_method = method.into();
         client.allowed_grant_types = grants.iter().map(|s| (*s).into()).collect();
         client.allowed_scopes = vec!["api.read".into()];
@@ -370,7 +380,7 @@ async fn register_clients(
             &env.issuer_host,
             &client,
             &["code".into()],
-            &Uuid::new_v4().to_string(),
+            &format!("assertion-test-rat-{id}"),
             "assertion-test",
         )
         .await?;

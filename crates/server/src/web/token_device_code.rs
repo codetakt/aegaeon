@@ -277,6 +277,7 @@ mod tests {
 
     fn client_with_grants(grants: &[&str]) -> RegisteredClient {
         RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "device-client".to_string(),
             client_secret: Some("device-secret".to_string()),
             redirect_uris: Vec::new(),

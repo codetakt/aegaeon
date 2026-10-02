@@ -8,6 +8,7 @@ struct FederationSignerWithoutPublicJwk {
 
 fn federation_test_registered_client(client_id: &str) -> crate::client_registry::RegisteredClient {
     crate::client_registry::RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://rp.example/callback".to_string()],

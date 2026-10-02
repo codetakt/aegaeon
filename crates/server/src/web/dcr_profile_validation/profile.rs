@@ -17,9 +17,6 @@ fn declared_sender_methods(meta: &ClientRegistration) -> Vec<String> {
             }
         }
     }
-    if meta.require_dpop == Some(true) {
-        declared.insert("dpop".to_string());
-    }
     if meta.require_mtls == Some(true) {
         declared.insert("mtls".to_string());
     }
@@ -177,4 +174,46 @@ pub(super) fn validate_registration_profile_or_response(
         record_dcr_profile_rejection(error.code);
         invalid_client_metadata_response(error.message)
     })
+}
+
+pub(super) async fn validate_client_dpop_minimum(
+    state: &AppState,
+    issuer_base: &str,
+    meta: &ClientRegistration,
+    existing: Option<&crate::client_registry::RegisteredClient>,
+    default_profile: &oauth_profile::ResolvedProfile,
+) -> Result<(), Response> {
+    if meta.require_dpop != Some(true) {
+        return Ok(());
+    }
+    let owner_profile;
+    let profile = if let Some(client) = existing {
+        owner_profile = oauth_profile::resolve_downstream_profile(
+            &state.db_pool,
+            issuer_base,
+            &client.client_id,
+        )
+        .await
+        .map_err(|_| {
+            no_cache_json_error_with_iss(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                Some("oauth profile lookup failed"),
+                issuer_base,
+            )
+        })?;
+        &owner_profile
+    } else {
+        default_profile
+    };
+    if oauth_profile::merge_sender_constraints(
+        state.cfg.security_policy.sender_constrained,
+        profile.sender_constrained,
+    ) == SenderConstraint::Mtls
+    {
+        return Err(invalid_client_metadata_response(
+            "Client DPoP requirement conflicts with mTLS policy",
+        ));
+    }
+    Ok(())
 }

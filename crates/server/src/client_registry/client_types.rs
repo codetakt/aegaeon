@@ -53,6 +53,8 @@ impl RegisteredClientJwks {
 
 #[derive(Clone, Debug)]
 pub struct RegisteredClient {
+    /// RFC 9449 §5.2: require verified DPoP at the token endpoint.
+    pub dpop_bound_access_tokens: bool,
     pub client_id: String,
     pub client_secret: Option<String>,
     pub redirect_uris: Vec<String>,

@@ -2025,6 +2025,23 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Nonce.fst#lemma_nonce_required_enforcement
     rust: crates/server/src/web/token_sender_binding.rs#dpop_use_nonce_response
     test: crates/server/src/web/token_exchange_tests/error_responses.rs
+- id: 9449-015
+  section: '5.2'
+  requirement: MUST
+  description: Persist and report the client DPoP minimum and require verified proof at token requests when true.
+  module: crates/server/src/web/token_endpoint/policy.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/token_snapshots/dpop_minimum.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/dpop_minimum.rs
+  - crates/server/src/web/management/tests/initialization/registration_metadata/dpop_minimum.rs
+  - crates/server/src/db/client_dpop/tests.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint/policy.rs
+  notes:
+  - The client boolean cannot weaken environment/profile requirements or existing stored bindings.
+  - Legacy retained clients require explicit offline resolution before startup; no rolling upgrade is supported.
+  - Code/PAR key binding, full replay freshness retention and supplier composition remain separate obligations.
 rfc_9700:
 - id: 9700-001
   section: 2.1.1

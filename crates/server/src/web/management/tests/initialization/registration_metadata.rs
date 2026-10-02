@@ -165,3 +165,5 @@ async fn pg_registration_metadata_management_sync_preserves_credentials_and_auth
     let result = scenario(&pool).await;
     finish(result, cleanup(control, pool, &name).await)
 }
+
+mod dpop_minimum;

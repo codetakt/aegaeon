@@ -134,8 +134,13 @@ pub(super) async fn build_token_context(
         client_auth_method,
     )
     .await?;
-    let sender_binding =
-        token_resolve_sender_binding(state, uri, headers, policy.sender_constraint, issuer_base)?;
+    let sender_binding = token_resolve_sender_binding(
+        state,
+        uri,
+        headers,
+        policy.proof_sender_constraint,
+        issuer_base,
+    )?;
     let issuer_req = IssuerTokenReq {
         grant_type: grant_type.clone(),
         code: form.code.clone(),

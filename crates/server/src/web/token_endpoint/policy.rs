@@ -14,6 +14,7 @@ use super::super::AppState;
 
 pub(super) struct TokenEndpointPolicyContext {
     pub(super) sender_constraint: SenderConstraint,
+    pub(super) proof_sender_constraint: SenderConstraint,
     pub(super) enforce_refresh_sender_binding: bool,
     pub(super) authorization_code_grant_allowed: bool,
     pub(super) refresh_grant_allowed: bool,
@@ -124,6 +125,9 @@ pub(super) async fn token_resolve_policy(
             Some("mTLS token binding is disabled for this environment"),
         ));
     }
+    // Client metadata requires proof for this request without inventing a stored
+    // binding on an older unbound grant. Existing profile grant rules stay separate.
+    let proof_sender_constraint = client_sender_constraint(state, client_id, sender_constraint)?;
     let enforce_refresh_sender_binding = state.cfg.security_policy.enforce_sender_binding()
         || profile.enforce_refresh_sender_binding;
     let authorization_code_grant_allowed = state
@@ -151,8 +155,32 @@ pub(super) async fn token_resolve_policy(
             .any(|grant| grant == "refresh_token");
     Ok(TokenEndpointPolicyContext {
         sender_constraint,
+        proof_sender_constraint,
         enforce_refresh_sender_binding,
         authorization_code_grant_allowed,
         refresh_grant_allowed,
     })
+}
+
+fn client_sender_constraint(
+    state: &AppState,
+    client_id: &str,
+    existing: SenderConstraint,
+) -> Result<SenderConstraint, Response> {
+    let client = state
+        .clients
+        .try_get(client_id)
+        .map_err(|error| token_registry_state_error_response("token_client_dpop_minimum", error))?
+        .ok_or_else(token_invalid_client_response)?;
+    if !client.dpop_bound_access_tokens {
+        return Ok(existing);
+    }
+    match existing {
+        SenderConstraint::None | SenderConstraint::DPoP => Ok(SenderConstraint::DPoP),
+        SenderConstraint::Mtls => Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "unauthorized_client",
+            Some("Client DPoP requirement conflicts with mTLS policy"),
+        )),
+    }
 }

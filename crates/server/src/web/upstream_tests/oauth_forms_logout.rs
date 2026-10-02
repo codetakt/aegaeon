@@ -248,6 +248,7 @@ fn backchannel_test_client(
     backchannel_logout_session_required: bool,
 ) -> crate::client_registry::RegisteredClient {
     crate::client_registry::RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: None,
         redirect_uris: vec!["https://rp.example/callback".to_string()],

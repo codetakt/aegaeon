@@ -22,7 +22,7 @@ pub(crate) const REPAIR: &str = include_str!(concat!(
 ));
 
 impl Database {
-    pub(crate) async fn create(predecessor: bool) -> anyhow::Result<Self> {
+    async fn empty() -> anyhow::Result<Self> {
         let control = PgPoolOptions::new()
             .max_connections(1)
             .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
@@ -40,7 +40,42 @@ impl Database {
             pool,
             name,
         };
-        let result = database.initialize(predecessor).await;
+        Ok(database)
+    }
+
+    pub(crate) async fn create(predecessor: bool) -> anyhow::Result<Self> {
+        let database = Self::empty().await?;
+        if let Err(error) = database.initialize(predecessor).await {
+            database.cleanup().await?;
+            return Err(error);
+        }
+        Ok(database)
+    }
+
+    /// Apply every immutable source migration preceding the client-minimum upgrade.
+    pub(crate) async fn client_dpop_predecessor() -> anyhow::Result<Self> {
+        let database = Self::empty().await?;
+        let result: anyhow::Result<()> = async {
+            let directory =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../db/migrations");
+            let mut paths = std::fs::read_dir(directory)?
+                .map(|e| e.map(|e| e.path()))
+                .collect::<Result<Vec<_>, _>>()?;
+            paths.sort();
+            for path in paths {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or_else(|| anyhow::anyhow!("migration name"))?;
+                if name.ends_with(".sql") && name < "20261002120000_client_dpop_minimum.sql" {
+                    sqlx::raw_sql(&std::fs::read_to_string(&path)?)
+                        .execute(&database.pool)
+                        .await?;
+                }
+            }
+            Ok(())
+        }
+        .await;
         if let Err(error) = result {
             database.cleanup().await?;
             return Err(error);
