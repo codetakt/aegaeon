@@ -142,6 +142,7 @@ impl OidcDiscovery {
             require_pushed_authorization_requests: Some(
                 runtime.require_pushed_authorization_requests,
             ),
+            require_signed_request_object: None,
             device_authorization_endpoint: device_authorization_endpoint(base_url, runtime),
 
             // EdDSA only — ffi::verify_dpop hardcodes Ed25519 (HACL*/EverCrypt).

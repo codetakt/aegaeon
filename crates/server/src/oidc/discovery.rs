@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 
 mod construction;
 
+fn deserialize_present_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    bool::deserialize(deserializer).map(Some)
+}
+
 /// `OpenID` Provider Configuration per `OpenID` Connect Discovery 1.0
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OidcDiscovery {
@@ -179,8 +186,20 @@ pub struct OidcDiscovery {
     pub pushed_authorization_request_endpoint: Option<String>,
 
     /// OPTIONAL. Require pushed authorization requests
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_bool",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub require_pushed_authorization_requests: Option<bool>,
+
+    /// OPTIONAL. Require signed Request Objects (RFC 9101).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_bool",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub require_signed_request_object: Option<bool>,
 
     /// OPTIONAL. Device Authorization Endpoint (RFC 8628 / OAuth metadata extension)
     #[serde(skip_serializing_if = "Option::is_none")]

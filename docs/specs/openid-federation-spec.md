@@ -245,6 +245,28 @@ list rejects requested scopes. Absent token authentication metadata defaults to
 `client_secret_basic`. Policy-selected capability and algorithm identifiers are
 compared exactly, without case or whitespace normalization.
 
+New authorization also requires compatibility with the client's ordinary code
+request. Both independently fetched/cached Discovery and the final resolved OP
+object are checked for `require_pushed_authorization_requests` and
+`require_signed_request_object`. Either `true` returns HTTP 502 `server_error`,
+invalidates ordinary Discovery cache and prevents transaction storage and the
+authorization redirect. The ordinary check precedes chain resolution: policy
+removal or `false` cannot override an independently advertised `true`; a policy
+introducing `true` is also refused. Raw signed statements and policy semantics
+are preserved. Missing/false flags and optional support-only metadata remain
+compatible; present null or non-Boolean flags are rejected by typed parsing.
+
+This is a local request-mode compatibility policy based on RFC 9126 section 5
+and RFC 9101 section 10.5. The remote authorization server's rejection MUST does
+not mandate universal client PAR/JAR implementation. The capability guard runs
+only for new authorization; true flags alone do not reject an issued-code
+callback, refresh or logout. `OidcDiscovery` Rust struct literals must initialize
+the new optional `require_signed_request_object` field; the producer uses `None`
+and retains existing PAR advertising. Finite tests execute the production
+metadata-to-store-to-redirect workflow, with signed fresh/cached chains and
+loopback callback/refresh controls; they do not execute a fresh routed DB/Redis
+lifecycle or establish complete metadata-schema conformance.
+
 Callback selects and validates current signed metadata before sending the code
 or client credentials. It retains captured token/JWKS endpoints, authentication
 method, verifier-implied PKCE, iss and ACR requirements. A newly excluding policy

@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-09-11
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -228,3 +228,31 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+## Mandatory upstream authorization request modes
+
+Aegaeon's upstream OIDC client sends ordinary authorization-code requests. If
+ordinary Discovery or the selected Federation OP metadata sets
+`require_pushed_authorization_requests` or `require_signed_request_object` to
+`true`, new authorization returns HTTP 502 `server_error` before storing state
+or returning an authorization redirect. The description identifies the required
+mode. Correct the upstream connection's request-mode compatibility before
+retrying; this client does not implement upstream PAR or signed Request Objects.
+
+Missing flags and explicit `false` allow the existing flow. Optional Request
+Object support, algorithm lists and PAR endpoint presence alone do not require
+those modes. Both recognized flags must be JSON Booleans when present: `null`,
+strings, numbers, arrays and objects are refused, as are duplicate JSON members.
+This stricter parsing also applies to shared metadata consumers. A `true` flag
+alone does not block completion of an already issued code, refresh or logout.
+
+RFC 9126 section 5 and RFC 9101 section 10.5 define these Boolean advertisements
+and omission defaults. The latter's rejection MUST addresses the remote
+authorization server. Aegaeon's refusal is a local compatibility policy; it does
+not assert a universal requirement for clients to implement PAR or JAR.
+
+The public Rust `OidcDiscovery` struct adds
+`require_signed_request_object: Option<bool>`; callers using struct literals must
+initialize it, normally to `None`. Aegaeon's Discovery producer initializes it
+to `None` and preserves its existing PAR advertisement. This change adds no
+runtime setting or storage migration.

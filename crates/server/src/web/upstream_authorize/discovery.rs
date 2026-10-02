@@ -1,7 +1,7 @@
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_metadata::{
-    acquire_upstream_federation_chain, build_upstream_http_client, fetch_upstream_discovery_cached,
-    resolve_upstream_metadata_with, validate_upstream_discovery,
+    build_upstream_http_client, fetch_upstream_discovery_cached, resolve_upstream_metadata_with,
+    validate_upstream_discovery,
 };
 use super::super::AppState;
 use super::{UpstreamAuthorizeContext, UpstreamAuthorizeInput};
@@ -20,16 +20,31 @@ fn invalidate_cached_discovery(state: &AppState, issuer: &str) {
     }
 }
 
-pub(super) async fn fetch_upstream_authorize_discovery(
+// Request construction is currently a plain code-flow authorization request.
+// Keep this capability check out of shared callback/refresh validation.
+fn validate_request_modes(
     state: &AppState,
     issuer_base: &str,
-    context: &UpstreamAuthorizeContext,
-    input: &UpstreamAuthorizeInput,
-) -> Result<OidcDiscovery, Response> {
-    fetch_upstream_authorize_discovery_with(state, issuer_base, context, input, |anchors, now| {
-        acquire_upstream_federation_chain(state, &context.issuer, anchors, now)
-    })
-    .await
+    issuer: &str,
+    discovery: &OidcDiscovery,
+) -> Result<(), Response> {
+    let description = if discovery.require_pushed_authorization_requests == Some(true) {
+        Some("upstream requires pushed authorization requests")
+    } else if discovery.require_signed_request_object == Some(true) {
+        Some("upstream requires signed request objects")
+    } else {
+        None
+    };
+    if let Some(description) = description {
+        invalidate_cached_discovery(state, issuer);
+        return Err(json_error_with_iss(
+            StatusCode::BAD_GATEWAY,
+            "server_error",
+            Some(description),
+            issuer_base,
+        ));
+    }
+    Ok(())
 }
 
 pub(in crate::web) async fn fetch_upstream_authorize_discovery_with<F, Fut>(
@@ -69,6 +84,7 @@ where
             issuer_base,
         )
     })?;
+    validate_request_modes(state, issuer_base, &context.issuer, &discovery)?;
     let discovery = resolve_upstream_metadata_with(
         state,
         &context.issuer,
@@ -80,6 +96,7 @@ where
     .await
     .inspect_err(|_| invalidate_cached_discovery(state, &context.issuer))?
     .discovery;
+    validate_request_modes(state, issuer_base, &context.issuer, &discovery)?;
     if let Err(message) = validate_upstream_discovery(
         &discovery,
         &context.issuer,
