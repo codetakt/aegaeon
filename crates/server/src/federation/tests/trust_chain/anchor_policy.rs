@@ -29,6 +29,7 @@ fn max_path_length_direct_chain_allowed() {
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
     sub_stmt.constraints = Some(Constraints {
+        naming_constraints: None,
         allowed_entity_types: None,
         max_path_length: Some(0),
         allowed_leaf_entity_types: None,
@@ -60,6 +61,7 @@ fn allowed_leaf_entity_types_direct_chain_rejects_disallowed_leaf_metadata() {
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
     sub_stmt.constraints = Some(Constraints {
+        naming_constraints: None,
         allowed_entity_types: None,
         max_path_length: None,
         allowed_leaf_entity_types: Some(vec!["openid_provider".to_string()]),
@@ -98,6 +100,7 @@ fn allowed_leaf_entity_types_intermediate_chain_rejects_ancestor_constraint() {
 
     let mut ta_sub_stmt = sample_subordinate_statement(ta_id, int_id, now);
     ta_sub_stmt.constraints = Some(Constraints {
+        naming_constraints: None,
         allowed_entity_types: None,
         max_path_length: None,
         allowed_leaf_entity_types: Some(vec!["openid_provider".to_string()]),
@@ -135,6 +138,7 @@ fn allowed_leaf_entity_types_accepts_matching_leaf_metadata() {
 
     let mut sub_stmt = sample_subordinate_statement(ta_id, leaf_id, now);
     sub_stmt.constraints = Some(Constraints {
+        naming_constraints: None,
         allowed_entity_types: None,
         max_path_length: None,
         allowed_leaf_entity_types: Some(vec!["openid_relying_party".to_string()]),

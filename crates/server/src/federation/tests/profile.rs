@@ -606,3 +606,100 @@ fn supported_metadata_critical_name_does_not_enable_payload_or_header_extensions
     assert_federation_signature_only(&jwt, key);
     assert!(verify_entity_statement(&jwt, &sample_jwks()).is_err());
 }
+
+#[test]
+fn signed_naming_constraint_shapes_syntax_and_lossless_roundtrip() {
+    let _guard = raw_json_env_guard();
+    let mut claims = payload(false);
+    for naming in [
+        json!({}),
+        json!({"permitted":[]}),
+        json!({"excluded":[]}),
+        json!({"permitted":[".EXAMPLE.COM.","xn--bcher-kva.example","localhost",".EXAMPLE.COM."],"excluded":["host.example.com"]}),
+    ] {
+        claims["constraints"] = json!({"naming_constraints":naming,"unknown_extension":null});
+        for statement in [
+            accept(&claims),
+            must_ok(parse_entity_statement_unverified(&signed(&claims))),
+        ] {
+            must_ok(validate_entity_statement(&statement, 1_700_000_000));
+            assert_eq!(
+                must_ok(serde_json::to_value(statement))["constraints"]["naming_constraints"],
+                naming
+            );
+        }
+    }
+    for naming in [
+        Value::Null,
+        json!(true),
+        json!([]),
+        json!("example.com"),
+        json!({"permitted":null}),
+        json!({"excluded":null}),
+        json!({"permitted":"example.com"}),
+        json!({"excluded":{}}),
+        json!({"permitted":[1]}),
+        json!({"excluded":["valid.example",null]}),
+    ] {
+        claims["constraints"] = json!({"naming_constraints":naming});
+        reject(&claims);
+    }
+    for invalid in [
+        "",
+        ".",
+        "..example.com",
+        "example..com",
+        "example.com..",
+        "-host.example",
+        "host-.example",
+        "_host.example",
+        "*.example",
+        "https://example.com",
+        "user@example.com",
+        "example.com:443",
+        "example.com/path",
+        "example.com?",
+        "example.com#",
+        "%65xample.com",
+        "bücher.example",
+        "example.com ",
+        "example\n.com",
+        "127.0.0.1",
+        ".127.0.0.1",
+        "127.1",
+        "2130706433",
+        "[::1]",
+        "::1",
+    ] {
+        for field in ["permitted", "excluded"] {
+            claims["constraints"] = json!({"naming_constraints":{field:[invalid]}});
+            reject(&claims);
+        }
+    }
+    for invalid in [
+        format!("{}.example", "a".repeat(64)),
+        format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(62)
+        ),
+    ] {
+        claims["constraints"] = json!({"naming_constraints":{"permitted":[invalid]}});
+        reject(&claims);
+    }
+    let longest = format!(
+        "{}.{}.{}.{}.",
+        "a".repeat(63),
+        "b".repeat(63),
+        "c".repeat(63),
+        "d".repeat(61)
+    );
+    claims["constraints"] =
+        json!({"naming_constraints":{"permitted":[longest],"ignored_extension":null}});
+    accept(&claims);
+    let mut config = payload(true);
+    config["constraints"] = json!({"naming_constraints":{}});
+    reject(&config);
+}

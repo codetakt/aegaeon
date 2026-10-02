@@ -5308,6 +5308,25 @@ openid_federation_rp:
   - Signed fresh/custom/cache tests and live operation fixtures are finite implementation evidence. Management common-gate correspondence is source-inspected; no new PostgreSQL/router or external HTTPS execution, full conformance or formal discharge is claimed.
 
 
+- id: fed-rp-011
+  section: '3.1.3, 3.2, 6.2, 6.2.2'
+  requirement: MUST
+  description: Enforce each superior naming constraint on all subordinate Entity Identifier hosts
+  module: crates/server/src/federation/naming_constraints.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/naming_constraints.rs
+  - crates/server/src/federation/tests/naming_constraints_cache.rs
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/web/management/tests/upstream_metadata/naming_constraints.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/naming_constraints.rs
+  notes:
+  - Preserve signed permitted/excluded lists and reject malformed recognized syntax. Every lower entity is constrained; the issuer is exempt. Exclusions override permissions and all ancestors apply independently.
+  - Exact hosts and leading-dot subtrees use DNS label boundaries. Empty-set, ASCII/A-label, case, root-dot and single-label choices are documented implementation contracts; original identifier equality is unchanged.
+  - Shared canonical admission covers signed fresh/custom/cache paths and rejects before metadata shortcuts or writes. Pure resolved_metadata does not authenticate signatures or time. Public Constraints literals require naming_constraints initialization or default.
+  - Finite signed-path and loopback upstream operation tests plus management raw refresh admission do not establish PostgreSQL/router, external HTTPS, sibling composition, full numerical domains, conformance or formal proof.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
