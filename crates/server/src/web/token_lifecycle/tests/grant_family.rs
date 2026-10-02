@@ -186,11 +186,25 @@ async fn refresh_grant_introspection_hides_grant_storage_errors_from_unrelated_c
         let reference = meta.refresh_grant.ok_or("grant missing")?;
         let mut conn = fixture.connection()?;
         let key = fixture.key("refresh-grant:v1", &reference.id);
+        let original: String = conn.get(&key)?;
         let _: usize = conn.del(&key)?;
         let _: usize = conn.lpush(&key, "wrong-type")?;
+        let (status, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body,
+            json!({"active":false}),
+            "owner denial precedes grant lookup"
+        );
         for jwt in [false, true] {
             let before = super::failures::metrics()?;
-            let (status, body) = introspection(&fixture.state, &access.token, OWNER, jwt).await?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
             assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(body["error"], "temporarily_unavailable");
             assert!(body.get("active").is_none());
@@ -199,6 +213,16 @@ async fn refresh_grant_introspection_hides_grant_storage_errors_from_unrelated_c
             assert_eq!(status, StatusCode::OK);
             assert_eq!(body, json!({"active":false}));
         }
+        let _: usize = conn.del(&key)?;
+        let _: () = conn.set_ex(&key, original, 300)?;
+        let (_, restored) = introspection(
+            &fixture.state,
+            &access.token,
+            &reader(&fixture.state, true),
+            true,
+        )
+        .await?;
+        assert_eq!(restored["active"], true);
         Ok(())
     }
     .await;

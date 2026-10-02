@@ -800,6 +800,7 @@ mod online_resources;
 mod authority_boundaries;
 
 mod signed_introspection;
+mod signed_recipient;
 
 mod authorization_runtime;
 

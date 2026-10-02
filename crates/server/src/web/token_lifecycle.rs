@@ -114,6 +114,15 @@ async fn active_access_token_introspection_response(
         Ok(meta) => meta,
         Err(error) => return token_store_introspection_error(state, error),
     };
+    if jwt_introspection::selects_jwt_introspection(state, headers)
+        && !introspection::signed_introspection_recipient(
+            access_token,
+            meta.as_ref(),
+            &introspect_client.client_id,
+        )
+    {
+        return inactive_introspection_response(state, headers, introspect_client);
+    }
     if (access_token.client_credentials_digest.is_some()
         || meta
             .as_ref()
