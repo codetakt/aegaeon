@@ -25,6 +25,7 @@ pub(super) async fn resource(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
+    method: http::Method,
     headers: HeaderMap,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
@@ -45,7 +46,7 @@ pub(super) async fn resource(
         match policy::admit_resource_authorization(auth_header.as_deref(), issuer_base) {
             Ok(credentials) => credentials,
             Err(outcome) => {
-                record_resource_outcome(&outcome, admission_start.elapsed().as_secs_f64());
+                record_resource_outcome(&outcome, &method, admission_start.elapsed().as_secs_f64());
                 return outcome.response;
             }
         };
@@ -61,7 +62,7 @@ pub(super) async fn resource(
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
-        &http::Method::GET,
+        &method,
         &uri_for_dpop,
         &headers,
     ) {
@@ -97,12 +98,16 @@ pub(super) async fn resource(
         .with_presentation(presented_scheme);
     let latency = start.elapsed().as_secs_f64();
 
-    record_resource_outcome(&outcome, latency);
+    record_resource_outcome(&outcome, &method, latency);
 
     outcome.response
 }
 
-fn record_resource_outcome(outcome: &outcome::ResourceOutcome, latency: f64) {
+fn record_resource_outcome(
+    outcome: &outcome::ResourceOutcome,
+    method: &http::Method,
+    latency: f64,
+) {
     crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
         metrics.record_resource_access(
             outcome.mode.as_str(),
@@ -112,7 +117,7 @@ fn record_resource_outcome(outcome: &outcome::ResourceOutcome, latency: f64) {
         metrics
             .metrics
             .request_latency
-            .with_label_values(&["/resource", "GET"])
+            .with_label_values(&["/resource", method.as_str()])
             .observe(latency);
     });
 }

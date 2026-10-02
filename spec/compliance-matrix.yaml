@@ -1841,6 +1841,7 @@ rfc_9449:
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests/request_method.rs
   ci_check: dpop-htm-match
   status: verified
   runtime_link: crates/server/src/middleware/dpop.rs
@@ -1849,6 +1850,9 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Htm_validation.fst#validate_htm
     rust: crates/ffi/src/lib.rs#validate_dpop_htm_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "Runtime handlers forward the actual GET or HEAD method for resource/UserInfo and delegated application authorization; middleware preserves method-token case (RFC 9449 section 4.3 item 8; RFC 9110 section 9.1)."
+  - "The cited oracle covers the equality predicate, not router method extraction. HTTP regressions use the claims-only DPoP test double; real-signature FFI regressions remain separate. No new formal discharge is asserted."
 - id: 9449-006
   section: '4.3'
   requirement: MUST
@@ -1928,7 +1932,8 @@ rfc_9449:
   tests:
   - tests/fstar/property/TestDpopJtiReuse.fst
   - crates/server/src/middleware/dpop/tests.rs
-  - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/middleware/dpop/retention_tests.rs
+  - crates/ffi/tests/dpop_proof_test.rs
   ci_check: dpop-replay-prevention
   status: verified
   runtime_link: crates/server/src/middleware/replay_store.rs
@@ -1937,6 +1942,10 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Replay.fst#make_ticket
     rust: crates/server/src/middleware/replay_store.rs#check_and_store
     test: crates/server/src/middleware/dpop/tests.rs
+  notes:
+  - "This row records Aegaeon's selected single-use policy; RFC 9449 sections 4.3/11.1 do not impose an unconditional replay-store MUST on every deployment."
+  - "Runtime retention covers twice the maximum supported iat window plus one second (currently 601), the direct middleware window bound, and any longer requested TTL. Nonce enforcement does not shorten retention."
+  - "Controlled-time middleware tests use a claims-only double; separate FFI tests exercise real signatures and inclusive freshness. These finite tests do not re-attest the formal proof blocks or establish trusted-clock/shared-store premises."
 - id: 9449-010
   section: '6'
   requirement: MUST

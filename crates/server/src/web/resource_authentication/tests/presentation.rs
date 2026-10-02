@@ -311,7 +311,7 @@ async fn resource_authentication_query_and_userinfo_form_errors_are_route_specif
                     "POST",
                     "/userinfo",
                     headers(auth, Some("unvalidated-proof"), false)?,
-                    Body::empty(),
+                    "unused=value",
                 )
                 .await?,
                 StatusCode::BAD_REQUEST,
@@ -351,7 +351,7 @@ async fn resource_authentication_query_and_userinfo_form_errors_are_route_specif
                     invalid.insert("content-type", HeaderValue::from_bytes(&[0x80])?);
                 }
                 expect(
-                    request(&fixture.state, "POST", "/userinfo", invalid, Body::empty()).await?,
+                    request(&fixture.state, "POST", "/userinfo", invalid, "unused=value").await?,
                     StatusCode::BAD_REQUEST,
                     Some(scheme),
                     Some("invalid_request"),

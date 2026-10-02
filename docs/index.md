@@ -348,7 +348,7 @@ Audience: contributors, maintainers
 | `docs/operations/client-dpop-minimum-upgrade.md` | runbook | Client DPoP requirement upgrade | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
 | `docs/operations/device-authorization.md` | runbook | Device Authorization Confirmation | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
-| `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
+| `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |

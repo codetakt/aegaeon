@@ -172,9 +172,9 @@ async fn resource_authentication_certificate_metadata_and_ingress_remain_distinc
                 expect(request(&fixture.state,method,path,hs.clone(),Body::empty()).await?,StatusCode::UNAUTHORIZED,Some("Bearer"),Some("invalid_token"),false).await?;
                 let state=State(fixture.state.clone());let remote=ConnectInfo("127.0.0.1:19001".parse()?);let uri=OriginalUri(path.parse()?);
                 let response=match (method,path) {
-                    (_,"/resource")=>crate::web::resource_endpoint::resource(state,remote,uri,hs).await,
-                    ("POST","/userinfo")=>crate::web::userinfo::userinfo_post(state,remote,uri,hs,Ok(axum::extract::Form(Vec::new()))).await,
-                    (_,"/userinfo"|"/application/authorization")=>crate::web::userinfo::userinfo_get(state,remote,uri,hs).await,
+                    (_,"/resource")=>crate::web::resource_endpoint::resource(state,remote,uri,method.parse()?,hs).await,
+                    ("POST","/userinfo")=>crate::web::userinfo::userinfo_post(state,remote,uri,hs,Ok(axum::body::Bytes::new())).await,
+                    (_,"/userinfo"|"/application/authorization")=>crate::web::userinfo::userinfo_get(state,remote,uri,method.parse()?,hs).await,
                     _=>match crate::web::upstream_refresh_links::authenticate_upstream_refresh_caller(&fixture.state,&path.parse()?,&hs,&fixture.environment.issuer_url).await {Err(response)=>response,Ok(_)=>return Err("invalid certificate metadata accepted".into())},
                 };
                 expect(response,StatusCode::BAD_REQUEST,Some(scheme),Some("invalid_request"),false).await?;

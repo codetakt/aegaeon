@@ -68,6 +68,14 @@ process/proxy boundary rather than an issuer policy snapshot.
 | `AEGAEON_DPOP_STRICT` | _removed_ | `environment` | Removed startup-environment fallback. If the global sender-constraint policy is `None`, strict mode upgrades the runtime posture to DPoP and enables sender-binding enforcement. In the supported PostgreSQL-backed runtime, `policy.dpopStrict` is authoritative. |
 | `AEGAEON_DPOP_IAT_WINDOW_SECS` | _removed_ | `environment` | Removed startup-environment fallback maximum absolute age/skew window for the DPoP `iat` claim, in seconds. Valid range is `1..=300`. In the supported PostgreSQL-backed runtime, `policy.dpopIatWindowSeconds` is authoritative. |
 
+DPoP `htm` matches the actual HTTP method exactly, including case (RFC 9449
+section 4.3 item 8 and RFC 9110 section 9.1). `/resource` and `/userinfo` handle
+HEAD with the same authentication checks as GET, require a proof for HEAD, and
+return no response body. `/application/authorization`, which delegates its
+credential validation to UserInfo, also forwards the actual method. UserInfo
+POST continues to require a proof for POST. Resource latency metrics use the
+actual GET or HEAD method with the fixed `/resource` route label.
+
 ## Authorization endpoint behaviour
 
 | Variable | Default | Scope | Notes |
