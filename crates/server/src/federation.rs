@@ -41,6 +41,7 @@ mod admission;
 mod fetcher;
 mod headers;
 mod keys;
+mod metadata;
 mod metadata_policy;
 mod naming_constraints;
 mod profile;

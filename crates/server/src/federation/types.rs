@@ -238,13 +238,21 @@ impl TrustChain {
     ///
     /// Requires a cryptographically verified canonical alternating C/S/C path.
     /// Typed construction alone does not authenticate statements. This method
-    /// checks layout and identities, but does not verify signatures or expiry.
+    /// checks layout, identities and known metadata schemas on every input and
+    /// retained result, but does not verify signatures or expiry.
     /// The result is derived metadata and carries no signature of its own.
     ///
     /// # Errors
     /// Returns an error for malformed layout, policy or resulting metadata.
     pub fn resolved_metadata(&self) -> Result<Option<HashMap<String, Value>>, FederationError> {
         self.validate_metadata_layout()?;
+        for statement in &self.chain {
+            if let Some(metadata) = &statement.metadata {
+                for (entity_type, parameters) in metadata {
+                    super::metadata::validate(entity_type, parameters)?;
+                }
+            }
+        }
         super::naming_constraints::validate_chain_names(&self.chain)?;
         // Collect and validate every declaration before any policy is processed,
         // including declarations on types that will be absent or filtered out.
@@ -318,6 +326,7 @@ impl TrustChain {
                 policies.get(entity_type).unwrap_or(&Default::default()),
                 Some(entity_type),
             )?;
+            super::metadata::validate(entity_type, metadata)?;
         }
         Ok(Some(resolved))
     }

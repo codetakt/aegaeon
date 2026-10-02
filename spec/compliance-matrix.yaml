@@ -5344,6 +5344,25 @@ openid_federation_rp:
   - Public OidcDiscovery struct literals require the new optional require_signed_request_object field. Producer initializes None and retains PAR advertising; no migration or runtime setting is added.
   - Finite actual parser and production post-context workflow tests include signed fresh/cached chains and loopback callback/refresh. No fresh router/DB/Redis lifecycle, full schema/Federation conformance, sibling composition or formal proof is claimed.
 
+- id: fed-rp-013
+  section: '5, 5.1.1, 5.2.1, 5.2.2 (Federation 1.0 and 1.1)'
+  requirement: MUST
+  description: Reject prohibited Federation protocol-key placement and malformed known metadata before and after policy resolution
+  module: crates/server/src/federation/metadata.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/metadata_validation.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/federation/tests/profile.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata.rs
+  notes:
+  - Common section 5 rules keep empty objects and extensions, reject immediate null members and prohibit jwks/jwks_uri/signed_jwks_uri inside federation_entity. Its seven endpoint URL checks also apply to derived metadata; contextual placement/completeness checks remain separate.
+  - Federation endpoint-auth algorithms require string arrays without exact none. Empty arrays and extension names remain representable; no new cryptographic selector or eligibility claim. Common keywords/contacts require one or more strings in every entity type.
+  - Explicit local representation uses strings for organization_name/display_name/description. Informational URLs require parseable absolute strings with no whitespace/control/backslash; HTTPS, query/fragment prohibition and fetching are not imposed. These local choices are distinct from quoted normative requirements.
+  - Shared signed/typed admission and all-input/final-result validation prevent overlay/filter/policy bypass. Entity-aware flat helpers validate schemas; generic helpers do not infer types. Unused policy operands are not actual metadata instances. Signed originals remain immutable.
+  - Finite signed/individual/fresh/cache and public typed-helper tests do not establish complete OP/RP/AS/client/resource schemas, protocol-key eligibility in other roles, full Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

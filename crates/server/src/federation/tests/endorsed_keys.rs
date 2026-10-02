@@ -611,3 +611,8 @@ mod naming_constraints {
     use super::*;
     include!("naming_constraints.rs");
 }
+
+mod metadata_validation {
+    use super::*;
+    include!("metadata_validation.rs");
+}

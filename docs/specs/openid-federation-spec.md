@@ -95,6 +95,63 @@ The upstream OIDC authorize, callback and refresh workflows consume resolved OP
 metadata as described below. Successful chain admission and these consumer checks
 do not establish full Federation conformance.
 
+## Known Federation Metadata Validation
+
+Original signed and typed Entity Statements, individual admission and fresh/cache
+chain paths share representation checks for known metadata. Before overlay or
+entity-type filtering, `TrustChain::resolved_metadata` checks every statement's
+metadata, including types that will not survive in the result. It checks retained
+types again after complete policy application. This adds schema validation to
+that public typed API; it does not authenticate signatures, expiry or a manually
+constructed chain. Raw metadata and stored compact JWTs are preserved.
+
+The checks implement the common OpenID Federation 1.0/1.1 section 5 boundary:
+entity metadata must be an object, may be empty, and cannot contain immediate
+null-valued members. Unknown types and members remain extensible, including
+nested nulls. No complete OP advertisement is required from each original object;
+a superior can supply metadata. In `federation_entity`, any presence of `jwks`,
+`jwks_uri` or `signed_jwks_uri` is prohibited by section 5.2.1. Top-level Entity
+Statement signing keys are distinct. Protocol-key representation and URI semantics
+in other roles remain separate obligations.
+
+All seven Federation endpoint fields retain their existing HTTPS URL checks:
+authority required, query permitted, fragment prohibited, and local lexical and
+credential safeguards retained. These checks now also apply to derived metadata.
+Statement placement and superior fetch/list requirements remain contextual rules;
+a derived metadata object is not itself a Subordinate Statement.
+`endpoint_auth_signing_alg_values_supported` must be an array of strings and
+cannot contain the exact value `none` (section 5.1.1). Empty arrays, duplicates
+and extension algorithm identifiers remain representable. This is not a
+cryptographic algorithm selector or a full algorithm-eligibility check.
+
+Section 5.2.2 informational names retain their meaning in every entity type,
+including extension types. Aegaeon represents `organization_name`, `display_name`
+and `description` as strings, including empty strings; this is an explicit local
+representation choice for human-readable text. `keywords` and `contacts` require
+one or more string elements, without email-format, uniqueness or nonempty-element
+requirements. `logo_uri`, `policy_uri`, `information_uri` and `organization_uri`
+require parseable absolute URLs. HTTP, HTTPS and other absolute schemes are
+allowed, as are query and fragment components. Local lexical policy rejects
+whitespace, control characters and backslashes to avoid silently normalizing
+input. Exact strings are preserved; no informational URL is fetched and outbound
+SSRF controls remain independent.
+
+Upgrade behavior: malformed known input cannot be repaired by overlay or policy,
+and policy cannot create an accepted malformed retained result. A subset policy
+that empties `keywords` or `contacts` now rejects; remove an optional field with
+`value:null` instead. This does not change generic empty-set or selected-algorithm
+policy semantics. Syntactically valid unused policy operands are not treated as
+actual metadata instances. The entity-aware flat helper checks input/output
+schemas, without statement-role rules. The context-free flat helper remains a
+generic JSON transformation and cannot establish entity-specific schema validity.
+No storage migration, dependency or runtime setting is added.
+
+Finite signed admission, typed resolution, fresh traversal and cache tests cover
+these boundaries. They do not establish full imported role schemas, all metadata
+advertisement conditions, routed DB/Redis/external HTTPS execution, full Federation
+conformance or proof. Existing browser-binding, exact-issuer and endpoint-query
+changes still require verification on their eventual combined source.
+
 ## Critical Metadata Policy Operators
 
 Subordinate Statements may carry `metadata_policy_crit`, a nonempty array of
