@@ -869,6 +869,34 @@ rfc_7662:
   - Finite native startup-constructor, public-library and PG/Redis routed tests are
     separate observations. This row does not establish complete recipient, parser,
     numerical, retention, response-protection or product assurance.
+- id: 7662-009
+  section: '2.2'
+  requirement: MAY
+  description: Preserve the exact token subject as sub and omit optional username
+    when no dedicated resource-owner username source is available
+  module: crates/server/src/web/token_lifecycle/introspection.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/subject.rs
+  - crates/server/src/web/token_lifecycle/tests/schema.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  - crates/server/src/authcode/token/tests/local_introspection.rs
+  - crates/server/src/authcode/token/tests/client_credentials_introspection.rs
+  ci_check: introspection-subject-claims
+  status: implemented
+  runtime_link: crates/server/src/authcode/token/validator.rs
+  notes:
+  - RFC 7662 makes username and sub optional; omission is this implementation's
+    policy because stored subjects have no separate username provenance.
+  - JSON and signed inner responses retain exact opaque, readable and Unicode
+    subjects, including the existing machine subject for client credentials.
+  - The public local helper intentionally replaces username with sub; consumers
+    reading username for the subject must migrate. It remains a local status API
+    without online requester authorization and retains client-credentials refusal.
+  - Inactive results remain false-only. Existing recipient, state, scope, sender
+    and signature behavior remains separately required; no full privacy or
+    protocol assurance follows from these finite tests.
+
 rfc_7515:
 
 - id: 7515-001
@@ -4429,7 +4457,7 @@ rfc_9701:
     before later protected state and crypto work. Plain JSON readers are unchanged.
   - Selection shares the existing capability and Accept predicate with finalization;
     no common-target reader, sender-proof requirement or cross-grant permission is added.
-  - Plain JSON entitlement, username, failed-authentication interpretation, scope
+  - Plain JSON entitlement, failed-authentication interpretation, scope
     narrowing, privacy and negotiated response protection remain separate obligations.
   - Finite native routed PostgreSQL/Redis observations do not establish full protocol
     conformance or product assurance.
@@ -6328,7 +6356,7 @@ security_review:
   fix: "Introspection response construction in crates/server/src/web/token_lifecycle/introspection.rs builds the public response from BearerTokenMeta but never serializes refresh_parent. refresh_parent remains internal refresh-chain state in authcode token metadata."
   notes:
   - "refresh_parent exists in BearerTokenMeta struct for internal revocation chain tracking."
-  - "The introspection handler selectively serializes only: scope, client_id, username, token_type, exp, aud, issued_at, expires_at, granted_scopes, authorization_details, auth_time, acr, sender_binding."
+  - "The introspection handler publishes selected fields including sub, scope, client_id, token_type, exp, aud, issued_at, expires_at, granted_scopes, authorization_details, auth_time, acr, and sender_binding; it omits username and internal refresh_parent."
 - id: sec-M-2
   requirement: MEDIUM
   severity: medium

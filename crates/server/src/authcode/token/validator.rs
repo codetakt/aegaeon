@@ -216,8 +216,13 @@ impl TokenValidator {
 
     /// Inspect legacy stored-token status without an online authority backend.
     /// Either stored client-credentials marker, and any lookup failure, yields inactive.
-    /// Use the HTTP
-    /// introspection endpoint for authenticated current-policy evaluation (RFC 7662).
+    /// Active results expose the exact stored subject as `sub` and omit `username`:
+    /// this store has no dedicated human-readable resource-owner username source.
+    /// Consumers that used the former `username` field for the subject must migrate
+    /// to `sub`. Inactive results contain only `active: false`.
+    /// This helper does not authorize an online client or resource server. Use the
+    /// HTTP introspection endpoint for authenticated current-policy evaluation
+    /// (RFC 7662).
     #[must_use]
     pub fn introspect_token(&self, token: &str) -> serde_json::Value {
         let Ok(Some(access_token)) = self.token_store.try_verify_access_token(token) else {
@@ -245,7 +250,7 @@ impl TokenValidator {
                 let mut body = json!({
                     "active": true,
                     "client_id": access_token.client_id,
-                    "username": access_token.user_id,
+                    "sub": access_token.user_id,
                     "token_type": access_token.token_type,
                     "exp": exp,
                 });

@@ -340,7 +340,34 @@ the JWT capability is disabled. This restriction uses the existing response
 selection; it does not change Accept negotiation.
 
 This implements a bounded signed-recipient check from RFC 9701 §§3 and 5.
-Plain JSON resource-server entitlement, username semantics, failed-authentication
+Plain JSON resource-server entitlement, failed-authentication
 status interpretation, scope narrowing, data-release privacy and negotiated
 response protection remain separate obligations. Finite tests do not establish
 full RFC 7662/RFC 9701 or product assurance.
+
+## Introspection subject claims
+
+Active JSON responses and the signed response's inner `token_introspection`
+object expose the exact stored token subject in `sub` and omit `username`.
+Readable, opaque and Unicode subject identifiers retain their exact value;
+client-credentials tokens retain their existing machine subject. No subject
+normalization, username inference or additional user lookup is performed.
+
+RFC 7662 §2.2 makes both fields optional: `username` identifies the resource owner
+in human-readable form, while `sub` is the token subject. Aegaeon's stored token
+records have no dedicated introspection username source, so this implementation
+chooses to omit `username`. The standard does not universally require omission
+or forbid a legitimate username and subject from being equal.
+
+This is a compatibility correction for the public
+`TokenValidator::introspect_token` helper: its former `username` field is replaced
+by `sub`. Consumers that read the token subject from `username` must migrate to
+`sub`. HTTP consumers already receive `sub` and should use that field for the
+subject. No database migration, token rewrite or additional disclosure permission
+is introduced. Inactive responses still contain only `{"active":false}`.
+
+The local helper remains a stored-token-status API without online client or
+resource-server authorization. It still refuses client-credentials records;
+use the authenticated HTTP endpoint for current-policy evaluation. This scoped
+field correction does not establish complete response privacy or protocol
+assurance.
