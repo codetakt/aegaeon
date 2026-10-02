@@ -87,13 +87,50 @@ scope-token alphabet with single SP separators; invalid or empty interior tokens
 Scope policy set operands, value and default use arrays of valid tokens. Other strings
 and OP `scopes_supported` do not receive this representation conversion.
 
-Unknown noncritical operators are ignored after structural validation. Critical
-declarations remain rejected by raw statement admission; these helpers cannot validate
-critical declarations or recover duplicate members discarded during JSON parsing.
+Unknown noncritical operators are ignored after structural validation. The flat helpers
+cannot validate signed or chain-wide critical declarations or recover duplicate members
+discarded during JSON parsing. Complete-chain admission handles declarations as below.
 Fresh and cached chain APIs now require policy resolution before returning success.
 The upstream OIDC authorize, callback and refresh workflows consume resolved OP
 metadata as described below. Successful chain admission and these consumer checks
 do not establish full Federation conformance.
+
+## Critical Metadata Policy Operators
+
+Subordinate Statements may carry `metadata_policy_crit`, a nonempty array of
+additional operator names (OpenID Federation 1.0/1.1 sections 3.1.3, 6.1.3.2 and
+6.1.4.1). Aegaeon supports exactly `intersect`, the existing local `subset_of`
+alias. The seven standard operator names cannot appear in this declaration.
+Empty, unknown or case-varied names are rejected even if no policy uses them.
+Null, empty or malformed arrays and duplicate JSON members are rejected on the
+original signed input. An Entity Configuration cannot carry the member, including
+null or empty values. Valid list order and duplicate names survive typed parsing;
+a supported name need not occur in the declaring statement or anywhere in the chain.
+
+The resolver collects declarations from every Subordinate Statement before
+validating and merging any policy. Every supplied policy is checked, including
+unused or filtered entity types and chains whose leaf has no metadata. Supported
+`intersect` operands, combinations and merges are processed whether or not declared
+critical. Unknown noncritical operators remain ignored after the original nonempty
+policy grammar is checked. Resolution still overlays immediate-superior metadata,
+filters entity types, then applies policies without recreating removed types.
+Optional anchor pins continue comparing the original policy values.
+
+Fresh traversal, custom acquisition, raw cache reconstruction and management refresh
+share signed-path admission. Detached parsed claims cannot replace the critical list
+in the signed bytes. Valid cache round trips preserve declarations; invalid cache can
+use fresh fallback, but invalid fresh output cannot create or renew a valid entry.
+The upstream operation checks consume the resulting OP metadata and reject unsupported
+critical input before sending credentials, without ordinary Discovery fallback.
+Payload `crit` remains unsupported and rejected whenever present; JOSE-header `crit`
+is a separate mechanism with its existing refusal rules.
+
+Rust callers constructing `EntityStatement` literals must initialize
+`metadata_policy_crit: None` for prior behavior. This intentionally changes Rust source
+compatibility; older JSON omitting the field remains compatible. No invalid default
+Entity Statement is provided. Public unverified parsing and direct serde do not attest
+signed admission or recover malformed presence lost by an `Option` conversion.
+Raw JWS cache arrays require no migration or purge.
 
 ## Optional Local Anchor Pins and Complete-Chain Admission
 
@@ -160,8 +197,8 @@ standard filter. A local match cannot preserve a type removed by the standard
 filter, and a local mismatch still rejects the chain. Raw signature/profile
 admission rejects present-null or wrong-shaped `allowed_entity_types`,
 `allowed_leaf_entity_types` and `max_path_length` values. Unrecognized additional
-constraints remain ignored. Standard naming constraints and critical extension
-processing remain separate implementation obligations; the existing `u32`
+constraints remain ignored. Standard naming constraints and unsupported payload
+extensions remain separate implementation obligations; the existing `u32`
 max-path representation and numerical domain are unchanged.
 
 Rust callers constructing the public `Constraints` struct must add
@@ -233,7 +270,7 @@ Refresh requests add no scope parameter or new granted-scope lineage check.
 Required `jwks_uri` plus optional inline signature-key consistency remains the
 key-source contract. Inline-only or `signed_jwks_uri` support, unconsumed
 UserInfo/registration fields, broader logout behavior and full Federation
-critical/constraint/numeric/cache-time domains remain separate obligations.
+unsupported payload extensions, naming constraints and full numeric/cache-time domains remain separate obligations.
 The separate exact-issuer, endpoint-query and browser-binding repairs require
 verification on their eventual combined source; this change does not establish
 that integration or whole-product assurance.

@@ -601,3 +601,8 @@ mod entity_type_constraints {
     use super::*;
     include!("entity_type_constraints.rs");
 }
+
+mod critical_policy {
+    use super::*;
+    include!("critical_policy.rs");
+}

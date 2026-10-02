@@ -5287,7 +5287,26 @@ openid_federation_rp:
   - Retain federation_entity; intersect all present allowed_entity_types lists without rewriting signed statements. Invalid or removed-type policies cannot be hidden by filtering.
   - The distinct local allowed_leaf_entity_types predicate still checks original leaf types. Rust struct literals require the new field or Constraints default; missing serialized fields remain compatible.
   - Signed fresh/custom/cache controls and direct upstream workflows use loopback token calls. Existing management common-gate correspondence is source-inspected, not newly executed through PostgreSQL or router tests.
-  - Naming constraints, critical extension processing, full numerical domains, sibling integration and whole-product assurance remain separate obligations.
+  - Naming constraints, unsupported payload extensions, full numerical domains, sibling integration and whole-product assurance remain separate obligations.
+
+- id: fed-rp-010
+  section: '3.1.3, 6.1.3.2, 6.1.4.1'
+  requirement: MUST
+  description: Admit supported critical metadata policy operators across the complete signed chain
+  module: crates/server/src/federation/types.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/federation/tests/critical_policy.rs
+  - crates/server/src/web/management/tests/upstream_metadata/critical_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Collect all Subordinate Statement metadata_policy_crit declarations before processing policies. The existing local intersect alias is supported; standard names, malformed lists and unsupported additional names are refused, including unused declarations.
+  - Validate every policy before metadata absence or type filtering. Preserve original signed bytes, duplicate declaration names, unknown noncritical ignore behavior and exact optional anchor pins.
+  - Rust EntityStatement literals require metadata_policy_crit initialization; omitted serialized fields remain compatible. Payload crit remains unsupported and JOSE critical headers retain their separate rules.
+  - Signed fresh/custom/cache tests and live operation fixtures are finite implementation evidence. Management common-gate correspondence is source-inspected; no new PostgreSQL/router or external HTTPS execution, full conformance or formal discharge is claimed.
+
 
 openid_federation_op:
 - id: fed-op-001

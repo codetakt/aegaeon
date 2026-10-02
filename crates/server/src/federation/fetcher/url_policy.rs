@@ -248,6 +248,7 @@ mod tests {
             trust_marks: None,
             authority_hints: None,
             source_endpoint: None,
+            metadata_policy_crit: None,
         }
     }
 
