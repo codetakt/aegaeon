@@ -92,7 +92,7 @@ fn form_pairs_with_duplicate(
     axum::extract::Form(params)
 }
 
-fn test_upstream_connection(
+pub(super) fn test_upstream_connection(
     environment_id: uuid::Uuid,
     connection_id: uuid::Uuid,
     client_auth_method: &str,
@@ -117,7 +117,7 @@ fn test_upstream_connection(
     }
 }
 
-fn base_profile() -> oauth_profile::ResolvedProfile {
+pub(super) fn base_profile() -> oauth_profile::ResolvedProfile {
     oauth_profile::ResolvedProfile {
         id: "profile-id".to_string(),
         name: "upstream".to_string(),
@@ -131,7 +131,7 @@ fn base_profile() -> oauth_profile::ResolvedProfile {
     }
 }
 
-fn base_discovery(issuer: &str) -> Result<OidcDiscovery, String> {
+pub(super) fn base_discovery(issuer: &str) -> Result<OidcDiscovery, String> {
     let base_url = issuer.trim_end_matches('/');
     let mut discovery = OidcDiscovery::new_with_runtime_config(
         issuer,
@@ -162,6 +162,7 @@ fn logout_test_request(
 ) -> crate::upstream::UpstreamAuthRequest {
     let now = SystemTime::now();
     crate::upstream::UpstreamAuthRequest {
+        browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(b"browser-secret")),
         state: "state".to_string(),
         nonce: "nonce".to_string(),
         code_verifier: None,
