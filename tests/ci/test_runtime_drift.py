@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -226,6 +227,15 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
             check=False,
         )
 
+    def guarded_checker(self, program, status=0):
+        original = CHECKER.read_text()
+        guard = 'if __name__ == "__main__":\n    raise SystemExit(main())'
+        assert original.count(guard) == 1
+        replacement = 'if __name__ == "__main__":\n' + textwrap.indent(
+            program + f"\nraise SystemExit({status})\n", "    "
+        )
+        self.write(str(CHECKER.relative_to(ROOT)), original.replace(guard, replacement))
+
     def test_wrapper_preserves_status_and_binds_unchanged_manifest(self):
         for expected, path in ((0, None), (1, "a.rs"), (2, "crates/crypto/src/monitored.rs")):
             with self.subTest(expected=expected):
@@ -275,7 +285,6 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
         assert not (self.root / "evidence").exists()
 
     def test_source_mutation_and_unexpected_status_are_evidence_failures(self):
-        checker = self.root / "scripts/validation/check_runtime_drift.py"
         cases = (
             (
                 (
@@ -288,7 +297,7 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
         )
         for index, (program, status) in enumerate(cases):
             with self.subTest(status=status):
-                checker.write_text(program)
+                self.guarded_checker(program, status)
                 evidence = self.temporary / f"invalid-{index}"
                 result = self.wrapped(evidence)
                 assert result.returncode == 3
@@ -306,23 +315,125 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
 
     def test_absent_and_malformed_manifest_preserve_direct_checker_failure(self):
         manifest = self.root / MANIFEST
-        for contents in (None, b"{"):
+        invalid_manifests = (
+            None,
+            b"{",
+            b"\xff",
+            b"[]",
+            b"null",
+            manifest.read_text().encode("utf-16"),
+            b'{"metadata": ' + b"9" * 5000 + b"}",
+            b"[" * 10_000 + b"]" * 10_000,
+        )
+        for index, contents in enumerate(invalid_manifests):
             with self.subTest(contents=contents):
                 if contents is None:
                     manifest.unlink()
                 else:
                     manifest.write_bytes(contents)
                 direct = self.invoke("--check")
-                evidence = self.temporary / ("absent" if contents is None else "malformed")
+                if index == len(invalid_manifests) - 1:
+                    assert "RecursionError" in direct.stderr
+                evidence = self.temporary / f"invalid-manifest-{index}"
                 wrapped = self.wrapped(evidence)
                 assert wrapped.returncode == direct.returncode == 1
                 receipt = json.loads((evidence / "receipt.json").read_text())
                 assert receipt["checker_exit_code"] == receipt["exit_code"] == 1
                 assert receipt["source_before"] == receipt["source_after"]
+                assert set(receipt["source_before"]["runtime_inputs"]) == {
+                    "crates/crypto/src/monitored.rs"
+                }
                 assert receipt["source_before"]["sha256"][str(MANIFEST)] == (
                     None if contents is None else sha(contents)
                 )
                 assert (manifest.read_bytes() if manifest.exists() else None) == contents
+
+    def test_untracked_and_ignored_monitored_mutations_are_evidence_failures(self):
+        path = "crates/crypto/src/observed.rs"
+        cases = (
+            (False, "create", 0),
+            (False, "modify", 0),
+            (True, "modify", 0),
+            (True, "remove", 0),
+            (False, "modify", 1),
+            (True, "remove", 2),
+        )
+        for index, (ignored, action, status) in enumerate(cases):
+            with self.subTest(ignored=ignored, action=action, status=status):
+                (self.root / ".git/info/exclude").write_text(path + "\n" if ignored else "")
+                self.write(path, "before\n")
+                if action == "create":
+                    (self.root / path).unlink()
+                operation = "unlink()" if action == "remove" else "write_text('after\\n')"
+                self.guarded_checker(f"pathlib.Path({path!r}).{operation}", status)
+                evidence = self.temporary / f"mutation-{index}"
+                assert self.wrapped(evidence).returncode == 3
+                receipt = json.loads((evidence / "receipt.json").read_text())
+                assert receipt["checker_exit_code"] == status
+                before, after = receipt["source_before"], receipt["source_after"]
+                assert before["tracked_status"] == after["tracked_status"]
+                assert before["tracked_diff_sha256"] == after["tracked_diff_sha256"]
+                assert before["runtime_inputs"] != after["runtime_inputs"]
+                assert after["runtime_inputs"].get(path) == (
+                    None if action == "remove" else sha(b"after\n")
+                )
+
+    def test_listed_untracked_symlink_target_changes_are_observed(self):
+        self.write("data/target", "before\n")
+        path = "outside.rs"
+        (self.root / path).symlink_to(self.root / "data/target")
+        manifest = json.loads((self.root / MANIFEST).read_bytes())
+        manifest["files"][path] = {
+            "sha256": sha(b"before\n"),
+            "entries": ["outside"],
+            "critical": False,
+        }
+        self.write(str(MANIFEST), json.dumps(manifest))
+        self.guarded_checker("pathlib.Path('data/target').write_text('after\\n')")
+        evidence = self.temporary / "symlink"
+        assert self.wrapped(evidence).returncode == 3
+        receipt = json.loads((evidence / "receipt.json").read_text())
+        assert receipt["checker_exit_code"] == 0
+        before, after = receipt["source_before"], receipt["source_after"]
+        assert before["tracked_status"] == after["tracked_status"]
+        assert before["tracked_diff_sha256"] == after["tracked_diff_sha256"]
+        assert before["runtime_inputs"][path] == sha(b"before\n")
+        assert after["runtime_inputs"][path] == sha(b"after\n")
+
+    def test_stable_untracked_ignored_and_missing_inputs_preserve_checker_failures(self):
+        path = "crates/crypto/src/new.rs"
+        for ignored in (False, True):
+            with self.subTest(ignored=ignored):
+                (self.root / ".git/info/exclude").write_text(path + "\n" if ignored else "")
+                self.write(path, "new\n")
+                evidence = self.temporary / f"stable-{ignored}"
+                assert self.wrapped(evidence).returncode == 2
+                receipt = json.loads((evidence / "receipt.json").read_text())
+                assert receipt["checker_exit_code"] == 2
+                assert receipt["source_before"] == receipt["source_after"]
+                assert receipt["source_before"]["runtime_inputs"][path] == sha(b"new\n")
+                (self.root / path).unlink()
+        for path, status in (("a.rs", 1), ("crates/crypto/src/monitored.rs", 2)):
+            with self.subTest(path=path):
+                original = (self.root / path).read_bytes()
+                (self.root / path).unlink()
+                evidence = self.temporary / f"missing-{status}"
+                assert (
+                    self.wrapped(evidence).returncode == self.invoke("--check").returncode == status
+                )
+                receipt = json.loads((evidence / "receipt.json").read_text())
+                assert receipt["source_before"] == receipt["source_after"]
+                assert receipt["source_before"]["runtime_inputs"][path] is None
+                (self.root / path).write_bytes(original)
+
+    def test_unmonitored_untracked_noise_does_not_change_the_input_inventory(self):
+        self.guarded_checker("pathlib.Path('noise.txt').write_text('unrelated')")
+        evidence = self.temporary / "noise"
+        assert self.wrapped(evidence).returncode == 0
+        receipt = json.loads((evidence / "receipt.json").read_text())
+        assert receipt["source_before"] == receipt["source_after"]
+        assert "noise.txt" not in receipt["source_after"]["runtime_inputs"]
+        assert (self.root / "noise.txt").read_text() == "unrelated"
 
     def test_workflow_keeps_failures_and_uploads_only_executed_runtime_evidence(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())

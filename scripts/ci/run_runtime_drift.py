@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import runpy
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -33,12 +34,42 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def manifest_digest() -> str | None:
+def read_manifest() -> bytes | None:
     try:
-        return digest(MANIFEST.read_bytes())
+        return MANIFEST.read_bytes()
     except FileNotFoundError:
         # Missing manifests are an existing checker failure, not a wrapper failure.
         return None
+
+
+def listed_paths(manifest: bytes | None) -> set[str]:
+    try:
+        data = json.loads(manifest.decode("utf-8")) if manifest is not None else None
+    except (ValueError, RecursionError):
+        # Let the existing checker decide invalid-manifest failures.
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    return {
+        path
+        for group in (data.get("files"), data.get("monitored_files"))
+        if isinstance(group, dict)
+        for path, info in group.items()
+        if isinstance(path, str) and isinstance(info, dict)
+    }
+
+
+def runtime_inputs(manifest: bytes | None) -> dict[str, str | None]:
+    # Import only definitions; use the checker's discovery, including ignored files.
+    checker = runpy.run_path(str(CHECKER), run_name="runtime_drift_snapshot")
+    paths = listed_paths(manifest) | set(checker["_collect_monitored_files"]())
+    inventory: dict[str, str | None] = {}
+    for path in sorted(paths):
+        try:
+            inventory[path] = digest(Path(path).read_bytes())
+        except FileNotFoundError:
+            inventory[path] = None
+    return inventory
 
 
 def source_state() -> dict[str, Any]:
@@ -46,16 +77,18 @@ def source_state() -> dict[str, Any]:
     commit = git("rev-parse", "HEAD")
     if os.environ.get("GITHUB_SHA", commit) != commit:
         raise ValueError("GITHUB_SHA differs from the checked out commit")
+    manifest = read_manifest()
     return {
         "commit": commit,
         "tree": git("rev-parse", "HEAD^{tree}"),
         "tracked_status": git("status", "--porcelain=v1", "--untracked-files=no"),
         "tracked_diff_sha256": digest(subprocess.check_output(["git", "diff", "HEAD", "--binary"])),
         "sha256": {
-            str(MANIFEST): manifest_digest(),
+            str(MANIFEST): digest(manifest) if manifest is not None else None,
             str(CHECKER): digest(CHECKER.read_bytes()),
             str(WRAPPER): digest(WRAPPER.read_bytes()),
         },
+        "runtime_inputs": runtime_inputs(manifest),
     }
 
 
@@ -88,7 +121,16 @@ def check(evidence: Path) -> dict[str, Any]:
         receipt["source_after"] = after
         validate_result(before, after, result.returncode)
         receipt["exit_code"] = result.returncode
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
+    except (
+        OSError,
+        ValueError,
+        ImportError,
+        LookupError,
+        SyntaxError,
+        TypeError,
+        SystemExit,
+        subprocess.SubprocessError,
+    ) as error:
         receipt["error"] = str(error)
         output += f"\nRuntime drift evidence error: {error}\n".encode()
     receipt["finished_at"] = datetime.now(UTC).isoformat()
