@@ -76,6 +76,16 @@ credential validation to UserInfo, also forwards the actual method. UserInfo
 POST continues to require a proof for POST. Resource latency metrics use the
 actual GET or HEAD method with the fixed `/resource` route label.
 
+The production DPoP verifier accepts the existing EdDSA/OKP/Ed25519 key profile.
+The embedded JWK must be public: any `d` member is rejected, including a null
+value. Protected-header and JWK member names must be unique, including escaped
+aliases. Aegaeon implements no critical DPoP extensions, so any `crit` parameter
+is rejected; unknown noncritical fields remain permitted (RFC 9449 sections
+4.2–4.3 and RFC 7515 sections 4 and 4.1.11). JWT payloads must remain base64url
+encoded: if `b64` is supplied, it must be Boolean `true` (RFC 7797 section 7).
+These checks apply to both public FFI DPoP verification entry points as well as
+the server's production verification path.
+
 ## Authorization endpoint behaviour
 
 | Variable | Default | Scope | Notes |
