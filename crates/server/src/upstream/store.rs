@@ -92,6 +92,19 @@ impl UpstreamAuthStore {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn pending_count_for_tests(&self) -> Result<usize, String> {
+        match &self.backend {
+            UpstreamAuthStoreBackend::InMemory(entries) => entries
+                .read()
+                .map(|entries| entries.len())
+                .map_err(|err| format!("upstream auth store lock poisoned: {err}")),
+            UpstreamAuthStoreBackend::Redis(_) => {
+                Err("pending-count observer requires in-memory test store".into())
+            }
+        }
+    }
+
     #[must_use]
     pub fn ttl(&self) -> Duration {
         self.ttl
