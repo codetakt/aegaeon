@@ -153,6 +153,9 @@ fn verify_software_statement_registered_claims(
     })?;
     let mut val = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
     val.validate_exp = true;
+    if let Some(audience) = config.expected_audience.as_deref() {
+        val.set_audience(&[audience]);
+    }
     let claims = verify_signed_assertion_registered_claims(
         ssa,
         &key,
@@ -172,14 +175,22 @@ fn verify_software_statement_registered_claims(
     })?;
 
     let now = software_statement_now(clock())?;
+    if claims
+        .iss
+        .as_deref()
+        .is_some_and(|issuer| issuer.chars().all(char::is_whitespace))
+    {
+        return Err(SoftwareStatementVerificationError::invalid(
+            "ssa issuer must not be empty",
+        ));
+    }
     let mut ctx_builder = ValidationContext::builder()
         .now(now)
         .leeway(Duration::from_secs(config.leeway_secs))
-        .require_exp(true);
+        .require_exp(true)
+        .require_issuer(true);
     if let Some(issuer) = config.expected_issuer.as_deref() {
-        ctx_builder = ctx_builder
-            .expected_issuer(issuer.to_string())
-            .require_issuer(true);
+        ctx_builder = ctx_builder.expected_issuer(issuer.to_string());
     }
     if let Some(aud) = config.expected_audience.as_deref() {
         ctx_builder = ctx_builder

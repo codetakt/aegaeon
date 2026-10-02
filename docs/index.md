@@ -85,7 +85,7 @@ Audience: contributors, maintainers
 | `docs/policies/audit-policy.md` | policy | Audit Policy — Strong Audit Baseline (AS/OP + Upstream OIDC RP) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/branch-protection.md` | policy | Branch Protection Rules | current implementation baseline | 2026-09-07 | Governance | contributors, maintainers |
 | `docs/policies/dcr-everparse-self-check.md` | policy | DCR EverParse Runtime Posture (Self-Check) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
-| `docs/policies/dcr-policy.md` | policy | Dynamic Client Registration (DCR) — BCP Policy Gates | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
+| `docs/policies/dcr-policy.md` | policy | Dynamic Client Registration (DCR) — BCP Policy Gates | current implementation baseline | 2026-10-02 | Governance | contributors, maintainers |
 | `docs/policies/dependency-policy.md` | policy | Dependency Policy & Supply-Chain Checks | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/jose-header-policy.md` | policy | JOSE Protected Header Length Policy | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
 | `docs/policies/jwt-bearer-policy.md` | policy | JWT Bearer Grant Policy (RFC 7523) | current implementation baseline | 2026-07-07 | Governance | contributors, maintainers |
