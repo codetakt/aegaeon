@@ -200,11 +200,28 @@ impl RuntimeKeySet {
         self.keys.is_empty()
     }
 
+    /// Return the sole ACTIVE key for this usage, or None if absent or ambiguous.
     #[must_use]
     pub fn active_key(&self, usage: RuntimeKeyUsage) -> Option<&RuntimeKey> {
+        let mut keys = self.active_keys(usage);
+        let key = keys.next()?;
+        keys.next().is_none().then_some(key)
+    }
+
+    #[must_use]
+    pub fn active_key_for_algorithm(
+        &self,
+        usage: RuntimeKeyUsage,
+        algorithm: RuntimeKeyAlgorithm,
+    ) -> Option<&RuntimeKey> {
+        self.active_keys(usage)
+            .find(|key| key.algorithm == algorithm)
+    }
+
+    pub fn active_keys(&self, usage: RuntimeKeyUsage) -> impl Iterator<Item = &RuntimeKey> {
         self.keys
             .iter()
-            .find(|key| key.usage == usage && key.status == RuntimeKeyStatus::Active)
+            .filter(move |key| key.usage == usage && key.status == RuntimeKeyStatus::Active)
     }
 
     #[must_use = "consume the retiring-key iterator or remove the call"]

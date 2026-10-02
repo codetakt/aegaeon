@@ -40,6 +40,7 @@ fn capacity_activate_request(
     usage: crate::runtime_keys::RuntimeKeyUsage,
 ) -> ActivateRuntimeKeyRequest {
     ActivateRuntimeKeyRequest {
+        algorithm: None,
         base_configuration_version_id: env.configuration_version_id.to_string(),
         usage: usage.as_db_str().to_string(),
         comment: None,

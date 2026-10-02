@@ -7,6 +7,7 @@ mod in_memory;
 #[cfg(test)]
 pub use in_memory::{InMemoryKeyManager, InMemoryPublicJwtKeyManager};
 mod managed;
+pub(crate) mod managed_rsa;
 pub use managed::ManagedJwtKeyManager;
 
 /// Errors that can occur during key management operations.
@@ -156,3 +157,6 @@ pub(super) fn log_key_manager_invariant(error: impl std::fmt::Display, context: 
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod managed_slot_tests;

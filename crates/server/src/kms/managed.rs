@@ -16,6 +16,7 @@ struct ManagedJwtSigningKey {
 
 enum ManagedJwtSigningMaterial {
     EdDsa(aegaeon_crypto::signing::Ed25519SigningKey),
+    Rs256(Box<super::managed_rsa::ManagedRsaSigningKey>),
 }
 
 struct ManagedJwtVerificationKey {
@@ -28,12 +29,14 @@ struct ManagedJwtVerificationKey {
 
 enum ManagedJwtVerificationMaterial {
     EdDsa(Vec<u8>),
+    Rs256 { n: Vec<u8>, e: Vec<u8> },
 }
 
 /// JWT key manager backed by management-database runtime keys.
 ///
-/// Signing uses the active key for a single runtime-key usage. Verification accepts
-/// both the active key and retiring keys for that usage, selected by JOSE `kid`.
+/// Signing uses the selected ACTIVE algorithm slot of one runtime-key usage.
+/// Verification accepts all ACTIVE and live RETIRING keys of that usage by exact
+/// JOSE `kid` and algorithm.
 pub struct ManagedJwtKeyManager {
     active: ManagedJwtSigningKey,
     verification_keys: Vec<ManagedJwtVerificationKey>,
@@ -51,12 +54,47 @@ impl ManagedJwtKeyManager {
         runtime_keys: &RuntimeKeySet,
         usage: RuntimeKeyUsage,
     ) -> Result<Self, KeyManagerError> {
+        // Preserve the existing HTTP selection until the recipient profile is implemented.
+        Self::try_from_runtime_keys_for_algorithm(runtime_keys, usage, RuntimeKeyAlgorithm::EdDsa)
+    }
+
+    /// Build a purpose-isolated signer for exactly the requested ACTIVE algorithm slot.
+    /// Verification and public projection include all live keys of the same purpose.
+    ///
+    /// # Errors
+    /// Returns an error for unsupported purpose/algorithm, missing slot or unusable material.
+    pub fn try_from_runtime_keys_for_algorithm(
+        runtime_keys: &RuntimeKeySet,
+        usage: RuntimeKeyUsage,
+        algorithm: RuntimeKeyAlgorithm,
+    ) -> Result<Self, KeyManagerError> {
+        let allowed = matches!(
+            (usage, algorithm),
+            (
+                RuntimeKeyUsage::JwtAccessTokenSigning,
+                RuntimeKeyAlgorithm::EdDsa
+            ) | (
+                RuntimeKeyUsage::JwtIntrospectionSigning,
+                RuntimeKeyAlgorithm::EdDsa | RuntimeKeyAlgorithm::Rs256
+            )
+        );
+        if !allowed {
+            return Err(KeyManagerError::OperationFailed);
+        }
         let active_key = runtime_keys
-            .active_key(usage)
+            .active_key_for_algorithm(usage, algorithm)
             .ok_or(KeyManagerError::KeyNotFound)?;
         let active = managed_jwt_signing_key(active_key)?;
-        let mut verification_keys = std::iter::once(active_key)
-            .chain(runtime_keys.retiring_keys(usage))
+        // Validate every ACTIVE private/public pair, including the other algorithm slot.
+        for key in runtime_keys
+            .active_keys(usage)
+            .filter(|key| key.algorithm != algorithm)
+        {
+            managed_jwt_signing_key(key)?;
+        }
+        let mut verification_keys = runtime_keys
+            .active_keys(usage)
+            .chain(runtime_keys.active_retiring_keys_at(usage, current_unix_epoch_secs()))
             .map(managed_jwt_verification_key)
             .collect::<Result<Vec<_>, _>>()?;
         verification_keys.sort_by(|left, right| left.kid.cmp(&right.kid));
@@ -72,6 +110,7 @@ impl ManagedJwtKeyManager {
 impl KeyManager for ManagedJwtKeyManager {
     fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, KeyManagerError> {
         match &self.active.material {
+            ManagedJwtSigningMaterial::Rs256(signer) => signer.sign(msg),
             ManagedJwtSigningMaterial::EdDsa(signer) => signer
                 .sign(msg)
                 .map_err(|_| KeyManagerError::OperationFailed),
@@ -134,6 +173,11 @@ impl ManagedJwtVerificationKey {
 
     fn verify(&self, msg: &[u8], sig: &[u8]) -> Result<bool, KeyManagerError> {
         match &self.material {
+            ManagedJwtVerificationMaterial::Rs256 { n, e } => {
+                Ok(ring::signature::RsaPublicKeyComponents { n, e }
+                    .verify(&ring::signature::RSA_PKCS1_2048_8192_SHA256, msg, sig)
+                    .is_ok())
+            }
             ManagedJwtVerificationMaterial::EdDsa(public_key) => {
                 Ok(aegaeon_crypto::signature::verify_ed25519(public_key, msg, sig).is_ok())
             }
@@ -156,9 +200,12 @@ fn managed_jwt_signing_key(key: &RuntimeKey) -> Result<ManagedJwtSigningKey, Key
             )?;
             ManagedJwtSigningMaterial::EdDsa(signer)
         }
-        RuntimeKeyAlgorithm::Rs256 | RuntimeKeyAlgorithm::RsaOaepA256Gcm => {
-            return Err(KeyManagerError::OperationFailed);
+        RuntimeKeyAlgorithm::Rs256 => {
+            let signer = super::managed_rsa::ManagedRsaSigningKey::from_pkcs8(&pkcs8)?;
+            ensure_runtime_key_public_jwk_matches(key, &signer.public_jwk(&key.kid)?)?;
+            ManagedJwtSigningMaterial::Rs256(Box::new(signer))
         }
+        RuntimeKeyAlgorithm::RsaOaepA256Gcm => return Err(KeyManagerError::OperationFailed),
     };
     Ok(ManagedJwtSigningKey {
         kid: key.kid.clone(),
@@ -176,9 +223,24 @@ fn managed_jwt_verification_key(
         RuntimeKeyAlgorithm::EdDsa => {
             ManagedJwtVerificationMaterial::EdDsa(eddsa_public_key_from_jwk(key)?)
         }
-        RuntimeKeyAlgorithm::Rs256 | RuntimeKeyAlgorithm::RsaOaepA256Gcm => {
-            return Err(KeyManagerError::OperationFailed);
+        RuntimeKeyAlgorithm::Rs256 => {
+            let decode = |value: Option<&str>| {
+                URL_SAFE_NO_PAD
+                    .decode(value.ok_or(KeyManagerError::OperationFailed)?)
+                    .map_err(|_| KeyManagerError::OperationFailed)
+            };
+            let n = decode(key.public_jwk.n.as_deref())?;
+            let e = decode(key.public_jwk.e.as_deref())?;
+            if !(256..=512).contains(&n.len())
+                || n.first()
+                    .is_none_or(|byte| *byte == 0 || (n.len() == 256 && *byte < 0x80))
+                || e.is_empty()
+            {
+                return Err(KeyManagerError::OperationFailed);
+            }
+            ManagedJwtVerificationMaterial::Rs256 { n, e }
         }
+        RuntimeKeyAlgorithm::RsaOaepA256Gcm => return Err(KeyManagerError::OperationFailed),
     };
     Ok(ManagedJwtVerificationKey {
         kid: key.kid.clone(),
@@ -195,9 +257,8 @@ fn jwt_alg_for_runtime_key(
 ) -> Result<&'static str, KeyManagerError> {
     match algorithm {
         RuntimeKeyAlgorithm::EdDsa => Ok("EdDSA"),
-        RuntimeKeyAlgorithm::Rs256 | RuntimeKeyAlgorithm::RsaOaepA256Gcm => {
-            Err(KeyManagerError::OperationFailed)
-        }
+        RuntimeKeyAlgorithm::Rs256 => Ok("RS256"),
+        RuntimeKeyAlgorithm::RsaOaepA256Gcm => Err(KeyManagerError::OperationFailed),
     }
 }
 

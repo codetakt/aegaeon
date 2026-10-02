@@ -157,11 +157,40 @@ accepts provider `awsKms` for `OIDC_ID_TOKEN_SIGNING` runtime keys only; it deri
 public JWK plus encrypted KMS key handle, while the stored provider configuration contains only the
 AWS region. Hosted bootstrap uses the same narrowed `awsKms` runtime-key boundary.
 
-`CreateRuntimeKeyRequest.activate=true` atomically retires the existing ACTIVE key for the same
-usage before inserting the replacement as ACTIVE; without activation, the key is stored as NEXT.
-Operators can later call `runtimeKeys/activateNext` with the intended usage to promote that NEXT key
-and retire the previous ACTIVE key, or revoke an individual runtime key with
-`runtimeKeys/{runtimeKeyId}/revoke`.
+`JWT_INTROSPECTION_SIGNING` supports independent RS256 and EdDSA ACTIVE/NEXT slots.
+RS256 uses separately imported `databaseEncrypted` PKCS#8 RSA material, validated by the
+signing primitive at import and manager construction. The local provider supports 2048–4096-bit
+RSA keys with SHA-256 and RSASSA-PKCS1-v1_5. Other usages retain a single ACTIVE/NEXT slot.
+The management creation default remains EdDSA for introspection; it is distinct from the
+RFC 9701 response default. The current HTTP response path still explicitly selects EdDSA:
+provisioning an RSA slot does not complete the RS256 default or per-recipient response profile.
+An enabled legacy introspection configuration still requires a usable EdDSA ACTIVE key.
+
+`CreateRuntimeKeyRequest.activate=true` atomically retires the existing ACTIVE key in the same
+slot before inserting the replacement; without activation, the key is stored as NEXT.
+`runtimeKeys/activateNext` accepts optional `algorithm` in the same vocabulary as creation.
+A supplied null, non-string, empty or unsupported value is invalid. With omission, a sole NEXT
+key for the usage is selected; multiple NEXT keys return HTTP 409 `invalid_request` with
+`allowedAlgorithms`, without mutation or success audit. Explicit selection never promotes a
+NEXT key from another algorithm slot. Rotation preserves the other slot and all history.
+Rust consumers constructing `ActivateRuntimeKeyRequest` with a struct literal must add
+`algorithm: None` to retain omitted-selector behavior, or `Some(...)` for explicit selection.
+This public field addition requires a source update even though the HTTP field is optional.
+The four-live-RETIRING-key limit remains combined across algorithms for each usage; only a
+predecessor in the selected slot increases the prospective count. Environment-wide `kid`
+uniqueness includes expired and revoked history. Revoke with `runtimeKeys/{runtimeKeyId}/revoke`
+remains exact, including emergency revocation of the last required key. Missing required keys
+fail closed on restart; another algorithm or purpose is never substituted.
+
+Apply `20261002100000_introspection_signing_key_slots.sql` with the matching binary during a
+planned maintenance interval. Stop all incompatible processes sharing the database first.
+The migration preserves existing key IDs, ciphertext, configuration ownership and deadlines;
+old binaries reject the new Atlas revision and cannot be assumed compatible with dual slots.
+Valid RSA material can be staged while introspection is disabled, subject to the active policy
+allowlist and normal human management authorization. ACTIVE mutations still require affected
+issuer processes to restart; this is not live key reload. Preserve EdDSA in the allowlist while
+its ACTIVE or live RETIRING keys remain loaded. This foundation does not provide a complete
+response-profile rollout, rollback, recovery or lifetime/cache-retention guarantee.
 
 Control-plane management policy is not issuer-scoped. The management API reads management-session
 TTL/capacity, browser Origin allowlist, and issuer base-domain defaults from
