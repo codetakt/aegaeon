@@ -341,42 +341,45 @@ async fn collect_inventory(
         .map(|name| (name, HashChain::new(name)))
         .collect();
     loop {
-        let row = sqlx::query("FETCH FORWARD 1 FROM subject_history_inventory_cursor")
-            .fetch_optional(&mut **tx)
+        let rows = sqlx::query("FETCH FORWARD 256 FROM subject_history_inventory_cursor")
+            .persistent(false)
+            .fetch_all(&mut **tx)
             .await
             .map_err(|_| refuse("database inventory stream failed"))?;
-        let Some(row) = row else {
+        if rows.is_empty() {
             break;
-        };
-        let kind: String = row
-            .try_get("record_type")
-            .map_err(|_| refuse("invalid inventory stream record"))?;
-        let key: String = row
-            .try_get("row_key")
-            .map_err(|_| refuse("invalid inventory stream key"))?;
-        let text: String = row
-            .try_get("payload")
-            .map_err(|_| refuse("invalid inventory stream payload"))?;
-        if kind.starts_with("source:") {
-            retain_source_record(&kind, &key, &text, &mut snapshot, &mut chains, &mut catalog)?;
-            continue;
         }
-        bytes = bytes
-            .checked_add(text.len() + key.len() + 64)
-            .filter(|n| *n <= INVENTORY_MAX_BYTES)
-            .ok_or_else(|| refuse("inventory exceeds supported document capacity"))?;
-        let payload: Value =
-            serde_json::from_str(&text).map_err(|_| refuse("invalid inventory record JSON"))?;
-        match kind.as_str() {
-            "collection" => collections.push(payload),
-            "fact" => facts.push(payload),
-            "finding" => findings.push(payload),
-            "observed_target" => {
-                if observed.replace(payload).is_some() {
-                    return Err(refuse("duplicate observed inventory target"));
-                }
+        for row in rows {
+            let kind: String = row
+                .try_get("record_type")
+                .map_err(|_| refuse("invalid inventory stream record"))?;
+            let key: String = row
+                .try_get("row_key")
+                .map_err(|_| refuse("invalid inventory stream key"))?;
+            let text: String = row
+                .try_get("payload")
+                .map_err(|_| refuse("invalid inventory stream payload"))?;
+            if kind.starts_with("source:") {
+                retain_source_record(&kind, &key, &text, &mut snapshot, &mut chains, &mut catalog)?;
+                continue;
             }
-            _ => return Err(refuse("unknown inventory stream record")),
+            bytes = bytes
+                .checked_add(text.len() + key.len() + 64)
+                .filter(|n| *n <= INVENTORY_MAX_BYTES)
+                .ok_or_else(|| refuse("inventory exceeds supported document capacity"))?;
+            let payload: Value =
+                serde_json::from_str(&text).map_err(|_| refuse("invalid inventory record JSON"))?;
+            match kind.as_str() {
+                "collection" => collections.push(payload),
+                "fact" => facts.push(payload),
+                "finding" => findings.push(payload),
+                "observed_target" => {
+                    if observed.replace(payload).is_some() {
+                        return Err(refuse("duplicate observed inventory target"));
+                    }
+                }
+                _ => return Err(refuse("unknown inventory stream record")),
+            }
         }
     }
     sqlx::query("CLOSE subject_history_inventory_cursor")

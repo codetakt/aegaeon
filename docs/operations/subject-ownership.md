@@ -43,6 +43,15 @@ and adoption functions. Inherited and `SET ROLE` paths are checked. Its ordinary
 application DML/view permissions remain the administrator's responsibility.
 The runtime also receives SELECT on the fixed Atlas revision relation for the
 existing startup schema check; revision mutation remains forbidden.
+Audit INSERT and SELECT remain supported, including management reads/export.
+The audit parent and every attached descendant, including subpartitions and
+partitions outside `aegaeon`, must deny reachable ownership, UPDATE, DELETE,
+TRUNCATE, TRIGGER and column UPDATE to the runtime. Direct, inherited and
+SET-reachable privileges are checked before startup and history adoption.
+Apply the forward audit-authority migration after draining existing processes.
+If preflight refuses existing grants, have the administrator review and remove
+the forbidden rights from the identified runtime role paths before restarting
+or adopting history. The migration does not revoke grants automatically.
 Only this explicit runtime login receives the fixed, read-only namespace
 validation entry. Do not grant that entry to PUBLIC or unrelated roles.
 
@@ -182,8 +191,11 @@ new validated factory result. Client projection refreshes retain the namespace.
 An embedder must observe `state.shutdown_requested()` and stop accepting/drain
 its listener when it resolves. For example, clone the opaque state for that wait
 and pass the other clone to `web::build_router`; attach the wait using Axum's
-`with_graceful_shutdown`. The capability refuses protected publication after a
-restart request even while requests are draining. Keep the Tokio runtime alive
+`with_graceful_shutdown`. A restart request refuses new protected admissions.
+Work already holding a namespace capability may complete while the listener
+drains; the capability does not hold a database transaction across Redis work.
+Finish draining all such work before privileged schema, role, database or
+history changes, then construct a new validated runtime. Keep the Tokio runtime alive
 for the required monitors. The factory initializes the shared TLS provider but
 does not configure tracing or parse the executable's arguments.
 
@@ -192,3 +204,8 @@ factory. Their caller remains responsible for supplying a validated, permanent
 issuer/subject ownership authority and composing token, UserInfo, projection and
 session operations with it. Constructing an individual helper does not confer
 Aegaeon's server namespace capability or establish deployment assurance.
+
+Inventory cursors fetch fixed batches of at most 256 rows while retaining one
+locked transaction and the complete ordered corpus. This bounds rows per fetch,
+not the byte size of an individual source row. Existing document capacity
+refusals and private failed-attempt artifacts still apply.

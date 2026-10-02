@@ -161,7 +161,7 @@
     "security_definer": false,
     "volatility": "s",
     "strict": false,
-    "body_sha256": "d3b883c26eceb4192fd1fe9b88d2b73948f4cbfa25757bb8710b8b9e01377988",
+    "body_sha256": "ad22a5c97d4dc321fa33b6ef3a237a3e66867aadf4ec0ffc7e2f144e3083fe2d",
     "settings": [
       "search_path=pg_catalog, pg_temp"
     ],
@@ -187,7 +187,7 @@
     "security_definer": false,
     "volatility": "s",
     "strict": false,
-    "body_sha256": "789fe6e645490247957e59769567a73fac51b2d4d02977a6dd8cf0c5b46f62f8",
+    "body_sha256": "21ef610a3972f7a49d63e7e1163bb82c99d2e3d8c2f64e4ed0f5a3869bc543e8",
     "settings": [
       "search_path=pg_catalog, pg_temp"
     ],
@@ -429,7 +429,7 @@
     "security_definer": false,
     "volatility": "v",
     "strict": false,
-    "body_sha256": "f69b9ea02f5329bf7fe4a13882f1ba2a1eb05ba78ff2a6bef8e9f72be13b6e35",
+    "body_sha256": "492e346cf2a26b45ff29054d9883d6ec4e4aa276c6ea01fa2dd04ae608f1058f",
     "settings": [
       "datestyle=iso, ymd",
       "extra_float_digits=3",

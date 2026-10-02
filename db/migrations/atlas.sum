@@ -1,4 +1,4 @@
-h1:pHrfJrFhWucKmk87GR0+3PFj+R7Cv5KOWAq6T8chT0s=
+h1:AvHTIpIxsDdaRxcKSxydStuW5YwpD+LWpbfJvq8UB3o=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -7,3 +7,4 @@ h1:pHrfJrFhWucKmk87GR0+3PFj+R7Cv5KOWAq6T8chT0s=
 20260913090000_application_authorization_identities.sql h1:EVIREfQ3EgynjVT8qwujTqVIvaNzLfAUvyPYIxUBaL0=
 20260930090000_client_credentials_policy.sql h1:7hvvi5YVMmIdeLRyVJ4DZodwsU41SzCBxvBBybrguVg=
 20261002130000_subject_ownership.sql h1:GGNSKSoQtSPXzvYaerHFEh4k071HSvU8Ujx4+m+qUj8=
+20261003090000_subject_audit_authority.sql h1:g4IMh37ODi3hC3MbxzCpFIbZ/ZOfPYJZii2cLa3lq7Y=

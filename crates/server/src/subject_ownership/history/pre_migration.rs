@@ -69,7 +69,11 @@ pub(super) async fn collect(
         let mut chain=HashChain::new(name);
         // Each fixed collection declares a different cursor row shape. Reusing a
         // prepared FETCH would retain the previous collection's column metadata.
-        while let Some(row)=sqlx::query("FETCH FORWARD 1 FROM subject_pre_inventory").persistent(false).fetch_optional(&mut **tx).await.map_err(|error| database_error(&error))? {
+        loop {
+            let rows = sqlx::query("FETCH FORWARD 256 FROM subject_pre_inventory")
+                .persistent(false).fetch_all(&mut **tx).await.map_err(|error| database_error(&error))?;
+            if rows.is_empty() { break; }
+            for row in rows {
             let key=if name=="audit_events" {
                 let mut bytes=Vec::new();
                 for field in ["occurred_at","id","tableoid"] {
@@ -92,6 +96,7 @@ pub(super) async fn collect(
                 output_bytes=output_bytes.checked_add(serde_json::to_vec(&(&new_facts,&new_findings)).map_err(|_|refuse("finding serialization failed"))?.len()).filter(|n|*n<=super::validation::INVENTORY_MAX_BYTES).ok_or_else(||refuse("pre-migration findings exceed supported capacity"))?;
                 facts.extend(new_facts);findings.extend(new_findings);
             }
+        }
         }
         sqlx::query("CLOSE subject_pre_inventory").execute(&mut **tx).await.map_err(|error| database_error(&error))?;
         let (count,hash)=chain.finish();collections.push(json!({"name":name,"count":count,"sha256":super::digest::hex_digest(&hash)}));

@@ -190,11 +190,14 @@ def configure_database(
         f"""
 GRANT USAGE ON SCHEMA aegaeon TO {runtime};
 DO $fixture$ DECLARE r record; BEGIN
-FOR r IN SELECT c.relname,c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+FOR r IN SELECT c.relname,c.relkind,c.oid
+FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname='aegaeon' AND c.relkind IN ('r','p','v')
 AND c.relname NOT IN ('subject_ownership_namespaces','subject_ownership_adoptions',
 'end_user_identity_owners','end_user_subject_reservations') LOOP
 IF r.relkind='v' THEN EXECUTE format('GRANT SELECT ON aegaeon.%I TO {runtime}',r.relname);
+ELSIF r.oid IN (SELECT relid FROM pg_partition_tree('aegaeon.audit_events'::regclass)) THEN
+EXECUTE format('GRANT SELECT,INSERT ON aegaeon.%I TO {runtime}',r.relname);
 ELSE EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON aegaeon.%I TO {runtime}',r.relname);
 END IF;
 END LOOP; END $fixture$;

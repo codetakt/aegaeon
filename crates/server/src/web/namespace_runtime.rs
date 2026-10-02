@@ -27,6 +27,8 @@ pub(crate) struct NamespacePermit {
 }
 
 /// A checked borrow cannot be manufactured or attached to another runtime.
+/// Admission is monotonic for this borrow: already-admitted work may finish
+/// during drain. A restart request prevents obtaining a new capability.
 pub(crate) struct NamespaceCapability<'a> {
     _permit: &'a NamespacePermit,
     state: &'a AppState,
@@ -96,6 +98,9 @@ impl AppState {
 
     /// Wait for mandatory runtime monitoring to request drain/restart.
     /// Embedders must stop accepting requests and drain their listener when this resolves.
+    /// New protected admissions are refused; operations already holding a namespace
+    /// capability may finish. Complete the drain before privileged database,
+    /// schema, role or history changes, then construct a new validated runtime.
     pub async fn shutdown_requested(&self) {
         self.runtime_restart.notified().await;
     }
