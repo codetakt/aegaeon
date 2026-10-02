@@ -78,7 +78,7 @@ pub(in crate::web) fn verify_upstream_id_token_claims(
     let jwk = select_upstream_signing_key(jwks, header.kid.as_deref())
         .map_err(UpstreamIdTokenSignatureError::KeySelection)?;
     if let Some(jwk_alg) = jwk.alg.as_deref() {
-        if !jwk_alg.eq_ignore_ascii_case(alg_name) {
+        if jwk_alg != alg_name {
             return Err(UpstreamIdTokenSignatureError::JwkAlgMismatch);
         }
     }
@@ -105,7 +105,7 @@ pub(in crate::web) fn verify_upstream_id_token_claims(
             decode_id_token_claims_from_admitted_payload(&payload)?
         }
         (KeyMaterial::Ec { crv, x, y }, ec_alg, Some(expected)) => {
-            if !crv.eq_ignore_ascii_case(expected) {
+            if crv != expected {
                 return Err(UpstreamIdTokenSignatureError::CurveMismatch);
             }
             let decoding_key =

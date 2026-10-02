@@ -5461,6 +5461,27 @@ openid_federation_rp:
   - Supplied schema performs no DNS, same-host, allowlist or SSRF check. Existing outbound TLS, SSRF, exact-match and no-query operation restrictions remain independent. No new mTLS selection, dependency, setting or migration is introduced.
   - Finite signed, individual, typed, flat-policy, fresh/cache and scoped local TLS tests do not establish external-provider behavior, DB/Redis routing, complete imported schemas, sibling composition, whole Federation conformance or formal discharge. TLS fixture trust and hostname controls do not change production transport policy.
 
+- id: fed-rp-019
+  section: '5.2.1 (Federation 1.0/1.1); 4-5 (RFC 7517); 6 (RFC 7518); 3 (Discovery); 2 (Registration)'
+  requirement: MUST
+  description: Validate public protocol-key envelopes and retain originals for upstream verification
+  module: crates/server/src/metadata/protocol_keys.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/protocol_keys/tests.rs
+  - crates/server/src/federation/tests/protocol_keys.rs
+  - crates/server/src/web/upstream_metadata/jwks/protocol_key_tests.rs
+  - crates/server/src/web/management/tests/upstream_metadata/protocol_keys.rs
+  - crates/jose/tests/jwk_verification.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/jwks.rs
+  notes:
+  - Five defined non-Federation roles accept partial and simultaneous key representations; HTTPS lexical URI and inline object/keys-array checks precede policy hiding and apply after derivation. Ordinary Discovery extensions and ordinary DCR exclusion are unchanged.
+  - Immediate standard private-member presence is rejected before filtering, including null and unusable siblings, as public-profile hardening. Empty inline sets are representable; an actual verifier requires eligible public keys.
+  - Tolerant per-member verification retains original kid checks and enforces exact usage, algorithm, curve and supported native material limits. Typed helpers can recheck visible fields but cannot reconstruct erased raw history.
+  - Upstream process-local cache retains original JSON; hits recheck outbound authorization and public profile. Signed inline and fetched eligible identities must match, with fetched algorithms a subset of endorsed algorithms; strict instantaneous equality is local policy during rollover.
+  - Signed JWKS retrieval, timed convergence, separate refresh-coordinator integration and complete mixed-purpose/certificate applicability remain outside this bounded contract. Bare-key consumers may ignore certificate members they do not interpret; no universal certificate fetching or PKIX trust requirement is asserted. No formal discharge follows from finite tests.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

@@ -1,23 +1,23 @@
 use std::sync::Arc;
 
-use aegaeon_jose::jwk::JwkSet;
 use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
 use aegaeon_server::management::types::PolicyDocument;
 use aegaeon_server::oidc::OidcDiscovery;
 use aegaeon_server::upstream::{NonAuthoritativeMetadataCache, UpstreamAuthStore};
 use aegaeon_server::web::UpstreamLogoutRelayStore;
 use anyhow::Result;
+use serde_json::Value;
 
 type UpstreamCachePair = (
     Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    Arc<NonAuthoritativeMetadataCache<Value>>,
 );
 
 pub(super) struct UpstreamRuntime {
     pub(super) auth_store: Arc<UpstreamAuthStore>,
     pub(super) logout_relay_store: Arc<UpstreamLogoutRelayStore>,
     pub(super) discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    pub(super) jwks_cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    pub(super) jwks_cache: Arc<NonAuthoritativeMetadataCache<Value>>,
 }
 
 pub(super) fn upstream_runtime_for_authority(

@@ -1,5 +1,5 @@
-use aegaeon_jose::jwk::JwkSet;
 use prometheus::Registry;
+use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
@@ -99,7 +99,7 @@ pub struct UpstreamState {
     pub logout_relay_store: Arc<UpstreamLogoutRelayStore>,
     pub auth_store: Arc<UpstreamAuthStore>,
     pub discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,
-    pub jwks_cache: Arc<NonAuthoritativeMetadataCache<JwkSet>>,
+    pub jwks_cache: Arc<NonAuthoritativeMetadataCache<Value>>,
 }
 
 #[derive(Clone)]

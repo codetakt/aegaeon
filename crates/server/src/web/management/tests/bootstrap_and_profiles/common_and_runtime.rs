@@ -163,7 +163,7 @@ fn test_app_state(
                 crate::oidc::OidcDiscovery,
             >::with_ttl_secs(60)),
             jwks_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
-                aegaeon_jose::jwk::JwkSet,
+                serde_json::Value,
             >::with_ttl_secs(60)),
         },
         dcr_enabled: false,

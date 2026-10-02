@@ -14,6 +14,8 @@ type Mutation = (AppState, ResolvedTrustChain);
 #[derive(Clone, Default)]
 struct TokenServer {
     response: Arc<Mutex<Value>>,
+    key_response: Arc<Mutex<Value>>,
+    key_calls: Arc<AtomicUsize>,
     calls: Arc<AtomicUsize>,
     mutation: Arc<Mutex<Option<Mutation>>>,
     forms: Arc<Mutex<Vec<String>>>,
@@ -27,6 +29,11 @@ async fn token(State(server): State<TokenServer>, body: String) -> Json<Value> {
         cache(&state, &chain).await.unwrap();
     }
     Json(server.response.lock().unwrap().clone())
+}
+
+async fn keys(State(server): State<TokenServer>) -> Json<Value> {
+    server.key_calls.fetch_add(1, Ordering::SeqCst);
+    Json(server.key_response.lock().unwrap().clone())
 }
 
 pub(super) struct Fixture {
@@ -57,6 +64,7 @@ impl Fixture {
         let endpoint = tls.endpoint.clone();
         let app = Router::new()
             .route("/token", post(token))
+            .route("/jwks", axum::routing::get(keys))
             .with_state(server.clone());
         let task = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
@@ -94,10 +102,11 @@ impl Fixture {
         let signing = crate::oidc::OidcSigningKey::from_rsa_pem("op-key".into(), PEM)?;
         let mut jwks = serde_json::to_value(signing.jwks())?;
         jwks["keys"][0].as_object_mut().unwrap().remove("alg");
-        state.upstream.jwks_cache.try_insert(
-            &discovery.jwks_uri,
-            aegaeon_jose::jwk::JwkSet::from_value(jwks.clone())?,
-        )?;
+        state
+            .upstream
+            .jwks_cache
+            .try_insert(&discovery.jwks_uri, jwks.clone())?;
+        *server.key_response.lock().unwrap() = jwks.clone();
         let now = SystemTime::now();
         let request = UpstreamAuthRequest {
             state: "state".into(),
@@ -163,6 +172,14 @@ impl Fixture {
         };
         result.respond(Some(jsonwebtoken::Algorithm::RS256))?;
         Ok(result)
+    }
+
+    pub fn serve_jwks(&self, value: Value) {
+        *self.server.key_response.lock().unwrap() = value;
+    }
+
+    pub fn key_calls(&self) -> usize {
+        self.server.key_calls.load(Ordering::SeqCst)
     }
 
     pub fn metadata(&self) -> Value {

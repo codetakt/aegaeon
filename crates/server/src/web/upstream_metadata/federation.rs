@@ -4,7 +4,7 @@ use super::validate_upstream_endpoint;
 use aegaeon_jose::jwk::{JwkSet, KeyMaterial};
 use axum::{http::StatusCode, response::Response};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use crate::oidc::OidcDiscovery;
 
@@ -77,44 +77,50 @@ pub(in crate::web) fn validate_upstream_discovery_matches_federation_metadata(
     })
 }
 
-fn jwk_signature_key_identity(key: &aegaeon_jose::jwk::Jwk) -> String {
-    let kid = key.kid.as_deref().unwrap_or("");
-    match &key.material {
-        KeyMaterial::Rsa { n, e } => format!("kid={kid}\0kty=RSA\0n={n}\0e={e}"),
-        KeyMaterial::Ec { crv, x, y } => {
-            format!("kid={kid}\0kty=EC\0crv={crv}\0x={x}\0y={y}")
+type SignatureKeyIdentity = (Option<String>, String, KeyMaterial);
+
+fn jwks_signature_key_identities(
+    jwks: &JwkSet,
+) -> HashMap<SignatureKeyIdentity, Vec<&'static str>> {
+    let mut identities: HashMap<SignatureKeyIdentity, Vec<&'static str>> = HashMap::new();
+    for key in jwks.verification_keys() {
+        let allowed = identities
+            .entry((key.kid.clone(), key.key_type.clone(), key.material.clone()))
+            .or_default();
+        for algorithm in key.verification_algorithms() {
+            if !allowed.contains(&algorithm) {
+                allowed.push(algorithm);
+            }
         }
     }
-}
-
-fn jwks_signature_key_identities(jwks: &JwkSet) -> HashSet<String> {
-    jwks.signature_keys()
-        .map(jwk_signature_key_identity)
-        .collect()
+    identities
 }
 
 pub(in crate::web) fn validate_upstream_jwks_matches_federation_metadata(
     fetched_jwks: &JwkSet,
     metadata: &Value,
 ) -> Result<(), String> {
-    let Some(inline_jwks) = metadata.get("jwks").filter(|value| !value.is_null()) else {
-        return Ok(());
-    };
-
-    let metadata_jwks = JwkSet::from_value(inline_jwks.clone())
-        .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
-    metadata_jwks
-        .ensure_unique_kid()
-        .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
+    crate::metadata::protocol_keys::validate_visible_public_jwks(fetched_jwks)
+        .map_err(str::to_owned)?;
     fetched_jwks
         .ensure_unique_kid()
-        .map_err(|err| format!("upstream jwks invalid: {err}"))?;
-    let expected = jwks_signature_key_identities(&metadata_jwks);
-    if expected.is_empty() {
-        return Err("federation openid_provider jwks has no signature keys".to_string());
+        .map_err(|_| "upstream jwks has duplicate kid".to_string())?;
+    if fetched_jwks.verification_keys().next().is_none() {
+        return Err("upstream jwks has no eligible signing keys".to_string());
     }
+    let Some(inline_jwks) = metadata.get("jwks") else {
+        return Ok(());
+    };
+    let metadata_jwks = super::jwks::admit_upstream_jwks(inline_jwks)?;
+    let expected = jwks_signature_key_identities(&metadata_jwks);
     let fetched = jwks_signature_key_identities(fetched_jwks);
-    if fetched == expected {
+    if fetched.len() == expected.len()
+        && fetched.iter().all(|(identity, algorithms)| {
+            expected
+                .get(identity)
+                .is_some_and(|allowed| algorithms.iter().all(|alg| allowed.contains(alg)))
+        })
+    {
         Ok(())
     } else {
         Err("upstream JWKS does not match federation openid_provider metadata".to_string())

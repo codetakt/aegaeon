@@ -41,6 +41,8 @@ impl FetchedJwksValidationError {
                 aegaeon_jose::jwk::JwkError::DuplicateKid(_) => "validation_duplicate_kid",
                 aegaeon_jose::jwk::JwkError::KidRequired => "validation_kid_missing",
                 aegaeon_jose::jwk::JwkError::NotAnObject => "validation_parse_error",
+                aegaeon_jose::jwk::JwkError::DuplicateKeyOperation(_)
+                | aegaeon_jose::jwk::JwkError::InconsistentKeyUsage => "validation_bad_key_usage",
             },
             FetchedJwksValidationError::DuplicateKid(_) => "validation_duplicate_kid",
             FetchedJwksValidationError::NoSignatureKeys => "validation_no_sig_keys",
