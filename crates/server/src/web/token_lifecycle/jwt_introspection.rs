@@ -16,19 +16,30 @@ use crate::util;
 const JWT_INTROSPECTION_CONTENT_TYPE: &str = "application/token-introspection+jwt";
 const JWT_INTROSPECTION_TYP: &str = "token-introspection+jwt";
 
-pub(super) fn wants_jwt_introspection(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|accept| {
-            accept
-                .split(',')
-                .any(|part| part.trim().starts_with(JWT_INTROSPECTION_CONTENT_TYPE))
-        })
-}
-
-pub(super) fn selects_jwt_introspection(state: &AppState, headers: &HeaderMap) -> bool {
-    state.cfg.jwt_runtime().introspection_enabled() && wants_jwt_introspection(headers)
+pub(super) fn negotiate_introspection_response(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<super::accept::IntrospectionRepresentation, Response> {
+    super::accept::select(headers, state.cfg.jwt_runtime().introspection_enabled()).map_err(
+        |error| {
+            let (status, description) = match error {
+                super::accept::NegotiationError::Malformed => (
+                    StatusCode::BAD_REQUEST,
+                    "Malformed introspection Accept header",
+                ),
+                super::accept::NegotiationError::NotAcceptable => (
+                    StatusCode::NOT_ACCEPTABLE,
+                    "No acceptable introspection representation",
+                ),
+            };
+            no_cache_json_error_with_iss(
+                status,
+                "invalid_request",
+                Some(description),
+                state.issuer.as_str(),
+            )
+        },
+    )
 }
 
 pub(super) fn build_jwt_introspection_response(

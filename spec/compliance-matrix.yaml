@@ -4455,12 +4455,43 @@ rfc_9701:
     current context, registration identity and metadata correspondence checks.
   - Owner-only and missing-metadata requests receive signed false-only inner claims
     before later protected state and crypto work. Plain JSON readers are unchanged.
-  - Selection shares the existing capability and Accept predicate with finalization;
+  - Selection uses one immutable negotiated representation for recipient checks and finalization;
     no common-target reader, sender-proof requirement or cross-grant permission is added.
   - Plain JSON entitlement, failed-authentication interpretation, scope
     narrowing, privacy and negotiated response protection remain separate obligations.
   - Finite native routed PostgreSQL/Redis observations do not establish full protocol
     conformance or product assurance.
+
+- id: 9701-008
+  section: '4, 5; RFC 9110 sections 5.2, 5.6, 8.3.1, 12.4, 12.5.1'
+  requirement: IMPLEMENTATION_POLICY
+  description: Negotiate introspection JSON or explicit JWT once using exact media
+    ranges and quality precedence before token observation
+  module: crates/server/src/web/token_lifecycle/accept.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/accept/tests.rs
+  - crates/server/src/web/token_lifecycle/tests/negotiation.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/missing.rs
+  - crates/server/src/web/token_lifecycle/tests/signed_recipient.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  ci_check: introspection-response-negotiation
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - RFC media-range syntax, quoted parameter equivalence, repeated fields, integer
+    quality values and specificity govern matching. Explicit JWT opt-in, lowest
+    duplicate quality and JWT preference on an equal-quality tie are local policy.
+  - Missing or wildcard-only Accept selects JSON; malformed syntax returns 400.
+    No acceptable available representation returns 406, a permitted RFC 9110
+    choice, including JWT-only requests while the capability is disabled.
+  - Authentication and required token admission precede negotiation. One selected
+    representation controls recipient authorization and output; negotiation errors
+    do not observe tokens, sign responses or record successful introspections.
+  - Finite parser and authenticated native PostgreSQL/Redis route tests do not
+    establish full HTTP negotiation or RFC 9701/product assurance. Signing metadata,
+    algorithm/key migration, JWE, wrapper expiry, privacy/scope and plain JSON
+    entitlement remain separate obligations.
 
 rfc_9728:
 - id: 9728-001

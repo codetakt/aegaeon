@@ -335,15 +335,71 @@ does not present the original sender's DPoP or mTLS proof.
 Upgrade signed-response consumers that previously relied only on token ownership
 to the supported recipient configuration. For client credentials, an owner may be
 explicitly configured as a reader before issuance. No storage rewrite or migration
-is required. Plain JSON visibility is unchanged, including a JSON fallback when
-the JWT capability is disabled. This restriction uses the existing response
-selection; it does not change Accept negotiation.
+is required. Plain JSON visibility is unchanged for requests selecting JSON.
+The representation negotiation below determines whether JSON or JWT is selected;
+a disabled JWT capability cannot satisfy a JWT-only request.
 
 This implements a bounded signed-recipient check from RFC 9701 §§3 and 5.
 Plain JSON resource-server entitlement, failed-authentication
 status interpretation, scope narrowing, data-release privacy and negotiated
 response protection remain separate obligations. Finite tests do not establish
 full RFC 7662/RFC 9701 or product assurance.
+
+## Introspection response negotiation
+
+After existing request admission, authentication, profile checks and required
+`token` admission, `/introspect` selects a representation once, before observing
+token state. The same decision controls signed-recipient authorization and
+response construction. Negotiation errors perform no token observation or signing
+and do not count as successful introspections. Authentication errors retain their
+existing status and challenge even when `Accept` is malformed.
+
+A missing `Accept` selects JSON. Wildcard-only requests also select JSON:
+Aegaeon requires an explicit matching `application/token-introspection+jwt` range
+to opt into JWT responses, together with `jwtIntrospectionEnabled=true`.
+Media types match exactly and case-insensitively; a suffix such as `+jwt-extra`
+does not request JWT introspection. Only exact `*/*` and `type/*` forms act as
+wildcards; other token values containing `*`, such as `application/*+jwt` or
+`*/json`, are valid unsupported types rather than glob patterns or syntax errors.
+Repeated fields are combined, and quoted
+commas and escapes are parsed as parameter contents. Empty list elements and
+empty semicolon parameters are ignored as allowed by RFC 9110.
+
+Quality values follow RFC 9110 §§12.4.2 and 12.5.1, including `q=0` exclusion,
+three fractional digits at most and a default of 1. The most specific matching
+range determines each representation's quality: exact type, then `application/*`,
+then `*/*`. An exact exclusion overrides a positive wildcard. Non-`q` parameters
+constrain a range and cannot match the parameterless JSON/JWT representations;
+valid unrelated ranges remain allowed. Equal-specificity duplicate ranges use
+the lowest quality as Aegaeon's conservative local rule. The higher-quality
+available representation wins; a tie selects explicitly requested JWT.
+
+Malformed syntax returns HTTP 400 JSON `invalid_request`; when no available
+representation is acceptable, Aegaeon chooses HTTP 406 JSON `invalid_request`,
+one of RFC 9110 §12.4.1's permitted responses. These protocol-error envelopes
+include the issuer and no-cache headers, without reflecting header or token
+contents. A present empty `Accept` therefore returns 406. Signing failures remain
+errors and do not fall back to JSON.
+
+This changes compatibility for callers that relied on prefix matching, ignored
+quality values or unconditional JSON fallback when JWT was disabled. Consumers
+should send preferences they can actually process, for example:
+
+| Accept | Enabled JWT capability | Result |
+| --- | --- | --- |
+| `application/json` | Either | JSON |
+| `application/token-introspection+jwt` | Yes | JWT |
+| `application/token-introspection+jwt` | No | 406 |
+| `application/token-introspection+jwt, application/json;q=0.5` | Yes / No | JWT / JSON |
+| `application/json;q=1, application/token-introspection+jwt;q=0.5` | Yes | JSON |
+| `application/json;q=0, */*` | Either | 406; wildcard alone does not opt into JWT |
+
+No database migration or new configuration is needed for this negotiation change.
+Explicit JWT opt-in, duplicate/tie handling, and the 400/406 error choices are
+implementation policy, not newly asserted RFC MUST requirements. Per-recipient
+signing metadata, algorithm/key provisioning, encryption, wrapper lifetime and
+privacy/scope obligations remain separate; this does not establish full RFC 9701
+conformance or resolve the remaining plain JSON entitlement interpretation.
 
 ## Introspection subject claims
 
