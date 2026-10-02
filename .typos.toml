@@ -14,6 +14,9 @@ environment_policies_federation_entity_cache_ttl_secon_not_null = "environment_p
 
 [files]
 extend-exclude = [
+    # Exact official registry bytes and generated language identifiers are data.
+    "crates/server/data/language-tags/language-subtag-registry.txt",
+    "crates/server/src/metadata/language_tags/registry.rs",
     ".git/",
     "artifacts/",
     "c/dudect.h",

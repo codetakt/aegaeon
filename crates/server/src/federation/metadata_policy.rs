@@ -93,6 +93,9 @@ fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, F
     fields
         .iter()
         .map(|(field, value)| {
+            if let Some(role) = entity_type {
+                super::metadata::languages::validate_name(role, field)?;
+            }
             let parsed = FieldPolicy::parse(value)?;
             if scope::is_client_scope(entity_type, field) {
                 scope::validate_policy(&parsed)?;
@@ -222,6 +225,22 @@ pub(crate) fn validate_metadata_policy_pin(policy: Option<&Value>) -> Result<(),
         .ok_or_else(|| error("anchor metadata policy must be a nonempty object"))?;
     for (entity_type, policy) in types {
         parse_type(policy, Some(entity_type))?;
+    }
+    Ok(())
+}
+
+/// Raw statement name admission, without parsing unknown operator semantics.
+pub(super) fn validate_localized_names(policy: &Value) -> Result<(), FederationError> {
+    let types = policy
+        .as_object()
+        .ok_or_else(|| error("entity policy must be an object"))?;
+    for (role, fields) in types {
+        let fields = fields
+            .as_object()
+            .ok_or_else(|| error("parameter policy must be an object"))?;
+        for field in fields.keys() {
+            super::metadata::languages::validate_name(role, field)?;
+        }
     }
     Ok(())
 }

@@ -97,6 +97,9 @@ pub(super) fn validate(claims: &Map<String, Value>) -> Result<(), FederationErro
             return Err(invalid("subordinate object claims"));
         }
     }
+    if let Some(value) = claims.get("metadata_policy") {
+        super::super::metadata_policy::validate_localized_names(value)?;
+    }
     if let Some(value) = claims.get("constraints") {
         validate_constraints(value)?;
     }

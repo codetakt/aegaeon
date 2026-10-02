@@ -289,10 +289,14 @@ where
         upstream_federation_gateway_error(issuer_base, "upstream discovery URL metadata invalid")
     })?;
     // Ordinary source admission still applies when signed metadata replaces it.
-    crate::oidc::capabilities::validate_typed(&discovery).map_err(|_| {
+    crate::oidc::capabilities::validate_typed(&discovery).map_err(|field| {
         upstream_federation_gateway_error(
             issuer_base,
-            "upstream discovery authentication signing capabilities invalid",
+            if matches!(field, "ui_locales_supported" | "claims_locales_supported") {
+                "upstream discovery language capabilities invalid"
+            } else {
+                "upstream discovery authentication signing capabilities invalid"
+            },
         )
     })?;
     let metadata = resolve_upstream_federation_metadata(

@@ -1,5 +1,6 @@
 //! Supplied provider capabilities, without completeness or local support claims.
 use super::OidcDiscovery;
+use crate::metadata::language_tags;
 use serde_json::{Map, Value};
 
 const COMMON_ARRAYS: &[&str] = &[
@@ -59,7 +60,8 @@ fn permits_auth_algorithms<'a>(mut values: impl Iterator<Item = &'a str>) -> boo
 }
 
 /// Exact known role maps only. Omission, empty arrays, duplicates and unknown
-/// string identifiers remain representable. Errors reveal only a known field.
+/// string identifiers remain representable except language tags, which use the
+/// pinned IANA admission profile. Errors reveal only a known field.
 pub(crate) fn validate_supplied(
     role: &str,
     parameters: &Map<String, Value>,
@@ -73,6 +75,13 @@ pub(crate) fn validate_supplied(
         if let Some(value) = parameters.get(field) {
             let values = value.as_array().ok_or(field)?;
             if values.iter().any(|value| !value.is_string()) {
+                return Err(field);
+            }
+            if matches!(field, "ui_locales_supported" | "claims_locales_supported")
+                && values
+                    .iter()
+                    .any(|value| !value.as_str().is_some_and(language_tags::is_valid))
+            {
                 return Err(field);
             }
             if AUTH_ALGORITHMS.contains(&field)
@@ -96,6 +105,20 @@ pub(crate) fn validate_supplied(
 /// Recheck semantics when a typed ordinary/cache value reaches a live operation.
 /// Its Rust types already enforce list element kinds and optional booleans.
 pub(crate) fn validate_typed(discovery: &OidcDiscovery) -> Result<(), &'static str> {
+    for (field, values) in [
+        ("ui_locales_supported", &discovery.ui_locales_supported),
+        (
+            "claims_locales_supported",
+            &discovery.claims_locales_supported,
+        ),
+    ] {
+        if values
+            .as_ref()
+            .is_some_and(|values| values.iter().any(|tag| !language_tags::is_valid(tag)))
+        {
+            return Err(field);
+        }
+    }
     for (field, values) in AUTH_ALGORITHMS.into_iter().zip([
         &discovery.token_endpoint_auth_signing_alg_values_supported,
         &discovery.revocation_endpoint_auth_signing_alg_values_supported,

@@ -792,13 +792,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Python dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml pytest
 
       - name: Check crypto call boundaries
         run: python3 scripts/validation/check_crypto_calls.py --check
 
       - name: Check keygen RNG boundary
         run: python3 scripts/validation/check_keygen_rng.py --check
+
+      - name: Check bundled language-tag registries and generated tables
+        run: |
+          python3 scripts/validation/generate_language_tags.py --check
+          python3 scripts/validation/test_language_tag_generator.py
 
       - name: Check runtime drift
         run: python3 scripts/validation/check_runtime_drift.py --check
