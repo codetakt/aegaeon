@@ -5402,6 +5402,25 @@ openid_federation_rp:
   - Partial original C/S and generic policy representations remain extensible; immediate superior and policy completion remain supported. Each operation retains one admitted context, including callback logout information. No Dynamic OP inference, new token algorithm, flow, registration or configuration is introduced.
   - Finite ordinary raw loopback, signed fresh/cache, actual token signature and operation side-effect tests do not establish full imported schemas, remote capability implementation, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
 
+- id: fed-rp-016
+  section: '5.1.2/5.1.3 (Federation 1.0); 5.1.1/5.1.2 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Validate supplied Federation registration declarations and require an endpoint for a selected explicit-registration OP
+  module: crates/server/src/federation/metadata/registration.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/registration_metadata.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/registration.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact RP client_registration_types and OP client_registration_types_supported are optional string arrays, retaining omission, empty arrays, duplicates, unknown strings and case. Other roles preserve extension behavior under common metadata rules. Presence is recommended, not mandatory; no default or closed enumeration is imposed.
+  - Supplied OP federation_registration_endpoint must be a parseable URL string, preserving bytes and rejecting literal whitespace/control/backslash locally. Only exact explicit activates the existing HTTPS/host/no-fragment/no-userinfo endpoint profile; port/path/query remain allowed. Admitted URLs are not fetched.
+  - Shared original admission precedes overlay/filter and retained results are checked after policy. Partial originals and generic derived results may omit the endpoint even with explicit, allowing superior/value/default completion. Selected signed OP metadata requires an admitted endpoint when explicit remains before Discovery conversion or authorize/callback/refresh side effects; independent Discovery cannot refill a deleted signed field.
+  - Fresh/cache/individual/signed/typed/policy and loopback operation tests cover valid completion, refusal, no registration fetch and one captured context. Ordinary no-Federation Discovery is unchanged. Previously ignored malformed declarations and incomplete selected explicit OP metadata now refuse; no migration, registration operation, setting, dependency or Dynamic OP inference is added.
+  - Finite checks do not establish full imported schemas, other conditional role completeness, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

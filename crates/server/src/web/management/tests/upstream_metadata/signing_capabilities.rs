@@ -6,7 +6,7 @@ const FIELD: &str = "id_token_signing_alg_values_supported";
 const CAPABILITY_ERROR: &str = "upstream OP signing capabilities must include RS256";
 const OPERATIONS: [&str; 3] = ["authorize", "callback", "refresh"];
 
-async fn exercise(
+pub(super) async fn exercise(
     f: &Fixture,
     operation: &str,
     chain: Option<&ResolvedTrustChain>,

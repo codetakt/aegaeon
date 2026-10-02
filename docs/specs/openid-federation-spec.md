@@ -173,6 +173,46 @@ advertisement conditions, routed DB/Redis/external HTTPS execution, full Federat
 conformance or proof. Existing browser-binding, exact-issuer and endpoint-query
 changes still require verification on their eventual combined source.
 
+## Federation Registration Declarations
+
+OpenID Federation 1.0 sections 5.1.2/5.1.3 and Federation for OpenID Connect
+1.1 sections 5.1.1/5.1.2 define RP `client_registration_types` and OP
+`client_registration_types_supported`. In those exact roles, a supplied value
+must be an array of strings. Omission, empty arrays, duplicates and additional
+values remain valid. Strings retain exact bytes and case, with no default or
+closed enumeration. These parameter names retain extension behavior in other
+roles under the existing common metadata rules.
+
+A supplied OP `federation_registration_endpoint` must be a string accepted by
+the existing URL parser. Local lexical policy rejects literal whitespace,
+control characters and backslashes; signed values are never rewritten. Without
+exact `explicit` in the OP modes, generic absolute URLs, including HTTP and
+fragment-bearing URLs, remain admissible. Exact `explicit` additionally requires
+the existing endpoint profile: HTTPS, a host, no fragment or userinfo, and the
+local lexical safeguards. HTTPS and fragment exclusion follow the conditional
+standard requirement; authority, userinfo and lexical restrictions are local
+admission policy. Ports, paths and queries are permitted. Merely
+admitting this declaration does not fetch the endpoint or perform registration.
+
+Original metadata is checked before overlay or filtering, and retained metadata
+is checked again after policy application. Partial originals and generic derived
+results may advertise `explicit` without an endpoint: a superior or policy may
+complete them. Before authorize state/redirect or callback/refresh credential
+transmission, the selected signed OP must have an admitted endpoint if exact
+`explicit` remains. This check precedes conversion to the ordinary Discovery
+representation, including cache hits. Independent Discovery cannot refill a
+removed signed endpoint. Removing `explicit` permits endpoint absence, and each
+operation retains one admitted context through its credential exchange.
+
+Upgrade behavior: malformed declarations previously ignored now fail admission,
+and an incomplete selected explicit-registration OP returns HTTP 502
+`server_error` before operation side effects. Correct the signed metadata or its
+policy; no stored JWT is rewritten and no cache purge or migration is required.
+Ordinary Discovery without Federation selection retains its existing behavior.
+These checks do not infer a Dynamic OP classification or add a registration
+flow, runtime setting or dependency. Full imported role schemas and other
+conditional advertisement/completeness requirements remain separate obligations.
+
 ## Critical Metadata Policy Operators
 
 Subordinate Statements may carry `metadata_policy_crit`, a nonempty array of

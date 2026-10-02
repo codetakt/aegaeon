@@ -58,6 +58,7 @@ pub use fetcher::{
     FetchedEntityConfiguration, FetchedSubordinateStatement, HttpFederationFetcher,
 };
 pub use keys::{decode_jwk_material, verification_key_for_alg, DecodedKeyMaterial};
+pub(crate) use metadata::validate_complete_op_registration;
 pub(crate) use metadata_policy::validate_metadata_policy_pin;
 pub use metadata_policy::{apply_metadata_policy, apply_metadata_policy_for_entity_type};
 #[cfg(test)]
