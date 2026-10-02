@@ -224,6 +224,9 @@ impl UserinfoEndpoint {
     }
 
     async fn load_filtered_userinfo(&self, meta: &BearerTokenMeta) -> Result<Userinfo> {
+        if !super::subject::is_valid_subject(&meta.user_id) {
+            return Err(Error::ServerError("Invalid OIDC subject".into()));
+        }
         let userinfo = self
             .load_user_info(
                 &meta.user_id,
@@ -235,6 +238,9 @@ impl UserinfoEndpoint {
                 error!("Failed to get user info: {}", e);
                 Error::ServerError("Failed to retrieve user information".into())
             })?;
+        if !super::subject::is_valid_subject(&userinfo.sub) || userinfo.sub != meta.user_id {
+            return Err(Error::ServerError("Invalid OIDC subject".into()));
+        }
         info!("Userinfo retrieved for subject: {}", meta.user_id);
         Ok(userinfo)
     }
