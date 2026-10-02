@@ -211,9 +211,27 @@ rfc_6749:
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
   - "Exact authenticated grant identifiers distinguish unsupported_grant_type from client/profile unauthorized_client. Wrong-client authorization codes return invalid_grant without consumption. PostgreSQL/Redis router regressions are in crates/server/src/web/grant_error_tests; global/profile activation remains outside these finite checks."
-  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; bare/empty/unsupported schemes, duplicate/nontext header admission remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
+  - "For recognized client authentication, token/device failures and token profile-method denials now include one Basic challenge with 401 invalid_client (RFC 6749 section 5.2; device errors import this rule via RFC 8628 section 3.2). Basic plus post without assertion is 400 invalid_request without a challenge. Five-route HTTP tests include successful controls, replay effects and existing PAR/lifecycle challenges; incomplete known Basic is covered by 6749-018; empty-whole/unsupported/malformed schemes and duplicate/nontext header admission remain open. The cited abstract proof does not establish HTTP challenge serialization or wire/model composition."
 
   - "Outgoing dynamic error fields share the RFC 6749 A.7/A.8 alphabet rule before JSON, query, form-post, challenge or public model serialization. Invalid descriptions replace each scalar with question mark; empty descriptions are omitted and malformed codes become server_error. Finite transport/router tests include upstream and DCR paths and preserve state/status/effects; this does not establish all error categories, ingress challenges or formal wire/model composition."
+
+- id: 6749-018
+  section: '2.3, 2.3.1, 5.2'
+  requirement: MUST
+  description: Known Basic client authentication attempts with missing or undecodable payloads must fail authentication and participate in multiple-method rejection before credential fallback.
+  module: crates/server/src/client_registry/registry_store/authentication.rs
+  proof: []
+  tests:
+  - crates/server/src/web/assertion_client/tests/incomplete_basic.rs
+  - crates/server/src/web/assertion_client/tests/incomplete_basic/boundaries.rs
+  - crates/server/src/web/assertion_client/tests/incomplete_basic/effects.rs
+  ci_check: incomplete-basic-client-authentication
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint/client_auth.rs
+  notes:
+  - "Five client endpoints count bare and case-insensitive Basic attempts before decoding. Basic plus post is 400 invalid_request; assertion mixtures and failed lone Basic are 401 invalid_client with one existing Basic challenge. RFC 7521 section 4.2.1 governs assertion mixtures."
+  - "Pure Basic decode refusal precedes plain PAR outer identity and introspection snapshot lookup; earlier transport, URI and form checks remain. Finite PG/Redis tests cover retry, replay, stored values and live grant/token state. The snapshot fault test invokes the production handler directly to isolate it from outer runtime middleware."
+  - "No formal or wire/proxy composition claim. Empty-whole, duplicate/nontext, malformed scheme and unsupported scheme classification remains outside this bounded implementation. Basic component decoding is unchanged."
 
 - id: 6749-010
   section: '10.3'

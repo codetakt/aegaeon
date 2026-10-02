@@ -43,14 +43,6 @@ pub(super) async fn authenticate_par_client(
     if let Some(response) = client_authentication_conflict_response(presence, "oauth", None) {
         return Err(response);
     }
-    if form.request.is_none() && form.client_id.is_none() {
-        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
-            axum::http::StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("client_id is required for a plain pushed authorization request"),
-            state.issuer.as_str(),
-        ));
-    }
     let client_id_from_basic = match (presence.basic, auth) {
         (true, Some(header)) => Some(
             ClientRegistry::decode_basic_auth_credentials(header)
@@ -61,6 +53,14 @@ pub(super) async fn authenticate_par_client(
         ),
         _ => None,
     };
+    if form.request.is_none() && form.client_id.is_none() {
+        return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("client_id is required for a plain pushed authorization request"),
+            state.issuer.as_str(),
+        ));
+    }
     let assertion_id = if presence.private_key_jwt {
         Some(
             private_key_jwt_client_id(
