@@ -44,22 +44,21 @@ pub(super) async fn request_uri(state: &AppState, sid: &str, mode: &str) -> Test
             "../../../../../tests/fixtures/rsa2048-private.pk8.pem"
         ))?,
     )?;
-    let private = PrivateDecryptingKey::from_pkcs8(
-        state
-            .oidc
-            .config
-            .as_ref()
-            .and_then(|c| c.request_object_encryption_key.as_ref())
-            .ok_or("encryption key")?
-            .pkcs8_der(),
-    )
-    .map_err(|_| "RSA key")?;
+    let key = state
+        .oidc
+        .config
+        .as_ref()
+        .and_then(|c| c.request_object_encryption_key.as_ref())
+        .ok_or("encryption key")?;
+    let private = PrivateDecryptingKey::from_pkcs8(key.pkcs8_der()).map_err(|_| "RSA key")?;
     let public = OaepPublicEncryptingKey::new(private.public_key()).map_err(|_| "OAEP key")?;
     let mut cek = [0_u8; 32];
     let mut nonce = [0_u8; 12];
     aegaeon_crypto::rand::fill_random(&mut cek)?;
     aegaeon_crypto::rand::fill_random(&mut nonce)?;
-    let protected = URL_SAFE_NO_PAD.encode(br#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT"}"#);
+    let protected = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&serde_json::json!({
+        "alg": "RSA-OAEP", "enc": "A256GCM", "cty": "JWT", "kid": key.kid()
+    }))?);
     let mut encrypted = vec![0; public.ciphertext_size()];
     let encrypted = public
         .encrypt(&OAEP_SHA1_MGF1SHA1, &cek, &mut encrypted, None)

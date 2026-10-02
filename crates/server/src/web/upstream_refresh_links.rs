@@ -94,6 +94,7 @@ pub(in crate::web) fn fixture_upstream_refresh_caller(
     caller_client_id: String,
 ) -> UpstreamRefreshCaller {
     UpstreamRefreshCaller {
+        scheme: crate::resource_authentication::ResourceScheme::Bearer,
         user_id,
         caller_client_id,
     }

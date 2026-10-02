@@ -184,7 +184,8 @@ async fn success(
     let mut page = browser.request(state, &uri, None).await?;
     if !existing || prompt.is_some_and(|p| p.contains("login")) {
         resume = complete_login(state, &mut browser, page).await?;
-        assert!(resume.contains("aeg_par_continue="));
+        assert!(resume.starts_with("/authorize?aeg_login_continue="));
+        assert_eq!(resume.len(), "/authorize?aeg_login_continue=".len() + 43);
         let before = state.tokens.issuer.code_store.snapshot().codes.len();
         for extra in ["&response_mode=query", "&prompt=none"] {
             let refused = browser
@@ -199,7 +200,7 @@ async fn success(
         }
         let mut wrong = query(&resume)?;
         for (k, v) in &mut wrong {
-            if k == "aeg_par_continue" {
+            if k == "aeg_login_continue" {
                 *v = "wrong".into();
             }
         }

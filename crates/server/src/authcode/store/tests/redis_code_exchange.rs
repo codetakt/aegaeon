@@ -365,6 +365,8 @@ fn redis_code_exchange_offline_target_survives_storage_and_refresh() -> StoreTes
         // This is a granted-scope fixture at the issuer boundary, not a consent UI test.
         let nonce = uuid::Uuid::new_v4().to_string();
         let mut code = make_test_code(None, Some(&nonce));
+        code.code_challenge = Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into());
+        code.code_challenge_method = Some("S256".into());
         code.scope = Some(scope.to_string());
         code.auth_session_id = Some(nonce);
         let code_str = code_store.store_code(code)?;

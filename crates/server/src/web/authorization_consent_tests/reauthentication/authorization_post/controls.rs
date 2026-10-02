@@ -22,6 +22,12 @@ pub(super) async fn raw(
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     assert_eq!(response.headers()[header::PRAGMA], "no-cache");
     Ok(Page {
+        cache_control: Some(
+            response.headers()[header::CACHE_CONTROL]
+                .to_str()?
+                .to_owned(),
+        ),
+        pragma: Some(response.headers()[header::PRAGMA].to_str()?.to_owned()),
         status: response.status(),
         location: response
             .headers()
