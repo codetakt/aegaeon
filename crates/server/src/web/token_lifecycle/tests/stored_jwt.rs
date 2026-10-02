@@ -81,7 +81,7 @@ async fn inner(state: &AppState, token: &str, active: bool) -> TestResult {
         );
     }
     for jwt in [false, true] {
-        let (status, body) = introspection(state, token, OWNER, jwt).await?;
+        let (status, body) = introspection(state, token, &reader(state, jwt), jwt).await?;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["active"], active, "{body}");
         if !active {
@@ -228,11 +228,22 @@ async fn stored_jwt_operational_failure_is_hidden_from_invisible_caller_and_reco
             assert_eq!(status, StatusCode::UNAUTHORIZED);
             assert_eq!(body["error"], "invalid_client");
         }
+        for value in [&token, &opaque] {
+            let (status, body) = introspection(&fixture.state, value, OWNER, true).await?;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(body, json!({"active":false}));
+            assert_eq!(
+                calls.load(Ordering::SeqCst),
+                0,
+                "owner denial precedes crypto"
+            );
+        }
         inner(&fixture.state, &opaque, true).await?;
         assert_eq!(calls.load(Ordering::SeqCst), 0);
         for jwt in [false, true] {
             let before = super::failures::metrics()?;
-            let (status, body) = introspection(&fixture.state, &token, OWNER, jwt).await?;
+            let (status, body) =
+                introspection(&fixture.state, &token, &reader(&fixture.state, jwt), jwt).await?;
             assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
             assert_eq!(body["error"], "temporarily_unavailable");
             assert!(body.get("active").is_none());
@@ -296,7 +307,7 @@ async fn stored_jwt_schema_signature_and_audience_checks_preserve_sender_disclos
                 fixture.state.tokens.store.store_issued_grant(access.clone(), refresh, meta)?;
                 inner(&fixture.state, &access.token, variant == "valid").await?;
                 if variant == "valid" {
-                    let (_, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
+                    let (_, body) = introspection(&fixture.state, &access.token, &reader(&fixture.state, true), true).await?;
                     match &access.cnf {
                         Some(CnfClaim::Jkt(value)) => assert_eq!(body["cnf"], json!({"jkt":value})),
                         Some(CnfClaim::X5tS256(value)) => assert_eq!(body["cnf"], json!({"x5t#S256":value})),

@@ -107,7 +107,8 @@ async fn refresh_parent_introspection_preserves_no_parent_and_sender_disclosure(
                 .store_issued_grant(access.clone(), refresh, meta)?;
             for jwt in [false, true] {
                 // Authentication belongs to the introspector. No original-client proof is sent.
-                let (status, body) = introspection(state, &access.token, OWNER, jwt).await?;
+                let (status, body) =
+                    introspection(state, &access.token, &reader(state, jwt), jwt).await?;
                 assert_eq!(status, StatusCode::OK, "{body}");
                 assert_eq!(body["active"], true);
                 assert!(body.get("cnf").is_some());

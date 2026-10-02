@@ -28,7 +28,8 @@ async fn introspection_scope_presence_and_sender_type_match_stored_tokens() -> T
                     .store
                     .store_issued_grant(access.clone(), refresh, meta)?;
                 for jwt in [false, true] {
-                    let (status, body) = introspection(state, &access.token, OWNER, jwt).await?;
+                    let (status, body) =
+                        introspection(state, &access.token, &reader(state, jwt), jwt).await?;
                     assert_eq!(status, StatusCode::OK);
                     assert_eq!(body["active"], true);
                     assert_eq!(body.get("scope"), scope.map(Value::from).as_ref());

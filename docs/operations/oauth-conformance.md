@@ -309,3 +309,38 @@ must stop injecting dotted opaque tokens; their existing bytes remain stored but
 now fail closed unless they are valid JWT access tokens. This change does not
 expand recipient entitlement or sender permissions, or establish complete JWT
 parser, numerical, protection-profile or product assurance.
+
+## Signed introspection recipients
+
+A selected JWT introspection response discloses active token claims only to an
+eligible authenticated recipient. For an ordinary token, stored metadata must
+identify that requester by exact audience equality. This is Aegaeon's local
+direct-identifier convention; OAuth does not generally require a resource
+indicator to equal a resource server's client identifier.
+
+For a client-credentials token, the requester must be an explicit reader retained
+in that token's grant, and the existing current policy, context and registration
+identity checks must succeed. A mapped reader may have a client identifier that
+differs from the token's resource audience. Audience equality alone does not add
+a client-credentials reader, and those mappings do not apply to other grants.
+
+Token ownership alone and missing metadata do not establish signed recipient
+authority. Such requests receive a signed response addressed to the authenticated
+requester with `token_introspection` exactly `{"active":false}`. The early denial
+precedes later protected grant, application and access-signature checks. Eligible
+readers retain existing state and signature checks and operational errors; an
+inactive response can itself fail if signing is unavailable. The introspector
+does not present the original sender's DPoP or mTLS proof.
+
+Upgrade signed-response consumers that previously relied only on token ownership
+to the supported recipient configuration. For client credentials, an owner may be
+explicitly configured as a reader before issuance. No storage rewrite or migration
+is required. Plain JSON visibility is unchanged, including a JSON fallback when
+the JWT capability is disabled. This restriction uses the existing response
+selection; it does not change Accept negotiation.
+
+This implements a bounded signed-recipient check from RFC 9701 §§3 and 5.
+Plain JSON resource-server entitlement, username semantics, failed-authentication
+status interpretation, scope narrowing, data-release privacy and negotiated
+response protection remain separate obligations. Finite tests do not establish
+full RFC 7662/RFC 9701 or product assurance.

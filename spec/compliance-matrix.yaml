@@ -4403,6 +4403,37 @@ rfc_9701:
   - "F* models the lifetime bound. The separate Kani wrapper is not called by production and is no longer cited as requirement evidence. Implementation correspondence remains open."
   - Runtime clamps the configured lifetime to at most 60 seconds.
 
+
+- id: 9701-007
+  section: '3, 5'
+  requirement: MUST
+  description: Restrict active signed introspection claims to the authenticated
+    intended resource recipient using existing grant-specific authority
+  module: crates/server/src/web/token_lifecycle/introspection.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/signed_recipient.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_recipient.rs
+  - crates/server/src/web/token_client_credentials/tests/signed_introspection.rs
+  ci_check: signed-introspection-recipient
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - Ordinary metadata audience equality is a local direct-identifier convention;
+    client-credentials readers require exact retained membership and existing
+    current context, registration identity and metadata correspondence checks.
+  - Owner-only and missing-metadata requests receive signed false-only inner claims
+    before later protected state and crypto work. Plain JSON readers are unchanged.
+  - Selection shares the existing capability and Accept predicate with finalization;
+    no common-target reader, sender-proof requirement or cross-grant permission is added.
+  - Plain JSON entitlement, username, failed-authentication interpretation, scope
+    narrowing, privacy and negotiated response protection remain separate obligations.
+  - Finite native routed PostgreSQL/Redis observations do not establish full protocol
+    conformance or product assurance.
+
 rfc_9728:
 - id: 9728-001
   requirement: TRACKING

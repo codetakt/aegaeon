@@ -32,6 +32,7 @@ mod cases;
 mod failures;
 mod grant_family;
 mod schema;
+mod signed_recipient;
 mod stored_jwt;
 
 const OWNER: &str = "grant-owner";
@@ -53,10 +54,16 @@ impl Fixture {
             .await?
             .ok_or("AEGAEON_DATABASE_URL required")?;
         let env = setup_test_environment(&pool).await?;
-        for id in [OWNER, OTHER] {
+        let resource = crate::resource_audience::protected_resource(&env.issuer_url);
+        for id in [OWNER, OTHER, resource.as_str()] {
             let mut client = sample_registered_client(id);
             client.client_secret = Some(SECRET.into());
-            client.token_endpoint_auth_method = "client_secret_basic".into();
+            client.token_endpoint_auth_method = if id == resource {
+                "client_secret_post"
+            } else {
+                "client_secret_basic"
+            }
+            .into();
             crate::dcr_persistence::create_dynamic_registration(
                 &pool,
                 &env.issuer_host,
@@ -76,7 +83,7 @@ impl Fixture {
         sqlx::query("UPDATE aegaeon.configuration_versions SET configuration_document=jsonb_set(configuration_document,'{policy}',$1) WHERE environment_id=$2 AND status='ACTIVE'")
             .bind(serde_json::to_value(&policy)?).bind(env.environment_id).execute(&pool).await?;
         sqlx::query("UPDATE aegaeon.oauth_profiles SET token_endpoint_auth_methods_allowed=$1 WHERE environment_id=$2")
-            .bind(vec!["client_secret_basic"]).bind(env.environment_id).execute(&pool).await?;
+            .bind(vec!["client_secret_basic", "client_secret_post"]).bind(env.environment_id).execute(&pool).await?;
         let mut state = test_app_state(pool.clone(), &env).await?;
         let namespace = RuntimeStateNamespace::for_tests(format!(
             "introspection-parent-{}",
@@ -210,22 +217,39 @@ async fn introspection(
     jwt: bool,
 ) -> TestResult<(StatusCode, Value)> {
     let mut request = Request::post("/introspect")
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .header(
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+    let mut fields = vec![("token", token)];
+    if caller == crate::resource_audience::protected_resource(state.issuer.as_str()) {
+        // URI client IDs use the registered post method; Basic parsing is a sibling concern.
+        fields.extend([("client_id", caller), ("client_secret", SECRET)]);
+    } else {
+        request = request.header(
             header::AUTHORIZATION,
             format!("Basic {}", STANDARD.encode(format!("{caller}:{SECRET}"))),
         );
+    }
     if jwt {
         request = request.header(header::ACCEPT, "application/token-introspection+jwt");
     }
     let response = router(state)
-        .oneshot(request.body(Body::from(serde_urlencoded::to_string([("token", token)])?))?)
+        .oneshot(request.body(Body::from(serde_urlencoded::to_string(fields)?))?)
         .await?;
     let status = response.status();
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     assert_eq!(response.headers()[header::PRAGMA], "no-cache");
+    if status == StatusCode::OK {
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            if jwt && state.cfg.jwt_runtime().introspection_enabled() {
+                "application/token-introspection+jwt"
+            } else {
+                "application/json"
+            }
+        );
+    }
     let bytes = to_bytes(response.into_body(), 65536).await?;
-    let body = if jwt && status == StatusCode::OK {
+    let body = if jwt && state.cfg.jwt_runtime().introspection_enabled() && status == StatusCode::OK
+    {
         verify_response(state, std::str::from_utf8(&bytes)?, caller)?
     } else {
         serde_json::from_slice(&bytes)?
@@ -251,6 +275,16 @@ fn verify_response(state: &AppState, jwt: &str, caller: &str) -> TestResult<Valu
     Ok(payload["token_introspection"].clone())
 }
 
+// Existing state/signature regression cases use a genuine recipient for signed responses.
+// Owner-only versus resource-reader disclosure is checked explicitly in signed_recipient.
+fn reader(state: &AppState, jwt: bool) -> String {
+    if jwt {
+        crate::resource_audience::protected_resource(state.issuer.as_str())
+    } else {
+        OWNER.into()
+    }
+}
+
 async fn observe(state: &AppState, token: &str, active: bool) -> TestResult {
     let resource = router(state)
         .oneshot(
@@ -268,7 +302,7 @@ async fn observe(state: &AppState, token: &str, active: bool) -> TestResult {
         }
     );
     for jwt in [false, true] {
-        let (status, body) = introspection(state, token, OWNER, jwt).await?;
+        let (status, body) = introspection(state, token, &reader(state, jwt), jwt).await?;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["active"], active);
         if !active {

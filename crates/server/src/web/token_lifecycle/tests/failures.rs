@@ -105,7 +105,8 @@ async fn refresh_parent_introspection_backend_error_is_not_an_active_observation
         ));
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(state, &access.token, OWNER, jwt).await?;
+            let (status, body) =
+                introspection(state, &access.token, &reader(state, jwt), jwt).await?;
             assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
             assert_eq!(body["error"], "temporarily_unavailable");
             assert!(body.get("active").is_none());
@@ -175,7 +176,13 @@ async fn refresh_parent_introspection_counts_final_application_status_and_signin
             .store_issued_grant(access.clone(), refresh, meta)?;
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(&fixture.state, &access.token, OWNER, jwt).await?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
             assert_eq!(status, StatusCode::OK, "{body}");
             assert_eq!(body["active"], true);
             assert_eq!(metrics()?, (before.0 + 1.0, before.1));
@@ -186,7 +193,13 @@ async fn refresh_parent_introspection_counts_final_application_status_and_signin
             .await?;
         for jwt in [false, true] {
             let before = metrics()?;
-            let (status, body) = introspection(&fixture.state, &access.token, OWNER, jwt).await?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
             assert_eq!(status, StatusCode::OK);
             assert_eq!(body, json!({"active":false}));
             assert_eq!(metrics()?, (before.0, before.1 + 1.0));
@@ -199,10 +212,25 @@ async fn refresh_parent_introspection_counts_final_application_status_and_signin
             projections: closed,
             memberships: None,
         });
-        let before = metrics()?;
-        let (status, body) = introspection(&fixture.state, &access.token, OWNER, false).await?;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
-        assert_eq!(metrics()?, before);
+        let (status, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body,
+            json!({"active":false}),
+            "owner denial precedes application lookup"
+        );
+        for jwt in [false, true] {
+            let before = metrics()?;
+            let (status, body) = introspection(
+                &fixture.state,
+                &access.token,
+                &reader(&fixture.state, jwt),
+                jwt,
+            )
+            .await?;
+            assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+            assert_eq!(metrics()?, before);
+        }
         // An active ordinary grant can reach signing; missing public material is an error.
         let (plain, refresh, meta) = grant(&fixture.state, false, None);
         fixture
@@ -213,7 +241,13 @@ async fn refresh_parent_introspection_counts_final_application_status_and_signin
         fixture.state.keys.jwt_introspection =
             Some(Arc::new(crate::kms::InMemoryKeyManager::new()));
         let before = metrics()?;
-        let (status, body) = introspection(&fixture.state, &plain.token, OWNER, true).await?;
+        let (status, body) = introspection(
+            &fixture.state,
+            &plain.token,
+            &reader(&fixture.state, true),
+            true,
+        )
+        .await?;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
         assert_eq!(metrics()?, before);
         Ok(())

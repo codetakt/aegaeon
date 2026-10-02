@@ -1,7 +1,7 @@
 use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::{clock_error_response, AppState};
 use super::forms::{required_lifecycle_token, IntrospectForm};
-use super::jwt_introspection::{build_jwt_introspection_response, wants_jwt_introspection};
+use super::jwt_introspection::{build_jwt_introspection_response, selects_jwt_introspection};
 use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -107,6 +107,25 @@ pub(super) async fn introspection_token_visible_to_client(
     .await
 }
 
+/// Preliminary denial using observed records only; existing visibility and
+/// current grant/registration checks remain mandatory for every positive result.
+pub(super) fn signed_introspection_recipient(
+    access: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
+    requester: &str,
+) -> bool {
+    let Some(meta) = meta else {
+        return false;
+    };
+    if let Some(grant) = meta.client_credentials_grant.as_ref() {
+        return grant
+            .introspection_clients
+            .iter()
+            .any(|identity| identity.client_id == requester);
+    }
+    access.client_credentials_digest.is_none() && meta.audience == requester
+}
+
 fn access_token_introspection_exp(access_token: &AccessToken) -> Option<u64> {
     let created_at_epoch_secs = access_token
         .created_at
@@ -174,14 +193,13 @@ pub(super) fn finalize_introspection_response(
     requesting_client: Option<&str>,
 ) -> Response {
     let active = body.get("active").and_then(Value::as_bool).unwrap_or(false);
-    let response =
-        if wants_jwt_introspection(headers) && state.cfg.jwt_runtime().introspection_enabled() {
-            build_jwt_introspection_response(state, &body, requesting_client)
-        } else {
-            let mut response = (StatusCode::OK, Json(body)).into_response();
-            util::apply_no_cache_headers(&mut response);
-            response
-        };
+    let response = if selects_jwt_introspection(state, headers) {
+        build_jwt_introspection_response(state, &body, requesting_client)
+    } else {
+        let mut response = (StatusCode::OK, Json(body)).into_response();
+        util::apply_no_cache_headers(&mut response);
+        response
+    };
     if response.status().is_success() {
         crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
             metrics.record_introspection("access_token", active);

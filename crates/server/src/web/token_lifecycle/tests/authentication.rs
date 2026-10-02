@@ -67,6 +67,7 @@ fn token(state: &AppState, owner: &str) -> TestResult<AccessToken> {
     let (mut access, refresh, mut meta) = grant(state, false, None);
     access.client_id = owner.into();
     meta.client_id = owner.into();
+    meta.audience = owner.into();
     state
         .tokens
         .store

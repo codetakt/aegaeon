@@ -27,6 +27,10 @@ pub(super) fn wants_jwt_introspection(headers: &HeaderMap) -> bool {
         })
 }
 
+pub(super) fn selects_jwt_introspection(state: &AppState, headers: &HeaderMap) -> bool {
+    state.cfg.jwt_runtime().introspection_enabled() && wants_jwt_introspection(headers)
+}
+
 pub(super) fn build_jwt_introspection_response(
     state: &AppState,
     introspection_claims: &Value,
