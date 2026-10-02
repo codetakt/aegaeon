@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: verification-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -32,6 +32,8 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -63,6 +65,8 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -131,6 +135,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -167,6 +173,8 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -224,6 +232,8 @@ jobs:
     needs: verified-core-wasm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -253,6 +263,8 @@ jobs:
     needs: fstar
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -273,6 +285,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -304,6 +318,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
@@ -340,6 +356,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
@@ -368,6 +386,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Free disk space (GitHub hosted runner)
         run: |
@@ -743,6 +763,8 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -770,6 +792,8 @@ jobs:
       NIX_PATH: nixpkgs=channel:nixos-unstable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -790,6 +814,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Python dependencies
         run: pip install pyyaml
