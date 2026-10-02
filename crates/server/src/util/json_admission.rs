@@ -200,6 +200,9 @@ pub fn decode_compact_jwt_payload(token: &str) -> Option<Vec<u8>> {
 /// Verify a signed JWT assertion with `jsonwebtoken` and then decode the
 /// registered claims through the per-surface raw JSON gate.
 ///
+/// Callers must first admit the complete protected header and resolve a trusted
+/// key with `decode_compact_jwt_header_without_duplicate_keys_with_max_len`.
+/// The original compact bytes, including harmless extensions, are verified here.
 /// The initial `jsonwebtoken` decode is intentionally narrow and is used only
 /// for signature / registered-claim validation. Duplicate-key rejection and
 /// top-level claim-shape validation remain authoritative in the surface-aware
@@ -243,6 +246,7 @@ pub(crate) fn signed_assertion_claims_error_from_jwt_claims_decode(
     }
 }
 
+#[cfg(test)]
 fn map_raw_json_object_error(err: &RawJsonObjectError) -> JsonObjectParseError {
     match err {
         RawJsonObjectError::InvalidBackendPolicy(_) => JsonObjectParseError::BackendPolicy,
@@ -261,6 +265,7 @@ fn map_raw_json_object_error(err: &RawJsonObjectError) -> JsonObjectParseError {
 /// Returns `JsonObjectParseError` when the payload is not valid JSON, is not a
 /// JSON object matching `T`, contains duplicate keys, or the selected surface
 /// requests an unsupported backend policy.
+#[cfg(test)]
 pub(crate) fn deserialize_compat_json_object_without_duplicate_keys_result_for_surface<
     T: DeserializeOwned,
 >(
@@ -324,10 +329,28 @@ pub fn decode_compact_jwt_header_without_duplicate_keys_with_max_len(
     jose_header_max_len: usize,
 ) -> Result<jsonwebtoken::Header, JsonObjectParseError> {
     let header_bytes = decode_compact_jwt_header_bytes(token, jose_header_max_len)?;
-    deserialize_compat_json_object_without_duplicate_keys_result_for_surface(
-        RawJsonSurface::JoseHeader,
+    aegaeon_jose::protected_header::admit_protected_header(
         &header_bytes,
+        aegaeon_jose::protected_header::ProtectedHeaderKind::Jws,
     )
+    .map_err(|error| {
+        use aegaeon_jose::json_lowstar::JsonError;
+        use aegaeon_jose::protected_header::HeaderAdmissionError;
+        match error {
+            HeaderAdmissionError::BackendPolicy(_) => JsonObjectParseError::BackendPolicy,
+            HeaderAdmissionError::Json(JsonError::PolicyViolation(reason))
+                if reason == "duplicate-key" =>
+            {
+                JsonObjectParseError::DuplicateKey
+            }
+            HeaderAdmissionError::Json(JsonError::TrailingBytes(_)) => {
+                JsonObjectParseError::TrailingBytes
+            }
+            HeaderAdmissionError::Json(_) => JsonObjectParseError::InvalidShape,
+        }
+    })?
+    .into_jwt_header()
+    .map_err(|_| JsonObjectParseError::InvalidShape)
 }
 
 #[cfg(test)]

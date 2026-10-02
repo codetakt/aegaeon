@@ -2,6 +2,7 @@ use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_callback_exchange::UpstreamCallbackExchange;
 use super::super::upstream_refresh_token_envelope::{
     seal_upstream_refresh_token, upstream_refresh_token_envelope_error_response,
+    UpstreamRefreshAuthenticationContext,
 };
 use axum::{http::StatusCode, response::Response};
 use sqlx::{Postgres, Row, Transaction};
@@ -102,6 +103,19 @@ pub(in crate::web) async fn persist_upstream_callback_refresh_token(
     let Some(refresh_token) = exchange.token_response.refresh_token.as_ref() else {
         return Ok(());
     };
+    let original = UpstreamRefreshAuthenticationContext::from_validated_id_token(
+        &exchange.id_token,
+        &request.client_id,
+        &request.issuer,
+        &exchange.upstream_sub_hash,
+    )
+    .map_err(|error| {
+        upstream_refresh_token_envelope_error_response(
+            error,
+            "upstream authentication context invalid",
+            issuer_base,
+        )
+    })?;
     let context = request.managed_connection_context();
     let link_state = load_callback_refresh_link_state(
         tx,
@@ -127,6 +141,7 @@ pub(in crate::web) async fn persist_upstream_callback_refresh_token(
         exchange.upstream_sub_hash.as_str(),
         context.connection_id,
         next_generation,
+        &original,
     )
     .map_err(|error| {
         upstream_refresh_token_envelope_error_response(

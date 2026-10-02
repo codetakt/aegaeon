@@ -1,9 +1,9 @@
 use super::super::oauth_errors::json_error_with_iss;
-use super::super::AppState;
+use super::super::{no_cache_redirect_response, AppState};
 use super::{UpstreamAuthorizeContext, UpstreamAuthorizeInput};
 use axum::{
     http::{header, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use std::time::SystemTime;
 use url::Url;
@@ -26,6 +26,9 @@ pub(super) struct UpstreamAuthorizeFlowState {
     state_token: String,
     nonce: String,
     code_challenge: Option<String>,
+    browser_secret: String,
+    expires_at: SystemTime,
+    ttl_secs: u64,
 }
 
 pub(super) async fn store_upstream_authorize_request(
@@ -41,6 +44,7 @@ pub(super) async fn store_upstream_authorize_request(
     let code_challenge = code_verifier.as_deref().map(pkce_challenge);
     let state_token = random_token(32);
     let nonce = random_token(32);
+    let browser_secret = random_token(32);
     let redirect_uri = build_upstream_redirect_uri(state.base_url.as_str(), connection_id);
     let issued_at = SystemTime::now();
     let Some(expires_at) = issued_at.checked_add(state.upstream.auth_store.ttl()) else {
@@ -53,6 +57,7 @@ pub(super) async fn store_upstream_authorize_request(
     };
 
     let stored_request = UpstreamAuthRequest {
+        browser_binding_digest: Some(aegaeon_crypto::hash::sha256_hex(browser_secret.as_bytes())),
         state: state_token.clone(),
         nonce: nonce.clone(),
         code_verifier,
@@ -73,7 +78,8 @@ pub(super) async fn store_upstream_authorize_request(
         redirect_uri: redirect_uri.clone(),
         return_to: input.return_to.clone(),
         max_age: input.max_age,
-        require_iss_parameter: context.profile.require_iss_parameter,
+        require_iss_parameter: context.profile.require_iss_parameter
+            || discovery.authorization_response_iss_parameter_supported == Some(true),
         jit_provisioning_policy: context.connection.jit_provisioning_policy.clone(),
         attribute_mappings: context.connection.attribute_mappings.clone(),
         claim_release_policy: context.connection.claim_release_policy.clone(),
@@ -101,6 +107,9 @@ pub(super) async fn store_upstream_authorize_request(
         state_token,
         nonce,
         code_challenge,
+        browser_secret,
+        expires_at,
+        ttl_secs: state.upstream.auth_store.ttl().as_secs(),
     })
 }
 
@@ -143,9 +152,40 @@ pub(super) fn build_upstream_authorize_redirect_response(
         }
     }
 
-    let mut response = StatusCode::FOUND.into_response();
-    if let Ok(value) = HeaderValue::from_str(auth_url.as_str()) {
-        response.headers_mut().insert(header::LOCATION, value);
+    let mut response = no_cache_redirect_response(auth_url.as_str());
+    let remaining = cookie_max_age(flow.expires_at, SystemTime::now(), flow.ttl_secs);
+    let cookie = super::super::upstream_browser_binding::cookie_value(
+        &flow.state_token,
+        &flow.browser_secret,
+        remaining,
+    );
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        response.headers_mut().append(header::SET_COOKIE, value);
     }
     Ok(response)
+}
+
+fn cookie_max_age(expires_at: SystemTime, now: SystemTime, ttl_secs: u64) -> u64 {
+    expires_at.duration_since(now).map_or(0, |remaining| {
+        remaining
+            .as_secs()
+            .saturating_add(u64::from(remaining.subsec_nanos() > 0))
+            .min(ttl_secs)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cookie_max_age;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn upstream_browser_binding_cookie_lifetime_preserves_one_second_transactions() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(100);
+        assert_eq!(cookie_max_age(now + Duration::from_millis(999), now, 1), 1);
+        assert_eq!(cookie_max_age(now + Duration::from_nanos(1), now, 1), 1);
+        assert_eq!(cookie_max_age(now + Duration::from_secs(10), now, 1), 1);
+        assert_eq!(cookie_max_age(now, now, 1), 0);
+        assert_eq!(cookie_max_age(now - Duration::from_secs(1), now, 1), 0);
+    }
 }

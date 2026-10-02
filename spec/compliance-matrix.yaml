@@ -1097,7 +1097,7 @@ rfc_7515:
   - "Linear scaling: ~650-700 ns per field"
 rfc_7516:
 - id: 7516-001
-  section: '4.1.1'
+  section: '4.1.2'
   requirement: MUST
   description: JWE MUST contain enc header parameter
   module: fstar/jose/Jose.Jwe_header.fst
@@ -1118,6 +1118,18 @@ rfc_7516:
   notes:
   - "test_jwe_rsa_oaep_a256gcm_rejects_missing_enc \u3068 ..._unsupported_enc\
     \ \u304C enc \u5FC5\u9808\u3068\u8A31\u5BB9\u30EA\u30B9\u30C8\u3092\u78BA\u8A8D"
+- id: 7516-ALG-REQUIRED
+  section: '4.1.1'
+  requirement: MUST
+  description: The supported JWE decryptor requires explicit RSA-OAEP alg before key unwrap
+  module: crates/jose/src/jwe.rs
+  tests:
+  - crates/jose/tests/jwe_required_headers.rs
+  ci_check: cargo test -p aegaeon-jose --test jwe_required_headers
+  status: implemented
+  runtime_link: crates/jose/src/jwe.rs
+  notes:
+  - "Real authenticated envelopes exercise omitted, mistyped, duplicate and unsupported alg/enc; a bounded unwrap control checks early refusal. These are finite Rust/native checks, not proof of the composed decryptor."
 - id: 7516-002
   section: '5.1'
   requirement: MUST
@@ -4142,7 +4154,7 @@ rfc_9207:
   - client
   notes:
   - "AS-side: authorization responses include iss equal to the configured issuer identifier and metadata advertises authorization_response_iss_parameter_supported=true (see 9207-002 and metadata tests)."
-  - "Client-side: upstream validation of the iss parameter is tracked in the OAuth client/RP federation roadmap; implementation is outside this repo."
+  - "RP-side: upstream transactions preserve exact issuer bytes and freeze the iss requirement from the profile or discovery support; success and error callbacks exact-check every present iss. See docs/specs/oidc-rp-brokering-spec.md and upstream_authorize/issuer_tests.rs."
 - id: 9207-002
   requirement: MUST
   description: Authorization response MUST include iss parameter
@@ -5913,6 +5925,10 @@ openid_core:
   - crates/server/src/web/upstream_callback.rs
   - crates/server/src/web/upstream_callback_connection.rs
   - crates/server/src/web/management/connections/preparation/update.rs
+  - crates/server/src/web/upstream_refresh/tests/cases.rs
+  - crates/server/src/web/upstream_refresh_token_envelope/tests.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests.rs
+  - crates/server/src/web/upstream_refresh/tests/signing_keys/cases.rs
   ci_check: oidc-rp-upstream-refresh
   status: verified
   runtime_link: crates/server/src/web/upstream_refresh.rs
@@ -5929,6 +5945,11 @@ openid_core:
   - "Persists rotated upstream refresh_token to account_links when upstream IdP issues a new one, guarded by upstream_refresh_token_generation optimistic CAS and connection binding."
   - "Uses bounded NonAuthoritativeMetadataCache for upstream discovery and JWKS to avoid repeated fetches without making process-local cache authoritative."
   - "Comprehensive error handling: 401 (invalid bearer), 404 (no link/token), 502 (upstream failures), and 503 for transient PostgreSQL-backed repository/service unavailability after mandatory startup preflight succeeds."
+  - "OIDC Core 1.0 errata set 2, section 12.2: refreshed upstream ID Tokens retain exact original issuer/subject and semantic audience members. Present auth_time/nonce must match captured original values; absent originals cannot corroborate newly supplied values and are refused by local fail-closed policy. Absent refreshed ID Tokens preserve context. Existing signature and claim checks remain conjunctive."
+  - "Original authentication context is encrypted with the refresh token in a version 3 envelope and retained through generation-CAS rotations. Legacy version 2 requires reauthentication before exchange. The cited F* model does not establish encrypted storage, original-authentication continuity, database concurrency, RNG/AEAD or complete callback/refresh composition; finite signed/PG tests are separate implementation evidence."
+  - "OIDC Core 1.0 errata set 2 section 10.1.1 describes re-retrieval for unfamiliar kid. Shared strict header admission permits one configured-URL retrieval for an absent nonempty kid; known-key signature/claim failures never trigger a forced retry. The provider SHOULD retain recently decommissioned keys; that is separate from consumer retrieval."
+  - "All upstream key retrievals share a bounded per-process coordinator with one in-flight request per exact URL and a 30-second monotonic attempt-start cooldown, including failure/cancellation. Protected slots cannot be evicted for new URLs. Successful fetches replace sets; failed fetches do not renew old TTL. Upstream RSA n/e and EC x/y require nonempty canonical unpadded base64url before replacement, without changing generic key-size, curve or algorithm policy. Current endpoint policy and final-set Federation checks remain mandatory."
+  - "Real HTTP, signed token/Federation, PostgreSQL callback/rotation and injected-clock concurrency tests are finite runtime observations. They do not prove scheduler fairness, fleet-wide rate limits, cryptographic assumptions, database isolation, supply or complete deployment composition; the existing F* model does not cover this coordinator."
 - id: OIDC-1-010
   section: Verification boundary
   requirement: MUST
@@ -6056,6 +6077,27 @@ openid_jwks:
   notes:
   - "OIDC signing keys support overlap through ACTIVE/RETIRING runtime keys in `aegaeon.runtime_keys`; duplicate kid values fail closed at runtime."
   - "The two Kani harnesses check the cfg(kani) model of the pure JWKS helpers (crates/pure kani_impl: u8 identifiers, at most 5 keys, one symbolic bool per harness), not the production String/Vec implementation; correspondence to the runtime helper is not proved. They run as the diagnostic group `jwks-rotation-models` of spec/kani-evidence.json and are not admitted evidence; /jwks endpoint tests cover the runtime path."
+- id: OIDC-10-003
+  section: '10.2, 10.2.1'
+  requirement: SHOULD
+  description: Eligible retiring private Request Object keys remain usable through the managed decryption consumer path while an active successor exists.
+  module: crates/server/src/oidc/config/runtime_keys.rs
+  proof: []
+  tests:
+  - crates/server/src/oidc/config/tests/decryption_keyring.rs
+  - crates/server/src/web/management/request_object_keyring_tests.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
+  - crates/jose/tests/jwe_required_headers.rs
+  ci_check: cargo test -p aegaeon-server request_object_keyring -- --include-ignored
+  status: implemented
+  runtime_link: crates/server/src/request_object/envelope.rs
+  notes:
+  - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
+  - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
+  - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."
+  - "request_object_keyring_rotation_expiry_through_authorize_and_par and request_object_keyring_rotation_revocation_through_authorize_and_par use actual PostgreSQL management transitions, runtime loading and public routes; stale snapshots return 503 and request restart. Runtime reconstruction in tests is not a process-restart or uninterrupted-availability guarantee."
+  - "No new retention/cache formula, external cache purge, key rollback, formal proof or full rotation assurance is established."
+
 openid_logout:
 - id: OIDC-3-001
   section: RP-Initiated Logout
@@ -6222,21 +6264,22 @@ openid_jar:
 - id: OIDC-5-001
   section: Request Object (JAR) Encryption
   requirement: MAY
-  description: When configured, the OP accepts encrypted Request Objects (compact JWE RSA-OAEP/A256GCM) that decrypt to a nested signed JWT before applying RFC 9101 validation
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+  description: When configured, encrypted Request Objects require explicit RSA-OAEP/A256GCM and authenticated JWT content type before inner signed JWT validation
+  module: crates/server/src/request_object/envelope.rs
   proof:
-  - type: plan
-    document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   - type: fstar
     file: fstar/par/RequestObject.fst
     invariant: lemma_merge_request_object_wins
   tests:
-  - crates/server/src/web/token_exchange_tests/request_object_retention.rs
-  ci_check: cargo test -p aegaeon-server --lib web::token_exchange_tests::request_object_retention
-  status: verified
-  runtime_link: crates/server/src/web/token_exchange_tests/request_object_retention.rs
+  - crates/jose/tests/jwe_required_headers.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/encrypted_headers.rs
+  ci_check: cargo test -p aegaeon-server --lib encrypted_request_object_headers -- --include-ignored
+  status: partial
+  runtime_link: crates/server/src/request_object/envelope.rs
   notes:
-  - Verified by `crates/server/src/web/token_exchange_tests/request_object_retention.rs::jar_par_binding_encrypted_request_object_valid_flow`.
+  - "Protected cty accepts JWT or application/jwt with ASCII case-insensitive comparison, without whitespace or parameters (RFC7519 section5.2, RFC7515 section4.1.10, RFC9101 section4). Generic non-JWT JWE keeps cty optional."
+  - "Authenticated envelope tests cover authorize/PAR, consent, code redemption, inner signature/client/claim refusal and no grant-store/browser effect on rejected requests. They require PostgreSQL and Redis."
+  - "The cited merge lemma does not establish native RSA-OAEP/AES-GCM, cty admission or router/store composition. The previous encrypted-flow test citation was absent from its source; this row is partial and finite runtime evidence is separate from model proof."
 - id: OIDC-5-002
   section: Request Object (JAR) RS256 interoperability
   requirement: SHOULD
@@ -6431,6 +6474,8 @@ rfc_7515_7516_jose_headers:
   tests:
   - crates/jose/src/jwe.rs
   - crates/jose/src/jws.rs
+  - crates/jose/tests/protected_header_admission.rs
+  - crates/ffi/tests/raw_json_structural_runtime_test.rs
   ci_check: jose-lowstar-pipeline
   status: verified
   runtime_link: crates/jose/src/jwe.rs
@@ -6441,7 +6486,9 @@ rfc_7515_7516_jose_headers:
     test: crates/jose/src/jws.rs
   notes:
   - "The JWS AST parser rejects crit on already decoded JSON; the cited lemma exposes algorithm and kid postconditions. It does not establish protected-byte decoding or complete wire-level JWS verification."
-  - crit rejected in both JOSE header parsers; see roadmap specification refresh section
+  - Complete common protected-header admission rejects every presence of crit, b64 and zip before projection, key selection or verification. Rejecting b64 true is unsupported-extension policy, not an RFC prohibition on true.
+  - Unknown noncritical values and Unicode names are ignored after syntax and decoded top-level duplicate checks. Consumed fields require strings; cryptographic input remains the original compact bytes.
+  - Runtime tests cover the composed native wrapper and Rust scanner; cited AST lemmas do not prove ignored-value syntax, Rust stack/resource behavior, or the full consumer and supplier composition.
   - Inline unit tests jwe_header_rejects_crit and verify_compact_rejects_crit_header confirm crit is rejected on both TLV and JSON paths.
 
 security_review:

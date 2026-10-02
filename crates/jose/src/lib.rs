@@ -14,6 +14,7 @@ pub mod jwk;
 pub mod jws;
 pub mod jwt;
 pub mod policy;
+pub mod protected_header;
 pub mod raw_json;
 pub mod raw_json_structural;
 pub mod request_object;

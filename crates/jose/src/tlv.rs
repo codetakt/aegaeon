@@ -26,6 +26,10 @@ fn resolve_everparse_entry_check(
 
 /// Parse TLV-encoded JOSE header entries into key-value pairs.
 ///
+/// This narrow adapter does not admit a complete protected JSON object. Protocol
+/// consumers use [`crate::protected_header::admit_protected_header`] before
+/// lowering selected processing fields to TLV.
+///
 /// # Errors
 ///
 /// Returns [`JoseHeaderParseError`] when the TLV stream is malformed or the
@@ -91,6 +95,13 @@ fn push_tlv_component(
 #[cfg(feature = "ffi_jose_header_tlv")]
 fn encode_json_header_as_tlv(bytes: &[u8]) -> Result<Vec<u8>, crate::json_lowstar::JsonError> {
     let members = crate::json_lowstar::parse_json_header_string_members(bytes)?;
+    encode_header_members_as_tlv(members)
+}
+
+#[cfg(feature = "ffi_jose_header_tlv")]
+fn encode_header_members_as_tlv(
+    members: Vec<crate::json_lowstar::JoseHeaderStringMember>,
+) -> Result<Vec<u8>, crate::json_lowstar::JsonError> {
     let mut out = Vec::new();
 
     for member in members {
@@ -103,6 +114,14 @@ fn encode_json_header_as_tlv(bytes: &[u8]) -> Result<Vec<u8>, crate::json_lowsta
     }
 
     Ok(out)
+}
+
+#[cfg(feature = "ffi_jose_header_tlv")]
+pub(crate) fn normalize_header_members_via_tlv_ffi(
+    members: Vec<crate::json_lowstar::JoseHeaderStringMember>,
+) -> Result<Vec<(String, String)>, crate::json_lowstar::JsonError> {
+    let tlv = encode_header_members_as_tlv(members)?;
+    ffi::tlv::parse_jose_header_tlv_via_abi(&tlv).map_err(map_tlv_abi_error)
 }
 
 /// Parse a JOSE header JSON object by normalizing it into TLV and routing the

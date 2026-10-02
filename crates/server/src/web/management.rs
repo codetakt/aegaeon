@@ -98,3 +98,6 @@ pub use routes::router;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod request_object_keyring_tests;

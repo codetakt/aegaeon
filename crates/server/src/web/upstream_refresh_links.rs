@@ -27,6 +27,8 @@ pub(super) struct UpstreamRefreshLink {
     pub(super) upstream_sub_hash: String,
     pub(super) upstream_refresh_token_generation: i64,
     pub(super) upstream_refresh_token: String,
+    pub(super) original_authentication:
+        super::upstream_refresh_token_envelope::UpstreamRefreshAuthenticationContext,
     pub(super) upstream_connection_id: uuid::Uuid,
     pub(super) upstream_connection_identifier: String,
     pub(super) upstream_client_id: String,
@@ -76,11 +78,23 @@ pub(super) async fn load_upstream_refresh_link(
         upstream_issuer: identity.upstream_issuer,
         upstream_sub_hash: identity.upstream_sub_hash,
         upstream_refresh_token_generation: identity.refresh_token_generation,
-        upstream_refresh_token,
+        original_authentication: upstream_refresh_token.original,
+        upstream_refresh_token: upstream_refresh_token.refresh_token,
         upstream_connection_id: client.connection_id,
         upstream_connection_identifier: client.connection_identifier,
         upstream_client_id: client.client_id,
         upstream_auth_method: client.auth_method,
         upstream_client_secret,
     })
+}
+
+#[cfg(test)]
+pub(in crate::web) fn fixture_upstream_refresh_caller(
+    user_id: String,
+    caller_client_id: String,
+) -> UpstreamRefreshCaller {
+    UpstreamRefreshCaller {
+        user_id,
+        caller_client_id,
+    }
 }

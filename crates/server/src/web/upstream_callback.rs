@@ -118,10 +118,6 @@ async fn finalize_upstream_callback_response(
     response
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "existing upstream callback workflow; new oversized functions remain gated"
-)]
 pub(super) async fn upstream_callback(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
@@ -138,41 +134,75 @@ pub(super) async fn upstream_callback(
     if let Err(resp) = enforce_no_credentials_in_callback_uri(&uri, issuer_base) {
         return resp;
     }
-    if let Some(response) = handle_upstream_callback_error(&state, &params, issuer_base).await {
-        return response;
-    }
-
-    let mut callback = match consume_upstream_callback_context(&state, &params, issuer_base).await {
-        Ok(callback) => callback,
-        Err(response) => return response,
-    };
-    if let Err(response) =
-        validate_upstream_callback_issuer(&params, &callback.request, issuer_base)
-    {
-        return response;
-    }
-    if let Err(response) = validate_and_hydrate_upstream_callback_connection(
-        &state.db_pool,
-        &mut callback.request,
+    let callback = match consume_upstream_callback_context(
+        &state,
+        &params,
+        &headers,
         &connection,
         issuer_base,
     )
     .await
     {
+        Ok(callback) => callback,
+        Err(response) => return response,
+    };
+    let cookie_state = callback.request.state.clone();
+    let mut response =
+        complete_bound_upstream_callback(&state, &params, callback, &connection, &request_id).await;
+    super::upstream_browser_binding::clear_cookie(response.headers_mut(), &cookie_state);
+    response
+}
+
+async fn complete_bound_upstream_callback(
+    state: &AppState,
+    params: &UpstreamCallbackQuery,
+    mut callback: super::upstream_callback_state::UpstreamCallbackContext,
+    connection: &str,
+    request_id: &str,
+) -> Response {
+    let issuer_base = state.issuer.as_str();
+    if let Err(response) = validate_upstream_callback_issuer(params, &callback.request, issuer_base)
+    {
         return response;
     }
-
-    let exchange = match perform_upstream_callback_exchange(
-        &state,
-        &callback.request,
-        &callback.code,
+    if let Some(response) = handle_upstream_callback_error(params, &callback.request, issuer_base) {
+        return response;
+    }
+    let Some(code) = callback.code.as_deref() else {
+        return json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            Some("code is required"),
+            issuer_base,
+        );
+    };
+    if let Err(response) = validate_and_hydrate_upstream_callback_connection(
+        &state.db_pool,
+        &mut callback.request,
+        connection,
         issuer_base,
     )
     .await
     {
-        Ok(exchange) => exchange,
-        Err(response) => return response,
-    };
+        return response;
+    }
+
+    let exchange =
+        match perform_upstream_callback_exchange(state, &callback.request, code, issuer_base).await
+        {
+            Ok(exchange) => exchange,
+            Err(response) => return response,
+        };
+    persist_bound_upstream_callback(state, &callback.request, &exchange, request_id).await
+}
+
+async fn persist_bound_upstream_callback(
+    state: &AppState,
+    request: &UpstreamAuthRequest,
+    exchange: &super::upstream_callback_exchange::UpstreamCallbackExchange,
+    request_id: &str,
+) -> Response {
+    let issuer_base = state.issuer.as_str();
     let mut tx = match state.db_pool.begin().await {
         Ok(tx) => tx,
         Err(_) => {
@@ -184,39 +214,28 @@ pub(super) async fn upstream_callback(
             );
         }
     };
-    let user = match resolve_upstream_callback_user(
-        &mut tx,
-        &callback.request,
-        &exchange,
-        issuer_base,
-        &request_id,
-    )
-    .await
-    {
-        Ok(user) => user,
-        Err(response) => return response,
-    };
+    let user =
+        match resolve_upstream_callback_user(&mut tx, request, exchange, issuer_base, request_id)
+            .await
+        {
+            Ok(user) => user,
+            Err(response) => return response,
+        };
 
-    if let Err(response) = record_upstream_callback_audit(
-        &mut tx,
-        &callback.request,
-        &user.user_id,
-        issuer_base,
-        &request_id,
-    )
-    .await
+    if let Err(response) =
+        record_upstream_callback_audit(&mut tx, request, &user.user_id, issuer_base, request_id)
+            .await
     {
         return response;
     }
     if let Err(response) =
-        persist_upstream_callback_refresh_token(&mut tx, &callback.request, &exchange, issuer_base)
-            .await
+        persist_upstream_callback_refresh_token(&mut tx, request, exchange, issuer_base).await
     {
         return response;
     }
     if let Err(response) = sync_upstream_callback_projection(
         &mut tx,
-        &callback.request,
+        request,
         user.local_end_user_id,
         &exchange.id_token,
         issuer_base,
@@ -234,12 +253,12 @@ pub(super) async fn upstream_callback(
         );
     }
     finalize_upstream_callback_response(
-        &state,
-        &callback.request,
+        state,
+        request,
         &exchange.discovery,
         &exchange.id_token,
         &user,
-        &request_id,
+        request_id,
     )
     .await
 }

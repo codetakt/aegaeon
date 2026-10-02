@@ -123,6 +123,9 @@ pub(super) fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppSt
             logout_relay_store: upstream.logout_relay_store,
             auth_store: upstream.auth_store,
             discovery_cache: upstream.discovery_cache,
+            jwks_fetches: Arc::new(
+                aegaeon_server::upstream::UpstreamJwksFetchCoordinator::default(),
+            ),
             jwks_cache: upstream.jwks_cache,
         },
         dcr_enabled: dcr.enabled,

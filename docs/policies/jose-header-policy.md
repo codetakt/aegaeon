@@ -1,6 +1,6 @@
 # JOSE Protected Header Length Policy
 
-Last updated: 2026-07-07
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -168,29 +168,94 @@ available for backward compatibility but are deprecated. They internally use
 - Use per-request contexts to apply different limits to different request types
   (e.g., stricter limits for untrusted sources).
 
-## Optional Header Handling (Interim)
+## Protected Header Admission
 
-Until Phase 2.1 of the Low*/C roadmap delivers verified parsing for all optional
-fields, the following policies apply:
+Protocol consumers admit the complete protected JSON object before projecting
+fields, selecting a key, retrieving an unknown key, checking a signature, or
+using claims. Decoded top-level names must be unique, including escaped aliases
+of names that the consumer otherwise ignores. Malformed JSON and trailing input
+are rejected. `alg`, `typ`, `kid`, and `cty` must be strings whenever present;
+JWE also consumes a string `enc`. JSON null is not absence. Required fields,
+algorithm allowlists, token purposes, key restrictions and claims remain the
+responsibility of each verifier.
 
-- `zip` (RFC 7516 §4.1.3): Compression is not yet supported; reject any protected
-  header where `zip` is present unless the value is exactly `DEF` and an explicit
-  feature flag enables it. Default posture: reject.
-- `crit` (RFC 7515 §4.1.11): Must be rejected unless every listed extension is
-  explicitly understood. Aegaeon rejects `crit` in both the TLV and JSON decoders;
-  regressions are monitored via the unit tests `jwe_header_rejects_crit` /
-  `verify_compact_rejects_crit_header` in `crates/jose/src/jwe.rs` and
-  `crates/jose/src/jws.rs`.
-- `kid` (RFC 7515 §4.1.4): If present must be ASCII and 1–255 characters. Longer or
-  empty identifiers are rejected before signature verification. The tests
-  `kid_validation_rejects_empty` / `kid_validation_rejects_too_long_or_non_ascii`
-  in `crates/jose/src/jws.rs` cover ASCII + length constraints and align with the
-  F* lemma `valid_kid_string`.
-- `typ` / `cty` (RFC 7515 §4.1.9 / §4.1.10): Accepted as informational hints when
-  ≤ 255 ASCII characters; values exceeding the bound or containing non-printable
-  characters are rejected. Verification coverage will be added alongside Low*
-  extraction.
-- Additional custom headers: reject unless documented and supported by policy.
+No critical extension, unencoded payload or compression is supported. Every
+presence of `crit`, `b64`, or `zip` is rejected, regardless of value. Rejecting
+`b64: true` is an unsupported-extension policy: RFC 7797 sections 6 and 7 require
+its critical-extension declaration even for true; they do not forbid true.
 
-The compliance matrix rows `7515-CRIT-NOT-SUPPORTED`, `7516-ENC-ALLOWLIST` and
-related entries reference this section as the authoritative run-time behaviour.
+Unknown noncritical members are ignored after syntax and duplicate-name checks,
+as required by RFC 7515 section 4 and RFC 7516 section 4. They may have Unicode
+names and any JSON value kind, including a value longer than a narrow TLV
+component, within the complete-header size bound. Unused `jku`, `x5u`, `x5c`, and
+`jwk` hints do not select or retrieve keys. DPoP is a separate profile that
+requires an embedded JWK and retains its own admission rules.
+
+The common admission API uses the configured structural FFI parser and fails
+closed for an unavailable or invalid backend. The wrapper includes a
+source-managed Rust scanner for broader JSON values when the extracted parser
+reports that input unsupported. Generated success also requires a complete
+syntax check through this Rust scanner, retaining the original generated spans.
+The wrapper validates UTF-8; the Rust scanner uses an explicit container stack
+whose size is bounded by input length. This avoids Rust recursive traversal,
+not recursion within the generated supplier. These Rust checks are outside the
+extracted parser's proof domain and do not repair the standalone generated
+parser. Successful local tests do not prove the composed parser.
+Only admitted processing strings enter the existing LowStar normalizer or the
+optional `ffi_jose_header_tlv` normalizer. Their selected-field restrictions
+remain in effect for those library paths. The public low-level string-pair
+adapters retain their narrow API and do not constitute complete JOSE admission.
+
+The JWT access-token decoder keeps its distinct `JwtAccessTokenHeader` backend
+policy. Server validators propagate the existing `policy.joseHeaderMaxLen`
+setting; the Request Object library has explicit `*_with_context` variants.
+No new runtime setting is introduced. Cryptographic verification always uses
+the original compact bytes, and JWE authentication uses the original encoded
+protected header as AAD.
+
+## Parsed JWS Compatibility
+
+`Jws::from_compact` (or `from_compact_with_context`) admits the complete protected
+header and retains the exact original compact representation. It does not verify
+a signature. `to_compact` returns those original bytes only while the public
+header projection, payload and signature equal their originally parsed values.
+Changing any of those fields returns `JwsError::ParsedFieldsChanged`; restoring
+the original values permits serialization again. Unknown metadata is preserved
+in the compact representation, not exposed through `JwsHeader`.
+
+The added private retained representation makes external `Jws` struct literals
+incompatible. Callers should parse a received compact value, or use the existing
+signing APIs to produce a newly signed value and then parse it if needed. Editing
+a parsed view does not re-sign it. The new error variant also requires updates
+to exhaustive matches. These changes prevent reuse of a signature over a
+reserialized, incomplete protected header.
+
+## JWE and Encrypted Request Objects
+
+The supported JWE decryptor requires explicit string `alg: "RSA-OAEP"` and
+`enc: "A256GCM"` (RFC 7516 sections 4.1.1–4.1.2). Algorithm names are case
+sensitive. Missing, null, nonstring, empty, unsupported or duplicate fields
+are rejected before private-key unwrap. Generic byte decryption keeps `cty`
+optional and permits unrelated string content types.
+
+Encrypted Request Objects require protected `cty: "JWT"` identifying the
+signed JWT inside the envelope. `jwt`, `application/jwt`, and ASCII case
+variants are equivalent (RFC 7519 section 5.2; RFC 7515 section 4.1.10).
+Whitespace, parameters, wildcards and other subtypes are not equivalent.
+The purpose-specific
+`decrypt_nested_jwt_rsa_oaep_a256gcm_pkcs8_with_context` API checks this content
+type through the same complete header admission and decryptor as the generic
+API. It returns plaintext only after authentication with the original protected
+segment as AAD. It does not verify the inner JWT.
+
+Both `/authorize` and `/par` pass the decrypted compact signed JWT through the
+existing signature, algorithm, registered client/key, claim, redirect, PKCE and
+lifetime checks. Only one JWE envelope is supported. Ordinary signed Request
+Objects do not acquire a `cty` requirement.
+
+Clients that omitted `alg`, or encrypted a Request Object without an accepted
+protected `cty`, must create a new correctly authenticated request. Existing
+ciphertext cannot be repaired by editing its header. No database or key migration
+is required. The new `JweError` variants affect exhaustive Rust matches. Finite
+cryptographic and router/store tests do not establish a formal proof of this
+composed path.

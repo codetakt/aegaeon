@@ -9,6 +9,7 @@ use std::error::Error as StdError;
 use std::io;
 use std::sync::MutexGuard;
 
+mod decryption_keyring;
 mod env_inventory;
 mod issuer;
 mod jwks;

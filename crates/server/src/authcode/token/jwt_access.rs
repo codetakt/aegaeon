@@ -15,11 +15,12 @@ pub(super) use types::{
 pub(super) fn verify_jwt(
     token: &str,
     key_manager: &dyn KeyManager,
+    jose_header_max_len: usize,
 ) -> Result<Option<JwtTokenParts>, JwtAccessTokenVerificationError> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
     let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 {
+    if parts.len() != 3 || parts[0].len() > jose_header_max_len {
         return Ok(None);
     }
 

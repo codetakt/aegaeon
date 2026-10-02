@@ -1,9 +1,9 @@
-use super::oauth_errors::json_error_with_iss;
+use super::oauth_errors::no_cache_json_error_with_iss as json_error_with_iss;
 use super::resource_authentication::enforce_resource_uri;
 use super::transport_boundary::transport_rejection_for_route;
 use super::upstream_id_token::{
-    refreshed_upstream_id_token_signature_failure, validate_upstream_id_token,
-    verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
+    admit_upstream_id_token_header, refreshed_upstream_id_token_signature_failure,
+    validate_upstream_id_token, verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
 };
 use super::upstream_metadata::{
     fetch_upstream_jwks_cached, verify_upstream_federation_metadata_blocking,
@@ -48,19 +48,32 @@ fn next_upstream_refresh_generation(current: i64, issuer_base: &str) -> Result<i
     })
 }
 
-async fn validate_upstream_refresh_exchange(
+async fn fetch_upstream_refresh_jwks(
     state: &AppState,
     issuer_base: &str,
-    link: &UpstreamRefreshLink,
     exchange: &UpstreamRefreshExchange,
-) -> Result<(), Response> {
-    let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
-        return Ok(());
-    };
+    id_token_str: &str,
+) -> Result<aegaeon_jose::jwk::JwkSet, Response> {
+    let header = admit_upstream_id_token_header(
+        id_token_str,
+        &exchange.discovery,
+        state.cfg.jose_header_max_len,
+    )
+    .map_err(refreshed_upstream_id_token_signature_failure)
+    .map_err(|error| {
+        json_error_with_iss(
+            error.status,
+            "server_error",
+            Some(&error.message),
+            issuer_base,
+        )
+    })?;
     let jwks = fetch_upstream_jwks_cached(
         &exchange.client,
         &exchange.discovery.jwks_uri,
         &state.upstream.jwks_cache,
+        &state.upstream.jwks_fetches,
+        &header,
         state.cfg.upstream().outbound_allowed_domains(),
     )
     .await
@@ -72,6 +85,19 @@ async fn validate_upstream_refresh_exchange(
             issuer_base,
         )
     })?;
+    Ok(jwks)
+}
+
+async fn validate_upstream_refresh_exchange(
+    state: &AppState,
+    issuer_base: &str,
+    link: &UpstreamRefreshLink,
+    exchange: &UpstreamRefreshExchange,
+) -> Result<(), Response> {
+    let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
+        return Ok(());
+    };
+    let jwks = fetch_upstream_refresh_jwks(state, issuer_base, exchange, id_token_str).await?;
     verify_upstream_federation_metadata_blocking(
         state.clone(),
         link.upstream_issuer.clone(),
@@ -113,9 +139,13 @@ async fn validate_upstream_refresh_exchange(
             jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         },
     )
+    .and_then(|()| {
+        link.original_authentication
+            .validate_refreshed_id_token(&id_token)
+            .map_err(|_| "original authentication context mismatch".to_string())
+    })
     .map_err(|error| {
         tracing::warn!(
-            upstream_issuer = %link.upstream_issuer,
             error = %error,
             "upstream refreshed id_token validation failed"
         );
@@ -144,6 +174,7 @@ async fn persist_upstream_refresh_exchange(
             link.upstream_sub_hash.as_str(),
             link.upstream_connection_id,
             next_generation,
+            &link.original_authentication,
         )
         .map_err(|error| {
             upstream_refresh_token_envelope_error_response(
@@ -309,3 +340,6 @@ pub(super) async fn upstream_refresh(
     }
     build_upstream_refresh_response(&link, &exchange.token_response)
 }
+
+#[cfg(test)]
+mod tests;

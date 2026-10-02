@@ -2,11 +2,14 @@
 
 use crate::json_lowstar::JsonError;
 
-/// Parse and normalize a JOSE protected header JSON object.
+/// Normalize a narrow JSON string/null member object.
 ///
 /// This is the public entry point for header normalization. It selects the
 /// active verified parsing surface (`json_lowstar` or the optional TLV/FFI
-/// bridge). Parser unavailability fails closed in normal builds.
+/// bridge). Parser unavailability fails closed in normal builds. This pair
+/// adapter does not implement complete protected-header admission and cannot
+/// represent arbitrary ignored JSON extensions. Protocol consumers first use
+/// [`crate::protected_header::admit_protected_header`].
 ///
 /// # Errors
 ///
@@ -15,10 +18,10 @@ use crate::json_lowstar::JsonError;
 pub fn parse_json_header(bytes: &[u8]) -> Result<Vec<(String, String)>, JsonError> {
     #[cfg(feature = "ffi_jose_header_tlv")]
     {
-        return resolve_json_header_pairs(
+        resolve_json_header_pairs(
             crate::tlv::parse_json_header_pairs_via_tlv_ffi(bytes),
             bytes,
-        );
+        )
     }
 
     #[cfg(not(feature = "ffi_jose_header_tlv"))]

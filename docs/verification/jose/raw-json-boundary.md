@@ -1,6 +1,6 @@
 # Raw JSON Claim Boundary
 
-Last updated: 2026-06-18
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -84,9 +84,26 @@ explicitly and select a promoted surface.
 
 The current released claim is now surface-specific.
 
-For `jose-header`, the claim starts at raw JSON bytes and flows through the
-source-managed `verified-structural-v1` backend into a typed
-`key + (string | null)` decoder before the Low*/C normalization boundary.
+For `jose-header`, protocol consumers use complete typed protected-header
+admission before field projection and LowStar/TLV normalization. Present consumed
+fields require strings; null is rejected. Unknown noncritical fields are ignored
+after decoded-name uniqueness and syntax checks. The separate public string-pair
+adapters retain their narrower contract. See the
+[protected-header policy](../../policies/jose-header-policy.md#protected-header-admission).
+
+The configured structural wrapper includes a source-managed Rust scanner for
+value shapes unsupported by the extracted parser. The scanner checks delimiters,
+scalar syntax and original spans with an explicit container stack; the production
+wrapper checks the complete input for UTF-8. Even generated success must pass
+the same iterative scanner's complete syntax guard before its original result
+is returned. In particular, the wrapper rejects root trailing commas accepted
+by the standalone generated supplier. The supplier itself remains unchanged.
+This Rust code is outside the extracted parser's proof domain; avoiding Rust
+recursion does not establish a bound on generated C recursion. Backend names and `RawBytes` classifications do
+not establish that the composed acceptance decision, ignored-value grammar or
+resource bounds have been formally proved. Runtime regressions are evidence only
+for their checked source, build and finite cases; the four-role product-assurance
+authority remains controlling.
 
 For `request-object`, the claim starts at raw JSON bytes and flows through the
 same source-managed `verified-structural-v1` backend into a typed
