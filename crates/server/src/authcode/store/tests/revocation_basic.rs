@@ -17,8 +17,8 @@ fn revoke_tokens_by_subject_revokes_matching_access_tokens() -> StoreTestResult 
         Some("openid".into()),
         3600,
     );
-    let token1 = store_access_token(&store, at1);
-    let token2 = store_access_token(&store, at2);
+    let token1 = issue_access_fixture(&store, at1);
+    let token2 = issue_access_fixture(&store, at2);
 
     let count = must_ok!(
         store.try_revoke_tokens_by_subject("user-A"),
@@ -97,14 +97,14 @@ fn revoke_tokens_by_subject_revokes_matching_refresh_tokens() -> StoreTestResult
     let store = TokenStore::new_process_local_for_tests();
     let rt1 = RefreshToken::new(refresh_input("client1", "user-A", Some("openid"), None));
     let rt2 = RefreshToken::new(refresh_input("client1", "user-B", Some("openid"), None));
-    let token1 = store_refresh_token(&store, rt1);
-    let token2 = store_refresh_token(&store, rt2);
+    let token1 = issue_refresh_key_fixture(&store, rt1);
+    let token2 = issue_refresh_key_fixture(&store, rt2);
 
     let count = must_ok!(
         store.try_revoke_tokens_by_subject("user-A"),
         "in-memory subject revocation should succeed",
     );
-    assert_eq!(count, 1);
+    assert_eq!(count, 3); // initial refresh, access and metadata
     assert!(is_refresh_revoked(&store, &token1));
     assert!(!is_refresh_revoked(&store, &token2));
     Ok(())
@@ -145,10 +145,10 @@ fn store_access_for_refresh_parent_binds_family_revocation() -> StoreTestResult 
         Some("read offline_access"),
         None,
     ));
-    let refresh_str = store_refresh_token(&store, refresh);
+    let refresh_str = issue_refresh_key_fixture(&store, refresh);
     let mut access = AccessToken::new("client1".into(), "user-A".into(), Some("read".into()), 3600);
     access.token = "exchanged-access".to_string();
-    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+    let mut meta = BearerTokenMeta::new(BearerTokenMetaInput {
         token_id: access.token.clone(),
         client_id: access.client_id.clone(),
         user_id: access.user_id.clone(),
@@ -158,6 +158,7 @@ fn store_access_for_refresh_parent_binds_family_revocation() -> StoreTestResult 
         ..bearer_meta_input(&access.token, &access.client_id, &access.user_id)
     });
 
+    copy_fixture_lineage(&store, &mut access, &mut meta);
     let stored = must_ok!(
         store.store_access_for_refresh_parent(access, meta),
         "access token should bind to active refresh parent",

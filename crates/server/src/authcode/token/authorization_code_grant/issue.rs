@@ -131,6 +131,7 @@ impl TokenIssuer {
             })
             .map_err(TokenGrantError::server)?;
         let access_token = AccessToken {
+            refresh_grant: None,
             client_credentials_digest: None,
             exchange_root: exchange_grant
                 .as_ref()

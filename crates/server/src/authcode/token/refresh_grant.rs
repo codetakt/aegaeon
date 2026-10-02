@@ -348,6 +348,7 @@ impl TokenIssuer {
             }
         };
         let access_token = AccessToken {
+            refresh_grant: refresh.refresh_grant.clone(),
             client_credentials_digest: None,
             exchange_root: refresh
                 .exchange_grant
@@ -385,6 +386,7 @@ impl TokenIssuer {
             expires_at,
             refresh_parent: Some(new_refresh.token.clone()),
         });
+        meta.refresh_grant = refresh.refresh_grant.clone();
         meta.exchange_grant = refresh
             .exchange_grant
             .as_ref()

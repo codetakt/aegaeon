@@ -256,6 +256,29 @@ the executable or renaming a runtime namespace alone is not a validated recovery
 
 ## Code exchange and refresh
 
+Authenticated HTTP introspection applies the same recorded refresh-parent
+lifecycle policy as resource and UserInfo validation. With `retainRefreshChain`
+enabled, an access token whose parent is rotated, missing or tombstoned is
+inactive. Rotation therefore makes the preceding access generation inactive
+immediately under this existing Aegaeon policy; RFC 7662 section 2.2 requires
+the report to reflect the authorization server's selected validity rules.
+
+JSON and signed JWT introspection responses return only `active: false` in
+the token-introspection body for an invalid parent. A failure to read parent
+status returns a no-cache 503 `temporarily_unavailable`, rather than a
+successful active or inactive determination. Authentication and caller
+visibility checks precede this lookup. Introspection does not require the
+original client's sender proof to disclose an otherwise visible token's binding.
+Metrics count the final successful response status, including application
+currentness rejections; backend and signing errors are not active observations.
+
+When `retainRefreshChain` is disabled or no parent is recorded, this parent
+check is skipped. This does not extend revocation across all historical grant
+ancestors or change refresh retention/expiry semantics. It does not broaden
+legacy metadata-absent acceptance or settle every introspection validity
+criterion. No configuration or storage migration is needed for this consistency
+fix.
+
 The authorization-code storage and standalone consume scripts validate their
 version counter before any write. A present counter must be Redis's canonical
 signed decimal integer and leave room for `INCR`; `9223372036854775807`, malformed
@@ -330,3 +353,11 @@ separate consent model describes parsed-request and session bindings; database
 and HTTP regressions cover consent acquisition, but do not prove Rust/SQL
 correspondence. Direct issuer tests start with an already-authorized grant and
 do not themselves establish consent acquisition.
+
+## Durable refresh-grant revocation
+
+See [refresh-grant revocation and coordinated upgrade](refresh-grant-revocation.md)
+for the independent grant decision, legacy storage compatibility, read-only
+inventory, drain/restart requirements and failure handling. Revoking a known
+refresh generation denies every access generation from that grant regardless of
+`retainRefreshChain`; ordinary rotation alone retains the optional parent policy.

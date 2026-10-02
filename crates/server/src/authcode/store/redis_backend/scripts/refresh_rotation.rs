@@ -1,16 +1,28 @@
+use super::super::refresh_grants::GrantCommit;
 use super::contract::{redis_bool, LuaSlot, RedisScriptArg};
 
 const COMMIT_REFRESH_ROTATION: &str = r#"
+-- The legacy caller timestamp remains a validated envelope slot; only Redis TIME
+-- is authoritative for expiry after a paused writer resumes.
+if not tonumber(ARGV[1]) then return "invalid" end
 if redis.call("EXISTS", KEYS[1]) == 1 then
   return "busy"
 end
 
+local write_types = {'string','string','string','zset','string','string','string','string','string','set','set','zset','string','string','set','zset','string','set','zset','string'}
+for i=2,20 do
+  if i < 14 or i > 19 or ARGV[11] == '1' then
+    local actual = redis.call('TYPE', KEYS[i]).ok
+    if actual ~= 'none' and actual ~= write_types[i] then return 'index_type' end
+  end
+end
 if ARGV[18] == "1" then
   if redis.call("EXISTS", KEYS[21]) == 1 or tonumber(redis.call("TIME")[1]) >= tonumber(ARGV[19]) then
     return "invalid"
   end
 end
-local now_epoch_secs = tonumber(ARGV[1])
+local current_time = redis.call("TIME")
+local now_epoch_secs = tonumber(current_time[1])
 if not now_epoch_secs then
   return "refresh_decode"
 end
@@ -58,7 +70,7 @@ local previous_expires_at = system_time_epoch_secs(previous["expires_at"])
 if not previous_expires_at then
   return "refresh_decode"
 end
-if now_epoch_secs >= previous_expires_at then
+if now_epoch_secs > previous_expires_at or (now_epoch_secs == previous_expires_at and tonumber(current_time[2]) * 1000 >= (previous["expires_at"]["nanos_since_epoch"] or 0)) then
   redis.call("DEL", KEYS[2])
   redis.call("DEL", KEYS[5])
   redis.call("DEL", KEYS[6])
@@ -88,6 +100,7 @@ if ARGV[11] == "1" and redis.call("EXISTS", KEYS[17]) == 1 then
   return "token_collision"
 end
 
+commit_refresh_grant()
 redis.call("SET", KEYS[2], ARGV[4])
 redis.call("SET", KEYS[6], ARGV[8])
 redis.call("SET", KEYS[8], ARGV[9])
@@ -260,10 +273,11 @@ impl<'a> RefreshRotationCommitArgs<'a> {
 
 pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
     conn: &mut redis::Connection,
+    grant: &GrantCommit,
     keys: RefreshRotationCommitKeys<'_>,
     args: RefreshRotationCommitArgs<'_>,
 ) -> redis::RedisResult<String> {
-    let script = redis::Script::new(COMMIT_REFRESH_ROTATION);
+    let script = GrantCommit::script(COMMIT_REFRESH_ROTATION);
     let mut invocation = script.prepare_invoke();
     for key in keys.ordered() {
         invocation.key(key);
@@ -281,6 +295,7 @@ pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
             }
         }
     }
+    grant.append(&mut invocation);
     invocation.invoke::<String>(conn)
 }
 

@@ -145,6 +145,7 @@ pub(super) async fn handle_token_exchange_grant(
         }
     };
     let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: token.clone(),

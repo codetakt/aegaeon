@@ -141,6 +141,7 @@ fn make_test_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode
 
 fn make_access_token(token: &str) -> AccessToken {
     AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: token.to_string(),
@@ -277,5 +278,67 @@ fn clear_redis_token_store_for_test(url: &str) {
     };
     if let Err(err) = backend.clear_for_test() {
         fail_assertion(format!("clear token store state: {err:?}"));
+    }
+}
+
+// Issue through the production atomic boundary; raw replacement helpers above
+// deliberately remain raw for corruption and legacy-compatibility fixtures.
+fn issue_refresh_fixture(store: &TokenStore, refresh: RefreshToken) -> RefreshToken {
+    let mut access = AccessToken::new(refresh.client_id.clone(), refresh.user_id.clone(), refresh.scope.clone(), 300);
+    access.cnf = refresh.sender_binding.as_ref().map(|binding| match binding {
+        SenderBinding::DPoP { jkt } => CnfClaim::Jkt(jkt.clone()),
+        SenderBinding::Mtls { fingerprint } => CnfClaim::X5tS256(fingerprint.clone()),
+    });
+    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+        granted_scopes: refresh.scope.as_deref().unwrap_or("").split_whitespace().map(str::to_owned).collect(),
+        audience: refresh.target_context.as_ref().map(|target| target.audience.clone()).or_else(|| refresh.resource.clone()).unwrap_or_else(|| refresh.client_id.clone()),
+        sender_binding: refresh.sender_binding.clone(),
+        refresh_parent: Some(refresh.token.clone()),
+        issued_at: access.created_at,
+        expires_at: access.created_at + Duration::from_secs(access.expires_in),
+        ..bearer_meta_input(&access.token, &access.client_id, &access.user_id)
+    });
+    store.store_issued_grant(access, Some(refresh.clone()), meta).expect("initial refresh fixture");
+    store.try_get_refresh_token(&refresh.token).expect("read issued refresh").expect("issued refresh active")
+}
+
+fn copy_fixture_lineage(store: &TokenStore, access: &mut AccessToken, meta: &mut BearerTokenMeta) {
+    let parent = store.try_get_refresh_token(meta.refresh_parent.as_deref().expect("parent")).expect("lookup").expect("active fixture parent");
+    access.refresh_grant = parent.refresh_grant.clone();
+    meta.refresh_grant = parent.refresh_grant;
+}
+
+fn issue_access_fixture(store: &TokenStore, access: AccessToken) -> String {
+    let meta = BearerTokenMeta::new(BearerTokenMetaInput {
+        granted_scopes: access.scope.as_deref().unwrap_or("").split_whitespace().map(str::to_owned).collect(),
+        issued_at: access.created_at,
+        expires_at: access.created_at + Duration::from_secs(access.expires_in),
+        ..bearer_meta_input(&access.token, &access.client_id, &access.user_id)
+    });
+    store.store_issued_grant(access, None, meta).expect("independent access fixture").0
+}
+fn issue_refresh_key_fixture(store: &TokenStore, refresh: RefreshToken) -> String {
+    issue_refresh_fixture(store, refresh).token
+}
+
+fn parent_access_fixture(store: &TokenStore, token: &str, parent: &str) -> Result<String, String> {
+    let mut access = make_access_token(token);
+    let mut meta = make_bearer_meta(token, Some(parent));
+    copy_fixture_lineage(store, &mut access, &mut meta);
+    store.store_access_for_refresh_parent(access, meta)
+}
+
+// Deliberately bypass monotonic publication to model damaged authority bytes.
+fn overwrite_refresh_grant_record(store: &TokenStore, record: &crate::authcode::types::RefreshGrantRecord) {
+    match &store.backend {
+        TokenStoreBackend::InMemory(state) => {
+            state.write().expect("state lock").refresh_grants.insert(record.reference.id.clone(), record.clone());
+        }
+        TokenStoreBackend::Redis(backend) => {
+            let url = std::env::var("AEGAEON_TEST_REDIS_URL").expect("Redis URL");
+            let mut conn = redis::Client::open(url).unwrap().get_connection().unwrap();
+            redis::cmd("SET").arg(backend.keyspace_for_tests().refresh_grant_key(&record.reference.id))
+                .arg(serde_json::to_string(record).unwrap()).query::<()>(&mut conn).unwrap();
+        }
     }
 }

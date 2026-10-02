@@ -33,6 +33,8 @@ sender constraints, and release handling.
   protocol error responses, mixed sender constraints, and RAR rejection.
 - `[runbook]` [Authorization-code, consent and refresh transitions](authorization-code-refresh-recovery.md) —
   explicit offline consent, grant scope, resource binding and recovery.
+- `[runbook]` [Refresh-grant revocation and coordinated upgrade](refresh-grant-revocation.md) —
+  durable online family denial, read-only legacy inventory and forced reauthorization.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —
   runtime authority, environment, and startup troubleshooting.
 - `[runbook]` [Device authorization confirmation](device-authorization.md) —

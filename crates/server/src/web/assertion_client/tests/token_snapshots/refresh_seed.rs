@@ -23,6 +23,7 @@ pub(super) fn seed_grant(state: &AppState) -> TestResult<String> {
     let token = format!("initial-{}", Uuid::new_v4());
     let now = SystemTime::now();
     let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: token.clone(),

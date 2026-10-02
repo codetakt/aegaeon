@@ -14,6 +14,7 @@ fn commit(
 ) -> redis::RedisResult<String> {
     invoke_refresh_rotation_commit(
         conn,
+        &super::super::super::refresh_grants::GrantCommit::independent_for_test(&keys[19]),
         RefreshRotationCommitKeys {
             mutation_barrier: &keys[0],
             previous_refresh: &keys[1],

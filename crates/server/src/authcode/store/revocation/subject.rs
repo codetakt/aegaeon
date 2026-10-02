@@ -8,10 +8,20 @@ use tracing::info;
 
 impl TokenStore {
     #[cfg(test)]
-    fn revoke_tokens_by_subject_locked(state: &mut TokenStoreState, subject: &str) -> usize {
+    fn revoke_tokens_by_subject_locked(
+        state: &mut TokenStoreState,
+        subject: &str,
+    ) -> Result<usize, String> {
         let now = SystemTime::now();
         Self::cleanup_revoked_locked(state, now);
 
+        for record in state
+            .refresh_grants
+            .values_mut()
+            .filter(|record| record.user_id == subject)
+        {
+            record.revoked = true;
+        }
         let mut count = 0usize;
 
         let access_keys: Vec<String> = state
@@ -36,7 +46,7 @@ impl TokenStore {
         for key in &refresh_keys {
             if state.refresh_tokens.contains_key(key) {
                 count = count.saturating_add(1);
-                count = count.saturating_add(Self::revoke_refresh_family_locked(state, key, now));
+                count = count.saturating_add(Self::revoke_refresh_family_locked(state, key, now)?);
             }
         }
 
@@ -56,7 +66,7 @@ impl TokenStore {
             state.version = state.version.saturating_add(1);
         }
 
-        count
+        Ok(count)
     }
 
     /// Revoke all tokens belonging to a given subject (`user_id`).
@@ -69,7 +79,7 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_tokens_by_subject")?;
-                Ok(Self::revoke_tokens_by_subject_locked(&mut state, subject))
+                Self::revoke_tokens_by_subject_locked(&mut state, subject)
             }
             TokenStoreBackend::Redis(backend) => {
                 backend.revoke_tokens_by_subject(subject).map_err(|error| {
@@ -114,7 +124,14 @@ impl TokenStore {
                     .bearer_meta
                     .values()
                     .filter(|meta| {
-                        meta.user_id == subject
+                        state
+                            .access_tokens
+                            .get(&meta.token_id)
+                            .is_some_and(|access| {
+                                !access.is_expired()
+                                    && Self::access_grant_active_locked(&state, access, now)
+                            })
+                            && meta.user_id == subject
                             && meta.expires_at > now
                             && !Self::is_revoked_locked(&state, meta.token_id.as_str(), now)
                             && meta
@@ -164,6 +181,7 @@ impl TokenStore {
                         token.user_id == subject
                             && token.expires_at > now
                             && !token.rotated
+                            && Self::refresh_grant_active_locked(&state, token, now)
                             && !Self::is_revoked_locked(&state, token.token.as_str(), now)
                             && token
                                 .exchange_grant
@@ -195,25 +213,24 @@ impl TokenStore {
             .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
-    #[must_use]
     #[cfg(test)]
     fn revoke_access_token_for_subject_locked(
         state: &mut TokenStoreState,
         subject: &str,
         token_str: &str,
-    ) -> bool {
+    ) -> Result<bool, String> {
         let owns_token = state
             .access_tokens
             .get(token_str)
             .is_some_and(|token| token.user_id == subject);
         if !owns_token {
-            return false;
+            return Ok(false);
         }
         let now = SystemTime::now();
         Self::cleanup_revoked_locked(state, now);
-        let _ = Self::revoke_token_locked(state, token_str, now);
+        let _ = Self::revoke_token_locked(state, token_str, now)?;
         state.version = state.version.saturating_add(1);
-        true
+        Ok(true)
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -226,9 +243,7 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_access_token_for_subject")?;
-                Ok(Self::revoke_access_token_for_subject_locked(
-                    &mut state, subject, token_str,
-                ))
+                Self::revoke_access_token_for_subject_locked(&mut state, subject, token_str)
             }
             TokenStoreBackend::Redis(backend) => backend
                 .revoke_access_token_for_subject(subject, token_str)
@@ -251,25 +266,24 @@ impl TokenStore {
         .map_err(|err| format!("token store worker failed: {err}"))?
     }
 
-    #[must_use]
     #[cfg(test)]
     fn revoke_refresh_token_for_subject_locked(
         state: &mut TokenStoreState,
         subject: &str,
         token_str: &str,
-    ) -> bool {
+    ) -> Result<bool, String> {
         let owns_token = state
             .refresh_tokens
             .get(token_str)
             .is_some_and(|token| token.user_id == subject);
         if !owns_token {
-            return false;
+            return Ok(false);
         }
         let now = SystemTime::now();
         Self::cleanup_revoked_locked(state, now);
-        let _ = Self::revoke_token_locked(state, token_str, now);
+        let _ = Self::revoke_token_locked(state, token_str, now)?;
         state.version = state.version.saturating_add(1);
-        true
+        Ok(true)
     }
 
     #[must_use = "handle the token store result to preserve backend failures"]
@@ -282,9 +296,7 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "try_revoke_refresh_token_for_subject")?;
-                Ok(Self::revoke_refresh_token_for_subject_locked(
-                    &mut state, subject, token_str,
-                ))
+                Self::revoke_refresh_token_for_subject_locked(&mut state, subject, token_str)
             }
             TokenStoreBackend::Redis(backend) => backend
                 .revoke_refresh_token_for_subject(subject, token_str)
