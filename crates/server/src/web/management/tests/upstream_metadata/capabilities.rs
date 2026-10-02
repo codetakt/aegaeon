@@ -62,9 +62,6 @@ fn upstream_capabilities_parser_checks_every_known_shape_before_optional_null_co
         let mut raw = baseline.clone();
         raw["unknown"] = Value::Null;
         raw["extension"] = json!({"nested":[null, {"scopes_supported":false}]});
-        // Endpoint/key/alias null meaning is outside this capability admission rule.
-        raw["registration_endpoint"] = Value::Null;
-        raw["mtls_endpoint_aliases"] = Value::Null;
         assert!(parse_upstream_discovery_body(&serde_json::to_vec(&raw)?).is_ok());
         for duplicate in [
             br#"{"scopes_supported":[],"scopes_supported":null}"#.as_slice(),
@@ -254,7 +251,9 @@ fn upstream_capabilities_raw_fetch_refuses_without_cache_state_or_token_effects(
                 let mut raw = f.metadata();
                 raw[field] = value;
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-                f.request.issuer = format!("http://{}", listener.local_addr()?);
+                let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+                f.state.upstream.test_http_client = Some(tls.client.clone());
+                f.request.issuer = tls.endpoint.clone();
                 let calls = Arc::new(AtomicUsize::new(0));
                 let observed = calls.clone();
                 let app = Router::new().fallback(axum::routing::get(move || {

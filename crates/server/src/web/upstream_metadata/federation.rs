@@ -279,6 +279,9 @@ where
         Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
     >,
 {
+    crate::oidc::provider_urls::validate_typed(&discovery).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "upstream discovery URL metadata invalid")
+    })?;
     // Ordinary source admission still applies when signed metadata replaces it.
     crate::oidc::capabilities::validate_typed(&discovery).map_err(|_| {
         upstream_federation_gateway_error(
@@ -321,6 +324,12 @@ where
     })?;
     crate::oidc::capabilities::validate_typed(&effective).map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
+    })?;
+    crate::oidc::provider_urls::validate_typed(&effective).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "resolved federation OP URL metadata invalid",
+        )
     })?;
     validate_id_token_signing_capabilities(&effective, issuer_base)?;
     Ok(EffectiveUpstreamMetadata {

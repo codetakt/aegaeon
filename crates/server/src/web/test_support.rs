@@ -98,6 +98,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             ),
         },
         upstream: crate::web::UpstreamState {
+            test_http_client: None,
             logout_relay_store: Arc::new(
                 crate::web::UpstreamLogoutRelayStore::new_process_local_with_ttl_secs_for_tests(60),
             ),

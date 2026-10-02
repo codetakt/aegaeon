@@ -1,5 +1,6 @@
-//! Real loopback token exchanges and signed Federation acquisition. No database
-//! operations, external provider, TLS/SSRF override, or lifecycle bypass is claimed.
+//! Real fixture TLS token exchanges and signed Federation acquisition. Certificate
+//! trust and routing are scoped to each fixture; production URL/SSRF checks run.
+//! No database operations, external provider or lifecycle bypass is claimed.
 use super::*;
 use crate::federation::{
     EntityStatement, FederationError, ResolvedTrustChain, TrustAnchor, TrustChain,
@@ -64,3 +65,5 @@ mod signing_capabilities;
 mod registration;
 
 mod capabilities;
+
+mod urls;

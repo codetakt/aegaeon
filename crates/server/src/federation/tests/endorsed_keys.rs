@@ -631,3 +631,8 @@ mod capability_metadata {
     use super::*;
     include!("capability_metadata.rs");
 }
+
+mod url_metadata {
+    use super::*;
+    include!("url_metadata.rs");
+}

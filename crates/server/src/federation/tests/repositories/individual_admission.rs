@@ -413,6 +413,10 @@ fn individual_subordinate_wrapper_checks_authority_before_callback_and_after_awa
 fn individual_metadata_schema_rejects_raw_cache_and_fresh_values_before_storage() {
     let _guard = raw_json_env_guard();
     for metadata in [
+        json!({"openid_provider":{"token_endpoint":"http://provider.example"}}),
+        json!({"oauth_authorization_server":{"token_endpoint":"http://provider.example"}}),
+        json!({"openid_provider":{"mtls_endpoint_aliases":{"registration_endpoint":null}}}),
+        json!({"oauth_authorization_server":{"mtls_endpoint_aliases":{}}}),
         json!({"federation_entity":{"jwks_uri":"https://private.example/keys"}}),
         json!({"federation_entity":{"endpoint_auth_signing_alg_values_supported":["none"]}}),
         json!({"extension":{"contacts":[]}}),

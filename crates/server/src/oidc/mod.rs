@@ -4,6 +4,7 @@ pub(crate) mod capabilities;
 pub mod config;
 pub mod discovery;
 pub mod id_token;
+pub(crate) mod provider_urls;
 pub(crate) mod required_rs256;
 pub mod session;
 pub mod userinfo;
