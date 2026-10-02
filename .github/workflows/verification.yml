@@ -827,7 +827,18 @@ jobs:
         run: python3 scripts/validation/check_keygen_rng.py --check
 
       - name: Check runtime drift
-        run: python3 scripts/validation/check_runtime_drift.py --check
+        id: runtime-drift
+        run: python3 scripts/ci/run_runtime_drift.py --evidence-dir "${{ runner.temp }}/runtime-drift"
+
+      - name: Upload runtime drift evidence
+        if: ${{ always() && steps.runtime-drift.outcome && steps.runtime-drift.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-drift-evidence
+          path: |
+            ${{ runner.temp }}/runtime-drift/receipt.json
+            ${{ runner.temp }}/runtime-drift/check.log
+          if-no-files-found: error
 
   # Passthrough: nix flake check is now exclusively owned by ci.yml.
   # This job preserves the "Formal Verification / verify-all" check name
