@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 Status: current implementation baseline
 
@@ -238,6 +238,10 @@ does not waive that requirement. A client registered with `none` can push a
 request only when the PAR policy and downstream profile allow unauthenticated
 clients. Unknown clients and incorrect or multiple authentication methods fail
 before a request URI is stored.
+For well-formed Basic and post credentials, rejected unknown clients and
+registration-method mismatches still execute the registry's existing dummy
+secret verification. This preserves that mitigation without asserting equal
+request duration or constant-time behavior.
 
 New PAR records contain the validated authorization request and the internal
 authentication outcome, without the plaintext `client_secret`. Later
