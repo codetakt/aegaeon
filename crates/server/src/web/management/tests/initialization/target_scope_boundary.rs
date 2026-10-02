@@ -285,7 +285,7 @@ async fn pg_target_scope_boundary_rechecks_after_environment_lock_wait() -> Mana
     finish(result, cleanup(control, pool, &name).await)
 }
 
-async fn reloaded_management_session(
+pub(super) async fn reloaded_management_session(
     pool: &PgPool,
     env: &crate::web::test_support::TestEnvironment,
 ) -> DataResult<(Router, String)> {

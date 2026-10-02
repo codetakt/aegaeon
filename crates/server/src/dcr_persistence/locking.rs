@@ -1,4 +1,5 @@
 use sqlx::{Postgres, Transaction};
+use uuid::Uuid;
 
 use super::{DcrDatabaseError, DcrStoredClient};
 
@@ -6,6 +7,27 @@ pub(super) async fn lock_current_dynamic_registration(
     tx: &mut Transaction<'_, Postgres>,
     stored: &DcrStoredClient,
 ) -> Result<(), DcrDatabaseError> {
+    // Separate statements enforce the same order as management writers. A
+    // joined FOR UPDATE does not promise which relation PostgreSQL locks first.
+    let environment = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM aegaeon.environments WHERE id = $1 FOR UPDATE",
+    )
+    .bind(stored.environment_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if environment.is_none() {
+        return Err(DcrDatabaseError::ConcurrentModification);
+    }
+    let client = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM aegaeon.clients WHERE environment_id = $1 AND id = $2 FOR UPDATE",
+    )
+    .bind(stored.environment_id)
+    .bind(stored.database_client_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if client.is_none() {
+        return Err(DcrDatabaseError::ConcurrentModification);
+    }
     let locked = sqlx::query_scalar::<_, i64>(
         r"
 SELECT 1::BIGINT
@@ -24,13 +46,20 @@ WHERE dcr.environment_id = $1
   AND c.status = 'ACTIVE'
   AND c.configuration_version_id = $4
   AND c.configuration_version_id = rt.configuration_version_id
-FOR UPDATE OF dcr, c, e
+  AND c.configuration_version_id = e.active_configuration_version_id
+  AND rt.issuer_host = $5
+  AND rt.team_id = $6
+  AND rt.tenant_id = $7
+FOR UPDATE OF dcr
         ",
     )
     .bind(stored.environment_id)
     .bind(stored.database_client_id)
     .bind(&stored.registration_access_token_hash)
     .bind(stored.configuration_version_id)
+    .bind(&stored.issuer_host)
+    .bind(stored.team_id)
+    .bind(stored.tenant_id)
     .fetch_optional(&mut **tx)
     .await?;
 
