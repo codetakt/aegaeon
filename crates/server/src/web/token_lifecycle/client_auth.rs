@@ -36,6 +36,20 @@ pub(super) fn introspection_request_state(
     {
         return Err(response);
     }
+    let basic_id = if presence.basic {
+        Some(
+            auth.and_then(crate::client_registry::ClientRegistry::decode_basic_auth_credentials)
+                .map(|(id, _)| id)
+                .ok_or_else(|| {
+                    util::invalid_client_response(
+                        "token_introspection",
+                        "Client authentication failed",
+                    )
+                })?,
+        )
+    } else {
+        None
+    };
     let lookup_id = if presence.private_key_jwt {
         Some(
             private_key_jwt_client_id(
@@ -49,9 +63,7 @@ pub(super) fn introspection_request_state(
             })?,
         )
     } else {
-        auth.and_then(crate::client_registry::ClientRegistry::decode_basic_auth_credentials)
-            .map(|(id, _)| id)
-            .or_else(|| form.client_id.clone())
+        basic_id.or_else(|| form.client_id.clone())
     };
     super::super::client_credentials_authorization::request_state(
         state,

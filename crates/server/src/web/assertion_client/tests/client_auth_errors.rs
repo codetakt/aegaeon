@@ -1,7 +1,7 @@
 //! Exact response and effect checks through the router and shared Redis stores.
 use super::*;
 
-fn password_fields(path: &str, client: &str) -> Vec<(String, String)> {
+pub(super) fn password_fields(path: &str, client: &str) -> Vec<(String, String)> {
     let mut fields: Vec<_> = super::fields(path, "")
         .into_iter()
         .filter(|(name, _)| !name.starts_with("client_assertion") && *name != "client_id")
@@ -11,7 +11,7 @@ fn password_fields(path: &str, client: &str) -> Vec<(String, String)> {
     fields
 }
 
-fn borrowed(fields: &[(String, String)]) -> Vec<(&str, &str)> {
+pub(super) fn borrowed(fields: &[(String, String)]) -> Vec<(&str, &str)> {
     fields
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -99,7 +99,7 @@ async fn recognized_failures(state: &AppState) -> TestResult {
     Ok(())
 }
 
-async fn successful_response(
+pub(super) async fn successful_response(
     state: &AppState,
     path: &str,
     fields: &[(&str, &str)],

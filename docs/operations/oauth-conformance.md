@@ -33,10 +33,27 @@ An assertion authenticated successfully before a later profile rejection remains
 consumed; clients need a fresh assertion when retrying. Internal backend errors
 remain generic server errors without an authentication challenge.
 
-This correction does not establish conformance for bare/empty Basic, unsupported
-schemes, duplicate/nontext headers or their admission ordering. Resource-server
-errors and dynamic registration error classification have separate contracts. Existing profile-error realms and late
-revocation/JWT-introspection refusals retain their behavior.
+A supplied Basic scheme is an authentication attempt even when its payload is
+missing or undecodable. Bare `Basic`, mixed-case variants and Basic followed only
+by spaces or tabs participate in the same mixture checks. With Basic alone, these
+requests return `401 invalid_client` and the endpoint's Basic challenge before
+client identity selection. Malformed Basic now precedes a missing outer
+`client_id` at plain PAR and registration snapshot errors at introspection.
+Earlier transport, URI and form admission still takes precedence. Valid Basic
+retains existing identity, registration and secret checks.
+
+On upgrade, clients sending incomplete Basic alongside body credentials or public
+client requests must remove that header or supply valid credentials for their
+registered method. A rejected assertion mixture does not consume the assertion.
+Existing leading/separator whitespace acceptance and rejection of trailing
+payload whitespace remain; these application checks do not define proxy or wire
+normalization. An entirely empty Authorization value is distinct from bare Basic.
+
+Duplicate/nontext headers, entirely empty values, malformed scheme syntax and
+unsupported schemes retain their prior behavior and remain outside this bounded
+correction. Their challenge classification is not certified here. Existing
+profile-error realms and late revocation/JWT-introspection refusals retain their
+behavior.
 
 ## Error field encoding
 

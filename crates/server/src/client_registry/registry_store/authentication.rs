@@ -18,15 +18,25 @@ impl ClientRegistry {
     }
 
     #[must_use]
-    fn basic_auth_payload(auth_header: &str) -> Option<&str> {
+    fn basic_auth_remainder(auth_header: &str) -> Option<&str> {
         let trimmed = auth_header.trim_start();
         let (scheme, rest) = trimmed.as_bytes().split_at_checked("Basic".len())?;
         if !scheme.eq_ignore_ascii_case(b"Basic")
-            || !rest.first().is_some_and(|byte| byte.is_ascii_whitespace())
+            || (!rest.is_empty() && !rest[0].is_ascii_whitespace())
         {
             return None;
         }
-        let payload = trimmed["Basic".len()..].trim_start();
+        Some(trimmed["Basic".len()..].trim_start())
+    }
+
+    /// Presence for client endpoint admission, including incomplete Basic attempts.
+    #[must_use]
+    pub(crate) fn basic_auth_attempted(auth_header: &str) -> bool {
+        Self::basic_auth_remainder(auth_header).is_some()
+    }
+
+    fn basic_auth_payload(auth_header: &str) -> Option<&str> {
+        let payload = Self::basic_auth_remainder(auth_header)?;
         (!payload.is_empty()).then_some(payload)
     }
 
