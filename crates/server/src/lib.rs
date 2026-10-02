@@ -66,3 +66,5 @@ mod rfc_tests;
 pub fn install_rustls_crypto_provider() {
     aegaeon_crypto::tls::install_rustls_crypto_provider();
 }
+
+pub(crate) mod resource_authentication;

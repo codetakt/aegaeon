@@ -130,7 +130,7 @@ async fn resource_malformed_proof_has_dpop_proof_challenge() -> TestResult {
     );
     assert_eq!(
         response.headers()["www-authenticate"],
-        "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\""
+        "DPoP realm=\"aegaeon\", error=\"invalid_dpop_proof\", algs=\"EdDSA\""
     );
     error(response, StatusCode::UNAUTHORIZED, "invalid_dpop_proof").await
 }
@@ -168,7 +168,7 @@ async fn dpop_roles_have_distinct_errors_and_nonce_challenges() -> TestResult {
         if role == DpopEndpointRole::ResourceServer {
             assert_eq!(
                 response.headers()["www-authenticate"],
-                "DPoP realm=\"aegaeon\", error=\"use_dpop_nonce\""
+                "DPoP realm=\"aegaeon\", error=\"use_dpop_nonce\", algs=\"EdDSA\""
             );
         }
         error(response, expected_status, "use_dpop_nonce").await?;

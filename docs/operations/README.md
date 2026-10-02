@@ -19,6 +19,9 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[reference]` [Protected-resource authentication errors](resource-authentication-errors.md) —
+  credential admission, challenges, and proof/nonce effects.
+
 - `[runbook]` [Registration metadata consistency upgrade](registration-metadata-upgrade.md) —
   effective defaults, all-row preflight and guarded predecessor repairs.
 

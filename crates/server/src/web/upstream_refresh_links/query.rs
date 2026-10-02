@@ -144,7 +144,7 @@ pub(super) async fn resolve_caller_environment_id(
             Some("caller client environment is unavailable"),
             issuer_base,
         );
-        apply_oauth_authenticate_header(&mut response, "Bearer", "invalid_token");
+        apply_oauth_authenticate_header(&mut response, caller.scheme.as_str(), "invalid_token");
         util::apply_no_cache_headers(&mut response);
         response
     })

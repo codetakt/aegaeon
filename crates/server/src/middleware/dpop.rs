@@ -107,6 +107,8 @@ pub struct DpopMiddleware {
     jose_header_max_len: usize,
     origin: Arc<str>,
     nonce_store: Option<Arc<DpopNonceStore>>,
+    #[cfg(test)]
+    native_verifier: bool,
 }
 
 impl Clone for DpopMiddleware {
@@ -119,6 +121,8 @@ impl Clone for DpopMiddleware {
             jose_header_max_len: self.jose_header_max_len,
             origin: Arc::clone(&self.origin),
             nonce_store: self.nonce_store.clone(),
+            #[cfg(test)]
+            native_verifier: self.native_verifier,
         }
     }
 }
@@ -141,6 +145,8 @@ impl DpopMiddleware {
             jose_header_max_len: aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
             origin: Arc::from(origin.trim_end_matches('/').to_string().into_boxed_str()),
             nonce_store: None,
+            #[cfg(test)]
+            native_verifier: false,
         }
     }
 
@@ -181,6 +187,15 @@ impl DpopMiddleware {
             Arc::new(InMemoryReplayStore::new()),
             Duration::from_secs(DEFAULT_REPLAY_TTL_SECS),
         )
+    }
+
+    /// Use the unchanged production verifier for this test instance only.
+    /// Existing fixtures keep their claims-only mock; no shared selector is mutated.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_native_verifier_for_tests(mut self) -> Self {
+        self.native_verifier = true;
+        self
     }
 
     /// Apply the operator-selected `iat` acceptance window in seconds.
@@ -324,7 +339,15 @@ impl DpopMiddleware {
             .and_then(extract_access_token)
             .map(compute_ath);
 
-        let verified_proof = verify_dpop_with_iat_window(
+        #[cfg(test)]
+        let verifier = if self.native_verifier {
+            ffi::verify_dpop_with_iat_window
+        } else {
+            verify_dpop_with_iat_window
+        };
+        #[cfg(not(test))]
+        let verifier = verify_dpop_with_iat_window;
+        let verified_proof = verifier(
             proof,
             &method_upper,
             &uri_string,

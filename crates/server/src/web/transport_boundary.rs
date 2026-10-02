@@ -38,6 +38,17 @@ pub(super) async fn transport_security_middleware(
         req.uri(),
         uri_credential_policy_for_request(req.method(), req.uri().path()),
     ) {
+        if super::resource_authentication::protected_resource_matched_route(
+            &state,
+            req.method(),
+            req.extensions().get::<MatchedPath>(),
+        ) {
+            return super::resource_authentication::resource_uri_rejection(
+                error,
+                state.issuer.as_str(),
+                req.headers(),
+            );
+        }
         return query_rejection_response(
             error,
             state.issuer.as_str(),

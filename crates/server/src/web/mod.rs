@@ -182,3 +182,5 @@ mod assertion_client_tests;
 
 #[cfg(test)]
 mod grant_error_tests;
+
+mod resource_authentication;

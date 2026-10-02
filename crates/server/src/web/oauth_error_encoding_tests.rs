@@ -61,7 +61,7 @@ async fn oauth_error_encoding_dynamic_web_serializers_preserve_status_and_envelo
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
         response.headers()[header::WWW_AUTHENTICATE],
-        "DPoP realm=\"aegaeon\", error=\"invalid_request\""
+        "DPoP realm=\"aegaeon\", error=\"invalid_request\", algs=\"EdDSA\""
     );
     let body: Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
     assert_eq!(body["error_description"], CLEAN);

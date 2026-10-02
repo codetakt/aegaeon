@@ -58,7 +58,9 @@ Redis に接続できない場合、アプリケーションは **503 (temporari
    AEGAEON_DPOP_REDIS_URL=redis://127.0.0.1:6379 \
    cargo test -p aegaeon-server dpop_middleware_integration_test::test_protected_endpoint_detects_replay
    ```
-   同じ JTI が 2 度送信された場合に 401/invalid_token になることを確認します。
+   同じ JTI が 2 度送信された場合に、保護リソースでは 401/invalid_dpop_proof、
+   token endpoint では 400/invalid_dpop_proof になることを確認します。
+   [認証エラーと proof の処理順序](resource-authentication-errors.md)も参照してください。
 3. Redis を停止 → 同テスト実行で 503 / temporarily_unavailable が返ることを確認し、fail-close を検証。
 
 ### CI への組み込み例
