@@ -142,8 +142,29 @@ that empties `keywords` or `contacts` now rejects; remove an optional field with
 `value:null` instead. This does not change generic empty-set or selected-algorithm
 policy semantics. Syntactically valid unused policy operands are not treated as
 actual metadata instances. The entity-aware flat helper checks input/output
-schemas, without statement-role rules. The context-free flat helper remains a
+schemas, without statement-role rules or issuer identity binding. The context-free flat helper remains a
 generic JSON transformation and cannot establish entity-specific schema validity.
+Neither flat helper has a subject and neither can establish issuer identity binding.
+
+Supplied `issuer` in exact `openid_provider` or `oauth_authorization_server`
+metadata must be a string equal byte-for-byte to the statement subject. This is
+`C.sub = C.iss` in an Entity Configuration and `S.sub` in a Subordinate Statement,
+including intermediates. No trimming, case, URL, percent-encoding or trailing-slash
+normalization applies. The identity constraint follows OpenID Federation 1.0
+sections 5.1.3/5.1.4 and Federation for OpenID Connect 1.1 sections 5.1.2/5.1.3;
+Federation section 3.1.1 makes subordinate metadata describe its subject.
+Aegaeon additionally enforces this at original admission, before overlay or
+filtering can hide an invalid value, and on retained metadata after full policy
+application. Errors identify the metadata type and field without issuer values.
+
+An absent issuer and empty role object remain legal at these partial-schema
+boundaries. The immediate superior or policy may supply the correct issuer.
+Policy removal does not refill it from Discovery: live upstream completeness
+guards still refuse unusable OP metadata before authorization state or redirect.
+Other roles retain unknown issuer values under the existing common-schema rules.
+Signed originals remain unchanged. This check does not implement the complete
+imported role schemas, their final completeness, or signature/time authentication
+for the public typed helper.
 No storage migration, dependency or runtime setting is added.
 
 Finite signed admission, typed resolution, fresh traversal and cache tests cover

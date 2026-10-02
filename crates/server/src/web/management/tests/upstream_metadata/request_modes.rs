@@ -282,3 +282,45 @@ fn upstream_request_modes_true_do_not_block_issued_code_or_refresh() -> Manageme
         Ok(())
     })
 }
+
+#[test]
+fn upstream_policy_removed_issuer_refuses_before_authorize_state_or_redirect(
+) -> ManagementTestResult {
+    run(async {
+        for cached in [false, true] {
+            let f = Fixture::new(1).await?;
+            let chain = f.chain(
+                f.metadata(),
+                &[Some(json!({"openid_provider":{"issuer":{"value":null}}}))],
+                None,
+            );
+            let original_jwts = chain.chain_jwts.clone();
+            let resolved = chain.trust_chain.resolved_metadata()?.unwrap();
+            assert!(!resolved["openid_provider"]
+                .as_object()
+                .unwrap()
+                .contains_key("issuer"));
+            f.configure(&chain).await?;
+            if cached {
+                cache(&f.state, &chain).await?;
+            }
+            let acquisitions = AtomicUsize::new(0);
+            let response = complete_upstream_authorize_with(
+                &f.state,
+                "https://local.example",
+                "connection",
+                &f.authorize_context(),
+                &authorize_input(&["openid"], None),
+                |_, _| {
+                    acquisitions.fetch_add(1, Ordering::SeqCst);
+                    std::future::ready(Ok(chain.clone()))
+                },
+            )
+            .await;
+            check_authorize_result(&f, response, false).await?;
+            assert_eq!(acquisitions.load(Ordering::SeqCst), usize::from(!cached));
+            assert_eq!(chain.chain_jwts, original_jwts);
+        }
+        Ok(())
+    })
+}

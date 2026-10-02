@@ -5363,6 +5363,26 @@ openid_federation_rp:
   - Shared signed/typed admission and all-input/final-result validation prevent overlay/filter/policy bypass. Entity-aware flat helpers validate schemas; generic helpers do not infer types. Unused policy operands are not actual metadata instances. Signed originals remain immutable.
   - Finite signed/individual/fresh/cache and public typed-helper tests do not establish complete OP/RP/AS/client/resource schemas, protocol-key eligibility in other roles, full Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
 
+
+- id: fed-rp-014
+  section: '3.1.1, 5.1.3, 5.1.4 (Federation 1.0); 5.1.2, 5.1.3 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Bind supplied OP and OAuth AS metadata issuers to their Federation subject
+  module: crates/server/src/federation/metadata.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/metadata_issuer.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/request_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata.rs
+  notes:
+  - Exact openid_provider/oauth_authorization_server issuer values must be strings equal to C.sub=C.iss or S.sub, never the superior S.iss. No normalization or fallback applies.
+  - The subject identity constraint is normative; enforcing every original before overlay/filtering is an additional local admission restriction. Retained results are checked after full policy application. Signed raw inputs remain unchanged.
+  - Absent issuer and empty objects remain legal for partial metadata; immediate superior or policy can supply the correct issuer. Optional removal does not refill from Discovery; live OP completeness guards remain required. Other roles retain unknown issuer members under common-schema rules.
+  - Context-free and entity-type-only flat helpers cannot establish identity binding. Typed trust-chain resolution does not authenticate signatures or expiry.
+  - Finite signed C/S, intermediate, individual, fresh/cache, policy and live authorization-state tests do not establish full imported schemas, complete Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

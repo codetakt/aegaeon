@@ -144,6 +144,7 @@ pub(super) fn resolve_policies<'a>(
 /// callers must validate those on the original signed input. Client `scope`
 /// strings require [`apply_metadata_policy_for_entity_type`]. Without an entity
 /// type this generic transformation cannot establish entity-specific schema validity.
+/// Neither flat helper has a subject, so neither establishes issuer identity binding.
 ///
 /// # Errors
 /// Returns an error for malformed policy, unsupported types, contradictory
@@ -158,7 +159,8 @@ pub fn apply_metadata_policy(metadata: &Value, policy: &Value) -> Result<Value, 
 /// arrays of scope tokens and serialized back to strings. Other metadata is
 /// unchanged by this representation step. Admission limitations are the same
 /// as [`apply_metadata_policy`]. Known metadata schemas are checked on input and
-/// output, without statement-role placement or superior completeness checks.
+/// output, without statement-role placement, issuer identity binding or superior
+/// completeness checks. Use a validated trust chain for subject context.
 ///
 /// # Errors
 /// Also rejects invalid known metadata, scope strings and policy operands.

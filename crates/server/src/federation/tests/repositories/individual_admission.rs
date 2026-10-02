@@ -448,3 +448,63 @@ fn individual_metadata_schema_rejects_raw_cache_and_fresh_values_before_storage(
         }
     }
 }
+
+#[test]
+fn individual_metadata_issuer_rejects_cache_and_fresh_then_accepts_valid_refetch() {
+    let _guard = raw_json_env_guard();
+    for role in ["openid_provider", "oauth_authorization_server"] {
+        for cached in [false, true] {
+            for valid_fresh in [false, true] {
+                let mut f = Fixture::new();
+                f.statement.metadata =
+                    Some(HashMap::from([(role.into(), json!({"issuer":ENTITY}))]));
+                f.raw = sign_entity_statement_for_test(sample_signing_key(), &f.statement);
+                let mut invalid = f.statement.clone();
+                invalid.metadata =
+                    Some(HashMap::from([(role.into(), json!({"issuer":AUTHORITY}))]));
+                let raw = sign_entity_statement_for_test(sample_signing_key(), &invalid);
+                assert_federation_signature_only(&raw, sample_signing_key());
+                let mut row = f.row.clone();
+                row.entity_configuration_jws = raw.clone();
+                let fetcher = f.fetcher(
+                    cached.then_some(row),
+                    Some(if valid_fresh { f.raw.clone() } else { raw }),
+                    false,
+                    false,
+                    false,
+                    100,
+                );
+                let result = block_on_test_future(
+                    fetcher.fetch_entity_configuration_with_clock(ENTITY, clock(vec![NOW; 4])),
+                );
+                assert_eq!(result.is_ok(), valid_fresh);
+                assert_eq!(f.calls.load(Ordering::SeqCst), 1);
+                let observed = must_ok(f.observations.lock());
+                assert_eq!(observed.writes.len(), usize::from(valid_fresh));
+                if let Ok(statement) = result {
+                    assert_eq!(statement.metadata, f.statement.metadata);
+                    assert_eq!(observed.writes[0].2, f.raw);
+                }
+            }
+        }
+        for issuer in [ENTITY, AUTHORITY] {
+            let f = Fixture::new();
+            let mut statement = sample_subordinate_statement(AUTHORITY, ENTITY, NOW);
+            statement.metadata = Some(HashMap::from([(role.into(), json!({"issuer":issuer}))]));
+            let raw = sign_entity_statement_for_test(sample_signing_key(), &statement);
+            assert_federation_signature_only(&raw, sample_signing_key());
+            let fetcher = f.fetcher(None, Some(raw), false, false, false, 100);
+            let authority = sample_entity_config(AUTHORITY, NOW);
+            let result = block_on_test_future(fetcher.fetch_subordinate_statement_with_clock(
+                AUTHORITY,
+                &authority,
+                ENTITY,
+                &sample_jwks(),
+                clock(vec![NOW; 2]),
+            ));
+            assert_eq!(result.is_ok(), issuer == ENTITY);
+            assert_eq!(f.calls.load(Ordering::SeqCst), 1);
+            assert!(must_ok(f.observations.lock()).writes.is_empty());
+        }
+    }
+}
