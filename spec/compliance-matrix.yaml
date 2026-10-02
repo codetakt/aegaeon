@@ -2859,6 +2859,25 @@ rfc_7592:
   - "client_id_issued_at provides issuance timestamp."
   - "F* spec: fstar/dcr/DcrManagement.fst (5 lemmas, 0 admit)."
 
+- id: 7592-006
+  section: '2.2'
+  requirement: MUST
+  description: Owner updates require the registered client_id and compare any supplied client_secret with an eligible issued credential before mutation.
+  module: crates/server/src/web/dcr_configuration/update.rs
+  proof: []
+  tests:
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_admission.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_races.rs
+  status: implemented
+  runtime_link: crates/server/src/web/dcr_configuration/update.rs
+  applies_to:
+  - as
+  notes:
+  - "RFC7592 section 2.2 requires matching client_id and supplied client_secret; the assertion never becomes a chosen replacement secret."
+  - "Aegaeon rejects forbidden credential members by presence, including null, with invalid_client_metadata; this error mapping is local policy for the client-side MUST NOT."
+  - "Database comparison follows current-registration locking and uses statement-time expiry with all eligible active Argon2id credentials for the exact environment/client."
+  - "Finite router/PostgreSQL and persistence lock-barrier tests; no formal proof or complete response/recovery conformance claim."
+
 rfc_7800:
 - id: 7800-001
   requirement: TRACKING

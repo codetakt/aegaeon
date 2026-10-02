@@ -110,6 +110,7 @@ async fn dynamic_registration_lifecycle(pool: &PgPool, env: &TestDcrEnvironment)
         &response_types,
         "registration-token-b",
         DcrClientSecretChange::RevokeAll,
+        None,
         "test-dcr-update",
     )
     .await

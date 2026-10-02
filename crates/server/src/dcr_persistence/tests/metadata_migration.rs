@@ -290,7 +290,7 @@ async fn dcr_metadata_upgrade_matches_fresh_schema_and_persistence_refuses_misma
         super::super::create_dynamic_registration(&fresh.pool,&env.issuer_host,&client,&["code".into()],"guard-token","guard-test").await?;
         let stored = super::super::load_dynamic_registration_by_token(&fresh.pool,&env.issuer_host,&client.client_id,"guard-token").await?.ok_or("stored")?;
         let before = snapshot(&fresh.pool).await?;
-        let err = super::super::update_dynamic_registration(&fresh.pool,&stored,&client,&[],"rotated-token",super::super::DcrClientSecretChange::Preserve,"guard-test").await.expect_err("mismatch must fail before writes");
+        let err = super::super::update_dynamic_registration(&fresh.pool,&stored,&client,&[],"rotated-token",super::super::DcrClientSecretChange::Preserve,None,"guard-test").await.expect_err("mismatch must fail before writes");
         assert!(matches!(err,super::super::DcrDatabaseError::MetadataRelation(_)));
         assert_eq!(before,snapshot(&fresh.pool).await?);
         sqlx::query("UPDATE aegaeon.dynamic_client_registrations SET response_types=ARRAY[]::text[]").execute(&fresh.pool).await?;

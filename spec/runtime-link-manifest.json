@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-02T00:00:19.623118+00:00",
+  "generated": "2026-10-02T05:19:34.818033+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -184,7 +184,7 @@
       "critical": false
     },
     "crates/server/src/dcr.rs": {
-      "sha256": "d8b5cc71d8a3b2c659914071e83f5c0b7766e3c9575b0b18d492d5a5283d9003",
+      "sha256": "8ce8ba633c050474001989118288146755c2bd691afd032f5428a1791ca27c03",
       "entries": [
         "7591-003"
       ],
@@ -313,7 +313,7 @@
       "critical": false
     },
     "crates/server/src/web/dcr_registration.rs": {
-      "sha256": "cd6be1e7f9b31d31f52c11f7c3cc29f4a066e40ca63f5ac54946a7473c1ef4f1",
+      "sha256": "8dd48af130053fbd8367ecf8b8d735bfc0fa91a6c23961cfc04fb44bbac61c56",
       "entries": [
         "7591-002",
         "7591-004"

@@ -141,6 +141,7 @@ async fn pg_target_scope_boundary_checks_policy_client_dcr_and_drafts() -> Manag
         expanded.allowed_scopes.push("email".into());
         crate::dcr_persistence::update_dynamic_registration(&pool, &stored, &expanded,
             &["code".into()], "scope-registration-token", crate::dcr_persistence::DcrClientSecretChange::Preserve,
+            None,
             "scope-expand").await?;
         let (status, draft_value) = send(&app, &session, &format!("{root}/configurationVersions"), Method::POST, draft).await?;
         assert_eq!(status, StatusCode::CREATED, "{draft_value}");
@@ -216,6 +217,7 @@ async fn check_client_writes(
         &["code".into()],
         "replacement-registration-token",
         crate::dcr_persistence::DcrClientSecretChange::Preserve,
+        None,
         "scope-shrink",
     )
     .await

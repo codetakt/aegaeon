@@ -65,7 +65,7 @@ async fn body_and_header(
                     method.clone(),
                     &path,
                     &bearer(supplied)?,
-                    "{\"redirect_uris\":[7]}",
+                    &json!({"client_id":client,"redirect_uris":[7]}).to_string(),
                 )?)
                 .await?;
             if supplied == credential {

@@ -364,3 +364,49 @@ pub fn parse_client_registration(
     let members = parse_client_registration_members_raw(bytes)?;
     decode_client_registration_from_members(&members)
 }
+
+/// Owner-update credentials are kept separate from debuggable registration metadata.
+/// The supplied secret is only an equality assertion, never a replacement secret.
+pub(crate) struct ClientRegistrationUpdate {
+    pub metadata: ClientRegistration,
+    pub client_secret_assertion: Option<String>,
+}
+
+pub(crate) fn parse_client_registration_update(
+    bytes: &[u8],
+    expected_client_id: &str,
+) -> Result<ClientRegistrationUpdate, ClientRegistrationParseError> {
+    let members = parse_client_registration_members_raw(bytes)?;
+    let mut client_id = None;
+    let mut client_secret_assertion = None;
+    for member in &members {
+        match member.key.as_str() {
+            "client_id" => client_id = member.value.as_str(),
+            "client_secret" => {
+                let secret = member.value.as_str().ok_or_else(|| {
+                    invalid_client_registration_claim_type("client_secret", "a string")
+                })?;
+                client_secret_assertion = Some(secret.to_owned());
+            }
+            "registration_access_token"
+            | "registration_client_uri"
+            | "client_secret_expires_at"
+            | "client_id_issued_at" => {
+                return Err(ClientRegistrationParseError::InvalidMetadata(format!(
+                    "{} must not be included in an update",
+                    member.key
+                )));
+            }
+            _ => {}
+        }
+    }
+    if client_id.is_none_or(|id| id.is_empty() || id != expected_client_id) {
+        return Err(ClientRegistrationParseError::InvalidMetadata(
+            "client_id must be a string matching the registered client".to_string(),
+        ));
+    }
+    Ok(ClientRegistrationUpdate {
+        metadata: decode_client_registration_from_members(&members)?,
+        client_secret_assertion,
+    })
+}
