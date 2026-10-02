@@ -15,6 +15,7 @@ mod authorize_request;
 mod authorize_validation;
 mod backchannel_logout;
 mod client_credentials_authorization;
+mod client_request_snapshot;
 mod dcr_bearer;
 mod dcr_client_build;
 mod dcr_configuration;

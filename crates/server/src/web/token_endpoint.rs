@@ -28,6 +28,8 @@ use super::{
 
 mod assertion_subject;
 mod client_auth;
+#[cfg(test)]
+pub(in crate::web) mod snapshot_test_hook;
 pub(in crate::web) use assertion_subject::private_key_jwt_client_id;
 mod policy;
 pub(super) use client_auth::{
@@ -108,14 +110,9 @@ pub(super) async fn build_token_context(
     let auth_header =
         authorization_header(headers).map_err(|err| token_header_error("Authorization", err))?;
     let (client_id, client_auth_presence) = token_resolve_client_id(state, auth_header, &form)?;
-    let captured_state = if matches!(
-        grant_type.as_str(),
-        TOKEN_EXCHANGE_GRANT_TYPE | "client_credentials"
-    ) {
-        super::client_credentials_authorization::request_state(state, &[&client_id])?
-    } else {
-        state.clone()
-    };
+    let captured_state = super::client_request_snapshot::request_state(state, &[&client_id])?;
+    #[cfg(test)]
+    snapshot_test_hook::pause(snapshot_test_hook::Phase::BeforeAuthentication).await;
     let state = &captured_state;
     let client_auth_method = token_client_auth_method(client_auth_presence);
     token_validate_client_authentication(
@@ -127,6 +124,8 @@ pub(super) async fn build_token_context(
         client_auth_method,
     )
     .await?;
+    #[cfg(test)]
+    snapshot_test_hook::pause(snapshot_test_hook::Phase::AfterAuthentication).await;
     let policy = token_resolve_policy(
         state,
         &client_id,
