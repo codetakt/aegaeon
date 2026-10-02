@@ -62,3 +62,5 @@ mod request_modes;
 mod signing_capabilities;
 
 mod registration;
+
+mod capabilities;

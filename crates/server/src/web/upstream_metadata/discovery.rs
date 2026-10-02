@@ -36,16 +36,21 @@ async fn fetch_upstream_discovery(
 }
 
 pub(in crate::web) fn parse_upstream_discovery_body(body: &[u8]) -> Result<OidcDiscovery, String> {
-    util::deserialize_json_without_duplicate_object_keys::<OidcDiscovery>(body).map_err(|err| {
-        match err {
+    let value = util::deserialize_json_without_duplicate_object_keys::<serde_json::Value>(body)
+        .map_err(|err| match err {
             util::JsonAdmissionError::DuplicateKey => {
                 "upstream discovery response contains duplicate object keys".to_string()
             }
             util::JsonAdmissionError::InvalidJson | util::JsonAdmissionError::TrailingBytes => {
                 "upstream discovery response invalid".to_string()
             }
-        }
-    })
+        })?;
+    let parameters = value
+        .as_object()
+        .ok_or_else(|| "upstream discovery response invalid".to_string())?;
+    crate::oidc::capabilities::validate_supplied("openid_provider", parameters)
+        .map_err(|field| format!("upstream discovery invalid capability field {field}"))?;
+    serde_json::from_value(value).map_err(|_| "upstream discovery response invalid".to_string())
 }
 
 pub(in crate::web) async fn fetch_upstream_discovery_cached(

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01T23:17:53.170909+00:00",
+  "generated": "2026-10-02T06:03:07.002898+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -252,7 +252,7 @@
       "critical": false
     },
     "crates/server/src/oidc/mod.rs": {
-      "sha256": "2f4a5fb7311734ee0449c811f83dd714c3a53631adc1a5a9c70e34fed36be754",
+      "sha256": "1191fcc11dde0db1d11180e13349e992580cc41633fa59b700b97699e9f32cb6",
       "entries": [
         "OIDC-1-006"
       ],

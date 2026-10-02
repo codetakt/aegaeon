@@ -1,5 +1,6 @@
 #[cfg(feature = "kms-aws")]
 pub(crate) mod aws_kms_signer;
+pub(crate) mod capabilities;
 pub mod config;
 pub mod discovery;
 pub mod id_token;

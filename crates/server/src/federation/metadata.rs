@@ -94,6 +94,8 @@ pub(super) fn validate(entity_type: &str, value: &Value) -> Result<(), Federatio
             _ => {}
         }
     }
+    crate::oidc::capabilities::validate_supplied(entity_type, parameters)
+        .map_err(|field| invalid(entity_type, field))?;
     registration::validate_supplied(entity_type, parameters)
 }
 

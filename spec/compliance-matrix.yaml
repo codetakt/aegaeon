@@ -5421,6 +5421,25 @@ openid_federation_rp:
   - Fresh/cache/individual/signed/typed/policy and loopback operation tests cover valid completion, refusal, no registration fetch and one captured context. Ordinary no-Federation Discovery is unchanged. Previously ignored malformed declarations and incomplete selected explicit OP metadata now refuse; no migration, registration operation, setting, dependency or Dynamic OP inference is added.
   - Finite checks do not establish full imported schemas, other conditional role completeness, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
 
+- id: fed-rp-017
+  section: '5.1.3/5.1.4 (Federation 1.0); 5.1.2/5.1.3 (Federation for OpenID Connect 1.1); 3 (Discovery errata2); 2 (RFC 8414)'
+  requirement: MUST
+  description: Validate supplied OP and AS capability shapes and authentication algorithm advertisements before projection or replacement
+  module: crates/server/src/oidc/capabilities.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/capability_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/capabilities.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact OP and ordinary Discovery maps cover 29 string arrays and 8 Boolean fields; exact AS maps cover 13 arrays and 4 Boolean fields. The OP access-token-format field is an existing local DTO extension. OP-only names retain extension behavior in other roles.
+  - Supplied token, revocation and introspection authentication signing-algorithm arrays forbid exact none, with no trimming, case folding, closed algorithm allowlist or mandatory RS256 auth member. ID Token, UserInfo and Request Object advertisements do not acquire this prohibition; the existing final selected ID Token RS256 guard remains.
+  - Original C/S checks precede overlay/filter/removal and retained policy values are rechecked. Omission, partial roles, empty arrays, duplicates and unknown strings are preserved. No companion-presence or new completeness rule is introduced.
+  - Ordinary capability validation precedes serde optional-null collapse while preserving raw duplicate-key admission and body limits. Rejection of known capability nulls and malformed originals despite replacement is local consumer admission policy. Unknown ordinary nested extensions/nulls remain ignored; endpoint/key/alias null meanings are unchanged.
+  - Live typed/cache ordinary values recheck all three auth arrays before signed replacement. Signed fresh/cache paths revalidate originals and derived values before state, redirect or credential transmission. No new transport, auth support, configuration, migration or dependency is added.
+  - Finite signed, individual, typed, flat-policy, fresh/cache and loopback tests do not establish full imported schemas, locale syntax, DPoP asymmetric classification, final companion conditions, routed DB/Redis/external HTTPS, sibling composition, whole Federation conformance or formal discharge.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
