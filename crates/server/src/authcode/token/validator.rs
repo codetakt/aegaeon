@@ -1,16 +1,13 @@
-use super::jwt_access::{
-    verify_jwt, JwtAccessTokenAudience, JwtAccessTokenHeader, JwtAccessTokenPayload,
-    JwtAccessTokenVerificationError,
-};
-use super::{access_token_introspection_exp, try_unix_epoch_now_secs, ACCESS_TOKEN_TYP};
+use super::{access_token_introspection_exp, try_unix_epoch_now_secs};
 use crate::authcode::store::TokenStore;
 use crate::authcode::types::{AccessToken, BearerTokenMeta};
-use crate::kms::KeyManager;
+use crate::kms::{AccessTokenVerifier, KeyManager, KeyManagerAccessTokenVerifier};
 use crate::policy::SecurityPolicy;
 use crate::util::{extract_bearer_token, BearerTokenError};
 use serde_json::json;
 use std::sync::Arc;
 
+mod jwt;
 mod policy;
 mod types;
 
@@ -20,7 +17,8 @@ pub use types::{BearerTokenValidationError, TokenPolicyContext, TokenPolicyError
 /// Token validator for resource servers
 pub struct TokenValidator {
     token_store: TokenStore,
-    key_manager: Arc<dyn KeyManager>,
+    access_verifier: Arc<dyn AccessTokenVerifier>,
+    now: fn() -> Result<u64, String>,
     policy: SecurityPolicy,
     jwt_access_tokens_enabled: bool,
     jwt_leeway_secs: u64,
@@ -39,12 +37,20 @@ impl TokenValidator {
     ) -> Self {
         Self {
             token_store,
-            key_manager,
+            access_verifier: Arc::new(KeyManagerAccessTokenVerifier(key_manager)),
+            now: try_unix_epoch_now_secs,
             policy,
             jwt_access_tokens_enabled: false,
             jwt_leeway_secs: 60,
             issuer: None,
         }
+    }
+
+    /// Override the compatibility manager adapter with an explicit access verification capability.
+    #[must_use]
+    pub fn with_access_token_verifier(mut self, verifier: Arc<dyn AccessTokenVerifier>) -> Self {
+        self.access_verifier = verifier;
+        self
     }
 
     #[must_use]
@@ -88,30 +94,7 @@ impl TokenValidator {
                 ),
             })?;
 
-        let verified = if self.jwt_access_tokens_enabled {
-            let verified = verify_jwt(&token, self.key_manager.as_ref())
-                .map_err(|err| match err {
-                    JwtAccessTokenVerificationError::KeyManager(err) => {
-                        BearerTokenValidationError::internal(format!(
-                            "Token verification error: {err}"
-                        ))
-                    }
-                    JwtAccessTokenVerificationError::BackendPolicy(surface) => BearerTokenValidationError::internal(
-                        format!(
-                            "access token parser backend misconfigured: unsupported raw JSON backend for {surface}"
-                        ),
-                    ),
-                })?
-                .ok_or_else(|| BearerTokenValidationError::invalid("Invalid token signature"))?;
-            Self::enforce_access_token_typ(&verified.header)
-                .map_err(BearerTokenValidationError::invalid)?;
-            self.enforce_access_token_claims(&verified.payload, self.issuer.as_deref())
-                .map_err(BearerTokenValidationError::invalid)?;
-            Some(verified)
-        } else {
-            None
-        };
-
+        let verified = self.verify_access_jwt(&token, self.jwt_access_tokens_enabled)?;
         let access = self
             .token_store
             .try_verify_access_token(&token)
@@ -177,30 +160,7 @@ impl TokenValidator {
             },
         )?;
 
-        let verified = if self.jwt_access_tokens_enabled {
-            let verified = verify_jwt(&token, self.key_manager.as_ref())
-                .map_err(|err| match err {
-                    JwtAccessTokenVerificationError::KeyManager(err) => {
-                        BearerTokenValidationError::internal(format!(
-                            "Token verification error: {err}"
-                        ))
-                    }
-                    JwtAccessTokenVerificationError::BackendPolicy(surface) => BearerTokenValidationError::internal(
-                        format!(
-                            "access token parser backend misconfigured: unsupported raw JSON backend for {surface}"
-                        ),
-                    ),
-                })?
-                .ok_or_else(|| BearerTokenValidationError::invalid("Invalid token signature"))?;
-            Self::enforce_access_token_typ(&verified.header)
-                .map_err(BearerTokenValidationError::invalid)?;
-            self.enforce_access_token_claims(&verified.payload, self.issuer.as_deref())
-                .map_err(BearerTokenValidationError::invalid)?;
-            Some(verified)
-        } else {
-            None
-        };
-
+        let verified = self.verify_access_jwt(&token, self.jwt_access_tokens_enabled)?;
         let access = self
             .token_store
             .try_verify_access_token_async(token.clone())
@@ -254,84 +214,6 @@ impl TokenValidator {
             .map(|(token, _)| token)
     }
 
-    fn enforce_access_token_typ(header: &JwtAccessTokenHeader) -> Result<(), String> {
-        let typ = header.typ.as_deref();
-        match typ {
-            Some(ACCESS_TOKEN_TYP | "application/at+jwt") => Ok(()),
-            _ => Err("invalid_token_typ".to_string()),
-        }
-    }
-
-    fn enforce_access_token_claims(
-        &self,
-        payload: &JwtAccessTokenPayload,
-        issuer: Option<&str>,
-    ) -> Result<(), String> {
-        let iss = payload.iss.as_deref();
-        if iss.is_none() {
-            return Err("invalid_token_issuer".to_string());
-        }
-        if let Some(expected) = issuer {
-            if iss != Some(expected) {
-                return Err("invalid_token_issuer".to_string());
-            }
-        }
-        if payload.sub.is_none() {
-            return Err("invalid_token_subject".to_string());
-        }
-        if !payload.aud_present {
-            return Err("invalid_token_audience".to_string());
-        }
-        if payload.aud.is_none() {
-            return Err("invalid_token_audience".to_string());
-        }
-        if payload.exp.is_none() {
-            return Err("invalid_token_exp".to_string());
-        }
-        if payload.iat.is_none() {
-            return Err("invalid_token_iat".to_string());
-        }
-        self.enforce_access_token_times(payload)?;
-        if payload.jti.is_none() {
-            return Err("invalid_token_id".to_string());
-        }
-        Ok(())
-    }
-
-    fn enforce_access_token_times(&self, payload: &JwtAccessTokenPayload) -> Result<(), String> {
-        let exp = payload.exp.ok_or_else(|| "invalid_token_exp".to_string())?;
-        let iat = payload.iat.ok_or_else(|| "invalid_token_iat".to_string())?;
-        if exp <= iat {
-            return Err("invalid_token_exp".to_string());
-        }
-
-        let now = try_unix_epoch_now_secs()?;
-        let leeway = self.jwt_leeway_secs;
-        let exp_with_leeway = exp
-            .checked_add(leeway)
-            .ok_or_else(|| "invalid_token_exp".to_string())?;
-        if exp_with_leeway < now {
-            return Err("invalid_token_exp".to_string());
-        }
-        let now_with_leeway = now
-            .checked_add(leeway)
-            .ok_or_else(|| "invalid_token_iat".to_string())?;
-        if iat > now_with_leeway {
-            return Err("invalid_token_iat".to_string());
-        }
-        Ok(())
-    }
-
-    fn aud_matches(payload: &JwtAccessTokenPayload, expected: &str) -> bool {
-        match payload.aud.as_ref() {
-            Some(JwtAccessTokenAudience::Single(aud)) => aud == expected,
-            Some(JwtAccessTokenAudience::Multiple(list)) => {
-                list.iter().any(|value| value == expected)
-            }
-            None => false,
-        }
-    }
-
     /// Inspect legacy stored-token status without an online authority backend.
     /// Either stored client-credentials marker, and any lookup failure, yields inactive.
     /// Use the HTTP
@@ -344,12 +226,18 @@ impl TokenValidator {
         if access_token.client_credentials_digest.is_some() {
             return json!({ "active": false });
         }
-        match self.token_store.try_get_bearer_meta(token) {
+        let meta = match self.token_store.try_get_bearer_meta(token) {
             Ok(Some(meta)) if meta.client_credentials_grant.is_some() => {
                 return json!({ "active": false });
             }
             Err(_) => return json!({ "active": false }),
-            Ok(_) => {}
+            Ok(meta) => meta,
+        };
+        if self
+            .validate_stored_access_token_jwt(&access_token, meta.as_ref())
+            .is_err()
+        {
+            return json!({ "active": false });
         }
         access_token_introspection_exp(&access_token).map_or_else(
             || json!({ "active": false }),

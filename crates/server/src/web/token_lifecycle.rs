@@ -169,6 +169,13 @@ async fn active_access_token_introspection_response(
         Ok(body) => body,
         Err(resp) => return resp,
     };
+    if body.get("active").and_then(serde_json::Value::as_bool) == Some(true) {
+        match introspection::validate_introspection_jwt(state, access_token, meta.as_ref()) {
+            Ok(true) => {}
+            Ok(false) => return inactive_introspection_response(state, headers, introspect_client),
+            Err(response) => return response,
+        }
+    }
     finalize_introspection_response(
         state,
         headers,

@@ -6,6 +6,9 @@ pub use self::legacy_aws_evidence::LegacyAwsKmsKeyManager;
 mod in_memory;
 #[cfg(test)]
 pub use in_memory::{InMemoryKeyManager, InMemoryPublicJwtKeyManager};
+mod access_verifier;
+pub(crate) use access_verifier::KeyManagerAccessTokenVerifier;
+pub use access_verifier::{AccessTokenVerifier, ManagedAccessTokenVerifier};
 mod managed;
 pub use managed::ManagedJwtKeyManager;
 

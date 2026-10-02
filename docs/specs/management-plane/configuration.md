@@ -428,3 +428,19 @@ Data plane fetch policy:
 
 - Recommended: continue serving last-known-good configuration on fetch failures and emit alerts.
 - Alternative: fail-closed (deployment policy choice).
+
+### Access-token issuance and verification keys
+
+`policy.jwtAccessTokensEnabled` controls issuance format and the built-in resource
+validator's strict JWT mode. Disabling it does not disable verification of previously
+issued JWT access tokens. Stored introspection classifies tokens by Aegaeon's issued
+format: values containing a period require JWT verification; ordinary opaque values
+remain eligible in either issuance mode, subject to current authorization checks.
+
+The runtime installs a verification-only view of `JWT_ACCESS_TOKEN_SIGNING` public
+keys independently of access issuance and JWT introspection response capabilities.
+A retiring-only view needs no active signer or private-key decryption and honors
+exclusive retirement expiry at each use. Other-purpose keys cannot substitute.
+An empty view cannot validate signed tokens; invalid configured public material is
+an initialization error. Enabling signing capabilities still requires their existing
+active signing keys. See [stored-token behavior and upgrade notes](../../operations/oauth-conformance.md#stored-access-token-signature-verification).
