@@ -105,6 +105,23 @@ is private, so external struct literals are no longer supported. Independently
 assembled or replaced configuration instances cannot serve authorization.
 No database migration or new environment setting is required.
 
+## Token client snapshots
+
+After selecting the caller ID, every supported `/token` grant copies that client's
+registration, eligible stored credentials and registry fingerprint before client
+authentication. Authentication and later client grant, scope and registered-key
+checks use this selected view throughout the request. A concurrent client reload
+cannot substitute another registration into the authenticated request. Subsequent
+requests use the refreshed runtime view under the existing admission checks.
+
+The effective OAuth profile is resolved separately from PostgreSQL after client
+authentication. Environment policy remains the admitted runtime configuration.
+This is not a joint client/profile database snapshot or a publication-time lock.
+Existing client-credentials revision checks, token-exchange checks, application
+publication guards and token-store single-use checks can still reject the request.
+Replay and remote JWKS state remain shared; this snapshot does not freeze remote
+key responses. No schema migration or new setting is required.
+
 ## private_key_jwt and request objects (JAR)
 
 | Variable | Default | Scope | Notes |
