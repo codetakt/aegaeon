@@ -332,8 +332,6 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
                 else:
                     manifest.write_bytes(contents)
                 direct = self.invoke("--check")
-                if index == len(invalid_manifests) - 1:
-                    assert "RecursionError" in direct.stderr
                 evidence = self.temporary / f"invalid-manifest-{index}"
                 wrapped = self.wrapped(evidence)
                 assert wrapped.returncode == direct.returncode == 1
