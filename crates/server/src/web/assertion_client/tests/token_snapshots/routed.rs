@@ -17,7 +17,10 @@ fn code_fields(state: &AppState) -> TestResult<Vec<(String, String)>> {
     ])
 }
 
-async fn request_fields(state: &AppState, grant: &str) -> TestResult<Vec<(String, String)>> {
+pub(super) async fn request_fields(
+    state: &AppState,
+    grant: &str,
+) -> TestResult<Vec<(String, String)>> {
     match grant {
         "authorization_code" => code_fields(state),
         "refresh_token" => Ok(vec![
@@ -56,6 +59,10 @@ async fn request_fields(state: &AppState, grant: &str) -> TestResult<Vec<(String
                 ("scope".into(), "api.read".into()),
             ])
         }
+        "client_credentials" => Ok(vec![
+            ("grant_type".into(), grant.into()),
+            ("audience".into(), BASIC.into()),
+        ]),
         _ => Err("unexpected fixture grant".into()),
     }
 }

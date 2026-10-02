@@ -284,6 +284,7 @@ mod tests {
 
     fn registered_client_with_grants(grants: &[&str]) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-1".to_string(),
             client_secret: Some("secret".to_string()),
             redirect_uris: vec!["https://app.example.com/callback".to_string()],

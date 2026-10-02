@@ -68,6 +68,7 @@ pub(in crate::web::management::clients) async fn prepare_client_update(
 
     Ok(PreparedClientUpdate {
         input: ClientUpdateInput {
+            dpop_bound_access_tokens: req.dpop_bound_access_tokens,
             name: req.name.clone(),
             redirect_uris,
             allowed_grant_types: req.allowed_grant_types.clone(),
@@ -80,7 +81,8 @@ pub(in crate::web::management::clients) async fn prepare_client_update(
 }
 
 fn client_update_requested(req: &UpdateClientRequest) -> bool {
-    req.name.is_some()
+    req.dpop_bound_access_tokens.is_some()
+        || req.name.is_some()
         || req.redirect_uris.is_some()
         || req.allowed_grant_types.is_some()
         || req.allowed_scopes.is_some()

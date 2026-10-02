@@ -161,6 +161,7 @@ async fn pg_dcr_registration_waiting_for_activation_uses_current_version() -> Te
         switch_active_configuration_version(&mut tx, env.environment_id, env.configuration_version_id, next, "dcr-activation").await
             .map_err(|_| io::Error::other("activation failed"))?;
         let client = crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "concurrent-dcr".into(), client_secret: None,
             redirect_uris: vec!["https://client.example/callback".into()],
             post_logout_redirect_uris: vec![], backchannel_logout_uri: None,

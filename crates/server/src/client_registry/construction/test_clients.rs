@@ -133,6 +133,7 @@ fn auth_code_client(
     redirect_uris: &[String],
 ) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: client_id.to_string(),
         client_secret: client_secret.map(str::to_string),
         redirect_uris: redirect_uris.to_vec(),
@@ -212,6 +213,7 @@ fn client_secret_post_test_client(env: &SeededClientEnvironment) -> RegisteredCl
 
 fn client_credentials_only_test_client(env: &SeededClientEnvironment) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "cc-only-client".to_string(),
         client_secret: Some("cc-secret".to_string()),
         redirect_uris: env.redirect_uris.clone(),
@@ -248,6 +250,7 @@ fn register_optional_seeded_clients(reg: &ClientRegistry, env: &SeededClientEnvi
 
 fn jwt_bearer_grant_test_client() -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "jwt-bearer-client".to_string(),
         client_secret: Some("jwt-bearer-secret".to_string()),
         redirect_uris: vec![default_callback_uri()],
@@ -268,6 +271,7 @@ fn jwt_bearer_grant_test_client() -> RegisteredClient {
 
 fn token_exchange_test_client(env: &SeededClientEnvironment) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "token-exchange-client".to_string(),
         client_secret: Some("token-exchange-secret".to_string()),
         redirect_uris: env.redirect_uris.clone(),
@@ -293,6 +297,7 @@ fn token_exchange_test_client(env: &SeededClientEnvironment) -> RegisteredClient
 
 fn device_code_test_client(env: &SeededClientEnvironment) -> RegisteredClient {
     RegisteredClient {
+        dpop_bound_access_tokens: false,
         client_id: "device-code-client".to_string(),
         client_secret: Some("device-code-secret".to_string()),
         redirect_uris: env.redirect_uris.clone(),

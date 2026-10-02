@@ -230,6 +230,7 @@ SELECT
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
+  c.dpop_bound_access_tokens,
   EXTRACT(EPOCH FROM dcr.client_id_issued_at)::BIGINT AS client_id_issued_at_epoch_secs,
   dcr.response_types,
   dcr.post_logout_redirect_uris,

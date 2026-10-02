@@ -18,6 +18,7 @@ pub(in crate::web::management::clients) struct PreparedClientCreate {
 
 #[derive(Clone, Debug)]
 pub(in crate::web::management::clients) struct ClientUpdateInput {
+    dpop_bound_access_tokens: Option<bool>,
     name: Option<String>,
     redirect_uris: Option<Vec<String>>,
     allowed_grant_types: Option<Vec<String>>,

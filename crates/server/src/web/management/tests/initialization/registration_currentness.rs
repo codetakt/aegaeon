@@ -80,9 +80,9 @@ async fn pg_registration_currentness_preserves_management_metadata_and_profile(
         let registry = state.clients.clone();
         let app = crate::web::build_router(state);
         let (management, session) = super::target_scope_boundary::reloaded_management_session(&pool, &env).await?;
-        // Two independent discriminators: inherited redirects + explicit profile,
-        // then profile assignment alone with unchanged owner metadata.
-        for (index, profile) in [profiles[1], profiles[0]].into_iter().enumerate() {
+        // Three independent discriminators: redirects/profile, profile alone,
+        // and the client-owned DPoP flag alone.
+        for (index, profile) in [profiles[1], profiles[0], profiles[0]].into_iter().enumerate() {
             let prepared = dcr_persistence::load_dynamic_registration_by_token(&pool, &init.issuer_host, &client.client_id, token).await?.ok_or("preloaded owner")?;
             // Admit a read first so any prior management projection change is
             // synchronized before measuring this request's no-write behavior.
@@ -99,6 +99,7 @@ async fn pg_registration_currentness_preserves_management_metadata_and_profile(
                 .bind(prepared.database_client_id).execute(&mut *blocker).await?;
             let mut payload = json!({"baseConfigurationVersionId":init.configuration_version_id,"oauthProfileId":profile});
             if index == 0 { payload["redirectUris"] = json!(["https://client.example/managed"]); }
+            if index == 2 { payload = json!({"baseConfigurationVersionId":init.configuration_version_id,"dpopBoundAccessTokens":true}); }
             let uri = format!("/api/v1/teams/{}/environments/{}/clients/{}",init.team_id,init.environment_id,prepared.database_client_id);
             let mut patch = request(&uri, payload, &session, "https://admin.aegaeon.test", true);
             *patch.method_mut() = Method::PATCH;
@@ -143,6 +144,7 @@ async fn pg_registration_currentness_preserves_management_metadata_and_profile(
             added_types.sort_unstable();
             let mut expected = vec!["management.client.updated.v1", "management.oauthProfile.assigned.v1"];
             if index == 1 { expected.push("management.oauthProfile.unassigned.v1"); }
+            if index == 2 { expected = vec!["management.client.updated.v1"]; }
             expected.sort_unstable();
             assert_eq!(added_types, expected, "only management update and profile audit");
             assert!(!after[3].contains("currentness-issued-secret"));
@@ -159,6 +161,16 @@ async fn pg_registration_currentness_preserves_management_metadata_and_profile(
             assert!(matches!(error, DcrDatabaseError::ConcurrentModification));
             assert_eq!(after, saved(&pool, init.environment_id).await?);
         }
+        let response=app.clone().oneshot(owner_request(Method::PUT,&client.client_id,token)).await?;
+        let status=response.status();let value:Value=serde_json::from_slice(&body::to_bytes(response.into_body(),65536).await?)?;
+        assert_eq!(status,StatusCode::OK,"{value}");assert_eq!(value["dpop_bound_access_tokens"],true,"fresh omitted owner update retains management choice");
+        let current_token=value["registration_access_token"].as_str().ok_or("fresh RAT")?;
+        let loaded=dcr_persistence::load_dynamic_registration_by_token(&pool,&init.issuer_host,&client.client_id,current_token).await?.ok_or("fresh owner")?;
+        assert!(loaded.client.dpop_bound_access_tokens);
+        let mut req=owner_request(Method::PUT,&client.client_id,current_token);
+        *req.body_mut()=Body::from(json!({"client_id":client.client_id,"dpop_bound_access_tokens":false}).to_string());
+        let response=app.clone().oneshot(req).await?;let status=response.status();let value:Value=serde_json::from_slice(&body::to_bytes(response.into_body(),65536).await?)?;
+        assert_eq!(status,StatusCode::OK,"{value}");assert_eq!(value["dpop_bound_access_tokens"],false);
         let response = app.oneshot(owner_request(Method::PUT, &client.client_id, "invalid-owner-token")).await?;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         Ok(())

@@ -271,3 +271,30 @@ existing behavior, including the possibility of a failure after commit.
 }
 ```
 → rejected (reason: `token_method_unimplemented`)
+
+## Durable client DPoP requirement
+
+RFC 9449 §5.2 `dpop_bound_access_tokens` is stored on the client and reported as a
+boolean in registration POST, GET and PUT responses, including false. Input aliases
+`require_dpop` and `dpop_required` remain accepted; collisions and nonboolean values
+are rejected. POST omission/null defaults to false. Owner PUT omission/null retains
+the stored value; explicit true/false replaces it under normal owner authority.
+
+True requires a verified DPoP proof on all six token grants. NONE/DPoP profiles are
+compatible; an effective mTLS policy conflicts and fails closed. The independent
+minimum remains subject to the global DPoP capability allowlist and does not satisfy
+the separate `require_sender_constrained_tokens` declaration requirement. Generic
+sender metadata retains its existing profile validation. Owner updates check the
+existing client's actual assigned/default profile for a known mTLS conflict.
+
+False cannot lower environment/profile requirements or erase existing token/grant
+bindings. Requiring a proof does not invent a prior binding on a legacy unbound
+refresh grant: a valid proof can bind the newly issued access/refresh tokens.
+The authenticated client is captured for each request; later edits affect subsequent
+requests, subject to existing stronger currentness checks. The profile remains a
+separate database observation. This metadata adds no code/PAR key-binding behavior.
+
+Existing deployments must follow the stopped-writer [explicit legacy resolution
+procedure](../operations/client-dpop-minimum-upgrade.md). Unresolved authority never
+becomes false. Existing software-statement selection and verifier retention limits
+remain separate from this metadata behavior.

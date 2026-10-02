@@ -54,6 +54,8 @@ pub(super) async fn validate_registration_policy_with_existing_response_types_or
     )?;
     let profile = resolve_dcr_profile(state, issuer_base).await?;
     validate_registration_profile_or_response(&effective, &profile)?;
+    profile::validate_client_dpop_minimum(state, issuer_base, &effective, existing, &profile)
+        .await?;
     Ok(effective)
 }
 
@@ -89,6 +91,7 @@ mod tests {
         allowed_grant_types: Vec<String>,
     ) -> crate::client_registry::RegisteredClient {
         crate::client_registry::RegisteredClient {
+            dpop_bound_access_tokens: false,
             client_id: "client-id".to_string(),
             client_secret: None,
             redirect_uris: vec!["https://example.com/callback".to_string()],

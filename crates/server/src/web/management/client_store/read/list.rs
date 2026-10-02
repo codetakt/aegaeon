@@ -16,6 +16,7 @@ SELECT
   c.allowed_grant_types,
   c.allowed_scopes,
   c.token_endpoint_authentication_method,
+  c.dpop_bound_access_tokens,
   to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
   c.id::text AS id_cursor,
   to_char(c.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,

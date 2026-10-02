@@ -9,6 +9,15 @@ mod preparation_currentness;
 mod refusals;
 
 async fn router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum::Router> {
+    router_with_sender_policy(pool, env, false, vec!["dpop".into()]).await
+}
+
+async fn router_with_sender_policy(
+    pool: &PgPool,
+    env: &TestDcrEnvironment,
+    require_sender: bool,
+    sender_methods: Vec<String>,
+) -> TestResult<axum::Router> {
     let grants = vec![
         "authorization_code".to_string(),
         "refresh_token".into(),
@@ -20,6 +29,8 @@ async fn router(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult<axum::Rou
     let mut state = test_app_state(pool.clone(), env).await?;
     let policy = crate::management::types::PolicyDocument {
         dcr_enabled: true,
+        dcr_require_sender_constrained: require_sender,
+        dcr_allowed_sender_methods: sender_methods,
         dcr_everparse_runtime_enabled: true,
         allowed_grant_types: grants,
         ..Default::default()
@@ -98,3 +109,5 @@ async fn post(app: &axum::Router, metadata: &Value) -> TestResult<Value> {
     assert_eq!(status, StatusCode::CREATED, "{value}");
     Ok(value)
 }
+
+mod dpop_minimum;

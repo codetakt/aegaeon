@@ -8,6 +8,7 @@ use super::super::normalization::normalize_lower_list;
 use super::super::{error_response, management_internal_error};
 
 struct ClientEffectiveProfilePolicy {
+    sender_constraint: crate::policy::SenderConstraint,
     allowed_grant_types: Vec<String>,
     token_endpoint_auth_methods_allowed: Vec<String>,
 }
@@ -32,6 +33,18 @@ pub(in crate::web::management::clients) async fn validate_client_policy_boundary
     let scope_allowlist =
         load_environment_scope_allowlist(tx, environment_id, configuration_version_id, request_id)
             .await?;
+
+    if input.dpop_bound_access_tokens
+        && crate::oauth_profile::merge_sender_constraints(
+            policy.sender_constraint.into(),
+            profile.sender_constraint,
+        ) == crate::policy::SenderConstraint::Mtls
+    {
+        return Err(invalid_client_policy(
+            request_id,
+            "Client DPoP requirement conflicts with mTLS policy",
+        ));
+    }
 
     let policy_grants = normalize_lower_list(&policy.allowed_grant_types);
     let profile_grants = normalize_lower_list(&profile.allowed_grant_types);
@@ -118,6 +131,7 @@ async fn load_effective_downstream_profile_policy(
     let row = sqlx::query(
         r"
 SELECT
+  sender_constrained::text AS sender_constrained,
   allowed_grant_types,
   token_endpoint_auth_methods_allowed
 FROM aegaeon.oauth_profiles
@@ -147,7 +161,16 @@ LIMIT 1
         ));
     };
 
+    let raw: String = row.try_get("sender_constrained").map_err(|_| {
+        management_internal_error(request_id, "Failed to read OAuth profile policy")
+    })?;
+    let sender_constraint = crate::management::types::PolicySenderConstraint::from_db_str(&raw)
+        .ok_or_else(|| {
+            management_internal_error(request_id, "Failed to read OAuth profile policy")
+        })?
+        .into();
     Ok(ClientEffectiveProfilePolicy {
+        sender_constraint,
         allowed_grant_types: row.try_get("allowed_grant_types").map_err(|_| {
             management_internal_error(request_id, "Failed to read OAuth profile policy")
         })?,
