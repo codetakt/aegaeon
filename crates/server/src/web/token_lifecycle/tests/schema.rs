@@ -35,6 +35,7 @@ async fn introspection_scope_presence_and_sender_type_match_stored_tokens() -> T
                     assert_eq!(body.get("scope"), scope.map(Value::from).as_ref());
                     assert_eq!(body["token_type"], access.token_type);
                     assert_eq!(body["sub"], access.user_id);
+                    assert!(body.get("username").is_none());
                     assert_eq!(body["iss"], state.issuer.as_str());
                     match access.cnf.as_ref() {
                         Some(CnfClaim::Jkt(jkt)) => assert_eq!(body["cnf"], json!({"jkt":jkt})),

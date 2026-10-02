@@ -4,13 +4,14 @@ use crate::authcode::types::BearerTokenMetaInput;
 
 fn record(
     store: &TokenStore,
+    subject: &str,
     scope: Option<&str>,
     token_type: &str,
     lifetime: u64,
 ) -> Result<AccessToken, String> {
     let mut access = AccessToken::new(
         "owner".into(),
-        "subject".into(),
+        subject.into(),
         scope.map(str::to_string),
         lifetime,
     );
@@ -43,7 +44,7 @@ fn legacy_introspection_preserves_optional_scope_and_stored_token_type() -> Test
     let validator = TokenValidator::new(store.clone(), Arc::new(InMemoryKeyManager::new()));
     for scope in [None, Some("read write"), Some("")] {
         for token_type in ["Bearer", "DPoP"] {
-            let access = record(&store, scope, token_type, 300)?;
+            let access = record(&store, "subject", scope, token_type, 300)?;
             let body = validator.introspect_token(&access.token);
             assert_eq!(body["active"], true);
             assert_eq!(
@@ -52,7 +53,8 @@ fn legacy_introspection_preserves_optional_scope_and_stored_token_type() -> Test
             );
             assert_eq!(body["token_type"], token_type);
             assert_eq!(body["client_id"], "owner");
-            assert_eq!(body["username"], "subject");
+            assert_eq!(body["sub"], "subject");
+            assert!(body.get("username").is_none());
             assert!(body["exp"].is_u64());
             assert!(body.get("cnf").is_none());
             assert!(body.get("iss").is_none());
@@ -67,12 +69,30 @@ fn legacy_introspection_preserves_optional_scope_and_stored_token_type() -> Test
         validator.introspect_token("unknown"),
         json!({"active":false})
     );
-    let mut expired = record(&store, None, "Bearer", 300)?;
+    let mut expired = record(&store, "subject", None, "Bearer", 300)?;
     expired.expires_in = 0;
     store.try_replace_access_token_record(expired.clone())?;
     assert_eq!(
         validator.introspect_token(&expired.token),
         json!({"active":false})
     );
+    Ok(())
+}
+
+#[test]
+fn local_introspection_preserves_exact_subject_without_inventing_username() -> TestResult {
+    let store = TokenStore::new_process_local_for_tests();
+    let validator = TokenValidator::new(store.clone(), Arc::new(InMemoryKeyManager::new()));
+    for subject in [
+        "usr:8e354c1d-5094-4ac8-9ad2-993b9013c71b",
+        "Alex Reader",
+        "利用者/e\u{301}/é/🌊",
+    ] {
+        let access = record(&store, subject, Some("read"), "Bearer", 300)?;
+        let body = validator.introspect_token(&access.token);
+        assert_eq!(body["active"], true);
+        assert_eq!(body["sub"], subject);
+        assert!(body.get("username").is_none());
+    }
     Ok(())
 }
