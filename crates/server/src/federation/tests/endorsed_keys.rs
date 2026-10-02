@@ -596,3 +596,8 @@ mod chain_policy_admission {
     use super::*;
     include!("chain_policy_admission.rs");
 }
+
+mod entity_type_constraints {
+    use super::*;
+    include!("entity_type_constraints.rs");
+}
