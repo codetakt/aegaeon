@@ -252,8 +252,8 @@ This follows RFC 7662 §§2.1, 2.2, 2.3 and 4 and RFC 9701 §§5 and 8.2 for the
 credentialless case. RFC 9701's broader failed-authentication wording versus
 RFC 7662's explicit invalid-credential 401 rule remains a separate profile
 interpretation; this change does not establish complete RFC 9701 conformance.
-Recipient entitlement, stored JWT validation and response-protection profiles
-remain separate from this behavior change.
+Recipient entitlement and response-protection profiles remain separate obligations.
+Stored JWT validation is described below.
 
 Active responses omit `scope` when it is unavailable. A stored string, including
 an empty string, is preserved exactly in JSON and the signed response's inner
@@ -268,3 +268,44 @@ It remains a local stored-status API: it does not authenticate a requester or
 supply online resource-server authority, and refuses client-credentials records
 and lookup errors with a false-only result. Use `/introspect` for authenticated
 current-policy evaluation.
+
+## Stored access-token signature verification
+
+Under RFC 7662 §4, `/introspect` validates stored signed access tokens even after
+`jwtAccessTokensEnabled` is disabled. Aegaeon's opaque tokens contain no periods;
+any stored token containing a period must pass compact JWT parsing, signature,
+access-token type, issuer, required-claim and time checks. When metadata exists,
+the JWT audience must match its stored resource audience. Malformed dotted values
+cannot fall back to opaque status. Existing requester visibility, grant-family,
+parent and current-authority checks run before this additional verification.
+Signature validity alone does not make a token active.
+
+Production verification uses only public material for `JWT_ACCESS_TOKEN_SIGNING`.
+Active keys and retiring keys strictly before their configured expiry are eligible;
+NEXT, REVOKED, expired or other-purpose keys are excluded. A retiring-only set works
+without an active access signer or private-handle decryption. Empty access-key sets
+support opaque deployments but cannot validate a JWT. The introspection response
+signer cannot substitute for an access verification key. Invalid configured public
+material prevents initialization. Retention policy and in-flight configuration
+currentness retain their existing contracts.
+
+Visible invalid JWTs produce the false-only inner object in JSON or a signed
+introspection response. Verification/backend/parser-policy or clock unavailability
+returns HTTP 503 without an active assertion or success metric. Invisible callers
+receive the existing inactive result before protected verification work.
+
+The built-in resource validator retains its strict mode: enabling JWT access-token
+validation requires JWTs, while disabling it still verifies dotted tokens. Both
+synchronous and asynchronous methods use this rule. Introspection accepts genuine
+stored opaque tokens in either issuance mode. The local `introspect_token` helper
+also verifies dotted tokens and collapses failures to false-only, while retaining
+its limited authority described above. Existing library constructors adapt the
+explicitly supplied `KeyManager`; `with_access_token_verifier` can supply a separate
+verification capability. Production startup always installs the purpose-restricted
+runtime access verifier.
+
+No storage migration or token rewriting is required. Custom library consumers
+must stop injecting dotted opaque tokens; their existing bytes remain stored but
+now fail closed unless they are valid JWT access tokens. This change does not
+expand recipient entitlement or sender permissions, or establish complete JWT
+parser, numerical, protection-profile or product assurance.

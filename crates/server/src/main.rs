@@ -269,6 +269,7 @@ async fn build_server_runtime(_args: &Args) -> Result<BuiltServerRuntime> {
     let token_runtime = token_runtime_from_shared_env(
         cfg.as_ref(),
         key_manager.clone(),
+        runtime_keys,
         oidc_runtime.as_deref(),
         oidc_sessions.clone(),
         &issuer,

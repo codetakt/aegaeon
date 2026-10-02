@@ -189,3 +189,28 @@ pub(super) fn finalize_introspection_response(
     }
     response
 }
+
+/// Called only after visibility and all existing state-authority checks.
+pub(super) fn validate_introspection_jwt(
+    state: &AppState,
+    access: &AccessToken,
+    meta: Option<&BearerTokenMeta>,
+) -> Result<bool, Response> {
+    match state
+        .tokens
+        .validator
+        .validate_stored_access_token_jwt(access, meta)
+    {
+        Ok(()) => Ok(true),
+        Err(error) if error.is_internal() => {
+            tracing::error!(error = %error, "access token verification unavailable during introspection");
+            Err(no_cache_json_error_with_iss(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "temporarily_unavailable",
+                Some("access token verification unavailable"),
+                state.issuer.as_str(),
+            ))
+        }
+        Err(_) => Ok(false),
+    }
+}

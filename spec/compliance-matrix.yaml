@@ -838,6 +838,37 @@ rfc_7662:
     claims. Finite routed PostgreSQL/Redis tests do not establish formal assurance.
   - The public local stored-status helper also omits absent scope and preserves
     stored token_type; its local execution does not establish HTTP authorization.
+- id: 7662-008
+  section: '4'
+  requirement: MUST
+  description: Verify stored signed access tokens independently of current issuance mode
+    with purpose-restricted public access keys and existing state authority
+  module: crates/server/src/authcode/token/validator/jwt.rs
+  proof: []
+  tests:
+  - crates/server/src/kms/access_verifier/tests.rs
+  - crates/server/src/authcode/token/tests/stored_jwt.rs
+  - crates/server/src/authcode/token/validator/jwt.rs
+  - crates/server/src/web/token_lifecycle/tests/stored_jwt.rs
+  - crates/server/src/main/tests/access_verifier.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
+  ci_check: stored-access-token-signatures
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle/introspection.rs
+  notes:
+  - Dotted tokens cannot fall back to opaque status; signature, typ, issuer, existing
+    required-claim and time checks and metadata audience comparison remain distinct.
+  - Production public verification accepts only active or unexpired retiring access
+    keys, including retiring-only sets; other purposes, revoked and NEXT keys cannot
+    substitute. Verification does not decrypt private handles or require an active signer.
+  - Caller visibility and existing grant, parent, equality and current-authority checks
+    precede introspection verification. Invalid tokens are inactive; operational
+    verification failures retain service-unavailable routing without success metrics.
+  - Sync and async resources retain strict JWT mode; the limited local helper checks
+    dotted values and retains its false-only failure and client-credentials refusal.
+  - Finite native startup-constructor, public-library and PG/Redis routed tests are
+    separate observations. This row does not establish complete recipient, parser,
+    numerical, retention, response-protection or product assurance.
 rfc_7515:
 
 - id: 7515-001

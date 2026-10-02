@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use aegaeon_server::authcode::{TokenIssuer, TokenStore, TokenValidator};
 use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
-use aegaeon_server::kms::KeyManager;
+use aegaeon_server::kms::{KeyManager, ManagedAccessTokenVerifier};
 use aegaeon_server::oidc::{OidcConfig, OidcSessionStore};
+use aegaeon_server::runtime_keys::RuntimeKeySet;
 use anyhow::Result;
 
 pub(super) struct TokenRuntime {
@@ -15,6 +16,7 @@ pub(super) struct TokenRuntime {
 pub(super) fn token_runtime_from_shared_env(
     cfg: &ServerConfig,
     key_manager: Arc<dyn KeyManager>,
+    runtime_keys: &RuntimeKeySet,
     oidc: Option<&OidcConfig>,
     oidc_sessions: Option<OidcSessionStore>,
     issuer: &str,
@@ -44,6 +46,9 @@ pub(super) fn token_runtime_from_shared_env(
             cfg.security_policy,
         )
         .with_jwt_access_tokens_enabled(jwt_runtime.access_tokens_enabled())
+        .with_access_token_verifier(Arc::new(ManagedAccessTokenVerifier::try_from_runtime_keys(
+            runtime_keys,
+        )?))
         .with_jwt_leeway_secs(jwt_runtime.leeway_secs())
         .with_issuer(Some(issuer.to_string())),
     );

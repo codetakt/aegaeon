@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01T23:51:42.731824+00:00",
+  "generated": "2026-10-02T00:34:11.418040+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -209,7 +209,7 @@
       "critical": false
     },
     "crates/server/src/main.rs": {
-      "sha256": "012c6e001fc45323e6a6136db2d50871e5c5ab8eadb314caa83f0d16adcece1b",
+      "sha256": "4ae613a4bda252fcba2e50fd14625b75d0cb670c9d3c01e980a8e5480991eae5",
       "entries": [
         "9101-001",
         "v21-002"
@@ -383,7 +383,7 @@
       "critical": false
     },
     "crates/server/src/web/token_lifecycle.rs": {
-      "sha256": "bcb5b07815011b0042a2fae066e249ca1cec6342b2bc5e3e31701186d52dfae9",
+      "sha256": "902d55670a5d90d90df317d9fb1f89cc4c654e9eefea7fd389b8f4b94b285d9c",
       "entries": [
         "7009-002",
         "7009-003",
