@@ -27,7 +27,8 @@ mod jwt_introspection;
 mod tests;
 
 use client_auth::{
-    introspection_requesting_client_id, revocation_requesting_client_id, EndpointClientAuthContext,
+    introspection_requesting_client_id, revocation_requesting_client_id,
+    AuthenticatedIntrospectionClient,
 };
 pub(super) use forms::{parse_introspect_form, parse_revoke_form};
 use forms::{required_lifecycle_token, IntrospectForm};
@@ -41,34 +42,31 @@ async fn authenticate_introspection_client(
     headers: &HeaderMap,
     form: &IntrospectForm,
     issuer_base: &str,
-) -> Result<EndpointClientAuthContext, Response> {
+) -> Result<AuthenticatedIntrospectionClient, Response> {
     let introspect_client = match introspection_requesting_client_id(state, headers, form).await {
         Ok(context) => context,
         Err(resp) => return Err(resp),
     };
-    if let Some(client_id) = introspect_client.client_id.as_deref() {
-        let profile = match resolve_downstream_profile_for_endpoint(
-            state,
-            issuer_base,
-            client_id,
+    let profile = match resolve_downstream_profile_for_endpoint(
+        state,
+        issuer_base,
+        &introspect_client.client_id,
+        "introspection",
+    )
+    .await
+    {
+        Ok(profile) => profile,
+        Err(response) => return Err(response),
+    };
+    if let Err(violation) =
+        validate_downstream_endpoint_auth_profile(&profile, introspect_client.client_auth_method)
+    {
+        return Err(downstream_profile_violation_response(
+            violation,
             "introspection",
-        )
-        .await
-        {
-            Ok(profile) => profile,
-            Err(response) => return Err(response),
-        };
-        if let Err(violation) = validate_downstream_endpoint_auth_profile(
-            &profile,
-            introspect_client.client_auth_method,
-        ) {
-            return Err(downstream_profile_violation_response(
-                violation,
-                "introspection",
-                "token_introspection",
-                issuer_base,
-            ));
-        }
+            "token_introspection",
+            issuer_base,
+        ));
     }
     Ok(introspect_client)
 }
@@ -76,13 +74,13 @@ async fn authenticate_introspection_client(
 fn inactive_introspection_response(
     state: &AppState,
     headers: &HeaderMap,
-    introspect_client: &EndpointClientAuthContext,
+    introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
     finalize_introspection_response(
         state,
         headers,
         json!({ "active": false }),
-        introspect_client.client_id.as_deref(),
+        Some(introspect_client.client_id.as_str()),
     )
 }
 
@@ -105,7 +103,7 @@ async fn active_access_token_introspection_response(
     headers: &HeaderMap,
     token: &str,
     access_token: &AccessToken,
-    introspect_client: &EndpointClientAuthContext,
+    introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
     let meta = match state
         .tokens
@@ -128,7 +126,7 @@ async fn active_access_token_introspection_response(
         state,
         access_token,
         meta.as_ref(),
-        introspect_client.client_id.as_deref(),
+        Some(introspect_client.client_id.as_str()),
     )
     .await
     {
@@ -171,14 +169,19 @@ async fn active_access_token_introspection_response(
         Ok(body) => body,
         Err(resp) => return resp,
     };
-    finalize_introspection_response(state, headers, body, introspect_client.client_id.as_deref())
+    finalize_introspection_response(
+        state,
+        headers,
+        body,
+        Some(introspect_client.client_id.as_str()),
+    )
 }
 
 async fn introspect_access_token(
     state: &AppState,
     headers: &HeaderMap,
     token: &str,
-    introspect_client: &EndpointClientAuthContext,
+    introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
     match state
         .tokens
@@ -227,6 +230,11 @@ pub(super) async fn introspect(
         Ok(form) => form,
         Err(resp) => return resp,
     };
+    if let Err(response) =
+        client_auth::require_introspection_authentication_attempt(&state, &headers, &form)
+    {
+        return response;
+    }
     // Pin the presented identity before authentication; token state remains unread here.
     let basic_id = super::oauth_errors::authorization_header(&headers)
         .ok()

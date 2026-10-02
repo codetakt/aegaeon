@@ -32,11 +32,8 @@ pub(super) fn build_jwt_introspection_response(
     introspection_claims: &Value,
     requesting_client: Option<&str>,
 ) -> Response {
-    let Some(requesting_client) = requesting_client else {
-        return util::invalid_client_response(
-            "token_introspection",
-            "Client authentication is required for JWT introspection responses",
-        );
+    let Some(requesting_client) = requesting_client.filter(|id| !id.is_empty()) else {
+        return super::client_auth::missing_introspection_authentication(state);
     };
 
     let key_manager = jwt_introspection_key_manager(state);

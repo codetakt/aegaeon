@@ -228,3 +228,43 @@ is a preparation failure.
 Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
+
+## Introspection authentication and optional scope
+
+`/introspect` requires successful authentication by a registered client using a
+supported method. A client identifier or public registration is insufficient,
+even with a profile allowing `none`. The legacy management setting
+`requireClientAuthIntrospection=false` still round-trips unchanged, but its
+effective runtime value is true. Upgrading requires credentialless introspection
+callers to use registered credentials; no database rewrite or new migration is
+required. Existing target and reader permissions continue to apply.
+
+When `jwtIntrospectionEnabled=true`, requests without effective credentials return
+HTTP 400 JSON `invalid_client`, an issuer, no `WWW-Authenticate`, and no-cache
+headers, regardless of `Accept`. With that capability disabled, the ordinary
+HTTP 401 `invalid_client` response retains its Basic challenge. Missing credentials
+include a bare `client_id` and empty/whitespace credential form fields. Existing
+header admission and attempted-credential errors retain their categories.
+Recognized invalid credentials, mixed methods and authenticated profile refusal
+retain their existing HTTP 401 behavior in this change.
+
+This follows RFC 7662 §§2.1, 2.2, 2.3 and 4 and RFC 9701 §§5 and 8.2 for the
+credentialless case. RFC 9701's broader failed-authentication wording versus
+RFC 7662's explicit invalid-credential 401 rule remains a separate profile
+interpretation; this change does not establish complete RFC 9701 conformance.
+Recipient entitlement, stored JWT validation and response-protection profiles
+remain separate from this behavior change.
+
+Active responses omit `scope` when it is unavailable. A stored string, including
+an empty string, is preserved exactly in JSON and the signed response's inner
+`token_introspection` object. Inactive responses remain exactly `{"active":false}`
+inside the selected response format. Sender type and confirmation claims retain
+their existing meaning; the introspector does not present the original token
+sender's proof.
+
+The public `TokenValidator::introspect_token` helper applies the same optional
+scope rule and returns the stored token type instead of hardcoded `Bearer`.
+It remains a local stored-status API: it does not authenticate a requester or
+supply online resource-server authority, and refuses client-credentials records
+and lookup errors with a false-only result. Use `/introspect` for authenticated
+current-policy evaluation.

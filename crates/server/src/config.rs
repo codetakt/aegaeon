@@ -154,6 +154,7 @@ pub struct ServerConfig {
     pub require_pushed_authorization_requests: bool,
 
     // Client authentication requirements
+    /// Legacy compatibility field; introspection authentication cannot be disabled.
     pub require_client_auth_introspection: bool,
     pub require_client_auth_revocation: bool,
     pub require_client_auth_par: bool,

@@ -133,12 +133,14 @@ pub(super) async fn active_introspection_body(
         "active": true,
         "iss": state.issuer.as_str(),
         "sub": access_token.user_id,
-        "scope": access_token.scope.clone(),
         "client_id": access_token.client_id,
         "username": access_token.user_id,
         "token_type": access_token.token_type,
         "exp": exp,
     });
+    if let Some(scope) = access_token.scope.as_ref() {
+        body["scope"] = json!(scope);
+    }
     if let Some(cnf_claim) = access_token.cnf.as_ref() {
         apply_introspection_cnf_claim(&mut body, cnf_claim);
     }
