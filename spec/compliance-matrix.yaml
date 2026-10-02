@@ -2868,6 +2868,8 @@ rfc_7592:
   tests:
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_admission.rs
   - crates/server/src/web/dcr_configuration/tests/metadata_consistency/credential_races.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/preparation_currentness.rs
+  - crates/server/src/web/management/tests/initialization/registration_currentness.rs
   status: implemented
   runtime_link: crates/server/src/web/dcr_configuration/update.rs
   applies_to:
@@ -2876,6 +2878,7 @@ rfc_7592:
   - "RFC7592 section 2.2 requires matching client_id and supplied client_secret; the assertion never becomes a chosen replacement secret."
   - "Aegaeon rejects forbidden credential members by presence, including null, with invalid_client_metadata; this error mapping is local policy for the client-side MUST NOT."
   - "Database comparison follows current-registration locking and uses statement-time expiry with all eligible active Argon2id credentials for the exact environment/client."
+  - "Local concurrency contract: compare exact semantic preparation state and post-lock eligible-secret presence before assertions/writes; metadata/profile or presence drift returns 409. This is not an additional RFC MUST."
   - "Finite router/PostgreSQL and persistence lock-barrier tests; no formal proof or complete response/recovery conformance claim."
 
 rfc_7800:

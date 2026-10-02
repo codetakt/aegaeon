@@ -4,8 +4,13 @@ use uuid::Uuid;
 use super::DcrDatabaseError;
 use crate::client_registry::{RegisteredClient, RegisteredClientJwks};
 
-#[derive(Clone, Debug)]
+/// An authenticated registration and its opaque database preparation state.
+/// Obtain this value through `load_dynamic_registration_by_token`; external
+/// struct literal construction is intentionally unavailable.
+#[derive(Clone)]
 pub struct DcrStoredClient {
+    pub(super) preparation_snapshot: super::preparation::PreparationSnapshot,
+    pub(super) issuer_host: String,
     pub team_id: Uuid,
     pub tenant_id: Uuid,
     pub environment_id: Uuid,
@@ -15,6 +20,16 @@ pub struct DcrStoredClient {
     pub client: RegisteredClient,
     pub response_types: Vec<String>,
     pub has_active_client_secret: bool,
+}
+
+// Do not expose the snapshot (including stored hashes and metadata) in logs.
+impl std::fmt::Debug for DcrStoredClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DcrStoredClient")
+            .field("environment_id", &self.environment_id)
+            .field("database_client_id", &self.database_client_id)
+            .finish_non_exhaustive()
+    }
 }
 
 pub(super) fn stored_client_from_row(
@@ -42,6 +57,8 @@ pub(super) fn stored_client_from_row(
     .map_err(DcrDatabaseError::CorruptRegistration)?;
 
     Ok(DcrStoredClient {
+        preparation_snapshot: super::preparation::PreparationSnapshot::from_row(row)?,
+        issuer_host: row.try_get("issuer_host")?,
         team_id: row.try_get("team_id")?,
         tenant_id: row.try_get("tenant_id")?,
         environment_id: row.try_get("environment_id")?,

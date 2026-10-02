@@ -9,6 +9,7 @@ mod credentials;
 mod environment;
 mod locking;
 mod mutation;
+mod preparation;
 mod schema;
 mod strict_preflight;
 pub use strict_preflight::{
@@ -214,9 +215,11 @@ pub async fn load_dynamic_registration_by_token(
 ) -> Result<Option<DcrStoredClient>, DcrDatabaseError> {
     let issuer_host = normalize_issuer_host(issuer_host)?;
     let token_hash = registration_access_token_hash(registration_access_token);
-    let row = sqlx::query(
+    let query = format!(
         r"
 SELECT
+  rt.issuer_host,
+  {snapshot} AS preparation_snapshot,
   rt.team_id,
   rt.tenant_id,
   rt.environment_id,
@@ -236,15 +239,7 @@ SELECT
   dcr.jwks,
   dcr.token_endpoint_auth_signing_alg,
   dcr.registration_access_token_hash,
-  EXISTS (
-    SELECT 1
-    FROM aegaeon.client_secrets cs
-    WHERE cs.environment_id = c.environment_id
-      AND cs.client_id = c.id
-      AND cs.status = 'ACTIVE'
-      AND cs.expires_at > now()
-      AND cs.secret_hash_algorithm = 'argon2id'
-  ) AS has_active_client_secret
+  {eligible_secret} AS has_active_client_secret
 FROM aegaeon.dynamic_client_registrations dcr
 JOIN aegaeon.clients c
   ON c.environment_id = dcr.environment_id
@@ -261,12 +256,15 @@ WHERE rt.issuer_host = $1
   AND dcr.registration_access_token_hash_algorithm = 'sha256'
 LIMIT 1
         ",
-    )
-    .bind(issuer_host)
-    .bind(client_identifier)
-    .bind(token_hash)
-    .fetch_optional(pool)
-    .await?;
+        snapshot = preparation::snapshot_sql(),
+        eligible_secret = preparation::ELIGIBLE_SECRET_SQL,
+    );
+    let row = sqlx::query(&query)
+        .bind(issuer_host)
+        .bind(client_identifier)
+        .bind(token_hash)
+        .fetch_optional(pool)
+        .await?;
 
     row.as_ref().map(stored_client_from_row).transpose()
 }
@@ -289,6 +287,7 @@ pub async fn update_dynamic_registration(
     .map_err(DcrDatabaseError::MetadataRelation)?;
     let mut tx = pool.begin().await?;
     lock_current_dynamic_registration(&mut tx, stored).await?;
+    preparation::check_current_preparation(&mut tx, stored).await?;
     if let Some(assertion) = client_secret_assertion {
         credentials::verify_current_client_secret(&mut tx, stored, assertion).await?;
     }

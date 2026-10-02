@@ -1,6 +1,6 @@
 # Dynamic Client Registration (DCR) — BCP Policy Gates
 
-Last updated: 2026-07-07
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -135,8 +135,11 @@ issued credential. Its exact bytes are compared with the client's active,
 unexpired Argon2id credentials within the locked update transaction. Any eligible
 credential in an overlapping rotation period may match, including credentials
 issued under an earlier configuration for the same stable client. Null or other
-nonstring values, expired or revoked credentials, and mismatches return
-`400 invalid_client_metadata`. An absent assertion adds no comparison condition.
+nonstring values return `400 invalid_client_metadata` during input admission.
+A string assertion matching no currently eligible credential returns that error
+after preparation currentness succeeds. For an admitted update, a change to
+eligible-secret presence since authentication instead returns 409 as described
+below. An absent assertion adds no secret comparison condition.
 The supplied value cannot select or replace the server-generated secret and is
 never included in registration metadata, responses, or audit records.
 
@@ -162,6 +165,42 @@ retain their existing behavior. Complete metadata response/clearability and
 credential delivery/retry/recovery remain separate work: a committed mutation
 can still be followed by runtime synchronization or response-delivery failure.
 These request checks do not establish complete RFC 7592 conformance.
+
+## Owner update preparation currentness
+
+Aegaeon captures the persisted client and registration state while authenticating
+an owner PUT. After locking environment, client and registration in that order,
+it compares the current semantic values and eligible-secret presence before any
+assertion check or write. Concurrent changes to inherited metadata, explicit
+OAuth profile assignment or secret presence return HTTP 409. This local
+concurrency contract supplements RFC 7592 section 2.2; it is not a new RFC MUST.
+
+A refused stale preparation leaves metadata, registration token, credentials,
+audit and runtime projection unchanged. Read current metadata and deliberately
+resubmit the intended update after resolving the conflict. The server does not
+rebuild or retry it automatically. An owner token already invalid when the
+request authenticates still returns 401; invalidation after that load returns 409.
+
+Eligibility uses the post-lock statement time, including when a lock wait crosses
+secret expiry. Adding another eligible overlapping credential while at least one
+remains eligible does not itself cause a conflict. Any supplied secret assertion
+still checks all currently eligible credentials. Issuance configuration remains
+provenance. Expiry is checked at the protected database read, not response delivery.
+
+Only bookkeeping creation/update times are excluded from the comparison.
+Semantic timestamps retain exact precision and are independent of connection
+TimeZone. Identical semantic state is sufficient; this is not a historical
+revision/ABA detector. DELETE uses the ordered owner/membership locks without a
+metadata-equality requirement, and GET remains read-only.
+
+Rust API compatibility: `DcrStoredClient` now contains private preparation state;
+external struct literals are no longer supported. Obtain it through
+`load_dynamic_registration_by_token` and pass that authenticated value to update
+or delete. Cloning remains supported. Debug output contains only environment and
+database client IDs; preparation contents never enter responses or audit events.
+No database migration, persisted revision, public ETag or configuration is added.
+Successful update token rotation and postcommit synchronization retain their
+existing behavior, including the possibility of a failure after commit.
 
 ## Examples
 1) Public client (accepted)
