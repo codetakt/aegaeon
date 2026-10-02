@@ -1478,6 +1478,25 @@ rfc_7591:
   - "Router/PostgreSQL tests cover effective defaults, empty responses, transitions, typed refusals without writes, secret preservation and management transaction synchronization. Migration tests execute actual predecessor schema, all-row guard, exact offline repair template, deterministic corrections and fingerprint consequences. These finite tests do not establish full protocol compliance, key strength or formal assurance."
   - "The upgrade runbook distinguishes reachable predecessor HTTP repair from guarded offline administrator repair for retained rows. Both the SQL relationship/envelope report and strict read-only local URI/JWK scan must have zero blocking findings with writers stopped. The SQL migration does not execute the Rust parsers. Explicit grant-subset repair changes rights; migration itself does not. Strict public-JWK projection, full owner update roundtripping, software-statement precedence and postcommit token recovery remain separate."
 
+- id: 7591-010
+  section: '2.3 (RFC 7591); 4.1.3 (RFC 7519); 2.2 (RFC 7592)'
+  requirement: MUST
+  description: Require a software statement issuer and admit its configured audience consistently before registration writes
+  module: crates/server/src/dcr/software_statement.rs
+  proof: []
+  tests:
+  - crates/server/src/dcr/tests/software_statement/identities.rs
+  - crates/server/src/dcr/software_statement/internal_tests.rs
+  - crates/server/src/web/dcr_configuration/tests/metadata_consistency/software_statement_identities.rs
+  - crates/server/src/web/dcr_configuration/tests/validation_errors.rs
+  status: implemented
+  runtime_link: crates/server/src/dcr/software_statement.rs
+  notes:
+  - Every accepted signed statement requires nonempty string iss; whitespace-only refusal is local policy. Optional expected issuer uses exact comparison without rewriting signed values. A configured trusted RSA key without an issuer pin trusts that key with otherwise valid issuers, not a fixed issuer allowlist.
+  - Configured expected audience is passed to the initial jsonwebtoken verifier and later immutable JwtClaims context. Matching string or membership in a string array succeeds; malformed/missing/null/mismatched audiences refuse. Without a configured recipient, absent/null audience remains optional and a present audience refuses under existing local policy. Policy normalization remains distinct from signed claim equality.
+  - Real RS256 controls and mounted POST/owner PUT with disposable PostgreSQL check accepted statements, invalid claims without client/secret/RAT/audit/runtime changes, wrong RAT precedence and successful retry with the old valid RAT. Existing signature/header/raw-backend/clock/error-category controls remain. Mounted routing is not live TCP or external deployment evidence.
+  - Trusted-metadata precedence, persistence/echo and complete owner roundtripping remain separate work. Library and local temporal validators retain their existing behavior; no full JWT temporal conformance, protocol certification or formal discharge is claimed. No schema, configuration field or dependency is added.
+
 rfc_8414:
 - id: 8414-001
   section: '2'
