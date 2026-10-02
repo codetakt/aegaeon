@@ -1,6 +1,6 @@
 use super::{
     equality::{contains, equal, intersection, union},
-    error, FederationError,
+    error, FederationError, INTERSECT_OPERATOR,
 };
 use serde_json::{Map, Value};
 
@@ -48,13 +48,13 @@ impl FieldPolicy {
                 | "superset_of" => {
                     ops.insert(name.clone(), value.clone());
                 }
-                "intersect" => {
+                INTERSECT_OPERATOR => {
                     array(value)?;
                 }
                 _ => {} // Additional, noncritical operators: section 6.1.3.2.
             }
         }
-        if let Some(alias) = original.get("intersect") {
+        if let Some(alias) = original.get(INTERSECT_OPERATOR) {
             let normalized = if let Some(standard) = ops.get("subset_of") {
                 Value::Array(intersection(array(standard)?, array(alias)?))
             } else {

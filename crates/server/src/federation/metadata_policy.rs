@@ -62,13 +62,27 @@ mod operators;
 mod scope;
 
 use operators::FieldPolicy;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 type TypePolicy = BTreeMap<String, FieldPolicy>;
 pub(super) type ResolvedPolicy = BTreeMap<String, TypePolicy>;
 
 fn error(message: &str) -> FederationError {
     FederationError::MetadataPolicy(message.into())
+}
+
+// Shared by signed/typed admission and the operator parser. Case is significant.
+pub(super) const INTERSECT_OPERATOR: &str = "intersect";
+
+pub(super) fn supports_additional_operator(name: &str) -> bool {
+    name == INTERSECT_OPERATOR
+}
+
+pub(super) fn validate_critical_names(names: &[String]) -> Result<(), FederationError> {
+    if names.is_empty() || names.iter().any(|name| !supports_additional_operator(name)) {
+        return Err(error("unsupported or empty metadata_policy_crit"));
+    }
+    Ok(())
 }
 
 fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, FederationError> {
@@ -90,7 +104,17 @@ fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, F
 
 pub(super) fn resolve_policies<'a>(
     policies: impl IntoIterator<Item = &'a HashMap<String, Value>>,
+    critical: &BTreeSet<&str>,
 ) -> Result<ResolvedPolicy, FederationError> {
+    // The complete chain context is admitted before any policy is parsed.
+    // Every supported additional operator is handled by FieldPolicy::parse,
+    // including occurrences outside the statement that declares it.
+    if critical
+        .iter()
+        .any(|name| !supports_additional_operator(name))
+    {
+        return Err(error("unsupported critical metadata policy operator"));
+    }
     let mut resolved = ResolvedPolicy::new();
     for policy in policies {
         if policy.is_empty() {

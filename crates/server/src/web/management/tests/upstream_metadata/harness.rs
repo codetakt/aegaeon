@@ -400,3 +400,18 @@ impl Fixture {
         chain.chain_jwts[index] = signed(&self.keys[subordinate + 1], &value);
     }
 }
+
+impl Fixture {
+    pub fn set_critical_policy(
+        &self,
+        chain: &mut ResolvedTrustChain,
+        subordinate: usize,
+        names: &[&str],
+    ) {
+        let index = subordinate * 2 + 1;
+        chain.trust_chain.chain[index].metadata_policy_crit =
+            Some(names.iter().map(|name| (*name).into()).collect());
+        let value = serde_json::to_value(&chain.trust_chain.chain[index]).unwrap();
+        chain.chain_jwts[index] = signed(&self.keys[subordinate + 1], &value);
+    }
+}
