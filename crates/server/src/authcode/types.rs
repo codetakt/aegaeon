@@ -4,6 +4,8 @@ use std::time::{Duration, SystemTime};
 
 mod access_token;
 mod authorization_code;
+pub(crate) mod dpop_key;
+mod refresh_grant;
 mod refresh_token;
 mod requests;
 
@@ -11,6 +13,8 @@ pub use access_token::{
     AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
 };
 pub use authorization_code::{AuthorizationCode, AuthorizationCodeInput};
+pub use dpop_key::DpopKeyThumbprint;
+pub use refresh_grant::{RefreshGrantRecord, RefreshGrantRef};
 pub use refresh_token::{RefreshTargetContext, RefreshToken, RefreshTokenInput};
 pub use requests::{AuthorizationRequest, TokenRequest, TokenResponse};
 
@@ -30,6 +34,7 @@ mod tests {
     #[test]
     fn access_token_unrepresentable_expiry_is_expired() {
         let token = AccessToken {
+            refresh_grant: None,
             exchange_root: None,
             client_credentials_digest: None,
             token: "access".to_string(),

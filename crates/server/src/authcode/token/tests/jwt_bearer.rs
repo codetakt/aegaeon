@@ -50,6 +50,7 @@ fn test_jwt_bearer_grant_rejects_openid_scope() -> TestResult {
 fn test_access_tokens_are_unique_per_issue() -> TestResult {
     fn build_auth_req() -> AuthorizationRequest {
         AuthorizationRequest {
+            dpop_jkt: None,
             response_type: "code".to_string(),
             client_id: "test_client".to_string(),
             iss: None,

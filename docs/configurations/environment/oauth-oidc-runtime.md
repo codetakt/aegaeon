@@ -58,10 +58,26 @@ and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETI
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.
 
-## Browser endpoint query admission
+### UserInfo token presentation
+
+The enabled `/userinfo` endpoint accepts GET and POST requests authenticated with
+an `Authorization` header (OIDC Core section 5.3.1). An empty POST body needs no
+`Content-Type`. A nonempty POST body must use
+`application/x-www-form-urlencoded`; Bearer tokens may use its `access_token`
+field instead of the header (RFC 6750 section 2.2). Supplying both transports or
+duplicate `access_token` fields is rejected. DPoP-bound tokens require the DPoP
+Authorization scheme and a proof for the actual POST method and token hash
+(RFC 9449 section 7). The router's request-body size limit also applies.
+
+## Browser endpoint parameter admission
 
 `/authorize` and `/logout` use strict form decoding for GET and implicit HEAD
-queries. Percent escapes must be complete hexadecimal pairs and the decoded
+queries. `/authorize` also accepts cross-origin OAuth client POST requests with
+`application/x-www-form-urlencoded` bodies through the same authorization policy.
+POST rejects a nonempty URI query and duplicate or unsupported Content-Type
+headers; parameters come exclusively from its bounded form body. Response mode
+selects query or form-post output independently of the incoming method.
+Percent escapes must be complete hexadecimal pairs and the decoded
 text must be valid UTF-8 ([RFC 6749 Appendix B](https://www.rfc-editor.org/rfc/rfc6749#appendix-B)).
 `+` decodes to a space; `%2B` decodes to a literal plus.
 
@@ -72,12 +88,15 @@ singleton parameters are rejected, including encoded spellings of the same name
 Repeated `resource` values reach the existing single-resource policy and return
 `invalid_target`; they are not silently collapsed.
 
-Limits remain 16 KiB of raw query, 64 nonempty encoded parameters, 64 decoded
+Limits remain 16 KiB of raw query or authorization form body, 64 nonempty encoded parameters, 64 decoded
 bytes per name and 8 KiB per value. Ignored and empty parameters count toward
 these limits. Transport and URI credential checks still apply. Admission errors
 return no-cache `invalid_request` responses without echoing supplied values.
 Clients that relied on replacement-character decoding must send valid UTF-8;
-no server configuration or database migration is required.
+no new server configuration or database migration is required for this admission
+change. Login and consent retain admitted input server-side; see the
+[continuation rollout requirements](../../operations/authorization-code-refresh-recovery.md#authorization-continuation-rollout)
+before updating nodes with pending interactions.
 
 ## Authorization configuration snapshots
 

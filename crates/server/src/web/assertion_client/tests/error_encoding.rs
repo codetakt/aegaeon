@@ -229,10 +229,12 @@ async fn oauth_error_encoding_scope_routes_preserve_issuance_and_registration_st
 fn upstream_request(
     state: &AppState,
     correlation: &str,
+    browser_digest: &str,
 ) -> TestResult<crate::upstream::UpstreamAuthRequest> {
     let now = std::time::SystemTime::now();
     Ok(crate::upstream::UpstreamAuthRequest {
         state: correlation.into(),
+        browser_binding_digest: Some(browser_digest.into()),
         nonce: "fixture".into(),
         code_verifier: None,
         acr: None,
@@ -249,7 +251,7 @@ fn upstream_request(
         ),
         token_endpoint: "https://upstream.example/token".into(),
         jwks_uri: "https://upstream.example/jwks".into(),
-        redirect_uri: format!("{}/oauth/upstream/fixture/callback", state.issuer),
+        redirect_uri: crate::web::build_upstream_redirect_uri(&state.base_url, "fixture"),
         return_to: crate::web::validate_return_to(Some("/resume".into()))
             .map_err(std::io::Error::other)?,
         max_age: None,
@@ -276,18 +278,27 @@ async fn oauth_error_encoding_upstream_router_preserves_error_consumption_and_de
         for error in ["extension_error", "", "bad\"\\é"] {
             for redirect in [false, true] {
                 let correlation = format!("{}-é&+", Uuid::new_v4());
-                if redirect {
-                    state
-                        .upstream
-                        .auth_store
-                        .try_insert(upstream_request(&state, &correlation)?)
-                        .map_err(std::io::Error::other)?;
+                let secret = crate::upstream::random_token(32);
+                let digest = aegaeon_crypto::hash::sha256_hex(secret.as_bytes());
+                let cookie = format!(
+                    "{}={secret}",
+                    crate::web::upstream_browser_binding::cookie_name(&correlation)
+                );
+                let mut request = upstream_request(&state, &correlation, &digest)?;
+                if !redirect {
+                    request.return_to = None;
                 }
+                state
+                    .upstream
+                    .auth_store
+                    .try_insert(request)
+                    .map_err(std::io::Error::other)?;
                 let before = scoped_keys(&state)?;
                 let pairs = [
                     ("error", error),
                     ("error_description", BAD_SCOPE),
                     ("state", &correlation),
+                    ("iss", "https://upstream.example"),
                 ];
                 let response = raw_request(
                     &state,
@@ -295,6 +306,7 @@ async fn oauth_error_encoding_upstream_router_preserves_error_consumption_and_de
                         "/oauth/upstream/fixture/callback?{}",
                         serde_urlencoded::to_string(pairs)?
                     ))
+                    .header(header::COOKIE, cookie)
                     .body(Body::empty())?,
                 )
                 .await?;
@@ -324,7 +336,11 @@ async fn oauth_error_encoding_upstream_router_preserves_error_consumption_and_de
                 assert!(state
                     .upstream
                     .auth_store
-                    .try_consume(&correlation)
+                    .try_consume_bound(
+                        &correlation,
+                        &digest,
+                        &crate::web::build_upstream_redirect_uri(&state.base_url, "fixture"),
+                    )
                     .map_err(std::io::Error::other)?
                     .is_none());
                 assert!(

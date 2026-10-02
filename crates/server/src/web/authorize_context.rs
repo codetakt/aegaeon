@@ -1,23 +1,24 @@
-use axum::{http::Uri, response::Response};
+use super::authorize_input::AdmittedAuthorizationInput;
+use axum::response::Response;
 
 use crate::authcode::types::AuthorizationRequest as AuthzReq;
 use crate::oauth_profile;
 
 use super::authorize_request::{
     parse_authorize_request_with_runtime_blocking, request_object_extra_string,
-    OwnedRequestObjectAuthorizeDeps, RawAuthzQuery, RequestObjectAuthorizeDeps,
+    OwnedRequestObjectAuthorizeDeps, RequestObjectAuthorizeDeps,
 };
 use super::authorize_validation::{
     authorize_error_response, validate_authorize_request, AuthorizeErrorContext,
     AuthorizeValidationContext,
 };
 use super::oauth_errors::registry_state_error_response;
-use super::oidc_request_input::{admit_oidc_query, OidcEndpoint};
 use super::profile_policy::{record_downstream_profile_rejection, record_downstream_profile_usage};
 use super::prompt::Prompt;
 use super::AppState;
 
 pub(super) struct AuthorizeRequestContext {
+    pub(super) input: AdmittedAuthorizationInput,
     pub(super) observation: crate::runtime_configuration::AuthorizationObservation,
     pub(super) request_id: String,
     pub(super) req: AuthzReq,
@@ -25,6 +26,7 @@ pub(super) struct AuthorizeRequestContext {
     pub(super) response_mode: crate::form_post::ResponseMode,
     pub(super) prompt: Prompt,
     pub(super) reauthenticated: bool,
+    pub(super) reauthentication_session: Option<serde_json::Value>,
     pub(super) client_id_for_error: String,
     pub(super) state_for_echo: Option<String>,
     pub(super) redirect_uri_for_error: Option<String>,
@@ -38,16 +40,16 @@ struct AuthorizePolicyDecision {
 }
 
 pub(super) fn authorize_request_object_deps(state: &AppState) -> RequestObjectAuthorizeDeps<'_> {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref());
     RequestObjectAuthorizeDeps {
         clients: state.clients.as_ref(),
         request_object_jti_store: state.protocol.request_object_jti_store.as_ref(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
@@ -57,17 +59,16 @@ pub(super) fn authorize_request_object_deps(state: &AppState) -> RequestObjectAu
 }
 
 fn owned_authorize_request_object_deps(state: &AppState) -> OwnedRequestObjectAuthorizeDeps {
-    let request_object_decryption_key = state.oidc.config.as_deref().and_then(|cfg| {
-        cfg.request_object_encryption_key
-            .as_ref()
-            .map(crate::oidc::config::OidcRequestObjectEncryptionKey::pkcs8_der)
-            .map(|der| der.to_vec())
-    });
+    let request_object_decryption_key = state
+        .oidc
+        .config
+        .as_deref()
+        .and_then(|cfg| cfg.request_object_encryption_key.as_ref().cloned());
     OwnedRequestObjectAuthorizeDeps {
         clients: state.clients.clone(),
         request_object_jti_store: state.protocol.request_object_jti_store.clone(),
         jose_header_max_len: state.cfg.jose_header_max_len,
-        request_object_decryption_key_pkcs8_der: request_object_decryption_key,
+        request_object_decryption_key,
         crypto_profile: state.cfg.crypto_profile,
         jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         request_object_everparse_runtime_enabled: state
@@ -119,7 +120,8 @@ fn authorize_error_context<'a>(
 
 async fn authorize_parse_request_context(
     state: &AppState,
-    uri: &Uri,
+    input: &AdmittedAuthorizationInput,
+    par_continuation: Option<&str>,
     issuer_base: &str,
 ) -> Result<
     (
@@ -131,9 +133,8 @@ async fn authorize_parse_request_context(
     ),
     Response,
 > {
-    let admitted = admit_oidc_query(OidcEndpoint::Authorize, uri)
-        .map_err(|error| error.into_response(issuer_base))?;
-    let raw = RawAuthzQuery::from_admitted(&admitted)
+    let raw = input
+        .raw(par_continuation)
         .map_err(|error| error.into_response(issuer_base))?;
     let selected_client_id = raw.client_id.as_deref().unwrap_or("");
     // PAR has historically trimmed this selector; plain and direct JAR have not.
@@ -145,7 +146,6 @@ async fn authorize_parse_request_context(
     let observation = observe_authorization(state, selected_client_id, issuer_base).await?;
     let selected_state = state_for_authorization_observation(state, &observation);
     let state = &selected_state;
-    let response_mode_raw = raw.response_mode.clone();
     let parsed = parse_authorize_request_with_runtime_blocking(
         raw,
         state.protocol.par_store.clone(),
@@ -156,13 +156,8 @@ async fn authorize_parse_request_context(
     )
     .await?;
     let req = parsed.request;
-    let response_mode_source = req
-        .request_object_claims
-        .as_ref()
-        .and_then(|claims| claims.response_mode.as_deref())
-        .or(response_mode_raw.as_deref());
-    let response_mode =
-        crate::form_post::parse_response_mode(response_mode_source).map_err(|_| {
+    let response_mode = crate::form_post::parse_response_mode(parsed.response_mode.as_deref())
+        .map_err(|_| {
             authorize_error_response(
                 authorize_error_context(
                     state,
@@ -294,14 +289,16 @@ fn authorize_validate_policy(
     })
 }
 
-pub(super) async fn build_authorize_request_context(
+pub(super) async fn build_authorize_input_context(
     state: &AppState,
-    uri: &Uri,
+    input: AdmittedAuthorizationInput,
+    par_continuation: Option<String>,
     issuer_base: &str,
     request_id: String,
 ) -> Result<AuthorizeRequestContext, Response> {
     let (observation, req, prompt, response_mode, par_authorize_continuation) =
-        authorize_parse_request_context(state, uri, issuer_base).await?;
+        authorize_parse_request_context(state, &input, par_continuation.as_deref(), issuer_base)
+            .await?;
     let selected_state = state_for_authorization_observation(state, &observation);
     let state = &selected_state;
     let profile = authorize_resolve_profile(state, &req, response_mode, issuer_base, &observation)?;
@@ -317,6 +314,7 @@ pub(super) async fn build_authorize_request_context(
         barriers.resume.wait().await;
     }
     Ok(AuthorizeRequestContext {
+        input,
         observation,
         request_id,
         client_id_for_error: req.client_id.clone(),
@@ -327,6 +325,7 @@ pub(super) async fn build_authorize_request_context(
         response_mode,
         prompt,
         reauthenticated: false,
+        reauthentication_session: None,
         pkce_required: policy.pkce_required,
         profile_pkce_required: policy.profile_pkce_required,
     })
@@ -374,4 +373,15 @@ async fn observe_authorization(
         )
         .await
         .map_err(|_| refused())
+}
+
+#[cfg(test)]
+pub(super) async fn build_authorize_request_context(
+    state: &AppState,
+    uri: &axum::http::Uri,
+    issuer_base: &str,
+    request_id: String,
+) -> Result<AuthorizeRequestContext, Response> {
+    let input = AdmittedAuthorizationInput::query(uri).map_err(|e| e.into_response(issuer_base))?;
+    build_authorize_input_context(state, input, None, issuer_base, request_id).await
 }

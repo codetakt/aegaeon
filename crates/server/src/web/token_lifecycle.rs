@@ -15,6 +15,7 @@ use serde_json::json;
 use std::net::SocketAddr;
 
 use crate::authcode::store::ClientBoundRevocationOutcome;
+use crate::authcode::token::TokenPolicyError;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
@@ -22,6 +23,8 @@ mod client_auth;
 mod forms;
 mod introspection;
 mod jwt_introspection;
+#[cfg(test)]
+mod tests;
 
 use client_auth::{
     introspection_requesting_client_id, revocation_requesting_client_id, EndpointClientAuthContext,
@@ -70,18 +73,11 @@ async fn authenticate_introspection_client(
     Ok(introspect_client)
 }
 
-fn record_access_token_introspection(active: bool) {
-    crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
-        metrics.record_introspection("access_token", active);
-    });
-}
-
 fn inactive_introspection_response(
     state: &AppState,
     headers: &HeaderMap,
     introspect_client: &EndpointClientAuthContext,
 ) -> Response {
-    record_access_token_introspection(false);
     finalize_introspection_response(
         state,
         headers,
@@ -142,7 +138,35 @@ async fn active_access_token_introspection_response(
     if !visible {
         return inactive_introspection_response(state, headers, introspect_client);
     }
-    record_access_token_introspection(true);
+    // Caller visibility precedes the independent grant lookup and its errors.
+    match state
+        .tokens
+        .store
+        .try_verify_access_token_async(token.to_string())
+        .await
+    {
+        Ok(Some(current))
+            if serde_json::to_value(&current)
+                .ok()
+                .zip(serde_json::to_value(access_token).ok())
+                .is_some_and(|(current, observed)| current == observed) => {}
+        Ok(_) => return inactive_introspection_response(state, headers, introspect_client),
+        Err(error) => return token_store_introspection_error(state, error),
+    }
+    if let Some(meta) = meta.as_ref() {
+        match state
+            .tokens
+            .validator
+            .validate_refresh_parent_async(meta)
+            .await
+        {
+            Ok(()) => {}
+            Err(TokenPolicyError::RefreshParentRevoked) => {
+                return inactive_introspection_response(state, headers, introspect_client);
+            }
+            Err(error) => return token_store_introspection_error(state, error),
+        }
+    }
     let body = match active_introspection_body(state, access_token, meta.as_ref()).await {
         Ok(body) => body,
         Err(resp) => return resp,
@@ -159,7 +183,7 @@ async fn introspect_access_token(
     match state
         .tokens
         .store
-        .try_verify_access_token_async(token.to_string())
+        .try_observe_access_record_async(token.to_string())
         .await
     {
         Ok(Some(access_token)) => {

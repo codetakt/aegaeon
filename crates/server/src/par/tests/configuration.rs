@@ -52,9 +52,11 @@ fn store_request_rejects_unrepresentable_expiry() -> TestResult {
     });
 
     let request = ParRequest {
+        dpop_jkt: None,
         client_id: "test_client".to_string(),
         redirect_uri: "https://example.com/callback".to_string(),
         response_type: "code".to_string(),
+        response_mode: None,
         iss: None,
         resource: None,
         state: Some("state123".to_string()),

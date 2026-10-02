@@ -11,6 +11,7 @@ fn test_token_issuance_flow() -> TestResult {
 
     // Step 1: Authorization request
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,
@@ -85,6 +86,7 @@ fn test_authorization_code_requires_pkce_challenge_and_method() -> TestResult {
         ),
     ] {
         let auth_req = AuthorizationRequest {
+            dpop_jkt: None,
             response_type: "code".to_string(),
             client_id: "test_client".to_string(),
             iss: None,

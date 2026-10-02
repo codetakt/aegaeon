@@ -4,7 +4,7 @@ use crate::web::test_support::TestResult;
 use axum::body::Body;
 use std::sync::Arc;
 
-fn sample(reason: &str) -> TestResult<(f64, f64, u64)> {
+fn sample(reason: &str, method: &str) -> TestResult<(f64, f64, u64)> {
     MetricsIntegration::with_global(|integration| {
         (
             integration
@@ -20,7 +20,7 @@ fn sample(reason: &str) -> TestResult<(f64, f64, u64)> {
             integration
                 .metrics
                 .request_latency
-                .with_label_values(&["/resource", "GET"])
+                .with_label_values(&["/resource", method])
                 .get_sample_count(),
         )
     })
@@ -47,18 +47,20 @@ async fn resource_authentication_early_classification_preserves_failure_and_late
             (Some("Bearer"), "malformed authorization header"),
             (Some("DPoP"), "malformed authorization header"),
         ] {
-            let before = sample(reason)?;
-            let response = request(
-                &fixture.state,
-                "GET",
-                "/resource",
-                headers(auth, Some("unvalidated-proof"), false)?,
-                Body::empty(),
-            )
-            .await?;
-            assert!(response.status().is_client_error());
-            let after = sample(reason)?;
-            assert_eq!(after, (before.0 + 1.0, before.1 + 1.0, before.2 + 1));
+            for method in ["GET", "HEAD"] {
+                let before = sample(reason, method)?;
+                let response = request(
+                    &fixture.state,
+                    method,
+                    "/resource",
+                    headers(auth, Some("unvalidated-proof"), false)?,
+                    Body::empty(),
+                )
+                .await?;
+                assert!(response.status().is_client_error());
+                let after = sample(reason, method)?;
+                assert_eq!(after, (before.0 + 1.0, before.1 + 1.0, before.2 + 1));
+            }
         }
         assert_eq!(fixture.replay.attempts(), 0);
         Ok::<(), Box<dyn std::error::Error>>(())

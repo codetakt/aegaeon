@@ -168,17 +168,9 @@ fn raw_json_structural_parser_unavailable(payload: &[u8]) -> bool {
     )
 }
 
-fn store_access_token(token_store: &TokenStore, token: AccessToken) -> Result<String, String> {
-    Ok(must_ok!(
-        token_store.try_replace_access_token_record(token),
-        "store access token",
-    ))
-}
-
 fn store_jwt_access_token(token_store: &TokenStore, token: &str) -> TestResult {
-    let _ = store_access_token(
-        token_store,
-        AccessToken {
+    let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
             token: token.to_string(),
@@ -189,8 +181,14 @@ fn store_jwt_access_token(token_store: &TokenStore, token: &str) -> TestResult {
             expires_in: 3600,
             created_at: SystemTime::now(),
             cnf: None,
-        },
-    )?;
+        };
+    let meta = BearerTokenMeta::new(crate::authcode::types::BearerTokenMetaInput {
+        token_id: token.into(), client_id: access.client_id.clone(), user_id: access.user_id.clone(),
+        audience: "client".into(), granted_scopes: vec![], sender_binding: None,
+        authorization_details: None, auth_time_epoch_secs: None, acr: None,
+        issued_at: access.created_at, expires_at: access.created_at + Duration::from_secs(access.expires_in), refresh_parent: None,
+    });
+    token_store.store_issued_grant(access, None, meta)?;
     Ok(())
 }
 
@@ -224,6 +222,7 @@ fn is_refresh_revoked(token_store: &TokenStore, token: &str) -> Result<bool, Str
 #[test]
 fn access_token_introspection_exp_rejects_unrepresentable_expiry() {
     let access_token = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: "access".to_string(),
@@ -289,6 +288,7 @@ fn sign_raw_jwt_parts(
 
 fn authorization_request(scope: &str, resource: Option<&str>) -> AuthorizationRequest {
     AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

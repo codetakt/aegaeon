@@ -1128,12 +1128,66 @@ pub fn verify_decrypt_jwe(
 }
 
 #[cfg(not(kani))]
-#[derive(Deserialize)]
 struct DpopHeader {
     alg: String,
     jwk: DpopJwk,
-    #[serde(rename = "typ")]
     typ: Option<String>,
+}
+
+#[cfg(not(kani))]
+impl<'de> Deserialize<'de> for DpopHeader {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct HeaderVisitor;
+
+        impl<'de> Visitor<'de> for HeaderVisitor {
+            type Value = DpopHeader;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a DPoP protected header object")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut seen = HashSet::new();
+                let mut alg = None;
+                let mut jwk = None;
+                let mut typ = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    if !seen.insert(key.clone()) {
+                        return Err(de::Error::custom("duplicate DPoP header parameter"));
+                    }
+                    match key.as_str() {
+                        "alg" => alg = Some(map.next_value()?),
+                        "jwk" => jwk = Some(map.next_value()?),
+                        "typ" => typ = map.next_value()?,
+                        // RFC 7515 section 4.1.11: no critical extensions are
+                        // implemented, and even an empty crit list is invalid.
+                        "crit" => return Err(de::Error::custom("unsupported DPoP crit")),
+                        "b64" => {
+                            // RFC 7797 section 7 prohibits unencoded JWT payloads.
+                            if !map.next_value::<bool>()? {
+                                return Err(de::Error::custom("unencoded DPoP payload"));
+                            }
+                        }
+                        _ => {
+                            let _: IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+                Ok(DpopHeader {
+                    alg: alg.ok_or_else(|| de::Error::missing_field("alg"))?,
+                    jwk: jwk.ok_or_else(|| de::Error::missing_field("jwk"))?,
+                    typ,
+                })
+            }
+        }
+        deserializer.deserialize_map(HeaderVisitor)
+    }
 }
 
 /// Validate the exact `DPoP` JWT type header required by RFC 9449 and the F* model.
@@ -1164,11 +1218,60 @@ pub fn validate_dpop_iat_for_spec_oracle(now: u64, iat: u64, iat_window_secs: u6
 }
 
 #[cfg(not(kani))]
-#[derive(Deserialize)]
 struct DpopJwk {
     kty: String,
     crv: String,
     x: String,
+}
+
+#[cfg(not(kani))]
+impl<'de> Deserialize<'de> for DpopJwk {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct JwkVisitor;
+
+        impl<'de> Visitor<'de> for JwkVisitor {
+            type Value = DpopJwk;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a public DPoP JWK object")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut seen = HashSet::new();
+                let mut kty = None;
+                let mut crv = None;
+                let mut x = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    if !seen.insert(key.clone()) {
+                        return Err(de::Error::custom("duplicate DPoP JWK parameter"));
+                    }
+                    match key.as_str() {
+                        "kty" => kty = Some(map.next_value()?),
+                        "crv" => crv = Some(map.next_value()?),
+                        "x" => x = Some(map.next_value()?),
+                        // RFC 9449 section 4.2 / RFC 8037 section 2: the
+                        // embedded OKP key must not carry private key material.
+                        "d" => return Err(de::Error::custom("private DPoP JWK")),
+                        _ => {
+                            let _: IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+                Ok(DpopJwk {
+                    kty: kty.ok_or_else(|| de::Error::missing_field("kty"))?,
+                    crv: crv.ok_or_else(|| de::Error::missing_field("crv"))?,
+                    x: x.ok_or_else(|| de::Error::missing_field("x"))?,
+                })
+            }
+        }
+        deserializer.deserialize_map(JwkVisitor)
+    }
 }
 
 #[cfg(not(kani))]
@@ -1295,9 +1398,11 @@ fn parse_dpop_claims(payload: &[u8]) -> Option<DpopClaims> {
 /// - HTTP method (htm) matches
 /// - URI (htu) matches
 /// - Issued-at time (iat) is within acceptable window
-/// - JTI hasn't been seen before (replay prevention)
 ///
-/// Returns verified proof material on success for replay and nonce handling.
+/// Returns the verified `jti` and optional nonce on success. This function does
+/// not access replay storage or enforce nonce policy. The caller must atomically
+/// record the proof identifier for the entire remaining acceptance interval and
+/// apply its nonce policy before accepting the request.
 #[cfg(not(kani))]
 #[must_use]
 pub fn verify_dpop(

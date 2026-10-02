@@ -33,6 +33,8 @@ sender constraints, and release handling.
   protocol error responses, mixed sender constraints, and RAR rejection.
 - `[runbook]` [Authorization-code, consent and refresh transitions](authorization-code-refresh-recovery.md) —
   explicit offline consent, grant scope, resource binding and recovery.
+- `[runbook]` [Refresh-grant revocation and coordinated upgrade](refresh-grant-revocation.md) —
+  durable online family denial, read-only legacy inventory and forced reauthorization.
 - `[runbook]` [Runtime configuration operations](runtime-configuration.md) —
   runtime authority, environment, and startup troubleshooting.
 - `[runbook]` [Device authorization confirmation](device-authorization.md) —
@@ -57,3 +59,5 @@ Use [Documentation index](../index.md) for the exhaustive generated inventory.
 1. Start here for operator workflow.
 2. Jump to `docs/policies/` when you need the normative posture behind a runbook.
 3. Jump to `docs/verification/` when a runbook mentions the verified-vs-compat boundary.
+
+- [Authorization-code DPoP binding upgrade](authorization-code-dpop-binding-upgrade.md): coordinated PAR, code and continuation v3 cutover and rollback.

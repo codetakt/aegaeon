@@ -128,6 +128,6 @@ pub(in crate::web) async fn try_validate_form_csrf_async(
 
 pub(in crate::web) fn apply_auth_session_clear_cookie(response: &mut Response) {
     if let Ok(value) = HeaderValue::from_str(&build_session_clear_cookie()) {
-        response.headers_mut().insert(header::SET_COOKIE, value);
+        response.headers_mut().append(header::SET_COOKIE, value);
     }
 }

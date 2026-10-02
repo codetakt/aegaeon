@@ -40,6 +40,7 @@ fn test_resource_indicator_sets_audience_on_code_exchange() -> TestResult {
     let resource = "https://api.example.com/resource".to_string();
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,
@@ -156,6 +157,7 @@ fn test_resource_indicator_mismatch_rejected_for_code_exchange() -> TestResult {
     let granted_resource = "https://api.example.com/resource".to_string();
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,
@@ -206,6 +208,7 @@ fn test_resource_indicator_invalid_target_rejected_for_code_exchange() -> TestRe
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

@@ -23,6 +23,18 @@ fn code_access_token_ttl(
     }
 }
 
+fn code_access_token_lifetime(
+    exchange_grant: Option<&crate::policy::token_exchange::ExchangeGrant>,
+    configured_ttl: u64,
+) -> Result<(SystemTime, u64, SystemTime), TokenGrantError> {
+    let now = SystemTime::now();
+    let expires_in = code_access_token_ttl(exchange_grant, now, configured_ttl)?;
+    let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
+        TokenGrantError::server("access token expiry is outside representable time")
+    })?;
+    Ok((now, expires_in, expires_at))
+}
+
 impl TokenIssuer {
     pub(super) fn issue_validated_authorization_code_grant(
         &self,
@@ -71,6 +83,7 @@ impl TokenIssuer {
             openid_requested,
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
+        super::sender::validate_code_sender(&code, cnf, sender_binding)?;
 
         let audience = self.access_token_audience(
             &code.client_id,
@@ -110,12 +123,8 @@ impl TokenIssuer {
             .as_ref()
             .and_then(|refresh| refresh.exchange_grant.clone());
 
-        let now = SystemTime::now();
-        let expires_in =
-            code_access_token_ttl(exchange_grant.as_ref(), now, self.access_token_ttl_secs)?;
-        let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
-            TokenGrantError::server("access token expiry is outside representable time")
-        })?;
+        let (now, expires_in, expires_at) =
+            code_access_token_lifetime(exchange_grant.as_ref(), self.access_token_ttl_secs)?;
         let access_token_str = self
             .issue_access_token_value(BearerAccessTokenMint {
                 application_grant: code.application_grant.as_ref(),
@@ -131,6 +140,7 @@ impl TokenIssuer {
             })
             .map_err(TokenGrantError::server)?;
         let access_token = AccessToken {
+            refresh_grant: None,
             client_credentials_digest: None,
             exchange_root: exchange_grant
                 .as_ref()

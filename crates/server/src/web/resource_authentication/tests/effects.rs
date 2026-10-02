@@ -52,6 +52,8 @@ async fn resource_authentication_early_refusals_do_not_consume_signed_proof() ->
                     )?,
                     if early == "mixed" {
                         "access_token=other"
+                    } else if early == "form" {
+                        "unused=value"
                     } else {
                         ""
                     },
@@ -255,7 +257,12 @@ async fn resource_authentication_nonce_state_and_backend_errors_keep_their_bound
                         "access_token=other",
                         true,
                     ));
-                    refused.push((path.to_string(), Some(format!("DPoP {token}")), "", false));
+                    refused.push((
+                        path.to_string(),
+                        Some(format!("DPoP {token}")),
+                        "unused=value",
+                        false,
+                    ));
                 }
                 for (uri, auth, body, form) in refused {
                     let before: Option<Vec<u8>> = redis::cmd("DUMP").arg(&key).query(&mut redis)?;

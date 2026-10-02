@@ -59,7 +59,7 @@ fn authorize_error_context<'a>(
     )
 }
 
-fn authorize_selected_acr(
+pub(in crate::web) fn authorize_selected_acr(
     state: &AppState,
     ctx: &AuthorizeRequestContext,
     issuer_base: &str,
@@ -135,6 +135,11 @@ pub(super) async fn authorize_decide_session(
             .map_err(|err| auth_session_store_lookup_error_response(issuer_base, &err))?,
         None => None,
     };
+    super::super::authorize_reauthentication::verify_session(
+        ctx,
+        cookie_session_id.as_deref(),
+        current_session.as_ref(),
+    )?;
     let selected_acr = authorize_selected_acr(state, ctx, issuer_base)?;
     let max_age = authorize_requested_max_age(&ctx.req);
     let session_acr = current_session
@@ -171,7 +176,6 @@ pub(super) async fn authorize_decide_session(
             client_id = %ctx.client_id_for_error,
             event = "stepup_required",
             reason = reason,
-            prompt = %ctx.prompt,
             "step-up authentication required"
         );
     }
@@ -265,6 +269,10 @@ pub(in crate::web) fn stepup_request_id(
     }
 
     let mut hasher = aegaeon_crypto::hash::Sha256Hasher::new();
+    hasher.update(b"aegaeon:authorization-stepup:v3");
+    if let Some(key) = req.dpop_jkt.as_ref() {
+        hash_component(&mut hasher, "dpop_jkt", key.as_str());
+    }
     hash_component(&mut hasher, "client_id", &req.client_id);
     hash_component(&mut hasher, "response_type", &req.response_type);
 
@@ -443,6 +451,7 @@ mod tests {
 
     fn request(max_age: Option<u64>, acr_values: Option<&str>) -> AuthzReq {
         AuthzReq {
+            dpop_jkt: None,
             response_type: "code".to_string(),
             client_id: "stepup-client".to_string(),
             iss: None,

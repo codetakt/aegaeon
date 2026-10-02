@@ -4,11 +4,10 @@ mod replay;
 mod resolution;
 mod types;
 
-pub(in crate::web) use claims::request_object_extra_string;
+pub(in crate::web) use claims::{request_object_dpop_jkt, request_object_extra_string};
 pub(in crate::web) use error::{
     request_object_resolution_error_json_response, request_object_resolution_error_response,
 };
-#[cfg(test)]
 pub(in crate::web) use replay::enforce_request_object_jti;
 pub(in crate::web) use replay::request_object_jti_authorization_code_commit_context;
 #[cfg(test)]

@@ -117,12 +117,18 @@ pub(in crate::web) fn request_object_jti_authorization_code_commit_context(
 
 pub(super) fn apply_request_object_replay_policy(
     deps: &RequestObjectAuthorizeDeps<'_>,
-    client_id: &str,
     claims: &RequestObjectClaims,
     policy: RequestObjectReplayPolicy,
 ) -> Result<(), RequestObjectResolutionError> {
     match policy {
-        RequestObjectReplayPolicy::Consume => enforce_request_object_jti(deps, client_id, claims),
-        RequestObjectReplayPolicy::Defer => require_request_object_jti(claims).map(|_| ()),
+        RequestObjectReplayPolicy::Defer => {
+            require_request_object_jti(claims)?;
+            request_object_jti_retention(
+                deps.request_object_jti_store,
+                claims,
+                deps.jwt_leeway_secs,
+            )?;
+            Ok(())
+        }
     }
 }

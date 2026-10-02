@@ -9,8 +9,10 @@ use axum::{
 };
 use serde_json::Value;
 
+mod request_method;
 mod sender_contract;
 mod transport_contract;
+mod userinfo_post;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -290,21 +292,36 @@ fn certificate_context_requires_trusted_https_provenance() -> TestResult {
 
 #[test]
 fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResult {
-    use crate::authcode::types::{BearerTokenMeta, BearerTokenMetaInput, SenderBinding};
+    use crate::authcode::types::{
+        AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
+    };
     use crate::authcode::{TokenPolicyContext, TokenValidator};
     use crate::policy::{SecurityPolicy, SenderConstraint};
     let now = std::time::SystemTime::now();
+    let certificate = format!("SHA256:{}", "ab".repeat(32));
+    let wrong_certificate = format!("SHA256:{}", "cd".repeat(32));
     for default in [SenderConstraint::DPoP, SenderConstraint::Mtls] {
         for binding in [
             SenderBinding::DPoP {
                 jkt: "test-key".into(),
             },
             SenderBinding::Mtls {
-                fingerprint: "test-cert".into(),
+                fingerprint: certificate.clone(),
             },
         ] {
+            let mut access =
+                AccessToken::new("client".into(), "user".into(), Some("read".into()), 60);
+            access.created_at = now;
+            access.cnf = Some(match &binding {
+                SenderBinding::DPoP { jkt } => CnfClaim::Jkt(jkt.clone()),
+                SenderBinding::Mtls { fingerprint } => CnfClaim::X5tS256(
+                    crate::middleware::tls::mtls_fingerprint_to_x5t_s256(fingerprint)
+                        .ok_or("fixture fingerprint")?,
+                ),
+            });
+            access.token_type = AccessToken::type_for_confirmation(access.cnf.as_ref()).into();
             let meta = BearerTokenMeta::new(BearerTokenMetaInput {
-                token_id: "access".into(),
+                token_id: access.token.clone(),
                 client_id: "client".into(),
                 user_id: "user".into(),
                 granted_scopes: vec!["read".into()],
@@ -317,15 +334,17 @@ fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResu
                 expires_at: now + std::time::Duration::from_secs(60),
                 refresh_parent: None,
             });
+            let store = crate::authcode::TokenStore::new_process_local_for_tests();
+            store.store_issued_grant(access, None, meta.clone())?;
             let validator = TokenValidator::with_policy(
-                crate::authcode::TokenStore::new_process_local_for_tests(),
+                store,
                 std::sync::Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?),
                 SecurityPolicy::default().with_sender_constraint(default),
             );
             for (jkt, cert, valid) in [
-                (Some("test-key"), Some("test-cert"), true),
+                (Some("test-key"), Some(certificate.as_str()), true),
                 (None, None, false),
-                (Some("wrong-key"), Some("wrong-cert"), false),
+                (Some("wrong-key"), Some(wrong_certificate.as_str()), false),
             ] {
                 let context = TokenPolicyContext {
                     requested_scopes: &["read"],

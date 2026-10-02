@@ -8,7 +8,7 @@ use crate::{
 };
 pub(crate) use authorization::{
     derive_test_authorization_runtime, reload_authorization_runtime, seed_oidc_configuration,
-    update_test_policy,
+    seed_request_object_encryption_key, update_test_policy,
 };
 pub(crate) use projections::seed_test_projection;
 use serde_json::json;
@@ -105,6 +105,7 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
             discovery_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
                 crate::oidc::OidcDiscovery,
             >::with_ttl_secs(60)),
+            jwks_fetches: Arc::new(crate::upstream::UpstreamJwksFetchCoordinator::default()),
             jwks_cache: Arc::new(crate::upstream::NonAuthoritativeMetadataCache::<
                 aegaeon_jose::jwk::JwkSet,
             >::with_ttl_secs(60)),

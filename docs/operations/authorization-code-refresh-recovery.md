@@ -31,6 +31,38 @@ PKCE validation failures issue no token and leave a live code unconsumed. A
 successful exchange atomically consumes it. Errors after consumption do not
 restore the code.
 
+## Pushed response modes and PAR storage cutover
+
+PAR requires an explicit `response_type=code`. It rejects effective `request_uri`
+parameters, including encoded parameter names, before storage (RFC 9126 section
+2.1). Empty form values follow the common OAuth omission rule. A supplied
+`response_mode` must be exactly `query` or `form_post`; omission defaults to
+`query`. Plain PAR retains the form value; signed PAR retains the verified
+Request Object claim. A later outer mode or prompt cannot override the stored
+request. Login, reauthentication and consent continuations retain that selection.
+A `form_post` grant returns the code, state and issuer in an HTML POST form to
+the registered redirect URI, rather than a code-bearing redirect query.
+
+PAR request and reservation keys now use namespace `par/v2` and its versioned
+request-URI digest. They retain the authorization-code-grant Redis hash tag for
+atomic consumption with code issuance. New readers never fall back to `par/v1`:
+older records may have discarded a requested response mode, and older readers
+ignore the new field. Stored signed mode and verified claim must agree; the
+server does not rewrite claims to repair a disagreement.
+
+Deploy the PAR and authorization readers/writers together, or stop accepting
+pushes and drain outstanding pushed requests and continuations before cutover.
+Mixed-version routing fails lookup and requires a new push. Old request URIs and
+continuation tokens cannot be migrated safely; clients must re-push after
+cutover, and again after a rollback. Leave `v1` keys to expire under their
+original TTL; no bulk deletion, backfill, SQL or secret migration is required.
+Serialized PAR records continue to exclude client credentials. The Rust
+`ParRequest` struct gains `response_mode: Option<String>`; code using struct
+literals must supply the field (`None` for the query default). Serde accepts an
+omitted field as `None` and omits it again when serializing; supplied values are
+validated at push. This serialization default does not enable reading old
+`v1` records through the new namespace.
+
 ## Explicit authorization consent
 
 OIDC Core §§3.1.2.1 and 11 require consent for offline access. This deployment
@@ -115,12 +147,23 @@ not reset a decided transaction to pending.
 
 `prompt=login` and `max_age=0` require active authentication for the current
 request, including PAR and signed Request Objects. The server retains the
-immutable request and a five-minute login transaction in
+admitted query or POST form, exact resolved request and a five-minute login transaction in
 `aegaeon.authorization_logins`. Successful local login completes it for the new
 session; authorization consumes the matching receipt once. Signed prompt values
 are preserved, while that receipt prevents an endless login redirect. Consent
 continuation inherits the receipt only from its bound session and request.
 Positive `max_age` limits and required ACR still apply independently.
+
+The local login return contains only `/authorize?aeg_login_continue=<opaque>`.
+Authorization parameters and compact Request Objects stay in the server-side
+snapshot. Preserve this exact return URI: appended parameters, duplicate tokens,
+foreign paths and malformed tokens are rejected. A failed local password attempt
+reuses the same transaction. The server reloads its bound request and revalidates
+current client policy before completing login or transferring a step-up challenge.
+Resume binds the receipt to the new session identifier, subject, authentication
+time and ACR before atomic consumption. Consent retains the same request and
+receipt, and checks the current session again. Consumed PAR or JAR replay state,
+changed policy, expired records and storage failure cannot issue a code.
 
 Apply both authorization migrations with `atlas migrate apply --env local`
 before starting the new server, using the deployment's existing revision-schema
@@ -135,6 +178,28 @@ The bounded retention below also applies to pending, completed and consumed logi
 Do not reset completed/consumed records, reuse another browser's continuation,
 or accept an old completed step-up challenge instead of checking the current
 session's age and ACR.
+
+## Authorization continuation rollout
+
+New GET and POST interactions write strict version-2 `request_snapshot`
+envelopes in the existing authorization-login and authorization-consent JSONB
+columns. The envelope retains the admitted input, resolved request, prompt,
+response mode, authoritative PAR continuation and any bound login receipt.
+No new SQL migration or environment setting is needed for this envelope;
+the existing authorization migrations and startup schema gate still apply.
+
+Deploy the reader and writer together across serving nodes, or stop admitting
+new authorization interactions and drain pending login and consent transactions
+for five minutes before replacing readers. Absent, older, unknown or malformed
+envelopes require a new authorization request; live rows are not backfilled.
+Older readers cannot reconstruct the request from the opaque return URI or
+canonical locator and cannot match the new snapshot. Rollback also requires
+restarting pending interactions. Do not reset or rewrite completed records.
+
+Direct requests and signed Request Objects retain their selected response mode
+through login and consent. Plain PAR response-mode persistence remains a separate
+limitation of the current PAR record format; authorization POST does not change
+that format. Validate composed PAR behavior when deploying its successor.
 
 ## Authorization transaction limits and retention
 
@@ -256,6 +321,29 @@ the executable or renaming a runtime namespace alone is not a validated recovery
 
 ## Code exchange and refresh
 
+Authenticated HTTP introspection applies the same recorded refresh-parent
+lifecycle policy as resource and UserInfo validation. With `retainRefreshChain`
+enabled, an access token whose parent is rotated, missing or tombstoned is
+inactive. Rotation therefore makes the preceding access generation inactive
+immediately under this existing Aegaeon policy; RFC 7662 section 2.2 requires
+the report to reflect the authorization server's selected validity rules.
+
+JSON and signed JWT introspection responses return only `active: false` in
+the token-introspection body for an invalid parent. A failure to read parent
+status returns a no-cache 503 `temporarily_unavailable`, rather than a
+successful active or inactive determination. Authentication and caller
+visibility checks precede this lookup. Introspection does not require the
+original client's sender proof to disclose an otherwise visible token's binding.
+Metrics count the final successful response status, including application
+currentness rejections; backend and signing errors are not active observations.
+
+When `retainRefreshChain` is disabled or no parent is recorded, this parent
+check is skipped. This does not extend revocation across all historical grant
+ancestors or change refresh retention/expiry semantics. It does not broaden
+legacy metadata-absent acceptance or settle every introspection validity
+criterion. No configuration or storage migration is needed for this consistency
+fix.
+
 The authorization-code storage and standalone consume scripts validate their
 version counter before any write. A present counter must be Redis's canonical
 signed decimal integer and leave room for `INCR`; `9223372036854775807`, malformed
@@ -330,3 +418,11 @@ separate consent model describes parsed-request and session bindings; database
 and HTTP regressions cover consent acquisition, but do not prove Rust/SQL
 correspondence. Direct issuer tests start with an already-authorized grant and
 do not themselves establish consent acquisition.
+
+## Durable refresh-grant revocation
+
+See [refresh-grant revocation and coordinated upgrade](refresh-grant-revocation.md)
+for the independent grant decision, legacy storage compatibility, read-only
+inventory, drain/restart requirements and failure handling. Revoking a known
+refresh generation denies every access generation from that grant regardless of
+`retainRefreshChain`; ordinary rotation alone retains the optional parent policy.

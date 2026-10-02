@@ -1,3 +1,4 @@
+mod dpop_binding;
 mod lease;
 
 use super::*;
@@ -266,7 +267,7 @@ fn redis_code_exchange_preserves_legacy_json_async() -> StoreTestResult {
 
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn redis_code_exchange_partial_write_error_does_not_enable_retry() -> StoreTestResult {
+fn redis_code_exchange_wrong_index_preflight_preserves_code_without_writes() -> StoreTestResult {
     let url = redis_url()?;
     let code_store = redis_auth_code_store_for_test(&url);
     let token_store = redis_token_store_for_test(&url);
@@ -307,26 +308,23 @@ fn redis_code_exchange_partial_write_error_does_not_enable_retry() -> StoreTestR
     let failed = commit(&first)
         .err()
         .ok_or_else(|| "wrong-type index must fail the real Lua".to_string())?;
-    assert!(failed.contains("WRONGTYPE"), "unexpected failure: {failed}");
-    // Redis script errors leave earlier writes intact. Repair only our synthetic
-    // index before checking that the same authorization code cannot publish again.
+    assert!(
+        failed.contains("index_type"),
+        "unexpected failure: {failed}"
+    );
+    // Type preflight fails before consuming the code or publishing any records.
+    // Repair only the isolated synthetic index; the unconsumed code remains usable.
     redis::cmd("DEL")
         .arg(&index)
         .query::<()>(&mut conn)
         .map_err(|err| err.to_string())?;
-    assert!(token_store.try_verify_access_token(&first)?.is_some());
-    assert!(
-        code_store.try_get_code(&code_str)?.is_none(),
-        "a failed publication must retire its code"
-    );
+    assert!(token_store.try_verify_access_token(&first)?.is_none());
+    assert!(token_store.try_get_bearer_meta(&first)?.is_none());
+    assert!(code_store.try_get_code(&code_str)?.is_some());
     let second = format!("partial-{suffix}-second");
-    assert_eq!(
-        commit(&second)
-            .err()
-            .ok_or_else(|| "retry must be rejected".to_string())?,
-        AUTHORIZATION_CODE_GRANT_CODE_MISSING
-    );
-    assert!(token_store.try_verify_access_token(&second)?.is_none());
+    commit(&second)?;
+    assert!(token_store.try_verify_access_token(&second)?.is_some());
+    assert!(code_store.try_get_code(&code_str)?.is_none());
     Ok(())
 }
 
@@ -368,6 +366,8 @@ fn redis_code_exchange_offline_target_survives_storage_and_refresh() -> StoreTes
         // This is a granted-scope fixture at the issuer boundary, not a consent UI test.
         let nonce = uuid::Uuid::new_v4().to_string();
         let mut code = make_test_code(None, Some(&nonce));
+        code.code_challenge = Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into());
+        code.code_challenge_method = Some("S256".into());
         code.scope = Some(scope.to_string());
         code.auth_session_id = Some(nonce);
         let code_str = code_store.store_code(code)?;
@@ -438,4 +438,101 @@ fn redis_code_exchange_offline_target_survives_storage_and_refresh() -> StoreTes
         );
     }
     Ok(())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL with ACL administration"]
+fn refresh_grant_code_publication_acl_failure_keeps_code_consumed() -> StoreTestResult {
+    let url = redis_url()?;
+    let mut admin = redis::Client::open(url.as_str())
+        .and_then(|c| c.get_connection())
+        .map_err(|e| e.to_string())?;
+    let user = format!("code-failure-{}", uuid::Uuid::new_v4());
+    redis::cmd("ACL")
+        .arg("SETUSER")
+        .arg(&user)
+        .arg("on")
+        .arg(">public-u24b-acl-fixture-password")
+        .arg("~*")
+        .arg("+@all")
+        .arg("-sadd")
+        .query::<()>(&mut admin)
+        .map_err(|e| e.to_string())?;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut restricted = url::Url::parse(&url).map_err(|e| e.to_string())?;
+        restricted
+            .set_username(&user)
+            .map_err(|()| "ACL fixture username")?;
+        restricted
+            .set_password(Some("public-u24b-acl-fixture-password"))
+            .map_err(|()| "ACL fixture password")?;
+        let mut principal_conn = redis::Client::open(restricted.as_str())
+            .and_then(|c| c.get_connection())
+            .map_err(|e| e.to_string())?;
+        let actual_user: String = redis::cmd("ACL")
+            .arg("WHOAMI")
+            .query(&mut principal_conn)
+            .map_err(|e| e.to_string())?;
+        assert_eq!(
+            actual_user, user,
+            "fault injection must use the intended Redis principal"
+        );
+        let restricted_store = redis_token_store_for_test(restricted.as_str());
+        let restricted_codes = redis_auth_code_store_for_test(restricted.as_str());
+        let store = redis_token_store_for_test(&url);
+        let codes = redis_auth_code_store_for_test(&url);
+        let mut code = make_test_code(None, None);
+        code.scope = Some("read".into());
+        let raw = serde_json::to_string(&code).map_err(|e| e.to_string())?;
+        let id = codes.store_code(code)?;
+        let access = make_access_token(&format!("acl-at-{}", uuid::Uuid::new_v4()));
+        let refresh = make_refresh_token(&format!("acl-rt-{}", uuid::Uuid::new_v4()));
+        let meta = make_bearer_meta(&access.token, Some(&refresh.token));
+        let commit = || {
+            AuthorizationCodeGrantCommit::new(
+                restricted_codes.clone(),
+                id.clone(),
+                raw.clone(),
+                access.clone(),
+                Some(refresh.clone()),
+                meta.clone(),
+                None,
+            )
+        };
+        let error = restricted_store
+            .store_issued_authorization_code_grant(commit())
+            .expect_err("SADD permission failure");
+        assert!(
+            error.contains("permission") || error.contains("NOPERM"),
+            "{error}"
+        );
+        assert!(
+            codes.try_get_code(&id)?.is_none(),
+            "code consumed before later Redis command failure"
+        );
+        assert!(
+            store.snapshot().access_tokens.contains_key(&access.token),
+            "actual earlier SET survived script error"
+        );
+        assert!(
+            store.try_verify_access_token(&access.token)?.is_none(),
+            "incomplete pair is inactive"
+        );
+        assert_eq!(
+            store
+                .store_issued_authorization_code_grant(commit())
+                .expect_err("retry rejected"),
+            AUTHORIZATION_CODE_GRANT_CODE_MISSING
+        );
+        Ok(())
+    }));
+    redis::cmd("ACL")
+        .arg("DELUSER")
+        .arg(user)
+        .query::<()>(&mut admin)
+        .map_err(|e| e.to_string())?;
+    match result {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }

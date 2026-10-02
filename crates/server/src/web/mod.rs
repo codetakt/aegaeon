@@ -6,9 +6,11 @@ mod auth_session;
 mod auth_session_flow;
 #[cfg(test)]
 mod authorization_consent_tests;
+mod authorization_snapshot;
 mod authorization_transactions;
 mod authorize_context;
 mod authorize_endpoint;
+mod authorize_input;
 mod authorize_login_redirect;
 mod authorize_reauthentication;
 mod authorize_request;
@@ -30,6 +32,7 @@ mod local_auth;
 mod local_auth_audit;
 mod local_auth_recovery;
 mod local_auth_support;
+mod logout_confirmation;
 mod logout_context;
 mod logout_dispatch;
 mod logout_endpoint;
@@ -70,6 +73,7 @@ mod token_response;
 mod token_sender_binding;
 mod transport_boundary;
 mod upstream_authorize;
+mod upstream_browser_binding;
 mod upstream_callback;
 mod upstream_callback_connection;
 mod upstream_callback_exchange;
@@ -108,7 +112,8 @@ use device_flow::{
     device_approve, device_authorization, device_deny, device_verify_get, device_verify_post,
 };
 use form_helpers::*;
-use logout_endpoint::{logout, upstream_logout_callback};
+use logout_confirmation::start as logout;
+use logout_endpoint::upstream_logout_callback;
 use oauth_errors::{json_error_with_iss, no_cache_header_error, no_cache_json_error_with_iss};
 use par_endpoint::par;
 use profile_policy::{
@@ -124,8 +129,8 @@ use resource_endpoint::resource;
 use runtime_authority_guard::runtime_authority_guard_middleware;
 use shared::{
     build_upstream_logout_callback_uri, clock_error_response, issuer_host_from_url,
-    no_cache_redirect_response, normalize_issuer, now_epoch_secs, parse_acr_values,
-    select_supported_acr, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
+    no_cache_redirect_response, now_epoch_secs, parse_acr_values, select_supported_acr,
+    validate_upstream_issuer, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
     CSRF_COOKIE_MAX_AGE_SECS, DEVICE_CODE_GRANT_TYPE, LOCAL_AUTH_CSRF_COOKIE_NAME,
     OAUTH_PROFILE_TYPE_DOWNSTREAM, OAUTH_PROFILE_TYPE_UPSTREAM, OAUTH_TOKEN_TYPE_ACCESS_TOKEN,
     RESOURCE_SCOPES, TOKEN_EXCHANGE_GRANT_TYPE, UPSTREAM_MAX_BODY_BYTES,

@@ -10,15 +10,25 @@ use std::time::{Duration, SystemTime};
 pub(super) const UPSTREAM_AUTH_REDIS_URL_ENV: &str = "AEGAEON_UPSTREAM_AUTH_REDIS_URL";
 const CONSUME_STATE_SCRIPT: &str = r"
 local payload = redis.call('GET', KEYS[1])
-if payload then
-  redis.call('DEL', KEYS[1])
+if not payload then return nil end
+local request = cjson.decode(payload)
+if type(request.browser_binding_digest) ~= 'string'
+  or request.browser_binding_digest ~= ARGV[1]
+  or request.redirect_uri ~= ARGV[2] then
+  return nil
 end
+local now = redis.call('TIME')
+if type(request.expires_at_epoch_secs) ~= 'number'
+  or request.expires_at_epoch_secs <= tonumber(now[1]) then
+  return nil
+end
+redis.call('DEL', KEYS[1])
 return payload
 ";
 #[cfg(test)]
 const CONSUME_STATE_SCRIPT_KEY_COUNT: usize = 1;
 #[cfg(test)]
-const CONSUME_STATE_SCRIPT_ARG_COUNT: usize = 0;
+const CONSUME_STATE_SCRIPT_ARG_COUNT: usize = 2;
 
 #[derive(Clone)]
 pub(super) struct RedisUpstreamAuthStoreBackend {
@@ -28,6 +38,8 @@ pub(super) struct RedisUpstreamAuthStoreBackend {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct RedisUpstreamAuthRequest {
+    #[serde(default)]
+    pub(super) browser_binding_digest: Option<String>,
     pub(super) state: String,
     pub(super) nonce: String,
     pub(super) code_verifier: Option<String>,
@@ -125,7 +137,7 @@ impl RedisUpstreamAuthStoreBackend {
         url: &str,
         namespace: &RuntimeStateNamespace,
     ) -> Result<Self, UpstreamAuthStorageError> {
-        Self::new_with_key(url, namespace.redis_prefix("upstream-auth", "v1"))
+        Self::new_with_key(url, namespace.redis_prefix("upstream-auth", "v2"))
     }
 
     pub(super) fn new_with_key(
@@ -181,14 +193,18 @@ impl RedisUpstreamAuthStoreBackend {
         }
     }
 
-    pub(super) fn consume(
+    pub(super) fn consume_bound(
         &self,
         state: &str,
+        browser_digest: &str,
+        redirect_uri: &str,
     ) -> Result<Option<UpstreamAuthRequest>, UpstreamAuthStorageError> {
         let key = self.state_key(state);
         let mut conn = self.connection()?;
         let payload = redis::Script::new(CONSUME_STATE_SCRIPT)
             .key(key)
+            .arg(browser_digest)
+            .arg(redirect_uri)
             .invoke::<Option<String>>(&mut conn)
             .map_err(|err| UpstreamAuthStorageError::BackendUnavailable(err.to_string()))?;
         payload
@@ -217,6 +233,7 @@ impl RedisUpstreamAuthRequest {
         let (connection_id, team_id, tenant_id, environment_id, configuration_version_id) =
             context_uuid_strings(request.context);
         Ok(Self {
+            browser_binding_digest: request.browser_binding_digest.clone(),
             state: request.state.clone(),
             nonce: request.nonce.clone(),
             code_verifier: request.code_verifier.clone(),
@@ -246,6 +263,7 @@ impl RedisUpstreamAuthRequest {
 
     pub(super) fn into_request(self) -> Result<UpstreamAuthRequest, UpstreamAuthStorageError> {
         Ok(UpstreamAuthRequest {
+            browser_binding_digest: self.browser_binding_digest,
             state: self.state,
             nonce: self.nonce,
             code_verifier: self.code_verifier,
@@ -331,7 +349,7 @@ mod tests {
         let source = include_str!("auth_store.rs");
         let body = invocation_body(
             source,
-            "pub(super) fn consume(",
+            "pub(super) fn consume_bound(",
             ".invoke::<Option<String>>(",
         );
         assert_script_contract(

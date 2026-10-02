@@ -398,3 +398,51 @@ fn duplicate_nonce_claim_is_rejected() {
     )
     .is_none());
 }
+
+#[test]
+fn signed_dpop_future_edge_remains_fresh_through_inclusive_final_second() {
+    let first = 1_700_000_000;
+    let window = 300;
+    for nonce in [None, Some("reusable-server-nonce")] {
+        let token = make_proof_extended(
+            "GET",
+            "https://issuer.example/resource",
+            to_iat(first + window),
+            "retention-boundary",
+            Some("dpop+jwt"),
+            None,
+            nonce,
+        );
+        for now in [first, first + 361, first + 2 * window] {
+            let verified = verify_dpop_with_iat_window(
+                &token,
+                "GET",
+                "https://issuer.example/resource",
+                now,
+                None,
+                window,
+            )
+            .expect("real signed proof at freshness boundary");
+            assert_eq!(verified.jti, "retention-boundary");
+            assert_eq!(verified.nonce.as_deref(), nonce);
+        }
+        assert!(verify_dpop_with_iat_window(
+            &token,
+            "GET",
+            "https://issuer.example/resource",
+            first + 2 * window + 1,
+            None,
+            window
+        )
+        .is_none());
+        assert!(verify_dpop_with_iat_window(
+            &token,
+            "POST",
+            "https://issuer.example/resource",
+            first,
+            None,
+            window
+        )
+        .is_none());
+    }
+}

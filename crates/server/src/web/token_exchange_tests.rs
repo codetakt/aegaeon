@@ -92,9 +92,11 @@ fn par_draft(
     code_challenge_method: Option<&str>,
 ) -> ParResolvedDraft {
     ParResolvedDraft {
+        dpop_jkt: None,
         resource: None,
         redirect_uri: redirect_uri.map(ToString::to_string),
         response_type: response_type.map(ToString::to_string),
+        response_mode: None,
         iss: None,
         state: None,
         code_challenge: code_challenge.map(ToString::to_string),

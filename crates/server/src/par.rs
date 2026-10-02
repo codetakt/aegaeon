@@ -125,6 +125,19 @@ impl ParStore {
         Ok(Self::with_request_store(expires_in, request_store))
     }
 
+    /// Select an explicit real Redis backend without changing process environment.
+    #[cfg(test)]
+    pub(crate) fn redis_for_tests(
+        url: &str,
+        expires_in: u64,
+        namespace: &RuntimeStateNamespace,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self::with_request_store(
+            expires_in,
+            Arc::new(RedisParRequestStore::new(url, namespace)?),
+        ))
+    }
+
     #[cfg(test)]
     fn with_expires_in(expires_in: u64) -> Self {
         Self::with_request_store(expires_in, Arc::new(InMemoryParRequestStore::new()))

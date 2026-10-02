@@ -9,7 +9,9 @@ fn scope_fixture(store: &TokenStore) -> Result<RefreshToken, String> {
     let mut meta = make_bearer_meta(&access.token, Some(&previous.token));
     meta.granted_scopes = vec!["read".to_string(), "write".to_string()];
     store.store_issued_grant(access, Some(previous.clone()), meta)?;
-    Ok(previous)
+    store
+        .try_get_refresh_token(&previous.token)?
+        .ok_or("issued refresh missing".into())
 }
 
 fn replacement(
@@ -21,6 +23,8 @@ fn replacement(
     let mut access = make_access_token(&format!("scope-at-{}", refresh.token));
     access.scope = Some(scope.to_string());
     let mut meta = make_bearer_meta(&access.token, Some(&refresh.token));
+    access.refresh_grant = refresh.refresh_grant.clone();
+    meta.refresh_grant = refresh.refresh_grant.clone();
     meta.granted_scopes = scope.split(' ').map(str::to_owned).collect();
     (access, refresh, meta)
 }

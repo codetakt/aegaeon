@@ -138,6 +138,22 @@ impl RedisTokenStoreKeyspace {
         format!("{}:*", self.prefix)
     }
 
+    pub(super) fn refresh_grant_key(&self, id: &str) -> String {
+        format!(
+            "{}:refresh-grant:v1:{}",
+            self.prefix,
+            token_store_key_digest(id)
+        )
+    }
+
+    pub(super) fn refresh_grant_cleanup_cursor_key(&self) -> String {
+        format!("{}:refresh-grant-cleanup-cursor:v1", self.prefix)
+    }
+
+    pub(super) fn expiry_refresh_grant_key(&self) -> String {
+        format!("{}:expiry:refresh-grant:v1", self.prefix)
+    }
+
     pub(super) fn access_key(&self, token: &str) -> String {
         self.key("access", token)
     }

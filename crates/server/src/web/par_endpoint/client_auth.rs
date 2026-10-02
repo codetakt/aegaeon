@@ -12,6 +12,7 @@ use crate::client_registry::ClientRegistry;
 use crate::util;
 
 pub(super) struct ParClientContext {
+    pub(super) state: AppState,
     pub(super) client_id: String,
     pub(super) client_auth_method: &'static str,
     pub(super) client_authenticated: bool,
@@ -95,6 +96,10 @@ pub(super) async fn authenticate_par_client(
         ));
     };
 
+    let snapshot = super::super::client_request_snapshot::request_state(state, &[&client_id])?;
+    #[cfg(test)]
+    super::snapshot_test_hook::pause(super::snapshot_test_hook::Phase::BeforeAuthentication).await;
+    let state = &snapshot;
     let registered_client = state
         .clients
         .try_get(&client_id)
@@ -171,7 +176,10 @@ pub(super) async fn authenticate_par_client(
         ));
     }
 
+    #[cfg(test)]
+    super::snapshot_test_hook::pause(super::snapshot_test_hook::Phase::AfterAuthentication).await;
     Ok(ParClientContext {
+        state: snapshot,
         client_id,
         client_auth_method: token_client_auth_method(presence),
         client_authenticated,

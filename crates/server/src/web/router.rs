@@ -75,7 +75,7 @@ pub fn build_router(state: AppState) -> Router {
             "/auth/consent",
             post(super::authorize_endpoint::consent_submit),
         )
-        .route("/authorize", get(super::authorize))
+        .route("/authorize", get(super::authorize).post(super::authorize))
         .route("/token", post(super::token))
         .route("/par", post(super::par))
         .route("/resource", get(super::resource))
@@ -89,7 +89,11 @@ pub fn build_router(state: AppState) -> Router {
             "/userinfo",
             get(super::userinfo_get).post(super::userinfo_post),
         )
-        .route("/logout", get(super::logout))
+        .route("/logout", get(super::logout).post(super::logout))
+        .route(
+            "/logout/confirm",
+            get(super::logout_confirmation::present).post(super::logout_confirmation::decide),
+        )
         .fallback(not_found);
     mount_device_routes_if_enabled(router, &state)
         .layer(DefaultBodyLimit::max(SERVER_REQUEST_BODY_LIMIT_BYTES))

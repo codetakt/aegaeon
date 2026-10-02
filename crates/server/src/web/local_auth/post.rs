@@ -80,24 +80,10 @@ async fn local_login_success_response(
         Ok(sid) => sid,
         Err(response) => return response,
     };
-    if let Err(response) = super::super::authorize_reauthentication::complete(
-        state,
-        headers,
-        submission.return_to.as_deref(),
-        &submission.csrf_token,
-        &sid,
-    )
-    .await
+    if let Err(response) = complete_authorization_login(state, headers, submission, &sid, now).await
     {
         return response;
     }
-    complete_stepup_for_local_login(
-        state.protocol.stepup_store.as_ref(),
-        headers,
-        submission,
-        &sid,
-        now,
-    );
     let cookie = build_session_set_cookie(&sid, state.browser_auth.auth_sessions.cookie_ttl_secs());
 
     if let Some(return_to) = submission.return_to.as_deref() {
@@ -126,6 +112,37 @@ async fn local_login_success_response(
     }
 }
 
+async fn complete_authorization_login(
+    state: &AppState,
+    headers: &HeaderMap,
+    submission: &LocalLoginSubmission,
+    sid: &str,
+    now: u64,
+) -> Result<(), Response> {
+    if let Some(ctx) = super::super::authorize_reauthentication::complete(
+        state,
+        headers,
+        submission.return_to.as_deref(),
+        &submission.csrf_token,
+        sid,
+    )
+    .await?
+    {
+        let selected_acr =
+            crate::web::authorize_endpoint::authorize_selected_acr(state, &ctx, &state.issuer)?;
+        complete_stepup_for_bound_request(
+            state.protocol.stepup_store.as_ref(),
+            headers,
+            &ctx.req,
+            selected_acr.as_deref(),
+            sid,
+            now,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn authorize_request_from_return_to(
     return_to: &str,
 ) -> Option<crate::authcode::types::AuthorizationRequest> {
@@ -133,24 +150,34 @@ fn authorize_request_from_return_to(
     if path != "/authorize" || query.is_empty() {
         return None;
     }
-    serde_urlencoded::from_str(query).ok()
+    // This legacy test adapter materializes an explicitly unbound admitted
+    // request. Production login uses the current, opaque bound snapshot.
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).ok()?;
+    let mut request = serde_json::Map::new();
+    for (name, value) in pairs {
+        let value = if name == "max_age" {
+            serde_json::json!(value.parse::<u64>().ok()?)
+        } else {
+            serde_json::Value::String(value)
+        };
+        if request.insert(name, value).is_some() {
+            return None;
+        }
+    }
+    request.entry("dpop_jkt").or_insert(serde_json::Value::Null);
+    serde_json::from_value(serde_json::Value::Object(request)).ok()
 }
 
-fn complete_stepup_for_local_login(
+fn complete_stepup_for_bound_request(
     store: &crate::stepup::StepUpStore,
     headers: &HeaderMap,
-    submission: &LocalLoginSubmission,
+    req: &crate::authcode::types::AuthorizationRequest,
+    selected_acr: Option<&str>,
     new_session_id: &str,
     now: u64,
 ) {
     // Session identifiers and opaque store errors are not diagnostic fields.
     // Keep operation messages and request/challenge correlation only.
-    let Some(return_to) = submission.return_to.as_deref() else {
-        return;
-    };
-    let Some(req) = authorize_request_from_return_to(return_to) else {
-        return;
-    };
     let old_session_id = match auth_session_cookie(headers) {
         Ok(Some(session_id)) => session_id,
         Ok(None) => return,
@@ -159,11 +186,7 @@ fn complete_stepup_for_local_login(
             return;
         }
     };
-    let request_id = stepup_request_id(
-        &req,
-        submission.requested_acr.as_deref(),
-        authorize_requested_max_age(&req),
-    );
+    let request_id = stepup_request_id(req, selected_acr, authorize_requested_max_age(req));
     let completed =
         match store.try_complete_for_request(&req.client_id, &old_session_id, &request_id, now) {
             Ok(Some(challenge)) => challenge,
@@ -222,6 +245,30 @@ fn complete_stepup_for_local_login(
             request_id = %request_id,
             "step-up successor challenge completion failed"
         ),
+    }
+}
+
+#[cfg(test)]
+fn complete_stepup_for_local_login(
+    store: &crate::stepup::StepUpStore,
+    headers: &HeaderMap,
+    submission: &LocalLoginSubmission,
+    new_session_id: &str,
+    now: u64,
+) {
+    if let Some(req) = submission
+        .return_to
+        .as_deref()
+        .and_then(authorize_request_from_return_to)
+    {
+        complete_stepup_for_bound_request(
+            store,
+            headers,
+            &req,
+            submission.requested_acr.as_deref(),
+            new_session_id,
+            now,
+        );
     }
 }
 

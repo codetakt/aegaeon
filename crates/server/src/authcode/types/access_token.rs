@@ -8,6 +8,9 @@ use crate::upstream::UpstreamClaimReleasePolicy;
 /// Access token using Bearer (RFC 6750 / mTLS) or DPoP (RFC 9449).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessToken {
+    /// Internal online refresh-grant decision; never a public JWT claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_grant: Option<super::RefreshGrantRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_credentials_digest: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,6 +48,9 @@ pub enum CnfClaim {
 /// Metadata tracked for bearer token enforcement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BearerTokenMeta {
+    /// Internal online refresh-grant decision; never a public JWT claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_grant: Option<super::RefreshGrantRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_credentials_grant: Option<crate::policy::client_credentials::ClientCredentialsGrant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -95,6 +101,7 @@ impl BearerTokenMeta {
     pub fn new(input: BearerTokenMetaInput) -> Self {
         Self {
             token_id: input.token_id,
+            refresh_grant: None,
             exchange_grant: None,
             client_credentials_grant: None,
             application_grant: None,
@@ -128,6 +135,7 @@ impl AccessToken {
     pub fn new(client_id: String, user_id: String, scope: Option<String>, expires_in: u64) -> Self {
         Self {
             token: generate_secure_random(32),
+            refresh_grant: None,
             exchange_root: None,
             client_credentials_digest: None,
             token_type: "Bearer".to_string(),

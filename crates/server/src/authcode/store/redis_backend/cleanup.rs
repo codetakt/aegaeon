@@ -12,6 +12,7 @@ impl RedisTokenStoreBackend {
     pub(in crate::authcode::store) fn cleanup_expired(&self) -> Result<(), TokenStoreStorageError> {
         self.with_lock("cleanup_expired_direct", |conn| {
             let now = SystemTime::now();
+            self.cleanup_refresh_grants(conn, now)?;
             let mut mutation = RedisTokenMutation::default();
 
             for token in self.expired_index_members(conn, self.keyspace.expiry_access_key(), now)? {

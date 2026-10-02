@@ -41,6 +41,94 @@ any public endpoint or compliance claim is activated.
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
 
+### Upstream signing-key refresh
+
+For callback and refresh ID Tokens, an admitted nonempty `kid` absent from the
+cached JWK Set can trigger retrieval from the configured `jwks_uri` (OIDC Core
+1.0 errata set 2, section 10.1.1). Header bounds, duplicate-key rejection and
+algorithm admission run before retrieval. Compact payload and signature segments
+must be nonempty canonical base64url, and the token stays within the existing
+upstream response-byte bound; preflight does not allocate a decoded payload.
+Missing or empty `kid`, a known but
+unusable key, a bad signature with a known key, and rejected claims do not
+trigger an additional fetch. Token-supplied URLs and embedded keys are never
+retrieval authorities. Token exchange is not repeated.
+
+Cold, expired-cache and unfamiliar-key requests share one in-flight retrieval
+per exact admitted URL within each process. Retrieval attempts are at least
+30 seconds apart, measured from attempt start using a monotonic clock; failures,
+timeouts and cancellation also start this cooldown. A key published just after
+a retrieval may therefore wait for the remainder of that interval. During the
+cooldown an unexpired cached set can still validate a compatible token; absent
+or incompatible keys fail closed. Network, trust and capacity failures can
+continue to prevent validation after the interval. Replicas have independent
+coordinators and multiply the retrieval ceiling.
+
+The coordinator uses the existing `policy.upstreamJwksCacheMaxEntries` bound.
+It does not evict an in-flight or cooling-down slot to admit another URL. At
+capacity it rejects new retrievals while allowing compatible cache hits; idle
+slots become eligible for removal when their cooldown expires. The existing
+`policy.upstreamJwksCacheTtlSeconds` controls key-set freshness. Successful
+retrieval replaces the set, without retaining withdrawn keys. Invalid responses
+leave a still-fresh previous set intact without renewing its TTL. RSA `n`/`e` and
+EC `x`/`y` must be nonempty canonical unpadded base64url before cache replacement.
+This representation check does not replace algorithm, curve or cryptographic
+validation of the selected key.
+
+Every selection rechecks the configured endpoint against current outbound
+policy, including cache hits. Retrieved keys remain non-authoritative: the
+exact final set must pass Federation metadata binding when Federation applies,
+then signature and all existing claim checks. Refresh also preserves and checks
+the original authentication context described below. A provider's retention of
+recently decommissioned signing keys is separate from this consumer behavior.
+No new environment variable or management setting is required.
+
+### Refresh grant continuity and upgrade
+
+Upstream refresh tokens are stored in a version 3 encrypted envelope together
+with the original validated ID Token's issuer, subject, audience members,
+optional authentication time and nonce, and the original upstream client ID.
+The existing environment, issuer, subject digest, connection and generation
+bindings remain authenticated. Original claims are not new plaintext columns.
+A callback only replaces this context when it receives a new refresh token.
+Rotations retain the original context; a callback without a refresh token does
+not attach a new authentication to an older grant.
+
+A refreshed ID Token is optional. If present, it must pass existing validation
+and match the original issuer, subject and audience set. String and singleton
+array audiences are equivalent; order and duplicates do not change that set.
+A supplied `auth_time` or nonce must equal the corresponding captured original
+value. If the original value was absent, a newly supplied value is refused;
+reauthenticate instead. Omission on refresh is allowed. These continuity rules
+follow OpenID Connect Core 1.0 errata set 2 §12.2, with the stated fail-closed
+policy for an uncorroborated authentication time. They do not adopt additional
+`azp` extension semantics. Changing the active connection's client ID requires
+new authentication. Rejected responses expose no new upstream tokens and do
+not replace stored token/context state. Generation comparisons prevent a stale
+response from overwriting a later callback or rotation.
+
+Version 2 envelopes lack original context. They are refused before upstream
+exchange with `400 invalid_grant` and a generic reauthentication-required
+message. A fresh successful callback receiving a refresh token writes version 3;
+no SQL migration or bulk token rewrite is performed. Coordinate all readers and
+writers during rollout: older binaries cannot read version 3, and rollback may
+require reauthentication. Preserve the prior database/token backups under the
+existing secret controls. Estimate affected older links without exposing token
+bytes using this read-only query:
+
+```sql
+SELECT count(*) AS legacy_upstream_refresh_links
+FROM aegaeon.account_links
+WHERE substring(upstream_refresh_token_encrypted
+                FROM 1 FOR octet_length('aeg-upstream-refresh-token-v2.'))
+      = convert_to('aeg-upstream-refresh-token-v2.', 'UTF8');
+```
+
+The token size bound remains 256 KiB. Structured envelope plaintext is bounded
+at 512 KiB, and the encoded envelope is bounded before decoding. Local signature,
+codec and PostgreSQL tests cover finite cases; they do not prove cryptographic,
+clock, isolation or complete distributed composition assumptions.
+
 ## Discovery metadata (mTLS aliases)
 
 When `policy.mtlsEnabled=true`, RFC 8705 fields are exposed in discovery metadata:

@@ -152,6 +152,7 @@ fn issue_tokens(scopes: &str, with_oidc: bool) -> TestResult<(UserinfoEndpoint, 
     };
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

@@ -3,8 +3,10 @@ use snapshot_test_hook::Phase;
 use tokio::sync::Barrier;
 
 fn code_fields(state: &AppState) -> TestResult<Vec<(String, String)>> {
-    let req = serde_json::from_value(json!({"response_type":"code","client_id":BASIC,
-        "redirect_uri":REDIRECT,"scope":"api.read","code_challenge":CHALLENGE,"code_challenge_method":"S256"}))?;
+    let req = serde_json::from_value(
+        json!({"dpop_jkt":null,"response_type":"code","client_id":BASIC,
+        "redirect_uri":REDIRECT,"scope":"api.read","code_challenge":CHALLENGE,"code_challenge_method":"S256"}),
+    )?;
     let (code, _) = state
         .tokens
         .issuer

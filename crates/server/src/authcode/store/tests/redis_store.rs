@@ -46,10 +46,7 @@ fn redis_token_store_shares_refresh_rotation_and_revocation() -> StoreTestResult
             .as_deref(),
         Some(refresh_1.as_str())
     );
-    must_ok!(
-        store_a.try_replace_refresh_token_record(make_refresh_token(&refresh_3)),
-        "store standalone refresh token",
-    );
+    issue_refresh_fixture(&store_a, make_refresh_token(&refresh_3));
     must_ok!(
         store_b.try_set_refresh_sender_binding(
             &refresh_3,
@@ -75,12 +72,16 @@ fn redis_token_store_shares_refresh_rotation_and_revocation() -> StoreTestResult
     assert!(is_refresh_revoked(&store_a, &refresh_3));
     assert!(get_refresh_token(&store_a, &refresh_3_successor.token).is_some());
 
+    let mut successor = get_refresh_token(&store_a, &refresh_1).unwrap().rotate();
+    successor.token = refresh_2.clone();
+    let mut child = make_access_token(&access_2);
+    let mut child_meta = make_bearer_meta(&access_2, Some(&refresh_2));
+    child.refresh_grant = successor.refresh_grant.clone();
+    child_meta.refresh_grant = successor.refresh_grant.clone();
     must_ok!(
         store_b.store_refreshed_grant(
             &refresh_1,
-            make_access_token(&access_2),
-            make_refresh_token(&refresh_2),
-            make_bearer_meta(&access_2, Some(&refresh_2)),
+            child, successor, child_meta,
         ),
         "store rotated grant",
     );
@@ -88,17 +89,11 @@ fn redis_token_store_shares_refresh_rotation_and_revocation() -> StoreTestResult
     assert!(is_refresh_revoked(&store_a, &refresh_1));
     assert!(get_refresh_token(&store_a, &refresh_2).is_some());
     must_ok!(
-        store_a.store_access_for_refresh_parent(
-            make_access_token(&access_3),
-            make_bearer_meta(&access_3, Some(&refresh_2)),
-        ),
+        parent_access_fixture(&store_a, &access_3, &refresh_2),
         "store access for active refresh parent",
     );
     assert!(verify_access_token(&store_b, &access_3).is_some());
-    must_ok!(
-        store_b.try_replace_access_token_record(make_access_token(&access_4)),
-        "store direct access token",
-    );
+    issue_access_fixture(&store_b, make_access_token(&access_4));
     must_ok!(
         store_a.try_bind_refresh_access(&refresh_2, &access_4),
         "bind access to refresh parent",
@@ -128,10 +123,7 @@ fn redis_token_store_shares_refresh_rotation_and_revocation() -> StoreTestResult
         "store refresh revocation grant",
     );
     must_ok!(
-        store_b.store_access_for_refresh_parent(
-            make_access_token(&access_6),
-            make_bearer_meta(&access_6, Some(&refresh_4)),
-        ),
+        parent_access_fixture(&store_b, &access_6, &refresh_4),
         "store refresh child access",
     );
     assert_eq!(
@@ -203,7 +195,7 @@ fn redis_refresh_rotation_expired_branch_deindexes_previous_refresh() -> StoreTe
     let store = redis_token_store_for_test(url);
     let suffix = aegaeon_crypto::rand::random_base64url(8);
     let refresh = format!("refresh-expired-rotation-{suffix}");
-    let mut expired_refresh = make_refresh_token(&refresh);
+    let mut expired_refresh = issue_refresh_fixture(&store, make_refresh_token(&refresh));
     expired_refresh.expires_at = SystemTime::now()
         .checked_sub(Duration::from_secs(1))
         .ok_or_else(|| "test clock should allow expired refresh construction".to_string())?;

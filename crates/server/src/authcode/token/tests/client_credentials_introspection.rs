@@ -10,8 +10,8 @@ fn client_credentials_primitive_introspection_rejects_either_origin_marker() -> 
     store.try_replace_access_token_record(access.clone())?;
     assert_eq!(
         validator.introspect_token(&access.token)["active"],
-        true,
-        "legacy unmarked metadata-absent behavior is preserved"
+        false,
+        "missing metadata cannot prove an independent grant"
     );
     let grant = ClientCredentialsGrant::fixture(
         "https://issuer.example",

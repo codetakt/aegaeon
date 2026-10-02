@@ -68,6 +68,24 @@ process/proxy boundary rather than an issuer policy snapshot.
 | `AEGAEON_DPOP_STRICT` | _removed_ | `environment` | Removed startup-environment fallback. If the global sender-constraint policy is `None`, strict mode upgrades the runtime posture to DPoP and enables sender-binding enforcement. In the supported PostgreSQL-backed runtime, `policy.dpopStrict` is authoritative. |
 | `AEGAEON_DPOP_IAT_WINDOW_SECS` | _removed_ | `environment` | Removed startup-environment fallback maximum absolute age/skew window for the DPoP `iat` claim, in seconds. Valid range is `1..=300`. In the supported PostgreSQL-backed runtime, `policy.dpopIatWindowSeconds` is authoritative. |
 
+DPoP `htm` matches the actual HTTP method exactly, including case (RFC 9449
+section 4.3 item 8 and RFC 9110 section 9.1). `/resource` and `/userinfo` handle
+HEAD with the same authentication checks as GET, require a proof for HEAD, and
+return no response body. `/application/authorization`, which delegates its
+credential validation to UserInfo, also forwards the actual method. UserInfo
+POST continues to require a proof for POST. Resource latency metrics use the
+actual GET or HEAD method with the fixed `/resource` route label.
+
+The production DPoP verifier accepts the existing EdDSA/OKP/Ed25519 key profile.
+The embedded JWK must be public: any `d` member is rejected, including a null
+value. Protected-header and JWK member names must be unique, including escaped
+aliases. Aegaeon implements no critical DPoP extensions, so any `crit` parameter
+is rejected; unknown noncritical fields remain permitted (RFC 9449 sections
+4.2–4.3 and RFC 7515 sections 4 and 4.1.11). JWT payloads must remain base64url
+encoded: if `b64` is supplied, it must be Boolean `true` (RFC 7797 section 7).
+These checks apply to both public FFI DPoP verification entry points as well as
+the server's production verification path.
+
 ## Authorization endpoint behaviour
 
 | Variable | Default | Scope | Notes |

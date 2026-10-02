@@ -5,6 +5,7 @@ mod exchange;
 mod exchange_root;
 mod indexes;
 mod reads;
+mod refresh_grants;
 mod revocation;
 mod rotation;
 mod scripts;
@@ -22,6 +23,15 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::warn;
 
+#[derive(Clone, Copy)]
+pub(in crate::authcode::store) struct IssuedGrantRecords<'a> {
+    pub(in crate::authcode::store) access_token: &'a crate::authcode::types::AccessToken,
+    pub(in crate::authcode::store) refresh_token: Option<&'a crate::authcode::types::RefreshToken>,
+    pub(in crate::authcode::store) meta: &'a crate::authcode::types::BearerTokenMeta,
+    pub(in crate::authcode::store) grant_record:
+        Option<&'a crate::authcode::types::RefreshGrantRecord>,
+}
+
 #[derive(Clone)]
 pub(super) struct RedisTokenStoreBackend {
     client: redis::Client,
@@ -30,6 +40,11 @@ pub(super) struct RedisTokenStoreBackend {
 }
 
 impl RedisTokenStoreBackend {
+    #[cfg(test)]
+    pub(in crate::authcode::store) fn keyspace_for_tests(&self) -> &RedisTokenStoreKeyspace {
+        &self.keyspace
+    }
+
     pub(super) fn new(
         url: &str,
         namespace: &RuntimeStateNamespace,

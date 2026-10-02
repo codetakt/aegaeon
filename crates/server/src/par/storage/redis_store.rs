@@ -28,7 +28,7 @@ impl RedisParRequestStore {
                         .redis_atomic_group_prefix(
                             RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
                             "par",
-                            "v1",
+                            "v3",
                         )
                         .into_boxed_str(),
                 ),
@@ -42,7 +42,7 @@ impl RedisParRequestStore {
             .map(|client| Self {
                 client,
                 url: Arc::from(url.to_string().into_boxed_str()),
-                prefix: Arc::from("par:v1"),
+                prefix: Arc::from("par:v3:{authcode}"),
             })
             .map_err(|err| ParStorageError::BackendUnavailable(err.to_string()))
     }
@@ -198,7 +198,7 @@ fn ttl_millis_i64(ttl: Duration) -> Result<i64, ParStorageError> {
 
 fn par_request_uri_digest(request_uri: &str) -> String {
     let mut hasher = aegaeon_crypto::hash::Sha256Hasher::new();
-    hasher.update(b"aegaeon:par:v1");
+    hasher.update(b"aegaeon:par:v3");
     hasher.update(&(request_uri.len() as u64).to_be_bytes());
     hasher.update(request_uri.as_bytes());
     URL_SAFE_NO_PAD.encode(hasher.finalize())
@@ -213,9 +213,11 @@ mod tests {
     fn sample_stored_request() -> StoredParRequest {
         StoredParRequest {
             request: ParRequest {
+                dpop_jkt: None,
                 client_id: "client".to_string(),
                 redirect_uri: "https://client.example/cb".to_string(),
                 response_type: "code".to_string(),
+                response_mode: None,
                 iss: None,
                 resource: None,
                 state: Some("state".to_string()),
