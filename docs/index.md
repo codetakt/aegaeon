@@ -33,6 +33,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/specs/README.md` | index | Specifications Overview | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/language-metadata.md` | spec | Language metadata admission and registry updates | current implementation baseline | 2026-10-02 | Engineering | implementers, operators, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-09-15 | Product / Engineering | implementers, reviewers |

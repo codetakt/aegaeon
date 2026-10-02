@@ -2,6 +2,7 @@
 use super::FederationError;
 use serde_json::Value;
 
+pub(super) mod languages;
 mod registration;
 pub(crate) use registration::validate_complete_op_registration;
 
@@ -74,25 +75,7 @@ pub(super) fn validate(entity_type: &str, value: &Value) -> Result<(), Federatio
         if value.is_null() {
             return Err(invalid(entity_type, field));
         }
-        match field.as_str() {
-            "organization_name" | "display_name" | "description" => {
-                if !value.is_string() {
-                    return Err(invalid(entity_type, field));
-                }
-            }
-            "keywords" | "contacts" => {
-                let items = value
-                    .as_array()
-                    .ok_or_else(|| invalid(entity_type, field))?;
-                if items.is_empty() || items.iter().any(|item| !item.is_string()) {
-                    return Err(invalid(entity_type, field));
-                }
-            }
-            "logo_uri" | "policy_uri" | "information_uri" | "organization_uri" => {
-                validate_url(entity_type, field, value)?;
-            }
-            _ => {}
-        }
+        languages::validate_value(entity_type, field, value)?;
     }
     crate::oidc::capabilities::validate_supplied(entity_type, parameters)
         .map_err(|field| invalid(entity_type, field))?;

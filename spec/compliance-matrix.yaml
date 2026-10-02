@@ -5482,6 +5482,29 @@ openid_federation_rp:
   - Upstream process-local cache retains original JSON; hits recheck outbound authorization and public profile. Signed inline and fetched eligible identities must match, with fetched algorithms a subset of endorsed algorithms; strict instantaneous equality is local policy during rollover.
   - Signed JWKS retrieval, timed convergence, separate refresh-coordinator integration and complete mixed-purpose/certificate applicability remain outside this bounded contract. Bare-key consumers may ignore certificate members they do not interpret; no universal certificate fetching or PKIX trust requirement is asserted. No formal discharge follows from finite tests.
 
+- id: fed-rp-020
+  section: '6.1.2, 14, 16 (Federation 1.0/1.1); 2, 4.5 (RFC 5646); 3 (Discovery); 2.1 (RFC 9728)'
+  requirement: MUST
+  description: Admit language metadata with complete tag form and a dated registry consumer profile
+  module: crates/server/src/metadata/language_tags/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/metadata/language_tags/tests.rs
+  - crates/server/src/federation/tests/language_metadata.rs
+  - crates/server/src/federation/tests/capability_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/language_metadata.rs
+  - crates/server/src/web/management/tests/upstream_metadata/capabilities.rs
+  - crates/server/src/metadata/tests/core.rs
+  - scripts/validation/test_language_tag_generator.py
+  status: implemented
+  runtime_link: crates/server/src/federation/metadata/languages.rs
+  notes:
+  - Complete RFC 5646 form and structural restrictions are separate from the stronger local consumer profile requiring ordinary-subtag membership, extlang enclosing-primary Prefix and extension allocation in pinned IANA snapshots dated 2026-09-17 and 2014-04-02. Rejection under a dated snapshot is not a global invalidity claim.
+  - Known Federation human-facing base and localized fields inherit role-specific value schemas. Original metadata is checked before policy hiding and retained derived values afterward; raw policy names, typed helpers, pins, ordinary Discovery arrays and live cache values are admitted separately. Unknown and wrong-role suffix fields remain extensions.
+  - JSON member names, policy operands and local pins retain exact decoded literal comparison. Case-insensitive tag structure does not collapse suffix aliases or array entries, normalize human text, or introduce language negotiation.
+  - Extension payload semantics, truthful advertised support, external producer assignment and canonical generation, actual language selection, Trust Mark localization and complete optional role schemas remain separate obligations. Finite tests and generator consistency do not establish formal assurance.
+  - The validation-scripts CI job runs generate_language_tags.py --check and test_language_tag_generator.py against bundled official data; updates require provenance verification, regeneration and compatibility review.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

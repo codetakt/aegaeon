@@ -5,7 +5,7 @@ const NOW: i64 = 1_800_000_000;
 const ENTITY: &str = "https://rp.example";
 const AUTHORITY: &str = "https://ta.example";
 
-fn sign_payload(payload: &str) -> String {
+pub(super) fn sign_payload(payload: &str) -> String {
     let key = sample_signing_key();
     let jwk = must_some(FederationKeyManager::federation_public_jwk(key));
     let header = json!({"alg": "ES256", "typ": "entity-statement+jwt", "kid": jwk["kid"]});

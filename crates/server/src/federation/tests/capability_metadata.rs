@@ -16,7 +16,14 @@ fn capabilities_exact_role_maps_check_signed_configurations_and_subordinates() {
     for (role, arrays, booleans) in [(OP, OP_ARRAYS, OP_BOOLEANS), (AS, AS_ARRAYS, AS_BOOLEANS)] {
         supplied(role, &json!({}), true);
         for field in arrays {
-            for value in [json!([]), json!(["future", "", "NONE", " none", "future"])] {
+            for value in [
+                json!([]),
+                if matches!(*field, "ui_locales_supported" | "claims_locales_supported") {
+                    json!(["en", "EN", "x-private", "fr"])
+                } else {
+                    json!(["future", "", "NONE", " none", "future"])
+                },
+            ] {
                 supplied(role, &json!({(*field):value}), true);
             }
             for value in [
@@ -45,7 +52,12 @@ fn capabilities_exact_role_maps_check_signed_configurations_and_subordinates() {
         }
         let mut complete = json!({"extension":{"nested":null}});
         for field in arrays {
-            complete[*field] = json!(["future", "future"]);
+            complete[*field] =
+                if matches!(*field, "ui_locales_supported" | "claims_locales_supported") {
+                    json!(["en", "EN"])
+                } else {
+                    json!(["future", "future"])
+                };
         }
         for field in booleans {
             complete[*field] = json!(true);
@@ -121,6 +133,8 @@ fn capabilities_originals_cannot_be_hidden_by_overlay_removal_filter_or_absence(
     for role in [OP, AS] {
         for (field, bad, good) in [
             ("scopes_supported", json!(false), json!([])),
+            ("ui_locales_supported", json!(["en_US"]), json!(["en"])),
+            ("display_name#en", json!(false), json!("Name")),
             ("require_signed_request_object", json!([]), json!(false)),
             (
                 "token_endpoint_auth_signing_alg_values_supported",
@@ -203,6 +217,8 @@ fn capabilities_fresh_and_cached_chains_recheck_originals_and_derived_shapes() {
         for role in [OP, AS] {
             for (field, good, bad) in [
                 ("scopes_supported", json!([]), json!(false)),
+                ("ui_locales_supported", json!(["en"]), json!(["eng"])),
+                ("display_name#en", json!("Name"), json!([])),
                 ("require_signed_request_object", json!(false), json!([])),
                 (
                     "token_endpoint_auth_signing_alg_values_supported",
