@@ -180,6 +180,21 @@ fn validate_constraints(value: &Value) -> Result<(), FederationError> {
             }
         }
     }
+    if let Some(naming) = object.get("naming_constraints") {
+        let naming = naming
+            .as_object()
+            .ok_or_else(|| invalid("naming_constraints"))?;
+        for field in ["permitted", "excluded"] {
+            if let Some(value) = naming.get(field) {
+                let names = value
+                    .as_array()
+                    .ok_or_else(|| invalid("naming_constraints names"))?;
+                if names.iter().any(|name| !name.is_string()) {
+                    return Err(invalid("naming_constraints names"));
+                }
+            }
+        }
+    }
     let constraints: super::super::Constraints =
         serde_json::from_value(value.clone()).map_err(|_| invalid("constraints"))?;
     constraints.validate()

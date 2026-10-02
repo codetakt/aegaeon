@@ -197,8 +197,8 @@ standard filter. A local match cannot preserve a type removed by the standard
 filter, and a local mismatch still rejects the chain. Raw signature/profile
 admission rejects present-null or wrong-shaped `allowed_entity_types`,
 `allowed_leaf_entity_types` and `max_path_length` values. Unrecognized additional
-constraints remain ignored. Standard naming constraints and unsupported payload
-extensions remain separate implementation obligations; the existing `u32`
+constraints remain ignored. Unsupported payload extensions remain separate
+implementation obligations; the existing `u32`
 max-path representation and numerical domain are unchanged.
 
 Rust callers constructing the public `Constraints` struct must add
@@ -404,3 +404,59 @@ currently filters or embeds trust marks in a public resolve response.
 - `crates/server/src/web/openid_federation.rs` (test-only structural parsers/builders)
 - `proofs/tamarin/federation/trust_chain.spthy`
 - `proofs/tamarin/federation/op_entity_configuration.spthy`
+
+## Naming constraints
+
+Every Subordinate Statement's `constraints.naming_constraints` applies to all
+Entity Identifiers below its issuer, including intermediate entities and the
+immediate subject. The issuer itself is outside that statement's restriction.
+Federation 1.0 and 1.1 section 6.2.2 incorporate RFC 5280 section 4.2.1.10 URI
+host constraints: `host.example.com` matches exactly, while `.example.com`
+matches one or more additional labels and excludes `example.com` itself.
+Matching uses the URI host; path and port cannot make a disallowed host pass.
+Each ancestor applies independently, and any excluded match wins over permission.
+
+Aegaeon adopts these explicit comparison and empty-set choices:
+
+- Omission, `{}`, and an empty `excluded` list without `permitted` impose no
+  additional restriction. A present `permitted: []` permits no names.
+- Constraints accept ASCII DNS labels and A-labels, with optional initial
+  subtree dot and terminal root dot. Comparison ignores ASCII case and one
+  terminal root dot. A single label is an absolute lexical hostname; no DNS
+  lookup is performed. Labels use letters, digits and hyphens, have at most 63
+  bytes, and cannot begin or end with a hyphen. The name has at most 253 bytes
+  after removing the subtree marker and terminal root dot.
+- Raw Unicode constraints, IP addresses, URL/path/port/userinfo forms, percent
+  escapes, wildcards, empty interior labels and whitespace are rejected.
+  Internationalized constraints use A-labels. URI hosts use the existing URL
+  parser's IDNA view solely for comparison.
+- Effective restrictions require a DNS URI host, including nonempty excluded-only
+  lists. IPv4 and IPv6 hosts fail; neutral constraints preserve existing
+  unconstrained identifier admission.
+
+Raw admission rejects present-null/nonobject naming constraints and present-null,
+nonarray or nonstring `permitted`/`excluded` members. Typed validation enforces
+representable domain syntax. Unknown additional members remain ignored. Stored
+list ordering, duplicates, spelling, signed identifiers and compact JWS bytes
+remain unchanged; comparison normalization never changes path identity equality.
+
+The canonical path check runs before metadata absence, type filtering or policy
+application can return success. Signed fresh, custom, cached and management
+refresh paths share this check; invalid cached paths use existing fresh fallback.
+The public `TrustChain::resolved_metadata()` also checks naming on canonical
+layouts, but still does not authenticate signatures or time. Naming declarations
+on typed Entity Configurations are rejected. The existing max-path, local leaf
+type, standard metadata type and critical-policy checks remain independent.
+
+Rust `Constraints` literals must initialize `naming_constraints: None` or use
+`..Constraints::default()` for omitted fields. The new public `NamingConstraints`
+type has optional `permitted` and `excluded` lists. Serialized omission remains
+compatible, and cached raw JWS need no migration or rewriting. Previously ignored
+signed naming restrictions are now enforced and can cause old cached paths to
+fail revalidation. Direct serde construction cannot retain invalid raw null
+presence for later typed validation.
+
+Signed path and loopback upstream-operation fixtures exercise this behavior.
+Management refresh is tested at its raw acquisition/admission seam before a
+storable payload is returned; this is not PostgreSQL or router coverage.
+These finite checks do not establish full Federation conformance or formal proof.

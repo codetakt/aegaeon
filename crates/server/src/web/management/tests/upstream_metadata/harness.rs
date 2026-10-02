@@ -415,3 +415,23 @@ impl Fixture {
         chain.chain_jwts[index] = signed(&self.keys[subordinate + 1], &value);
     }
 }
+
+impl Fixture {
+    pub fn set_naming_constraints(
+        &self,
+        chain: &mut ResolvedTrustChain,
+        subordinate: usize,
+        permitted: &[&str],
+    ) {
+        let index = subordinate * 2 + 1;
+        chain.trust_chain.chain[index]
+            .constraints
+            .get_or_insert_with(crate::federation::Constraints::default)
+            .naming_constraints = Some(crate::federation::NamingConstraints {
+            permitted: Some(permitted.iter().map(|name| (*name).into()).collect()),
+            excluded: None,
+        });
+        let value = serde_json::to_value(&chain.trust_chain.chain[index]).unwrap();
+        chain.chain_jwts[index] = signed(&self.keys[subordinate + 1], &value);
+    }
+}
