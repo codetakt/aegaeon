@@ -5270,6 +5270,25 @@ openid_federation_rp:
   - Tests use signed direct and multiple-superior acquisition plus cache paths and real loopback token calls; acquisition seams retain raw signature/policy admission. DB lifecycle, external HTTPS transport and sibling composition are not newly executed by these tests.
   - Captured callback requirements are preserved; no fresh local-profile query, atomic revocation, granted-scope lineage, new OP key-source feature, full Federation conformance or formal proof claim.
 
+
+- id: fed-rp-009
+  section: '3.1.3, 3.2, 6.2, 6.2.3'
+  requirement: MUST
+  description: Apply every standard entity type constraint between superior metadata overlay and policy application
+  module: crates/server/src/federation/types.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/entity_type_constraints.rs
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/web/management/tests/upstream_metadata/entity_types.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Retain federation_entity; intersect all present allowed_entity_types lists without rewriting signed statements. Invalid or removed-type policies cannot be hidden by filtering.
+  - The distinct local allowed_leaf_entity_types predicate still checks original leaf types. Rust struct literals require the new field or Constraints default; missing serialized fields remain compatible.
+  - Signed fresh/custom/cache controls and direct upstream workflows use loopback token calls. Existing management common-gate correspondence is source-inspected, not newly executed through PostgreSQL or router tests.
+  - Naming constraints, critical extension processing, full numerical domains, sibling integration and whole-product assurance remain separate obligations.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

@@ -136,6 +136,51 @@ accepted. Existing role/environment checks, explicit-now behavior and cache writ
 failure semantics remain. Complete-chain cache TTL versus signed time remains a
 separate temporal obligation; this change does not alter it.
 
+## Standard Entity Type Constraints
+
+Every Subordinate Statement's optional `constraints.allowed_entity_types`
+restricts the derived metadata to the listed exact, case-sensitive type names.
+All present lists apply independently: omission adds no restriction, while an
+empty list leaves only an already declared `federation_entity` type. That type
+is always retained and must not be explicitly included in the list. Unknown
+type names and duplicate strings remain supported; original list ordering and
+signed statement bytes are preserved.
+
+Resolution validates every supplied metadata policy and representable entity
+type constraint, applies immediate-superior metadata only to types originally
+declared by the leaf, removes excluded types, then applies policies to the
+remaining types. Policies cannot recreate removed or undeclared types, and
+filtering cannot hide malformed policy for an unused type. A leaf without metadata still resolves to
+`None`; a metadata object emptied by filtering remains a present empty object.
+A generic chain can therefore be valid while unsuitable for an OIDC role.
+
+The separate `allowed_leaf_entity_types` local extension still requires any
+matching type in the original leaf metadata. It is not an alias for the
+standard filter. A local match cannot preserve a type removed by the standard
+filter, and a local mismatch still rejects the chain. Raw signature/profile
+admission rejects present-null or wrong-shaped `allowed_entity_types`,
+`allowed_leaf_entity_types` and `max_path_length` values. Unrecognized additional
+constraints remain ignored. Standard naming constraints and critical extension
+processing remain separate implementation obligations; the existing `u32`
+max-path representation and numerical domain are unchanged.
+
+Rust callers constructing the public `Constraints` struct must add
+`allowed_entity_types: None` to preserve prior behavior, or use
+`..Constraints::default()` for omitted fields. This is a Rust source-compatibility
+change; serialized inputs lacking the field remain compatible. Unverified
+parsing retains valid new data but does not establish signature/profile validity.
+Direct serde construction cannot preserve malformed raw null presence for later
+typed validation.
+
+Cached signed chains are re-evaluated through common admission without rewriting
+or purging stored evidence. Invalid new fields use the existing fresh-fallback
+behavior and cannot be repaired by detached parsed data. Live authorize,
+callback and refresh operations refuse when filtering removes
+`openid_provider`, before codes or credentials are sent, including in-flight
+transactions. Independently cached ordinary Discovery does not refill the type.
+No new management-router or PostgreSQL execution is established by this change;
+management refresh retains the same common raw-chain gate.
+
 ## Resolved OP Metadata in Upstream OIDC Operations
 
 Each authorize, callback and refresh operation selects one effective typed
