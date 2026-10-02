@@ -416,6 +416,7 @@ jobs:
       - name: Run JOSE JSON/TLV compatibility tests
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
+          set -euo pipefail
           run_test() {
             cargo test "$@"
           }
@@ -498,6 +499,7 @@ jobs:
       - name: Run strict claim-bearing profile tests
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
+          set -euo pipefail
           run_test() {
             cargo test "$@"
           }
@@ -605,6 +607,7 @@ jobs:
       - name: Run TLV parity tests
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
+          set -euo pipefail
           mkdir -p artifacts/jose/tlv-parity
           : > artifacts/jose/tlv-parity/test-output.txt
 
