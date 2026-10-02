@@ -292,6 +292,7 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Run Tamarin verification (Nix)
@@ -308,6 +309,12 @@ jobs:
             ${{ runner.temp }}/tamarin-evidence/
             !${{ runner.temp }}/tamarin-evidence/**/result/**
           if-no-files-found: error
+
+      - name: Observe final disk capacity
+        if: always()
+        run: |
+          echo "Final disk capacity; peak usage was not measured."
+          df -h "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
 
   # Kani Bounded Model Checking
   kani-pure:
