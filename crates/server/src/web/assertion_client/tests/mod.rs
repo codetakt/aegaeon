@@ -7,6 +7,7 @@ mod oauth_forms;
 mod oauth_grants;
 mod par;
 mod pkce;
+mod pushed_modes;
 mod resources;
 mod success;
 mod token_snapshots;
@@ -329,7 +330,7 @@ fn par_count(state: &AppState) -> TestResult<usize> {
     let prefix = namespace.redis_atomic_group_prefix(
         crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
         "par",
-        "v1",
+        "v2",
     );
     let mut conn =
         redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL")?)?.get_connection()?;
