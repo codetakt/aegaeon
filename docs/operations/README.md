@@ -49,3 +49,5 @@ Use [Documentation index](../index.md) for the exhaustive generated inventory.
 1. Start here for operator workflow.
 2. Jump to `docs/policies/` when you need the normative posture behind a runbook.
 3. Jump to `docs/verification/` when a runbook mentions the verified-vs-compat boundary.
+
+- [Permanent OIDC subject ownership and stopped history adoption](subject-ownership.md)

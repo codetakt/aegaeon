@@ -8,7 +8,6 @@ use crate::web::AppState;
 use axum::extract::{ConnectInfo, OriginalUri, State};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde_json::json;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::error::Error>> {
@@ -79,6 +78,21 @@ fn headers(
     Ok(headers)
 }
 
+async fn userinfo_state(
+    pool: &sqlx::PgPool,
+    env: &crate::web::test_support::TestEnvironment,
+) -> Result<AppState, Box<dyn std::error::Error>> {
+    let policy = crate::management::types::PolicyDocument {
+        oidc_enabled: true,
+        oidc_require_nonce: true,
+        id_token_time_to_live_seconds: 300,
+        ..crate::management::types::PolicyDocument::default()
+    };
+    crate::web::test_support::seed_oidc_configuration(pool, env, policy, "userinfo-fixture")
+        .await?;
+    crate::web::test_support::test_app_state(pool.clone(), env).await
+}
+
 #[tokio::test]
 #[ignore = "requires PostgreSQL"]
 async fn upstream_refresh_rejects_bearer_downgrade_with_proof_and_preserves_token() -> TestResult {
@@ -123,13 +137,7 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
     let result = async {
-        let mut state = test_app_state(pool.clone(), &env).await?;
-        state.oidc.userinfo_endpoint =
-            Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
-                state.tokens.validator.as_ref().clone(),
-                pool.clone(),
-                env.issuer_url.clone(),
-            )));
+        let state = userinfo_state(&pool, &env).await?;
         // Simulate persisted legacy profile data: release allowlists must not
         // turn editable profile attributes into an application authority claim.
         let authority_claim = crate::application_authorization::inorii::CLAIM_NAME;
@@ -204,13 +212,7 @@ async fn oidc_subject_format_userinfo_database_get_post() -> TestResult {
     let pool = test_pg_pool().await?.ok_or("database required")?;
     let env = setup_test_environment(&pool).await?;
     let result: TestResult = async {
-        let mut state = test_app_state(pool.clone(), &env).await?;
-        state.oidc.userinfo_endpoint =
-            Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
-                state.tokens.validator.as_ref().clone(),
-                pool.clone(),
-                env.issuer_url.clone(),
-            )));
+        let state = userinfo_state(&pool, &env).await?;
         let app = crate::web::build_router(state.clone());
         for subject in [
             String::new(),
@@ -219,6 +221,15 @@ async fn oidc_subject_format_userinfo_database_get_post() -> TestResult {
             " ExactCase ".into(),
             "x".repeat(255),
         ] {
+            if !crate::oidc::subject::is_valid_subject(&subject) {
+                // New ordinary writers refuse invalid disclosures before they
+                // can become a served identity. Legacy rows are inspected by
+                // the explicitly pre-migration inventory tests.
+                let error = sqlx::query("INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,$2,'ACTIVE')")
+                    .bind(env.environment_id).bind(&subject).execute(&pool).await.expect_err("invalid stored subject accepted");
+                assert_eq!(error.as_database_error().and_then(|e| e.constraint()), Some("end_users_subject_format"));
+                continue;
+            }
             let user_id: uuid::Uuid = sqlx::query_scalar(
                 "INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,$2,'ACTIVE') RETURNING id",
             ).bind(env.environment_id).bind(&subject).fetch_one(&pool).await?;
@@ -238,28 +249,10 @@ async fn oidc_subject_format_userinfo_database_get_post() -> TestResult {
                 let response = app.clone().oneshot(request).await?;
                 assert_eq!(response.headers()["cache-control"], "no-store");
                 assert!(response.headers().get("www-authenticate").is_none());
-                let valid = crate::oidc::subject::is_valid_subject(&subject);
-                assert_eq!(
-                    response.status(),
-                    if valid {
-                        StatusCode::OK
-                    } else {
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    }
-                );
-                let value: Value =
-                    serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
-                if valid {
-                    assert_eq!(value["sub"], subject);
-                    assert_eq!(value["name"], "Database profile");
-                } else {
-                    assert_eq!(value["error"], "server_error");
-                    assert_eq!(
-                        value["error_description"],
-                        "userinfo endpoint failed internally"
-                    );
-                    assert!(value.get("sub").is_none());
-                }
+                assert_eq!(response.status(), StatusCode::OK);
+                let value: Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+                assert_eq!(value["sub"], subject);
+                assert_eq!(value["name"], "Database profile");
             }
         }
         Ok(())

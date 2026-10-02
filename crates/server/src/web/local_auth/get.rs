@@ -24,6 +24,9 @@ pub(in crate::web) async fn local_login_get(
     headers: HeaderMap,
     Query(query): Query<LocalLoginQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, state.issuer.as_str()) {
         return resp;
     }

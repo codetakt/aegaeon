@@ -65,6 +65,10 @@ impl TokenValidator {
         self
     }
 
+    pub(crate) fn has_server_issuer(&self, issuer: &str) -> bool {
+        self.issuer.as_deref() == Some(issuer)
+    }
+
     /// Validate bearer token and return both token and optional metadata
     ///
     /// # Errors

@@ -295,7 +295,7 @@ async fn shared_redis_exchange_client_scope_expansion_cannot_authorize_existing_
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await?;
         old_snapshot_requires_reauthorization(&state).await?;
         missing_snapshot_retains_only_legacy_exchange(&state).await

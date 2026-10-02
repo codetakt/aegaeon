@@ -27,6 +27,10 @@ pub(crate) struct TestEnvironment {
 }
 
 pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestResult<AppState> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(pool.options().get_max_connections())
+        .connect_with(pool.connect_options().as_ref().clone())
+        .await?;
     let mut baseline = crate::config::ServerConfig {
         transport: crate::config::TransportSecurityConfig::default(),
         ..crate::config::ServerConfig::default()
@@ -54,7 +58,12 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
         .try_synchronize_client_projection_from_database(&pool, clients.as_ref())
         .await?;
 
-    Ok(AppState {
+    let token_issuer = token_issuer
+        .with_issuer(env.issuer_url.clone())
+        .with_oidc(oidc_config.as_deref().cloned());
+    let token_validator = token_validator.with_issuer(Some(env.issuer_url.clone()));
+    let mut state = AppState {
+        subject_namespace: None,
         application_authority: None,
         cfg: Arc::clone(&cfg),
         base_url: Arc::new(env.issuer_url.clone()),
@@ -143,7 +152,9 @@ pub(crate) async fn test_app_state(pool: PgPool, env: &TestEnvironment) -> TestR
                 crate::device_authz::VerificationRateLimiter::new_process_local_for_tests(),
             ),
         },
-    })
+    };
+    state.validate_subject_namespace().await?;
+    Ok(state)
 }
 
 fn test_par_endpoint() -> TestResult<crate::par::ParEndpoint> {
@@ -176,6 +187,21 @@ pub(crate) async fn test_pg_pool() -> TestResult<Option<PgPool>> {
             .connect(&url)
             .await?,
     ))
+}
+
+/// Setup-only supplier for owned integration databases. Never used to validate
+/// a positive runtime permit or passed to a production handler.
+pub(crate) async fn test_admin_pool(runtime: &PgPool) -> TestResult<PgPool> {
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?.parse()?;
+    let actual = runtime.connect_options();
+    let database = actual
+        .get_database()
+        .ok_or("fixture database name missing")?;
+    Ok(sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect_with(options.database(database))
+        .await?)
 }
 
 pub(crate) async fn setup_test_environment(pool: &PgPool) -> Result<TestEnvironment, sqlx::Error> {
@@ -279,50 +305,13 @@ INSERT INTO aegaeon.oauth_profiles (
     })
 }
 
+/// Namespace ownership and private audit history survive every test operation.
+/// The enclosing lane owns and tears down the entire disposable database.
 pub(crate) async fn cleanup_test_environment(
-    pool: &PgPool,
-    env: &TestEnvironment,
+    _pool: &PgPool,
+    _env: &TestEnvironment,
 ) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    for sql in [
-        "DELETE FROM aegaeon.audit_events WHERE environment_id = $1",
-        "DELETE FROM aegaeon.client_secrets WHERE environment_id = $1",
-        "DELETE FROM aegaeon.dynamic_client_registrations WHERE environment_id = $1",
-        "DELETE FROM aegaeon.application_authorizations WHERE environment_id = $1",
-        "DELETE FROM aegaeon.end_users WHERE environment_id = $1",
-        "DELETE FROM aegaeon.clients WHERE environment_id = $1",
-        "DELETE FROM aegaeon.oauth_profiles WHERE environment_id = $1",
-        "DELETE FROM aegaeon.environment_policies WHERE environment_id = $1",
-        "DELETE FROM aegaeon.runtime_keys WHERE environment_id = $1",
-    ] {
-        sqlx::query(sql)
-            .bind(env.environment_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    sqlx::query(
-        "UPDATE aegaeon.environments SET active_configuration_version_id = NULL WHERE id = $1",
-    )
-    .bind(env.environment_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query("DELETE FROM aegaeon.configuration_versions WHERE environment_id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.environments WHERE id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.tenants WHERE id = $1")
-        .bind(env.tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.teams WHERE id = $1")
-        .bind(env.team_id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await
+    Ok(())
 }
 
 pub(crate) fn finish_test(result: TestResult, cleanup: Result<(), sqlx::Error>) -> TestResult {

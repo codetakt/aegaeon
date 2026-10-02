@@ -129,6 +129,10 @@ pub(super) async fn logout(
     OriginalUri(uri): OriginalUri,
     headers: axum::http::HeaderMap,
 ) -> Response {
+    let namespace = match state.require_subject_namespace() {
+        Ok(namespace) => namespace,
+        Err(response) => return response,
+    };
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
@@ -163,7 +167,7 @@ pub(super) async fn logout(
         Ok(events) => events,
         Err(response) => return response,
     };
-    dispatch_backchannel_logout_if_enabled(&state, cfg, logout_events).await;
+    dispatch_backchannel_logout_if_enabled(&namespace, logout_events).await;
     let targets = match resolve_logout_redirect_targets(
         &state,
         &headers,
@@ -199,6 +203,9 @@ pub(super) async fn upstream_logout_callback(
     headers: axum::http::HeaderMap,
     Query(query): Query<UpstreamLogoutCallbackQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {

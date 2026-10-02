@@ -13,6 +13,9 @@ pub(in crate::web) async fn local_logout_post(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let mut redirect_target = "/auth/login".to_string();
     let request_id = request_id_from_headers(&headers);
     let cookie_header = match single_cookie_header(&headers) {

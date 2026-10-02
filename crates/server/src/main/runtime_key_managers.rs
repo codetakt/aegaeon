@@ -1,9 +1,9 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use aegaeon_server::config::ServerConfig;
-use aegaeon_server::kms::{KeyManager, KeyManagerError, ManagedJwtKeyManager};
-use aegaeon_server::runtime_keys::{RuntimeKeySet, RuntimeKeyUsage};
+use crate::config::ServerConfig;
+use crate::kms::{KeyManager, KeyManagerError, ManagedJwtKeyManager};
+use crate::runtime_keys::{RuntimeKeySet, RuntimeKeyUsage};
 
 type RuntimeKeyManagerPair = (Arc<dyn KeyManager>, Option<Arc<dyn KeyManager>>);
 

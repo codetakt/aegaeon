@@ -27,6 +27,9 @@ pub(super) async fn resource(
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection_for_route(&state, kind, uri.path());

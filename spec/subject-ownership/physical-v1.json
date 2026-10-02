@@ -1,0 +1,965 @@
+{
+  "columns": [
+    {
+      "name": "owner_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_identity_owners",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_identity_owners",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "clock_timestamp()",
+      "not_null": true,
+      "relation": "end_user_identity_owners",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_subject_reservations",
+      "collation": null
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_subject_reservations",
+      "collation": "C"
+    },
+    {
+      "name": "owner_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_user_subject_reservations",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "clock_timestamp()",
+      "not_null": true,
+      "relation": "end_user_subject_reservations",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "subject",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "end_users",
+      "collation": "C"
+    },
+    {
+      "name": "email",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "end_users",
+      "collation": "default"
+    },
+    {
+      "name": "status",
+      "type": "aegaeon.end_user_status",
+      "default": "'INVITED'::aegaeon.end_user_status",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "blocked_at",
+      "type": "timestamp with time zone",
+      "default": null,
+      "not_null": false,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "blocked_reason",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "end_users",
+      "collation": "default"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "end_users",
+      "collation": null
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "default": "gen_random_uuid()",
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "tenant_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "environments",
+      "collation": "default"
+    },
+    {
+      "name": "slug",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "environments",
+      "collation": "default"
+    },
+    {
+      "name": "issuer_host",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "environments",
+      "collation": "default"
+    },
+    {
+      "name": "issuer_url",
+      "type": "text",
+      "default": "('https://'::text || issuer_host)",
+      "not_null": false,
+      "relation": "environments",
+      "collation": "default"
+    },
+    {
+      "name": "active_configuration_version_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": false,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "status",
+      "type": "aegaeon.environment_status",
+      "default": "'ACTIVE'::aegaeon.environment_status",
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "now()",
+      "not_null": true,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "deleted_at",
+      "type": "timestamp with time zone",
+      "default": null,
+      "not_null": false,
+      "relation": "environments",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": null
+    },
+    {
+      "name": "kind",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "receipt_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": null
+    },
+    {
+      "name": "contract_version",
+      "type": "integer",
+      "default": "1",
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "clock_timestamp()",
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": null
+    },
+    {
+      "name": "session_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "effective_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "definer_actor",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "maintenance_reference",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "manifest_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "inventory_sha256",
+      "type": "text",
+      "default": null,
+      "not_null": false,
+      "relation": "subject_ownership_adoptions",
+      "collation": "default"
+    },
+    {
+      "name": "receipt_data",
+      "type": "jsonb",
+      "default": null,
+      "not_null": false,
+      "relation": "subject_ownership_adoptions",
+      "collation": null
+    },
+    {
+      "name": "environment_id",
+      "type": "uuid",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_namespaces",
+      "collation": null
+    },
+    {
+      "name": "issuer_host",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_namespaces",
+      "collation": "default"
+    },
+    {
+      "name": "origin",
+      "type": "text",
+      "default": null,
+      "not_null": true,
+      "relation": "subject_ownership_namespaces",
+      "collation": "default"
+    },
+    {
+      "name": "contract_version",
+      "type": "integer",
+      "default": "1",
+      "not_null": true,
+      "relation": "subject_ownership_namespaces",
+      "collation": null
+    },
+    {
+      "name": "recorded_at",
+      "type": "timestamp with time zone",
+      "default": "clock_timestamp()",
+      "not_null": true,
+      "relation": "subject_ownership_namespaces",
+      "collation": null
+    }
+  ],
+  "triggers": [
+    {
+      "name": "end_user_identity_owners_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "end_user_identity_owners",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "end_user_identity_owners_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "end_user_identity_owners",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "end_user_subject_reservations_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "end_user_subject_reservations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "end_user_subject_reservations_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "end_user_subject_reservations",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "end_users_subject_ownership",
+      "type": 23,
+      "enabled": "O",
+      "function": "subject_ownership_guard_user",
+      "relation": "end_users",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "environments_lifecycle_invariants",
+      "type": 23,
+      "enabled": "O",
+      "function": "enforce_environment_lifecycle_invariants",
+      "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "environments_subject_namespace_immutable",
+      "type": 19,
+      "enabled": "O",
+      "function": "subject_ownership_guard_environment",
+      "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "environments_subject_namespace_initialize",
+      "type": 5,
+      "enabled": "O",
+      "function": "subject_ownership_guard_environment",
+      "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "runtime_authority_notify_environments",
+      "type": 29,
+      "enabled": "O",
+      "function": "notify_runtime_authority_changed",
+      "relation": "environments",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_ownership_adoptions_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_ownership_adoptions",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_ownership_adoptions_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_ownership_adoptions",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_ownership_namespaces_immutable",
+      "type": 27,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_ownership_namespaces",
+      "arguments": "",
+      "qualifier": null
+    },
+    {
+      "name": "subject_ownership_namespaces_no_truncate",
+      "type": 34,
+      "enabled": "O",
+      "function": "subject_ownership_immutable",
+      "relation": "subject_ownership_namespaces",
+      "arguments": "",
+      "qualifier": null
+    }
+  ],
+  "constraints": [
+    {
+      "name": "end_user_identity_owners_environment_id_fkey",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_user_identity_owners_environment_id_not_null",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "end_user_identity_owners_owner_id_environment_id_key",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (owner_id, environment_id)"
+    },
+    {
+      "name": "end_user_identity_owners_owner_id_not_null",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL owner_id"
+    },
+    {
+      "name": "end_user_identity_owners_pkey",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (owner_id)"
+    },
+    {
+      "name": "end_user_identity_owners_recorded_at_not_null",
+      "deferred": false,
+      "relation": "end_user_identity_owners",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "end_user_subject_reservations_environment_id_fkey",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.subject_ownership_namespaces(environment_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_user_subject_reservations_environment_id_not_null",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "end_user_subject_reservations_owner_id_not_null",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL owner_id"
+    },
+    {
+      "name": "end_user_subject_reservations_pkey",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id, subject)"
+    },
+    {
+      "name": "end_user_subject_reservations_recorded_at_not_null",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "end_user_subject_reservations_subject_check",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (aegaeon.subject_ownership_valid_subject(subject))"
+    },
+    {
+      "name": "end_user_subject_reservations_subject_not_null",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject"
+    },
+    {
+      "name": "subject_reservations_owner_environment_fkey",
+      "deferred": false,
+      "relation": "end_user_subject_reservations",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (owner_id, environment_id) REFERENCES aegaeon.end_user_identity_owners(owner_id, environment_id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_users_created_at_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "end_users_email_lowercase",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((email IS NULL) OR (email = lower(email))))"
+    },
+    {
+      "name": "end_users_environment_id_fkey",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "end_users_environment_id_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "end_users_id_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "end_users_pkey",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "end_users_status_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL status"
+    },
+    {
+      "name": "end_users_subject_format",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (aegaeon.subject_ownership_valid_subject(subject))"
+    },
+    {
+      "name": "end_users_subject_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL subject"
+    },
+    {
+      "name": "end_users_updated_at_not_null",
+      "deferred": false,
+      "relation": "end_users",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "environments_active_configuration_version_same_environment_fkey",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (id, active_configuration_version_id) REFERENCES aegaeon.configuration_versions(environment_id, id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "environments_created_at_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "name": "environments_id_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "name": "environments_issuer_host_check",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((issuer_host = lower(issuer_host)) AND (POSITION(('://'::text) IN (issuer_host)) = 0) AND (POSITION(('/'::text) IN (issuer_host)) = 0) AND (POSITION(('?'::text) IN (issuer_host)) = 0) AND (POSITION(('#'::text) IN (issuer_host)) = 0)))"
+    },
+    {
+      "name": "environments_issuer_host_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issuer_host"
+    },
+    {
+      "name": "environments_name_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL name"
+    },
+    {
+      "name": "environments_pkey",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "environments_slug_dns_label",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((slug ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'::text) AND (slug = lower(slug))))"
+    },
+    {
+      "name": "environments_slug_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL slug"
+    },
+    {
+      "name": "environments_status_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL status"
+    },
+    {
+      "name": "environments_tenant_id_fkey",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (tenant_id) REFERENCES aegaeon.tenants(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "environments_tenant_id_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL tenant_id"
+    },
+    {
+      "name": "environments_updated_at_not_null",
+      "deferred": false,
+      "relation": "environments",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "name": "subject_ownership_adoptions_contract_version_check",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((contract_version = 1))"
+    },
+    {
+      "name": "subject_ownership_adoptions_contract_version_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL contract_version"
+    },
+    {
+      "name": "subject_ownership_adoptions_definer_actor_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL definer_actor"
+    },
+    {
+      "name": "subject_ownership_adoptions_effective_actor_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL effective_actor"
+    },
+    {
+      "name": "subject_ownership_adoptions_environment_id_kind_fkey",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id, kind) REFERENCES aegaeon.subject_ownership_namespaces(environment_id, origin) ON DELETE RESTRICT"
+    },
+    {
+      "name": "subject_ownership_adoptions_environment_id_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "subject_ownership_adoptions_kind_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL kind"
+    },
+    {
+      "name": "subject_ownership_adoptions_pkey",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id)"
+    },
+    {
+      "name": "subject_ownership_adoptions_receipt_id_key",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (receipt_id)"
+    },
+    {
+      "name": "subject_ownership_adoptions_receipt_id_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL receipt_id"
+    },
+    {
+      "name": "subject_ownership_adoptions_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    },
+    {
+      "name": "subject_ownership_adoptions_session_actor_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL session_actor"
+    },
+    {
+      "name": "subject_ownership_adoptions_shape",
+      "deferred": false,
+      "relation": "subject_ownership_adoptions",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((((kind = 'fresh'::text) AND (maintenance_reference IS NULL) AND (manifest_sha256 IS NULL) AND (inventory_sha256 IS NULL) AND (receipt_data IS NULL)) OR ((kind = 'legacy'::text) AND (maintenance_reference IS NOT NULL) AND (manifest_sha256 IS NOT NULL) AND (inventory_sha256 IS NOT NULL) AND (manifest_sha256 ~ '^[0-9a-f]{64}$'::text) AND (inventory_sha256 ~ '^[0-9a-f]{64}$'::text) AND (receipt_data IS NOT NULL))))"
+    },
+    {
+      "name": "subject_ownership_namespaces_contract_version_check",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((contract_version = 1))"
+    },
+    {
+      "name": "subject_ownership_namespaces_contract_version_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL contract_version"
+    },
+    {
+      "name": "subject_ownership_namespaces_environment_id_fkey",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "FOREIGN KEY (environment_id) REFERENCES aegaeon.environments(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "subject_ownership_namespaces_environment_id_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL environment_id"
+    },
+    {
+      "name": "subject_ownership_namespaces_environment_id_origin_key",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (environment_id, origin)"
+    },
+    {
+      "name": "subject_ownership_namespaces_issuer_host_key",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "UNIQUE (issuer_host)"
+    },
+    {
+      "name": "subject_ownership_namespaces_issuer_host_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL issuer_host"
+    },
+    {
+      "name": "subject_ownership_namespaces_origin_check",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((origin = ANY (ARRAY['legacy'::text, 'fresh'::text])))"
+    },
+    {
+      "name": "subject_ownership_namespaces_origin_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL origin"
+    },
+    {
+      "name": "subject_ownership_namespaces_pkey",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "PRIMARY KEY (environment_id)"
+    },
+    {
+      "name": "subject_ownership_namespaces_recorded_at_not_null",
+      "deferred": false,
+      "relation": "subject_ownership_namespaces",
+      "validated": true,
+      "deferrable": false,
+      "definition": "NOT NULL recorded_at"
+    }
+  ]
+}

@@ -118,7 +118,7 @@ async fn shared_redis_token_exchange_no_parent_and_legacy_selector_contract() ->
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }
     .await;

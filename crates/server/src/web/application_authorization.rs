@@ -9,6 +9,9 @@ pub(super) async fn authorization_context(
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
     headers: axum::http::HeaderMap,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     // This application surface accepts exactly the authenticated UserInfo credential and
     // its original sender binding, while obtaining authority exclusively from the grant.
     let authenticated = super::userinfo::userinfo_get(

@@ -214,6 +214,9 @@ pub(super) async fn handle_token_device_code_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !state.cfg.grant_runtime().device_authorization_enabled() {
         return token_error_response(StatusCode::BAD_REQUEST, "unsupported_grant_type", None);
     }

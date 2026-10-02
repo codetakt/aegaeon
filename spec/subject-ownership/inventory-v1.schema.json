@@ -1,0 +1,496 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Strict raw JSON parsing additionally rejects decoded duplicate keys, NUL, BOM, noncanonical integer lexical forms, excess bytes and depth. Semantic validation enforces cross references, source coverage, ordered identities and ownership preservation. JSON Schema alone does not establish adoption.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "aegaeon-subject-ownership-inventory"
+    },
+    "version": {
+      "const": 1
+    },
+    "namespace": {
+      "$ref": "#/$defs/namespace"
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "collections": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "environments"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "subject_ownership_namespaces"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "subject_ownership_adoptions"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "end_user_identity_owners"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "end_user_subject_reservations"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "end_users"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "audit_events"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "physical_catalog"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "name",
+            "count",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "items": false,
+      "minItems": 8,
+      "maxItems": 8
+    },
+    "state_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fact"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "findings_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "namespace",
+    "target",
+    "collections",
+    "state_sha256",
+    "facts",
+    "findings",
+    "findings_sha256"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "environment_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "issuer_host": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "environment_id",
+        "issuer_host"
+      ],
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "runtime_role": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "database_name": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "database_oid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "server_version_num": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "server_encoding": {
+          "const": "UTF8"
+        },
+        "schema_revision": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "schema_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "catalog_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tool_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_commit": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "dirty_input_sha256": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "deployment_id",
+        "runtime_role",
+        "database_name",
+        "database_oid",
+        "server_version_num",
+        "server_encoding",
+        "schema_revision",
+        "schema_sha256",
+        "catalog_sha256",
+        "tool_sha256",
+        "source_commit",
+        "source_tree",
+        "dirty_input_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "fact": {
+      "type": "object",
+      "properties": {
+        "fact_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "origin": {
+          "enum": [
+            "current_user",
+            "permanent_owner",
+            "permanent_reservation",
+            "management_create_subject",
+            "management_previous_subject",
+            "management_current_subject"
+          ]
+        },
+        "row_key": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$",
+          "minLength": 1
+        },
+        "row_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "environment_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "owner_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "subject": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[^\\u0000]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fact_id",
+        "origin",
+        "row_key",
+        "row_sha256",
+        "environment_id",
+        "owner_id",
+        "subject",
+        "valid"
+      ],
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "class": {
+          "enum": [
+            "unknown_event",
+            "malformed_event",
+            "unknown_owner",
+            "unscoped_event",
+            "invalid_history",
+            "ownership_conflict",
+            "outside_target"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        },
+        "row_key": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$",
+          "minLength": 1
+        },
+        "row_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "environment_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observed_owner_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "observed_subjects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\u0000]*$"
+          },
+          "uniqueItems": true
+        },
+        "preserved_fact_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "finding_id",
+        "class",
+        "origin",
+        "row_key",
+        "row_sha256",
+        "environment_id",
+        "observed_owner_ids",
+        "observed_subjects",
+        "preserved_fact_ids"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

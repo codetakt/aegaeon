@@ -12,17 +12,11 @@ pub(super) async fn handle_token_client_credentials_grant(
     state: &AppState,
     ctx: &TokenEndpointContext,
 ) -> Response {
-    let grant_allowed = match state
-        .clients
-        .try_allows_grant(&ctx.client_id, "client_credentials")
-    {
-        Ok(allowed) => allowed,
-        Err(error) => {
-            return token_registry_state_error_response("client_credentials_allows_grant", error);
-        }
-    };
-    if !grant_allowed {
-        return token_error_response(StatusCode::BAD_REQUEST, "unauthorized_client", None);
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
+    if let Err(response) = require_client_credentials_grant(state, ctx) {
+        return response;
     }
     let permit = match super::client_credentials_authorization::authorize(state, ctx).await {
         Ok(permit) => permit,
@@ -108,6 +102,32 @@ pub(super) async fn handle_token_client_credentials_grant(
             token_internal_error_response("client_credentials_token_issuer", Some(&error))
         }
     }
+}
+
+fn require_client_credentials_grant(
+    state: &AppState,
+    ctx: &TokenEndpointContext,
+) -> Result<(), Response> {
+    let grant_allowed = match state
+        .clients
+        .try_allows_grant(&ctx.client_id, "client_credentials")
+    {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            return Err(token_registry_state_error_response(
+                "client_credentials_allows_grant",
+                error,
+            ));
+        }
+    };
+    if !grant_allowed {
+        return Err(token_error_response(
+            StatusCode::BAD_REQUEST,
+            "unauthorized_client",
+            None,
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

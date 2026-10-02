@@ -34,6 +34,7 @@ mod logout_endpoint;
 mod logout_id_token_hint;
 pub mod management;
 mod metadata;
+pub(crate) mod namespace_runtime;
 mod oauth_audit;
 mod oauth_errors;
 mod oidc_request_input;

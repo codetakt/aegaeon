@@ -1,0 +1,516 @@
+[
+  {
+    "signature": "aegaeon.subject_ownership_valid_subject(text)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "fc9882541afc9a780cb6caf80c97d96fe8be21e62568205f8e7ef7be2b349eb6",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "boolean",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_ownership_guard_insert()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "52b9475146e50d85310a14c71ead5c119d0b6b202f8bb521928c36c46739497f",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "trigger",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_ownership_immutable()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "c365d747fb17ea03ac06aa4612a993663f3dbf74c6fb47240fcdc856d159d9d2",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "trigger",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_ownership_guard_environment()",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "6406ec1158669d7225bb0c5e09595ab2517e849df4cbf892c652628e46cb2d58",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "trigger",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_ownership_guard_user()",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "9614948221b7e5aa281211f40a79a7536c465ba5d5fa6dd091eb4fb29668c34d",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "trigger",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_frame(bytea)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "73af3455a9d9ed6d84a6b2d177850c382d37cc03538db945d99ed4e50c6536c5",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "bytea",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_chain_start(text)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "6a89cf6cfeaf7b67228160c980a685d2340106c53c81d5d282cc68f7a8d30444",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "bytea",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_chain_row(bytea,bigint,text,text)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "995e91e793b4bb0b8441035c374ae62c48afd83b1fc79f4731b976377d441599",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "bytea",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_chain_end(bytea,bigint)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "00c46633113a05cbd996b6bc36d9fb55874d2c964a4ca1675188756bc5067290",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "text",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_strict_json(json,integer)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "de16f880ea0c9ff4ef15676b05d2cb42b1fd86ef1c760563de9cbf323f0b38bd",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": "0"
+  },
+  {
+    "signature": "aegaeon.subject_history_require_keys(jsonb,text[])",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "5b3e7a080c1ad342fc617a2d11632708df22395107c024a631b22775ab998324",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_require_string(jsonb,text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "d51baf6bfdfe6c472679c279e366dd8bbba63140694a9a8f7e7e8d39483d61d6",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "text",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_check_maintenance_role(text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "d3b883c26eceb4192fd1fe9b88d2b73948f4cbfa25757bb8710b8b9e01377988",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_maintenance_actor()",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "8d62d6f1ac5189b60e6a0553e4e361109776468f33a8de1c6064e3bfe0e981ee",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "text",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_check_runtime_role(text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "789fe6e645490247957e59769567a73fac51b2d4d02977a6dd8cf0c5b46f62f8",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_lock()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "627ee964ca9d785f28708042e3aee5f60f08e702b30be583eb16d17c98460786",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_revision_relation()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "d64c499c2301b4ba5c0d25a375434dbd0a4d6321e8db419d8ca7773e5f5575c4",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "regclass",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_revision_rows()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "1674cf69df8522d842fb678547ea047d64db68293a702421e42d44610a3bf73d",
+    "settings": [
+      "datestyle=iso, ymd",
+      "extra_float_digits=3",
+      "intervalstyle=postgres",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "result": "TABLE(row_key text, row_text text)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_lock_revisions()",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "4504247c9f8d02f60f728d5a13778bc37c0f065e1949f8ee1cf24e4a1d3e28b3",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_physical_catalog(text)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "dab1b87fa17049d8d9cf2360ddc85e31743c43b117ddab3a574bace7b015e342",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "TABLE(row_key text, row_text text)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_key(text[])",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": true,
+    "body_sha256": "8ae3364074e7f5b84b1f36e23fc893d5c55b64fb9db00d8ebce3fceb467dce39",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "text",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_source_rows(text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "a0625351b63ad3180f2b0898f847ef5b30e4653548273174c2272f452c2f2567",
+    "settings": [
+      "datestyle=iso, ymd",
+      "extra_float_digits=3",
+      "intervalstyle=postgres",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "result": "TABLE(collection_name text, row_key text, row_text text)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_content_id(text,text[],text[])",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "f857b4ccabedc2c61d12ab699db33a8d7bd24cb5c46c15a57e5fe75d731c9250",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "text",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_fact(text,text,text,uuid,uuid,text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "50c81e2960f390c6395fe4ff7c1eafd9e70d1a8c06703f52dc3e5d7c2963b072",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "jsonb",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_finding(text,text,text,text,uuid,jsonb,jsonb,jsonb)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "5e48222af63e3b68f8c9889789b307ca9898ad44a34b3dd0f9521d457e24b42e",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "jsonb",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_classify(text,text,text,uuid)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "4234db1e406f61682c13c52bd27c5809d261a08fe19a92656f7d35ea6a421314",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "TABLE(record_type text, payload jsonb)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_document_schema(text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "39cd34d015032e888a7ae344126f163f624b415bed7e1aa11107af3396d6f875",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "jsonb",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_validate_shape(jsonb,jsonb,jsonb)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "1d4453458e87bed963c4d3519234082e48e4ba3a657b8a249a0e53306cb67a09",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_parse_document(bytea,text)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "b18bc5ce79110960ba66a2e5aca7f6c1707c82bb2c1bdbaa9cfb53c523884b16",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "jsonb",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_source_refs(jsonb,jsonb,text,boolean)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "f67403f7dbc56971dbac94e03f488a3c480a43e9c17d1be31c614b7b514f357b",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_validate_manifest(jsonb)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "091c069b1d18676295e2f107c96512ed006e2f985886798bf6a62888e4dba071",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_observed_physical()",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "3c4962a3121741e8da7f4b7346622ce78d0d7095ac5b9da4c5144c5c007d067d",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "jsonb",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_inventory_stream(uuid,text,text,jsonb)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "f69b9ea02f5329bf7fe4a13882f1ba2a1eb05ba78ff2a6bef8e9f72be13b6e35",
+    "settings": [
+      "datestyle=iso, ymd",
+      "extra_float_digits=3",
+      "intervalstyle=postgres",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "result": "TABLE(record_type text, row_key text, payload text)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.inventory_subject_ownership_history_v1(uuid,text,text,jsonb)",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "163a5a4186fb6931bfe5ad36b37b8b2009442665ad37700c43140e4a28aca6ed",
+    "settings": [
+      "datestyle=iso, ymd",
+      "extra_float_digits=3",
+      "intervalstyle=postgres",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "result": "TABLE(record_type text, row_key text, payload text)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_identity_event(text)",
+    "language": "sql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "6089a7cc7506b6b595b0cc0dd16e9973b8207fe3bc98d325c61e2c9dcb2cf7ef",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "boolean",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.subject_history_validate_union(jsonb,jsonb)",
+    "language": "plpgsql",
+    "security_definer": false,
+    "volatility": "i",
+    "strict": false,
+    "body_sha256": "8483684ad930becb24f663ea50086cfc7c6249dc6d109ff0ac8858906d11d6f4",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "void",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.adopt_subject_ownership_history_v1(bytea,bytea,text,text)",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "v",
+    "strict": false,
+    "body_sha256": "403dd259b7863e50b410efbcabf3baade2321926d6e64ae535bc20966dc642f0",
+    "settings": [
+      "datestyle=iso, ymd",
+      "extra_float_digits=3",
+      "intervalstyle=postgres",
+      "search_path=pg_catalog, pg_temp",
+      "timezone=utc"
+    ],
+    "result": "TABLE(environment_id uuid, receipt_id uuid, manifest_sha256 text, inventory_sha256 text, session_actor text, effective_actor text, definer_actor text, owner_count bigint, reservation_count bigint)",
+    "defaults": null
+  },
+  {
+    "signature": "aegaeon.validate_subject_ownership_namespace_v1(uuid)",
+    "language": "plpgsql",
+    "security_definer": true,
+    "volatility": "s",
+    "strict": false,
+    "body_sha256": "6edd9f6fe332c899235ccf1f8be4f8af146796ceb17719386d27252b99753c06",
+    "settings": [
+      "search_path=pg_catalog, pg_temp"
+    ],
+    "result": "TABLE(record_type text, row_key text, payload text)",
+    "defaults": null
+  }
+]

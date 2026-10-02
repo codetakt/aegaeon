@@ -147,3 +147,25 @@ production deployments.
 - Runtime client snapshot synchronization: `crates/server/src/runtime_clients.rs`
 - JWKS fetcher + caching: `crates/server/src/client_registry.rs`
 - Request Object self-check: `crates/server/src/request_object.rs`
+
+### Subject ownership database test fixtures
+
+`AEGAEON_PRE_MIGRATION_DATABASE_URL` is a test-only authorized inspection URL for
+predecessor-schema inventory tests. It is never accepted as server runtime
+configuration. The container integration runner creates an owned disposable
+database and three restricted login identities, runs the required predecessor
+inventory lane, applies the actual Atlas migrations, then exports the restricted
+runtime URL to its remaining tests. It retains namespaces until whole-database
+teardown. `AEGAEON_TEST_ADMIN_DATABASE_URL` is the runner's temporary administrator
+connection for creating/removing those owned fixtures; it is not a server setting.
+Generated passwords and shell environment files remain in its private temporary
+directory. Successful cleanup removes the credential-bearing environment file.
+The runner refuses incompatible preexisting subject role memberships; use the
+repository's isolated test PostgreSQL service.
+
+`AEGAEON_TEST_DATABASE_FIXTURE_DIRECTORY` is a private test-runner artifact path.
+Its credential file supplies the same separate migration/runtime/maintenance
+logins to isolated initialization-test databases. Setup and injected DDL use
+`AEGAEON_TEST_ADMIN_DATABASE_URL`; actual server state uses the restricted runtime
+login. The runner removes its private supplier file during cleanup. These are
+test fixture suppliers, never production server configuration.

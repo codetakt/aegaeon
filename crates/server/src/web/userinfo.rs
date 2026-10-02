@@ -26,6 +26,9 @@ pub(super) async fn userinfo_get(
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let endpoint = match state.oidc.userinfo_endpoint.as_ref() {
         Some(ep) => ep.clone(),
@@ -222,6 +225,9 @@ pub(super) async fn userinfo_post(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let endpoint = match state.oidc.userinfo_endpoint.as_ref() {
         Some(ep) => ep.clone(),

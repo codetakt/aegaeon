@@ -89,18 +89,22 @@ async fn pg_application_resource_rejections_record_failure_and_latency() -> Test
         )
         .await?;
         let mut state = test_app_state(pool.clone(), &env).await?;
-        state.application_authority = Some(Authority {
-            projections: pool.clone(),
+        state.application_authority = Some(std::sync::Arc::new(Authority {
+            projections: state.db_pool.clone(),
             memberships: None,
-        });
+        }));
         // This fixture uses the supported unbound Bearer policy. Scope, audience,
         // token validity and application authority checks remain enabled.
-        state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
-            state.tokens.store.as_ref().clone(),
-            Arc::clone(&state.keys.access_token),
-            crate::policy::SecurityPolicy::default()
-                .with_sender_constraint(crate::policy::SenderConstraint::None),
-        ));
+        state.tokens.validator = Arc::new(
+            crate::authcode::TokenValidator::with_policy(
+                state.tokens.store.as_ref().clone(),
+                Arc::clone(&state.keys.access_token),
+                crate::policy::SecurityPolicy::default()
+                    .with_sender_constraint(crate::policy::SenderConstraint::None),
+            )
+            .with_issuer(Some(env.issuer_url.clone())),
+        );
+        state.validate_subject_namespace().await?;
         let access = AccessToken::new("client".into(), "subject".into(), Some("read".into()), 300);
         let token = access.token.clone();
         let mut meta = BearerTokenMeta::new(BearerTokenMetaInput {
@@ -149,15 +153,16 @@ async fn pg_application_resource_rejections_record_failure_and_latency() -> Test
             .execute(&pool)
             .await?;
         request(&state, &token, StatusCode::OK, "success", None).await?;
-        let closed = sqlx::postgres::PgPoolOptions::new()
-            .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
-            .await?;
-        closed.close().await;
-        let mut unavailable = state.clone();
-        unavailable.application_authority = Some(Authority {
-            projections: closed,
+        // Fail the actual independently owned runtime pool after successful
+        // validation, keeping the original runtime alive for the recovery control.
+        let mut unavailable = test_app_state(pool.clone(), &env).await?;
+        unavailable.tokens = state.tokens.clone();
+        unavailable.application_authority = Some(std::sync::Arc::new(Authority {
+            projections: unavailable.db_pool.clone(),
             memberships: None,
-        });
+        }));
+        unavailable.validate_subject_namespace().await?;
+        unavailable.db_pool.close().await;
         request(
             &unavailable,
             &token,

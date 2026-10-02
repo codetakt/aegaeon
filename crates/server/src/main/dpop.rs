@@ -3,10 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
-use aegaeon_server::config::{
-    require_shared_runtime_store_url, RuntimeStateNamespace, ServerConfig,
-};
-use aegaeon_server::middleware::{dpop::DpopMiddleware, DpopNonceStore};
+use crate::config::{require_shared_runtime_store_url, RuntimeStateNamespace, ServerConfig};
+use crate::middleware::{dpop::DpopMiddleware, DpopNonceStore};
 
 fn dpop_replay_ttl(cfg: &ServerConfig) -> Result<Duration> {
     cfg.dpop_iat_window_secs
