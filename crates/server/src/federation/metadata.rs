@@ -98,6 +98,8 @@ pub(super) fn validate(entity_type: &str, value: &Value) -> Result<(), Federatio
         .map_err(|field| invalid(entity_type, field))?;
     crate::oidc::provider_urls::validate_supplied(entity_type, parameters)
         .map_err(|field| invalid(entity_type, field))?;
+    crate::metadata::protocol_keys::validate_supplied(entity_type, parameters)
+        .map_err(|field| invalid(entity_type, field))?;
     registration::validate_supplied(entity_type, parameters)
 }
 

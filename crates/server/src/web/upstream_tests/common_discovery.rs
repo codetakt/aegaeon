@@ -198,18 +198,10 @@ fn jwks_from_keys(keys: &[Value]) -> Result<JwkSet, String> {
 }
 
 fn rsa_key(kid: &str) -> Value {
-    rsa_key_with_material(kid, "00", "AQAB")
-}
-
-fn rsa_key_with_material(kid: &str, n: &str, e: &str) -> Value {
-    json!({
-        "kty": "RSA",
-        "kid": kid,
-        "use": "sig",
-        "alg": "RS256",
-        "n": n,
-        "e": e
-    })
+    let mut key =
+        serde_json::to_value(upstream_signing_key().unwrap().jwks()).unwrap()["keys"][0].clone();
+    key["kid"] = json!(kid);
+    key
 }
 
 fn federation_metadata_from_discovery(discovery: &OidcDiscovery) -> Value {
@@ -252,10 +244,12 @@ fn validate_upstream_discovery_matches_federation_metadata_rejects_endpoint_mism
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_different_material(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "00", "AQAB")])?;
+    let fetched = jwks_from_keys(&[rsa_key("k1")])?;
+    let mut other_key = rsa_key("k1");
+    other_key["e"] = json!("Aw");
     let metadata = json!({
         "jwks": {
-            "keys": [rsa_key_with_material("k1", "01", "AQAB")]
+            "keys": [other_key]
         }
     });
 
@@ -289,20 +283,8 @@ fn validate_upstream_jwks_matches_federation_metadata_accepts_same_material_with
 
 #[test]
 fn parse_upstream_jwks_body_accepts_valid_jwks() -> TestResult {
-    let body = br#"{
-            "keys": [
-                {
-                    "kty": "RSA",
-                    "kid": "upstream-rs256",
-                    "use": "sig",
-                    "alg": "RS256",
-                    "n": "00",
-                    "e": "AQAB"
-                }
-            ]
-        }"#;
-
-    let jwks = parse_upstream_jwks_body(body)?;
+    let body = serde_json::to_vec(&json!({"keys":[rsa_key("upstream-rs256")]})).unwrap();
+    let jwks = parse_upstream_jwks_body(&body)?;
     assert_eq!(jwks.keys().len(), 1);
     assert!(jwks.signature_keys().next().is_some());
     Ok(())

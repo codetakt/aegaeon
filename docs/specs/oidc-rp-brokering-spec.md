@@ -160,6 +160,53 @@ and ordinary OIDC restrictions shared by Federation 1.0 and Federation Connect 1
 Full metadata-policy, constraints, key-material, temporal-domain, and individual entity admission
 remain separate obligations. No edition adoption or new formal assurance follows from these checks.
 
+## Public Protocol-Key Metadata
+
+Federation OP, RP, OAuth authorization server, client and resource metadata accept
+`jwks`, `jwks_uri` and `signed_jwks_uri` together under Federation section 5.2.1.1.
+A supplied inline set must be an object containing a `keys` array; empty sets and
+unusable individual members remain representable in partial metadata. URI values
+use the shared HTTPS lexical admission policy, preserving the exact string and
+allowing ports, paths and queries. Admission does not fetch a URI or grant outbound
+access. Ordinary client registration's `jwks`/`jwks_uri` exclusion is unchanged.
+Ordinary OP Discovery retains its standard URI contract and ignores unknown
+inline/signed extensions. The current live OP consumer still needs `jwks_uri`.
+
+Aegaeon's public protocol-key profile rejects immediate `d`, `p`, `q`, `dp`, `dq`,
+`qi`, `oth` and `k` member names before filtering, including null and otherwise
+unusable siblings. Applying this presence rule to all five roles is local
+hardening; generic JOSE private keys and opaque nested extensions are unaffected.
+Upgrades therefore refuse metadata or upstream sets previously accepted with
+those members. Original C/S inputs are checked before policy can hide them, and
+retained derived values are checked again.
+
+Actual upstream verification ignores unsupported or malformed individual keys
+while requiring at least one supported public verification key. Key usage,
+algorithm and curve matching are exact; supported native material validation and
+original duplicate-kid guards apply before selection. Missing kid requires one
+eligible candidate before token-algorithm narrowing. Empty or all-ineligible
+sets cannot authorize a signature.
+
+The process-local upstream JWKS cache retains the original JSON. Both new fetches
+and cache hits reapply the public profile and eligibility checks, and outbound
+authorization runs before cache lookup. TTL and exact URI cache keys are unchanged;
+there is no persistent migration. Typed helpers recheck visible fields but cannot
+recover erased original information. This cache representation must be preserved
+when integrating separate refresh coordination behavior.
+
+When signed OP metadata includes inline keys, eligible `(kid, key type, public
+material)` identity sets must equal the fetched set, and fetched algorithm
+permissions must be a subset of signed permissions. Missing and empty kid differ.
+This instantaneous equality is a local availability restriction during rollover;
+it does not establish Federation's timely convergence of all representations.
+
+`signed_jwks_uri` is retained without fetching. Complete mixed-purpose requirements
+and certificate applicability remain separate work. Bare-key consumers may ignore
+uninterpreted certificate members; this change neither adds certificate trust nor
+requires universal certificate fetching or PKIX validation. Registration storage,
+echo and any actually claimed certificate semantics require their own applicable
+checks. This bounded validation is not complete imported-role conformance.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The

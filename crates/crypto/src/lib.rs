@@ -13,6 +13,7 @@ pub mod error;
 pub mod hash;
 pub mod jwe;
 pub mod mac;
+pub mod public_key;
 pub mod rand;
 pub mod signature;
 pub mod signing;

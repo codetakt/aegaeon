@@ -58,6 +58,11 @@ fn valid(value: &str, kind: Kind) -> bool {
         && (!matches!(kind, Kind::Issuer) || parsed.query().is_none())
 }
 
+/// Shared lexical HTTPS admission; this does not authorize a network request.
+pub(crate) fn valid_https_endpoint(value: &str) -> bool {
+    valid(value, Kind::Endpoint)
+}
+
 fn supplied(
     parameters: &Map<String, Value>,
     field: &'static str,
