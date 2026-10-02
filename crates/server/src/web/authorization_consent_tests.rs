@@ -26,6 +26,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 const CLIENT: &str = "consent-client";
+const CLIENT_SECRET: &str = "consent-client-test-secret";
 const SCOPE: &str = "openid profile email offline_access";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
@@ -43,6 +44,9 @@ async fn fixture_with_auth_method(
 ) -> TestResult<(AppState, String)> {
     let mut client = sample_registered_client(CLIENT);
     client.token_endpoint_auth_method = auth_method.to_string();
+    if auth_method == "client_secret_basic" {
+        client.client_secret = Some(CLIENT_SECRET.into());
+    }
     client.allowed_scopes = SCOPE.split(' ').map(str::to_string).collect();
     client.allowed_grant_types.push("refresh_token".to_string());
     let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(

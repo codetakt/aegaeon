@@ -140,7 +140,7 @@ fn request_keys(state: &AppState, connection: &mut redis::Connection) -> TestRes
     let prefix = namespace.redis_atomic_group_prefix(
         crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
         "par",
-        "v2",
+        "v3",
     );
     Ok(redis::cmd("KEYS")
         .arg(format!("{prefix}:req:*"))

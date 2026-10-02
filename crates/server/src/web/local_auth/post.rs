@@ -150,7 +150,22 @@ fn authorize_request_from_return_to(
     if path != "/authorize" || query.is_empty() {
         return None;
     }
-    serde_urlencoded::from_str(query).ok()
+    // This legacy test adapter materializes an explicitly unbound admitted
+    // request. Production login uses the current, opaque bound snapshot.
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_str(query).ok()?;
+    let mut request = serde_json::Map::new();
+    for (name, value) in pairs {
+        let value = if name == "max_age" {
+            serde_json::json!(value.parse::<u64>().ok()?)
+        } else {
+            serde_json::Value::String(value)
+        };
+        if request.insert(name, value).is_some() {
+            return None;
+        }
+    }
+    request.entry("dpop_jkt").or_insert(serde_json::Value::Null);
+    serde_json::from_value(serde_json::Value::Object(request)).ok()
 }
 
 fn complete_stepup_for_bound_request(

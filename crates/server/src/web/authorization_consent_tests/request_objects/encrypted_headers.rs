@@ -112,7 +112,7 @@ fn assert_no_grant_records(state: &AppState) -> TestResult {
     let url = std::env::var("AEGAEON_TEST_REDIS_URL")?;
     let mut conn = redis::Client::open(url)?.get_connection()?;
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
-    for (surface, version) in [("par", "v1"), ("authcode", "v2"), ("token-store", "v3")] {
+    for (surface, version) in [("par", "v3"), ("authcode", "v3"), ("token-store", "v3")] {
         let prefix = namespace.redis_atomic_group_prefix(
             crate::config::RuntimeRedisAtomicGroup::AuthorizationCodeGrant,
             surface,

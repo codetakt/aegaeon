@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-02T14:11:12.414722+00:00",
+  "generated": "2026-10-02T15:00:03.982475+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -146,7 +146,7 @@
       "critical": false
     },
     "crates/server/src/authcode/token/tests/oidc_id_token.rs": {
-      "sha256": "f7e724eb859bdfdc94df21e5567eaeec5a47ac3d89ad8d90fb681adfa3694e80",
+      "sha256": "0789e98f349c4bfb6d3a7932201fe9b2f531f947c7232b6a8524bc4aa2f9c9b7",
       "entries": [
         "OIDC-1-001",
         "OIDC-1-002",
@@ -357,7 +357,7 @@
       "critical": false
     },
     "crates/server/src/web/par_endpoint.rs": {
-      "sha256": "65ee017d08a8412d0f16b144d94f40e80d078456af99bead2b19797d01256e4e",
+      "sha256": "a901c51363b42a242d519afe82a88ea1959bfea2a450d81aaf6b986eea0acabb",
       "entries": [
         "9126-003",
         "9126-005",

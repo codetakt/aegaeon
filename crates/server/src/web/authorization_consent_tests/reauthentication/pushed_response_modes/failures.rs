@@ -8,7 +8,7 @@ async fn namespace_isolation(state: &AppState, sid: &str) -> TestResult {
         .ok_or("URI")?
         .1;
     let raw: String = redis::cmd("GET")
-        .arg(request_key(state, &request_uri, "v2"))
+        .arg(request_key(state, &request_uri, "v3"))
         .query(&mut connection()?)?;
     let old_uri = format!("urn:aegaeon:par:{}", Uuid::new_v4());
     let old_key = request_key(state, &old_uri, "v1");
@@ -60,7 +60,7 @@ async fn namespace_isolation(state: &AppState, sid: &str) -> TestResult {
     assert!(old_reader.is_none(), "old reader cannot find new records");
     let page = browser.request(state, &uri, None).await?;
     redeem_response(state, &browser, &page, "form_post", &request_uri).await?;
-    assert!(keys(state, "v2")?.is_empty());
+    assert!(keys(state, "v3")?.is_empty());
     let original: String = redis::cmd("GET").arg(old_key).query(&mut connection()?)?;
     assert_eq!(original, legacy);
     let reservation: String = redis::cmd("GET")
@@ -84,7 +84,7 @@ async fn refusal_and_expiry(state: &AppState, sid: &str) -> TestResult {
     let page = browser.request(state, &uri, None).await?;
     let transaction = transaction(&page.body)?.to_string();
     assert_eq!(
-        keys(state, "v2")?.len(),
+        keys(state, "v3")?.len(),
         2,
         "request and reservation coexist"
     );
@@ -105,7 +105,7 @@ async fn refusal_and_expiry(state: &AppState, sid: &str) -> TestResult {
         before
     );
     assert!(stored(state, &request_uri)?.is_some());
-    assert_eq!(keys(state, "v2")?.len(), 2);
+    assert_eq!(keys(state, "v3")?.len(), 2);
     let _ = state
         .protocol
         .par_store
@@ -132,7 +132,7 @@ async fn inconsistent_signed_record(state: &AppState, sid: &str) -> TestResult {
         .find(|(k, _)| k == "request_uri")
         .ok_or("URI")?
         .1;
-    let key = request_key(state, &request_uri, "v2");
+    let key = request_key(state, &request_uri, "v3");
     let raw: String = redis::cmd("GET").arg(&key).query(&mut connection()?)?;
     let mut value: Value = serde_json::from_str(&raw)?;
     value["request"]["response_mode"] = json!("query");

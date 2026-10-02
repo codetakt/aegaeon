@@ -6,6 +6,9 @@ use std::time::SystemTime;
 /// PAR request as per RFC 9126
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ParRequest {
+    /// Accepted RFC 9449 authorization key, independent of later client policy.
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::required_expectation")]
+    pub dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub client_id: String,
     pub redirect_uri: String,
     pub response_type: String,

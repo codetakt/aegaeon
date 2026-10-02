@@ -283,6 +283,7 @@ impl TokenIssuer {
         let redirect_uri = req.redirect_uri.clone();
         let mut code = AuthorizationCode::new_with_ttl(
             AuthorizationCodeInput {
+                dpop_jkt: req.dpop_jkt,
                 resource,
                 authorization_details: req.authorization_details,
                 scope: req.scope,

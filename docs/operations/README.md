@@ -59,3 +59,5 @@ Use [Documentation index](../index.md) for the exhaustive generated inventory.
 1. Start here for operator workflow.
 2. Jump to `docs/policies/` when you need the normative posture behind a runbook.
 3. Jump to `docs/verification/` when a runbook mentions the verified-vs-compat boundary.
+
+- [Authorization-code DPoP binding upgrade](authorization-code-dpop-binding-upgrade.md): coordinated PAR, code and continuation v3 cutover and rollback.

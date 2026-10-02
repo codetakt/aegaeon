@@ -233,6 +233,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
         )?
         .claims;
     let mut stored = serde_json::to_value(&claims)?;
+    stored["dpop_jkt"] = Value::Null;
     stored["iss"] = json!(state.issuer.as_str());
     stored["prompt"] = json!("consent");
     stored["request_object"] = json!(jwt);

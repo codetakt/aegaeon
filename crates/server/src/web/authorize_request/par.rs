@@ -36,6 +36,7 @@ fn authz_req_from_par_request(
 ) -> Result<AuthzReq, crate::par::ParError> {
     let iss = merge_par_authorize_issuer(par_req.iss, iss)?;
     Ok(AuthzReq {
+        dpop_jkt: par_req.dpop_jkt,
         response_type: par_req.response_type,
         client_id: par_req.client_id,
         iss,
@@ -154,6 +155,21 @@ pub(super) fn authorize_request_from_par(
                 ),
             },
         ));
+    }
+    if let Some(claims) = par_req.request_object_claims.as_ref() {
+        let signed = super::request_object::request_object_dpop_jkt(claims).map_err(|error| {
+            super::request_object_resolution_error_response(issuer_base, &error)
+        })?;
+        // Only PAR can retain a header-derived key when the signed claim is absent.
+        if signed
+            .as_ref()
+            .is_some_and(|key| Some(key) != par_req.dpop_jkt.as_ref())
+        {
+            return Err(super::invalid_authorize_request_response(
+                issuer_base,
+                "stored dpop_jkt disagrees with Request Object; push a new request",
+            ));
+        }
     }
     let response_mode = par_req.response_mode.clone();
     let prompt = par_req.prompt.clone();

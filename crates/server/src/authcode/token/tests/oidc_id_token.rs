@@ -4,6 +4,7 @@ fn test_oidc_id_token_emission() -> TestResult {
         .with_oidc(Some(enabled_oidc_config()?));
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,
@@ -58,6 +59,7 @@ fn test_oidc_id_token_emission() -> TestResult {
 fn test_openid_scope_rejected_without_oidc() {
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,
@@ -85,6 +87,7 @@ fn test_openid_scope_rejected_without_auth_session_context() -> TestResult {
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
         .with_oidc(Some(enabled_oidc_config()?));
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

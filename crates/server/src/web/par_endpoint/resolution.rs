@@ -18,6 +18,7 @@ use super::form::ParForm;
 use crate::util;
 
 pub(in crate::web) struct ParResolvedParameters {
+    pub(super) dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub(super) resource: Option<String>,
     pub(super) redirect_uri: String,
     pub(super) response_type: String,
@@ -37,6 +38,7 @@ pub(in crate::web) struct ParResolvedParameters {
 }
 
 pub(in crate::web) struct ParResolvedDraft {
+    pub(in crate::web) dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     pub(in crate::web) resource: Option<String>,
     pub(in crate::web) redirect_uri: Option<String>,
     pub(in crate::web) response_type: Option<String>,
@@ -123,6 +125,7 @@ pub(in crate::web) fn finalize_par_resolved_parameters(
     }
 
     Ok(ParResolvedParameters {
+        dpop_jkt: draft.dpop_jkt,
         resource: draft.resource,
         redirect_uri,
         response_type,
@@ -174,6 +177,19 @@ pub(super) async fn resolve_par_parameters(
     client_id: &str,
     issuer_base: &str,
 ) -> Result<ParResolvedParameters, Response> {
+    let mut dpop_jkt = form
+        .dpop_jkt
+        .as_deref()
+        .map(crate::authcode::types::DpopKeyThumbprint::parse)
+        .transpose()
+        .map_err(|description| {
+            no_cache_json_error_with_iss(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                Some(description),
+                issuer_base,
+            )
+        })?;
     let mut resource = resolve_par_form_resource(form, issuer_base)?;
     let supported_authorization_details =
         state.cfg.authorization_details_types_supported.as_slice();
@@ -217,6 +233,7 @@ pub(super) async fn resolve_par_parameters(
             supported_authorization_details,
         )
         .await?;
+        dpop_jkt = resolved.dpop_jkt;
         redirect_uri = Some(resolved.redirect_uri);
         response_type = Some(resolved.response_type);
         response_mode = resolved.request_object_claims.response_mode.clone();
@@ -239,6 +256,7 @@ pub(super) async fn resolve_par_parameters(
 
     finalize_par_resolved_parameters(
         ParResolvedDraft {
+            dpop_jkt,
             resource,
             redirect_uri,
             response_type,
@@ -312,7 +330,7 @@ async fn resolve_par_request_object(
         request_jwt.to_string(),
         issuer_base.to_string(),
         authorization_details_types_supported.to_vec(),
-        RequestObjectReplayPolicy::Consume,
+        RequestObjectReplayPolicy::Defer,
     )
     .await
     .map_err(|error| request_object_resolution_error_json_response(&error))

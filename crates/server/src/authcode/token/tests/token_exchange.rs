@@ -3,6 +3,7 @@ fn test_token_exchange_rejects_wrong_client_without_consuming_code() -> TestResu
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "legit_client".to_string(),
         iss: None,
@@ -75,6 +76,7 @@ fn test_token_exchange_rejects_authorization_code_policy_without_consuming_code(
     let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()));
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "legit_client".to_string(),
         iss: None,
@@ -151,6 +153,7 @@ fn test_token_exchange_rejects_oidc_session_failure_without_consuming_code() -> 
     .with_oidc_sessions(Some(failing_sessions));
 
     let auth_req = AuthorizationRequest {
+        dpop_jkt: None,
         scope: Some("openid profile".to_string()),
         state: Some("state-oidc-session-failure".to_string()),
         nonce: Some("nonce-oidc-session-failure".to_string()),

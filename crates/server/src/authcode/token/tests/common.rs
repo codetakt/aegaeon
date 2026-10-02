@@ -288,6 +288,7 @@ fn sign_raw_jwt_parts(
 
 fn authorization_request(scope: &str, resource: Option<&str>) -> AuthorizationRequest {
     AuthorizationRequest {
+        dpop_jkt: None,
         response_type: "code".to_string(),
         client_id: "test_client".to_string(),
         iss: None,

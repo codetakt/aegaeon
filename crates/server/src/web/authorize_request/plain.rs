@@ -9,6 +9,7 @@ use super::{
 };
 
 pub(super) struct PlainAuthorizeInput {
+    pub(super) dpop_jkt: Option<String>,
     pub(super) client_id: Option<String>,
     pub(super) response_type: Option<String>,
     pub(super) iss: Option<String>,
@@ -88,7 +89,16 @@ pub(super) fn authorize_request_from_plain_query(
         ));
     }
 
+    let dpop_jkt = input
+        .dpop_jkt
+        .as_deref()
+        .map(crate::authcode::types::DpopKeyThumbprint::parse)
+        .transpose()
+        .map_err(|description| {
+            super::invalid_authorize_request_response(runtime.issuer_base, description)
+        })?;
     Ok(AuthzReq {
+        dpop_jkt,
         response_type,
         client_id,
         iss: input.iss,

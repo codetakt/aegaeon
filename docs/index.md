@@ -343,6 +343,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
+| `docs/operations/authorization-code-dpop-binding-upgrade.md` | runbook | Authorization-code DPoP binding and coordinated upgrade | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-02 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/client-dpop-minimum-upgrade.md` | runbook | Client DPoP requirement upgrade | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |

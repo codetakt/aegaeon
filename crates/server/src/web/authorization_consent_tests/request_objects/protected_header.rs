@@ -22,13 +22,13 @@ async fn protected_header_pg_par_request_object_admission() -> TestResult {
     let env = setup_test_environment(&pool).await?;
     let result=async {
         let (state,sid)=fixture(&pool,&env).await?;
-        for (extra,accepted) in [
-            (r#""extension":{"nested":[null,true]},"\u2603":"ignored","jku":"https://keys.example/jwks""#,true),
-            (r#""extension":[1,]"#,false),
-            (r#""crit":null"#,false),
-            (r#""b64":true"#,false),
-            (r#""kid":null"#,false),
-            (r#""extension":0,"\u0065xtension":1"#,false),
+        for (extra,accepted,error) in [
+            (r#""extension":{"nested":[null,true]},"\u2603":"ignored","jku":"https://keys.example/jwks""#,true,""),
+            (r#""extension":[1,]"#,false,"invalid_request_object"),
+            (r#""crit":null"#,false,"invalid_request_object"),
+            (r#""b64":true"#,false,"invalid_request_object"),
+            (r#""kid":null"#,false,"invalid_request_object"),
+            (r#""extension":0,"\u0065xtension":1"#,false,"invalid_request"),
         ] {
             let original=signed_request(&state,"header-admission")?;
             let payload=URL_SAFE_NO_PAD.decode(original.split('.').nth(1).ok_or("payload")?)?;
@@ -38,7 +38,7 @@ async fn protected_header_pg_par_request_object_admission() -> TestResult {
             assert_eq!(status,if accepted {StatusCode::CREATED} else {StatusCode::BAD_REQUEST},"{header}: {body}");
             let response:Value=serde_json::from_str(&body)?;
             if accepted {assert!(response["request_uri"].is_string());}
-            else {assert_eq!(response["error"],"invalid_request");}
+            else {assert_eq!(response["error"],error,"{header}: {body}");}
         }
         Ok(())
     }.await;

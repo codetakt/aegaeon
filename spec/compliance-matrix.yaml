@@ -2091,6 +2091,45 @@ rfc_9449:
   - The client boolean cannot weaken environment/profile requirements or existing stored bindings.
   - Legacy retained clients require explicit offline resolution before startup; no rolling upgrade is supported.
   - Code/PAR key binding, full replay freshness retention and supplier composition remain separate obligations.
+- id: 9449-016
+  section: '10'
+  requirement: MUST
+  description: Retain an accepted authorization DPoP key and require matching verified possession when redeeming its code.
+  module: crates/server/src/authcode/token/authorization_code_grant/sender.rs
+  tests:
+  - crates/server/src/authcode/token/tests/code_binding.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/flows.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/admission.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/encrypted.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/continuation.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/descendants.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/authcode/token/authorization_code_grant/sender.rs
+  notes:
+  - Direct GET/POST, verified signed/encrypted JAR and stored PAR retain canonical SHA-256 thumbprints through login, consent, step-up and code publication.
+  - The direct authorization DPoP header is ignored; direct JAR selects the signed RFC 9101 parameter set and ignores one outer thumbprint.
+  - Sync/async issuer checks precede signing and original-payload CAS; public bound APIs require independently verified sender context from trusted callers.
+  - Coordinated v3 cutover and pending-flow loss are documented in docs/operations/authorization-code-dpop-binding-upgrade.md; local tests do not establish mixed-fleet or deployment safety.
+- id: 9449-017
+  section: '10.1'
+  requirement: MUST
+  description: Support both PAR thumbprint parameters and verified DPoP headers, require agreement when both are present, and retain the accepted key.
+  module: crates/server/src/web/par_endpoint/binding.rs
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/par.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/nonce.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/snapshot.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/stored.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/replay.rs
+  ci_check: server-container-integration
+  status: implemented
+  runtime_link: crates/server/src/web/par_endpoint/binding.rs
+  notes:
+  - PAR uses strict form decoding with its own body limit and the actual POST/PAR URI under authorization-server nonce/replay policy.
+  - Authentication and registration checks share a captured client snapshot; the downstream profile is a later SQL observation.
+  - A pushed JAR may obtain its key from the signed claim, verified header or both. Nonempty body authorization parameters outside its Request Object are rejected.
+  - JAR jti admission follows effective validation and proof agreement immediately before persistence; failed persistence does not restore spent replay identity.
 rfc_9700:
 - id: 9700-001
   section: 2.1.1
@@ -6382,6 +6421,8 @@ rfc_9101:
     invariant: lemma_merge_request_object_wins
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/edges.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/replay.rs
   ci_check: cargo test -p aegaeon-server --lib web::token_exchange_tests::request_object_retention
   status: verified
   runtime_link: crates/server/src/main.rs
@@ -6392,6 +6433,7 @@ rfc_9101:
     test: crates/jose/src/request_object.rs
   notes:
   - 'Verified by the end-to-end PAR+JAR tests: audience mismatch, exp/nbf validation, client_id claim binding, and jti replay rejection are all covered.'
+  - "The RFC 9449 binding extension preserves direct signed-parameter authority, rejects outer PAR authorization parameters, and defers PAR JAR jti admission until after effective validation/proof agreement. New finite runtime tests do not extend this legacy formal proof status."
 - id: 9101-002
   section: '3.4'
   requirement: MUST
@@ -6413,6 +6455,7 @@ rfc_9101:
   tests:
   - crates/server/src/web/token_exchange_tests/request_object_retention.rs
   - crates/server/src/par/tests/request_lifecycle.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/dpop_binding/stored.rs
   ci_check: jar-par-binding
   status: verified
   runtime_link: crates/server/src/web/token_exchange_tests/request_object_retention.rs
@@ -6421,6 +6464,8 @@ rfc_9101:
     fstar: fstar/par/Lifetime.fst#is_expired
     rust: crates/server/src/par/request_uri.rs#try_consume_request
     test: crates/server/src/par/tests/request_lifecycle.rs
+  notes:
+  - "Stored PAR v3 retains the admitted canonical key and distinguishes absent signed claims from a header-derived key. Namespace/decoder tests require coordinated restart; they do not claim mixed-fleet safety or extend the legacy proof status."
 - id: global-004
   requirement: MUST
   description: All state-changing operations MUST be idempotent where specified

@@ -278,7 +278,8 @@ async fn scenario(removal: Removal) -> TestResult {
                 let invalid=encryption.seal(&header,signed_request(&state,"bad-signature")?.as_bytes())?;
                 let (status,body)=request(&state,&sid,Some(&invalid),par,"").await?;
                 assert_eq!(status,StatusCode::BAD_REQUEST);
-                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object validation failed")));
+                assert_eq!(body["error"], "invalid_request_object");
+                assert!(body["error_description"].as_str().is_some_and(|v| v.contains("request object cryptographic validation failed")));
             }
         }
         if !matches!(removal, Removal::Expiry) {

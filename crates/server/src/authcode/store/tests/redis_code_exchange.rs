@@ -1,3 +1,4 @@
+mod dpop_binding;
 mod lease;
 
 use super::*;

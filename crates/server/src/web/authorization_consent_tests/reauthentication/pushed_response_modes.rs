@@ -36,7 +36,7 @@ fn request_key(state: &AppState, request_uri: &str, version: &str) -> String {
 }
 fn stored(state: &AppState, request_uri: &str) -> TestResult<Option<crate::par::ParRequest>> {
     let raw: Option<String> = redis::cmd("GET")
-        .arg(request_key(state, request_uri, "v2"))
+        .arg(request_key(state, request_uri, "v3"))
         .query(&mut connection()?)?;
     raw.map(|raw| {
         let value: Value = serde_json::from_str(&raw)?;
@@ -216,7 +216,7 @@ async fn success(
     }
     if prompt.is_some_and(|p| p.contains("consent")) {
         let transaction = transaction(&page.body)?.to_string();
-        let retained = keys(state, "v2")?;
+        let retained = keys(state, "v3")?;
         assert!(retained.iter().any(|key| key.contains(":reservation:")));
         page = browser
             .request(
@@ -264,7 +264,7 @@ async fn pushed_response_modes_survive_real_shared_grant_login_and_consent() -> 
         }
         success(&state, &sid, Some("query"), None, true, true).await?;
         assert!(
-            keys(&state, "v2")?.is_empty(),
+            keys(&state, "v3")?.is_empty(),
             "grant commits consume both keys"
         );
         Ok(())

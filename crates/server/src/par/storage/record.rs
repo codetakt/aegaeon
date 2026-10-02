@@ -5,6 +5,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(super) struct StoredParRequestRecord {
+    #[serde(deserialize_with = "crate::authcode::types::dpop_key::storage_version")]
+    version: u8,
     request: ParRequest,
     expires_at_epoch_secs: u64,
     client_id: String,
@@ -16,6 +18,7 @@ impl TryFrom<StoredParRequest> for StoredParRequestRecord {
     fn try_from(mut stored: StoredParRequest) -> Result<Self, Self::Error> {
         stored.request.client_secret = None;
         Ok(Self {
+            version: 3,
             request: stored.request,
             expires_at_epoch_secs: system_time_to_epoch_secs(stored.expires_at)?,
             client_id: stored.client_id,
@@ -55,6 +58,7 @@ mod tests {
     fn sample_stored_request() -> StoredParRequest {
         StoredParRequest {
             request: ParRequest {
+                dpop_jkt: None,
                 client_id: "client".to_string(),
                 redirect_uri: "https://client.example/cb".to_string(),
                 response_type: "code".to_string(),

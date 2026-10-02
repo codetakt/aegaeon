@@ -43,12 +43,12 @@ impl OwnedRequestObjectAuthorizeDeps {
 
 #[derive(Clone, Copy)]
 pub(in crate::web) enum RequestObjectReplayPolicy {
-    Consume,
     Defer,
 }
 
 #[derive(Debug)]
 pub(in crate::web) struct ResolvedAuthorizeRequestObject {
+    pub(in crate::web) dpop_jkt: Option<crate::authcode::types::DpopKeyThumbprint>,
     /// Recipient bound by JWT audience validation, distinct from the JWT issuer.
     pub(in crate::web) authorization_server_issuer: String,
     pub(in crate::web) redirect_uri: String,

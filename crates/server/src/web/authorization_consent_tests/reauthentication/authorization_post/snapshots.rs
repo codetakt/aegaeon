@@ -28,7 +28,7 @@ async fn begin(state: &AppState, sid: &str) -> TestResult<Pending> {
         .bind(state.environment_id).bind(digest).fetch_one(&state.db_pool).await?;
     assert_eq!(locator, "/authorize");
     assert!(!snapshot.to_string().contains(token));
-    assert_eq!(snapshot["version"], 2);
+    assert_eq!(snapshot["version"], 3);
     assert_eq!(snapshot["input"]["provenance"], "form");
     let submitted: Vec<(String, String)> =
         serde_urlencoded::from_str(uri.split_once('?').ok_or("query")?.1)?;
@@ -64,7 +64,8 @@ async fn malformed(state: &AppState, pending: &mut Pending) -> TestResult {
     let mut invalid = vec![old.clone()];
     for version in [
         serde_json::json!(1),
-        serde_json::json!(3),
+        serde_json::json!(2),
+        serde_json::json!(4),
         serde_json::json!("2"),
     ] {
         let mut value = pending.snapshot.clone();
@@ -104,7 +105,7 @@ async fn malformed(state: &AppState, pending: &mut Pending) -> TestResult {
     }
     replace(state, pending, &pending.snapshot).await?;
     // Explicit old-reader fixtures: the original unversioned snapshot cannot
-    // equal v2; neither its stored locator nor the opaque browser URI contains
+    // equal v3; neither its stored locator nor the opaque browser URI contains
     // the client/response fields needed by the old query-only context builder.
     assert_ne!(old, pending.snapshot);
     for uri in ["/authorize", pending.return_to.as_str()] {

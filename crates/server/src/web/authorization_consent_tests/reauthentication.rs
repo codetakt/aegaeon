@@ -2,6 +2,7 @@
 use super::*;
 use std::collections::BTreeMap;
 mod authorization_post;
+mod dpop_binding;
 mod negative;
 mod pushed_response_modes;
 
