@@ -490,6 +490,41 @@ class MetadataBindingTests(unittest.TestCase):
                 assert any(needle in r for r in result["reasons"]), result["reasons"]
 
 
+class RequestTargetTests(unittest.TestCase):
+    def test_only_exact_server_compile_contexts_share(self) -> None:
+        registry = json.loads((ROOT / kani.REGISTRY).read_text())
+        first = next(g for g in registry["groups"] if g["id"] == "server-regressions")
+        first["features"] = ["one", "two"]
+        meta = {"sha256": "a" * 64}
+        root = pathlib.Path("/synthetic-build-root")
+        changes = [
+            ("features", ["two", "one"]),
+            ("features", ["one"]),
+            ("no_default_features", True),
+            ("cfg", ["kani", "extra"]),
+            ("crate", "other_crate"),
+            ("package", {"name": "other", "manifest": "crates/server/Cargo.toml"}),
+            ("package", {"name": "aegaeon-server", "manifest": "crates/other/Cargo.toml"}),
+            ("id", "other-server-group"),
+            ("metadata", "b" * 64),
+        ]
+        for field, value in changes:
+            with self.subTest(field=field, value=value):
+                targets: dict[tuple[Any, ...], pathlib.Path] = {}
+                initial = kani.request_target(first, meta, root, targets)
+                following = json.loads(json.dumps(first))
+                following.update(id="authorization-grant-predicates", default_unwind=66)
+                assert kani.request_target(following, meta, root, targets) == initial
+                altered_meta = dict(meta)
+                if field == "metadata":
+                    altered_meta["sha256"] = str(value)
+                else:
+                    following[field] = value
+                separate = kani.request_target(following, altered_meta, root, targets)
+                assert separate == root / f"group-{following['id']}"
+                assert separate != initial
+
+
 class RegistryTests(unittest.TestCase):
     def test_checked_in_registry_loads(self) -> None:
         registry = kani.load_registry(ROOT, ROOT / kani.REGISTRY, SCHEMA)
@@ -629,7 +664,7 @@ class RegistryTests(unittest.TestCase):
 
 FAKE_KANI = r'''#!/usr/bin/env python3
 """Controlled fake cargo-kani: reproduces the 0.66.0 output grammar for the wrapper tests."""
-import hashlib, json, os, pathlib, sys
+import hashlib, json, os, pathlib, sys, tomllib
 args = sys.argv[1:]
 knobs_path = pathlib.Path(__file__).resolve().parents[3] / "fake-mode.json"
 knobs = json.loads(knobs_path.read_text()) if knobs_path.exists() else {}
@@ -644,6 +679,11 @@ if args and args[0] == "kani":
     target_root = pathlib.Path(os.environ["CARGO_TARGET_DIR"])
     target = target_root / "kani/x86_64-unknown-linux-gnu/debug/deps"
     target.mkdir(parents=True, exist_ok=True)
+    if knobs.get("target_log"):
+        existing = sorted(p.name for p in target.glob("*.kani-metadata.json"))
+        with pathlib.Path(knobs["target_log"]).open("a") as log:
+            log.write(json.dumps({"argv": args, "target": str(target_root),
+                                  "existing": existing}) + "\n")
     def write_metadata(selected):
         attributes = {"kind": "Proof", "should_panic": False, "solver": None,
                       "unwind_value": None, "stubs": [], "verified_stubs": []}
@@ -662,6 +702,8 @@ if args and args[0] == "kani":
                            "contracted_functions": [], "autoharness_md": None})
         digest = hashlib.sha256((blob + str(sorted(selected))).encode()).hexdigest()[:16]
         name = f"{crate}-{digest}.kani-metadata.json"
+        if mode == "overwrite-metadata" and "--only-codegen" not in args:
+            name = f"{crate}-reused.kani-metadata.json"
         content = blob
         if mode == "null-metadata" and "--only-codegen" not in args:
             content = "null"
@@ -710,7 +752,7 @@ if args and args[0] == "kani":
     sys.exit(0 if mode != "nonzero-after-success" else 3)
 if args[:1] == ["metadata"]:
     manifest = pathlib.Path(args[args.index("--manifest-path") + 1])
-    package = manifest.parent.name
+    package = tomllib.loads(manifest.read_text())["package"]["name"]
     crate = package.replace("-", "_")
     pid = f"path+file://{manifest.parent}#{package}@0.1.0"
     package_record = {"id": pid, "name": package, "version": "0.1.0", "source": None,
@@ -876,6 +918,8 @@ class WrapperTests(unittest.TestCase):
         self.env.pop("RUSTFLAGS", None)
 
     def fake(self, **knobs: Any) -> None:
+        if hasattr(self, "target_log"):
+            knobs["target_log"] = str(self.target_log)
         (self.root / "store" / "kani-verifier-0.66.0" / "fake-mode.json").write_text(
             json.dumps(knobs)
         )
@@ -1179,6 +1223,148 @@ sys.exit(2)
         assert (run_dir / "tools.json").is_file()
         replay = self.replay()
         assert replay.returncode == 0, replay.stdout + replay.stderr
+
+    def write_server_groups(self) -> None:
+        """Five eligible groups, an intervening diagnostic and an ineligible server group."""
+        shutil.rmtree(self.root / "crates/alpha-pkg")
+        source = self.root / "crates/server/src/lib.rs"
+        source.parent.mkdir(parents=True)
+        names = ["one", "two", "three", "four", "five", "outside"]
+        source.write_text("".join(f"#[kani::proof]\nfn {name}() {{}}\n" for name in names))
+        (source.parent.parent / "Cargo.toml").write_text('[package]\nname = "aegaeon-server"\n')
+        (source.parent.parent / "harnesses.json").write_text(
+            json.dumps({f"proofs::{name}": "src/lib.rs" for name in names})
+        )
+        ids = [
+            "server-regressions",
+            "authorization-grant-predicates",
+            "server-exchange-lifetime",
+            "redis-boolean-encoding",
+            "application-authorization-revision",
+            "other-server-group",
+        ]
+        groups = []
+        for group_id, name, unwind in zip(ids, names, [16, 66, 4, 2, 2, 16], strict=True):
+            group = json.loads(json.dumps(self.registry["groups"][0]))
+            group.update(
+                id=group_id,
+                package={"name": "aegaeon-server", "manifest": "crates/server/Cargo.toml"},
+                crate="aegaeon_server",
+                default_unwind=unwind,
+                harnesses=[
+                    {
+                        "name": f"proofs::{name}",
+                        "file": str(source.relative_to(self.root)),
+                        "domain": "synthetic target reuse",
+                        "rows": ["ROW-1"] if name == "one" else [],
+                    }
+                ],
+            )
+            groups.append(group)
+        groups.insert(2, self.registry["groups"][1])
+        self.registry["groups"] = groups
+        self.write_registry(self.registry)
+        self.write_matrix()
+        matrix = self.root / "spec/compliance-matrix.yaml"
+        matrix.write_text(matrix.read_text().replace("crates/alpha-pkg/", "crates/server/"))
+        self.target_log = self.root / "target-observations.jsonl"
+        self.fake()
+
+    def test_server_groups_share_only_request_targets_within_one_evaluation(self) -> None:
+        self.write_server_groups()
+        previous_targets: set[str] = set()
+        for _ in range(2):
+            self.target_log.write_text("")
+            result = self.invoke()
+            assert result.returncode == 0, result.stdout + result.stderr
+            observations = [json.loads(line) for line in self.target_log.read_text().splitlines()]
+            discoveries = [o for o in observations if "--only-codegen" in o["argv"]]
+            requests = [o for o in observations if "--harness" in o["argv"]]
+            assert len(discoveries) == len(requests) == 7
+            assert len({o["target"] for o in discoveries}) == 7
+            assert all(not o["existing"] for o in discoveries)
+            shared = [
+                o
+                for o in requests
+                if o["argv"][o["argv"].index("--harness") + 1]
+                not in {"proofs::beta", "proofs::outside"}
+            ]
+            assert len(shared) == 5
+            assert len({o["target"] for o in shared}) == 1
+            assert [len(o["existing"]) for o in shared] == [0, 1, 2, 3, 4]
+            assert [o["argv"][o["argv"].index("--default-unwind") + 1] for o in shared] == [
+                "16",
+                "66",
+                "4",
+                "2",
+                "2",
+            ]
+            assert len({o["target"] for o in requests}) == 3
+            assert not {o["target"] for o in discoveries} & {o["target"] for o in requests}
+            current_targets = {o["target"] for o in observations}
+            assert not previous_targets & current_targets
+            previous_targets = current_targets
+            assert self.replay().returncode == 0
+            assert self.check_citations("--gate", str(self.output / "gate.json")).returncode == 0
+            shutil.rmtree(self.output)
+
+    def test_shared_server_targets_keep_metadata_failure_and_replay_guards(self) -> None:
+        self.write_server_groups()
+        cases = [
+            ({"mode": mode}, "exactly one new compiled metadata")
+            for mode in ("overwrite-metadata", "no-metadata", "stale-metadata")
+        ]
+        cases.append(
+            (
+                {"overrides": {"proof": {"pretty_name": "proofs::foreign"}}},
+                "compiled metadata does not list exactly the requested harness",
+            )
+        )
+        for knobs, reason in cases:
+            with self.subTest(knobs=knobs):
+                self.fake(**knobs)
+                result = self.invoke()
+                assert result.returncode != 0, result.stdout
+                assert reason in result.stdout
+                assert not (self.output / "gate.json").exists()
+                assert self.replay().returncode != 0
+                if knobs.get("mode") == "overwrite-metadata":
+                    run = max(self.output.glob("run-*"))
+                    first = json.loads((run / "requests/01/result.json").read_text())
+                    second = json.loads((run / "requests/02/result.json").read_text())
+                    assert first["status"] == "accepted"
+                    assert second["status"] == "rejected"
+                shutil.rmtree(self.output)
+
+    def test_shared_server_evidence_still_requires_the_original_adapter(self) -> None:
+        self.write_server_groups()
+        assert self.invoke().returncode == 0
+        run = max(self.output.glob("run-*"))
+        self.mutate_evaluation_and_records(
+            run, lambda record: record["inputs"].__setitem__("adapter", "0" * 64)
+        )
+        self.assert_all_entry_points_reject(
+            str(self.output / "gate.json"), "different adapter", "adapter identity changed"
+        )
+
+    def test_shared_server_targets_preserve_failure_classification(self) -> None:
+        self.write_server_groups()
+        cases = [
+            ({"mode": "fail", "fail_suffix": "two"}, "rejected", False),
+            ({"mode": "fail"}, "accepted", True),
+            ({"mode": "crash-discovery", "crash_package": "beta-pkg"}, "fault", False),
+            ({"mode": "mutate-source"}, "fault", False),
+        ]
+        for knobs, status, accepted in cases:
+            with self.subTest(knobs=knobs):
+                original = (self.root / "crates/server/src/lib.rs").read_bytes()
+                self.fake(**knobs)
+                result = self.invoke()
+                assert (result.returncode == 0) == accepted, result.stdout + result.stderr
+                assert self.admissions(result.stdout)[-1]["status"] == status
+                assert (self.replay().returncode == 0) == accepted
+                (self.root / "crates/server/src/lib.rs").write_bytes(original)
+                shutil.rmtree(self.output)
 
     def test_diagnostic_failure_does_not_block_but_required_failure_does(self) -> None:
         result = (self.fake(mode="fail"), self.invoke())[1]  # only harness 'beta' fails

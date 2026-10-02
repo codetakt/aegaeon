@@ -32,6 +32,15 @@ REGISTRY = pathlib.Path("spec/kani-evidence.json")
 SCHEMA = pathlib.Path("spec/kani-evidence.schema.json")
 CONTRACT = "kani-0.66.0-text-v1"
 RECORD_VERSION = 3
+SERVER_REQUEST_GROUPS = frozenset(
+    {
+        "server-regressions",
+        "authorization-grant-predicates",
+        "server-exchange-lifetime",
+        "redis-boolean-encoding",
+        "application-authorization-revision",
+    }
+)
 POLICY_RUSTFLAGS = "-C panic=abort -Z panic-abort-tests --cfg kani"
 # Inherited variables that would change the effective compiler, flags or target.
 FORBIDDEN_ENVIRONMENT = (
@@ -815,6 +824,34 @@ def metadata_files(target: pathlib.Path) -> set[pathlib.Path]:
     return set(target.rglob("*.kani-metadata.json")) if target.exists() else set()
 
 
+def request_target(
+    group: dict[str, Any],
+    meta: dict[str, Any],
+    build_root: pathlib.Path,
+    shared_targets: dict[tuple[Any, ...], pathlib.Path],
+) -> pathlib.Path:
+    """Reuse compatible server request targets only within the caller's evaluation."""
+    separate = build_root / f"group-{group['id']}"
+    if (
+        group["id"] not in SERVER_REQUEST_GROUPS
+        or group["package"] != {"name": "aegaeon-server", "manifest": "crates/server/Cargo.toml"}
+        or group["crate"] != "aegaeon_server"
+    ):
+        return separate
+    # Tools, source root, target and environment are fixed for the whole evaluation.
+    # sha256 binds the complete Cargo metadata output, including dependency resolution.
+    context = (
+        group["package"]["name"],
+        group["package"]["manifest"],
+        group["crate"],
+        tuple(group["features"]),
+        group["no_default_features"],
+        tuple(group["cfg"]),
+        meta["sha256"],
+    )
+    return shared_targets.setdefault(context, separate)
+
+
 def discover(
     group: dict[str, Any],
     manifest: pathlib.Path,
@@ -1468,6 +1505,7 @@ def run(args: argparse.Namespace) -> int:
         {dep for meta in metadata_by_group.values() for dep in meta["path_dependencies"]}
     )
     record["inputs"] = input_digests(root, groups, path_dependencies)
+    shared_request_targets: dict[tuple[Any, ...], pathlib.Path] = {}
     index = 0
     for group in groups:
         group_dir = run_dir / "groups" / group["id"]
@@ -1504,7 +1542,7 @@ def run(args: argparse.Namespace) -> int:
                 print(f"{harness['name']}: fault", flush=True)
                 print(evidence_line(result, {}), flush=True)
             continue
-        target = build_root / f"group-{group['id']}"
+        target = request_target(group, meta, build_root, shared_request_targets)
         for harness in group["harnesses"]:
             index += 1
             request_dir = run_dir / "requests" / f"{index:02d}"
