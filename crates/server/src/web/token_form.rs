@@ -98,11 +98,11 @@ pub(super) fn token_form_from_params(
         ));
     }
     let grant_type = required_token_param(params, "grant_type", issuer_base)?;
-    if params.iter().any(|(name, _)| {
-        name == "organizationId"
-            || (name == "organization_id"
-                && grant_type != "urn:ietf:params:oauth:grant-type:token-exchange")
-    }) {
+    // This known restriction must not silently disappear on an unsupported grant.
+    // Unknown names remain ignored; empty canonical values are omitted by the helper.
+    if optional_token_param(params, "organization_id", issuer_base)?.is_some()
+        && grant_type != "urn:ietf:params:oauth:grant-type:token-exchange"
+    {
         return Err(no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -125,6 +125,9 @@ pub(super) fn token_form_from_params(
         device_code: optional_token_param(params, "device_code", issuer_base)?,
     })
 }
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn token_resource_from_params(
     params: &[(String, String)],

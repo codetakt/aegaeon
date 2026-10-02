@@ -297,8 +297,10 @@ exchange, introspection and local resources recheck current authority.
 Changing or disabling a projection invalidates old grants; adding permissions never
 upgrades an old token or refresh family. Obtain new interactive authorization.
 For token exchange, `organization_id` selects exactly one existing membership and
-removes SUPER_ADMIN. Selection is required when the parent has organization claims.
-A subsequent exchange cannot switch organizations, widen scope or add audiences.
+removes SUPER_ADMIN. A parent with organization claims that has not yet selected
+an organization requires a canonical selector. An already-selected parent retains
+that organization when the selector is omitted; an explicit different organization
+is rejected. A subsequent exchange cannot widen scope or add audiences.
 This application contract is configured explicitly by the relying application:
 use `GET /application/authorization` at the configured issuer and the documented
 `organization_id` request parameter. OIDC discovery does not advertise this
@@ -306,6 +308,27 @@ application-specific contract. The two earlier experimental application
 metadata keys have been removed; consumers of that candidate must use explicit
 configuration. Any future discovery extension requires an `aeg_*` name and an
 explicit, default-off policy toggle; none is introduced by this change.
+
+The token endpoint ignores unknown request names, including `organizationId`;
+it is not an alias for `organization_id`. Repeated unknown fields remain ignored.
+This follows RFC 6749 §3.2 without discarding a recognized authorization
+restriction: nonempty canonical `organization_id` is supported only by token
+exchange and returns `400 invalid_request` on other grants. Parameter names are
+case-sensitive. Empty or valueless canonical fields are omitted before applicability
+and duplicate checks; one nonempty plus empty fields is one selector, while two
+nonempty canonical fields are rejected, even when equal or percent-encoded to
+the same name.
+
+Consumers requiring organization selection must send the canonical name.
+Ignoring `organizationId` means the request behaves as if that field were absent;
+it does not mean the caller's intended restriction was applied. Canonical A plus
+an unknown camelCase B still selects A. A camelCase-only request cannot select
+an unselected organization-bearing parent, cannot switch a preselected parent,
+and can retain existing global-only roles on an otherwise valid exchange just
+as an omitted selector can. A request cannot invent application authority or
+membership. This compatibility correction preserves the known grant restriction,
+existing authority/currentness checks and grant consumption rules.
+
 The context endpoint uses the original UserInfo token and sender proof, returning
 issuer/subject/client ID with authoritative application claims. This does not let
 an OAuth client infer privileges by decoding an unverified access token.

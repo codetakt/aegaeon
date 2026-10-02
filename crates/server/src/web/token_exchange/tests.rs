@@ -23,6 +23,7 @@ mod client_scope_ceiling;
 mod form_parameters;
 mod legacy_commit;
 mod legacy_request;
+mod organization_parameters;
 mod projection_pool;
 mod uri_target;
 
@@ -329,11 +330,32 @@ async fn scenarios(state: &AppState) -> TestResult {
         vec![("audience", "internal-api"), ("audience", "unknown")],
         vec![("resource", "https://api.example/resource#f")],
         vec![("audience", "internal-api"), ("scope", "api.admin")],
-        vec![("audience", "internal-api"), ("scope", "")],
     ] {
         let (status, body) = exchange(state, source, &selectors, true).await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{selectors:?}: {body}");
         assert!(body.get("access_token").is_none());
+    }
+    // RFC 6749 omission: empty scope must use the same bounded default as absence.
+    for selectors in [
+        vec![("audience", "internal-api")],
+        vec![("audience", "internal-api"), ("scope", "")],
+    ] {
+        let (status, body) = exchange(state, source, &selectors, true).await?;
+        assert_eq!(status, StatusCode::OK, "{selectors:?}: {body}");
+        assert_eq!(body["scope"], "api.read");
+        let claims = jwt(&body)?;
+        assert_eq!(claims["aud"], "internal-api");
+        assert_eq!(claims["scope"], "api.read");
+        let token = body["access_token"]
+            .as_str()
+            .ok_or("default-scope output")?;
+        let meta = state
+            .tokens
+            .store
+            .try_get_bearer_meta(token)?
+            .ok_or("metadata")?;
+        assert_eq!(meta.audience, "internal-api");
+        assert_eq!(meta.granted_scopes, vec!["api.read"]);
     }
     let (status, body) = exchange(state, source, &[("audience", "internal-api")], false).await?;
     assert_eq!(
