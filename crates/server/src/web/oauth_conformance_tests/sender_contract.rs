@@ -11,7 +11,11 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub(super) fn proof(
+    method: &str,
+    path: &str,
+    token: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let header = json!({"typ":"dpop+jwt", "alg":"ES256", "jwk":{
         "kty":"EC", "crv":"P-256", "x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
         "y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"}});
@@ -25,7 +29,7 @@ fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::e
     ))
 }
 
-async fn install_token(
+pub(super) async fn install_token(
     state: &AppState,
     path: &str,
     scope: &str,
@@ -167,7 +171,7 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                         remote,
                         uri,
                         request_headers,
-                        Ok(axum::extract::Form(Vec::new())),
+                        Ok(axum::body::Bytes::new()),
                     )
                     .await
                 };
