@@ -7,7 +7,7 @@ use base64::Engine as _;
 
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "requires PostgreSQL and AEGAEON_PAR_REDIS_URL / AEGAEON_TEST_REDIS_URL"]
-async fn par_secret_rejections_preserve_actual_dummy_verification() -> TestResult {
+async fn shared_redis_par_secret_rejections_preserve_actual_dummy_verification() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
