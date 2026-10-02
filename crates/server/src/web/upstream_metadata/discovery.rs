@@ -50,6 +50,8 @@ pub(in crate::web) fn parse_upstream_discovery_body(body: &[u8]) -> Result<OidcD
         .ok_or_else(|| "upstream discovery response invalid".to_string())?;
     crate::oidc::capabilities::validate_supplied("openid_provider", parameters)
         .map_err(|field| format!("upstream discovery invalid capability field {field}"))?;
+    crate::oidc::provider_urls::validate_supplied("openid_provider", parameters)
+        .map_err(|field| format!("upstream discovery invalid URL field {field}"))?;
     serde_json::from_value(value).map_err(|_| "upstream discovery response invalid".to_string())
 }
 

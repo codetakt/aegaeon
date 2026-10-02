@@ -221,12 +221,71 @@ redirect or token credentials are sent. Errors contain a field/category only.
 
 Partial signed objects may omit these fields, and superior/policy completion
 remains supported. This slice adds no companion-presence requirement, locale
-syntax validation, DPoP asymmetric-algorithm classification, endpoint/alias/key
-semantics, whole-role completeness or remote capability verification. No new
+syntax validation, DPoP asymmetric-algorithm classification, key semantics,
+whole-role completeness or remote capability verification. URL and alias
+admission is specified separately below. No new
 transport, authentication support, setting, dependency or migration is added.
 Finite signed/typed/fresh/cache and loopback operation tests do not establish
 full schema or standards conformance, routed DB/Redis/external HTTPS behavior,
 sibling-source composition or formal assurance.
+
+## Provider URL and mTLS Alias Admission
+
+Exact `openid_provider` metadata and ordinary Discovery check supplied `issuer`
+as an HTTPS URL with an authority and no query or fragment. The authorization,
+token, UserInfo, JWKS, registration, end-session, revocation, introspection,
+pushed authorization request and device authorization endpoints require HTTPS.
+Endpoint ports, paths and queries remain representable. Exact
+`oauth_authorization_server` uses the same map except UserInfo and end-session.
+`service_documentation`, `op_policy_uri` and `op_tos_uri` accept absolute URLs,
+including non-HTTPS schemes, userinfo, queries and fragments. These informational
+values are not fetched or rendered as active links by this check.
+
+The field requirements come from Discovery errata set 2 section 3, RFC 8414
+section 2, RFC 7009 section 2, RFC 7662 section 2, RFC 8705 section 5,
+RFC 8628 section 4, RFC 9126 section 5 and RP-Initiated Logout section 2.1.
+Aegaeon's local lexical admission policy additionally rejects whitespace,
+control characters and backslashes in every URL. HTTPS values need explicit
+`://` authority, a nonempty host, no userinfo and no fragment, even an empty
+fragment. Uniform endpoint fragment/userinfo refusals are local policy where
+the field's specification does not impose them. Original strings are retained;
+case-insensitive scheme checks do not rewrite identity or destinations.
+
+A supplied `mtls_endpoint_aliases` must be a nonempty object. Known token,
+revocation, introspection, pushed authorization request, registration and device
+authorization aliases use the same HTTPS endpoint checks; OP also checks
+UserInfo. Known entries must be strings. Other entries remain opaque, including
+nested values and null. A nonempty unknown-only object is accepted without
+certifying a usable alias or initiating mTLS. The typed DTO retains only token,
+revocation, introspection and PAR aliases: an all-absent typed projection can
+therefore represent valid extension input and is not rejected as raw `{}`.
+
+Upgrade behavior: supplied known URL/alias nulls, wrong kinds, HTTP endpoint
+values and malformed alias objects are refused before ordinary serde projection
+or signed metadata replacement. This optional-null refusal is explicit consumer
+policy. Unknown ordinary extensions remain ignored. Discovery section 4.2's
+zero-element omission rule governs producers; this consumer still represents
+supplied empty capability arrays without defaults or a claim of producer
+compliance. Partial signed role objects may omit fields and use superior or
+policy completion. Original signed C/S values are checked before overlay,
+filtering or removal, policy-derived values are rechecked, and retained typed
+ordinary/cache values are checked before signed replacement or live use.
+
+URL schema admission does not resolve DNS, require the same host, enforce an
+allowlist or authorize network access. Existing outbound SSRF, TLS, exact-match
+and no-query operation restrictions remain separate; accepting an endpoint
+query here does not make that endpoint usable by an outbound operation. Errors
+contain a field/category only and refusals precede redirect/state or credential
+effects. No new dependency, setting, migration or mTLS selection is introduced.
+
+Tests separately cover signed and typed admission, fresh/cache acquisition,
+raw Discovery parsing and live operations using fixture-owned TLS trust and
+routing to a local backend. Wrong-host and untrusted-certificate controls check
+that fixture TLS verification stays active. Production schema/outbound checks
+run unchanged; the live fixture still requires public DNS resolution of
+`example.com`. Finite fixture results do not attest an external provider,
+DB/Redis routing, complete imported schemas, sibling-source composition or
+formal assurance.
 
 ## Federation Registration Declarations
 

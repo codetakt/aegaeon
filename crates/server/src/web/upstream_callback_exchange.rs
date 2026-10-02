@@ -37,7 +37,7 @@ where
     >,
 {
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
-    let client = build_upstream_http_client(allowed_domains).map_err(|message| {
+    let client = build_upstream_http_client(state).map_err(|message| {
         json_error_with_iss(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server_error",

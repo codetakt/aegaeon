@@ -28,7 +28,12 @@ pub(super) use jwks::{fetch_upstream_jwks_cached, select_upstream_signing_key};
 
 const UPSTREAM_HTTP_TIMEOUT_SECS: u64 = 5;
 
-pub(super) fn build_upstream_http_client(allowed_domains: &[String]) -> Result<Client, String> {
+pub(super) fn build_upstream_http_client(state: &super::AppState) -> Result<Client, String> {
+    #[cfg(test)]
+    if let Some(client) = &state.upstream.test_http_client {
+        return Ok(client.clone());
+    }
+    let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
     let allowed_domains =
         crate::upstream::normalize_upstream_outbound_allowed_domains(allowed_domains)?;
     let redirect_allowed_domains = (!allowed_domains.is_empty()).then_some(allowed_domains);

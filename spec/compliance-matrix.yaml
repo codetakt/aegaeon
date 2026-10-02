@@ -5436,9 +5436,30 @@ openid_federation_rp:
   - Exact OP and ordinary Discovery maps cover 29 string arrays and 8 Boolean fields; exact AS maps cover 13 arrays and 4 Boolean fields. The OP access-token-format field is an existing local DTO extension. OP-only names retain extension behavior in other roles.
   - Supplied token, revocation and introspection authentication signing-algorithm arrays forbid exact none, with no trimming, case folding, closed algorithm allowlist or mandatory RS256 auth member. ID Token, UserInfo and Request Object advertisements do not acquire this prohibition; the existing final selected ID Token RS256 guard remains.
   - Original C/S checks precede overlay/filter/removal and retained policy values are rechecked. Omission, partial roles, empty arrays, duplicates and unknown strings are preserved. No companion-presence or new completeness rule is introduced.
-  - Ordinary capability validation precedes serde optional-null collapse while preserving raw duplicate-key admission and body limits. Rejection of known capability nulls and malformed originals despite replacement is local consumer admission policy. Unknown ordinary nested extensions/nulls remain ignored; endpoint/key/alias null meanings are unchanged.
+  - Ordinary capability validation precedes serde optional-null collapse while preserving raw duplicate-key admission and body limits. Rejection of known capability nulls and malformed originals despite replacement is local consumer admission policy. Unknown ordinary nested extensions/nulls remain ignored; endpoint/key/alias null meanings are unchanged by this capability check; separate provider URL admission governs URL/alias values.
   - Live typed/cache ordinary values recheck all three auth arrays before signed replacement. Signed fresh/cache paths revalidate originals and derived values before state, redirect or credential transmission. No new transport, auth support, configuration, migration or dependency is added.
   - Finite signed, individual, typed, flat-policy, fresh/cache and loopback tests do not establish full imported schemas, locale syntax, DPoP asymmetric classification, final companion conditions, routed DB/Redis/external HTTPS, sibling composition, whole Federation conformance or formal discharge.
+
+- id: fed-rp-018
+  section: '3 (Discovery errata2); 2 (RFC 8414); 5 (RFC 8705); 4 (RFC 8628); 5 (RFC 9126); 2.1 (RP-Initiated Logout)'
+  requirement: MUST
+  description: Validate supplied provider URL fields and known mTLS aliases before projection or replacement
+  module: crates/server/src/oidc/provider_urls.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/url_metadata.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/tests/upstream_metadata/urls.rs
+  - crates/server/src/web/management/tests/upstream_metadata/harness/tls.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Exact OP and ordinary Discovery check issuer, ten HTTPS endpoint fields and three absolute informational URLs; exact AS omits UserInfo and end-session from the endpoint map. Original bytes and partial omission are preserved.
+  - Whitespace/control/backslash refusal and uniform HTTPS authority, userinfo and fragment restrictions are local admission policy where not required by the individual specification. Informational URLs accept non-HTTPS schemes, userinfo, queries and fragments. Endpoint queries and ports remain representable.
+  - Raw aliases must be a nonempty object. Six AS and seven OP known endpoint aliases require HTTPS strings; unknown members remain opaque, including unknown-only objects. The four-field typed projection may legally be empty and is not treated as an invalid raw empty object.
+  - Known ordinary URL and alias nulls are refused before serde as local consumer policy. Original signed C/S admission precedes overlay/filter/removal; retained policy values and typed/cache ordinary values are rechecked before replacement or use. Discovery producer omission rules do not become blanket consumer empty-array rejection.
+  - Supplied schema performs no DNS, same-host, allowlist or SSRF check. Existing outbound TLS, SSRF, exact-match and no-query operation restrictions remain independent. No new mTLS selection, dependency, setting or migration is introduced.
+  - Finite signed, individual, typed, flat-policy, fresh/cache and scoped local TLS tests do not establish external-provider behavior, DB/Redis routing, complete imported schemas, sibling composition, whole Federation conformance or formal discharge. TLS fixture trust and hostname controls do not change production transport policy.
 
 openid_federation_op:
 - id: fed-op-001

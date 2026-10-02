@@ -93,6 +93,9 @@ pub struct BrowserAuthState {
 
 #[derive(Clone)]
 pub struct UpstreamState {
+    /// Per-fixture transport and trust only; all metadata and outbound validators still run.
+    #[cfg(test)]
+    pub test_http_client: Option<reqwest::Client>,
     pub logout_relay_store: Arc<UpstreamLogoutRelayStore>,
     pub auth_store: Arc<UpstreamAuthStore>,
     pub discovery_cache: Arc<NonAuthoritativeMetadataCache<OidcDiscovery>>,

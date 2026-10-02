@@ -200,7 +200,9 @@ fn upstream_signing_capabilities_raw_discovery_refuses_before_side_effects() -> 
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
                 // Existing test-only loopback transport reaches the production
                 // raw parser. Failure occurs before issuer matching or token use.
-                f.request.issuer = format!("http://{}", listener.local_addr()?);
+                let tls = TlsRelay::new(listener.local_addr()?, "example.com")?;
+                f.state.upstream.test_http_client = Some(tls.client.clone());
+                f.request.issuer = tls.endpoint.clone();
                 let app = Router::new().fallback(axum::routing::get(move || {
                     let body = raw.clone();
                     async move { Json(body) }
