@@ -6017,6 +6017,25 @@ openid_core:
   - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
   - "A supplied Request Object prompt must be a JSON string. Null and other non-string values are rejected with invalid_request; omitting the claim requests no prompt action."
   - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
+- id: OIDC-1-012
+  section: '3.1.2.1, 13.1, 13.2 (Core errata set 2)'
+  requirement: MUST
+  description: The authorization endpoint accepts GET query and POST form requests and preserves admitted requests through local interaction
+  module: crates/server/src/web/authorize_input.rs
+  proof: []
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post/lifecycle.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post/snapshots.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/authorize_input.rs
+  notes:
+  - "GET and implicit HEAD use query input; POST uses a bounded strict application/x-www-form-urlencoded body and rejects a nonempty URI query. Response mode is independent of the incoming method. Cross-origin OAuth client POST is accepted."
+  - "Version-2 server-side login and consent snapshots retain admitted input, resolved request, prompt, response mode and authoritative PAR continuation. Opaque login returns carry no authorization parameters. Current client/session policy and exact snapshots are checked before one-shot transitions."
+  - "Actual router, PostgreSQL and Redis regression fixtures cover plain, signed and encrypted requests, local login, consent, step-up transfer, replay/binding rejection and code redemption. These finite runtime checks are not a formal proof or complete OpenID certification."
+  - "Existing JSONB columns need no new migration, but coordinated readers/writers or a five-minute interaction drain are required. Old/malformed envelopes and rollback-pending interactions require restart."
+  - "Plain PAR form_post persistence is a separate PAR-format limitation; this change retains the existing supported PAR modes. Composition with subsequent PAR/input changes remains required."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
@@ -6213,6 +6232,25 @@ openid_logout:
   notes:
   - "The three cited Kani harnesses run fixed sequential traces against the cfg(kani) `BoundedKaniSessionStore` model (crates/server/src/oidc/session/kani.rs; 4 sessions / 4 clients), not the production session store, and none quantifies over adversarial inputs with kani::any(); correspondence to the runtime store is not proved."
   - "They are executed as blocking model regressions in the required group `server-regressions` of spec/kani-evidence.json (`nix build .#verify-kani`); required execution is not a claim grade, so this row stays partial until a production-correspondence argument exists."
+- id: OIDC-3-006
+  section: RP-Initiated Logout 1.0 section 2
+  requirement: MUST
+  description: The OP MUST ask the End-User whether to log out when no id_token_hint is supplied, or when the supplied ID Token does not belong to the current OP session with the RP and/or the currently logged-in End-User.
+  module: crates/server/src/web/logout_confirmation/mod.rs
+  tests:
+  - crates/server/src/web/logout_confirmation/tests.rs
+  - crates/server/src/web/logout_confirmation/tests/browser.rs
+  - crates/server/src/web/logout_confirmation/tests/rejection.rs
+  - crates/server/src/web/logout_confirmation/tests/retention.rs
+  ci_check: oidc-rp-logout
+  status: implemented
+  runtime_link: crates/server/src/web/logout_confirmation/mod.rs
+  notes:
+  - Aegaeon product policy always requests explicit confirmation, including a hint matching the current session; this is stronger than the specification's conditional MUST and follows its general SHOULD ask recommendation.
+  - Existing OIDC-3-001 and OIDC-3-002 cover hint checks and exact registered redirects; this row records the confirmation boundary and does not upgrade their proof scope.
+  - GET and bounded form POST start a five-minute PostgreSQL confirmation; an independent browser cookie and first-presented auth-session digest and subject bind the one-use same-origin decision.
+  - Explicit client_id must match a supplied signed hint. A foreign hint never selects another session or user-wide logout. Client-only exact registered redirects require confirmation too.
+  - Finite PostgreSQL/Redis router cases cover session scope, input/binding rejection, retention limits and current-policy checks; no formal discharge or atomic remote delivery is claimed. Existing expired-hint behavior is unchanged.
 oauth_form_post:
 - id: OIDC-4-001
   section: Form Post Response Mode
@@ -6260,6 +6298,7 @@ oauth_form_post:
     test: crates/server/src/form_post.rs
   notes:
   - Verified by CSP unit tests and `crates/server/src/form_post.rs` (nonce-bound CSP + auto-submit script nonce match).
+
 openid_jar:
 - id: OIDC-5-001
   section: Request Object (JAR) Encryption

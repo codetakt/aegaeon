@@ -6,9 +6,11 @@ mod auth_session;
 mod auth_session_flow;
 #[cfg(test)]
 mod authorization_consent_tests;
+mod authorization_snapshot;
 mod authorization_transactions;
 mod authorize_context;
 mod authorize_endpoint;
+mod authorize_input;
 mod authorize_login_redirect;
 mod authorize_reauthentication;
 mod authorize_request;
@@ -30,6 +32,7 @@ mod local_auth;
 mod local_auth_audit;
 mod local_auth_recovery;
 mod local_auth_support;
+mod logout_confirmation;
 mod logout_context;
 mod logout_dispatch;
 mod logout_endpoint;
@@ -109,7 +112,8 @@ use device_flow::{
     device_approve, device_authorization, device_deny, device_verify_get, device_verify_post,
 };
 use form_helpers::*;
-use logout_endpoint::{logout, upstream_logout_callback};
+use logout_confirmation::start as logout;
+use logout_endpoint::upstream_logout_callback;
 use oauth_errors::{json_error_with_iss, no_cache_header_error, no_cache_json_error_with_iss};
 use par_endpoint::par;
 use profile_policy::{

@@ -5,8 +5,9 @@ mod session;
 pub(super) use consent::submit as consent_submit;
 
 use axum::{
+    body::Body,
     extract::{ConnectInfo, OriginalUri, State},
-    http::HeaderMap,
+    http::{Method, Request},
     response::Response,
 };
 use std::net::SocketAddr;
@@ -17,7 +18,7 @@ use crate::util;
 use issue::{authorize_error_context, commit_authorize_code_response};
 
 use super::authorize_context::{
-    build_authorize_request_context, state_for_authorization_observation,
+    build_authorize_input_context, state_for_authorization_observation,
 };
 use super::authorize_login_redirect::authorize_login_redirect_response;
 use super::request_admission::enforce_no_credentials_in_authorize_uri;
@@ -26,7 +27,9 @@ use session::{
     authorize_decide_session, complete_authorize_stepup, resolve_authorize_session_state,
 };
 
-pub(in crate::web) use session::{authorize_requested_max_age, stepup_request_id};
+pub(in crate::web) use session::{
+    authorize_requested_max_age, authorize_selected_acr, stepup_request_id,
+};
 
 async fn load_authorize_local_profile(
     state: &AppState,
@@ -47,10 +50,11 @@ async fn load_authorize_local_profile(
 pub(super) async fn authorize(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
     OriginalUri(uri): OriginalUri,
+    request: Request<Body>,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
+    let headers = request.headers().clone();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection(&state, kind);
     }
@@ -64,9 +68,7 @@ pub(super) async fn authorize(
     if let Err(response) = super::authorization_transactions::admit_source(&state, &source).await {
         return response;
     }
-    let request_id = request_id_from_headers(&headers);
-    let mut ctx = match build_authorize_request_context(&state, &uri, issuer_base, request_id).await
-    {
+    let mut ctx = match load_authorize_context(&state, &headers, &uri, request).await {
         Ok(ctx) => ctx,
         Err(mut response) => {
             util::apply_no_cache_headers(&mut response);
@@ -74,11 +76,6 @@ pub(super) async fn authorize(
         }
     };
     let state = state_for_authorization_observation(&state, &ctx.observation);
-    ctx.reauthenticated =
-        match super::authorize_reauthentication::resume(&state, &headers, &uri, &ctx).await {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
     let decision = match authorize_decide_session(&state, &headers, &ctx, issuer_base).await {
         Ok(decision) => decision,
         Err(mut response) => {
@@ -119,7 +116,6 @@ pub(super) async fn authorize(
         return authorize_login_redirect_response(
             &state,
             &ctx,
-            &uri,
             decision.selected_acr.as_deref(),
             issuer_base,
         )
@@ -144,11 +140,36 @@ pub(super) async fn authorize(
             return response;
         }
     }
-    match consent::prepare(&state, &mut ctx, &session, &uri).await {
+    match consent::prepare(&state, &mut ctx, &session).await {
         Ok(Some(response)) | Err(response) => return response,
         Ok(None) => {}
     }
     finish_authorization(&state, ctx, &session).await
+}
+
+async fn load_authorize_context(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    uri: &axum::http::Uri,
+    request: Request<Body>,
+) -> Result<super::authorize_context::AuthorizeRequestContext, Response> {
+    let request_id = request_id_from_headers(headers);
+    // Preserve the actual method/URI for admission. Only GET/HEAD may resume an
+    // opaque login URI; POST parameters are exclusively in the bounded form.
+    if request.method() != Method::POST {
+        if let Some(ctx) = super::authorize_reauthentication::resume_context(
+            state,
+            headers,
+            uri,
+            request_id.clone(),
+        )
+        .await?
+        {
+            return Ok(ctx);
+        }
+    }
+    let input = super::authorize_input::admit(uri, request, &state.issuer).await?;
+    build_authorize_input_context(state, input, None, &state.issuer, request_id).await
 }
 
 async fn finish_authorization(

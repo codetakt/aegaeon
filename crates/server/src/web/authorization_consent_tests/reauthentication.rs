@@ -1,6 +1,7 @@
 //! Exercise the actual login form and credential POST, including wrapped requests.
 use super::*;
 use std::collections::BTreeMap;
+mod authorization_post;
 mod negative;
 
 const PASSWORD: &str = "local-reauthentication-test-password";
@@ -178,8 +179,14 @@ async fn scenario(state: &AppState, sid: &str, mode: &str, existing: bool) -> Te
     assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
     let resume = page.location.ok_or("authorize return missing")?;
     if mode.starts_with("direct-expired-positive") {
+        let token = resume
+            .strip_prefix("/authorize?aeg_login_continue=")
+            .ok_or("opaque continuation")?;
+        let digest = URL_SAFE_NO_PAD.encode(aegaeon_crypto::hash::sha256_digest(token.as_bytes()));
+        let saved: Value = sqlx::query_scalar("SELECT request_snapshot FROM aegaeon.authorization_logins WHERE environment_id=$1 AND token_sha256=$2")
+            .bind(state.environment_id).bind(digest).fetch_one(&state.db_pool).await?;
         let req: crate::authcode::types::AuthorizationRequest =
-            serde_urlencoded::from_str(resume.split_once('?').ok_or("query missing")?.1)?;
+            serde_json::from_value(saved["request"].clone())?;
         let request_id = super::super::authorize_endpoint::stepup_request_id(&req, None, Some(1));
         let now = crate::util::now_unix_epoch_secs()?;
         let sid = browser
@@ -196,6 +203,12 @@ async fn scenario(state: &AppState, sid: &str, mode: &str, existing: bool) -> Te
             .stepup_store
             .try_complete_for_request(CLIENT, sid, &request_id, now)?
             .is_some());
+        let before: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM aegaeon.authorization_logins WHERE environment_id=$1",
+        )
+        .bind(state.environment_id)
+        .fetch_one(&state.db_pool)
+        .await?;
         tokio::time::sleep(std::time::Duration::from_millis(2100)).await;
         let page = browser.request(state, &resume, None).await?;
         assert!(
@@ -203,6 +216,21 @@ async fn scenario(state: &AppState, sid: &str, mode: &str, existing: bool) -> Te
             "a stale completed challenge must not bypass max_age: {}",
             page.body
         );
+        let after: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM aegaeon.authorization_logins WHERE environment_id=$1",
+        )
+        .bind(state.environment_id)
+        .fetch_one(&state.db_pool)
+        .await?;
+        assert_eq!(
+            before, after,
+            "a consumed receipt cannot create another login transaction"
+        );
+        assert!(browser
+            .request(state, &resume, None)
+            .await?
+            .status
+            .is_client_error());
         return Ok(());
     }
 

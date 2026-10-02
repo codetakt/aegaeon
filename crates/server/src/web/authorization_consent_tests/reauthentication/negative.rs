@@ -10,7 +10,11 @@ async fn begin(
     browser
         .cookies
         .insert("aegaeon_auth_session".to_string(), sid.to_string());
-    let page = browser.request(state, &uri, None).await?;
+    let page = if mode.ends_with("-post") {
+        super::authorization_post::post_input(&mut browser, state, &uri).await?
+    } else {
+        browser.request(state, &uri, None).await?
+    };
     assert_eq!(page.status, StatusCode::FOUND);
     let login = page.location.ok_or("login missing")?;
     let page = browser.request(state, &login, None).await?;
@@ -23,7 +27,7 @@ async fn begin(
     ))
 }
 
-async fn login(
+pub(super) async fn login(
     browser: &mut Browser,
     state: &AppState,
     uri: &str,
@@ -73,22 +77,7 @@ async fn substitutions(
         StatusCode::BAD_REQUEST,
         "CSRF from another request must not complete this request"
     );
-    let token = url::form_urlencoded::parse(
-        return_to
-            .split_once('?')
-            .ok_or("query missing")?
-            .1
-            .as_bytes(),
-    )
-    .find(|(k, _)| k == "aeg_login_continue")
-    .ok_or("continuation missing")?
-    .1
-    .into_owned();
-    let other_base = other_return
-        .split("&aeg_login_continue=")
-        .next()
-        .ok_or("other URI missing")?;
-    let swapped_uri = format!("{other_base}&aeg_login_continue={token}");
+    let swapped_uri = other_return;
     let page = browser.clone().request(state, &swapped_uri, None).await?;
     assert_eq!(
         page.status,

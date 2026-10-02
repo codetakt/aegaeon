@@ -79,9 +79,7 @@ pub(super) async fn create(
         VALUES ($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()+interval '5 minutes')")
         .bind(state.environment_id).bind(state.issuer.as_str()).bind(&session.user_id)
         .bind(digest(sid)).bind(digest(&token)).bind(uri).bind(snapshot)
-        .execute(&mut *tx).await.map_err(|err| {
-            tracing::error!(error=%err,"consent transaction could not be stored"); unavailable()
-        })?;
+        .execute(&mut *tx).await.map_err(|_| unavailable())?;
     tx.commit().await.map_err(|_| unavailable())?;
     Ok(token)
 }
