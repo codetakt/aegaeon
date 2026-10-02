@@ -15,7 +15,7 @@ pub(in crate::web::management) fn normalize_email(raw: &str) -> Option<String> {
 
 pub(in crate::web::management) fn normalize_subject(raw: &str) -> Option<String> {
     let subject = raw.trim();
-    if subject.is_empty() {
+    if !crate::oidc::subject::is_valid_subject(subject) {
         return None;
     }
     Some(subject.to_owned())
@@ -50,7 +50,7 @@ pub(in crate::web::management) fn normalize_required_subject(
         error_response(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            "Subject must not be empty",
+            "Subject must contain 1 to 255 ASCII characters",
             None,
             Some(request_id),
         )
