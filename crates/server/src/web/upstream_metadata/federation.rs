@@ -301,6 +301,12 @@ where
                 "upstream discovery does not match federation metadata",
             )
         })?;
+    crate::federation::validate_complete_op_registration(&metadata).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "resolved federation OP registration declarations invalid",
+        )
+    })?;
     // Deserialize only the resolved signed OP object: missing/deleted fields are
     // not restored from independently fetched Discovery.
     let effective: OidcDiscovery = serde_json::from_value(metadata.clone()).map_err(|_| {

@@ -2,6 +2,9 @@
 use super::FederationError;
 use serde_json::Value;
 
+mod registration;
+pub(crate) use registration::validate_complete_op_registration;
+
 const ENDPOINTS: [&str; 7] = [
     "federation_fetch_endpoint",
     "federation_list_endpoint",
@@ -14,6 +17,24 @@ const ENDPOINTS: [&str; 7] = [
 
 fn invalid(entity_type: &str, field: &str) -> FederationError {
     FederationError::Validation(format!("invalid {entity_type} metadata field {field}"))
+}
+
+fn validate_url<'a>(
+    entity_type: &str,
+    field: &str,
+    value: &'a Value,
+) -> Result<&'a str, FederationError> {
+    let uri = value.as_str().ok_or_else(|| invalid(entity_type, field))?;
+    // Local lexical policy avoids URL-parser normalization. Admission does not
+    // authorize an outbound request or change the supplied string.
+    if uri
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control() || c == '\\')
+        || url::Url::parse(uri).is_err()
+    {
+        return Err(invalid(entity_type, field));
+    }
+    Ok(uri)
 }
 
 /// Check original or derived metadata without interpreting statement position.
@@ -68,21 +89,12 @@ pub(super) fn validate(entity_type: &str, value: &Value) -> Result<(), Federatio
                 }
             }
             "logo_uri" | "policy_uri" | "information_uri" | "organization_uri" => {
-                let uri = value.as_str().ok_or_else(|| invalid(entity_type, field))?;
-                // Local lexical policy avoids URL-parser normalization. These
-                // informational URLs are preserved, never fetched here.
-                if uri
-                    .chars()
-                    .any(|c| c.is_whitespace() || c.is_control() || c == '\\')
-                    || url::Url::parse(uri).is_err()
-                {
-                    return Err(invalid(entity_type, field));
-                }
+                validate_url(entity_type, field, value)?;
             }
             _ => {}
         }
     }
-    Ok(())
+    registration::validate_supplied(entity_type, parameters)
 }
 
 /// Bind supplied OP/AS identity to the statement subject. Partial metadata may

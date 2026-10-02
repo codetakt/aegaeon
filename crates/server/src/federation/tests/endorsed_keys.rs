@@ -621,3 +621,8 @@ mod metadata_issuer {
     use super::*;
     include!("metadata_issuer.rs");
 }
+
+mod registration_metadata {
+    use super::*;
+    include!("registration_metadata.rs");
+}
