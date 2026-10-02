@@ -1,12 +1,16 @@
 use super::super::oauth_errors::{
-    authorization_header, invalid_client_header_error, registry_state_error_response,
+    authorization_header, invalid_client_header_error, no_cache_json_error_with_iss,
+    registry_state_error_response,
 };
 use super::super::{
     client_auth_presence, multiple_client_auth_methods_present, token_client_auth_method,
     validate_private_key_jwt_client_assertion, AppState,
 };
 use super::forms::{IntrospectForm, RevokeForm};
-use axum::{http::HeaderMap, response::Response};
+use axum::{
+    http::{header, HeaderMap, StatusCode},
+    response::Response,
+};
 
 use crate::util;
 
@@ -16,15 +20,52 @@ pub(super) struct EndpointClientAuthContext {
     pub(super) client_auth_method: &'static str,
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "existing endpoint authentication workflow; new oversized functions remain gated"
-)]
+/// Constructed only after a supported registered credential has been validated.
+#[derive(Clone, Debug)]
+pub(super) struct AuthenticatedIntrospectionClient {
+    pub(super) client_id: String,
+    pub(super) client_auth_method: &'static str,
+}
+
+pub(super) fn missing_introspection_authentication(state: &AppState) -> Response {
+    const DESCRIPTION: &str = "Client authentication is required for introspection";
+    if state.cfg.jwt_runtime().introspection_enabled() {
+        no_cache_json_error_with_iss(
+            StatusCode::BAD_REQUEST,
+            "invalid_client",
+            Some(DESCRIPTION),
+            state.issuer.as_str(),
+        )
+    } else {
+        util::invalid_client_response("token_introspection", DESCRIPTION)
+    }
+}
+
+/// Reject credentialless requests before selecting a registration or reading tokens.
+/// Header admission and attempted-credential errors retain their existing contracts.
+pub(super) fn require_introspection_authentication_attempt(
+    state: &AppState,
+    headers: &HeaderMap,
+    form: &IntrospectForm,
+) -> Result<(), Response> {
+    let presence = client_auth_presence(
+        None,
+        form.client_secret.as_deref(),
+        form.client_assertion_type.as_deref(),
+        form.client_assertion.as_deref(),
+    );
+    if !headers.contains_key(header::AUTHORIZATION) && !presence.any() {
+        return Err(missing_introspection_authentication(state));
+    }
+    Ok(())
+}
+
 pub(super) async fn introspection_requesting_client_id(
     state: &AppState,
     headers: &HeaderMap,
     form: &IntrospectForm,
-) -> Result<EndpointClientAuthContext, Response> {
+) -> Result<AuthenticatedIntrospectionClient, Response> {
+    require_introspection_authentication_attempt(state, headers, form)?;
     let auth_header = authorization_header(headers)
         .map_err(|err| invalid_client_header_error("token_introspection", "Authorization", err))?;
     let presence = client_auth_presence(
@@ -107,44 +148,13 @@ pub(super) async fn introspection_requesting_client_id(
             ));
         }
     }
-    if presence.any() && authenticated_client_id.is_none() {
-        return Err(util::invalid_client_response(
-            "token_introspection",
-            "Client authentication failed",
-        ));
-    }
-    if authenticated_client_id.is_none() {
-        if let Some(client_id) = form.client_id.as_deref() {
-            let registered_public = state
-                .clients
-                .try_is_registered_public_client(client_id)
-                .map_err(|error| {
-                    registry_state_error_response(
-                        state.issuer.as_str(),
-                        "introspection_is_registered_public_client",
-                        error,
-                    )
-                })?;
-            if !state.cfg.require_client_auth_introspection && registered_public {
-                return Ok(EndpointClientAuthContext {
-                    client_id: Some(client_id.to_string()),
-                    client_auth_method,
-                });
-            }
-            return Err(util::invalid_client_response(
-                "token_introspection",
-                "Client authentication failed or was not provided",
-            ));
-        }
-    }
-    if state.cfg.require_client_auth_introspection && authenticated_client_id.is_none() {
-        return Err(util::invalid_client_response(
-            "token_introspection",
-            "Client authentication failed or was not provided",
-        ));
-    }
-    Ok(EndpointClientAuthContext {
-        client_id: authenticated_client_id,
+    let client_id = authenticated_client_id
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| {
+            util::invalid_client_response("token_introspection", "Client authentication failed")
+        })?;
+    Ok(AuthenticatedIntrospectionClient {
+        client_id,
         client_auth_method,
     })
 }

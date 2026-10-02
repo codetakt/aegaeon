@@ -30,3 +30,8 @@ crates/server/src/web/management/account_link/read/filters.rs:        upstream_s
 # authority. This inventory records the resolver's defaulting contract.
 crates/server/src/web/authorize_context.rs:    Prompt::parse(raw.unwrap_or_default()).map_err(|description| {
 crates/server/src/web/par_endpoint/resolution.rs:    if let Err(description) = Prompt::parse(draft.prompt.clone().unwrap_or_default()) {
+
+# Introspection test fixtures: absent optional scope has an empty metadata scope list;
+# the actual HTTP/public-helper assertions separately require scope omission.
+crates/server/src/web/token_lifecycle/tests/schema.rs:                    .unwrap_or_default()
+crates/server/src/authcode/token/tests/local_introspection.rs:            .unwrap_or_default()

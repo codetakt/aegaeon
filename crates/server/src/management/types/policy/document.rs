@@ -62,6 +62,7 @@ pub struct PolicyDocument {
     pub strict_authorize_redirect: bool,
     pub require_client_auth_token: bool,
     pub require_client_auth_par: bool,
+    /// Legacy compatibility field; introspection authentication cannot be disabled.
     pub require_client_auth_introspection: bool,
     pub require_client_auth_revocation: bool,
     pub sender_constraint: PolicySenderConstraint,

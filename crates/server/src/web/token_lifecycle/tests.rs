@@ -27,9 +27,11 @@ use std::{
 };
 use tower::ServiceExt;
 
+mod authentication;
 mod cases;
 mod failures;
 mod grant_family;
+mod schema;
 
 const OWNER: &str = "grant-owner";
 const OTHER: &str = "unrelated-client";

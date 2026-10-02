@@ -227,6 +227,15 @@ Secret material rules (MUST):
 
 #### Policy document (schemaVersion = 1; Phase 1; normative)
 
+Introspection always requires successful registered-client authentication. The
+legacy `requireClientAuthIntrospection` field remains in stored documents and
+management API round trips, including historical `false` values, but cannot
+disable authentication. Runtime policy projection uses `true`; even direct Rust
+configuration of the field to `false` does not admit credentialless requests.
+Stored values, document digests and revision identities are not rewritten. Existing
+management downgrade acknowledgments still apply to changes of the stored field.
+No startup environment override is available.
+
 `configurationDocument.policy` MUST be a JSON object with the following keys:
 
 - `clientCredentials` (object; optional on historical documents, defaults to deny-all version 1;
@@ -238,7 +247,7 @@ Secret material rules (MUST):
 - `strictAuthorizeRedirect` (boolean)
 - `requireClientAuthToken` (boolean)
 - `requireClientAuthPar` (boolean)
-- `requireClientAuthIntrospection` (boolean)
+- `requireClientAuthIntrospection` (boolean; legacy compatibility field, effective runtime value always true)
 - `requireClientAuthRevocation` (boolean)
 - `dpopStrict` (boolean)
 - `dpopIatWindowSeconds` (number)

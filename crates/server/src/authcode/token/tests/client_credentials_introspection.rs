@@ -9,8 +9,8 @@ fn client_credentials_primitive_introspection_rejects_either_origin_marker() -> 
     let mut access = AccessToken::new("caller".into(), "caller".into(), Some("read".into()), 300);
     store.try_replace_access_token_record(access.clone())?;
     assert_eq!(
-        validator.introspect_token(&access.token)["active"],
-        false,
+        validator.introspect_token(&access.token),
+        json!({"active":false}),
         "missing metadata cannot prove an independent grant"
     );
     let grant = ClientCredentialsGrant::fixture(
@@ -38,22 +38,22 @@ fn client_credentials_primitive_introspection_rejects_either_origin_marker() -> 
     meta.client_credentials_grant = Some(grant.clone());
     store.try_replace_bearer_meta_record(meta.clone())?;
     assert_eq!(
-        validator.introspect_token(&access.token)["active"],
-        false,
+        validator.introspect_token(&access.token),
+        json!({"active":false}),
         "metadata-only CC marker must not take the legacy active path"
     );
     access.client_credentials_digest = Some(grant.digest()?);
     store.try_replace_access_token_record(access.clone())?;
     assert_eq!(
-        validator.introspect_token(&access.token)["active"],
-        false,
+        validator.introspect_token(&access.token),
+        json!({"active":false}),
         "complete CC record requires the authoritative HTTP path"
     );
     meta.client_credentials_grant = None;
     store.try_replace_bearer_meta_record(meta)?;
     assert_eq!(
-        validator.introspect_token(&access.token)["active"],
-        false,
+        validator.introspect_token(&access.token),
+        json!({"active":false}),
         "access-only CC marker must also stay inactive"
     );
     Ok(())

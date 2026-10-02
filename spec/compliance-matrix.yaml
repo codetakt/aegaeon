@@ -808,6 +808,36 @@ rfc_7662:
   - 'Responses include Cache-Control: no-store and Pragma: no-cache headers.'
   - This row concerns response cache headers; it does not establish current authorization
     or immediate policy revocation at a consumer.
+- id: 7662-007
+  section: '2.1, 2.2, 2.3, 4'
+  requirement: MUST
+  description: Introspection requires registered credentials regardless of the legacy
+    policy flag and omits scope when no string is available
+  module: crates/server/src/web/token_lifecycle/client_auth.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_lifecycle/tests/authentication.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/missing.rs
+  - crates/server/src/web/token_lifecycle/tests/authentication/credentials.rs
+  - crates/server/src/web/token_lifecycle/tests/schema.rs
+  - crates/server/src/config/tests/introspection_policy.rs
+  - crates/server/src/authcode/token/tests/local_introspection.rs
+  - crates/server/src/authcode/token/tests/client_credentials_introspection.rs
+  ci_check: introspection-authentication-and-scope
+  status: implemented
+  runtime_link: crates/server/src/web/token_lifecycle.rs
+  notes:
+  - The persisted flag round-trips unchanged, but runtime projection is true and
+    the handler requires authentication even with a direct false Rust field.
+  - Credentialless requests return 400 without a challenge when JWT introspection
+    capability is enabled, independent of Accept (RFC 9701 sections 5 and 8.2);
+    ordinary mode retains 401. Recognized invalid credentials retain existing 401.
+  - The remaining RFC 9701 failed-credential status interpretation, recipient
+    entitlement, signed-token verification and response protection are not closed here.
+  - None scope is omitted; Some strings retain exact bytes in JSON and signed inner
+    claims. Finite routed PostgreSQL/Redis tests do not establish formal assurance.
+  - The public local stored-status helper also omits absent scope and preserves
+    stored token_type; its local execution does not establish HTTP authorization.
 rfc_7515:
 
 - id: 7515-001
