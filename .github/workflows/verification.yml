@@ -638,15 +638,23 @@ jobs:
             output="artifacts/jose/tlv-parity/${profile}.txt"
             echo "=== TLV parity profile: ${profile} ===" \
               | tee -a artifacts/jose/tlv-parity/test-output.txt
+            status=0
             if [ -n "$features" ]; then
               cargo test -p aegaeon-jose --test tlv_parity \
                 --features "$features" -- --test-threads=1 --nocapture 2>&1 \
-                | tee "$output"
+                | tee "$output" || status=$?
             else
               cargo test -p aegaeon-jose --test tlv_parity \
-                -- --test-threads=1 --nocapture 2>&1 | tee "$output"
+                -- --test-threads=1 --nocapture 2>&1 | tee "$output" || status=$?
             fi
-            cat "$output" >> artifacts/jose/tlv-parity/test-output.txt
+            append_status=0
+            cat "$output" >> artifacts/jose/tlv-parity/test-output.txt || append_status=$?
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+            if [ "$append_status" -ne 0 ]; then
+              exit "$append_status"
+            fi
           done
           BASH
           )"
