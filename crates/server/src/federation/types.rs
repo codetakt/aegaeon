@@ -249,7 +249,7 @@ impl TrustChain {
         for statement in &self.chain {
             if let Some(metadata) = &statement.metadata {
                 for (entity_type, parameters) in metadata {
-                    super::metadata::validate(entity_type, parameters)?;
+                    super::metadata::validate_for_subject(entity_type, parameters, &statement.sub)?;
                 }
             }
         }
@@ -326,7 +326,7 @@ impl TrustChain {
                 policies.get(entity_type).unwrap_or(&Default::default()),
                 Some(entity_type),
             )?;
-            super::metadata::validate(entity_type, metadata)?;
+            super::metadata::validate_for_subject(entity_type, metadata, &self.leaf()?.sub)?;
         }
         Ok(Some(resolved))
     }

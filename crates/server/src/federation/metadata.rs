@@ -1,4 +1,4 @@
-//! Common metadata representation checks, independent of statement roles.
+//! Common metadata checks and contextual subject identity binding.
 use super::FederationError;
 use serde_json::Value;
 
@@ -80,6 +80,27 @@ pub(super) fn validate(entity_type: &str, value: &Value) -> Result<(), Federatio
                 }
             }
             _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Bind supplied OP/AS identity to the statement subject. Partial metadata may
+/// omit issuer; completeness remains the responsibility of the consuming role.
+pub(super) fn validate_for_subject(
+    entity_type: &str,
+    value: &Value,
+    subject: &str,
+) -> Result<(), FederationError> {
+    validate(entity_type, value)?;
+    if matches!(
+        entity_type,
+        "openid_provider" | "oauth_authorization_server"
+    ) {
+        if let Some(issuer) = value.get("issuer") {
+            if issuer.as_str() != Some(subject) {
+                return Err(invalid(entity_type, "issuer"));
+            }
         }
     }
     Ok(())
