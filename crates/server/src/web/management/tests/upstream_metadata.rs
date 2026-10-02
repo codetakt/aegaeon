@@ -58,3 +58,5 @@ mod critical_policy;
 mod naming_constraints;
 
 mod request_modes;
+
+mod signing_capabilities;
