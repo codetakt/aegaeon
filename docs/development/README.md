@@ -21,6 +21,7 @@ current-context entrypoints.
 
 - `[runbook]` [Database setup](database.md)
 - `[runbook]` [Validation tools](validation-tools.md)
+- `[guide]` [Reviewing dependency updates](dependency-updates.md)
 - `[guide]` [Claude agent guide](claude-agent-guide.md)
 - `[context]` [Current delivery context](current-delivery-context.md) — live
   implementation entrypoints only
