@@ -45,12 +45,15 @@ async fn signed_recipient_restricts_owner_disclosure_and_preserves_json_selectio
             .store
             .store_issued_grant(same.clone(), refresh, meta)?;
         check(&fixture.state, &same.token, OWNER, true, true).await?;
-        // An actual selected JSON fallback must not acquire the signed-only restriction.
+        // Disabling JWT cannot satisfy an explicit JWT-only request. Plain JSON
+        // retains its existing owner visibility.
         update_test_policy(&mut fixture.state, |policy| {
             policy.jwt_introspection_enabled = false
         })
         .await?;
-        check(&fixture.state, &access.token, OWNER, true, true).await?;
+        let (status, body) = introspection(&fixture.state, &access.token, OWNER, true).await?;
+        assert_eq!(status, StatusCode::NOT_ACCEPTABLE);
+        assert_eq!(body["error"], "invalid_request");
         check(&fixture.state, &access.token, OWNER, false, true).await?;
         Ok(())
     }

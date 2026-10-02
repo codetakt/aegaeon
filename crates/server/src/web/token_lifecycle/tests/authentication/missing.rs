@@ -15,6 +15,7 @@ async fn missing_cases(fixture: &Fixture) -> TestResult {
     for accept in [
         None,
         Some("application/json"),
+        Some("application/json;q=broken"),
         Some("application/token-introspection+jwt"),
     ] {
         for id in [None, Some(PUBLIC), Some(OWNER), Some("unknown-client")] {

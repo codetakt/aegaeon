@@ -1,9 +1,10 @@
 use super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::{clock_error_response, AppState};
+use super::accept::IntrospectionRepresentation;
 use super::forms::{required_lifecycle_token, IntrospectForm};
-use super::jwt_introspection::{build_jwt_introspection_response, selects_jwt_introspection};
+use super::jwt_introspection::build_jwt_introspection_response;
 use axum::{
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -187,12 +188,12 @@ pub(super) async fn active_introspection_body(
 
 pub(super) fn finalize_introspection_response(
     state: &AppState,
-    headers: &HeaderMap,
+    representation: IntrospectionRepresentation,
     body: Value,
     requesting_client: Option<&str>,
 ) -> Response {
     let active = body.get("active").and_then(Value::as_bool).unwrap_or(false);
-    let response = if selects_jwt_introspection(state, headers) {
+    let response = if representation == IntrospectionRepresentation::Jwt {
         build_jwt_introspection_response(state, &body, requesting_client)
     } else {
         let mut response = (StatusCode::OK, Json(body)).into_response();

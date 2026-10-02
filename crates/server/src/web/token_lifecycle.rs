@@ -19,6 +19,7 @@ use crate::authcode::token::TokenPolicyError;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
+mod accept;
 mod client_auth;
 mod forms;
 mod introspection;
@@ -26,6 +27,7 @@ mod jwt_introspection;
 #[cfg(test)]
 mod tests;
 
+use accept::IntrospectionRepresentation;
 use client_auth::{
     introspection_requesting_client_id, revocation_requesting_client_id,
     AuthenticatedIntrospectionClient,
@@ -73,12 +75,12 @@ async fn authenticate_introspection_client(
 
 fn inactive_introspection_response(
     state: &AppState,
-    headers: &HeaderMap,
+    representation: IntrospectionRepresentation,
     introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
     finalize_introspection_response(
         state,
-        headers,
+        representation,
         json!({ "active": false }),
         Some(introspect_client.client_id.as_str()),
     )
@@ -100,7 +102,7 @@ fn token_store_introspection_error(state: &AppState, err: impl std::fmt::Display
 
 async fn active_access_token_introspection_response(
     state: &AppState,
-    headers: &HeaderMap,
+    representation: IntrospectionRepresentation,
     token: &str,
     access_token: &AccessToken,
     introspect_client: &AuthenticatedIntrospectionClient,
@@ -114,14 +116,14 @@ async fn active_access_token_introspection_response(
         Ok(meta) => meta,
         Err(error) => return token_store_introspection_error(state, error),
     };
-    if jwt_introspection::selects_jwt_introspection(state, headers)
+    if representation == IntrospectionRepresentation::Jwt
         && !introspection::signed_introspection_recipient(
             access_token,
             meta.as_ref(),
             &introspect_client.client_id,
         )
     {
-        return inactive_introspection_response(state, headers, introspect_client);
+        return inactive_introspection_response(state, representation, introspect_client);
     }
     if (access_token.client_credentials_digest.is_some()
         || meta
@@ -129,7 +131,7 @@ async fn active_access_token_introspection_response(
             .is_some_and(|meta| meta.client_credentials_grant.is_some()))
         && introspect_client.client_auth_method == "none"
     {
-        return inactive_introspection_response(state, headers, introspect_client);
+        return inactive_introspection_response(state, representation, introspect_client);
     }
     let visible = match introspection_token_visible_to_client(
         state,
@@ -143,7 +145,7 @@ async fn active_access_token_introspection_response(
         Err(response) => return response,
     };
     if !visible {
-        return inactive_introspection_response(state, headers, introspect_client);
+        return inactive_introspection_response(state, representation, introspect_client);
     }
     // Caller visibility precedes the independent grant lookup and its errors.
     match state
@@ -157,7 +159,7 @@ async fn active_access_token_introspection_response(
                 .ok()
                 .zip(serde_json::to_value(access_token).ok())
                 .is_some_and(|(current, observed)| current == observed) => {}
-        Ok(_) => return inactive_introspection_response(state, headers, introspect_client),
+        Ok(_) => return inactive_introspection_response(state, representation, introspect_client),
         Err(error) => return token_store_introspection_error(state, error),
     }
     if let Some(meta) = meta.as_ref() {
@@ -169,7 +171,7 @@ async fn active_access_token_introspection_response(
         {
             Ok(()) => {}
             Err(TokenPolicyError::RefreshParentRevoked) => {
-                return inactive_introspection_response(state, headers, introspect_client);
+                return inactive_introspection_response(state, representation, introspect_client);
             }
             Err(error) => return token_store_introspection_error(state, error),
         }
@@ -181,13 +183,15 @@ async fn active_access_token_introspection_response(
     if body.get("active").and_then(serde_json::Value::as_bool) == Some(true) {
         match introspection::validate_introspection_jwt(state, access_token, meta.as_ref()) {
             Ok(true) => {}
-            Ok(false) => return inactive_introspection_response(state, headers, introspect_client),
+            Ok(false) => {
+                return inactive_introspection_response(state, representation, introspect_client)
+            }
             Err(response) => return response,
         }
     }
     finalize_introspection_response(
         state,
-        headers,
+        representation,
         body,
         Some(introspect_client.client_id.as_str()),
     )
@@ -195,7 +199,7 @@ async fn active_access_token_introspection_response(
 
 async fn introspect_access_token(
     state: &AppState,
-    headers: &HeaderMap,
+    representation: IntrospectionRepresentation,
     token: &str,
     introspect_client: &AuthenticatedIntrospectionClient,
 ) -> Response {
@@ -208,14 +212,14 @@ async fn introspect_access_token(
         Ok(Some(access_token)) => {
             active_access_token_introspection_response(
                 state,
-                headers,
+                representation,
                 token,
                 &access_token,
                 introspect_client,
             )
             .await
         }
-        Ok(None) => inactive_introspection_response(state, headers, introspect_client),
+        Ok(None) => inactive_introspection_response(state, representation, introspect_client),
         Err(err) => token_store_introspection_error(state, err),
     }
 }
@@ -275,7 +279,12 @@ pub(super) async fn introspect(
         Ok(token) => token,
         Err(resp) => return resp,
     };
-    introspect_access_token(&state, &headers, &token, &introspect_client).await
+    let representation = match jwt_introspection::negotiate_introspection_response(&state, &headers)
+    {
+        Ok(representation) => representation,
+        Err(response) => return response,
+    };
+    introspect_access_token(&state, representation, &token, &introspect_client).await
 }
 
 pub(super) async fn revoke(
