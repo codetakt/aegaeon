@@ -626,3 +626,8 @@ mod registration_metadata {
     use super::*;
     include!("registration_metadata.rs");
 }
+
+mod capability_metadata {
+    use super::*;
+    include!("capability_metadata.rs");
+}

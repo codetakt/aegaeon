@@ -173,6 +173,61 @@ advertisement conditions, routed DB/Redis/external HTTPS execution, full Federat
 conformance or proof. Existing browser-binding, exact-issuer and endpoint-query
 changes still require verification on their eventual combined source.
 
+## Provider Capability Values
+
+Supplied capability metadata in exact `openid_provider` and
+`oauth_authorization_server` roles is checked before overlay/filtering and after
+policy application. The shared validator also checks ordinary OIDC Discovery
+before conversion to the typed consumer representation. Field domains follow
+OpenID Connect Discovery 1.0 errata set 2 section 3, RFC 8414 section 2 and the
+applicable PAR, JAR, PKCE, DPoP, issuer-response and mTLS metadata extensions.
+
+Both roles require string arrays for supplied scopes, response types/modes,
+grant types, token/revocation/introspection endpoint authentication methods and
+signing algorithms, UI locales, PKCE methods and DPoP signing algorithms.
+OP additionally checks ACR and subject types; ID Token, UserInfo and Request
+Object signing/encryption algorithms and encryption encodings; display values,
+claim types/names/locales; and `aegaeon_access_token_formats_supported`. That last
+field is an existing local DTO extension, not a standardized parameter.
+
+Both roles require Boolean values for supplied
+`require_pushed_authorization_requests`, `require_signed_request_object`,
+`authorization_response_iss_parameter_supported` and
+`tls_client_certificate_bound_access_tokens`. OP additionally checks
+`claims_parameter_supported`, `request_parameter_supported`,
+`request_uri_parameter_supported` and `require_request_uri_registration`.
+OP-only names remain extensions in other roles; these checks do not restrict
+unknown nested extension values.
+
+The token, revocation and introspection
+`*_endpoint_auth_signing_alg_values_supported` arrays cannot contain exact
+`none`. Other algorithm advertisements, including ID Token, UserInfo and Request
+Object arrays, do not acquire that prohibition. Strings are neither trimmed nor
+case-folded; unknown identifiers, duplicates and empty arrays remain
+representable. No authentication-algorithm allowlist or mandatory advertised
+RS256 member is imposed. The existing selected OP ID Token RS256 requirement
+continues to apply after choosing effective metadata, permitting valid signed
+replacement of ordinary RS384-only advertisements.
+
+Upgrade behavior: known optional capability `null`, wrong primitive/list kinds,
+mixed list elements and forbidden authentication `none` now refuse at source
+admission even if another source would replace them. Rejecting supplied optional
+`null` and malformed originals before replacement is Aegaeon's consumer admission
+policy. Ordinary duplicate-key rejection and response body limits remain;
+unknown ordinary extensions, including nulls, remain ignored. At live
+ordinary/cache use, the authentication-algorithm prohibition is rechecked before
+Federation replacement. Invalid input is refused before authorization state,
+redirect or token credentials are sent. Errors contain a field/category only.
+
+Partial signed objects may omit these fields, and superior/policy completion
+remains supported. This slice adds no companion-presence requirement, locale
+syntax validation, DPoP asymmetric-algorithm classification, endpoint/alias/key
+semantics, whole-role completeness or remote capability verification. No new
+transport, authentication support, setting, dependency or migration is added.
+Finite signed/typed/fresh/cache and loopback operation tests do not establish
+full schema or standards conformance, routed DB/Redis/external HTTPS behavior,
+sibling-source composition or formal assurance.
+
 ## Federation Registration Declarations
 
 OpenID Federation 1.0 sections 5.1.2/5.1.3 and Federation for OpenID Connect

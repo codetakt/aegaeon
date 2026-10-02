@@ -279,6 +279,13 @@ where
         Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
     >,
 {
+    // Ordinary source admission still applies when signed metadata replaces it.
+    crate::oidc::capabilities::validate_typed(&discovery).map_err(|_| {
+        upstream_federation_gateway_error(
+            issuer_base,
+            "upstream discovery authentication signing capabilities invalid",
+        )
+    })?;
     let metadata = resolve_upstream_federation_metadata(
         state,
         upstream_issuer,
@@ -310,6 +317,9 @@ where
     // Deserialize only the resolved signed OP object: missing/deleted fields are
     // not restored from independently fetched Discovery.
     let effective: OidcDiscovery = serde_json::from_value(metadata.clone()).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
+    })?;
+    crate::oidc::capabilities::validate_typed(&effective).map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
     })?;
     validate_id_token_signing_capabilities(&effective, issuer_base)?;
