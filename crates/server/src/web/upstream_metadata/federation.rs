@@ -221,6 +221,25 @@ pub(crate) fn admit_upstream_federation_metadata(
     }
 }
 
+// Discovery section 3 requires RS256 in complete OP signing capabilities.
+// This does not select an individual token's algorithm or validate partial C/S metadata.
+fn validate_id_token_signing_capabilities(
+    discovery: &OidcDiscovery,
+    issuer_base: &str,
+) -> Result<(), Response> {
+    if !discovery
+        .id_token_signing_alg_values_supported
+        .iter()
+        .any(|algorithm| algorithm == "RS256")
+    {
+        return Err(upstream_federation_gateway_error(
+            issuer_base,
+            "upstream OP signing capabilities must include RS256",
+        ));
+    }
+    Ok(())
+}
+
 /// Selected metadata and its inline-key constraint belong to one operation.
 /// Construction is private; raw signed chain admission remains the authority.
 pub(in crate::web) struct EffectiveUpstreamMetadata {
@@ -269,6 +288,7 @@ where
     )
     .await?;
     let Some(metadata) = metadata else {
+        validate_id_token_signing_capabilities(&discovery, issuer_base)?;
         return Ok(EffectiveUpstreamMetadata {
             discovery,
             federation_metadata: None,
@@ -286,6 +306,7 @@ where
     let effective: OidcDiscovery = serde_json::from_value(metadata.clone()).map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
     })?;
+    validate_id_token_signing_capabilities(&effective, issuer_base)?;
     Ok(EffectiveUpstreamMetadata {
         discovery: effective,
         federation_metadata: Some(metadata),

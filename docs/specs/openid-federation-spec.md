@@ -345,6 +345,37 @@ metadata-to-store-to-redirect workflow, with signed fresh/cached chains and
 loopback callback/refresh controls; they do not execute a fresh routed DB/Redis
 lifecycle or establish complete metadata-schema conformance.
 
+Every live operation also requires complete OP signing-capability metadata:
+`id_token_signing_alg_values_supported` must be a string array containing exact
+`RS256` (OpenID Connect Discovery 1.0 section 3). Check ordinary Discovery when no Federation anchors are configured, or the
+final resolved Federation OP object otherwise, before authorization state or
+redirect, or callback/refresh credential transmission. Cached and typed transport
+inputs pass the same construction boundary. A typed ordinary signing list that
+excludes RS256 may be replaced by a valid signed result under the existing
+identity/endpoint and operation checks. Existing raw missing/null/wrong-type
+parser refusals still apply before selection. Missing, null, wrong-type, empty,
+wrong-case or padded-only lists fail with HTTP 502 `server_error`.
+
+Upgrade guidance: policy results such as `value:["RS384"]` or a `subset_of`
+removing RS256 were previously accepted but are invalid complete OP metadata.
+Federation 1.0/1.1 section 6.1.4.2 forbids using invalid resolved metadata; the OP
+imports are Federation 1.0 section 5.1.3 and Federation for OpenID Connect 1.1
+section 5.1.2. Keep RS256 in the effective list. Earlier successful executions of
+RS384-only metadata do not establish conformance for that case. A valid list
+containing RS256 and RS384 still permits an actual RS384 ID Token, subject to
+its advertised algorithm and all existing signature/key/claim checks. Valid
+narrowing that retains RS256 remains supported; this rule does not permit `none`
+as a token algorithm or add cryptographic implementations.
+
+Original partial signed objects and generic policy operations remain partial.
+An immediate superior, `value` or `default` can complete their signing list;
+required-member removal cannot be refilled from ordinary Discovery or bypassed
+by disabling Federation. This adds no refresh authorization-only capability
+requirement or Dynamic OP inference. Each operation retains one admitted context
+through token verification; callback logout information uses that same context.
+No complete imported-role schema, remote capability implementation attestation,
+new flow, registration feature, setting or storage migration is claimed.
+
 Callback selects and validates current signed metadata before sending the code
 or client credentials. It retains captured token/JWKS endpoints, authentication
 method, verifier-implied PKCE, iss and ACR requirements. A newly excluding policy

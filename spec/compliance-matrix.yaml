@@ -5383,6 +5383,25 @@ openid_federation_rp:
   - Context-free and entity-type-only flat helpers cannot establish identity binding. Typed trust-chain resolution does not authenticate signatures or expiry.
   - Finite signed C/S, intermediate, individual, fresh/cache, policy and live authorization-state tests do not establish full imported schemas, complete Federation conformance, sibling composition, routed DB/Redis/external HTTPS execution or formal proof.
 
+
+- id: fed-rp-015
+  section: '3 (OIDC Discovery 1.0); 6.1.4.2 (Federation 1.0/1.1); 5.1.3 (Federation 1.0); 5.1.2 (Federation for OpenID Connect 1.1)'
+  requirement: MUST
+  description: Require exact RS256 in complete upstream OP ID Token signing-capability metadata before live use
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/signing_capabilities.rs
+  - crates/server/src/web/management/tests/upstream_metadata/callback.rs
+  - crates/server/src/web/management/tests/upstream_metadata/refresh.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Common operation-context construction checks ordinary Discovery in the no-Federation branch and the effective signed OP object otherwise, before authorization state/redirect or callback/refresh credential transmission, including cache hits and typed inputs. Typed ordinary capabilities may be replaced by a valid signed result; raw DTO parser refusals remain. Missing, null, wrong-type, empty or RS256-excluding lists fail with bounded upstream errors; no normalization or refill applies.
+  - Corrects prior acceptance of RS384-only resolved OP metadata. Retaining RS256 advertisement does not require every token to use it; valid advertised RS384 tokens and narrowing retaining RS256 remain supported with existing signature/key/claim checks. Earlier RS384-only success is not conformance evidence.
+  - Partial original C/S and generic policy representations remain extensible; immediate superior and policy completion remain supported. Each operation retains one admitted context, including callback logout information. No Dynamic OP inference, new token algorithm, flow, registration or configuration is introduced.
+  - Finite ordinary raw loopback, signed fresh/cache, actual token signature and operation side-effect tests do not establish full imported schemas, remote capability implementation, routed DB/Redis/external HTTPS, sibling composition, full Federation conformance or formal discharge.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
