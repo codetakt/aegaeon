@@ -396,3 +396,73 @@ fn raw_id_token_payload_parser_rejects_invalid_exp_type_under_verified_backend()
     assert!(matches!(err, RequiredRs256Error::InvalidPayload));
     Ok(())
 }
+
+#[tokio::test]
+async fn oidc_subject_format_direct_signers_and_signed_incoming_tokens() -> TestResult {
+    let key = OidcSigningKey::from_rsa_pem("subject-test".into(), TEST_RSA_PRIVATE_KEY_PEM)?;
+    let (n, e) = sample_jwk_components(&key)?;
+    for subject in [
+        String::new(),
+        "é".into(),
+        "x".repeat(256),
+        "A".into(),
+        "x".repeat(255),
+    ] {
+        let builder = IdTokenBuilder::try_new(
+            "https://issuer.example".into(),
+            subject.clone(),
+            "client".into(),
+        );
+        let valid = super::super::subject::is_valid_subject(&subject);
+        assert_eq!(builder.is_ok(), valid);
+        let mut claims = IdTokenBuilder::try_new(
+            "https://issuer.example".into(),
+            "valid".into(),
+            "client".into(),
+        )?
+        .build()
+        .claims;
+        claims.sub = subject.clone();
+        let sync = sign_required_id_token(&claims, &key);
+        let asynchronous = sign_required_id_token_async(&claims, &key).await;
+        assert_eq!(sync.is_ok(), valid);
+        assert_eq!(asynchronous.is_ok(), valid);
+        if !valid {
+            assert!(matches!(sync, Err(RequiredRs256Error::InvalidPayload)));
+            assert!(matches!(
+                asynchronous,
+                Err(RequiredRs256Error::InvalidPayload)
+            ));
+        }
+        // Bypass only the outbound field guard to model a signed remote ID Token.
+        let remote = key.sign_rs256_jwt(&claims)?;
+        let decoded = verify_required_id_token_claims(&remote, &n, &e)?;
+        let token = super::super::IdToken {
+            claims: decoded,
+            signing_alg: "RS256".into(),
+        };
+        assert_eq!(
+            token
+                .validate("client", "https://issuer.example", None)
+                .is_ok(),
+            valid
+        );
+    }
+    let claims = IdTokenBuilder::try_new(
+        "https://issuer.example".into(),
+        "valid".into(),
+        "client".into(),
+    )?
+    .claim("sub".into(), serde_json::json!("other"))
+    .build()
+    .claims;
+    assert!(matches!(
+        sign_required_id_token(&claims, &key),
+        Err(RequiredRs256Error::InvalidPayload)
+    ));
+    assert!(matches!(
+        sign_required_id_token_async(&claims, &key).await,
+        Err(RequiredRs256Error::InvalidPayload)
+    ));
+    Ok(())
+}

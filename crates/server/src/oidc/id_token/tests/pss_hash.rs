@@ -91,8 +91,8 @@ fn oidc_pss_hash_errors_preserve_bounds_and_invalid_algorithm_rejection() {
     }
 }
 
+#[cfg(feature = "verified-claim")]
 #[test]
-#[ignore = "requires the actual ffi/lowstar_hash runtime; run explicitly in that feature lane"]
 fn oidc_pss_hash_runtime_mapping_keeps_ffi_algorithm_contract() -> TestResult {
     for input in ["sample-access-token", "authorization-code-123"] {
         for (pss, digest_selector, expected) in vectors(input) {
