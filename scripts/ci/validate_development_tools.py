@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -580,16 +581,80 @@ def checked_consumer_inputs(source: Path, inputs: dict[str, dict[str, str | int]
     unchanged(source, inputs)
 
 
-def consumers(
+def installed_closure(source: Path) -> dict[str, dict[str, str | int]]:
+    """Record every installed filesystem input, not only package entrypoints."""
+    require(source.is_dir() and not source.is_symlink(), "Source snapshot root changed")
+    root = source / "node_modules"
+    require(root.is_dir() and not root.is_symlink(), "Installed closure root changed")
+    result: dict[str, dict[str, str | int]] = {}
+
+    def record(path: Path) -> None:
+        metadata = path.lstat()
+        relative = str(path.relative_to(root))
+        if stat.S_ISDIR(metadata.st_mode):
+            result[relative] = {
+                "kind": "directory",
+                "mode": metadata.st_mode,
+                "device": metadata.st_dev,
+                "inode": metadata.st_ino,
+            }
+        elif stat.S_ISREG(metadata.st_mode):
+            result[relative] = identity(path)
+        elif stat.S_ISLNK(metadata.st_mode):
+            try:
+                target = path.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError(f"Invalid installed closure symlink: {relative}") from error
+            require(
+                target.is_relative_to(root.resolve()),
+                f"Outside installed closure symlink: {relative}",
+            )
+            target_mode = target.lstat().st_mode
+            require(
+                stat.S_ISREG(target_mode) or stat.S_ISDIR(target_mode),
+                f"Special installed closure symlink target: {relative}",
+            )
+            result[relative] = {**identity(path), "target": raw_link(path)}
+        else:
+            raise ValueError(f"Special installed closure input: {relative}")
+
+    def traversal_error(error: OSError) -> None:
+        raise error
+
+    record(root)
+    for directory, directories, files in os.walk(root, onerror=traversal_error, followlinks=False):
+        for name in sorted([*directories, *files]):
+            record(Path(directory) / name)
+    return result
+
+
+def checked_installed_closure(source: Path, closure: dict[str, dict[str, str | int]]) -> None:
+    require(
+        installed_closure(source) == closure, "Installed consumer closure changed before invocation"
+    )
+
+
+def checked_consumer_state(
+    source: Path,
+    inputs: dict[str, dict[str, str | int]],
+    closure: dict[str, dict[str, str | int]],
+) -> None:
+    checked_consumer_inputs(source, inputs)
+    checked_installed_closure(source, closure)
+
+
+def consumers(  # noqa: PLR0913 - bind tracked inputs and complete installed closure
     commands: Commands,
     source: Path,
     tools: dict[str, str],
     entrypoints: dict[str, dict[str, str | int]],
     inputs: dict[str, dict[str, str | int]],
+    *,
+    closure: dict[str, dict[str, str | int]],
 ) -> None:
     # Keep these arguments aligned with the exact EXPECTED_SCRIPTS contract.
     # npm run would prepend untrusted dependency-provided .bin names to PATH.
-    checked_consumer_inputs(source, inputs)
+    checked_consumer_state(source, inputs, closure)
     commands.run(
         "lint-ts",
         [
@@ -601,7 +666,7 @@ def consumers(
         ],
         source,
     )
-    checked_consumer_inputs(source, inputs)
+    checked_consumer_state(source, inputs, closure)
     commands.run(
         "typecheck-ts",
         [
@@ -615,17 +680,19 @@ def consumers(
         ],
         source,
     )
-    checked_consumer_inputs(source, inputs)
+    checked_consumer_state(source, inputs, closure)
     commands.run(
         "audit-strict-types",
         [tools["node"], "--experimental-strip-types", "scripts/check-strict-types.ts"],
         source,
     )
     for index, test in enumerate(TESTS):
-        checked_consumer_inputs(source, inputs)
+        checked_consumer_state(source, inputs, closure)
         commands.run(
             f"consumer-{index}", [tools["node"], "--experimental-strip-types", test], source
         )
+    # Bind final receipt to the installed state left by the last consumer.
+    checked_consumer_state(source, inputs, closure)
 
 
 def execute(root: Path, output: Path, tools: dict[str, str]) -> dict[str, Any]:
@@ -666,8 +733,20 @@ def execute(root: Path, output: Path, tools: dict[str, str]) -> dict[str, Any]:
                 )
             )
             audit_contract(report["audit"], lock)
-            report["consumer_entrypoints"] = consumer_entrypoints(source, report["installed_graph"])
-            consumers(commands, source, tools, report["consumer_entrypoints"], report["inputs"])
+            report.update(
+                {
+                    "installed_closure": installed_closure(source),
+                    "consumer_entrypoints": consumer_entrypoints(source, report["installed_graph"]),
+                }
+            )
+            consumers(
+                commands,
+                source,
+                tools,
+                report["consumer_entrypoints"],
+                report["inputs"],
+                closure=report["installed_closure"],
+            )
             unchanged(source, report["inputs"])
             unchanged(root, report["inputs"])
             report["status"] = "passed"

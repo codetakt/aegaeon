@@ -276,23 +276,27 @@ class DevelopmentToolsTests(unittest.TestCase):
                 patch.object(tools, "installed_graph", return_value={}),
                 patch.object(tools, "graph_contract", return_value=[]),
                 patch.object(tools.Commands, "run", run),
+                patch.object(tools, "installed_closure", return_value={}) as closure,
                 patch.object(tools, "consumer_entrypoints", return_value={}) as entrypoints,
                 patch.object(
                     tools,
                     "consumers",
-                    side_effect=lambda *_, calls=calls: calls.append("consumers"),
+                    side_effect=lambda *_, calls=calls, **__: calls.append("consumers"),
                 ) as consumers,
             ):
                 report = tools.execute(self.root, self.root, {"node": "node"})
             if audit == json.dumps(clean_audit()):
                 self.assertEqual(report["status"], "passed")
                 self.assertEqual(calls, ["npm-ci", "npm-ls", "npm-audit", "consumers"])
-                self.assertTrue(consumers.call_count == entrypoints.call_count == 1)
+                self.assertTrue(
+                    consumers.call_count == entrypoints.call_count == closure.call_count == 1
+                )
             else:
                 self.assertEqual(report["status"], "failed")
                 self.assertEqual(calls, ["npm-ci", "npm-ls", "npm-audit"])
                 consumers.assert_not_called()
                 entrypoints.assert_not_called()
+                closure.assert_not_called()
 
     def consumer_fixture_inputs(self):
         return {
@@ -382,8 +386,14 @@ class DevelopmentToolsTests(unittest.TestCase):
         inputs = self.consumer_fixture_inputs()
         commands = tools.Commands(output, {"PATH": str(bins)})
         entrypoints = tools.consumer_entrypoints(self.root, installed)
+        closure = tools.installed_closure(self.root)
         tools.consumers(
-            commands, self.root, {"node": str(runtime), "npm": "unused"}, entrypoints, inputs
+            commands,
+            self.root,
+            {"node": str(runtime), "npm": "unused"},
+            entrypoints,
+            inputs,
+            closure=closure,
         )
         self.assertEqual(len(commands.records), 6)
         self.assertTrue(all(record["argv"][0] == str(runtime) for record in commands.records))
@@ -395,12 +405,17 @@ class DevelopmentToolsTests(unittest.TestCase):
         )
         self.assertFalse((self.root / "hijacked").exists())
         Path(entrypoints["eslint"]["path"]).write_text("raise SystemExit(7)\n")
-        with pytest.raises(ValueError, match="entrypoint changed before invocation: eslint"):
-            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints, inputs)
+        with pytest.raises(ValueError, match="Installed consumer closure changed"):
+            tools.consumers(
+                commands, self.root, {"node": str(runtime)}, entrypoints, inputs, closure=closure
+            )
         self.assertEqual(len(commands.records), 6)
         entrypoints = tools.consumer_entrypoints(self.root, installed)
+        closure = tools.installed_closure(self.root)
         with pytest.raises(ValueError, match="lint-ts failed with exit 7"):
-            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints, inputs)
+            tools.consumers(
+                commands, self.root, {"node": str(runtime)}, entrypoints, inputs, closure=closure
+            )
 
     def test_successful_earlier_consumer_cannot_replace_later_entrypoint(self):
         installed = self.install_consumer_fixtures()
@@ -416,8 +431,11 @@ class DevelopmentToolsTests(unittest.TestCase):
         output = Path(self.enterContext(tempfile.TemporaryDirectory()))
         inputs = self.consumer_fixture_inputs()
         commands = tools.Commands(output, {})
-        with pytest.raises(ValueError, match="entrypoint changed before invocation: tsc") as caught:
-            tools.consumers(commands, self.root, {"node": sys.executable}, entrypoints, inputs)
+        closure = tools.installed_closure(self.root)
+        with pytest.raises(ValueError, match="Installed consumer closure changed") as caught:
+            tools.consumers(
+                commands, self.root, {"node": sys.executable}, entrypoints, inputs, closure=closure
+            )
         (output / "rejection.txt").write_text(str(caught.value))
         self.assertEqual([row["name"] for row in commands.records], ["lint-ts"])
         self.assertEqual(commands.records[0]["exit"], 0)
@@ -499,12 +517,188 @@ class DevelopmentToolsTests(unittest.TestCase):
                     entrypoints,
                     commands,
                 ) = self.sequential_replacement_fixture(earlier_index, target_name)
+                closure = tools.installed_closure(root)
                 with pytest.raises(ValueError, match="Source or lock changed"):
-                    tools.consumers(commands, root, {"node": str(runtime)}, entrypoints, inputs)
+                    tools.consumers(
+                        commands, root, {"node": str(runtime)}, entrypoints, inputs, closure=closure
+                    )
                 self.assertEqual(len(commands.records), earlier_index + 1)
                 self.assertTrue(all(row["exit"] == 0 for row in commands.records))
                 self.assertFalse(marker.exists())
                 self.assertNotEqual(target.read_text(), original)
+
+    def installed_implementation_replacement_fixture(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        output = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        with patch.object(self, "root", root):
+            installed = self.install_consumer_fixtures()
+            target = root / "node_modules/typescript/lib/tsc.js"
+            target.parent.mkdir()
+            original = "print('reviewed implementation passed')\n"
+            target.write_text(original)
+            launcher = root / "node_modules/typescript/bin/tsc"
+            launcher.write_text(
+                f"from pathlib import Path\nexec(Path({str(target)!r}).read_text())\n"
+            )
+            for name in ("scripts/check-strict-types.ts", *tools.TESTS):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("print('consumer passed')\n")
+            marker = output / "altered-implementation-executed"
+            replacement = (
+                "from pathlib import Path\n"
+                f"Path({str(target)!r}).write_text({original!r})\n"
+                f"Path({str(marker)!r}).touch()\n"
+                "print('altered implementation passed and restored itself')\n"
+            )
+            (root / "node_modules/eslint/bin/eslint.js").write_text(
+                "from pathlib import Path\n"
+                f"Path({str(target)!r}).write_text({replacement!r})\n"
+                "print('earlier consumer passed')\n"
+            )
+            runtime = output / "pinned-node-fixture"
+            runtime.write_text(
+                f"#!{sys.executable}\nimport os, sys\n"
+                "args = [arg for arg in sys.argv[1:] if arg != '--experimental-strip-types']\n"
+                "os.execv(sys.executable, [sys.executable, *args])\n"
+            )
+            runtime.chmod(0o755)
+            inputs = self.consumer_fixture_inputs()
+            entrypoints = tools.consumer_entrypoints(root, installed)
+        return root, output, target, original, marker, runtime, inputs, entrypoints
+
+    def test_successful_consumer_cannot_replace_installed_implementation(self):
+        root, output, target, original, marker, runtime, inputs, entrypoints = (
+            self.installed_implementation_replacement_fixture()
+        )
+        closure = tools.installed_closure(root)
+        commands = tools.Commands(output, {})
+        with pytest.raises(ValueError, match="Installed consumer closure changed"):
+            tools.consumers(
+                commands, root, {"node": str(runtime)}, entrypoints, inputs, closure=closure
+            )
+        self.assertEqual([row["name"] for row in commands.records], ["lint-ts"])
+        self.assertEqual(commands.records[0]["exit"], 0)
+        self.assertFalse(marker.exists())
+        self.assertNotEqual(target.read_text(), original)
+        self.assertEqual(
+            {
+                "path": str(root / "node_modules/typescript/bin/tsc"),
+                **tools.identity(root / "node_modules/typescript/bin/tsc"),
+            },
+            entrypoints["tsc"],
+        )
+        tools.unchanged(root, inputs)
+
+    def test_final_consumer_cannot_leave_installed_closure_changed(self):
+        root, output, target, _original, marker, runtime, _inputs, entrypoints = (
+            self.installed_implementation_replacement_fixture()
+        )
+        Path(entrypoints["eslint"]["path"]).write_text("print('reviewed earlier consumer')\n")
+        (root / tools.TESTS[-1]).write_text(
+            "from pathlib import Path\n"
+            f"Path({str(target)!r}).write_text('altered after final consumer')\n"
+            f"Path({str(marker)!r}).touch()\n"
+            "print('final consumer passed')\n"
+        )
+        with patch.object(self, "root", root):
+            inputs = self.consumer_fixture_inputs()
+        entrypoints["eslint"] = {
+            "path": str(Path(entrypoints["eslint"]["path"])),
+            **tools.identity(Path(entrypoints["eslint"]["path"])),
+        }
+        closure = tools.installed_closure(root)
+        commands = tools.Commands(output, {})
+        with pytest.raises(ValueError, match="Installed consumer closure changed"):
+            tools.consumers(
+                commands, root, {"node": str(runtime)}, entrypoints, inputs, closure=closure
+            )
+        self.assertEqual(len(commands.records), 6)
+        self.assertTrue(all(row["exit"] == 0 for row in commands.records))
+        self.assertTrue(marker.is_file())
+        self.assertEqual(target.read_text(), "altered after final consumer")
+        tools.unchanged(root, inputs)
+
+    def test_installed_closure_rejects_missing_additional_bytes_modes_and_directories(self):
+        self.install_consumer_fixtures()
+        root = self.root / "node_modules"
+        target = root / "typescript/bin/tsc"
+        for change in (
+            "missing",
+            "additional",
+            "bytes",
+            "mode",
+            "empty directory",
+            "directory mode",
+            "directory identity",
+        ):
+            with self.subTest(change=change):
+                source = Path(self.enterContext(tempfile.TemporaryDirectory())) / "source"
+                shutil.copytree(self.root, source)
+                closure = tools.installed_closure(source)
+                installed = source / "node_modules"
+                current = installed / target.relative_to(root)
+                if change == "missing":
+                    current.unlink()
+                elif change == "additional":
+                    (installed / "injected.js").write_text("unreviewed")
+                elif change == "bytes":
+                    current.write_text("altered")
+                elif change == "mode":
+                    current.chmod(0o700)
+                elif change == "empty directory":
+                    (installed / "empty").mkdir()
+                elif change == "directory mode":
+                    (installed / "typescript/lib").mkdir()
+                    closure = tools.installed_closure(source)
+                    (installed / "typescript/lib").chmod(0o700)
+                else:
+                    directory = installed / "typescript/bin"
+                    saved = source / "saved-bin"
+                    directory.rename(saved)
+                    shutil.copytree(saved, directory)
+                with pytest.raises(ValueError, match="closure changed"):
+                    tools.checked_installed_closure(source, closure)
+
+    def test_installed_closure_links_are_literal_internal_and_complete(self):
+        self.install_consumer_fixtures()
+        root = self.root / "node_modules"
+        link = root / "tsc-link"
+        link.symlink_to("typescript/bin/tsc")
+        directory_link = root / "typescript-link"
+        directory_link.symlink_to("typescript", target_is_directory=True)
+        closure = tools.installed_closure(self.root)
+        self.assertEqual(closure["tsc-link"]["target"], "typescript/bin/tsc")
+        self.assertEqual(closure["typescript-link"]["kind"], "symlink")
+        tools.checked_installed_closure(self.root, closure)
+        link.unlink()
+        link.symlink_to("./typescript/bin/tsc")
+        with pytest.raises(ValueError, match="closure changed"):
+            tools.checked_installed_closure(self.root, closure)
+        outside = self.root / "outside.js"
+        outside.write_text("outside")
+        for target in ("missing", "../outside.js", "tsc-link"):
+            with self.subTest(target=target):
+                link.unlink()
+                link.symlink_to(target)
+                with pytest.raises(ValueError, match="closure symlink"):
+                    tools.installed_closure(self.root)
+        link.unlink()
+        (root / "special").touch()
+        (root / "special").unlink()
+        os.mkfifo(root / "special")
+        with pytest.raises(ValueError, match="Special installed closure input"):
+            tools.installed_closure(self.root)
+
+    def test_installed_closure_rejects_root_symlink(self):
+        self.install_consumer_fixtures()
+        closure = tools.installed_closure(self.root)
+        root = self.root / "node_modules"
+        saved = self.root / "saved-installation"
+        root.rename(saved)
+        root.symlink_to(saved, target_is_directory=True)
+        with pytest.raises(ValueError, match="Installed closure root changed"):
+            tools.checked_installed_closure(self.root, closure)
 
     def test_tracked_consumer_inventory_rejects_missing_additional_and_symlink_inputs(self):
         config = self.root / "tsconfig.json"
