@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -18,6 +19,7 @@ import yaml
 from check_doc_links import broken_links, local_links, snapshot
 from check_pr_results import check_results
 from pr_plan import build_plan, classify, path_scope
+from validate_change import classify as classify_change
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY = json.loads((ROOT / "ci/pr-policy.json").read_text())
@@ -246,6 +248,127 @@ class GitTests(unittest.TestCase):
         updated_base = self.commit()
         assert build_plan(self.repo, updated_base, head, POLICY)["scope"] == "docs"
 
+    def test_group_delta_uses_protected_policy_and_includes_earlier_runtime_change(self):
+        classifier = (ROOT / "scripts/ci/pr_plan.py").read_text()
+        policy = (ROOT / "ci/pr-policy.json").read_text()
+        self.write("scripts/ci/pr_plan.py", classifier)
+        self.write("ci/pr-policy.json", policy)
+        self.write(
+            "scripts/ci/validate_change.py", (ROOT / "scripts/ci/validate_change.py").read_text()
+        )
+        protected_base = self.commit()
+        self.write("implementation.rs", "fn main() { todo!() }\n")
+        self.write("scripts/ci/pr_plan.py", "raise RuntimeError('speculative policy executed')\n")
+        self.write("ci/pr-policy.json", "{}\n")
+        self.write(
+            "scripts/ci/validate_change.py", "raise RuntimeError('candidate verifier executed')\n"
+        )
+        speculative_parent = self.commit()
+        self.write("docs/queued.md", "Later queued documentation\n")
+        group_head = self.commit()
+        assert build_plan(self.repo, speculative_parent, group_head, POLICY)["scope"] == "docs"
+        previous = Path.cwd()
+        os.chdir(self.repo)
+        try:
+            plan = classify_change(
+                {"base": protected_base, "source_head": group_head}, self.repo / "group-plan.json"
+            )
+        finally:
+            os.chdir(previous)
+        assert plan["scope"] == "full"
+        assert {change["path"] for change in plan["changes"]} == {
+            "implementation.rs",
+            "docs/queued.md",
+            "scripts/ci/pr_plan.py",
+            "ci/pr-policy.json",
+            "scripts/ci/validate_change.py",
+        }
+        assert plan["classifier_sha256"] == hashlib.sha256(classifier.encode()).hexdigest()
+        assert plan["policy_sha256"] == hashlib.sha256(policy.encode()).hexdigest()
+
+        self.check_group_workflow(protected_base, speculative_parent, group_head)
+
+    def check_group_workflow(self, protected_base, speculative_parent, group_head):
+        # Execute the actual workflow shell and protected verifier. Only the API
+        # is synthetic: disposable fixture commits are not signature evidence.
+        tools = self.repo / "fake-tools"
+        tools.mkdir()
+        gh = tools / "gh"
+        gh.write_text(
+            f"#!{sys.executable}\nimport json, os, sys\n"
+            f"base = {protected_base!r}\n"
+            "mode = os.environ.get('FAKE_API_MODE')\n"
+            "if mode == 'network':\n    sys.exit(1)\n"
+            "if mode == 'missing-main' and sys.argv[-1] == '.object.sha':\n"
+            "    print('null'); sys.exit(0)\n"
+            "if sys.argv[-1] == '.object.sha':\n    print(base)\n"
+            "else:\n    sha = sys.argv[-1].rsplit('/', 1)[-1]\n"
+            "    print(json.dumps({'sha': sha, 'commit': {'verification': "
+            "{'verified': mode != 'unsigned', 'reason': 'valid'}}}))\n"
+        )
+        gh.chmod(0o755)
+        event_path = self.repo / "event.json"
+        event_path.write_text(
+            json.dumps(
+                {
+                    "action": "checks_requested",
+                    "merge_group": {
+                        "base_sha": speculative_parent,
+                        "head_sha": group_head,
+                        "base_ref": "refs/heads/main",
+                        "head_ref": "refs/heads/gh-readonly-queue/main/pr-1",
+                    },
+                }
+            )
+        )
+        self.git("remote", "add", "origin", str(self.repo))
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        command = next(
+            step["run"] for step in workflow["jobs"]["plan"]["steps"] if step.get("id") == "plan"
+        )
+        output = self.repo / "github-output"
+        env = {
+            **os.environ,
+            "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+            "GITHUB_EVENT_NAME": "merge_group",
+            "GITHUB_SHA": group_head,
+            "GITHUB_REPOSITORY": "owner/repo",
+            "GITHUB_EVENT_PATH": str(event_path),
+            "GITHUB_OUTPUT": str(output),
+            "RUNNER_TEMP": str(tools),
+            "EVENT_BASE_SHA": speculative_parent,
+        }
+        result = subprocess.run(  # noqa: S603 - fixed workflow with synthetic API and Git fixture
+            ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],  # noqa: S607
+            cwd=self.repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        evidence = json.loads((self.repo / "ci-validation.json").read_text())
+        assert evidence["base"] == protected_base
+        assert evidence["event_base"] == speculative_parent
+        assert evidence["test_tree"] == self.git("rev-parse", "HEAD^{tree}")
+        assert {record["sha"] for record in evidence["signatures"]} == {
+            speculative_parent,
+            group_head,
+        }
+        assert output.read_text().startswith(f"scope=full\nbase={protected_base}\n")
+        for failure in ["network", "missing-main", "unsigned"]:
+            output.unlink(missing_ok=True)
+            failed = subprocess.run(  # noqa: S603 - same isolated workflow/API fixture
+                ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],  # noqa: S607
+                cwd=self.repo,
+                env={**env, "FAKE_API_MODE": failure},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert failed.returncode != 0, failure
+            assert not output.exists(), failure
+
     def test_link_baseline_and_removed_target(self):
         self.write("docs/page.md", "[source](../implementation.rs)\n")
         base = self.commit()
@@ -322,14 +445,11 @@ class WiringTests(unittest.TestCase):
     def test_workflow_selection_and_dependencies_match_policy(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
         events = workflow.get("on", workflow.get(True))
-        assert events["pull_request"]["types"] == ["opened", "synchronize", "reopened"]
+        assert events["pull_request"]["types"] == ["opened", "synchronize", "reopened", "edited"]
         jobs = workflow["jobs"]
         assert set(jobs["required"]["needs"]) == set(POLICY["scopes"]["full"]) | {"plan"}
         assert "always()" in jobs["required"]["if"]
-        assert (
-            jobs["required"]["steps"][0]["with"]["ref"]
-            == "${{ github.event.pull_request.base.sha }}"
-        )
+        assert jobs["required"]["steps"][1]["with"]["ref"] == "${{ needs.plan.outputs.base }}"
         for lane in set(POLICY["scopes"]["full"]) - {"docs", "integrity"}:
             assert jobs[lane]["if"] == "needs.plan.outputs.scope == 'full'"
             child = yaml.safe_load((ROOT / jobs[lane]["uses"]).read_text())

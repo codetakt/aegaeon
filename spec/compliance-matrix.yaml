@@ -1466,7 +1466,7 @@ rfc_9126:
 - id: 9126-002
   section: '2.1'
   requirement: MUST
-  description: Clients MUST authenticate at PAR endpoint
+  description: Confidential clients MUST authenticate at PAR endpoint
   module: fstar/par/Client_auth.fst
   proof:
   - type: fstar
@@ -1474,11 +1474,15 @@ rfc_9126:
     invariant: handle_par_request
   tests:
   - crates/server/src/par/tests/client_auth.rs
+  - crates/server/src/web/par_endpoint/authentication_tests.rs
+  - crates/server/src/par/storage/redis_store.rs
   ci_check: par-client-auth
   status: partial
   runtime_link: crates/server/src/client_registry.rs
   notes:
-  - Covered by par_http_test (auth failure/success cases).
+  - Registered authentication methods are enforced independently of global authentication flags; public clients require policy/profile permission.
+  - HTTP and Redis regressions in crates/server/src/web/par_endpoint/authentication_tests.rs cover missing, wrong and successful authentication and secret-free storage.
+  - Legacy PAR secrets are discarded on read; existing Redis bytes expire under their original TTL. See docs/operations/oauth-conformance.md.
 - id: 9126-003
   section: '2.2'
   requirement: MUST
@@ -1687,7 +1691,7 @@ rfc_9449:
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-htu-match
   status: verified
-  runtime_link: crates/server/src/middleware/dpop.rs
+  runtime_link: crates/ffi/src/dpop_uri.rs
   trace:
     kind: oracle
     fstar: fstar/dpop/Dpop.Htu_validation.fst#validate_htu
@@ -4350,11 +4354,11 @@ rfc_9728:
   applies_to:
   - rs
   notes:
-  - "Phase 6 implementation complete. /.well-known/oauth-protected-resource endpoint and ProtectedResourceMetadata struct."
+  - "The /resource metadata locator is /.well-known/oauth-protected-resource/resource; the former host-root locator redirects with 308. ProtectedResourceMetadata fields are unchanged."
 - id: 9728-101
   section: '3'
   requirement: MUST
-  description: Protected resource MUST publish metadata at /.well-known/oauth-protected-resource including resource identifier
+  description: Protected resource MUST publish metadata at the RFC 9728 resource-derived well-known URI including its resource identifier
   module: crates/server/src/metadata.rs
   proof:
   - type: fstar
@@ -4364,6 +4368,7 @@ rfc_9728:
     detail: ProtectedResourceMetadata::for_issuer populates resource, authorization_servers, scopes_supported, bearer_methods_supported
   tests:
   - crates/server/src/metadata.rs
+  - crates/server/src/web/metadata/tests.rs
   ci_check: resource-metadata-endpoint
   status: verified
   runtime_link: crates/server/src/metadata.rs
@@ -4374,6 +4379,8 @@ rfc_9728:
     test: crates/server/src/metadata/tests/resource.rs
   notes:
   - "ProtectedResourceMetadata struct with resource, authorization_servers, scopes_supported, bearer_methods_supported, dpop_signing_alg_values_supported."
+  - "For the configured issuer origin plus /resource, the router serves /.well-known/oauth-protected-resource/resource; the host-root locator returns a fixed relative 308 redirect. Router regression cases are in crates/server/src/web/metadata/tests.rs."
+  - "The cited F* lemma checks a nonempty modeled resource only; it does not prove HTTP locator derivation or router correspondence. Route tests provide bounded implementation evidence, without a proof-status upgrade."
 
 rfc_9901:
 - id: 9901-001
@@ -5736,6 +5743,26 @@ openid_core:
   - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
   - "A supplied Request Object prompt must be a JSON string. Null and other non-string values are rejected with invalid_request; omitting the claim requests no prompt action."
   - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
+- id: OIDC-1-025
+  section: '2 (sub), 5.7, 8'
+  requirement: MUST
+  description: OIDC End-User subject producers and ID Token/UserInfo boundaries enforce nonempty ASCII values of at most 255 characters without output normalization
+  module: crates/server/src/oidc/subject.rs
+  tests:
+  - crates/server/src/oidc/required_rs256/tests.rs
+  - crates/server/src/oidc/userinfo/tests.rs
+  - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/subject_format.rs
+  - crates/server/src/web/upstream_callback_users/jit/subject_tests.rs
+  - crates/server/src/web/upstream_tests/id_token/validation.rs
+  - crates/server/src/web/oauth_conformance_tests/sender_contract.rs
+  ci_check: cargo-test
+  status: implemented
+  runtime_link: crates/server/src/oidc/subject.rs
+  notes:
+  - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use opaque UUIDv4 values; collisions refuse instead of adopting an existing user."
+  - "Existing linked identities and explicit email reuse are preserved. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
+  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; that obligation and legacy-history reconciliation remain open."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
