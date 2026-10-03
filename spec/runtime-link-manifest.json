@@ -15,7 +15,7 @@
       "critical": true
     },
     "crates/ffi/src/lib.rs": {
-      "sha256": "ece64dba89e2acd100d88f19d0dd2dd8d0070466310cfe406ea9b07a98d68bf3",
+      "sha256": "ac6d0a9b16e7b7eada52409e363bd2d3e84e3f7a0a3b69b57dbe9fa36cc7246b",
       "entries": [
         "9449-001",
         "9449-002"

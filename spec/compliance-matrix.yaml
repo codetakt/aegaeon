@@ -1604,7 +1604,8 @@ rfc_9449:
     kind: exempt
     note: "Tamarin protocol-level property (dpop_authentication); JWT well-formedness has no single F* function counterpart."
   notes:
-  - "The production Rust verifier rejects private OKP d members, all present crit parameters, duplicate protected-header/JWK names, and b64 values other than Boolean true (RFC 9449 sections 4.2-4.3, RFC 7515 sections 4/4.1.11, RFC 7797 section 7). Unknown noncritical fields remain permitted."
+  - "The production Rust verifier rejects private OKP d members, all present crit and b64 parameters, and duplicate protected-header/JWK names (RFC 9449 sections 4.2-4.3, RFC 7515 sections 4/4.1.11). Unknown noncritical fields remain permitted."
+  - "RFC 7797 section 6 requires crit whenever b64 is present, including true; Aegaeon's DPoP profile supports no critical extensions. Boolean true with the required declaration is allowed by that RFC but outside this implementation profile; section 7 forbids false for JWTs."
   - "Real Ed25519 signed regressions exercise both public FFI entry points. These runtime tests do not extend the cited protocol model or establish new formal discharge."
 - id: 9449-002
   section: '4.2'
