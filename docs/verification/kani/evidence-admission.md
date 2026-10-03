@@ -81,7 +81,9 @@ For a required or diagnostic request the runner
    the group uses a fresh target. Discovery may reuse a separate, stable target
    under the same server group and context restrictions. Before each repeated
    discovery, the adapter validates the target layout and removes server primary
-   artifacts, package fingerprint/build outputs and all incremental directories;
+   artifacts and package fingerprint/build outputs at the pinned Cargo profile
+   locations, plus those profiles' incremental directories. Hash-bearing crate
+   artifacts must match a server fingerprint in the same profile;
    dependency artifacts stay at their original paths. Remaining primary metadata
    rejects before codegen. Each group still runs discovery and retains its own
    fresh metadata and log. Discovery and request targets are disjoint, and neither

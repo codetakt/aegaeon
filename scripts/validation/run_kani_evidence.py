@@ -858,7 +858,65 @@ def request_target(
     return separate if context is None else shared_targets.setdefault(context, separate)
 
 
-def clear_discovery_primary(target: pathlib.Path, build_root: pathlib.Path) -> list[str]:
+def discovery_primary_paths(
+    target: pathlib.Path, cargo_target: str, paths: list[tuple[pathlib.Path, bool]]
+) -> list[tuple[pathlib.Path, bool]]:
+    """Select only server-owned artifacts in the pinned Cargo/Kani profile layout."""
+    profiles = (target / "kani/debug", target / "kani" / cargo_target / "debug")
+    structural = {target / "kani", target / "kani" / cargo_target}
+    for profile in profiles:
+        structural.update(
+            profile / part for part in (".", "deps", ".fingerprint", "build", "incremental")
+        )
+    if any(path in structural and not directory for path, directory in paths):
+        raise AdmissionError("unsupported discovery Cargo profile layout")
+    selected: list[tuple[pathlib.Path, bool]] = []
+    for profile in profiles:
+        selected.extend(server_profile_primary_paths(profile, paths))
+    return sorted(selected, key=lambda entry: len(entry[0].parts))
+
+
+def server_profile_primary_paths(
+    profile: pathlib.Path, paths: list[tuple[pathlib.Path, bool]]
+) -> list[tuple[pathlib.Path, bool]]:
+    """Package fingerprints bind hash-bearing crate outputs in this exact profile."""
+    package = re.compile(r"aegaeon-server-([0-9a-f]{16})")
+    artifact = re.compile(
+        r"(?:lib)?aegaeon_server-([0-9a-f]{16})"
+        r"(?:\.(?:d|rlib|rmeta|kani-metadata\.json)|"
+        r"__R[A-Za-z0-9_]+\.(?:out|symtab\.out|type_map\.json|pretty_name_map\.json))"
+    )
+    selected: list[tuple[pathlib.Path, bool]] = []
+    hashes: set[str] = set()
+    for path, directory in paths:
+        match = package.fullmatch(path.name)
+        if path.parent in {profile / ".fingerprint", profile / "build"} and match is not None:
+            if not directory:
+                raise AdmissionError("unsupported discovery package output layout")
+            selected.append((path, directory))
+            if path.parent == profile / ".fingerprint":
+                hashes.add(match[1])
+    for path, directory in paths:
+        if path.parent not in {profile, profile / "deps"}:
+            continue
+        match = artifact.fullmatch(path.name)
+        plain = path.parent == profile and path.name in {
+            "libaegaeon_server.d",
+            "libaegaeon_server.rlib",
+            "libaegaeon_server.rmeta",
+        }
+        if path == profile / "incremental":
+            selected.append((path, directory))
+        elif plain or (match is not None and match[1] in hashes):
+            if directory:
+                raise AdmissionError("unsupported discovery crate artifact layout")
+            selected.append((path, directory))
+    return selected
+
+
+def clear_discovery_primary(
+    target: pathlib.Path, build_root: pathlib.Path, cargo_target: str
+) -> list[str]:
     """Invalidate primary server state without relocating its live dependencies."""
     try:
         if (
@@ -868,7 +926,6 @@ def clear_discovery_primary(target: pathlib.Path, build_root: pathlib.Path) -> l
             or target.resolve().parent != build_root.resolve()
         ):
             raise AdmissionError("discovery target is not an evaluation-owned directory")
-        primary = re.compile(r"^(?:lib)?aegaeon[_-]server(?:[-_.]|$)")
         paths: list[tuple[pathlib.Path, bool]] = []
         pending = [target]
         # rglob and is_file/is_dir can suppress OSError. Inventory strictly and finish
@@ -885,9 +942,7 @@ def clear_discovery_primary(target: pathlib.Path, build_root: pathlib.Path) -> l
                     if directory:
                         pending.append(path)
         removed: list[pathlib.Path] = []
-        for path, directory in sorted(paths, key=lambda entry: len(entry[0].parts)):
-            if not (primary.match(path.name) or path.name == "incremental"):
-                continue
+        for path, directory in discovery_primary_paths(target, cargo_target, paths):
             if any(parent in removed for parent in path.parents):
                 continue
             if directory:
@@ -1574,7 +1629,7 @@ def run(args: argparse.Namespace) -> int:
             removed = []
             if previous is not None:
                 discovery_target = previous
-                removed = clear_discovery_primary(discovery_target, build_root)
+                removed = clear_discovery_primary(discovery_target, build_root, registry["target"])
             discovery = discover(
                 group,
                 manifest,

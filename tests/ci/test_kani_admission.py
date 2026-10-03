@@ -36,6 +36,7 @@ RUNNER = ROOT / "scripts/validation/run_kani_evidence.py"
 CHECKER = ROOT / "scripts/validation/check_kani_citations.py"
 SCHEMA = ROOT / "spec/kani-evidence.schema.json"
 BUDGET = 600
+TARGET = "x86_64-unknown-linux-gnu"
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -538,20 +539,27 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             target = root / "discovery-server"
             kept = "kani/x86_64-unknown-linux-gnu/debug/deps/libdependency.rmeta"
             removed = [
-                "kani/x86_64-unknown-linux-gnu/debug/deps/aegaeon_server-abcd.d",
-                "kani/x86_64-unknown-linux-gnu/debug/deps/libaegaeon_server.rlib",
-                "kani/x86_64-unknown-linux-gnu/debug/deps/aegaeon_server-abcd.kani-metadata.json",
-                "kani/x86_64-unknown-linux-gnu/debug/deps/aegaeon_server__proof.symtab.out",
-                "kani/x86_64-unknown-linux-gnu/debug/.fingerprint/aegaeon-server-abcd/lib",
-                "kani/debug/build/aegaeon-server-abcd/output",
-                "kani/x86_64-unknown-linux-gnu/debug/incremental/session/state",
+                f"{profile}/{artifact}"
+                for profile in ("kani/debug", f"kani/{TARGET}/debug")
+                for artifact in (
+                    "libaegaeon_server.rlib",
+                    "libaegaeon_server.d",
+                    "deps/aegaeon_server-0123456789abcdef.d",
+                    "deps/libaegaeon_server-0123456789abcdef.rlib",
+                    "deps/libaegaeon_server-0123456789abcdef.rmeta",
+                    "deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+                    "deps/aegaeon_server-0123456789abcdef__Rsynthetic.symtab.out",
+                    ".fingerprint/aegaeon-server-0123456789abcdef/lib",
+                    "build/aegaeon-server-0123456789abcdef/output",
+                    "incremental/session/state",
+                )
             ]
             for relative in [kept, *removed]:
                 path = target / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(relative)
             before = (target / kept).stat()
-            inventory = kani.clear_discovery_primary(target, root)
+            inventory = kani.clear_discovery_primary(target, root, TARGET)
             assert inventory
             assert (target / kept).read_text() == kept
             assert (target / kept).stat().st_mtime_ns == before.st_mtime_ns
@@ -559,19 +567,121 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             for relative in removed:
                 assert not (target / relative).exists()
 
+    def test_dependency_owned_names_and_nested_layouts_are_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            profile = f"kani/{TARGET}/debug"
+            nested = f"{profile}/build/dependency-0123456789abcdef/out"
+            names = [
+                f"{nested}/incremental/state",
+                f"{nested}/aegaeon_server-generated.rs",
+                f"{nested}/libaegaeon_server.rlib",
+                f"{nested}/deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+                f"{nested}/.fingerprint/aegaeon-server-0123456789abcdef/lib",
+                f"{nested}/build/aegaeon-server-0123456789abcdef/output",
+                f"{nested}/kani/debug/incremental/state",
+                f"{nested}/{profile}/libaegaeon_server.d",
+                f"{profile}/.fingerprint/aegaeon-server-helper-0123456789abcdef/lib",
+                f"{profile}/build/aegaeon-server-extra-0123456789abcdef/output",
+                f"{profile}/deps/libaegaeon_server_extra-0123456789abcdef.rmeta",
+                f"{profile}/deps/libaegaeon_server-0123456789abcdee.rmeta",
+                f"{profile}/deps/libaegaeon_server-0123456789abcdef0.rmeta",
+                f"{profile}/deps/aegaeon_server-0123456789abcdef_unknown.out",
+                f"{profile}/deps/aegaeon_server-0123456789abcdef.unknown",
+                "kani/debug/deps/libaegaeon_server-0123456789abcdef.rmeta",
+                "incremental/state",
+                "aegaeon_server-0123456789abcdef.kani-metadata.json",
+            ]
+            for name in [*names, f"{profile}/.fingerprint/aegaeon-server-0123456789abcdef/lib"]:
+                path = target / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            before = {
+                name: ((target / name).read_bytes(), (target / name).stat()) for name in names
+            }
+            removed = kani.clear_discovery_primary(target, root, TARGET)
+            assert removed == [f"{profile}/.fingerprint/aegaeon-server-0123456789abcdef"]
+            for name, (content, info) in before.items():
+                path = target / name
+                assert path.read_bytes() == content
+                assert path.stat().st_ino == info.st_ino
+                assert path.stat().st_mtime_ns == info.st_mtime_ns
+
+    def test_malformed_profile_and_primary_layouts_reject_before_deletion(self) -> None:
+        for entry, directory in (
+            ("kani", False),
+            ("kani/debug", False),
+            (f"kani/{TARGET}", False),
+            (f"kani/{TARGET}/debug", False),
+            ("kani/debug/deps", False),
+            ("kani/debug/.fingerprint", False),
+            ("kani/debug/build", False),
+            ("kani/debug/incremental", False),
+            ("kani/debug/.fingerprint/aegaeon-server-0123456789abcdef", False),
+            ("kani/debug/build/aegaeon-server-0123456789abcdef", False),
+            ("kani/debug/libaegaeon_server.rlib", True),
+        ):
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                target = root / "discovery-server"
+                path = target / entry
+                path.parent.mkdir(parents=True)
+                if directory:
+                    path.mkdir()
+                else:
+                    path.write_text("not a directory")
+                with (
+                    mock.patch.object(pathlib.Path, "unlink") as unlink,
+                    mock.patch.object(shutil, "rmtree") as remove,
+                ):
+                    with self.assertRaisesRegex(kani.AdmissionError, "layout"):
+                        kani.clear_discovery_primary(target, root, TARGET)
+                    unlink.assert_not_called()
+                    remove.assert_not_called()
+
+    def test_unowned_primary_metadata_still_blocks_codegen(self) -> None:
+        for relative in (
+            f"kani/{TARGET}/debug/deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+            f"kani/{TARGET}/debug/deps/aegaeon_server-unrecognized.kani-metadata.json",
+            "unrecognized/aegaeon_server.kani-metadata.json",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                target = root / "discovery-server"
+                path = target / relative
+                path.parent.mkdir(parents=True)
+                path.write_text('{"crate_name":"aegaeon_server"}')
+                assert kani.clear_discovery_primary(target, root, TARGET) == []
+                with mock.patch.object(kani, "run_process") as execute:
+                    with self.assertRaisesRegex(kani.AdmissionError, "pre-existing primary"):
+                        kani.discover(
+                            {"crate": "aegaeon_server"},
+                            root / "Cargo.toml",
+                            "kani",
+                            {},
+                            {},
+                            root,
+                            target,
+                            root,
+                            ".",
+                        )
+                    execute.assert_not_called()
+
     def test_rejects_non_owned_targets_and_links_before_deleting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             target = root / "discovery-server"
             target.mkdir()
-            primary = target / "aegaeon_server.kani-metadata.json"
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
             primary.write_text("primary")
             for forbidden in (root, root / "missing", root / "nested/target"):
                 with self.subTest(target=forbidden), self.assertRaises(kani.AdmissionError):
-                    kani.clear_discovery_primary(forbidden, root)
+                    kani.clear_discovery_primary(forbidden, root, TARGET)
             (target / "link").symlink_to(root)
             with self.assertRaisesRegex(kani.AdmissionError, "unsupported"):
-                kani.clear_discovery_primary(target, root)
+                kani.clear_discovery_primary(target, root, TARGET)
             assert primary.read_text() == "primary"
 
     def test_rejects_special_files_before_deleting(self) -> None:
@@ -579,11 +689,12 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             root = pathlib.Path(temporary)
             target = root / "discovery-server"
             target.mkdir()
-            primary = target / "aegaeon_server.kani-metadata.json"
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
             primary.write_text("primary")
             os.mkfifo(target / "pipe")
             with self.assertRaisesRegex(kani.AdmissionError, "unsupported"):
-                kani.clear_discovery_primary(target, root)
+                kani.clear_discovery_primary(target, root, TARGET)
             assert primary.read_text() == "primary"
 
     def test_invalidation_error_is_a_fault_without_retry(self) -> None:
@@ -591,30 +702,35 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             root = pathlib.Path(temporary)
             target = root / "discovery-server"
             target.mkdir()
-            (target / "libaegaeon_server.rlib").write_text("primary")
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True)
+            primary.write_text("primary")
             with mock.patch.object(pathlib.Path, "unlink", side_effect=OSError("failed")) as unlink:
                 with self.assertRaisesRegex(kani.AdmissionError, "invalidation failed"):
-                    kani.clear_discovery_primary(target, root)
+                    kani.clear_discovery_primary(target, root, TARGET)
                 assert unlink.call_count == 1
 
     def test_scan_errors_after_partial_inventory_preserve_primary_outputs(self) -> None:
-        original = os.scandir
         for failure in ("open", "iteration"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 root = pathlib.Path(temporary)
                 target = root / "discovery-server"
                 nested = target / "nested"
                 nested.mkdir(parents=True)
-                primary = target / "aegaeon_server.rlib"
+                primary = target / "kani/debug/libaegaeon_server.rlib"
+                primary.parent.mkdir(parents=True, exist_ok=True)
                 primary.write_text("primary")
                 (nested / "entry").write_text("dependency")
                 (nested / "hidden-link").symlink_to(root)
 
                 @contextlib.contextmanager
                 def scan(
-                    path: Any, blocked: pathlib.Path = nested, mode: str = failure
+                    path: Any,
+                    blocked: pathlib.Path = nested,
+                    mode: str = failure,
+                    scandir: Any = os.scandir,
                 ) -> Iterator[Iterator[os.DirEntry[str]]]:
-                    with original(path) as entries:
+                    with scandir(path) as entries:
                         if pathlib.Path(path) != blocked:
                             yield entries
                         elif mode == "open":
@@ -635,7 +751,7 @@ class DiscoveryInvalidationTests(unittest.TestCase):
                     mock.patch.object(shutil, "rmtree") as remove,
                 ):
                     with self.assertRaisesRegex(kani.AdmissionError, "synthetic inventory"):
-                        kani.clear_discovery_primary(target, root)
+                        kani.clear_discovery_primary(target, root, TARGET)
                     unlink.assert_not_called()
                     remove.assert_not_called()
                 assert primary.read_text() == "primary"
@@ -647,7 +763,8 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             target = root / "discovery-server"
             nested = target / "nested"
             nested.mkdir(parents=True)
-            primary = target / "aegaeon_server.rlib"
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
             primary.write_text("primary")
             dependency = nested / "entry"
             dependency.write_text("dependency")
@@ -669,7 +786,7 @@ class DiscoveryInvalidationTests(unittest.TestCase):
                         mock.patch.object(shutil, "rmtree") as remove,
                     ):
                         with self.assertRaisesRegex(kani.AdmissionError, "synthetic nofollow"):
-                            kani.clear_discovery_primary(target, root)
+                            kani.clear_discovery_primary(target, root, TARGET)
                         unlink.assert_not_called()
                         remove.assert_not_called()
                     assert primary.read_text() == "primary"
@@ -679,7 +796,8 @@ class DiscoveryInvalidationTests(unittest.TestCase):
             root = pathlib.Path(temporary)
             target = root / "discovery-server"
             target.mkdir()
-            primary = target / "aegaeon_server.rlib"
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
             primary.write_text("primary")
             with (
                 mock.patch.object(pathlib.Path, "resolve", side_effect=OSError("resolve failed")),
@@ -687,7 +805,7 @@ class DiscoveryInvalidationTests(unittest.TestCase):
                 mock.patch.object(shutil, "rmtree") as remove,
             ):
                 with self.assertRaisesRegex(kani.AdmissionError, "resolve failed"):
-                    kani.clear_discovery_primary(target, root)
+                    kani.clear_discovery_primary(target, root, TARGET)
                 unlink.assert_not_called()
                 remove.assert_not_called()
             assert primary.read_text() == "primary"
@@ -914,6 +1032,9 @@ if args and args[0] == "kani":
                                   "unsupported_features": [], "test_harnesses": [],
                                   "contracted_functions": [], "autoharness_md": None})
         if mode != "no-metadata" or "--only-codegen" in args:
+            fingerprint = target.parent / ".fingerprint" / f"{package}-{digest}"
+            fingerprint.mkdir(parents=True, exist_ok=True)
+            (fingerprint / "lib").write_text("synthetic fingerprint")
             (target / name).write_text(content)
     print("Kani Rust Verifier 0.66.0 (cargo plugin)")
     crash = mode == "crash-discovery" and package == knobs.get("crash_package")
@@ -1581,14 +1702,20 @@ sys.exit(2)
                 self.target_log.write_text("")
                 attempted = False
 
-                def cleanup(
-                    target: pathlib.Path, build_root: pathlib.Path, mode: str = failure
+                def cleanup(  # noqa: PLR0915 - inject one fault and verify actual retained files
+                    target: pathlib.Path,
+                    build_root: pathlib.Path,
+                    cargo_target: str,
+                    mode: str = failure,
                 ) -> list[str]:
                     nonlocal attempted
                     if attempted:
-                        return original_cleanup(target, build_root)
+                        return original_cleanup(target, build_root, cargo_target)
                     attempted = True
-                    preserved = {p: p.read_bytes() for p in target.iterdir() if p.is_file()}
+                    preserved = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+                    assert preserved
+                    assert any(p.name.endswith(".kani-metadata.json") for p in preserved)
+                    assert any(p.name == "dependency.rmeta" for p in preserved)
                     dependency = target / "inventory-late/entry"
                     dependency.parent.mkdir()
                     dependency.write_text("dependency")
@@ -1621,7 +1748,7 @@ sys.exit(2)
                                 stack.enter_context(
                                     mock.patch.object(pathlib.Path, "resolve", resolve)
                                 )
-                            return original_cleanup(target, build_root)
+                            return original_cleanup(target, build_root, cargo_target)
                     finally:
                         assert all(p.read_bytes() == content for p, content in preserved.items())
 
