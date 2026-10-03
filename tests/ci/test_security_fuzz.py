@@ -148,6 +148,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "SECURITY_ARTIFACT_DIR": str(self.artifacts),
             "SECURITY_HISTORY_DIR": str(Path(self.temporary) / "history"),
             "CARGO_TARGET_DIR": str(Path(self.temporary) / "target"),
+            "CARGO_HOME": str(Path(self.temporary) / "cargo-home"),
         }
         for name in (
             "FUZZ_TARGETS",
@@ -173,8 +174,10 @@ class SecurityFuzzFixture(unittest.TestCase):
         destination.write_text(f"#!{sys.executable}\n" + code)
         destination.chmod(0o755)
 
-    def run_suite(self, case="ok", *, aggregate=False, long=False, **environment):
+    def run_suite(self, case="ok", *, aggregate=False, long=False, stages=None, **environment):
         args = [] if aggregate else ["--stage", "fuzz"]
+        if stages is not None:
+            args = [value for stage in stages for value in ("--stage", stage)]
         if long:
             args.insert(0, "--fuzz-long")
         return subprocess.run(  # noqa: S603 - execute the real wrapper and controlled fixtures
@@ -183,7 +186,7 @@ class SecurityFuzzFixture(unittest.TestCase):
                 str(self.root / "scripts/security/run_security_suite.sh"),
                 *args,
             ],
-            cwd=self.root,
+            cwd=getattr(self, "caller", self.root),
             env={**self.env, "CASE": case, **environment},
             capture_output=True,
             text=True,
@@ -209,6 +212,19 @@ class SecurityFuzzFixture(unittest.TestCase):
             path.write_bytes(b"preserve original " + name.encode())
             raw[path] = path.read_bytes()
         return marker, raw
+
+    def seed_stale_results(self):
+        marker, raw = self.seed_stale_collection()
+        execution = {"status": "passed", "run_id": "previous-run", "targets": []}
+        (marker.parent / "execution.json").write_text(json.dumps(execution))
+        (marker.parent / "run_summary.json").write_text(
+            json.dumps({"status": "passed", "execution": execution})
+        )
+        return marker, raw
+
+    def assert_no_current_results(self):
+        for name in ("collection.ok", "execution.json", "run_summary.json"):
+            self.assertFalse((self.artifacts / "fuzz" / name).exists(), name)
 
     def install_helper_hooks(self, hooks):
         self.install(
@@ -311,7 +327,7 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertEqual(self.calls(), [])
 
     def test_stale_receipt_invalidated_before_stage_log_entry_failure(self):
-        marker, raw = self.seed_stale_collection()
+        _, raw = self.seed_stale_results()
         actual_tee = shutil.which("tee")
         self.install(
             "tee",
@@ -325,11 +341,11 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         for path, content in raw.items():
             self.assertEqual(path.read_bytes(), content)
-        self.assertFalse(marker.exists())
+        self.assert_no_current_results()
         self.assertEqual(self.calls(), [])
 
     def test_stale_receipt_invalidated_before_fuzz_directory_setup_failure(self):
-        marker, raw = self.seed_stale_collection()
+        _, raw = self.seed_stale_results()
         actual_mkdir = shutil.which("mkdir")
         failed_directory = str(self.artifacts / "fuzz")
         self.install(
@@ -342,7 +358,7 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         for path, content in raw.items():
             self.assertEqual(path.read_bytes(), content)
-        self.assertFalse(marker.exists())
+        self.assert_no_current_results()
         self.assertEqual(self.calls(), [])
 
     def test_default_executes_exactly_seven_targets_and_records_receipts(self):
@@ -612,9 +628,12 @@ class SecurityFuzzRecoveryTests(SecurityFuzzFixture):
         for aggregate in (False, True):
             with self.subTest(aggregate=aggregate):
                 _, raw = self.seed_stale_collection()
-                cache = self.root / "fuzz/target/cache"
+                cache = Path(self.env["CARGO_TARGET_DIR"]) / "fuzz/cache"
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 cache.write_bytes(b"build cache excluded")
+                legacy = self.root / "fuzz/target/cache"
+                legacy.parent.mkdir(parents=True, exist_ok=True)
+                legacy.write_bytes(b"unrelated legacy cache")
                 result = self.run_suite(aggregate=aggregate)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 backup, manifest = self.assert_backup()
@@ -628,6 +647,7 @@ class SecurityFuzzRecoveryTests(SecurityFuzzFixture):
                     self.assertFalse((self.root / "fuzz" / name).exists())
                     self.assertTrue(manifest["raw"][name]["present"])
                 self.assertFalse(cache.exists())
+                self.assertEqual(legacy.read_bytes(), b"unrelated legacy cache")
                 self.assertEqual(self.summary()["status"], "passed")
                 self.assertFalse(list(backup.glob("recovery-result-*.json")))
 
@@ -906,6 +926,343 @@ else:
         self.assertNotIn("inert-link/preserve-marker", manifest["raw"]["corpus"]["inventory"])
         self.assertEqual(marker.read_bytes(), b"external fixture")
         self.assertEqual(self.summary()["execution"]["cleanup_recovery"]["status"], "restored")
+
+
+class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
+    def protected_removal_interceptor(self):
+        actual_rm = shutil.which("rm")
+        self.install(
+            "rm",
+            "import json,os,pathlib,sys\n"
+            "root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
+            "if '-rf' in sys.argv:\n"
+            " (root / 'unsafe-removal-called').write_text(json.dumps(sys.argv[1:]))\n"
+            " raise SystemExit(91)\n"
+            f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
+        )
+
+    def test_configured_cache_cleanup_preserves_unrelated_caches(self):
+        for configured in ("default", "relative spaced cache", "cache\nwith newline"):
+            for aggregate in (False, True):
+                with self.subTest(configured=configured, aggregate=aggregate):
+                    self.env.pop("CARGO_TARGET_DIR", None)
+                    if configured != "default":
+                        self.env["CARGO_TARGET_DIR"] = configured
+                    target = self.root / (
+                        "target/security-suite" if configured == "default" else configured
+                    )
+                    sibling = target.parent / "unrelated-sibling/input"
+                    sibling.parent.mkdir(parents=True, exist_ok=True)
+                    sibling.write_bytes(b"preserve sibling")
+                    legacy = self.root / "fuzz/target/input"
+                    legacy.parent.mkdir(parents=True, exist_ok=True)
+                    legacy.write_bytes(b"preserve legacy")
+                    result = self.run_suite(aggregate=aggregate, FUZZ_TARGETS=TARGETS[0])
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    execution = self.summary()["execution"]
+                    self.assertEqual(execution["target_dir"], str(target.resolve() / "fuzz"))
+                    self.assertFalse((target / "fuzz").exists())
+                    self.assertEqual(sibling.read_bytes(), b"preserve sibling")
+                    self.assertEqual(legacy.read_bytes(), b"preserve legacy")
+                    backup, _ = self.assert_backup()
+                    self.assertFalse((backup / "raw/target").exists())
+
+    def test_safe_legacy_cache_and_trailing_newline_alias_are_cleaned(self):
+        for alias in (False, True):
+            with self.subTest(alias=alias):
+                base = self.root / "fuzz/target"
+                base.mkdir(parents=True, exist_ok=True)
+                actual = base / "fuzz"
+                if alias:
+                    actual = Path(self.temporary) / "actual cache\n"
+                    actual.mkdir()
+                    (base / "fuzz").symlink_to(actual)
+                sibling = base / "unrelated/input"
+                sibling.parent.mkdir(parents=True, exist_ok=True)
+                sibling.write_bytes(b"preserve sibling")
+                call_start = len(self.calls())
+                result = self.run_suite(CARGO_TARGET_DIR=str(base), FUZZ_TARGETS=TARGETS[0])
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.summary()["execution"]["target_dir"], str(actual))
+                self.assertFalse(actual.exists())
+                self.assertEqual(sibling.read_bytes(), b"preserve sibling")
+                build = next(
+                    call for call in self.calls()[call_start:] if call[:2] == ["fuzz", "build"]
+                )
+                self.assertEqual(build[build.index("--target-dir") + 1], str(actual))
+                if alias:
+                    (base / "fuzz").unlink()
+                shutil.rmtree(base / "unrelated")
+
+    def test_unsafe_cache_aliases_are_rejected_before_any_destructive_command(self):
+        alias_base = Path(self.temporary) / "configured-cache"
+        alias_base.mkdir()
+        roots = (
+            self.root,
+            self.root.parent,
+            Path("/"),
+            self.root / "fuzz",
+            self.root / "Cargo.toml",
+            self.root / "fuzz/Cargo.lock",
+            self.root / "crates",
+            self.root / "scripts",
+            self.root / "fuzz/fuzz_targets",
+            self.root / "fuzz/corpus",
+            self.root / "fuzz/artifacts",
+            self.root / "fuzz/corpus_archive",
+            self.artifacts,
+            self.artifacts / "fuzz/cleanup-recovery",
+        )
+        self.protected_removal_interceptor()
+        # If a guard regresses, the fake build refuses before following any alias.
+        self.install("cargo", "raise SystemExit(87)")
+        original = (self.root / "Cargo.toml").read_bytes()
+        for target in roots:
+            for aggregate in (False, True):
+                with self.subTest(target=target, aggregate=aggregate):
+                    self.seed_stale_results()
+                    link = alias_base / "fuzz"
+                    link.symlink_to(target)
+                    result = self.run_suite(aggregate=aggregate, CARGO_TARGET_DIR=str(alias_base))
+                    link.unlink()
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("[security] fuzz evidence failed:", result.stderr)
+                    self.assert_no_current_results()
+                    self.assertFalse((self.root / "unsafe-removal-called").exists())
+                    self.assertEqual((self.root / "Cargo.toml").read_bytes(), original)
+                    self.assertEqual(self.calls(), [])
+
+    def test_cache_and_evidence_descendant_overlaps_are_rejected(self):
+        self.protected_removal_interceptor()
+        for case in ("source", "raw", "evidence", "evidence-inside-cache"):
+            with self.subTest(case=case):
+                base = {
+                    "source": self.root / "crates/nested",
+                    "raw": self.root / "fuzz/corpus/nested",
+                    "evidence": self.artifacts / "nested",
+                    "evidence-inside-cache": Path(self.temporary) / "cache-with-evidence",
+                }[case]
+                if case == "evidence-inside-cache":
+                    self.artifacts = base / "fuzz/evidence"
+                    self.env["SECURITY_ARTIFACT_DIR"] = str(self.artifacts)
+                self.seed_stale_results()
+                result = self.run_suite(CARGO_TARGET_DIR=str(base), FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("overlaps protected", result.stderr)
+                self.assertFalse((self.root / "unsafe-removal-called").exists())
+                self.assert_no_current_results()
+                self.assertEqual(self.calls(), [])
+
+    def test_external_git_metadata_cache_aliases_are_rejected(self):  # noqa: PLR0915 - bounded metadata layouts
+        private = Path(self.temporary) / "private Git metadata"
+        admin = private / "worktrees/fixture"
+        admin.mkdir(parents=True)
+        common = private / "shared\nmetadata"
+        common.mkdir()
+        marker = common / "preserve-marker"
+        marker.write_bytes(b"owned Git metadata fixture")
+        git_entry = self.root / ".git"
+        configured = Path(self.temporary) / "configured-cache"
+        configured.mkdir()
+        self.protected_removal_interceptor()
+        self.install("cargo", "raise SystemExit(87)")
+        for relative in (False, True):
+            pointer = os.path.relpath(admin, self.root) if relative else str(admin)
+            git_entry.write_text("gitdir: " + pointer + "\n")
+            common_pointer = os.path.relpath(common, admin) if relative else str(common)
+            (admin / "commondir").write_text(common_pointer + "\n")
+            for target in (admin, common, common / "objects", private):
+                for aggregate in (False, True):
+                    with self.subTest(relative=relative, target=target, aggregate=aggregate):
+                        self.seed_stale_results()
+                        link = configured / "fuzz"
+                        link.symlink_to(target)
+                        result = self.run_suite(
+                            aggregate=aggregate, CARGO_TARGET_DIR=str(configured)
+                        )
+                        link.unlink()
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn("overlaps protected", result.stderr)
+                        self.assert_no_current_results()
+                        self.assertFalse((self.root / "unsafe-removal-called").exists())
+                        self.assertEqual(marker.read_bytes(), b"owned Git metadata fixture")
+                        self.assertEqual(git_entry.read_text(), "gitdir: " + pointer + "\n")
+                        self.assertEqual(self.calls(), [])
+
+        metadata_file = private / "regular-file"
+        metadata_file.write_bytes(b"owned regular file")
+        missing = private / "missing-directory"
+        # CRLF must fail even if its stray carriage return names an existing directory.
+        Path(str(admin) + "\r").mkdir()
+        Path(str(common) + "\r").mkdir()
+        pointers = (
+            ("gitdir", b"invalid", f"{common}\n".encode()),
+            ("commondir", f"gitdir: {admin}\n".encode(), b""),
+            ("gitdir-missing", f"gitdir: {missing}\n".encode(), f"{common}\n".encode()),
+            ("gitdir-file", f"gitdir: {metadata_file}\n".encode(), f"{common}\n".encode()),
+            ("gitdir-crlf", f"gitdir: {admin}\r\n".encode(), f"{common}\n".encode()),
+            ("commondir-missing", f"gitdir: {admin}\n".encode(), f"{missing}\n".encode()),
+            ("commondir-file", f"gitdir: {admin}\n".encode(), f"{metadata_file}\n".encode()),
+            ("commondir-crlf", f"gitdir: {admin}\n".encode(), f"{common}\r\n".encode()),
+        )
+        for malformed, git_record, common_record in pointers:
+            with self.subTest(malformed=malformed):
+                git_entry.write_bytes(git_record)
+                (admin / "commondir").write_bytes(common_record)
+                self.seed_stale_results()
+                result = self.run_suite(CARGO_TARGET_DIR=str(configured))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("metadata pointer", result.stderr)
+                self.assert_no_current_results()
+                self.assertFalse((self.root / "unsafe-removal-called").exists())
+                self.assertEqual(marker.read_bytes(), b"owned Git metadata fixture")
+                self.assertEqual(metadata_file.read_bytes(), b"owned regular file")
+                self.assertEqual(git_entry.read_bytes(), git_record)
+                self.assertEqual((admin / "commondir").read_bytes(), common_record)
+                self.assertEqual(self.calls(), [])
+
+        self.install("cargo", CARGO)
+        (self.bin / "rm").unlink()
+        (self.bin / "rm").symlink_to(shutil.which("rm"))
+        for layout in ("worktree", "none", "standalone"):
+            with self.subTest(safe_layout=layout):
+                if layout == "worktree":
+                    git_entry.write_text(f"gitdir: {admin}\n")
+                    (admin / "commondir").write_text(f"{common}\n")
+                elif layout == "none":
+                    git_entry.unlink()
+                else:
+                    git_entry.mkdir()
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(marker.read_bytes(), b"owned Git metadata fixture")
+                self.assertFalse((self.root / "target/security-suite/fuzz").exists())
+
+    def test_receipt_cache_mismatch_and_missing_cache_block_raw_deletion(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                _, raw = self.seed_stale_collection()
+                code = (
+                    "shutil.rmtree(Path(os.environ['CARGO_TARGET_DIR']) / 'fuzz')"
+                    if missing
+                    else "os.environ['CARGO_TARGET_DIR'] = str(ROOT / 'different-cache')"
+                )
+                self.install_helper_hooks({"--cleanup-cache": code})
+                self.install_cleanup_hook("pass")
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("missing" if missing else "differs", result.stderr)
+                self.assertFalse((self.root / "cleanup-called").exists())
+                self.assert_restored(raw, "removal", 1)
+
+    def test_missing_cleanup_command_blocks_and_keeps_raw_recovery(self):
+        for helper in (False, True):
+            with self.subTest(helper=helper):
+                _, raw = self.seed_stale_collection()
+                if helper:
+                    self.install_helper_hooks({"--cleanup-cache": "raise SystemExit(127)"})
+                    self.install_cleanup_hook("pass")
+                else:
+                    self.install_cleanup_hook("raise SystemExit(127)")
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assert_restored(raw, "removal", 1 if helper else 127)
+
+    def bootstrap_failure(self, failure):
+        if failure == "log-truncation":
+            (self.artifacts / "summary/security.log").mkdir(parents=True)
+        elif failure in ("global-directory", "cargo-home"):
+            actual_mkdir = shutil.which("mkdir")
+            blocked = (
+                (self.artifacts / "summary")
+                if failure == "global-directory"
+                else Path(self.env["CARGO_HOME"])
+            )
+            self.install(
+                "mkdir",
+                "import os,sys\n"
+                f"if {str(blocked)!r} in sys.argv[1:]: raise SystemExit(33)\n"
+                f"os.execv({actual_mkdir!r}, [{actual_mkdir!r}] + sys.argv[1:])",
+            )
+        else:
+            actual_tee = shutil.which("tee")
+            self.install(
+                "tee",
+                "import subprocess,sys\n"
+                "data=sys.stdin.buffer.read()\n"
+                "if b'starting security suite' in data: raise SystemExit(32)\n"
+                f"raise SystemExit(subprocess.run([{actual_tee!r}] + sys.argv[1:], "
+                "input=data).returncode)",
+            )
+
+    def test_fuzz_results_invalidated_before_each_global_bootstrap_failure(self):
+        for failure in ("global-directory", "log-truncation", "global-log", "cargo-home"):
+            for aggregate in (False, True):
+                with self.subTest(failure=failure, aggregate=aggregate):
+                    _, raw = self.seed_stale_results()
+                    self.bootstrap_failure(failure)
+                    result = self.run_suite(aggregate=aggregate)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assert_no_current_results()
+                    for path, content in raw.items():
+                        self.assertEqual(path.read_bytes(), content)
+                    self.assertEqual(self.calls(), [])
+                    for name in ("mkdir", "tee"):
+                        command = self.bin / name
+                        command.unlink()
+                        command.symlink_to(shutil.which(name))
+                    blocked = self.artifacts / "summary/security.log"
+                    if blocked.is_dir():
+                        blocked.rmdir()
+
+    def test_invalidation_failure_prevents_bootstrap_and_children(self):
+        _, raw = self.seed_stale_results()
+        actual_rm = shutil.which("rm")
+        self.install(
+            "rm",
+            "import os,sys\n"
+            "if any(arg.endswith('/run_summary.json') for arg in sys.argv[1:]):\n"
+            " raise SystemExit(31)\n"
+            f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
+        )
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                result = self.run_suite(aggregate=aggregate)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("cannot invalidate previous fuzz results", result.stderr)
+                self.assertFalse((self.artifacts / "summary").exists())
+                self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+                self.assertEqual(self.calls(), [])
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
+
+    def test_nonfuzz_stage_preserves_previous_fuzz_results(self):
+        marker, _ = self.seed_stale_results()
+        original = {
+            name: (marker.parent / name).read_bytes()
+            for name in ("collection.ok", "execution.json", "run_summary.json")
+        }
+        result = self.run_suite(stages=["cargo-vet"])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name, content in original.items():
+            self.assertEqual((marker.parent / name).read_bytes(), content)
+
+    def test_relative_cargo_home_stays_anchored_to_the_caller(self):
+        self.caller = self.root / "caller"
+        self.caller.mkdir()
+        self.install(
+            "git",
+            "import os,sys\n"
+            "if '--show-toplevel' in sys.argv: print(os.environ['FIXTURE_ROOT'])\n"
+            "else: raise SystemExit(1)",
+        )
+        result = self.run_suite(CARGO_HOME="relative cargo home", FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.summary()["execution"]["environment"]["CARGO_HOME"],
+            str(self.caller / "relative cargo home"),
+        )
+        self.assertFalse((self.root / "relative cargo home").exists())
 
 
 if __name__ == "__main__":
