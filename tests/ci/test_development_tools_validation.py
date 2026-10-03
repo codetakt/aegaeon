@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -58,8 +59,8 @@ class DevelopmentToolsTests(unittest.TestCase):
 
     def test_current_consumer_and_lifecycle_profile(self):
         package, lock = tools.package_contract(self.root)
-        assert package["devDependencies"]
-        assert len(lock["packages"]) > 1
+        self.assertTrue(package["devDependencies"])
+        self.assertGreater(len(lock["packages"]), 1)
 
     def test_bootstrap_hash_mismatch_rejected_before_extraction(self):
         with (
@@ -69,7 +70,7 @@ class DevelopmentToolsTests(unittest.TestCase):
         ):
             tools.bootstrap_npm(self.root, self.root)
         extract.assert_not_called()
-        assert (self.root / "npm-10.9.7.tgz").read_bytes() == b"invalid"
+        self.assertEqual((self.root / "npm-10.9.7.tgz").read_bytes(), b"invalid")
 
     def test_archive_unsafe_members_and_duplicate_aliases_rejected(self):
         candidates = [
@@ -99,8 +100,8 @@ class DevelopmentToolsTests(unittest.TestCase):
             member.size = 5
             archive.addfile(member, io.BytesIO(b"hello"))
         raw = buffer.getvalue()
-        assert tools.extract_archive(raw, self.root / "valid") == 1
-        assert (self.root / "valid/package/bin/npm-cli.js").read_bytes() == b"hello"
+        self.assertEqual(tools.extract_archive(raw, self.root / "valid"), 1)
+        self.assertEqual((self.root / "valid/package/bin/npm-cli.js").read_bytes(), b"hello")
         for constant, bound in [("MAX_MEMBERS", 0), ("MAX_UNPACKED_BYTES", 4)]:
             with (
                 patch.object(tools, constant, bound),
@@ -284,14 +285,22 @@ class DevelopmentToolsTests(unittest.TestCase):
             ):
                 report = tools.execute(self.root, self.root, {"node": "node"})
             if audit == json.dumps(clean_audit()):
-                assert report["status"] == "passed"
-                assert calls == ["npm-ci", "npm-ls", "npm-audit", "consumers"]
-                assert consumers.call_count == entrypoints.call_count == 1
+                self.assertEqual(report["status"], "passed")
+                self.assertEqual(calls, ["npm-ci", "npm-ls", "npm-audit", "consumers"])
+                self.assertTrue(consumers.call_count == entrypoints.call_count == 1)
             else:
-                assert report["status"] == "failed"
-                assert calls == ["npm-ci", "npm-ls", "npm-audit"]
+                self.assertEqual(report["status"], "failed")
+                self.assertEqual(calls, ["npm-ci", "npm-ls", "npm-audit"])
                 consumers.assert_not_called()
                 entrypoints.assert_not_called()
+
+    def consumer_fixture_inputs(self):
+        return {
+            str(path.relative_to(self.root)): tools.identity(path)
+            for path in self.root.rglob("*")
+            if path.relative_to(self.root).parts[0] != "node_modules"
+            and (path.is_file() or path.is_symlink())
+        }
 
     def install_consumer_fixtures(self):
         installed = {}
@@ -369,25 +378,29 @@ class DevelopmentToolsTests(unittest.TestCase):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("print('validated consumer executed')\n")
-        commands = tools.Commands(self.root, {"PATH": str(bins)})
+        output = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        inputs = self.consumer_fixture_inputs()
+        commands = tools.Commands(output, {"PATH": str(bins)})
         entrypoints = tools.consumer_entrypoints(self.root, installed)
-        tools.consumers(commands, self.root, {"node": str(runtime), "npm": "unused"}, entrypoints)
+        tools.consumers(
+            commands, self.root, {"node": str(runtime), "npm": "unused"}, entrypoints, inputs
+        )
         self.assertEqual(len(commands.records), 6)
         self.assertTrue(all(record["argv"][0] == str(runtime) for record in commands.records))
         self.assertTrue(
             all(
-                (self.root / record["stdout"]).read_text() == "validated consumer executed\n"
+                (output / record["stdout"]).read_text() == "validated consumer executed\n"
                 for record in commands.records
             )
         )
         self.assertFalse((self.root / "hijacked").exists())
         Path(entrypoints["eslint"]["path"]).write_text("raise SystemExit(7)\n")
         with pytest.raises(ValueError, match="entrypoint changed before invocation: eslint"):
-            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints)
+            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints, inputs)
         self.assertEqual(len(commands.records), 6)
         entrypoints = tools.consumer_entrypoints(self.root, installed)
         with pytest.raises(ValueError, match="lint-ts failed with exit 7"):
-            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints)
+            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints, inputs)
 
     def test_successful_earlier_consumer_cannot_replace_later_entrypoint(self):
         installed = self.install_consumer_fixtures()
@@ -400,14 +413,121 @@ class DevelopmentToolsTests(unittest.TestCase):
             "print('earlier consumer passed')\n"
         )
         entrypoints = tools.consumer_entrypoints(self.root, installed)
-        commands = tools.Commands(self.root, {})
+        output = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        inputs = self.consumer_fixture_inputs()
+        commands = tools.Commands(output, {})
         with pytest.raises(ValueError, match="entrypoint changed before invocation: tsc") as caught:
-            tools.consumers(commands, self.root, {"node": sys.executable}, entrypoints)
-        (self.root / "rejection.txt").write_text(str(caught.value))
+            tools.consumers(commands, self.root, {"node": sys.executable}, entrypoints, inputs)
+        (output / "rejection.txt").write_text(str(caught.value))
         self.assertEqual([row["name"] for row in commands.records], ["lint-ts"])
         self.assertEqual(commands.records[0]["exit"], 0)
         self.assertFalse(marker.exists())
-        self.assertEqual((self.root / "lint-ts.stdout").read_text(), "earlier consumer passed\n")
+        self.assertEqual((output / "lint-ts.stdout").read_text(), "earlier consumer passed\n")
+
+    def sequential_replacement_fixture(self, earlier_index, target_name):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        output = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        with patch.object(self, "root", root):
+            installed = self.install_consumer_fixtures()
+            sequence = [
+                root / "node_modules/eslint/bin/eslint.js",
+                root / "node_modules/typescript/bin/tsc",
+                root / "scripts/check-strict-types.ts",
+                *(root / name for name in tools.TESTS),
+            ]
+            for path in sequence:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("print('consumer passed')\n")
+            target = root / target_name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target not in sequence:
+                target.write_text("reviewed policy/config input\n")
+            original = target.read_text()
+            marker = output / "altered-later-input-executed"
+            restore = (
+                "from pathlib import Path\n"
+                f"Path({str(target)!r}).write_text({original!r})\n"
+                f"Path({str(marker)!r}).touch()\n"
+                "print('altered later consumer passed and restored inputs')\n"
+            )
+            if target not in sequence:
+                # Config/policy replacement is restored by the next consumer.
+                sequence[earlier_index + 1].write_text(restore)
+                replacement = "altered policy/config input\n"
+            else:
+                replacement = restore
+            sequence[earlier_index].write_text(
+                "from pathlib import Path\n"
+                f"Path({str(target)!r}).write_text({replacement!r})\n"
+                "print('successful earlier consumer replaced tracked input')\n"
+            )
+            runtime = output / "pinned-node-fixture"
+            runtime.write_text(
+                f"#!{sys.executable}\nimport os, sys\n"
+                "args = [arg for arg in sys.argv[1:] "
+                "if arg != '--experimental-strip-types']\n"
+                "os.execv(sys.executable, [sys.executable, *args])\n"
+            )
+            runtime.chmod(0o755)
+            inputs = self.consumer_fixture_inputs()
+            entrypoints = tools.consumer_entrypoints(root, installed)
+            commands = tools.Commands(output, {})
+        return root, output, target, original, marker, runtime, inputs, entrypoints, commands
+
+    def test_successful_consumer_cannot_replace_tracked_source_policy_or_config(self):
+        # Each later source can restore itself while returning success. Reject it
+        # before execution, including when a preceding consumer returned zero.
+        cases = [
+            (0, "scripts/check-strict-types.ts"),
+            (1, "scripts/check-strict-types.ts"),
+            (2, tools.TESTS[0]),
+            (3, tools.TESTS[1]),
+            (4, tools.TESTS[2]),
+            (0, "tsconfig.json"),
+            (0, ".github/workflows/ci.yml"),
+        ]
+        for earlier_index, target_name in cases:
+            with self.subTest(earlier_index=earlier_index, target=target_name):
+                (
+                    root,
+                    _output,
+                    target,
+                    original,
+                    marker,
+                    runtime,
+                    inputs,
+                    entrypoints,
+                    commands,
+                ) = self.sequential_replacement_fixture(earlier_index, target_name)
+                with pytest.raises(ValueError, match="Source or lock changed"):
+                    tools.consumers(commands, root, {"node": str(runtime)}, entrypoints, inputs)
+                self.assertEqual(len(commands.records), earlier_index + 1)
+                self.assertTrue(all(row["exit"] == 0 for row in commands.records))
+                self.assertFalse(marker.exists())
+                self.assertNotEqual(target.read_text(), original)
+
+    def test_tracked_consumer_inventory_rejects_missing_additional_and_symlink_inputs(self):
+        config = self.root / "tsconfig.json"
+        config.write_text("reviewed config\n")
+        inputs = self.consumer_fixture_inputs()
+        tools.checked_consumer_inputs(self.root, inputs)
+        for change in ("missing", "additional", "symlink", "parent symlink"):
+            with self.subTest(change=change):
+                source = Path(self.enterContext(tempfile.TemporaryDirectory())) / "source"
+                shutil.copytree(self.root, source)
+                if change == "missing":
+                    (source / "tsconfig.json").unlink()
+                elif change == "additional":
+                    (source / "eslint.config.js").write_text("unreviewed config\n")
+                elif change == "symlink":
+                    (source / "tsconfig.json").unlink()
+                    (source / "tsconfig.json").symlink_to(config)
+                else:
+                    saved = source.with_name("saved")
+                    source.rename(saved)
+                    source.symlink_to(saved, target_is_directory=True)
+                with pytest.raises(ValueError, match="changed"):
+                    tools.checked_consumer_inputs(source, inputs)
 
     def test_invocation_revalidation_rejects_changed_path_identity_and_symlinks(self):
         installed = self.install_consumer_fixtures()
@@ -509,14 +629,17 @@ class DevelopmentToolsTests(unittest.TestCase):
                 "optional_peers": {"optional": "^1.0.0"},
             }
         }
-        assert tools.graph_contract(graph, package, installed) == [
-            {
-                "parent": "tool",
-                "parent_version": "1.0.0",
-                "peer": "optional",
-                "declared_range": "^1.0.0",
-            }
-        ]
+        self.assertEqual(
+            tools.graph_contract(graph, package, installed),
+            [
+                {
+                    "parent": "tool",
+                    "parent_version": "1.0.0",
+                    "peer": "optional",
+                    "declared_range": "^1.0.0",
+                }
+            ],
+        )
         installed["node_modules/tool"]["optional_peers"] = {}
         with pytest.raises(ValueError, match="declared optional peer"):
             tools.graph_contract(graph, package, installed)
@@ -556,13 +679,13 @@ class DevelopmentToolsTests(unittest.TestCase):
             },
         ):
             env = tools.environment(self.root, "/nix/store/node/bin/node")
-        assert "NPM_CONFIG_OMIT" not in env
-        assert "npm_config_ignore_scripts" not in env
-        assert "NODE_OPTIONS" not in env
-        assert "GH_TOKEN" not in env
-        assert env["HOME"] == os.environ["HOME"]
-        assert env["NODE_ENV"] == "development"
-        assert env["NPM_CONFIG_USERCONFIG"] != env["NPM_CONFIG_GLOBALCONFIG"]
+        self.assertNotIn("NPM_CONFIG_OMIT", env)
+        self.assertNotIn("npm_config_ignore_scripts", env)
+        self.assertNotIn("NODE_OPTIONS", env)
+        self.assertNotIn("GH_TOKEN", env)
+        self.assertEqual(env["HOME"], os.environ["HOME"])
+        self.assertEqual(env["NODE_ENV"], "development")
+        self.assertNotEqual(env["NPM_CONFIG_USERCONFIG"], env["NPM_CONFIG_GLOBALCONFIG"])
 
     def test_command_nonzero_and_timeout_preserve_logs(self):
         commands = tools.Commands(self.root, {})
@@ -572,15 +695,15 @@ class DevelopmentToolsTests(unittest.TestCase):
             pytest.raises(ValueError, match="failed"),
         ):
             commands.run("failure", ["node"], self.root)
-        assert (self.root / "failure.stderr").read_bytes() == b"audit error"
+        self.assertEqual((self.root / "failure.stderr").read_bytes(), b"audit error")
         timeout = subprocess.TimeoutExpired(["node"], 300, b"output", b"timeout")
         with (
             patch.object(subprocess, "run", side_effect=timeout),
             pytest.raises(subprocess.TimeoutExpired),
         ):
             commands.run("timeout", ["node"], self.root)
-        assert (self.root / "timeout.stdout").read_bytes() == b"output"
-        assert len(json.loads((self.root / "commands.json").read_text())) == 2
+        self.assertEqual((self.root / "timeout.stdout").read_bytes(), b"output")
+        self.assertEqual(len(json.loads((self.root / "commands.json").read_text())), 2)
 
     def test_package_manager_mismatch_fails_before_install(self):
         commands = tools.Commands(self.root, {})
@@ -608,8 +731,8 @@ class DevelopmentToolsTests(unittest.TestCase):
         )
         destination = self.root / "copy"
         inputs = tools.snapshot(self.root, destination)
-        assert set(inputs) == {"package.json", "package-lock.json"}
-        assert not (self.root / "node_modules").exists()
+        self.assertEqual(set(inputs), {"package.json", "package-lock.json"})
+        self.assertFalse((self.root / "node_modules").exists())
         tools.unchanged(self.root, inputs)
         tools.unchanged(destination, inputs)
 
@@ -624,7 +747,7 @@ class DevelopmentToolsTests(unittest.TestCase):
             pytest.raises(ValueError, match="Unreviewed source symlink"),
         ):
             tools.snapshot(self.root, self.root / "copy")
-        assert not (self.root / "copy/scripts/check-strict-types.ts").is_symlink()
+        self.assertFalse((self.root / "copy/scripts/check-strict-types.ts").is_symlink())
 
     def test_only_exact_nonconsumer_kani_link_is_allowed(self):
         relative = "crates/kani-harness/kani"

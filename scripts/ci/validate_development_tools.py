@@ -566,14 +566,30 @@ def checked_consumer_entrypoint(source: Path, command: str, recorded: dict[str, 
     return str(target)
 
 
+def checked_consumer_inputs(source: Path, inputs: dict[str, dict[str, str | int]]) -> None:
+    # The disposable source has no Git index. Enumerate its actual source inputs;
+    # installed packages are validated separately and are not tracked sources.
+    require(source.is_dir() and not source.is_symlink(), "Source snapshot root changed")
+    actual = {
+        str(path.relative_to(source))
+        for path in source.rglob("*")
+        if path.relative_to(source).parts[0] != "node_modules"
+        and (path.is_file() or path.is_symlink())
+    }
+    require(actual == set(inputs), "Tracked consumer input inventory changed before invocation")
+    unchanged(source, inputs)
+
+
 def consumers(
     commands: Commands,
     source: Path,
     tools: dict[str, str],
     entrypoints: dict[str, dict[str, str | int]],
+    inputs: dict[str, dict[str, str | int]],
 ) -> None:
     # Keep these arguments aligned with the exact EXPECTED_SCRIPTS contract.
     # npm run would prepend untrusted dependency-provided .bin names to PATH.
+    checked_consumer_inputs(source, inputs)
     commands.run(
         "lint-ts",
         [
@@ -585,6 +601,7 @@ def consumers(
         ],
         source,
     )
+    checked_consumer_inputs(source, inputs)
     commands.run(
         "typecheck-ts",
         [
@@ -598,12 +615,14 @@ def consumers(
         ],
         source,
     )
+    checked_consumer_inputs(source, inputs)
     commands.run(
         "audit-strict-types",
         [tools["node"], "--experimental-strip-types", "scripts/check-strict-types.ts"],
         source,
     )
     for index, test in enumerate(TESTS):
+        checked_consumer_inputs(source, inputs)
         commands.run(
             f"consumer-{index}", [tools["node"], "--experimental-strip-types", test], source
         )
@@ -648,7 +667,7 @@ def execute(root: Path, output: Path, tools: dict[str, str]) -> dict[str, Any]:
             )
             audit_contract(report["audit"], lock)
             report["consumer_entrypoints"] = consumer_entrypoints(source, report["installed_graph"])
-            consumers(commands, source, tools, report["consumer_entrypoints"])
+            consumers(commands, source, tools, report["consumer_entrypoints"], report["inputs"])
             unchanged(source, report["inputs"])
             unchanged(root, report["inputs"])
             report["status"] = "passed"
