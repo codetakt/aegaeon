@@ -65,7 +65,7 @@ fn elapsed_millis_u64(start: &Instant) -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ClientProfile {
     id: String,
     secret: Option<String>,
@@ -159,7 +159,10 @@ impl ScenarioExecutor {
         );
 
         let client_profile = ClientProfile::from_env();
-        tracing::debug!(profile = ?client_profile, "initialized loadtest client profile");
+        tracing::debug!(
+            has_client_secret = client_profile.secret.is_some(),
+            "initialized loadtest client profile"
+        );
 
         Ok(Self {
             client: Client::builder()
@@ -219,11 +222,12 @@ impl ScenarioExecutor {
     }
 
     fn apply_client_auth(&self, request: RequestBuilder) -> RequestBuilder {
-        if self.client_profile.secret.is_some() {
-            request.basic_auth(
-                self.client_profile.id.clone(),
-                self.client_profile.secret.clone(),
-            )
+        if let Some(secret) = &self.client_profile.secret {
+            // RFC 6749 section 2.3.1: form-encode each component before HTTP Basic.
+            let client_id: String =
+                form_urlencoded::byte_serialize(self.client_profile.id.as_bytes()).collect();
+            let secret: String = form_urlencoded::byte_serialize(secret.as_bytes()).collect();
+            request.basic_auth(client_id, Some(secret))
         } else {
             request
         }
@@ -805,7 +809,7 @@ impl ScenarioExecutor {
             .header("Forwarded", &self.forwarded_header);
 
         if profile.secret.is_some() {
-            request = request.basic_auth(profile.id.clone(), profile.secret.clone());
+            request = self.apply_client_auth(request);
         } else if let Ok(secret) = std::env::var("AEG_LOADTEST_CLIENT_SECRET_POST") {
             if !secret.trim().is_empty() {
                 params.push(("client_id".to_string(), profile.id.clone()));
@@ -914,7 +918,7 @@ impl ScenarioExecutor {
             .header("Forwarded", &self.forwarded_header);
 
         if profile.secret.is_some() {
-            request = request.basic_auth(profile.id.clone(), profile.secret.clone());
+            request = self.apply_client_auth(request);
         } else if let Ok(secret) = std::env::var("AEG_LOADTEST_CLIENT_SECRET_POST") {
             if !secret.trim().is_empty() {
                 params.push(("client_id".to_string(), profile.id.clone()));
@@ -1229,6 +1233,112 @@ impl ScenarioExecutor {
 mod tests {
     use super::*;
     use reqwest::header::{HeaderMap, HeaderValue, WWW_AUTHENTICATE};
+
+    fn executor_with_credentials(id: &str, secret: Option<&str>) -> ScenarioExecutor {
+        ScenarioExecutor {
+            client: Client::new(),
+            base_url: "https://example.com".to_string(),
+            generator: TestDataGenerator::new(),
+            client_profile: ClientProfile {
+                id: id.to_string(),
+                secret: secret.map(str::to_string),
+                redirect_uri: "https://example.com/callback".to_string(),
+                scope: "read".to_string(),
+            },
+            forwarded_header: "proto=https;host=example.com".to_string(),
+            cached_access_token: None,
+            cached_userinfo_access_token: None,
+        }
+    }
+
+    #[test]
+    fn oauth_basic_headers_encode_components_once_and_roundtrip() {
+        use base64::Engine;
+
+        // Literal wire values distinguish spaces from plus and percent-encoded text.
+        let cases = [
+            (
+                "client-._~*123",
+                "secret-._~*456",
+                "client-._%7E*123:secret-._%7E*456",
+            ),
+            ("a b", "c d", "a+b:c+d"),
+            ("a+b", "c+d", "a%2Bb:c%2Bd"),
+            ("a%20b", "c%2Bd", "a%2520b:c%252Bd"),
+            ("a:b", "c:d", "a%3Ab:c%3Ad"),
+            (
+                "利用者",
+                "秘密é",
+                "%E5%88%A9%E7%94%A8%E8%80%85:%E7%A7%98%E5%AF%86%C3%A9",
+            ),
+            ("", "secret", ":secret"),
+            ("client", "", "client:"),
+            ("", "", ":"),
+        ];
+        for (id, secret, expected) in cases {
+            let executor = executor_with_credentials(id, Some(secret));
+            for endpoint in ["token", "introspect", "revoke"] {
+                let request = executor
+                    .apply_client_auth(
+                        executor
+                            .client
+                            .post(format!("https://example.com/{endpoint}")),
+                    )
+                    .form(&[("token", "a+b %:é")])
+                    .build()
+                    .unwrap();
+                let header = &request.headers()[reqwest::header::AUTHORIZATION];
+                assert!(header.is_sensitive());
+                let encoded = header.to_str().unwrap().strip_prefix("Basic ").unwrap();
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap();
+                assert_eq!(decoded, expected.as_bytes());
+                let wire = String::from_utf8(decoded).unwrap();
+                let (wire_id, wire_secret) = wire.split_once(':').unwrap();
+                for (component, logical) in [(wire_id, id), (wire_secret, secret)] {
+                    let form = format!("value={component}");
+                    let pairs: Vec<_> = form_urlencoded::parse(form.as_bytes()).collect();
+                    assert_eq!(pairs.len(), 1);
+                    assert_eq!(pairs[0].1, logical);
+                }
+                assert_eq!(
+                    request.body().unwrap().as_bytes().unwrap(),
+                    b"token=a%2Bb+%25%3A%C3%A9"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn absent_secret_preserves_authorization_and_client_secret_post_body() {
+        let executor = executor_with_credentials("client+ id", None);
+        for authorization in [None, Some("Bearer existing-token")] {
+            let mut builder = executor.client.post("https://example.com/token");
+            if let Some(value) = authorization {
+                builder = builder.header(reqwest::header::AUTHORIZATION, value);
+            }
+            let request = executor
+                .apply_client_auth(builder)
+                .form(&[
+                    ("client_id", "client+ id"),
+                    ("client_secret", "secret+ %:é"),
+                ])
+                .build()
+                .unwrap();
+            assert_eq!(
+                request
+                    .headers()
+                    .get(reqwest::header::AUTHORIZATION)
+                    .map(|value| value.to_str().unwrap()),
+                authorization
+            );
+            assert_eq!(
+                request.body().unwrap().as_bytes().unwrap(),
+                b"client_id=client%2B+id&client_secret=secret%2B+%25%3A%C3%A9"
+            );
+        }
+    }
 
     fn invalid_client_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
