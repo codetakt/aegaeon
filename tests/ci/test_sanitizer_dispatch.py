@@ -7,6 +7,7 @@ import json
 import shutil
 import subprocess
 import unittest
+from pathlib import Path
 
 import test_security_fuzz as fuzz_fixture
 
@@ -23,7 +24,7 @@ with (root / 'dispatch-calls.jsonl').open('a') as out:
 if sanitizer:
     directory = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
     (directory / 'child-receipt.json').write_text(json.dumps({'exit_code': code}))
-    scratch = root / 'target/sanitizers'
+    scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
     scratch.mkdir(parents=True, exist_ok=True)
     (scratch / 'child-output').write_text('transient sanitizer output')
     print('sanitizer child diagnostic: SUCCESS! exit=' + str(code))
@@ -35,7 +36,9 @@ raise SystemExit(code)
 RM = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
-if 'target/sanitizers' in args:
+root = pathlib.Path(os.environ['FIXTURE_ROOT'])
+target = str((root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve())
+if target in args:
     root = pathlib.Path(os.environ['FIXTURE_ROOT'])
     code = int(os.environ.get('SANITIZER_CLEANUP_EXIT', '0'))
     with (root / 'dispatch-calls.jsonl').open('a') as out:
@@ -72,6 +75,7 @@ class SanitizerDispatchTests(unittest.TestCase):
         fixture = fuzz_fixture.SecurityFuzzTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
+        fixture.env.pop("SANITIZER_TARGET_DIR", None)
         fixture.install("nix", NIX)
         fixture.install("rm", "ACTUAL_RM = " + repr(shutil.which("rm")) + "\n" + RM)
         fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
@@ -100,6 +104,130 @@ class SanitizerDispatchTests(unittest.TestCase):
 
     def receipt(self, fixture):
         return json.loads((fixture.artifacts / "sanitizers/child-receipt.json").read_text())
+
+    def target_directory(self, fixture, setting):
+        if setting == "absolute":
+            return str(Path(fixture.temporary) / "custom sanitizer outputs")
+        if setting == "symlink":
+            directory = Path(fixture.temporary) / "resolved sanitizer outputs"
+            directory.mkdir()
+            (fixture.root / "sanitizer-link").symlink_to(directory, target_is_directory=True)
+            return "sanitizer-link"
+        return setting
+
+    def test_configured_target_cleanup_preserves_unrelated_directories(self):
+        for aggregate in (False, True):
+            for setting in (
+                None,
+                "",
+                "target/sanitizers",
+                "custom sanitizer outputs",
+                "absolute",
+                "symlink",
+                "missing-parent/../normalized outputs",
+                "-custom",
+            ):
+                with self.subTest(aggregate=aggregate, setting=setting):
+                    fixture = self.fixture()
+                    target = self.target_directory(fixture, setting)
+                    default = fixture.root / "target/sanitizers"
+                    if target and target != "target/sanitizers":
+                        default.mkdir(parents=True)
+                        (default / "unrelated-output").write_text("keep default directory")
+                    unrelated = fixture.root / "target/unrelated-output"
+                    unrelated.parent.mkdir(parents=True, exist_ok=True)
+                    unrelated.write_text("keep unrelated output")
+                    environment = {} if target is None else {"SANITIZER_TARGET_DIR": target}
+                    result = self.run_suite(fixture, aggregate=aggregate, **environment)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(self.receipt(fixture)["exit_code"], 0)
+                    expected = str((fixture.root / (target or "target/sanitizers")).resolve())
+                    cleanup = self.calls(fixture, "cleanup")
+                    self.assertEqual(len(cleanup), 1)
+                    self.assertEqual(cleanup[0]["args"], ["-rf", "--", expected])
+                    self.assertFalse(Path(expected).exists())
+                    if setting == "symlink":
+                        self.assertTrue((fixture.root / target).is_symlink())
+                    self.assertEqual(unrelated.read_text(), "keep unrelated output")
+                    if target and target != "target/sanitizers":
+                        self.assertEqual(
+                            (default / "unrelated-output").read_text(), "keep default directory"
+                        )
+
+    def test_trailing_newline_target_cleanup_preserves_similarly_named_sibling(self):
+        for aggregate in (False, True):
+            for suffix in ("\n", "\n\n"):
+                with self.subTest(aggregate=aggregate, suffix=suffix):
+                    fixture = self.fixture()
+                    target = "custom sanitizer outputs" + suffix
+                    sibling = fixture.root / target.rstrip("\n")
+                    sibling.mkdir()
+                    preserved = sibling / "unrelated-output"
+                    preserved.write_text("keep similarly named sibling")
+                    result = self.run_suite(
+                        fixture, aggregate=aggregate, SANITIZER_TARGET_DIR=target
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(self.receipt(fixture)["exit_code"], 0)
+                    self.assertEqual(preserved.read_text(), "keep similarly named sibling")
+                    expected = str((fixture.root / target).resolve())
+                    cleanup = self.calls(fixture, "cleanup")
+                    self.assertEqual(len(cleanup), 1)
+                    self.assertEqual(cleanup[0]["args"], ["-rf", "--", expected])
+                    self.assertFalse(Path(expected).exists())
+
+    def test_custom_target_failure_codes_and_outputs_are_preserved(self):
+        for aggregate in (False, True):
+            for setting in ("custom sanitizer outputs", "absolute", "symlink", "newline outputs\n"):
+                for child, cleanup in ((71, 0), (71, 79), (0, 79)):
+                    with self.subTest(
+                        aggregate=aggregate, setting=setting, child=child, cleanup=cleanup
+                    ):
+                        fixture = self.fixture()
+                        target = self.target_directory(fixture, setting)
+                        result = self.run_suite(
+                            fixture,
+                            aggregate=aggregate,
+                            SANITIZER_TARGET_DIR=target,
+                            SANITIZER_CHILD_EXIT=str(child),
+                            SANITIZER_CLEANUP_EXIT=str(cleanup),
+                        )
+                        self.assertEqual(
+                            result.returncode, child or cleanup, result.stdout + result.stderr
+                        )
+                        self.assertEqual(self.receipt(fixture)["exit_code"], child)
+                        self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], cleanup)
+                        output = fixture.root / target / "child-output"
+                        self.assertEqual(output.exists(), cleanup != 0)
+                        if cleanup:
+                            self.assertEqual(output.read_text(), "transient sanitizer output")
+
+    def test_resolution_failure_preserves_outputs_and_child_status(self):
+        for aggregate in (False, True):
+            for child in (0, 71):
+                with self.subTest(aggregate=aggregate, child=child):
+                    fixture = self.fixture()
+                    fixture.install(
+                        "python3",
+                        "import os, sys\n"
+                        "if sys.argv[1:2] == ['-c'] "
+                        "and 'Path(sys.argv[1]).resolve()' in sys.argv[2]:\n"
+                        "    print('controlled target resolution failure', file=sys.stderr)\n"
+                        "    raise SystemExit(81)\n"
+                        "os.execv(sys.executable, [sys.executable] + sys.argv[1:])\n",
+                    )
+                    result = self.run_suite(
+                        fixture,
+                        aggregate=aggregate,
+                        SANITIZER_TARGET_DIR="custom sanitizer outputs",
+                        SANITIZER_CHILD_EXIT=str(child),
+                    )
+                    self.assertEqual(result.returncode, child or 81, result.stdout + result.stderr)
+                    self.assertEqual(self.receipt(fixture)["exit_code"], child)
+                    self.assertEqual(self.calls(fixture, "cleanup"), [])
+                    self.assertTrue(
+                        (fixture.root / "custom sanitizer outputs/child-output").is_file()
+                    )
 
     def test_selected_and_aggregate_success_preserve_artifacts_after_cleanup(self):
         for aggregate in (False, True):

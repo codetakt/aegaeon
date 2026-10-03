@@ -132,7 +132,13 @@ cleanup_fuzz_outputs() {
 }
 
 cleanup_sanitizer_outputs() {
-	rm -rf target/sanitizers
+	local dir
+	# Match the runner's fallback and resolved paths, including symlink roots.
+	dir="$(python3 -c 'from pathlib import Path; import sys; print(str(Path(sys.argv[1]).resolve()) + ".")' \
+		"${SANITIZER_TARGET_DIR:-target/sanitizers}")" || return $?
+	# Keep trailing newlines through command substitution, then remove the sentinel.
+	dir=${dir%.}
+	rm -rf -- "$dir"
 }
 
 discover_devtools_manifests() {
