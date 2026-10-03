@@ -10,6 +10,10 @@ inputs:
     description: Run the hosted-runner disk cleanup step.
     required: false
     default: "false"
+  minimum-free-gib:
+    description: Skip enabled cleanup only when every relevant filesystem has this much free space; zero always cleans.
+    required: false
+    default: "0"
   enable-flakehub-cache:
     description: Enable the FlakeHub binary cache.
     required: false
@@ -21,18 +25,10 @@ runs:
     - name: Free disk space (GitHub hosted runner)
       if: ${{ inputs.free-disk == 'true' }}
       shell: bash
+      env:
+        MINIMUM_FREE_GIB: ${{ inputs.minimum-free-gib }}
       run: |
-        set -euxo pipefail
-        df -h
-        if command -v sudo >/dev/null 2>&1; then
-          SUDO="sudo"
-        else
-          SUDO=""
-        fi
-        $SUDO rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
-        $SUDO docker system prune -af || true
-        $SUDO apt-get clean || true
-        df -h
+        bash "$GITHUB_ACTION_PATH/prepare-disk.sh" "$MINIMUM_FREE_GIB" "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22

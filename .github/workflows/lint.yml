@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: lint-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: lint-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -30,6 +30,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Nix CI
@@ -103,6 +104,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Nix CI
@@ -112,20 +114,20 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Install JavaScript dependencies
-        run: nix develop .#ci --command npm ci
+        run: nix develop .#typescript --command npm ci
 
       - name: Run TypeScript lint
-        run: nix develop .#ci --command npm run lint:ts
+        run: nix develop .#typescript --command npm run lint:ts
 
       - name: Run TypeScript type checks
-        run: nix develop .#ci --command npm run typecheck:ts
+        run: nix develop .#typescript --command npm run typecheck:ts
 
       - name: Run strict TypeScript policy audit
-        run: nix develop .#ci --command npm run audit:strict-types
+        run: nix develop .#typescript --command npm run audit:strict-types
 
       - name: Run root strict TypeScript policy tests
         run: |
-          nix develop .#ci --command node --experimental-strip-types \
+          nix develop .#typescript --command node --experimental-strip-types \
             tests/verified_core_wasm/root_strict_types_policy_test.ts
 
   python-lint:
@@ -139,6 +141,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Nix CI
@@ -166,6 +169,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Nix CI
