@@ -210,6 +210,85 @@ class SecurityFuzzFixture(unittest.TestCase):
             raw[path] = path.read_bytes()
         return marker, raw
 
+    def install_helper_hooks(self, hooks):
+        self.install(
+            "python3",
+            "import os,runpy,sys\n"
+            f"hooks={hooks!r}\n"
+            "for action, code in hooks.items():\n"
+            " if action in sys.argv:\n"
+            "  namespace=runpy.run_path(sys.argv[1], run_name='fuzz_test_hook')\n"
+            "  state=namespace['main'].__globals__\n"
+            "  exec(code, state)\n"
+            "  sys.argv=sys.argv[1:]\n"
+            "  raise SystemExit(state['main']())\n"
+            f"os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])",
+        )
+
+    def assert_backup(self):
+        execution = self.summary()["execution"]
+        backup = self.artifacts / "fuzz/cleanup-recovery" / execution["run_id"]
+        manifest = json.loads((backup / "backup-ready.json").read_text())
+        self.assertEqual(manifest["run_id"], execution["run_id"])
+        self.assertEqual(manifest["source"], execution["source"]["files"])
+        self.assertEqual(set(manifest["raw"]), {"corpus", "artifacts", "corpus_archive"})
+        for name, expected_digest in manifest["evidence"].items():
+            self.assertEqual(
+                hashlib.sha256((backup / "evidence" / name).read_bytes()).hexdigest(),
+                expected_digest,
+            )
+        original = json.loads((backup / "evidence/execution.json").read_text())
+        self.assertEqual(original["run_id"], execution["run_id"])
+        self.assertEqual(original["status"], "awaiting-cleanup")
+        self.assertNotIn("cleanup_exit_code", original)
+        self.assertEqual(
+            json.loads((backup / "evidence/run_summary.json").read_text())["execution"], original
+        )
+        self.assertEqual(
+            json.loads((backup / "evidence/collection.ok").read_text())["summary_sha256"],
+            manifest["evidence"]["collection-summary.json"],
+        )
+        self.assertFalse((backup / "raw/target").exists())
+        return backup, manifest
+
+    def assert_restored(self, raw, reason, exit_code):
+        summary = self.summary()
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["execution"]["status"], "failed")
+        self.assertEqual(summary["execution"]["cleanup_exit_code"], exit_code)
+        report = summary["execution"]["cleanup_recovery"]
+        self.assertEqual(report["reason"], reason)
+        self.assertEqual(report["status"], "restored")
+        backup, _ = self.assert_backup()
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+            self.assertEqual(
+                (backup / "raw" / path.relative_to(self.root / "fuzz")).read_bytes(), content
+            )
+        for name in ("collection.ok", "collection-summary.json"):
+            self.assertEqual(
+                (self.artifacts / "fuzz" / name).read_bytes(),
+                (backup / "evidence" / name).read_bytes(),
+            )
+        self.assertEqual(
+            json.loads((self.artifacts / "fuzz/execution.json").read_text()), summary["execution"]
+        )
+        self.assertTrue(list(backup.glob("recovery-result-*.json")))
+        self.assertEqual((self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input")
+
+    def install_cleanup_hook(self, code):
+        actual_rm = shutil.which("rm")
+        self.install(
+            "rm",
+            "import os,pathlib,shutil,sys\n"
+            "if 'fuzz/corpus' in sys.argv[1:]:\n"
+            " root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
+            " (root / 'cleanup-called').write_text('called')\n"
+            + "\n".join(" " + line for line in code.splitlines())
+            + "\n"
+            + f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
+        )
+
 
 class SecurityFuzzTests(SecurityFuzzFixture):
     def test_stale_receipt_removal_failure_preserves_raw_evidence_without_starting_stage(self):
@@ -490,18 +569,13 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertFalse(any(call[:2] == ["fuzz", "build"] for call in self.calls()))
 
     def test_cleanup_receipt_write_failure_cannot_leave_passed_status(self):
-        self.install(
-            "python3",
-            "import os,sys\nif '--cleanup-result' in sys.argv:\n raise SystemExit(29)\nos.execv("
-            + repr(sys.executable)
-            + ", ["
-            + repr(sys.executable)
-            + "] + sys.argv[1:])",
-        )
-        result = self.run_suite()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(self.summary()["status"], "awaiting-cleanup")
-        self.assertNotIn("cleanup_exit_code", self.summary()["execution"])
+        _, raw = self.seed_stale_collection()
+        self.install_helper_hooks({"--cleanup-result": "raise SystemExit(29)"})
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                result = self.run_suite(aggregate=aggregate)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assert_restored(raw, "receipt", 0)
 
     def test_cleanup_failure_is_blocking_and_recorded(self):
         actual_rm = shutil.which("rm")
@@ -518,6 +592,320 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.summary()["execution"]["cleanup_exit_code"], 31)
         self.assertEqual(self.summary()["status"], "failed")
+
+
+class SecurityFuzzRecoveryTests(SecurityFuzzFixture):
+    def test_empty_long_aggregate_with_explicit_overrides_fails_before_build(self):
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                result = self.run_suite(
+                    aggregate=aggregate,
+                    long=True,
+                    FUZZ_TOTAL_TIMEOUT_OVERRIDE="",
+                    FUZZ_MAX_TOTAL_OVERRIDE="85",
+                    FUZZ_TIMEOUT_OVERRIDE="115s",
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(any(call[:2] == ["fuzz", "build"] for call in self.calls()))
+
+    def test_success_removes_originals_and_retains_bound_recovery_without_caches(self):
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                _, raw = self.seed_stale_collection()
+                cache = self.root / "fuzz/target/cache"
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_bytes(b"build cache excluded")
+                result = self.run_suite(aggregate=aggregate)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                backup, manifest = self.assert_backup()
+                for path, content in raw.items():
+                    self.assertFalse(path.exists())
+                    self.assertEqual(
+                        (backup / "raw" / path.relative_to(self.root / "fuzz")).read_bytes(),
+                        content,
+                    )
+                for name in manifest["raw"]:
+                    self.assertFalse((self.root / "fuzz" / name).exists())
+                    self.assertTrue(manifest["raw"][name]["present"])
+                self.assertFalse(cache.exists())
+                self.assertEqual(self.summary()["status"], "passed")
+                self.assertFalse(list(backup.glob("recovery-result-*.json")))
+
+    def test_absent_and_empty_raw_roots_preserve_presence_state(self):
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        backup, manifest = self.assert_backup()
+        self.assertFalse(manifest["raw"]["artifacts"]["present"])
+        self.assertFalse((backup / "raw/artifacts").exists())
+        (self.root / "fuzz/artifacts").mkdir()
+        self.install_helper_hooks({"--cleanup-result": "raise SystemExit(29)"})
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        backup, manifest = self.assert_backup()
+        self.assertTrue(manifest["raw"]["artifacts"]["present"])
+        self.assertEqual(manifest["raw"]["artifacts"]["inventory"], {})
+        self.assertTrue((backup / "raw/artifacts").is_dir())
+        self.assertTrue((self.root / "fuzz/artifacts").is_dir())
+
+    def test_partial_receipt_write_restores_raw_and_failed_pre_cleanup_evidence(self):
+        self.install_helper_hooks(
+            {
+                "--cleanup-result": """
+original_write = write_json
+def partial_write(path, data):
+    if path.name == 'run_summary.json':
+        path.write_text('{"status":"passed"')
+        raise OSError('fixture partial receipt write')
+    original_write(path, data)
+write_json = partial_write
+"""
+            }
+        )
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                _, raw = self.seed_stale_collection()
+                result = self.run_suite(aggregate=aggregate)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assert_restored(raw, "receipt", 0)
+
+    def test_silent_corrupt_receipt_restores_raw_and_failed_status(self):
+        for name in ("execution.json", "run_summary.json"):
+            self.install_helper_hooks(
+                {
+                    "--cleanup-result": f"""
+original_write = write_json
+def silent_corruption(path, data):
+    if path.name == {name!r}:
+        data = dict(data, status='awaiting-cleanup')
+    original_write(path, data)
+write_json = silent_corruption
+"""
+                }
+            )
+            for aggregate in (False, True):
+                with self.subTest(name=name, aggregate=aggregate):
+                    _, raw = self.seed_stale_collection()
+                    result = self.run_suite(aggregate=aggregate)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("cleanup receipt write did not preserve", result.stderr)
+                    self.assert_restored(raw, "receipt", 0)
+
+    def test_partial_removal_restores_deleted_corpus_and_keeps_crashes(self):
+        self.install_cleanup_hook("shutil.rmtree(root / 'fuzz/corpus')\nraise SystemExit(31)")
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                _, raw = self.seed_stale_collection()
+                result = self.run_suite(aggregate=aggregate)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue((self.root / "cleanup-called").exists())
+                self.assert_restored(raw, "removal", 31)
+
+    def test_backup_copy_failure_skips_removal_and_keeps_partial_copy(self):
+        _, raw = self.seed_stale_collection()
+        self.install_cleanup_hook("pass")
+        self.install_helper_hooks(
+            {
+                "--backup-cleanup": """
+def fail_copy(source, destination, **kwargs):
+    destination.mkdir()
+    (destination / 'partial-copy').write_bytes(b'partial')
+    raise OSError('fixture copy failure')
+shutil.copytree = fail_copy
+"""
+            }
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / "cleanup-called").exists())
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+        recovery = self.artifacts / "fuzz/cleanup-recovery" / self.summary()["execution"]["run_id"]
+        self.assertFalse((recovery / "backup-ready.json").exists())
+        self.assertEqual((recovery / "raw/corpus/partial-copy").read_bytes(), b"partial")
+
+    def test_backup_detects_evidence_and_source_changes_before_removal(self):
+        for changed in ("collection.ok", "fuzz/fuzz_targets/fuzz_par.rs"):
+            with self.subTest(changed=changed):
+                _, raw = self.seed_stale_collection()
+                self.install_cleanup_hook("pass")
+                self.install_helper_hooks(
+                    {
+                        "--backup-cleanup": f"""
+original_copy = shutil.copytree
+def change_after_copy(source, destination, *args, **kwargs):
+    result = original_copy(source, destination, *args, **kwargs)
+    changed = {changed!r}
+    directory = Path(os.environ['SECURITY_ARTIFACT_DIR']) / 'fuzz'
+    path = (directory / changed) if changed == 'collection.ok' else (ROOT / changed)
+    path.write_bytes(path.read_bytes() + b'\\n')
+    return result
+shutil.copytree = change_after_copy
+"""
+                    }
+                )
+                result = self.run_suite()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                expected = (
+                    "collection evidence changed during recovery copy"
+                    if changed == "collection.ok"
+                    else "source identity changed before cleanup"
+                )
+                self.assertIn(expected, result.stderr)
+                self.assertFalse((self.root / "cleanup-called").exists())
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
+                recovery = (
+                    self.artifacts / "fuzz/cleanup-recovery" / self.summary()["execution"]["run_id"]
+                )
+                self.assertFalse((recovery / "backup-ready.json").exists())
+
+    def test_restore_copy_failure_retains_verified_backup_and_failed_disposition(self):
+        _, raw = self.seed_stale_collection()
+        self.install_helper_hooks(
+            {
+                "--cleanup-result": "raise SystemExit(29)",
+                "--restore-cleanup": """
+def fail_copy(*args, **kwargs):
+    raise OSError('fixture restoration failure')
+shutil.copytree = fail_copy
+""",
+            }
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.summary()["status"], "failed")
+        self.assertEqual(self.summary()["execution"]["cleanup_recovery"]["status"], "failed")
+        backup, _ = self.assert_backup()
+        for path, content in raw.items():
+            self.assertFalse(path.exists())
+            self.assertEqual(
+                (backup / "raw" / path.relative_to(self.root / "fuzz")).read_bytes(), content
+            )
+        report = json.loads(next(backup.glob("recovery-result-*.json")).read_text())
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("fixture restoration failure", report["error"])
+
+    def test_restore_evidence_failure_retains_original_receipts_and_diagnostics(self):
+        self.install_helper_hooks(
+            {
+                "--cleanup-result": "raise SystemExit(29)",
+                "--restore-cleanup": """
+original_write = write_json
+def fail_evidence(path, data):
+    if path.name == 'execution.json':
+        raise OSError('fixture evidence restoration failure')
+    original_write(path, data)
+write_json = fail_evidence
+""",
+            }
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        backup, _ = self.assert_backup()
+        self.assertEqual((self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input")
+        report = json.loads(next(backup.glob("recovery-result-*.json")).read_text())
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("fixture evidence restoration failure", report["evidence_error"])
+        self.assertIn("original evidence retained", result.stderr)
+
+    def test_restore_refuses_top_level_and_inner_existing_symlinks(self):
+        for nested in (False, True):
+            with self.subTest(nested=nested):
+                outside = Path(self.temporary) / "outside"
+                outside.mkdir(exist_ok=True)
+                marker = outside / "preserve-marker"
+                marker.write_bytes(b"owned external fixture remains unchanged")
+                relative = "fuzz/corpus/link" if nested else "fuzz/corpus"
+                self.install_cleanup_hook(
+                    "shutil.rmtree(root / 'fuzz/corpus')\n"
+                    + ("(root / 'fuzz/corpus').mkdir()\n" if nested else "")
+                    + f"(root / {relative!r}).symlink_to({str(outside)!r})\n"
+                    + "raise SystemExit(31)"
+                )
+                result = self.run_suite()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(marker.read_bytes(), b"owned external fixture remains unchanged")
+                self.assertEqual(list(outside.iterdir()), [marker])
+                backup, _ = self.assert_backup()
+                self.assertEqual(
+                    self.summary()["execution"]["cleanup_recovery"]["status"], "failed"
+                )
+                self.assertTrue(list(backup.glob("recovery-result-*.json")))
+                corpus = self.root / "fuzz/corpus"
+                if corpus.is_symlink():
+                    corpus.unlink()
+                else:
+                    shutil.rmtree(corpus)
+
+    def test_backup_rejects_top_level_raw_symlink_without_removal(self):
+        outside = Path(self.temporary) / "outside"
+        outside.mkdir()
+        marker = outside / "preserve-marker"
+        marker.write_bytes(b"external fixture")
+        (self.root / "fuzz/artifacts").symlink_to(outside)
+        self.install_cleanup_hook("pass")
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / "cleanup-called").exists())
+        self.assertTrue((self.root / "fuzz/artifacts").is_symlink())
+        self.assertEqual(marker.read_bytes(), b"external fixture")
+        self.assertIn("owned raw directory roots", result.stderr)
+
+    def test_restore_rejects_missing_empty_backup_and_symlinked_containers(self):
+        for mutation in ("missing-empty", "raw", "evidence"):
+            with self.subTest(mutation=mutation):
+                empty = self.root / "fuzz/artifacts"
+                empty.mkdir(exist_ok=True)
+                outside = Path(self.temporary) / ("outside-" + mutation)
+                outside.mkdir()
+                marker = outside / "preserve-marker"
+                marker.write_bytes(b"external fixture")
+                self.install_helper_hooks(
+                    {
+                        "--cleanup-result": "raise SystemExit(29)",
+                        "--restore-cleanup": f"""
+run_id = sys.argv[sys.argv.index('--restore-cleanup') + 2]
+directory = Path(sys.argv[sys.argv.index('--restore-cleanup') + 1])
+recovery = directory / 'cleanup-recovery' / run_id
+mutation = {mutation!r}
+if mutation == 'missing-empty':
+    (recovery / 'raw/artifacts').rmdir()
+else:
+    container = recovery / mutation
+    container.rename(recovery / (mutation + '-preserved'))
+    container.symlink_to({str(outside)!r})
+""",
+                    }
+                )
+                result = self.run_suite()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotEqual(self.summary()["status"], "passed")
+                self.assertEqual(marker.read_bytes(), b"external fixture")
+                self.assertEqual(list(outside.iterdir()), [marker])
+                self.assertFalse((self.root / "fuzz/corpus").exists())
+                self.assertIn("fuzz recovery", result.stderr)
+
+    def test_inner_symlinks_are_copied_and_restored_as_inert_links(self):
+        outside = Path(self.temporary) / "outside"
+        outside.mkdir()
+        marker = outside / "preserve-marker"
+        marker.write_bytes(b"external fixture")
+        link = self.root / "fuzz/corpus/inert-link"
+        link.parent.mkdir()
+        link.symlink_to(outside)
+        self.install_helper_hooks({"--cleanup-result": "raise SystemExit(29)"})
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        backup, manifest = self.assert_backup()
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.readlink(), outside)
+        saved = backup / "raw/corpus/inert-link"
+        self.assertTrue(saved.is_symlink())
+        self.assertEqual(saved.readlink(), outside)
+        self.assertEqual(manifest["raw"]["corpus"]["inventory"]["inert-link"]["type"], "symlink")
+        self.assertNotIn("inert-link/preserve-marker", manifest["raw"]["corpus"]["inventory"])
+        self.assertEqual(marker.read_bytes(), b"external fixture")
+        self.assertEqual(self.summary()["execution"]["cleanup_recovery"]["status"], "restored")
 
 
 if __name__ == "__main__":
