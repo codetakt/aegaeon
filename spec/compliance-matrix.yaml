@@ -1588,6 +1588,7 @@ rfc_9449:
     rule: verify_dpop_compact_jwt
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_header_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-jwt-format
   status: verified
@@ -1595,6 +1596,9 @@ rfc_9449:
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (dpop_authentication); JWT well-formedness has no single F* function counterpart."
+  notes:
+  - "The production Rust verifier rejects private OKP d members, all present crit parameters, duplicate protected-header/JWK names, and b64 values other than Boolean true (RFC 9449 sections 4.2-4.3, RFC 7515 sections 4/4.1.11, RFC 7797 section 7). Unknown noncritical fields remain permitted."
+  - "Real Ed25519 signed regressions exercise both public FFI entry points. These runtime tests do not extend the cited protocol model or establish new formal discharge."
 - id: 9449-002
   section: '4.2'
   requirement: MUST
