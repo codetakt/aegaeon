@@ -258,8 +258,10 @@ def locked_entry(path: str, entry: dict[str, Any]) -> None:
         str(entry.get("resolved", "")).startswith("https://registry.npmjs.org/"),
         "Unreviewed package registry",
     )
+    integrity = str(entry.get("integrity", ""))
+    require(not integrity.startswith("sha1-"), "SHA-1 package integrity is not supported")
     require(
-        bool(re.fullmatch(r"sha(?:512|256|1)-[A-Za-z0-9+/=]+", str(entry.get("integrity", "")))),
+        bool(re.fullmatch(r"sha(?:512|256)-[A-Za-z0-9+/=]+", integrity)),
         "Missing or unknown package integrity",
     )
 

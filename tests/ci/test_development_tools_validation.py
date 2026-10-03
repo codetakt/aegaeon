@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import io
 import json
 import os
@@ -178,6 +180,41 @@ class DevelopmentToolsTests(unittest.TestCase):
             candidate = {**entry, field: value}
             with self.subTest(field=field), pytest.raises(ValueError, match=r"."):
                 tools.locked_entry(path, candidate)
+
+    def test_sha256_and_sha512_lock_integrity_accepted(self):
+        path, entry = next((p, v) for p, v in self.lock["packages"].items() if p)
+        for algorithm in ("sha256", "sha512"):
+            digest = base64.b64encode(hashlib.new(algorithm, b"package").digest()).decode()
+            candidate = {**entry, "integrity": f"{algorithm}-{digest}"}
+            with self.subTest(algorithm=algorithm):
+                tools.locked_entry(path, candidate)
+
+    def test_weak_missing_and_malformed_lock_integrity_rejected(self):
+        path, entry = next((p, v) for p, v in self.lock["packages"].items() if p)
+        sha1_digest = base64.b64encode(
+            hashlib.sha1(b"package", usedforsecurity=False).digest()
+        ).decode()
+        cases = [
+            (f"sha1-{sha1_digest}", "SHA-1 package integrity is not supported"),
+            ("sha384-YWJj", "Missing or unknown package integrity"),
+            ("md5-YWJj", "Missing or unknown package integrity"),
+            ("SHA256-YWJj", "Missing or unknown package integrity"),
+            ("sha256-", "Missing or unknown package integrity"),
+            ("sha512-***", "Missing or unknown package integrity"),
+            ("sha256-YWJj extra", "Missing or unknown package integrity"),
+            ("", "Missing or unknown package integrity"),
+            (None, "Missing or unknown package integrity"),
+        ]
+        for integrity, diagnostic in cases:
+            candidate = {**entry, "integrity": integrity}
+            with self.subTest(integrity=integrity), pytest.raises(ValueError, match=diagnostic):
+                tools.locked_entry(path, candidate)
+        candidate = {key: value for key, value in entry.items() if key != "integrity"}
+        with (
+            self.subTest(integrity="absent"),
+            pytest.raises(ValueError, match="Missing or unknown package integrity"),
+        ):
+            tools.locked_entry(path, candidate)
 
     def test_audit_complete_dev_graph_passes(self):
         tools.audit_contract(clean_audit(), sample_lock())
