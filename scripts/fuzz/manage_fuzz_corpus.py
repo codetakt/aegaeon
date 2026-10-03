@@ -433,7 +433,7 @@ def prepare_run(directory: Path) -> None:
     total = os.environ.get("FUZZ_TOTAL_TIMEOUT", "")
     maximum = os.environ.get("FUZZ_MAX_TOTAL", "30")
     watchdog = os.environ.get("FUZZ_TIMEOUT", "60s")
-    if not maximum or not watchdog:
+    if not maximum or not watchdog or (os.environ.get("FUZZ_LONG") == "1" and not total):
         invalid("fuzz budgets must be nonempty")
     if os.environ.get("FUZZ_LONG") == "1":
         maximum = "" if maximum == "auto" else maximum
@@ -650,7 +650,7 @@ def finish_run(directory: Path, exit_code: int) -> bool:
     return passed
 
 
-def cleanup_result(directory: Path, exit_code: int) -> None:
+def collected_execution(directory: Path) -> dict:
     data = load_execution(directory)
     summary_path = directory / "run_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -664,6 +664,13 @@ def cleanup_result(directory: Path, exit_code: int) -> None:
         or marker["summary_sha256"] != digest(collected_summary)
     ):
         invalid("fuzz collection receipt is missing or inconsistent")
+    return data
+
+
+def cleanup_result(directory: Path, exit_code: int) -> None:
+    data = collected_execution(directory)
+    summary_path = directory / "run_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
     data["cleanup_exit_code"] = exit_code
     # Stage success is recorded only after the required cleanup has a receipt.
     data["status"] = (
@@ -672,9 +679,210 @@ def cleanup_result(directory: Path, exit_code: int) -> None:
     summary.update(execution=data, status=data["status"])
     write_json(directory / "execution.json", data)
     write_json(summary_path, summary)
+    if (
+        load_execution(directory) != data
+        or json.loads(summary_path.read_text(encoding="utf-8")) != summary
+    ):
+        invalid("fuzz cleanup receipt write did not preserve the final execution")
 
 
-def main() -> int:
+RECOVERY_RAW_NAMES = ("corpus", "artifacts", "corpus_archive")
+RECOVERY_EVIDENCE_NAMES = (
+    "execution.json",
+    "run_summary.json",
+    "collection.ok",
+    "collection-summary.json",
+)
+
+
+def owned_raw_root(name: str) -> Path:
+    path = FUZZ_DIR / name
+    if FUZZ_DIR.resolve() != FUZZ_DIR or path.is_symlink() or path.resolve() != path:
+        invalid("fuzz recovery requires owned raw directory roots")
+    if path.exists() and not path.is_dir():
+        invalid("fuzz recovery raw root is not a directory")
+    return path
+
+
+def recovery_directory(directory: Path, run_id: str, *, create: bool = False) -> Path:
+    if str(uuid.UUID(run_id)) != run_id:
+        invalid("malformed fuzz recovery run ID")
+    owned = directory.resolve()
+    if any(owned.is_relative_to(FUZZ_DIR / name) for name in (*RECOVERY_RAW_NAMES, "target")):
+        invalid("fuzz recovery evidence must be outside transient output roots")
+    container = owned / "cleanup-recovery"
+    recovery = container / run_id
+    if container.is_symlink() or recovery.is_symlink():
+        invalid("fuzz recovery directory cannot be a symlink")
+    if create:
+        recovery.mkdir(parents=True, exist_ok=False)
+    if not recovery.is_dir() or recovery.resolve() != recovery:
+        invalid("fuzz recovery directory is unavailable or unsafe")
+    return recovery
+
+
+def raw_inventory(directory: Path) -> dict:
+    inventory = {}
+    for path in sorted(directory.rglob("*")):
+        name = path.relative_to(directory).as_posix()
+        if path.is_symlink():
+            inventory[name] = {"type": "symlink", "target": str(path.readlink())}
+        elif path.is_file():
+            inventory[name] = {"type": "file", "sha256": digest(path)}
+        elif path.is_dir():
+            inventory[name] = {"type": "directory"}
+        else:
+            invalid("fuzz recovery encountered a special filesystem entry")
+    return inventory
+
+
+def copy_raw_backups(recovery: Path) -> dict:
+    raw = recovery / "raw"
+    raw.mkdir()
+    records = {}
+    for name in RECOVERY_RAW_NAMES:
+        source = owned_raw_root(name)
+        present = source.exists()
+        inventory = raw_inventory(source) if present else {}
+        if present:
+            shutil.copytree(source, raw / name, symlinks=True)
+            if raw_inventory(raw / name) != inventory or raw_inventory(source) != inventory:
+                invalid("fuzz raw evidence changed during recovery copy")
+        records[name] = {"present": present, "inventory": inventory}
+    return records
+
+
+def backup_cleanup(directory: Path) -> str:
+    data = collected_execution(directory)
+    if data["status"] != "awaiting-cleanup":
+        invalid("only successful current fuzz execution can prepare cleanup")
+    snapshots = {}
+    for name in RECOVERY_EVIDENCE_NAMES:
+        path = directory / name
+        if path.is_symlink() or not path.is_file():
+            invalid("fuzz collection evidence must be regular files")
+        snapshots[name] = path.read_bytes()
+    recovery = recovery_directory(directory, data["run_id"], create=True)
+    evidence = recovery / "evidence"
+    evidence.mkdir()
+    for name, content in snapshots.items():
+        (evidence / name).write_bytes(content)
+    records = copy_raw_backups(recovery)
+    if any((directory / name).read_bytes() != content for name, content in snapshots.items()):
+        invalid("fuzz collection evidence changed during recovery copy")
+    if source_hashes(data["selected_targets"]) != data["source"]["files"]:
+        invalid("fuzz source identity changed before cleanup")
+    write_json(
+        recovery / "backup-ready.json",
+        {
+            "run_id": data["run_id"],
+            "source": data["source"]["files"],
+            "raw": records,
+            "evidence": {name: digest(evidence / name) for name in snapshots},
+        },
+    )
+    return data["run_id"]
+
+
+def validate_raw_backups(recovery: Path, manifest: dict) -> None:
+    for name, record in manifest["raw"].items():
+        source = recovery / "raw" / name
+        if not isinstance(record["present"], bool) or source.is_symlink():
+            invalid("fuzz recovery raw presence or root is unsafe")
+        if source.exists() != record["present"]:
+            invalid("fuzz recovery raw copy presence changed")
+        if record["present"] and (
+            not source.is_dir() or raw_inventory(source) != record["inventory"]
+        ):
+            invalid("fuzz recovery raw copy is missing or changed")
+
+
+def load_cleanup_backup(directory: Path, run_id: str) -> tuple[Path, dict, dict]:
+    recovery = recovery_directory(directory, run_id)
+    manifest_path = recovery / "backup-ready.json"
+    if manifest_path.is_symlink():
+        invalid("fuzz recovery manifest cannot be a symlink")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest["run_id"] != run_id or set(manifest["raw"]) != set(RECOVERY_RAW_NAMES):
+        invalid("fuzz recovery manifest does not bind the current run")
+    for name in ("raw", "evidence"):
+        container = recovery / name
+        if container.is_symlink() or not container.is_dir() or container.resolve() != container:
+            invalid("fuzz recovery container is missing or unsafe")
+    snapshots = {}
+    for name in RECOVERY_EVIDENCE_NAMES:
+        path = recovery / "evidence" / name
+        if path.is_symlink() or not path.is_file() or digest(path) != manifest["evidence"][name]:
+            invalid("fuzz recovery evidence is missing or changed")
+        snapshots[name] = path.read_bytes()
+    data = json.loads(snapshots["execution.json"])
+    marker = json.loads(snapshots["collection.ok"])
+    if (
+        data["run_id"] != run_id
+        or marker["run_id"] != run_id
+        or data["source"]["files"] != manifest["source"]
+        or marker["summary_sha256"] != manifest["evidence"]["collection-summary.json"]
+    ):
+        invalid("fuzz recovery identity or collection receipt is inconsistent")
+    validate_raw_backups(recovery, manifest)
+    return recovery, manifest, snapshots
+
+
+def restore_raw_copy(recovery: Path, manifest: dict) -> None:
+    for name, record in manifest["raw"].items():
+        destination = owned_raw_root(name)
+        if destination.exists() and any(path.is_symlink() for path in destination.rglob("*")):
+            invalid("fuzz restoration refuses existing symlink traversal")
+        if record["present"]:
+            shutil.copytree(recovery / "raw" / name, destination, symlinks=True, dirs_exist_ok=True)
+            if raw_inventory(destination) != record["inventory"]:
+                invalid("fuzz restored evidence differs from its recovery copy")
+        elif destination.exists():
+            invalid("fuzz restoration found unexpected raw output")
+
+
+def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -> bool:
+    if reason not in ("removal", "receipt"):
+        invalid("unknown fuzz cleanup recovery reason")
+    recovery, manifest, snapshots = load_cleanup_backup(directory, run_id)
+    report = {
+        "run_id": run_id,
+        "reason": reason,
+        "status": "restored",
+        "cleanup_exit_code": exit_code,
+    }
+    try:
+        restore_raw_copy(recovery, manifest)
+    except (OSError, ValueError) as error:
+        report.update(status="failed", error=str(error))
+        print(
+            f"[security] fuzz raw restoration failed; recovery copies retained: {error}",
+            file=sys.stderr,
+        )
+    data = json.loads(snapshots["execution.json"])
+    summary = json.loads(snapshots["run_summary.json"])
+    data.update(status="failed", cleanup_exit_code=exit_code, cleanup_recovery=report)
+    summary.update(status="failed", execution=data)
+    try:
+        for name in RECOVERY_EVIDENCE_NAMES:
+            if (directory / name).is_symlink():
+                invalid("fuzz evidence restoration refuses existing symlink traversal")
+        for name in ("collection.ok", "collection-summary.json"):
+            (directory / name).write_bytes(snapshots[name])
+        write_json(directory / "execution.json", data)
+        write_json(directory / "run_summary.json", summary)
+    except (OSError, ValueError) as error:
+        report.update(status="failed", evidence_error=str(error))
+        print(
+            f"[security] fuzz evidence restoration failed; original evidence retained: {error}",
+            file=sys.stderr,
+        )
+    # Preserve the verified backup and append recovery disposition, even after failure.
+    write_json(recovery / f"recovery-result-{uuid.uuid4()}.json", report)
+    return report["status"] == "restored"
+
+
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument("--prepare-run", type=Path)
@@ -682,10 +890,36 @@ def main() -> int:
     actions.add_argument("--record-target", nargs=4, metavar=("DIR", "TARGET", "PHASE", "EXIT"))
     actions.add_argument("--finish-run", nargs=2, metavar=("DIR", "EXIT"))
     actions.add_argument("--cleanup-result", nargs=2, metavar=("DIR", "EXIT"))
-    args = parser.parse_args()
+    actions.add_argument("--backup-cleanup", type=Path)
+    actions.add_argument("--restore-cleanup", nargs=4, metavar=("DIR", "RUN_ID", "EXIT", "REASON"))
+    return parser.parse_args()
+
+
+def cleanup_action(args: argparse.Namespace) -> int | None:
+    result = None
+    if args.cleanup_result:
+        directory, code = args.cleanup_result
+        cleanup_result(Path(directory), int(code))
+        result = 0
+    elif args.backup_cleanup:
+        print(backup_cleanup(args.backup_cleanup))
+        result = 0
+    elif args.restore_cleanup:
+        directory, run_id, code, reason = args.restore_cleanup
+        result = (
+            0 if restore_cleanup(Path(directory), run_id, int(code), reason) else EVIDENCE_ERROR
+        )
+    return result
+
+
+def main() -> int:
+    args = parse_arguments()
     result = 0
     try:
-        if args.prepare_run:
+        recovery_result = cleanup_action(args)
+        if recovery_result is not None:
+            result = recovery_result
+        elif args.prepare_run:
             prepare_run(args.prepare_run)
         elif args.record_environment:
             record_environment(args.record_environment)
@@ -697,9 +931,6 @@ def main() -> int:
         elif args.finish_run:
             directory, code = args.finish_run
             result = 0 if finish_run(Path(directory), int(code)) else 1
-        elif args.cleanup_result:
-            directory, code = args.cleanup_result
-            cleanup_result(Path(directory), int(code))
         else:
             collect_corpus()
     except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:

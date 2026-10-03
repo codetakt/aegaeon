@@ -183,13 +183,14 @@ Commit regenerated output when it changes.
 ## Fuzzing notes (security suite)
 
 - Fuzz execution is required: all seven configured targets must build and complete normally. A crash, watchdog, missing execution or evidence, or cleanup failure fails the stage. Per-target commands, statuses, executable/log digests and separate corpus/crash archives are retained under `artifacts/security/latest/fuzz/`, with corpus history under `artifacts/security/history/`.
+- Cleanup prepares a verified, run-ID-bound copy of raw corpus, crashes and corpus archives under `artifacts/security/latest/fuzz/cleanup-recovery/`. Copies and pre-cleanup receipts remain as execution evidence. A removal or final receipt-writing failure restores raw inputs when possible and fails the stage; restoration failure retains the recovery evidence. Build targets and caches are excluded. Recovery refuses unsafe directory roots and existing symlink traversal.
 - Default smoke budgets are 30 internal libFuzzer seconds and a 60-second external watchdog per target. Watchdog termination is a failure; it is distinct from normal libFuzzer completion.
 - For longer local runs, use `nix run .#security-suite -- --fuzz-long`. Its default 600-second aggregate internal allocation divides across seven targets into 85 seconds each, with a 115-second watchdog each.
 - `FUZZ_TOTAL_TIMEOUT` and long-mode `FUZZ_TOTAL_TIMEOUT_OVERRIDE` specify aggregate **internal fuzz seconds**. Compilation, watchdog grace and artifact collection are excluded. Division never exceeds that allocation and must allow at least 30 seconds per selected target. The workflow job timeout bounds overall wall time.
 - Local overrides:
   - `FUZZ_TARGETS="fuzz_bearer_token fuzz_dpop_proof"` selects an explicitly reported local subset. CI requires all seven targets; empty, duplicate and unknown selections fail.
   - Smoke: `FUZZ_TIMEOUT=1m FUZZ_MAX_TOTAL=30`.
-  - Long: `FUZZ_TOTAL_TIMEOUT_OVERRIDE=1200s`; optional `FUZZ_MAX_TOTAL_OVERRIDE=120` caps each target's internal allocation, and `FUZZ_TIMEOUT_OVERRIDE=3m` sets a watchdog with at least 30 seconds of grace. Empty, malformed or insufficient budgets fail.
+  - Long: `FUZZ_TOTAL_TIMEOUT_OVERRIDE=1200s`; optional `FUZZ_MAX_TOTAL_OVERRIDE=120` caps each target's internal allocation, and `FUZZ_TIMEOUT_OVERRIDE=3m` sets a watchdog with at least 30 seconds of grace. Empty, malformed or insufficient budgets fail. Long mode requires a nonempty aggregate allocation even with explicit per-target and watchdog overrides.
 
 ## OIDF conformance (local-only for now)
 

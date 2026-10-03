@@ -544,7 +544,7 @@ run_cargo_vet_stage() {
 }
 
 run_fuzz_stage() {
-	local result=0 cleanup_result=0 dir="$ARTIFACT_BASE/fuzz"
+	local result=0 cleanup_result=0 recovery_run_id dir="$ARTIFACT_BASE/fuzz"
 	# Invalidate the previous receipt before logging or child setup can fail.
 	if ! rm -f "$dir/collection.ok"; then
 		echo "[security] cannot invalidate previous fuzz receipt; retaining transient outputs" >&2
@@ -557,13 +557,27 @@ run_fuzz_stage() {
 	fi
 	# A collected failure still needs its raw corpus and crashes for upload.
 	if [[ $result -eq 0 && -f "$dir/collection.ok" ]]; then
-		if cleanup_fuzz_outputs; then
-			cleanup_result=0
+		if recovery_run_id="$(python3 scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
+			if cleanup_fuzz_outputs; then
+				cleanup_result=0
+			else
+				cleanup_result=$?
+			fi
+			if [[ $cleanup_result -ne 0 ]]; then
+				result=1
+				python3 scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+					"$dir" "$recovery_run_id" "$cleanup_result" removal || result=1
+			elif python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" 0; then
+				: # Keep the bound recovery copies as execution evidence.
+			else
+				result=1
+				python3 scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+					"$dir" "$recovery_run_id" 0 receipt || result=1
+			fi
 		else
-			cleanup_result=$?
+			echo "[security] fuzz recovery copy incomplete; retaining transient outputs" >&2
 			result=1
 		fi
-		python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" "$cleanup_result" || result=1
 	else
 		echo "[security] fuzz stage failed or evidence incomplete; retaining transient outputs" >&2
 		result=1
