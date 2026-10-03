@@ -128,7 +128,7 @@ reset_cargo_target_dir() {
 }
 
 cleanup_fuzz_outputs() {
-	rm -rf fuzz/target fuzz/artifacts fuzz/corpus fuzz/corpus_archive || true
+	rm -rf fuzz/target fuzz/artifacts fuzz/corpus fuzz/corpus_archive
 }
 
 cleanup_sanitizer_outputs() {
@@ -246,14 +246,15 @@ run_fuzz_cargo_vet() {
 }
 
 run_step() {
-	local name="$1"
+	local name="$1" result
 	shift
-	echo "[security] >>> $name" | tee -a "$LOG_FILE"
+	echo "[security] >>> $name" | tee -a "$LOG_FILE" || return 1
 	if "$@" >>"$LOG_FILE" 2>&1; then
-		echo "[security] <<< $name: ok" | tee -a "$LOG_FILE"
+		echo "[security] <<< $name: ok" | tee -a "$LOG_FILE" || return 1
 	else
-		echo "[security] <<< $name: failed" | tee -a "$LOG_FILE"
-		return 1
+		result=$?
+		echo "[security] <<< $name: failed" | tee -a "$LOG_FILE" || return "$result"
+		return "$result"
 	fi
 }
 
@@ -285,133 +286,125 @@ DEFAULT_FUZZ_TARGETS=(
 	fuzz_introspection
 	fuzz_par
 )
-FUZZ_TARGETS="${FUZZ_TARGETS:-${DEFAULT_FUZZ_TARGETS[*]}}"
-FUZZ_TIMEOUT="${FUZZ_TIMEOUT:-1m}"
-FUZZ_MAX_TOTAL="${FUZZ_MAX_TOTAL:-30}"
-FUZZ_TOTAL_TIMEOUT="${FUZZ_TOTAL_TIMEOUT:-}"
-
+# An explicitly empty selection or budget must fail rather than use defaults.
+FUZZ_TARGETS="${FUZZ_TARGETS-${DEFAULT_FUZZ_TARGETS[*]}}"
+FUZZ_TIMEOUT="${FUZZ_TIMEOUT-60s}"
+FUZZ_MAX_TOTAL="${FUZZ_MAX_TOTAL-30}"
+FUZZ_TOTAL_TIMEOUT="${FUZZ_TOTAL_TIMEOUT-}"
 if [ "$FUZZ_LONG" -eq 1 ]; then
-	FUZZ_TOTAL_TIMEOUT="${FUZZ_TOTAL_TIMEOUT_OVERRIDE:-600s}"
-	FUZZ_TIMEOUT="${FUZZ_TIMEOUT_OVERRIDE:-5m}"
-	FUZZ_MAX_TOTAL="${FUZZ_MAX_TOTAL_OVERRIDE:-300}"
-	echo \
-		"[security] long fuzz mode enabled" \
-		"(timeout=$FUZZ_TIMEOUT, max_total=$FUZZ_MAX_TOTAL, total_timeout=$FUZZ_TOTAL_TIMEOUT)" |
-		tee -a "$LOG_FILE"
+	FUZZ_TOTAL_TIMEOUT="${FUZZ_TOTAL_TIMEOUT_OVERRIDE-600s}"
+	FUZZ_TIMEOUT="${FUZZ_TIMEOUT_OVERRIDE-auto}"
+	FUZZ_MAX_TOTAL="${FUZZ_MAX_TOTAL_OVERRIDE-auto}"
 fi
+export FUZZ_TARGETS FUZZ_TIMEOUT FUZZ_MAX_TOTAL FUZZ_TOTAL_TIMEOUT FUZZ_LONG
+
+run_fuzz_targets() (
+	# Every required operation has a checked return: callers may invoke this
+	# function in a conditional, which disables Bash's errexit inside functions.
+	local dir="$1" configuration internal watchdog host target rc record_result result=0
+	local fuzz_cmd=(cargo fuzz)
+	configuration="$(python3 scripts/fuzz/manage_fuzz_corpus.py --prepare-run "$dir")" || return 1
+	read -r internal watchdog host <<<"$configuration"
+	if ! command -v cargo >/dev/null 2>&1 ||
+		! command -v cargo-fuzz >/dev/null 2>&1 ||
+		! command -v rustc >/dev/null 2>&1 ||
+		! command -v timeout >/dev/null 2>&1 || [[ $host == missing ]]; then
+		echo "[security] cargo, cargo-fuzz, rustc and timeout with a host target are required" >&2
+		return 1
+	fi
+	if ! "${fuzz_cmd[@]}" --help >"$dir/cargo-fuzz-help.log" 2>&1; then
+		echo "[security] cargo-fuzz not available" >&2
+		return 1
+	fi
+
+	unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_BUILD \
+		NIX_CFLAGS_COMPILE_FOR_TARGET NIX_CFLAGS_COMPILE_FOR_HOST
+	unset NIX_CFLAGS_LINK NIX_CFLAGS_LINK_FOR_BUILD \
+		NIX_CFLAGS_LINK_FOR_TARGET NIX_CFLAGS_LINK_FOR_HOST
+	unset NIX_LDFLAGS NIX_LDFLAGS_FOR_BUILD \
+		NIX_LDFLAGS_FOR_TARGET NIX_LDFLAGS_FOR_HOST RUSTFLAGS RUSTDOCFLAGS
+	# Retain the established LeakSanitizer policy on ptrace-restricted runners.
+	export ASAN_OPTIONS="${ASAN_OPTIONS:+${ASAN_OPTIONS}:}detect_leaks=0"
+	export LSAN_OPTIONS="${LSAN_OPTIONS:+${LSAN_OPTIONS}:}detect_leaks=0"
+	if [[ -n ${CC:-} ]]; then
+		local cc_support_dir nix_cflags=""
+		cc_support_dir="$(dirname "$CC")/../nix-support" || return 2
+		if [[ -d $cc_support_dir ]]; then
+			if [[ -f "$cc_support_dir/cc-cflags" ]]; then
+				nix_cflags+=" $(<"$cc_support_dir/cc-cflags")"
+			fi
+			if [[ -f "$cc_support_dir/libc-cflags" ]]; then
+				nix_cflags+=" $(<"$cc_support_dir/libc-cflags")"
+			fi
+			if [[ -n ${nix_cflags// /} ]]; then
+				export CFLAGS="${CFLAGS:-}${nix_cflags}"
+				export CXXFLAGS="${CXXFLAGS:-}${nix_cflags}"
+			fi
+		fi
+	fi
+	python3 scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
+	local targets_text="${FUZZ_TARGETS//$'\n'/ }" targets=()
+	targets_text="${targets_text//$'\r'/ }"
+	read -r -a targets <<<"$targets_text"
+	local target_dir="$CARGO_TARGET_DIR"
+	if [[ $target_dir != /* ]]; then
+		target_dir="$ROOT/$target_dir"
+	fi
+	target_dir+="/fuzz"
+	for target in "${targets[@]}"; do
+		mkdir -p "$dir/$target" || return 2
+		echo "[security] Building $target"
+		if "${fuzz_cmd[@]}" build --target-dir "$target_dir" --target "$host" "$target" \
+			>"$dir/$target/build.log" 2>&1; then
+			rc=0
+		else
+			rc=$?
+		fi
+		if python3 scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" build "$rc"; then
+			:
+		else
+			record_result=$?
+			[[ $record_result -eq 1 ]] || return 2
+			result=1
+			continue
+		fi
+		echo "[security] Fuzzing $target (internal=${internal}s, watchdog=${watchdog}s)"
+		if timeout --kill-after=10s "${watchdog}s" \
+			"${fuzz_cmd[@]}" run --target-dir "$target_dir" --target "$host" "$target" \
+			-- "-max_total_time=$internal" >"$dir/$target/run.log" 2>&1; then
+			rc=0
+		else
+			rc=$?
+		fi
+		if python3 scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" run "$rc"; then
+			:
+		else
+			record_result=$?
+			[[ $record_result -eq 1 ]] || return 2
+			result=1
+		fi
+	done
+	return "$result"
+)
 
 run_fuzz() {
-	local dir="$ARTIFACT_BASE/fuzz"
-	local history_dir="$SECURITY_HISTORY_DIR"
-	mkdir -p "$dir" "$history_dir"
-	local log="$dir/run.log"
-	: >"$log"
-	(
-		set -euo pipefail
-		exec > >(tee -a "$log") 2>&1
-		echo "[security] Running fuzz smoke (targets=$FUZZ_TARGETS)"
-		if [ ! -d fuzz ]; then
-			echo "[security] fuzz directory not found" >&2
-			exit 1
-		fi
-		if ! command -v cargo >/dev/null 2>&1; then
-			echo "[security] cargo not available" >&2
-			exit 1
-		fi
-		unset NIX_CFLAGS_COMPILE NIX_CFLAGS_COMPILE_FOR_BUILD \
-			NIX_CFLAGS_COMPILE_FOR_TARGET NIX_CFLAGS_COMPILE_FOR_HOST
-		unset NIX_CFLAGS_LINK NIX_CFLAGS_LINK_FOR_BUILD \
-			NIX_CFLAGS_LINK_FOR_TARGET NIX_CFLAGS_LINK_FOR_HOST
-		unset NIX_LDFLAGS NIX_LDFLAGS_FOR_BUILD \
-			NIX_LDFLAGS_FOR_TARGET NIX_LDFLAGS_FOR_HOST
-		echo \
-			"[security] fuzz env: cleared NIX_CFLAGS_* and NIX_LDFLAGS_*" \
-			"for include ordering"
-		echo \
-			"[security] fuzz compiler: CC=${CC:-unset} CXX=${CXX:-unset}" \
-			"cc=$(command -v cc || echo missing) c++=$(command -v c++ || echo missing)"
-		echo \
-			"[security] fuzz flags: NIX_CFLAGS_COMPILE=${NIX_CFLAGS_COMPILE:-unset}" \
-			"NIX_LDFLAGS=${NIX_LDFLAGS:-unset}"
-		unset RUSTFLAGS RUSTDOCFLAGS
-		FUZZ_CMD="cargo fuzz"
-		# LeakSanitizer is unreliable under ptrace-restricted runners; disable leak detection
-		if [ -n "${ASAN_OPTIONS:-}" ]; then
-			export ASAN_OPTIONS="${ASAN_OPTIONS}:detect_leaks=0"
-		else
-			export ASAN_OPTIONS="detect_leaks=0"
-		fi
-		if [ -n "${LSAN_OPTIONS:-}" ]; then
-			export LSAN_OPTIONS="${LSAN_OPTIONS}:detect_leaks=0"
-		else
-			export LSAN_OPTIONS="detect_leaks=0"
-		fi
-		if [[ -n ${CC:-} ]]; then
-			local cc_support_dir
-			cc_support_dir="$(cd "$(dirname "$CC")/../nix-support" && pwd)"
-			if [[ -d $cc_support_dir ]]; then
-				local nix_cflags=""
-				if [[ -f "$cc_support_dir/cc-cflags" ]]; then
-					nix_cflags+=" $(<"$cc_support_dir/cc-cflags")"
-				fi
-				if [[ -f "$cc_support_dir/libc-cflags" ]]; then
-					nix_cflags+=" $(<"$cc_support_dir/libc-cflags")"
-				fi
-				if [[ -n ${nix_cflags// /} ]]; then
-					export CFLAGS="${CFLAGS:-}${nix_cflags}"
-					export CXXFLAGS="${CXXFLAGS:-}${nix_cflags}"
-				fi
-			fi
-		fi
-		if ! sh -c "$FUZZ_CMD --help" >/dev/null 2>&1; then
-			echo "[security] cargo-fuzz not installed" >&2
-			exit 1
-		fi
-
-		local timeout="$FUZZ_TIMEOUT"
-		local max_total="$FUZZ_MAX_TOTAL"
-		if [ -n "$FUZZ_TOTAL_TIMEOUT" ]; then
-			local total_seconds=0
-			if printf "%s" "$FUZZ_TOTAL_TIMEOUT" | grep -Eq '^[0-9]+[sSmMhH]?$'; then
-				local unit value
-				unit=$(printf "%s" "$FUZZ_TOTAL_TIMEOUT" | sed -n 's/^[0-9]\+\([sSmMhH]\)$/\1/p')
-				value=$(printf "%s" "$FUZZ_TOTAL_TIMEOUT" | sed 's/[sSmMhH]$//')
-				[ -z "$value" ] && value=0
-				case "$unit" in
-				"" | s | S) total_seconds=$value ;;
-				m | M) total_seconds=$((value * 60)) ;;
-				h | H) total_seconds=$((value * 3600)) ;;
-				*) total_seconds=0 ;;
-				esac
-			fi
-			if [ "$total_seconds" -gt 0 ]; then
-				local count
-				count=$(echo "$FUZZ_TARGETS" | wc -w | tr -d ' ')
-				if [ "$count" -gt 0 ]; then
-					local per=$((total_seconds / count))
-					[ "$per" -lt 30 ] && per=30
-					timeout="${per}s"
-					max_total="$per"
-				fi
-			fi
-		fi
-
-		for target in $FUZZ_TARGETS; do
-			echo "[security] Building $target"
-			"$FUZZ_CMD" build "$target"
-			echo "[security] Fuzzing $target (timeout=$timeout, max_total_time=$max_total)"
-			if ! timeout "$timeout" "$FUZZ_CMD" run "$target" -- -max_total_time="$max_total"; then
-				echo "[security] WARNING: fuzzing $target failed" >&2
-			fi
-		done
-
-		FUZZ_RUN_ARTIFACT_DIR="$dir" \
-			FUZZ_HISTORY_DIR="$history_dir" \
-			python3 scripts/fuzz/manage_fuzz_corpus.py || true
-		if [ -f fuzz/corpus_meta/history.jsonl ]; then
-			cp fuzz/corpus_meta/history.jsonl "$history_dir/fuzz_history.jsonl" || true
-		fi
-	)
+	local dir="$ARTIFACT_BASE/fuzz" result=0
+	mkdir -p "$dir" "$SECURITY_HISTORY_DIR" || return 1
+	# A receipt from an earlier attempt must never satisfy this invocation.
+	rm -f "$dir/collection.ok" "$dir/execution.json" "$dir/run_summary.json" || return 1
+	if run_fuzz_targets "$dir" >"$dir/run.log" 2>&1; then
+		result=0
+	else
+		result=$?
+	fi
+	cat "$dir/run.log" || result=1
+	# Collect corpus and crash archives even after setup, build or run failures.
+	# Collection writes its marker only after all evidence has been checked.
+	if ! FUZZ_RUN_ARTIFACT_DIR="$dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR" \
+		python3 scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
+		result=1
+	fi
+	return "$result"
 }
 
 run_geiger() {
@@ -551,8 +544,25 @@ run_cargo_vet_stage() {
 }
 
 run_fuzz_stage() {
-	warn_step "cargo fuzz smoke" run_fuzz
-	cleanup_fuzz_outputs
+	local result=0 cleanup_result=0 dir="$ARTIFACT_BASE/fuzz"
+	if run_step "cargo fuzz smoke" run_fuzz; then
+		result=0
+	else
+		result=$?
+	fi
+	if [[ -f "$dir/collection.ok" ]]; then
+		if cleanup_fuzz_outputs; then
+			cleanup_result=0
+		else
+			cleanup_result=$?
+			result=1
+		fi
+		python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" "$cleanup_result" || result=1
+	else
+		echo "[security] fuzz evidence incomplete; retaining transient outputs" >&2
+		result=1
+	fi
+	return "$result"
 }
 
 run_sanitizers_stage() {
@@ -780,7 +790,14 @@ stage_enabled "supply-chain" && run_supply_chain_stage
 stage_enabled "runtime-tests" && run_runtime_tests_stage
 stage_enabled "jose-boundaries" && run_jose_boundaries_stage
 stage_enabled "cargo-vet" && run_cargo_vet_stage
-stage_enabled "fuzz" && run_fuzz_stage
+suite_result=0
+if stage_enabled "fuzz"; then
+	if run_fuzz_stage; then
+		:
+	else
+		suite_result=$?
+	fi
+fi
 stage_enabled "sanitizers" && run_sanitizers_stage
 stage_enabled "sbom" && run_sbom_stage
 stage_enabled "geiger" && run_geiger_stage
@@ -788,3 +805,4 @@ stage_enabled "udeps" && run_udeps_stage
 
 echo "[security] suite finished. log: $LOG_FILE" | tee -a "$LOG_FILE"
 mkdir -p "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR"
+exit "$suite_result"
