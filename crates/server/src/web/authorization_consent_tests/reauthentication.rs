@@ -2,6 +2,7 @@
 use super::*;
 use std::collections::BTreeMap;
 mod negative;
+mod recovery;
 
 const PASSWORD: &str = "local-reauthentication-test-password";
 
