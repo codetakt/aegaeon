@@ -504,9 +504,70 @@ def audit_contract(audit: object, lock: dict[str, Any]) -> None:
     )
 
 
-def consumers(commands: Commands, source: Path, tools: dict[str, str]) -> None:
-    for name in EXPECTED_SCRIPTS:
-        commands.run(name.replace(":", "-"), [tools["node"], tools["npm"], "run", name], source)
+def consumer_entrypoints(
+    source: Path, installed: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, str | int]]:
+    result = {}
+    for package, command, relative in (
+        ("eslint", "eslint", "bin/eslint.js"),
+        ("typescript", "tsc", "bin/tsc"),
+    ):
+        package_path = "node_modules/" + package
+        entrypoint = source / package_path / relative
+        manifest = source / package_path / "package.json"
+        for target in (manifest, entrypoint):
+            path = source
+            for part in target.relative_to(source).parts:
+                path = path / part
+                require(not path.is_symlink(), f"Symlink in consumer package path: {path}")
+            require(target.is_file(), f"Missing regular consumer package file: {target}")
+        raw = manifest.read_bytes()
+        observed = installed.get(package_path, {})
+        require(
+            observed.get("name") == package and observed.get("manifest_sha256") == sha(raw),
+            f"Consumer package differs from validated graph: {package}",
+        )
+        actual = mapping(json.loads(raw), "consumer package")
+        bins = mapping(actual.get("bin"), "consumer package bins")
+        require(
+            bins.get(command) in (relative, "./" + relative),
+            f"Unreviewed consumer package entrypoint: {command}",
+        )
+        result[command] = {"path": str(entrypoint), **identity(entrypoint)}
+    return result
+
+
+def consumers(
+    commands: Commands,
+    source: Path,
+    tools: dict[str, str],
+    entrypoints: dict[str, dict[str, str | int]],
+) -> None:
+    # Keep these arguments aligned with the exact EXPECTED_SCRIPTS contract.
+    # npm run would prepend untrusted dependency-provided .bin names to PATH.
+    commands.run(
+        "lint-ts",
+        [tools["node"], str(entrypoints["eslint"]["path"]), "--max-warnings", "0", *CONSUMERS],
+        source,
+    )
+    commands.run(
+        "typecheck-ts",
+        [
+            tools["node"],
+            str(entrypoints["tsc"]["path"]),
+            "--project",
+            "tsconfig.json",
+            "--pretty",
+            "false",
+            "--noEmit",
+        ],
+        source,
+    )
+    commands.run(
+        "audit-strict-types",
+        [tools["node"], "--experimental-strip-types", "scripts/check-strict-types.ts"],
+        source,
+    )
     for index, test in enumerate(TESTS):
         commands.run(
             f"consumer-{index}", [tools["node"], "--experimental-strip-types", test], source
@@ -545,14 +606,14 @@ def execute(root: Path, output: Path, tools: dict[str, str]) -> dict[str, Any]:
                 graph, package, report["installed_graph"]
             )
             report["npm_graph"] = graph
-            consumers(commands, source, tools)
-            audit = json.loads(
+            report["audit"] = json.loads(
                 commands.run(
                     "npm-audit", [*npm, "audit", "--json", "--audit-level=info", *INCLUDE], source
                 )
             )
-            audit_contract(audit, lock)
-            report["audit"] = audit
+            audit_contract(report["audit"], lock)
+            report["consumer_entrypoints"] = consumer_entrypoints(source, report["installed_graph"])
+            consumers(commands, source, tools, report["consumer_entrypoints"])
             unchanged(source, report["inputs"])
             unchanged(root, report["inputs"])
             report["status"] = "passed"

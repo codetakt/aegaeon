@@ -7,6 +7,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -180,6 +181,144 @@ class DevelopmentToolsTests(unittest.TestCase):
 
     def test_audit_complete_dev_graph_passes(self):
         tools.audit_contract(clean_audit(), sample_lock())
+
+    def test_audit_gate_precedes_every_consumer_and_rejects_failures(self):
+        advisory = clean_audit()
+        advisory["vulnerabilities"]["tool"] = {"severity": "high"}
+        for audit in (
+            ValueError("npm-audit failed with exit 1"),
+            "not JSON",
+            "{}",
+            json.dumps(advisory),
+            json.dumps(clean_audit()),
+        ):
+            calls = []
+
+            def run(_commands, name, _argv, _cwd, audit=audit, calls=calls):
+                calls.append(name)
+                if name == "npm-audit":
+                    if isinstance(audit, Exception):
+                        raise audit
+                    return audit
+                return "{}"
+
+            with (
+                self.subTest(audit=audit),
+                patch.object(tools, "snapshot", return_value={}),
+                patch.object(tools, "package_contract", return_value=({}, sample_lock())),
+                patch.object(tools, "bootstrap_npm", return_value=(Path("npm"), {})),
+                patch.object(tools, "environment", return_value={}),
+                patch.object(tools, "tool_identity", return_value={}),
+                patch.object(tools, "installed_graph", return_value={}),
+                patch.object(tools, "graph_contract", return_value=[]),
+                patch.object(tools.Commands, "run", run),
+                patch.object(tools, "consumer_entrypoints", return_value={}) as entrypoints,
+                patch.object(
+                    tools,
+                    "consumers",
+                    side_effect=lambda *_, calls=calls: calls.append("consumers"),
+                ) as consumers,
+            ):
+                report = tools.execute(self.root, self.root, {"node": "node"})
+            if audit == json.dumps(clean_audit()):
+                assert report["status"] == "passed"
+                assert calls == ["npm-ci", "npm-ls", "npm-audit", "consumers"]
+                assert consumers.call_count == entrypoints.call_count == 1
+            else:
+                assert report["status"] == "failed"
+                assert calls == ["npm-ci", "npm-ls", "npm-audit"]
+                consumers.assert_not_called()
+                entrypoints.assert_not_called()
+
+    def install_consumer_fixtures(self):
+        installed = {}
+        for package, command, relative in (
+            ("eslint", "eslint", "bin/eslint.js"),
+            ("typescript", "tsc", "bin/tsc"),
+        ):
+            directory = self.root / "node_modules" / package
+            (directory / "bin").mkdir(parents=True)
+            manifest = directory / "package.json"
+            manifest.write_text(json.dumps({"name": package, "bin": {command: relative}}))
+            (directory / relative).write_text("print('validated consumer executed')\n")
+            installed["node_modules/" + package] = {
+                "name": package,
+                "manifest_sha256": tools.sha(manifest.read_bytes()),
+            }
+        return installed
+
+    def test_consumer_entrypoints_reject_identity_path_and_bin_changes(self):
+        installed = self.install_consumer_fixtures()
+        tools.consumer_entrypoints(self.root, installed)
+        manifest = self.root / "node_modules/eslint/package.json"
+        original = manifest.read_bytes()
+        for value in (
+            "../other.js",
+            str(self.root / "other.js"),
+            "bin/noop.js",
+            "bin/./eslint.js",
+            [],
+        ):
+            manifest.write_text(json.dumps({"name": "eslint", "bin": {"eslint": value}}))
+            installed["node_modules/eslint"]["manifest_sha256"] = tools.sha(manifest.read_bytes())
+            with self.subTest(value=value), pytest.raises(ValueError, match="entrypoint"):
+                tools.consumer_entrypoints(self.root, installed)
+        manifest.write_bytes(original)
+        with pytest.raises(ValueError, match="validated graph"):
+            tools.consumer_entrypoints(self.root, installed)
+        installed["node_modules/eslint"]["manifest_sha256"] = tools.sha(original)
+        installed["node_modules/eslint"]["name"] = "another-package"
+        with pytest.raises(ValueError, match="validated graph"):
+            tools.consumer_entrypoints(self.root, installed)
+
+    def test_consumer_entrypoints_reject_symlink_file_or_parent(self):
+        installed = self.install_consumer_fixtures()
+        package = self.root / "node_modules/eslint"
+        for relative in ("bin/eslint.js", "package.json", "bin"):
+            path = package / relative
+            saved = package / "saved"
+            path.rename(saved)
+            path.symlink_to(saved)
+            with self.subTest(relative=relative), pytest.raises(ValueError, match="Symlink"):
+                tools.consumer_entrypoints(self.root, installed)
+            path.unlink()
+            saved.rename(path)
+
+    def test_dependency_bin_shadowing_cannot_replace_consumers(self):
+        installed = self.install_consumer_fixtures()
+        # Use an explicit fixture interpreter so this regression needs no Node installation.
+        runtime = self.root / "pinned-node-fixture"
+        runtime.write_text(
+            f"#!{sys.executable}\nimport os, sys\n"
+            "args = [arg for arg in sys.argv[1:] if arg != '--experimental-strip-types']\n"
+            "os.execv(sys.executable, [sys.executable, *args])\n"
+        )
+        runtime.chmod(0o755)
+        bins = self.root / "node_modules/.bin"
+        bins.mkdir()
+        for name in ("eslint", "tsc", "node"):
+            poisoned = bins / name
+            poisoned.write_text(
+                f"#!{sys.executable}\nfrom pathlib import Path\nPath('hijacked').touch()\n"
+            )
+            poisoned.chmod(0o755)
+        for relative in ("scripts/check-strict-types.ts", *tools.TESTS):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("print('validated consumer executed')\n")
+        commands = tools.Commands(self.root, {"PATH": str(bins)})
+        entrypoints = tools.consumer_entrypoints(self.root, installed)
+        tools.consumers(commands, self.root, {"node": str(runtime), "npm": "unused"}, entrypoints)
+        assert len(commands.records) == 6
+        assert all(record["argv"][0] == str(runtime) for record in commands.records)
+        assert all(
+            (self.root / record["stdout"]).read_text() == "validated consumer executed\n"
+            for record in commands.records
+        )
+        assert not (self.root / "hijacked").exists()
+        Path(entrypoints["eslint"]["path"]).write_text("raise SystemExit(7)\n")
+        with pytest.raises(ValueError, match="lint-ts failed with exit 7"):
+            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints)
 
     def test_audit_errors_unknown_schema_and_incomplete_reports_rejected(self):
         candidates = [
