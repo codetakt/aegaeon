@@ -44,13 +44,24 @@ if tool == "dirname":
     else:
         print(str(Path(sys.argv[1]).parent))
     raise SystemExit(int(os.environ.get("DIRNAME_EXIT", "0")))
+if tool == "rm":
+    status = int(os.environ.get("RM_EXIT", "0"))
+    if status:
+        raise SystemExit(status)
+    os.execv(os.environ["DUDECT_REAL_RM"], ["rm", *sys.argv[1:]])
 if tool == "clang":
     status = int(os.environ.get("COMPILER_EXIT", "0"))
     if status:
         raise SystemExit(status)
     if not os.environ.get("OMIT_BINARY"):
         target = Path(sys.argv[sys.argv.index("-o") + 1])
-        target.write_text("#!" + sys.executable + "\\n" + os.environ["DUDECT_BINARY_SOURCE"])
+        if os.environ.get("DIRECTORY_BINARY"):
+            target.mkdir()
+            raise SystemExit(0)
+        target.write_text(
+            "" if os.environ.get("EMPTY_BINARY")
+            else "#!" + sys.executable + "\\n" + os.environ["DUDECT_BINARY_SOURCE"]
+        )
         target.chmod(0o600 if os.environ.get("NONEXECUTABLE_BINARY") else 0o755)
     raise SystemExit(0)
 if tool == "tee":
@@ -72,7 +83,7 @@ class DudectRunnerTests(unittest.TestCase):
             (self.fixture / "c" / name).write_text("/* controlled source input */\n")
         self.bin = self.directory / "karamel/bin"
         self.bin.mkdir(parents=True)
-        for name in ("clang", "krml", "dirname", "tee"):
+        for name in ("clang", "krml", "dirname", "rm", "tee"):
             executable = self.bin / name
             executable.write_text(f"#!{sys.executable}\n{TOOL}")
             executable.chmod(0o755)
@@ -91,6 +102,7 @@ class DudectRunnerTests(unittest.TestCase):
             "DUDECT_EVENTS": str(self.events),
             "DUDECT_BINARY_SOURCE": BINARY,
             "DUDECT_REAL_TEE": shutil.which("tee"),
+            "DUDECT_REAL_RM": shutil.which("rm"),
         }
         for name in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"):
             environment.pop(name, None)
@@ -152,14 +164,14 @@ class DudectRunnerTests(unittest.TestCase):
                     self.check_failure(self.invoke(**{name: value}), before_compile=True)
 
     def test_missing_required_tools_fail(self):
-        for tool in ("krml", "dirname", "clang", "tee"):
+        for tool in ("krml", "dirname", "rm", "clang", "tee"):
             with self.subTest(tool=tool):
                 executable = self.bin / tool
                 original = executable.read_bytes()
                 executable.unlink()
                 self.events.unlink(missing_ok=True)
                 result = self.invoke()
-                self.check_failure(result, before_compile=tool in ("krml", "dirname"))
+                self.check_failure(result, before_compile=tool in ("krml", "dirname", "rm"))
                 self.assertIn(tool, result.stderr)
                 executable.write_bytes(original)
                 executable.chmod(0o755)
@@ -169,7 +181,7 @@ class DudectRunnerTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.check_failure(self.invoke(**changes), before_compile=True)
 
-    def test_failed_compiler_never_executes_a_stale_binary(self):
+    def create_stale_binary(self):
         stale = self.fixture / "dudect_test"
         stale.write_text(
             f"#!{sys.executable}\n"
@@ -179,16 +191,57 @@ class DudectRunnerTests(unittest.TestCase):
             "    output.write(json.dumps({'tool': 'binary', 'stale': True}) + '\\n')\n"
         )
         stale.chmod(0o755)
+        return stale
+
+    def test_failed_compiler_never_executes_a_stale_binary(self):
+        stale = self.create_stale_binary()
         self.check_failure(self.invoke(COMPILER_EXIT="31"))
-        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "clang"])
+        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm", "clang"])
+        self.assertFalse(stale.exists())
+
+    def test_successful_compiler_without_output_cannot_reuse_a_stale_binary(self):
+        stale = self.create_stale_binary()
+        result = self.invoke(OMIT_BINARY="1")
+        self.check_failure(result)
+        self.assertIn("Required dudect compiler output", result.stderr)
+        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm", "clang"])
+        self.assertFalse(stale.exists())
+        self.assertFalse((self.out / "dudect.log").exists())
+
+    def test_failed_output_removal_prevents_compilation_and_execution(self):
+        stale = self.create_stale_binary()
+        result = self.invoke(RM_EXIT="39")
+        self.check_failure(result, before_compile=True)
+        self.assertIn("Unable to remove prior dudect compiler output", result.stderr)
+        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm"])
+        self.assertTrue(stale.exists())
+        self.assertFalse((self.out / "dudect.log").exists())
+
+    def test_existing_directory_cannot_be_removed_as_prior_compiler_output(self):
+        target = self.fixture / "dudect_test"
+        target.mkdir()
+        result = self.invoke()
+        self.check_failure(result, before_compile=True)
+        self.assertTrue(target.is_dir())
+        self.assertIn("Unable to remove prior dudect compiler output", result.stderr)
 
     def test_missing_or_nonexecutable_compiler_output_fails(self):
-        for changes in ({"OMIT_BINARY": "1"}, {"NONEXECUTABLE_BINARY": "1"}):
+        for changes in (
+            {"OMIT_BINARY": "1"},
+            {"NONEXECUTABLE_BINARY": "1"},
+            {"EMPTY_BINARY": "1"},
+        ):
             with self.subTest(changes=changes):
                 self.events.unlink(missing_ok=True)
                 (self.fixture / "dudect_test").unlink(missing_ok=True)
                 self.check_failure(self.invoke(**changes))
                 self.assertNotIn("binary", [event["tool"] for event in self.recorded()])
+
+    def test_compiler_directory_output_cannot_count_as_an_executable(self):
+        result = self.invoke(DIRECTORY_BINARY="1")
+        self.check_failure(result)
+        self.assertIn("Required dudect compiler output", result.stderr)
+        self.assertNotIn("binary", [event["tool"] for event in self.recorded()])
 
     def test_binary_failure_and_signal_propagate_through_successful_tee(self):
         for changes in ({"BINARY_EXIT": "43"}, {"BINARY_SIGNAL": "1"}):
@@ -206,6 +259,10 @@ class DudectRunnerTests(unittest.TestCase):
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.out / "dudect.log").read_text(), "controlled dudect output\n")
+        self.assertEqual(
+            [event for event in self.recorded() if event["tool"] == "rm"],
+            [{"tool": "rm", "args": ["-f", "--", "dudect_test"]}],
+        )
         compiler = [event for event in self.recorded() if event["tool"] == "clang"]
         self.assertEqual(len(compiler), 1)
         karamel = self.bin.parent

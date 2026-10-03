@@ -23,6 +23,10 @@ KARAMEL_C="$KARAMEL_HOME/lib/krml/c"
 KARAMEL_DIST="$KARAMEL_HOME/lib/krml/dist/generic"
 INC="$EVERCRYPT_DIST/include"
 LIB="$EVERCRYPT_DIST/lib"
+if ! rm -f -- dudect_test; then
+	echo "Unable to remove prior dudect compiler output: dudect_test" >&2
+	exit 1
+fi
 clang -O2 \
 	-Ic \
 	-I "$INC" \
@@ -34,4 +38,8 @@ clang -O2 \
 	-levercrypt \
 	-lm \
 	-o dudect_test
+if [ ! -f dudect_test ] || [ ! -s dudect_test ] || [ ! -x dudect_test ]; then
+	echo "Required dudect compiler output is not a nonempty executable file: dudect_test" >&2
+	exit 1
+fi
 ./dudect_test | tee "$OUT_DIR/dudect.log"
