@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 Status: current implementation baseline
 
@@ -119,7 +119,7 @@ Missing Origin does not assert that a stored transaction is expired or already u
 Each consent submission receives a server-generated `x-request-id`; structured warning events carry
 that identifier and a stable reason for Origin, session, snapshot, or transaction admission failures.
 Storage failures remain `503 temporarily_unavailable`. Authorization-code refusals log a stable
-reason including `state_reused` or `nonce_reused` with the authorization request identifier.
+reason with the authorization request identifier.
 Events do not include raw state, nonce, code, consent token, Request Object, or database payloads.
 The public OAuth error categories and redirect validation remain unchanged.
 
@@ -229,12 +229,39 @@ Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
 
+## PAR authentication and stored credentials
+
+Under RFC 9126 section 2.1, clients registered with `client_secret_basic`,
+`client_secret_post`, or `private_key_jwt` must authenticate at `/par` with their
+registered method. Disabling `requireClientAuthPar` or `requireClientAuthToken`
+does not waive that requirement. A client registered with `none` can push a
+request only when the PAR policy and downstream profile allow unauthenticated
+clients. Unknown clients and incorrect or multiple authentication methods fail
+before a request URI is stored.
+
+New PAR records contain the validated authorization request and the internal
+authentication outcome, without the plaintext `client_secret`. Later
+reservation and login continuation use this outcome without carrying a password
+forward; authorization still applies current client policy. This credential
+minimization does not redefine signed Request Object contents.
+
+Upgrade all PAR writers together. Older writers can still put plaintext secrets
+in Redis during a mixed-version rollout. Readers accept legacy records but
+discard their `client_secret`; reads and reservations do not scrub the existing
+Redis bytes. Existing records expire within their original configured
+`policy.parExpiresInSeconds` lifetime (default 90 seconds, maximum 600 seconds),
+measured from the last old-writer insertion. This change does not establish that
+an existing deployment has purged old secrets. Include retained Redis backups
+and snapshots in the deployment's credential-retention review. No key rotation,
+configuration change, or persistent schema migration is required by the format
+change itself.
+
 ## RP state and nonce observations
 
 Distinct authorization transactions may carry the same admissible RP-supplied
 `state` or `nonce`, including requests from the same client. Aegaeon preserves
-these decoded values in their own authorization-code context, response and ID
-Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
+both decoded values in their own authorization-code context, echoes `state` in
+the authorization response, and includes `nonce` in the ID Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
 sections 4.1.1, 4.1.2 and 10.12 and OpenID Connect Core sections 3.1.2.1 and
 3.1.3.7 leave the RP responsible for its state/nonce validation and
 unpredictability obligations. Existing required-presence, encoding, length and

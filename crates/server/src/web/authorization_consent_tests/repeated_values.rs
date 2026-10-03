@@ -295,14 +295,20 @@ macro_rules! real_repeat_test {
         }
     };
 }
-real_repeat_test!(repeated_rp_values_plain_authorize_token, "plain");
-real_repeat_test!(repeated_rp_values_par_authorize_token, "par");
-real_repeat_test!(repeated_rp_values_jar_authorize_token, "jar");
-real_repeat_test!(repeated_rp_values_par_jar_authorize_token, "par-jar");
+real_repeat_test!(
+    shared_redis_repeated_rp_values_plain_authorize_token,
+    "plain"
+);
+real_repeat_test!(shared_redis_repeated_rp_values_par_authorize_token, "par");
+real_repeat_test!(shared_redis_repeated_rp_values_jar_authorize_token, "jar");
+real_repeat_test!(
+    shared_redis_repeated_rp_values_par_jar_authorize_token,
+    "par-jar"
+);
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and shared Redis code/token/PAR/JTI stores"]
-async fn repeated_rp_values_preserve_required_presence_policy() -> TestResult {
+async fn shared_redis_repeated_rp_values_preserve_required_presence_policy() -> TestResult {
     let pool = test_pg_pool().await?.ok_or("PostgreSQL URL required")?;
     let env = setup_test_environment(&pool).await?;
     let result=async {
