@@ -155,7 +155,10 @@ fn build_refresh_token_request(
     let mut token_req = client.post(&discovery.token_endpoint).form(form);
     if auth_method == "client_secret_basic" {
         if let Some(secret) = link.upstream_client_secret.as_ref() {
-            token_req = token_req.basic_auth(&link.upstream_client_id, Some(secret));
+            token_req = token_req.basic_auth(
+                crate::oauth_basic::encode_component(&link.upstream_client_id),
+                Some(crate::oauth_basic::encode_component(secret)),
+            );
         }
     }
     token_req
@@ -246,3 +249,6 @@ pub(super) async fn perform_upstream_refresh_exchange(
         token_response,
     })
 }
+
+#[cfg(test)]
+mod basic_auth_tests;

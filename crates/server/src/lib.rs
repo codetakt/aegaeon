@@ -21,6 +21,7 @@ pub mod jwk_types;
 pub mod management;
 pub mod metadata;
 pub mod middleware;
+mod oauth_basic;
 pub mod oauth_profile;
 pub(crate) mod oauth_scope;
 pub mod oidc;
