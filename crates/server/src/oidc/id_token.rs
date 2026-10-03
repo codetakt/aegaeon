@@ -86,7 +86,8 @@ pub struct IdTokenClaims {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amr: Option<Vec<String>>,
 
-    /// Authorized party - REQUIRED when multiple audiences
+    /// Optional authorized party. Aegaeon requires a supplied value to match
+    /// the expected client ID; its presence is not required by audience shape.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub azp: Option<String>,
 
@@ -134,7 +135,7 @@ impl Audience {
 
     #[must_use]
     pub fn is_multiple(&self) -> bool {
-        matches!(self, Audience::Multiple(_))
+        matches!(self, Audience::Multiple(values) if values.len() > 1)
     }
 }
 
