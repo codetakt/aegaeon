@@ -119,8 +119,9 @@ async fn invalid_claims(state: &AppState) -> TestResult {
 }
 
 #[tokio::test]
-#[ignore = "requires PostgreSQL"]
-async fn assertion_subject_rejects_invalid_signed_claims_and_malformed_credentials() -> TestResult {
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_assertion_subject_rejects_invalid_signed_claims_and_malformed_credentials(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -140,8 +141,8 @@ async fn assertion_subject_rejects_invalid_signed_claims_and_malformed_credentia
 }
 
 #[tokio::test]
-#[ignore = "requires PostgreSQL; isolated environment-policy process"]
-async fn assertion_subject_parser_backend_failure_is_server_error() -> TestResult {
+#[ignore = "requires PostgreSQL and Redis; isolated environment-policy process"]
+async fn shared_redis_assertion_subject_parser_backend_failure_is_server_error() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

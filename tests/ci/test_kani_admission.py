@@ -8,8 +8,10 @@ end to end with a controlled fake toolchain that reproduces the tool's output gr
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import hashlib
+import io
 import json
 import os
 import pathlib
@@ -18,7 +20,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from unittest import mock
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/validation"))
@@ -30,6 +36,7 @@ RUNNER = ROOT / "scripts/validation/run_kani_evidence.py"
 CHECKER = ROOT / "scripts/validation/check_kani_citations.py"
 SCHEMA = ROOT / "spec/kani-evidence.schema.json"
 BUDGET = 600
+TARGET = "x86_64-unknown-linux-gnu"
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -490,6 +497,339 @@ class MetadataBindingTests(unittest.TestCase):
                 assert any(needle in r for r in result["reasons"]), result["reasons"]
 
 
+class RequestTargetTests(unittest.TestCase):
+    def test_only_exact_server_compile_contexts_share(self) -> None:
+        registry = json.loads((ROOT / kani.REGISTRY).read_text())
+        first = next(g for g in registry["groups"] if g["id"] == "server-regressions")
+        first["features"] = ["one", "two"]
+        meta = {"sha256": "a" * 64}
+        root = pathlib.Path("/synthetic-build-root")
+        changes = [
+            ("features", ["two", "one"]),
+            ("features", ["one"]),
+            ("no_default_features", True),
+            ("cfg", ["kani", "extra"]),
+            ("crate", "other_crate"),
+            ("package", {"name": "other", "manifest": "crates/server/Cargo.toml"}),
+            ("package", {"name": "aegaeon-server", "manifest": "crates/other/Cargo.toml"}),
+            ("id", "other-server-group"),
+            ("metadata", "b" * 64),
+        ]
+        for field, value in changes:
+            with self.subTest(field=field, value=value):
+                targets: dict[tuple[Any, ...], pathlib.Path] = {}
+                initial = kani.request_target(first, meta, root, targets)
+                following = json.loads(json.dumps(first))
+                following.update(id="authorization-grant-predicates", default_unwind=66)
+                assert kani.request_target(following, meta, root, targets) == initial
+                altered_meta = dict(meta)
+                if field == "metadata":
+                    altered_meta["sha256"] = str(value)
+                else:
+                    following[field] = value
+                separate = kani.request_target(following, altered_meta, root, targets)
+                assert separate == root / f"group-{following['id']}"
+                assert separate != initial
+
+
+class DiscoveryInvalidationTests(unittest.TestCase):
+    def test_retains_dependencies_in_place_and_removes_all_primary_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            kept = "kani/x86_64-unknown-linux-gnu/debug/deps/libdependency.rmeta"
+            removed = [
+                f"{profile}/{artifact}"
+                for profile in ("kani/debug", f"kani/{TARGET}/debug")
+                for artifact in (
+                    "libaegaeon_server.rlib",
+                    "libaegaeon_server.d",
+                    "deps/aegaeon_server-0123456789abcdef.d",
+                    "deps/libaegaeon_server-0123456789abcdef.rlib",
+                    "deps/libaegaeon_server-0123456789abcdef.rmeta",
+                    "deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+                    "deps/aegaeon_server-0123456789abcdef__Rsynthetic.symtab.out",
+                    ".fingerprint/aegaeon-server-0123456789abcdef/lib",
+                    "build/aegaeon-server-0123456789abcdef/output",
+                    "incremental/session/state",
+                )
+            ]
+            for relative in [kept, *removed]:
+                path = target / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(relative)
+            before = (target / kept).stat()
+            inventory = kani.clear_discovery_primary(target, root, TARGET)
+            assert inventory
+            assert (target / kept).read_text() == kept
+            assert (target / kept).stat().st_mtime_ns == before.st_mtime_ns
+            assert (target / kept).stat().st_ino == before.st_ino
+            for relative in removed:
+                assert not (target / relative).exists()
+
+    def test_dependency_owned_names_and_nested_layouts_are_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            profile = f"kani/{TARGET}/debug"
+            nested = f"{profile}/build/dependency-0123456789abcdef/out"
+            names = [
+                f"{nested}/incremental/state",
+                f"{nested}/aegaeon_server-generated.rs",
+                f"{nested}/libaegaeon_server.rlib",
+                f"{nested}/deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+                f"{nested}/.fingerprint/aegaeon-server-0123456789abcdef/lib",
+                f"{nested}/build/aegaeon-server-0123456789abcdef/output",
+                f"{nested}/kani/debug/incremental/state",
+                f"{nested}/{profile}/libaegaeon_server.d",
+                f"{profile}/.fingerprint/aegaeon-server-helper-0123456789abcdef/lib",
+                f"{profile}/build/aegaeon-server-extra-0123456789abcdef/output",
+                f"{profile}/deps/libaegaeon_server_extra-0123456789abcdef.rmeta",
+                f"{profile}/deps/libaegaeon_server-0123456789abcdee.rmeta",
+                f"{profile}/deps/libaegaeon_server-0123456789abcdef0.rmeta",
+                f"{profile}/deps/aegaeon_server-0123456789abcdef_unknown.out",
+                f"{profile}/deps/aegaeon_server-0123456789abcdef.unknown",
+                "kani/debug/deps/libaegaeon_server-0123456789abcdef.rmeta",
+                "incremental/state",
+                "aegaeon_server-0123456789abcdef.kani-metadata.json",
+            ]
+            for name in [*names, f"{profile}/.fingerprint/aegaeon-server-0123456789abcdef/lib"]:
+                path = target / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            before = {
+                name: ((target / name).read_bytes(), (target / name).stat()) for name in names
+            }
+            removed = kani.clear_discovery_primary(target, root, TARGET)
+            assert removed == [f"{profile}/.fingerprint/aegaeon-server-0123456789abcdef"]
+            for name, (content, info) in before.items():
+                path = target / name
+                assert path.read_bytes() == content
+                assert path.stat().st_ino == info.st_ino
+                assert path.stat().st_mtime_ns == info.st_mtime_ns
+
+    def test_malformed_profile_and_primary_layouts_reject_before_deletion(self) -> None:
+        for entry, directory in (
+            ("kani", False),
+            ("kani/debug", False),
+            (f"kani/{TARGET}", False),
+            (f"kani/{TARGET}/debug", False),
+            ("kani/debug/deps", False),
+            ("kani/debug/.fingerprint", False),
+            ("kani/debug/build", False),
+            ("kani/debug/incremental", False),
+            ("kani/debug/.fingerprint/aegaeon-server-0123456789abcdef", False),
+            ("kani/debug/build/aegaeon-server-0123456789abcdef", False),
+            ("kani/debug/libaegaeon_server.rlib", True),
+        ):
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                target = root / "discovery-server"
+                path = target / entry
+                path.parent.mkdir(parents=True)
+                if directory:
+                    path.mkdir()
+                else:
+                    path.write_text("not a directory")
+                with (
+                    mock.patch.object(pathlib.Path, "unlink") as unlink,
+                    mock.patch.object(shutil, "rmtree") as remove,
+                ):
+                    with self.assertRaisesRegex(kani.AdmissionError, "layout"):
+                        kani.clear_discovery_primary(target, root, TARGET)
+                    unlink.assert_not_called()
+                    remove.assert_not_called()
+
+    def test_unowned_primary_metadata_still_blocks_codegen(self) -> None:
+        for relative in (
+            f"kani/{TARGET}/debug/deps/aegaeon_server-0123456789abcdef.kani-metadata.json",
+            f"kani/{TARGET}/debug/deps/aegaeon_server-unrecognized.kani-metadata.json",
+            "unrecognized/aegaeon_server.kani-metadata.json",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                target = root / "discovery-server"
+                path = target / relative
+                path.parent.mkdir(parents=True)
+                path.write_text('{"crate_name":"aegaeon_server"}')
+                assert kani.clear_discovery_primary(target, root, TARGET) == []
+                with mock.patch.object(kani, "run_process") as execute:
+                    with self.assertRaisesRegex(kani.AdmissionError, "pre-existing primary"):
+                        kani.discover(
+                            {"crate": "aegaeon_server"},
+                            root / "Cargo.toml",
+                            "kani",
+                            {},
+                            {},
+                            root,
+                            target,
+                            root,
+                            ".",
+                        )
+                    execute.assert_not_called()
+
+    def test_rejects_non_owned_targets_and_links_before_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            target.mkdir()
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
+            primary.write_text("primary")
+            for forbidden in (root, root / "missing", root / "nested/target"):
+                with self.subTest(target=forbidden), self.assertRaises(kani.AdmissionError):
+                    kani.clear_discovery_primary(forbidden, root, TARGET)
+            (target / "link").symlink_to(root)
+            with self.assertRaisesRegex(kani.AdmissionError, "unsupported"):
+                kani.clear_discovery_primary(target, root, TARGET)
+            assert primary.read_text() == "primary"
+
+    def test_rejects_special_files_before_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            target.mkdir()
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
+            primary.write_text("primary")
+            os.mkfifo(target / "pipe")
+            with self.assertRaisesRegex(kani.AdmissionError, "unsupported"):
+                kani.clear_discovery_primary(target, root, TARGET)
+            assert primary.read_text() == "primary"
+
+    def test_invalidation_error_is_a_fault_without_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            target.mkdir()
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True)
+            primary.write_text("primary")
+            with mock.patch.object(pathlib.Path, "unlink", side_effect=OSError("failed")) as unlink:
+                with self.assertRaisesRegex(kani.AdmissionError, "invalidation failed"):
+                    kani.clear_discovery_primary(target, root, TARGET)
+                assert unlink.call_count == 1
+
+    def test_scan_errors_after_partial_inventory_preserve_primary_outputs(self) -> None:
+        for failure in ("open", "iteration"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                target = root / "discovery-server"
+                nested = target / "nested"
+                nested.mkdir(parents=True)
+                primary = target / "kani/debug/libaegaeon_server.rlib"
+                primary.parent.mkdir(parents=True, exist_ok=True)
+                primary.write_text("primary")
+                (nested / "entry").write_text("dependency")
+                (nested / "hidden-link").symlink_to(root)
+
+                @contextlib.contextmanager
+                def scan(
+                    path: Any,
+                    blocked: pathlib.Path = nested,
+                    mode: str = failure,
+                    scandir: Any = os.scandir,
+                ) -> Iterator[Iterator[os.DirEntry[str]]]:
+                    with scandir(path) as entries:
+                        if pathlib.Path(path) != blocked:
+                            yield entries
+                        elif mode == "open":
+                            message = "synthetic inventory open failure"
+                            raise PermissionError(message)
+                        else:
+
+                            def partial() -> Iterator[os.DirEntry[str]]:
+                                yield next(entry for entry in entries if entry.name == "entry")
+                                message = "synthetic inventory iteration failure"
+                                raise OSError(message)
+
+                            yield partial()
+
+                with (
+                    mock.patch.object(os, "scandir", scan),
+                    mock.patch.object(pathlib.Path, "unlink") as unlink,
+                    mock.patch.object(shutil, "rmtree") as remove,
+                ):
+                    with self.assertRaisesRegex(kani.AdmissionError, "synthetic inventory"):
+                        kani.clear_discovery_primary(target, root, TARGET)
+                    unlink.assert_not_called()
+                    remove.assert_not_called()
+                assert primary.read_text() == "primary"
+                assert (nested / "hidden-link").is_symlink()
+
+    def test_ownership_and_late_stat_errors_preserve_primary_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            nested = target / "nested"
+            nested.mkdir(parents=True)
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
+            primary.write_text("primary")
+            dependency = nested / "entry"
+            dependency.write_text("dependency")
+            original = pathlib.Path.stat
+            for failing in (root, target, dependency):
+                with self.subTest(failing=failing):
+
+                    def stat(
+                        path: pathlib.Path, selected: pathlib.Path = failing, **kwargs: Any
+                    ) -> os.stat_result:
+                        if path == selected:
+                            message = "synthetic nofollow stat failure"
+                            raise OSError(message)
+                        return original(path, **kwargs)
+
+                    with (
+                        mock.patch.object(pathlib.Path, "stat", stat),
+                        mock.patch.object(pathlib.Path, "unlink") as unlink,
+                        mock.patch.object(shutil, "rmtree") as remove,
+                    ):
+                        with self.assertRaisesRegex(kani.AdmissionError, "synthetic nofollow"):
+                            kani.clear_discovery_primary(target, root, TARGET)
+                        unlink.assert_not_called()
+                        remove.assert_not_called()
+                    assert primary.read_text() == "primary"
+
+    def test_resolve_errors_are_typed_before_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            target = root / "discovery-server"
+            target.mkdir()
+            primary = target / "kani/debug/libaegaeon_server.rlib"
+            primary.parent.mkdir(parents=True, exist_ok=True)
+            primary.write_text("primary")
+            with (
+                mock.patch.object(pathlib.Path, "resolve", side_effect=OSError("resolve failed")),
+                mock.patch.object(pathlib.Path, "unlink") as unlink,
+                mock.patch.object(shutil, "rmtree") as remove,
+            ):
+                with self.assertRaisesRegex(kani.AdmissionError, "resolve failed"):
+                    kani.clear_discovery_primary(target, root, TARGET)
+                unlink.assert_not_called()
+                remove.assert_not_called()
+            assert primary.read_text() == "primary"
+
+    def test_existing_primary_metadata_blocks_codegen_even_with_unexpected_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "unexpected.kani-metadata.json").write_text('{"crate_name":"aegaeon_server"}')
+            with mock.patch.object(kani, "run_process") as execute:
+                with self.assertRaisesRegex(kani.AdmissionError, "pre-existing primary"):
+                    kani.discover(
+                        {"crate": "aegaeon_server"},
+                        root / "Cargo.toml",
+                        "kani",
+                        {},
+                        {},
+                        root,
+                        root,
+                        root,
+                        ".",
+                    )
+                execute.assert_not_called()
+
+
 class RegistryTests(unittest.TestCase):
     def test_checked_in_registry_loads(self) -> None:
         registry = kani.load_registry(ROOT, ROOT / kani.REGISTRY, SCHEMA)
@@ -629,7 +969,7 @@ class RegistryTests(unittest.TestCase):
 
 FAKE_KANI = r'''#!/usr/bin/env python3
 """Controlled fake cargo-kani: reproduces the 0.66.0 output grammar for the wrapper tests."""
-import hashlib, json, os, pathlib, sys
+import hashlib, json, os, pathlib, sys, tomllib
 args = sys.argv[1:]
 knobs_path = pathlib.Path(__file__).resolve().parents[3] / "fake-mode.json"
 knobs = json.loads(knobs_path.read_text()) if knobs_path.exists() else {}
@@ -644,6 +984,19 @@ if args and args[0] == "kani":
     target_root = pathlib.Path(os.environ["CARGO_TARGET_DIR"])
     target = target_root / "kani/x86_64-unknown-linux-gnu/debug/deps"
     target.mkdir(parents=True, exist_ok=True)
+    if knobs.get("target_log"):
+        existing = sorted(p.name for p in target.glob("*.kani-metadata.json"))
+        dependency_present = (target / "dependency.rmeta").exists()
+        with pathlib.Path(knobs["target_log"]).open("a") as log:
+            log.write(json.dumps({"argv": args, "target": str(target_root),
+                                  "existing": existing,
+                                  "dependency_present": dependency_present}) + "\n")
+    discovery_generation = None
+    if "--only-codegen" in args and knobs.get("record_discoveries"):
+        counter = knobs_path.with_name("discovery-counter")
+        discovery_generation = int(counter.read_text()) + 1 if counter.exists() else 1
+        counter.write_text(str(discovery_generation))
+        print(f"Synthetic discovery generation {discovery_generation}")
     def write_metadata(selected):
         attributes = {"kind": "Proof", "should_panic": False, "solver": None,
                       "unwind_value": None, "stubs": [], "verified_stubs": []}
@@ -657,11 +1010,18 @@ if args and args[0] == "kani":
         for proof in proofs:
             proof.update(overrides.get("proof", {}))
             proof["attributes"].update(overrides.get("attributes", {}))
-        blob = json.dumps({"crate_name": crate, "proof_harnesses": proofs,
-                           "unsupported_features": [], "test_harnesses": [],
-                           "contracted_functions": [], "autoharness_md": None})
+        document = {"crate_name": crate, "proof_harnesses": proofs,
+                    "unsupported_features": [], "test_harnesses": [],
+                    "contracted_functions": [], "autoharness_md": None}
+        if discovery_generation is not None:
+            document["synthetic_generation"] = discovery_generation
+        if mode == "foreign-discovery" and "--only-codegen" in args:
+            document["crate_name"] = "foreign"
+        blob = json.dumps(document)
         digest = hashlib.sha256((blob + str(sorted(selected))).encode()).hexdigest()[:16]
         name = f"{crate}-{digest}.kani-metadata.json"
+        if mode == "overwrite-metadata" and "--only-codegen" not in args:
+            name = f"{crate}-reused.kani-metadata.json"
         content = blob
         if mode == "null-metadata" and "--only-codegen" not in args:
             content = "null"
@@ -672,12 +1032,23 @@ if args and args[0] == "kani":
                                   "unsupported_features": [], "test_harnesses": [],
                                   "contracted_functions": [], "autoharness_md": None})
         if mode != "no-metadata" or "--only-codegen" in args:
+            fingerprint = target.parent / ".fingerprint" / f"{package}-{digest}"
+            fingerprint.mkdir(parents=True, exist_ok=True)
+            (fingerprint / "lib").write_text("synthetic fingerprint")
             (target / name).write_text(content)
     print("Kani Rust Verifier 0.66.0 (cargo plugin)")
     crash = mode == "crash-discovery" and package == knobs.get("crash_package")
     if "--only-codegen" in args and crash:
         print("synthetic discovery crash"); sys.exit(13)
     if "--only-codegen" in args:
+        if mode == "crash-once-reused-discovery" and (target / "dependency.rmeta").exists():
+            marker = target / "synthetic-discovery-failed"
+            if not marker.exists():
+                marker.write_text("failed once")
+                print("synthetic repeated discovery crash"); sys.exit(13)
+        if mode == "no-fresh-discovery" and (target / "dependency.rmeta").exists():
+            sys.exit(0)
+        (target / "dependency.rmeta").write_text("synthetic dependency")
         write_metadata(set(harnesses)); sys.exit(0)
     harness = args[args.index("--harness") + 1]
     if mode == "mutate-source" and harness.endswith("two"):
@@ -710,7 +1081,7 @@ if args and args[0] == "kani":
     sys.exit(0 if mode != "nonzero-after-success" else 3)
 if args[:1] == ["metadata"]:
     manifest = pathlib.Path(args[args.index("--manifest-path") + 1])
-    package = manifest.parent.name
+    package = tomllib.loads(manifest.read_text())["package"]["name"]
     crate = package.replace("-", "_")
     pid = f"path+file://{manifest.parent}#{package}@0.1.0"
     package_record = {"id": pid, "name": package, "version": "0.1.0", "source": None,
@@ -876,6 +1247,8 @@ class WrapperTests(unittest.TestCase):
         self.env.pop("RUSTFLAGS", None)
 
     def fake(self, **knobs: Any) -> None:
+        if hasattr(self, "target_log"):
+            knobs["target_log"] = str(self.target_log)
         (self.root / "store" / "kani-verifier-0.66.0" / "fake-mode.json").write_text(
             json.dumps(knobs)
         )
@@ -1179,6 +1552,329 @@ sys.exit(2)
         assert (run_dir / "tools.json").is_file()
         replay = self.replay()
         assert replay.returncode == 0, replay.stdout + replay.stderr
+
+    def write_server_groups(self) -> None:
+        """Five eligible groups, an intervening diagnostic and an ineligible server group."""
+        shutil.rmtree(self.root / "crates/alpha-pkg")
+        source = self.root / "crates/server/src/lib.rs"
+        source.parent.mkdir(parents=True)
+        names = ["one", "two", "three", "four", "five", "outside"]
+        source.write_text("".join(f"#[kani::proof]\nfn {name}() {{}}\n" for name in names))
+        (source.parent.parent / "Cargo.toml").write_text('[package]\nname = "aegaeon-server"\n')
+        (source.parent.parent / "harnesses.json").write_text(
+            json.dumps({f"proofs::{name}": "src/lib.rs" for name in names})
+        )
+        ids = [
+            "server-regressions",
+            "authorization-grant-predicates",
+            "server-exchange-lifetime",
+            "redis-boolean-encoding",
+            "application-authorization-revision",
+            "other-server-group",
+        ]
+        groups = []
+        for group_id, name, unwind in zip(ids, names, [16, 66, 4, 2, 2, 16], strict=True):
+            group = json.loads(json.dumps(self.registry["groups"][0]))
+            group.update(
+                id=group_id,
+                package={"name": "aegaeon-server", "manifest": "crates/server/Cargo.toml"},
+                crate="aegaeon_server",
+                default_unwind=unwind,
+                harnesses=[
+                    {
+                        "name": f"proofs::{name}",
+                        "file": str(source.relative_to(self.root)),
+                        "domain": "synthetic target reuse",
+                        "rows": ["ROW-1"] if name == "one" else [],
+                    }
+                ],
+            )
+            groups.append(group)
+        groups.insert(2, self.registry["groups"][1])
+        self.registry["groups"] = groups
+        self.write_registry(self.registry)
+        self.write_matrix()
+        matrix = self.root / "spec/compliance-matrix.yaml"
+        matrix.write_text(matrix.read_text().replace("crates/alpha-pkg/", "crates/server/"))
+        self.target_log = self.root / "target-observations.jsonl"
+        self.fake()
+
+    def test_server_groups_reuse_stable_separate_discovery_targets_within_one_evaluation(
+        self,
+    ) -> None:
+        self.write_server_groups()
+        previous_targets: set[str] = set()
+        for _ in range(2):
+            self.target_log.write_text("")
+            result = self.invoke()
+            assert result.returncode == 0, result.stdout + result.stderr
+            observations = [json.loads(line) for line in self.target_log.read_text().splitlines()]
+            discoveries = [o for o in observations if "--only-codegen" in o["argv"]]
+            requests = [o for o in observations if "--harness" in o["argv"]]
+            assert len(discoveries) == len(requests) == 7
+            assert len({o["target"] for o in discoveries}) == 3
+            assert all(not o["existing"] for o in discoveries)
+            assert [o["dependency_present"] for o in discoveries] == [
+                False,
+                True,
+                False,
+                True,
+                True,
+                True,
+                False,
+            ]
+            shared = [
+                o
+                for o in requests
+                if o["argv"][o["argv"].index("--harness") + 1]
+                not in {"proofs::beta", "proofs::outside"}
+            ]
+            assert len(shared) == 5
+            assert len({o["target"] for o in shared}) == 1
+            assert [len(o["existing"]) for o in shared] == [0, 1, 2, 3, 4]
+            assert [o["argv"][o["argv"].index("--default-unwind") + 1] for o in shared] == [
+                "16",
+                "66",
+                "4",
+                "2",
+                "2",
+            ]
+            assert len({o["target"] for o in requests}) == 3
+            assert not {o["target"] for o in discoveries} & {o["target"] for o in requests}
+            current_targets = {o["target"] for o in observations}
+            assert not previous_targets & current_targets
+            previous_targets = current_targets
+            assert self.replay().returncode == 0
+            assert self.check_citations("--gate", str(self.output / "gate.json")).returncode == 0
+            shutil.rmtree(self.output)
+
+    def test_reused_discovery_requires_new_primary_metadata(self) -> None:
+        self.write_server_groups()
+        self.fake(mode="no-fresh-discovery")
+        result = self.invoke()
+        assert result.returncode != 0
+        assert not (self.output / "gate.json").exists()
+        assert "discovery produced 0 metadata files" in result.stdout
+        evaluation = json.loads(next(self.output.glob("run-*/evaluation.json")).read_text())
+        assert sum(r["status"] == "fault" for r in evaluation["results"]) == 4
+
+    def test_later_discoveries_preserve_each_groups_original_evidence(self) -> None:
+        self.write_server_groups()
+        self.fake(record_discoveries=True)
+        result = self.invoke()
+        assert result.returncode == 0, result.stdout + result.stderr
+        run = next(self.output.glob("run-*"))
+        for index, group in enumerate(self.registry["groups"], 1):
+            directory = run / "groups" / group["id"]
+            metadata = json.loads((directory / "discovery.kani-metadata.json").read_text())
+            assert metadata["synthetic_generation"] == index
+            log = (directory / "discovery.log").read_text()
+            assert f"Synthetic discovery generation {index}\n" in log
+            summary = json.loads((directory / "discovery.json").read_text())
+            assert summary["metadata_sha256"] == sha256(directory / "discovery.kani-metadata.json")
+            assert summary["log_sha256"] == sha256(directory / "discovery.log")
+        assert self.replay().returncode == 0
+
+    def test_repeated_discovery_failure_survives_later_success(self) -> None:
+        self.write_server_groups()
+        self.fake(mode="crash-once-reused-discovery")
+        result = self.invoke()
+        assert result.returncode != 0
+        assert not (self.output / "gate.json").exists()
+        evaluation = json.loads(next(self.output.glob("run-*/evaluation.json")).read_text())
+        faults = [r for r in evaluation["results"] if r["status"] == "fault"]
+        assert len(faults) == 1
+        assert faults[0]["group"] == "authorization-grant-predicates"
+        assert evaluation["results"][-1]["status"] == "accepted"
+        observations = [json.loads(line) for line in self.target_log.read_text().splitlines()]
+        assert sum("--only-codegen" in o["argv"] for o in observations) == 7
+        assert self.replay().returncode != 0
+
+    def test_discovery_inventory_faults_are_retained_after_later_groups(self) -> None:  # noqa: C901, PLR0915 - fault injection and retained end-to-end evidence
+        self.write_server_groups()
+        original_cleanup = kani.clear_discovery_primary
+        original_scan = os.scandir
+        original_stat = pathlib.Path.stat
+        original_resolve = pathlib.Path.resolve
+        for failure in ("scan", "stat", "resolve"):
+            with self.subTest(failure=failure):
+                self.output = self.root / f"out-{failure}"
+                self.target_log.write_text("")
+                attempted = False
+
+                def cleanup(  # noqa: PLR0915 - inject one fault and verify actual retained files
+                    target: pathlib.Path,
+                    build_root: pathlib.Path,
+                    cargo_target: str,
+                    mode: str = failure,
+                ) -> list[str]:
+                    nonlocal attempted
+                    if attempted:
+                        return original_cleanup(target, build_root, cargo_target)
+                    attempted = True
+                    preserved = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+                    assert preserved
+                    assert any(p.name.endswith(".kani-metadata.json") for p in preserved)
+                    assert any(p.name == "dependency.rmeta" for p in preserved)
+                    dependency = target / "inventory-late/entry"
+                    dependency.parent.mkdir()
+                    dependency.write_text("dependency")
+
+                    def scan(path: Any) -> Any:
+                        if pathlib.Path(path) == dependency.parent:
+                            message = "synthetic late scan failure"
+                            raise PermissionError(message)
+                        return original_scan(path)
+
+                    def stat(path: pathlib.Path, **kwargs: Any) -> os.stat_result:
+                        if path == dependency:
+                            message = "synthetic late stat failure"
+                            raise OSError(message)
+                        return original_stat(path, **kwargs)
+
+                    def resolve(path: pathlib.Path, **kwargs: Any) -> pathlib.Path:
+                        if path == target:
+                            message = "synthetic resolve failure"
+                            raise OSError(message)
+                        return original_resolve(path, **kwargs)
+
+                    try:
+                        with contextlib.ExitStack() as stack:
+                            if mode == "scan":
+                                stack.enter_context(mock.patch.object(os, "scandir", scan))
+                            elif mode == "stat":
+                                stack.enter_context(mock.patch.object(pathlib.Path, "stat", stat))
+                            else:
+                                stack.enter_context(
+                                    mock.patch.object(pathlib.Path, "resolve", resolve)
+                                )
+                            return original_cleanup(target, build_root, cargo_target)
+                    finally:
+                        assert all(p.read_bytes() == content for p, content in preserved.items())
+
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with (
+                    mock.patch.dict(os.environ, self.env, clear=True),
+                    mock.patch.object(kani, "clear_discovery_primary", cleanup),
+                    mock.patch.object(
+                        sys,
+                        "argv",
+                        [str(RUNNER), "--root", str(self.root), "--output", str(self.output)],
+                    ),
+                    contextlib.redirect_stdout(stdout),
+                    contextlib.redirect_stderr(stderr),
+                ):
+                    result = kani.main()
+                assert attempted
+                assert result == 1, stdout.getvalue() + stderr.getvalue()
+                assert not (self.output / "gate.json").exists()
+                run = next(self.output.glob("run-*"))
+                fault = json.loads(
+                    (run / "groups/authorization-grant-predicates/fault.json").read_text()
+                )
+                assert fault["kind"] == "preflight"
+                assert "synthetic" in fault["reason"]
+                assert failure in fault["reason"]
+                evaluation = json.loads((run / "evaluation.json").read_text())
+                assert evaluation["status"] == "fault"
+                assert [r["status"] for r in evaluation["results"]] == [
+                    "accepted",
+                    "fault",
+                    "accepted",
+                    "accepted",
+                    "accepted",
+                    "accepted",
+                    "accepted",
+                ]
+                request = json.loads((run / "requests/02/result.json").read_text())
+                assert request["status"] == "fault"
+                assert any(fault["reason"] in reason for reason in request["reasons"])
+                assert not (run / "requests/02/command.json").exists()
+                summary = self.admissions(stdout.getvalue())[-1]
+                assert summary["gate"] is False
+                assert summary["counts"]["faults"] == 1
+                observations = [
+                    json.loads(line) for line in self.target_log.read_text().splitlines()
+                ]
+                assert sum("--only-codegen" in o["argv"] for o in observations) == 6
+                assert sum("--harness" in o["argv"] for o in observations) == 6
+                replay = self.replay()
+                assert replay.returncode != 0
+                assert "fault" in replay.stdout + replay.stderr
+
+    def test_discovery_rejects_foreign_metadata(self) -> None:
+        self.write_server_groups()
+        self.fake(mode="foreign-discovery")
+        result = self.invoke()
+        assert result.returncode != 0
+        assert "discovery produced 0 metadata files" in result.stdout
+        assert not (self.output / "gate.json").exists()
+
+    def test_reused_discovery_does_not_hide_source_mutation(self) -> None:
+        self.write_server_groups()
+        self.fake(mode="mutate-source")
+        result = self.invoke()
+        assert result.returncode != 0
+        assert "inputs changed during the run" in result.stdout + result.stderr
+        assert not (self.output / "gate.json").exists()
+
+    def test_shared_server_targets_keep_metadata_failure_and_replay_guards(self) -> None:
+        self.write_server_groups()
+        cases = [
+            ({"mode": mode}, "exactly one new compiled metadata")
+            for mode in ("overwrite-metadata", "no-metadata", "stale-metadata")
+        ]
+        cases.append(
+            (
+                {"overrides": {"proof": {"pretty_name": "proofs::foreign"}}},
+                "compiled metadata does not list exactly the requested harness",
+            )
+        )
+        for knobs, reason in cases:
+            with self.subTest(knobs=knobs):
+                self.fake(**knobs)
+                result = self.invoke()
+                assert result.returncode != 0, result.stdout
+                assert reason in result.stdout
+                assert not (self.output / "gate.json").exists()
+                assert self.replay().returncode != 0
+                if knobs.get("mode") == "overwrite-metadata":
+                    run = max(self.output.glob("run-*"))
+                    first = json.loads((run / "requests/01/result.json").read_text())
+                    second = json.loads((run / "requests/02/result.json").read_text())
+                    assert first["status"] == "accepted"
+                    assert second["status"] == "rejected"
+                shutil.rmtree(self.output)
+
+    def test_shared_server_evidence_still_requires_the_original_adapter(self) -> None:
+        self.write_server_groups()
+        assert self.invoke().returncode == 0
+        run = max(self.output.glob("run-*"))
+        self.mutate_evaluation_and_records(
+            run, lambda record: record["inputs"].__setitem__("adapter", "0" * 64)
+        )
+        self.assert_all_entry_points_reject(
+            str(self.output / "gate.json"), "different adapter", "adapter identity changed"
+        )
+
+    def test_shared_server_targets_preserve_failure_classification(self) -> None:
+        self.write_server_groups()
+        cases = [
+            ({"mode": "fail", "fail_suffix": "two"}, "rejected", False),
+            ({"mode": "fail"}, "accepted", True),
+            ({"mode": "crash-discovery", "crash_package": "beta-pkg"}, "fault", False),
+            ({"mode": "mutate-source"}, "fault", False),
+        ]
+        for knobs, status, accepted in cases:
+            with self.subTest(knobs=knobs):
+                original = (self.root / "crates/server/src/lib.rs").read_bytes()
+                self.fake(**knobs)
+                result = self.invoke()
+                assert (result.returncode == 0) == accepted, result.stdout + result.stderr
+                assert self.admissions(result.stdout)[-1]["status"] == status
+                assert (self.replay().returncode == 0) == accepted
+                (self.root / "crates/server/src/lib.rs").write_bytes(original)
+                shutil.rmtree(self.output)
 
     def test_diagnostic_failure_does_not_block_but_required_failure_does(self) -> None:
         result = (self.fake(mode="fail"), self.invoke())[1]  # only harness 'beta' fails

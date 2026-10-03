@@ -88,9 +88,9 @@ async fn exercise(state: &AppState) -> TestResult {
     Ok(())
 }
 #[tokio::test]
-#[ignore = "requires PostgreSQL"]
-async fn assertion_subject_par_distinguishes_plain_and_signed_request_identification() -> TestResult
-{
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_assertion_subject_par_distinguishes_plain_and_signed_request_identification(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

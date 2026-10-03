@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     Json,
 };
 use serde_json::{json, Value};
@@ -208,6 +208,15 @@ pub(super) async fn well_known_oauth_authorization_server(
     Json(meta).into_response()
 }
 
+pub(super) const PROTECTED_RESOURCE_METADATA_PATH: &str =
+    "/.well-known/oauth-protected-resource/resource";
+
+// Compatibility for callers of the old host-root locator. The resource URI has
+// a /resource path, so RFC 9728 section 3.1 places its metadata at that suffix.
+pub(super) async fn redirect_oauth_protected_resource() -> Redirect {
+    Redirect::permanent(PROTECTED_RESOURCE_METADATA_PATH)
+}
+
 /// RFC 9728 — Protected Resource Metadata endpoint.
 /// Publishes the capabilities of the /resource endpoint so that clients can
 /// discover scopes, sender-constraint requirements, and the authorization
@@ -289,3 +298,6 @@ pub(super) async fn jwks(State(state): State<AppState>) -> Response {
 
     Json(json!({ "keys": keys })).into_response()
 }
+
+#[cfg(test)]
+mod tests;

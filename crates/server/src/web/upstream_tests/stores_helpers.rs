@@ -1,4 +1,3 @@
-
 // -----------------------------------------------------------------------
 // UpstreamAuthStore round-trip tests
 // -----------------------------------------------------------------------
@@ -52,7 +51,10 @@ fn upstream_auth_store_insert_and_consume() -> TestResult {
 #[test]
 fn upstream_auth_store_insert_rejects_fresh_state_collision() -> TestResult {
     let store = crate::upstream::UpstreamAuthStore::new_process_local_for_tests();
-    store.try_insert(make_auth_request("s-collision", std::time::Duration::from_secs(60)))?;
+    store.try_insert(make_auth_request(
+        "s-collision",
+        std::time::Duration::from_secs(60),
+    ))?;
     let err = require_err(
         store.try_insert(make_auth_request(
             "s-collision",
@@ -93,7 +95,7 @@ fn select_upstream_jit_reuse_candidate_rejects_email_collision_for_reject_policy
         account_link_connection_id: None,
     }];
     let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
+        select_upstream_jit_reuse_candidate(&policy, &matches),
         "expected reject-existing-email collision",
     )?;
     assert_eq!(
@@ -119,8 +121,8 @@ fn select_upstream_jit_reuse_candidate_reuses_single_matching_user() -> TestResu
         status: "ACTIVE".to_string(),
         account_link_connection_id: None,
     }];
-    let candidate = select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches)
-        .map_err(ToString::to_string)?;
+    let candidate =
+        select_upstream_jit_reuse_candidate(&policy, &matches).map_err(ToString::to_string)?;
     let candidate = require_some(candidate, "expected reuse candidate")?;
     assert_eq!(candidate.end_user_id, existing_id);
     Ok(())
@@ -150,7 +152,7 @@ fn select_upstream_jit_reuse_candidate_rejects_multiple_reuse_matches() -> TestR
         },
     ];
     let err = require_err(
-        select_upstream_jit_reuse_candidate(&policy, "new-subject", &matches),
+        select_upstream_jit_reuse_candidate(&policy, &matches),
         "expected multiple reuse matches to be rejected",
     )?;
     assert_eq!(err, "upstream email resolves to multiple local users");
@@ -164,15 +166,14 @@ fn upstream_account_link_upsert_sql_is_identity_preserving() {
         .collect::<Vec<_>>()
         .join(" ");
 
-    assert!(normalized_sql.contains(
-        "ON CONFLICT (environment_id, upstream_issuer, upstream_sub_hash) DO UPDATE"
-    ));
-    assert!(normalized_sql.contains(
-        "WHERE aegaeon.account_links.end_user_id = EXCLUDED.end_user_id"
-    ));
-    assert!(normalized_sql.contains(
-        "AND aegaeon.account_links.connection_id = EXCLUDED.connection_id"
-    ));
+    assert!(normalized_sql
+        .contains("ON CONFLICT (environment_id, upstream_issuer, upstream_sub_hash) DO UPDATE"));
+    assert!(
+        normalized_sql.contains("WHERE aegaeon.account_links.end_user_id = EXCLUDED.end_user_id")
+    );
+    assert!(
+        normalized_sql.contains("AND aegaeon.account_links.connection_id = EXCLUDED.connection_id")
+    );
 }
 
 #[test]
@@ -475,7 +476,9 @@ fn no_cache_redirect_response_sets_location_and_no_store() -> TestResult {
     assert_eq!(response.status(), StatusCode::FOUND);
     let headers = response.headers();
     assert_eq!(
-        headers.get(header::LOCATION).and_then(|value| value.to_str().ok()),
+        headers
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
         Some("/continue")
     );
     assert!(

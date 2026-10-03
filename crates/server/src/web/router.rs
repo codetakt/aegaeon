@@ -32,6 +32,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/.well-known/oauth-protected-resource",
+            get(metadata::redirect_oauth_protected_resource),
+        )
+        .route(
+            metadata::PROTECTED_RESOURCE_METADATA_PATH,
             get(metadata::well_known_oauth_protected_resource),
         )
         .route("/jwks", get(metadata::jwks))

@@ -15,3 +15,5 @@ pub(crate) use session::{OidcSessionGrantCommit, RedisOidcSessionGrantCommit};
 pub use userinfo::{filter_claims_by_scope, Address, Userinfo, UserinfoEndpoint};
 #[cfg(test)]
 pub use userinfo::{InMemoryUserProvider, SubjectOnlyUserProvider};
+
+pub(crate) mod subject;
