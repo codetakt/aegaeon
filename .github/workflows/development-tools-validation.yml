@@ -1,0 +1,41 @@
+name: Development Tools Validation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  development-tools:
+    name: npm development dependencies and consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+      - name: Check development-tool runner regressions
+        env:
+          PYTHONPATH: scripts/ci
+        run: |
+          nix develop .#integrity --command python3 -m unittest discover \
+            -s tests/ci -p test_development_tools_validation.py
+      - name: Validate clean development-tool installation
+        run: |
+          nix develop .#integrity --command nix develop .#typescript --command \
+            python3 scripts/ci/validate_development_tools.py
+      - name: Preserve development-tool diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: development-tools-validation
+          path: artifacts/development-tools-validation
+          if-no-files-found: error
