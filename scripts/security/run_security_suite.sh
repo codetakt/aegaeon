@@ -561,7 +561,8 @@ run_fuzz_stage() {
 	else
 		result=$?
 	fi
-	if [[ -f "$dir/collection.ok" ]]; then
+	# A collected failure still needs its raw corpus and crashes for upload.
+	if [[ $result -eq 0 && -f "$dir/collection.ok" ]]; then
 		if cleanup_fuzz_outputs; then
 			cleanup_result=0
 		else
@@ -570,7 +571,7 @@ run_fuzz_stage() {
 		fi
 		python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" "$cleanup_result" || result=1
 	else
-		echo "[security] fuzz evidence incomplete; retaining transient outputs" >&2
+		echo "[security] fuzz stage failed or evidence incomplete; retaining transient outputs" >&2
 		result=1
 	fi
 	return "$result"

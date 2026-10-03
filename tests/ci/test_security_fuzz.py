@@ -289,16 +289,48 @@ class SecurityFuzzTests(SecurityFuzzFixture):
             self.assertEqual(row["run"]["executable_sha256"], row["build"]["executable_sha256"])
         self.assertEqual(len([call for call in self.calls() if call[:2] == ["fuzz", "run"]]), 7)
 
-    def test_mixed_results_fail_and_preserve_crashes_before_cleanup(self):
-        result = self.run_suite("run-fail", FAIL_TARGET=TARGETS[1])
-        self.assertNotEqual(result.returncode, 0)
+    def test_failed_target_with_current_collection_retains_raw_evidence(self):
+        marker_path, _ = self.seed_stale_collection()
+        result = self.run_suite("run-fail", FAIL_TARGET=TARGETS[1], CORPUS_ARCHIVE_KEEP="1")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         summary = self.summary()
+        execution = summary["execution"]
         self.assertEqual(summary["status"], "failed")
-        self.assertEqual(summary["execution"]["targets"][1]["run"]["exit_code"], 23)
-        self.assertEqual(summary["execution"]["targets"][-1]["run"]["status"], "passed")
-        with tarfile.open(self.artifacts / "fuzz" / summary["crash_archive"]) as archive:
-            self.assertIn(TARGETS[1] + "/crash-input", archive.getnames())
-        self.assertFalse((self.root / "fuzz/artifacts").exists())
+        self.assertEqual(execution["status"], "failed")
+        self.assertNotEqual(execution["exit_code"], 0)
+        self.assertEqual(execution["targets"][1]["run"]["exit_code"], 23)
+        self.assertEqual(execution["targets"][-1]["run"]["status"], "passed")
+        marker = json.loads(marker_path.read_text())
+        self.assertNotEqual(marker["run_id"], "previous-run")
+        self.assertEqual(marker["run_id"], execution["run_id"])
+        collected = marker_path.parent / marker["summary_file"]
+        self.assertEqual(
+            marker["summary_sha256"], hashlib.sha256(collected.read_bytes()).hexdigest()
+        )
+        self.assertEqual(json.loads(collected.read_text()), summary)
+        for key, member, content in (
+            ("corpus_archive", "corpus/" + TARGETS[1] + "/seed", b"input"),
+            ("crash_archive", TARGETS[1] + "/crash-input", b"preserve this crash"),
+        ):
+            archive_path = marker_path.parent / summary[key]
+            self.assertEqual(
+                archive_path.read_bytes(),
+                (Path(self.env["SECURITY_HISTORY_DIR"]) / archive_path.name).read_bytes(),
+            )
+            with tarfile.open(archive_path) as archive:
+                self.assertEqual(archive.extractfile(member).read(), content)
+        for target in TARGETS:
+            self.assertEqual((self.root / "fuzz/corpus" / target / "seed").read_bytes(), b"input")
+        self.assertEqual(
+            (self.root / "fuzz/artifacts" / TARGETS[1] / "crash-input").read_bytes(),
+            b"preserve this crash",
+        )
+        local_archive = self.root / "fuzz/corpus_archive" / summary["corpus_archive"]
+        self.assertEqual(
+            local_archive.read_bytes(), (marker_path.parent / local_archive.name).read_bytes()
+        )
+        self.assertNotIn("cleanup_exit_code", execution)
+        self.assertIn("retaining transient outputs", result.stderr)
 
     def test_disabled_archive_cannot_delete_required_corpus(self):
         result = self.run_suite(CORPUS_ARCHIVE_KEEP="0")
@@ -312,6 +344,14 @@ class SecurityFuzzTests(SecurityFuzzFixture):
                 result = self.run_suite("success-then-fail", aggregate=aggregate)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(self.summary()["status"], "failed")
+                self.assertEqual(
+                    (self.root / "fuzz/artifacts" / TARGETS[0] / "crash-input").read_bytes(),
+                    b"preserve this crash",
+                )
+                self.assertEqual(
+                    (self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input"
+                )
+                self.assertNotIn("cleanup_exit_code", self.summary()["execution"])
 
     def test_successful_help_followed_by_build_failure_is_blocking(self):
         result = self.run_suite("build-fail")
