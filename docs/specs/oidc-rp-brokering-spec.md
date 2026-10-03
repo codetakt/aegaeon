@@ -42,6 +42,26 @@ The current broker baseline includes:
 Configuration transactions are the current federation-management surface. A separate top-level
 federation resource is not required for the delivered posture.
 
+## Upstream ID Token Hash Claims
+
+For an already admitted and verified PS256, PS384 or PS512 ID Token signature, Aegaeon
+validates supplied `at_hash` and `c_hash` using SHA-256, SHA-384 or SHA-512 respectively:
+the leftmost half of the digest is encoded as unpadded base64url. The original signature
+algorithm remains attached to the token. Signature selection, discovery advertisement,
+key admission and hash-claim optionality are unchanged. A supplied hash requires the
+corresponding access token or authorization code; omitted code-flow hash claims remain optional.
+
+The server's hash adapter selects the existing RS256/384/512 digest operation when calling
+the Low* hash runtime for a PSS signature. This selects a digest only; it does not reinterpret
+the signature as RSA PKCS#1 v1.5. The extracted dispatcher and public FFI helper retain their
+existing accepted-name domain. The Rust fallback uses the same SHA family. The `verified-claim`
+profile continues to reject unavailable or failed required hash runtime operations.
+
+This follows OpenID Connect Core errata set 2 §§3.1.3.6–3.1.3.8 and 3.3.2.11 with the
+RSA-PSS digest associations in RFC 7518 §3.5. Finite signed-token and runtime-vector tests
+cover the server adapter; the new PSS mapping does not expand the extracted proof domain.
+No migration, environment setting or signature-algorithm enablement is introduced.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The
