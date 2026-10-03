@@ -1698,15 +1698,19 @@ rfc_9449:
     invariant: validate_htu
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_uri_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-htu-match
   status: verified
-  runtime_link: crates/server/src/middleware/dpop.rs
+  runtime_link: crates/ffi/src/dpop_uri.rs
   trace:
     kind: oracle
     fstar: fstar/dpop/Dpop.Htu_validation.fst#validate_htu
     rust: crates/ffi/src/lib.rs#validate_dpop_htu_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "The cited F* predicate and Rust spec oracle retain exact-string equality semantics. They do not prove HTTP URI parsing, RFC 3986 normalization, or its composition with production signature verification."
+  - "Both production FFI verification APIs compare validated HTTP(S) URI components using RFC 9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Runtime normalization and its composition remain distinct assurance obligations; signed Ed25519 fixtures exercise finite positive and rejection cases. Server claims-only tests are separate evidence."
 - id: 9449-007
   section: '4.3'
   requirement: MUST
@@ -1766,7 +1770,8 @@ rfc_9449:
   tests:
   - tests/fstar/property/TestDpopJtiReuse.fst
   - crates/server/src/middleware/dpop/tests.rs
-  - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/middleware/dpop/retention_tests.rs
+  - crates/ffi/tests/dpop_proof_test.rs
   ci_check: dpop-replay-prevention
   status: verified
   runtime_link: crates/server/src/middleware/replay_store.rs
@@ -1775,6 +1780,10 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Replay.fst#make_ticket
     rust: crates/server/src/middleware/replay_store.rs#check_and_store
     test: crates/server/src/middleware/dpop/tests.rs
+  notes:
+  - "This row records Aegaeon's selected single-use policy; RFC 9449 sections 4.3/11.1 do not impose an unconditional replay-store MUST on every deployment."
+  - "Runtime retention covers twice the maximum supported iat window plus one second (currently 601), the direct middleware window bound, and any longer requested TTL. Nonce enforcement does not shorten retention."
+  - "Controlled-time middleware tests use a claims-only double; separate FFI tests exercise real signatures and inclusive freshness. These finite tests do not re-attest the formal proof blocks or establish trusted-clock/shared-store premises."
 - id: 9449-010
   section: '6'
   requirement: MUST

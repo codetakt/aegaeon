@@ -102,22 +102,33 @@ Recommended defaults (policy guidance; not normative):
 
 ### DPoP リプレイ検知（Redis 前提）
 
-- Verified Core は DPoP 検証時に `replay_ticket`（JTI などの素材を含むチケット）を返すだけで、ストレージは担当しない。
-- 制御プレーン/データプレーンは環境ごとの **名前空間 (namespace)** と TTL を決め、Redis 等の外部ストアに単一操作（`SET <key> 1 NX PX <ttl>`）で記録する。
-- 推奨 TTL:
-  - `AEGAEON_DPOP_IAT_WINDOW_SECS`（既存の受理窓＝5 分相当）＋ `AEGAEON_JWT_LEEWAY_SECS`（60 秒）を合算し、デフォルト 360 秒とする。
-  - future skew（時計ズレ）を考慮した余裕を持たせる。
-- キー素材:
-  - 環境の namespace（例: `AEGAEON_DPOP_NAMESPACE` で明示。未設定時は issuer URL を使用）。
-  - メソッド（大文字化された `htm`）、正規化済み URI (`htu`)、`jti`、公開鍵 thumbprint (`jkt`)、必要に応じて `ath`。
-  - 上記を SHA-256 でハッシュし base64url で表現 → `dpop:v1:{namespace}:{hash}` を Redis キーとする。
-- バックエンド実装要件:
-  - `AEGAEON_DPOP_REDIS_URL` を必須とし、Redis を利用する。`noeviction`（明示的に eviction を禁止）設定を推奨。
-  - Redis に接続できない／SET が失敗した場合は **fail-close**（`503 Temporarily Unavailable`, `error="temporarily_unavailable"`）としてクライアントに通知。
-  - 旧来の未設定時インメモリ実装は protocol-level test harness 専用の名残であり、server runtime の supported configuration からは廃止する。
-  - 同一キーが既に存在した場合は replay と判定し、`invalid_token`（DPoP replay）で拒否。
-- 監査:
-  - 成功・再試行・障害（バックエンド unavailable）それぞれを audit event として記録できるようにする。
+Rust FFI は DPoP の署名・freshness 等を検査して `jti` と任意の nonce を返します。
+リプレイ記録と nonce policy は Rust middleware の責務です。FFI が replay ticket を
+発行して保存まで保証するものではありません。
+
+- 名前空間は management database の Environment ID から導出します。issuer URL や
+  `AEGAEON_DPOP_NAMESPACE` による上書きは使いません。
+- リプレイキーの素材は、長さ付きで連結した `jkt` と `jti` です。これと environment
+  namespace を長さ付きで連結して SHA-256 / base64url で表現し、environment / surface
+  ごとの Redis prefix と組み合わせます。`htm`、`htu`、`ath` はこのキー素材に含めません。
+- middleware は保存直前に TTL を
+  `max(2 * MAX_DPOP_IAT_WINDOW_SECS + 1, 2 * iat_window_secs + 1, caller TTL)`
+  秒へ引き上げます。現在の supported maximum による下限は **601 秒**です。
+  より長い caller TTL は維持し、算術 overflow は fail-closed にします。
+- `iat` window は active configuration document の `policy.dpopIatWindowSeconds`
+  が定めます。整数秒で包含する未来側の端から最終受理秒までを覆うため、片側の
+  window と JWT leeway の加算では足りません。JWT leeway は DPoP freshness に加算しません。
+- nonce enforcement の有効・無効によらず同じ TTL 下限を適用します。nonce TTL へ
+  短縮せず、nonce 自体が一回限りとは仮定しません。
+- server runtime は `AEGAEON_DPOP_REDIS_URL` による共有 Redis を必須とし、
+  `SET <key> 1 NX PX <ttl_ms>` で原子的に保存します。既存キーは replay として拒否し、
+  接続・保存失敗は `503` / `temporarily_unavailable` として fail-closed にします。
+  インメモリ実装は直接 unit test / fuzz / protocol harness 用です。
+
+容量増加、共有ストアの no-eviction・時計前提、および旧 instance の最終受理から
+必要な期間 admission を停止して待つ更新手順は、
+[DPoP リプレイストア運用ガイド](../../operations/dpop-replay-store.md)に従います。
+既存の短い記録を新 instance から復元することはできません。
 
 ## Environment configuration
 
