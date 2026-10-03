@@ -5,6 +5,7 @@ mod exchange_commit;
 mod grant_commit;
 mod redis_backend;
 mod redis_support;
+mod refresh_grants;
 mod refresh_rotation;
 mod revocation;
 mod token_consistency;
@@ -172,7 +173,10 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, operation)?;
-                Ok(f(&mut state))
+                let grants = state.refresh_grants.clone();
+                let result = f(&mut state);
+                state.refresh_grants = grants;
+                Ok(result)
             }
             TokenStoreBackend::Redis(backend) => backend
                 .mutate_state(f)

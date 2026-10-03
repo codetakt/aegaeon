@@ -839,7 +839,10 @@ jobs:
           persist-credentials: false
 
       - name: Install Python dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml pytest
+
+      - name: Test refresh-grant inventory failures
+        run: python3 -m pytest -q tests/operations/test_count_legacy_refresh_grants.py
 
       - name: Check crypto call boundaries
         run: python3 scripts/validation/check_crypto_calls.py --check

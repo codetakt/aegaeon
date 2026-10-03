@@ -59,6 +59,9 @@ pub(crate) fn bearer_metadata_matches_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    if access_token.refresh_grant != meta.refresh_grant {
+        return Err("access token and metadata refresh grant references must match");
+    }
     match (
         &access_token.client_credentials_digest,
         &meta.client_credentials_grant,
@@ -111,6 +114,11 @@ pub(super) fn refresh_token_matches_issued_grant(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    if refresh_token.refresh_grant != access_token.refresh_grant
+        || refresh_token.refresh_grant != meta.refresh_grant
+    {
+        return Err("refresh grant references must match");
+    }
     // Initial issuance binds both tokens to the same grant. Only refresh may
     // narrow the access token independently (RFC 6749 section 6).
     if scope_set(refresh_token.scope.as_deref()) != scope_set(access_token.scope.as_deref()) {
@@ -124,6 +132,11 @@ pub(super) fn refresh_token_covers_access_token(
     access_token: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
+    if refresh_token.refresh_grant != access_token.refresh_grant
+        || refresh_token.refresh_grant != meta.refresh_grant
+    {
+        return Err("refresh grant references must match");
+    }
     if access_token.client_credentials_digest.is_some() || meta.client_credentials_grant.is_some() {
         return Err("client-credentials authority cannot have refresh lineage");
     }
@@ -184,4 +197,35 @@ pub(super) fn access_token_expired_at(token: &AccessToken, now: SystemTime) -> b
         Some(expiry) => now >= expiry,
         None => true,
     }
+}
+
+/// Remint copies the existing parent grant; new target authority uses exchange commit.
+pub(super) fn refresh_parent_matches_remint(
+    parent: &RefreshToken,
+    access: &AccessToken,
+    meta: &BearerTokenMeta,
+    now: SystemTime,
+) -> Result<(), &'static str> {
+    if parent.refresh_grant.is_none() || parent.refresh_grant != access.refresh_grant {
+        return Err("refresh grant references disagree");
+    }
+    if parent.rotated || now >= parent.expires_at {
+        return Err("refresh_parent must be active");
+    }
+    if parent.exchange_grant != meta.exchange_grant {
+        return Err("refresh_parent exchange authority must remain active and unchanged");
+    }
+    if parent.client_id != access.client_id || parent.user_id != access.user_id {
+        return Err("refresh_parent owner must match the access token");
+    }
+    if meta.audience != refresh_parent_audience(parent) {
+        return Err("bearer metadata audience must match refresh_parent resource");
+    }
+    if !meta_scope_set(meta).is_subset(&scope_set(parent.scope.as_deref())) {
+        return Err("bearer metadata scope must be a subset of refresh_parent scope");
+    }
+    if !sender_bindings_match(parent.sender_binding.as_ref(), meta.sender_binding.as_ref()) {
+        return Err("bearer metadata sender_binding must match refresh_parent");
+    }
+    Ok(())
 }

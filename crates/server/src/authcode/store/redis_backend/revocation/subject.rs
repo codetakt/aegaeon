@@ -67,7 +67,28 @@ impl RedisTokenStoreBackend {
                     Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
                 {
                     if refresh.user_id == subject {
+                        self.revoke_refresh_grant(
+                            conn,
+                            refresh.refresh_grant.as_ref(),
+                            &refresh.client_id,
+                            &refresh.user_id,
+                        )?;
                         self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
+                    }
+                }
+            }
+            // Access descendants can remain live after refresh records/indexes expire.
+            for token in self.subject_access_tokens(conn, subject)? {
+                if let Some(access) =
+                    Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
+                {
+                    if access.user_id == subject {
+                        self.revoke_refresh_grant(
+                            conn,
+                            access.refresh_grant.as_ref(),
+                            &access.client_id,
+                            &access.user_id,
+                        )?;
                     }
                 }
             }
@@ -77,6 +98,11 @@ impl RedisTokenStoreBackend {
                 let Some(access) =
                     Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
                 else {
+                    self.prune_missing_subject_member(
+                        conn,
+                        self.keyspace.subject_access_key(subject),
+                        &token,
+                    )?;
                     mutation.delete_access_token(token);
                     continue;
                 };
@@ -104,6 +130,11 @@ impl RedisTokenStoreBackend {
                 let Some(refresh) =
                     Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
                 else {
+                    self.prune_missing_subject_member(
+                        conn,
+                        self.keyspace.subject_refresh_key(subject),
+                        &token,
+                    )?;
                     mutation.delete_refresh_token(token);
                     continue;
                 };
@@ -128,6 +159,11 @@ impl RedisTokenStoreBackend {
                 let Some(meta) =
                     Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&token))?
                 else {
+                    self.prune_missing_subject_member(
+                        conn,
+                        self.keyspace.subject_bearer_key(subject),
+                        &token,
+                    )?;
                     mutation.delete_bearer_token(token);
                     continue;
                 };

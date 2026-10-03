@@ -2,11 +2,49 @@ use super::super::redis_support::RedisRevokedTokenRecord;
 use super::super::redis_support::RedisTokenMutation;
 use super::super::token_consistency::token_is_active_revoked;
 use super::RedisTokenStoreBackend;
+use crate::authcode::store::refresh_grants::{access_reference, descendant_deadline};
 use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::time::SystemTime;
 
 impl RedisTokenStoreBackend {
+    pub(in crate::authcode::store) fn observe_access_record(
+        &self,
+        token: &str,
+    ) -> Result<Option<AccessToken>, TokenStoreStorageError> {
+        Self::get_json(&mut self.connection()?, self.keyspace.access_key(token))
+    }
+
+    pub(super) fn access_grant_active(
+        &self,
+        conn: &mut redis::Connection,
+        access: &AccessToken,
+        now: SystemTime,
+    ) -> Result<bool, TokenStoreStorageError> {
+        let Some(meta) =
+            Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&access.token))?
+        else {
+            return Ok(false);
+        };
+        let Ok(reference) = access_reference(access, &meta) else {
+            return Ok(false);
+        };
+        let Some(reference) = reference else {
+            return Ok(true);
+        };
+        let Ok(deadline) = descendant_deadline(access, &meta, None) else {
+            return Ok(false);
+        };
+        self.refresh_grant_active(
+            conn,
+            Some(reference),
+            &access.client_id,
+            &access.user_id,
+            deadline,
+            now,
+        )
+    }
+
     pub(super) fn revoked_expires_at(
         &self,
         conn: &mut redis::Connection,
@@ -56,6 +94,12 @@ impl RedisTokenStoreBackend {
                     Some(meta)
                         if meta.user_id == subject
                             && meta.expires_at > now
+                            && Self::get_json::<AccessToken>(
+                                conn,
+                                self.keyspace.access_key(&meta.token_id),
+                            )?
+                            .is_some_and(|access| !access.is_expired())
+                            && self.verify_access_token(&meta.token_id)?.is_some()
                             && !self.is_revoked_direct(conn, &meta.token_id, now)?
                             && self.exchange_root_active(
                                 conn,
@@ -70,6 +114,11 @@ impl RedisTokenStoreBackend {
                     }
                     Some(_) => {}
                     None => {
+                        self.prune_missing_subject_member(
+                            conn,
+                            self.keyspace.subject_bearer_key(subject),
+                            &token,
+                        )?;
                         mutation.delete_bearer_token(token);
                     }
                 }
@@ -97,6 +146,14 @@ impl RedisTokenStoreBackend {
                         if refresh.user_id == subject
                             && refresh.expires_at > now
                             && !refresh.rotated
+                            && self.refresh_grant_active(
+                                conn,
+                                refresh.refresh_grant.as_ref(),
+                                &refresh.client_id,
+                                &refresh.user_id,
+                                refresh.expires_at,
+                                now,
+                            )?
                             && !self.is_revoked_direct(conn, &refresh.token, now)?
                             && self.exchange_root_active(
                                 conn,
@@ -114,6 +171,11 @@ impl RedisTokenStoreBackend {
                     }
                     Some(_) => {}
                     None => {
+                        self.prune_missing_subject_member(
+                            conn,
+                            self.keyspace.subject_refresh_key(subject),
+                            &token,
+                        )?;
                         mutation.delete_refresh_token(token);
                     }
                 }
@@ -160,7 +222,14 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
-            if !self.exchange_root_active(
+            if !self.refresh_grant_active(
+                &mut conn,
+                refresh.refresh_grant.as_ref(),
+                &refresh.client_id,
+                &refresh.user_id,
+                refresh.expires_at,
+                now,
+            )? || !self.exchange_root_active(
                 &mut conn,
                 refresh
                     .exchange_grant
@@ -187,7 +256,9 @@ impl RedisTokenStoreBackend {
         if let Some(access) =
             Self::get_json::<AccessToken>(&mut conn, self.keyspace.access_key(token))?
         {
-            if !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)? {
+            if !self.access_grant_active(&mut conn, &access, now)?
+                || !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)?
+            {
                 return Ok(None);
             }
             return Ok((!access.is_expired()).then_some(access));
@@ -207,7 +278,9 @@ impl RedisTokenStoreBackend {
         if let Some(access) =
             Self::get_json::<AccessToken>(&mut conn, self.keyspace.access_key(token))?
         {
-            if !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)? {
+            if !self.access_grant_active(&mut conn, &access, now)?
+                || !self.exchange_root_active(&mut conn, access.exchange_root.as_ref(), now)?
+            {
                 return Ok(None);
             }
             if !access.is_expired() {
@@ -217,7 +290,14 @@ impl RedisTokenStoreBackend {
         if let Some(refresh) =
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
-            if !self.exchange_root_active(
+            if !self.refresh_grant_active(
+                &mut conn,
+                refresh.refresh_grant.as_ref(),
+                &refresh.client_id,
+                &refresh.user_id,
+                refresh.expires_at,
+                now,
+            )? || !self.exchange_root_active(
                 &mut conn,
                 refresh
                     .exchange_grant
@@ -231,20 +311,7 @@ impl RedisTokenStoreBackend {
                 return Ok(Some(refresh.client_id));
             }
         }
-        if let Some(meta) =
-            Self::get_json::<BearerTokenMeta>(&mut conn, self.keyspace.bearer_key(token))?
-        {
-            if !self.exchange_root_active(
-                &mut conn,
-                meta.exchange_grant.as_ref().and_then(|grant| grant.root()),
-                now,
-            )? {
-                return Ok(None);
-            }
-            if now < meta.expires_at {
-                return Ok(Some(meta.client_id));
-            }
-        }
+
         Ok(None)
     }
 
@@ -261,6 +328,15 @@ impl RedisTokenStoreBackend {
             Self::get_json::<RefreshToken>(&mut conn, self.keyspace.refresh_key(token))?
         {
             return Ok(refresh.rotated
+                || now >= refresh.expires_at
+                || !self.refresh_grant_active(
+                    &mut conn,
+                    refresh.refresh_grant.as_ref(),
+                    &refresh.client_id,
+                    &refresh.user_id,
+                    refresh.expires_at,
+                    now,
+                )?
                 || !self.exchange_root_active(
                     &mut conn,
                     refresh

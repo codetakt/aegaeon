@@ -375,6 +375,7 @@ impl TokenIssuer {
         };
 
         let access_token = AccessToken {
+            refresh_grant: None,
             exchange_root: None,
             client_credentials_digest: client_credentials_grant
                 .map(ClientCredentialsGrant::digest)

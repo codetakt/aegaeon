@@ -364,6 +364,7 @@ Audience: contributors, maintainers
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
 | `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
+| `docs/operations/refresh-grant-revocation.md` | runbook | Refresh-grant revocation and coordinated upgrade | current implementation baseline | 2026-10-03 | Operations | operators and maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
