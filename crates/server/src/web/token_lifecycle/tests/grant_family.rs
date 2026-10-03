@@ -67,7 +67,8 @@ async fn revoke_http(state: &AppState, token: &str, caller: &str) -> TestResult<
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_grant_family_opaque_and_jwt_resource_and_introspection() -> TestResult {
+async fn shared_redis_refresh_grant_family_opaque_and_jwt_resource_and_introspection() -> TestResult
+{
     for jwt in [false, true] {
         let mut fixture = Fixture::new(false).await?;
         let key: Arc<dyn crate::kms::KeyManager> =
@@ -167,8 +168,8 @@ async fn refresh_grant_family_opaque_and_jwt_resource_and_introspection() -> Tes
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_grant_introspection_hides_grant_storage_errors_from_unrelated_caller() -> TestResult
-{
+async fn shared_redis_refresh_grant_introspection_hides_grant_storage_errors_from_unrelated_caller(
+) -> TestResult {
     let fixture = Fixture::new(false).await?;
     let result = async {
         let (access, refresh, meta) = grant(&fixture.state, true, None);
@@ -207,7 +208,8 @@ async fn refresh_grant_introspection_hides_grant_storage_errors_from_unrelated_c
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_grant_revocation_cleanup_failure_commits_denial_before_http_error() -> TestResult {
+async fn shared_redis_refresh_grant_revocation_cleanup_failure_commits_denial_before_http_error(
+) -> TestResult {
     let fixture = Fixture::new(false).await?;
     let result = async {
         let (access, refresh, meta) = grant(&fixture.state, true, None);

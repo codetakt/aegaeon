@@ -225,7 +225,7 @@ fn refresh_grant_family_revocation_memory() {
 }
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_family_revocation_redis() {
+fn redis_refresh_grant_family_revocation() {
     family_cases(true);
 }
 #[test]
@@ -234,7 +234,7 @@ fn refresh_grant_legacy_and_independent_memory() {
 }
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_legacy_and_independent_redis() {
+fn redis_refresh_grant_legacy_and_independent() {
     legacy_cases(true);
 }
 
@@ -386,7 +386,7 @@ fn refresh_grant_retention_and_stale_snapshot_memory() {
 }
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_retention_and_stale_snapshot_redis() {
+fn redis_refresh_grant_retention_and_stale_snapshot() {
     retention_cases(true);
 }
 #[test]
@@ -395,7 +395,7 @@ fn refresh_grant_corruption_collision_overflow_memory() {
 }
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_corruption_collision_overflow_redis() {
+fn redis_refresh_grant_corruption_collision_overflow() {
     corruption_cases(true);
 }
 fn backend(store: &TokenStore) -> &RedisTokenStoreBackend {
@@ -728,7 +728,7 @@ fn refresh_grant_reference_disagreements_memory() {
 
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_reference_disagreements_redis() {
+fn redis_refresh_grant_reference_disagreements() {
     reference_disagreements(true);
 }
 
@@ -777,7 +777,7 @@ fn refresh_grant_shortened_retention_rejects_descendants_memory() {
 
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-fn refresh_grant_shortened_retention_rejects_descendants_redis() {
+fn redis_refresh_grant_shortened_retention_rejects_descendants() {
     shortened_retention_rejects_descendants(true);
 }
 

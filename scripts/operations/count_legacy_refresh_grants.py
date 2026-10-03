@@ -27,6 +27,7 @@ def connection() -> tuple[list[str], dict[str, str]]:
         "redis-cli",
         "--json",
         "--no-auth-warning",
+        "-e",
         "-h",
         url.hostname,
         "-p",
@@ -54,7 +55,10 @@ class RedisReader:
             self.command + list(words), env=self.env, capture_output=True, check=False
         )
         message = "Redis read failed; no complete inventory was produced"
-        if result.returncode:
+        # redis-cli may exit successfully after AUTH or SELECT fails, returning
+        # valid JSON from a different connection context. Warnings also make
+        # the inventory incomplete; never expose raw diagnostics or counts.
+        if result.returncode or result.stderr:
             raise RuntimeError(message)
         try:
             return json.loads(result.stdout)

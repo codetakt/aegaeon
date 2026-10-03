@@ -11,7 +11,11 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub(super) fn proof(
+    method: &str,
+    path: &str,
+    token: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let header = json!({"typ":"dpop+jwt", "alg":"ES256", "jwk":{
         "kty":"EC", "crv":"P-256", "x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
         "y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"}});
@@ -25,12 +29,21 @@ fn proof(method: &str, path: &str, token: &str) -> Result<String, Box<dyn std::e
     ))
 }
 
-async fn install_token(
+pub(super) async fn install_token(
     state: &AppState,
     path: &str,
     scope: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let mut access = AccessToken::new("client".into(), "user".into(), Some(scope.into()), 60);
+    install_subject_token(state, path, scope, "user").await
+}
+
+async fn install_subject_token(
+    state: &AppState,
+    path: &str,
+    scope: &str,
+    subject: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut access = AccessToken::new("client".into(), subject.into(), Some(scope.into()), 60);
     let sample = proof("GET", path, &access.token)?;
     let jkt = crate::util::compute_dpop_jkt_from_proof(&sample).ok_or("fixture thumbprint")?;
     access.cnf = Some(crate::authcode::types::CnfClaim::Jkt(jkt.clone()));
@@ -158,7 +171,7 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                         remote,
                         uri,
                         request_headers,
-                        Ok(axum::extract::Form(Vec::new())),
+                        Ok(axum::body::Bytes::new()),
                     )
                     .await
                 };
@@ -174,6 +187,82 @@ async fn userinfo_get_and_post_bearer_downgrade_challenge_the_attempted_scheme()
                         "Bearer realm=\"aegaeon\", error=\"invalid_token\""
                     );
                     error(response, StatusCode::UNAUTHORIZED, "invalid_token").await?;
+                }
+            }
+        }
+        Ok(())
+    }
+    .await;
+    sqlx::query("DELETE FROM aegaeon.end_users WHERE environment_id=$1")
+        .bind(env.environment_id)
+        .execute(&pool)
+        .await?;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL"]
+async fn oidc_subject_format_userinfo_database_get_post() -> TestResult {
+    use tower::ServiceExt;
+
+    let pool = test_pg_pool().await?.ok_or("database required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result: TestResult = async {
+        let mut state = test_app_state(pool.clone(), &env).await?;
+        state.oidc.userinfo_endpoint =
+            Some(Arc::new(crate::oidc::userinfo::UserinfoEndpoint::new(
+                state.tokens.validator.as_ref().clone(),
+                pool.clone(),
+                env.issuer_url.clone(),
+            )));
+        let app = crate::web::build_router(state.clone());
+        for subject in [
+            String::new(),
+            "é".into(),
+            "x".repeat(256),
+            " ExactCase ".into(),
+            "x".repeat(255),
+        ] {
+            let user_id: uuid::Uuid = sqlx::query_scalar(
+                "INSERT INTO aegaeon.end_users(environment_id,subject,status) VALUES ($1,$2,'ACTIVE') RETURNING id",
+            ).bind(env.environment_id).bind(&subject).fetch_one(&pool).await?;
+            sqlx::query("INSERT INTO aegaeon.end_user_profiles(end_user_id,display_name) VALUES ($1,'Database profile')")
+                .bind(user_id).execute(&pool).await?;
+            let token = install_subject_token(&state, "/userinfo", "openid profile", &subject).await?;
+            for method in ["GET", "POST"] {
+                let mut request = http::Request::builder()
+                    .method(method)
+                    .uri("/userinfo")
+                    .extension(ConnectInfo("127.0.0.1:12345".parse::<std::net::SocketAddr>()?))
+                    .body(axum::body::Body::empty())?;
+                *request.headers_mut() = headers("DPoP", method, "/userinfo", &token)?;
+                if method == "POST" {
+                    request.headers_mut().insert("content-type", "application/x-www-form-urlencoded".parse()?);
+                }
+                let response = app.clone().oneshot(request).await?;
+                assert_eq!(response.headers()["cache-control"], "no-store");
+                assert!(response.headers().get("www-authenticate").is_none());
+                let valid = crate::oidc::subject::is_valid_subject(&subject);
+                assert_eq!(
+                    response.status(),
+                    if valid {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
+                );
+                let value: Value =
+                    serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+                if valid {
+                    assert_eq!(value["sub"], subject);
+                    assert_eq!(value["name"], "Database profile");
+                } else {
+                    assert_eq!(value["error"], "server_error");
+                    assert_eq!(
+                        value["error_description"],
+                        "userinfo endpoint failed internally"
+                    );
+                    assert!(value.get("sub").is_none());
                 }
             }
         }

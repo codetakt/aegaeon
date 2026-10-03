@@ -1,6 +1,6 @@
 # Refresh-grant revocation and coordinated upgrade
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 Status: current implementation baseline
 
@@ -70,14 +70,19 @@ backfill, automatic root creation or authorization to delete production records.
 2. Stop admission and drain **all** token-store readers and writers, including
    background jobs, before counting or activating the new binary. A scan of a
    changing namespace is not an exact inventory.
-3. Using an account restricted to `SCAN`, `GET` and `TIME`, run the read-only
-   helper with the exact configured v3 token-store prefix. The helper reads
+3. Using an account restricted to `SCAN`, `GET`, `TIME` and `SELECT`, run the
+   read-only helper with the exact configured v3 token-store prefix. `SELECT`
+   is required when the Redis URL selects a nonzero database. The helper reads
    `AEGAEON_TOKEN_STORE_REDIS_URL`, invokes `redis-cli`, and emits counts only:
 
    ```sh
    python3 scripts/operations/count_legacy_refresh_grants.py \
      --prefix 'EXACT_CONFIGURED_TOKEN_STORE_V3_PREFIX'
    ```
+
+   Any `redis-cli` error or stderr diagnostic, including a warning, makes the
+   inventory incomplete and stops count output. Correct authentication and
+   database-selection permissions before retrying; do not use fallback counts.
 
    Record all legacy refresh counts and live dependent bearer/access counts,
    the scan time, prefix, backup identity and expected reauthorization window.
