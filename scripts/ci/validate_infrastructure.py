@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -324,14 +325,15 @@ def expression(text: str, name: str) -> str:
     return text[start:].strip().rstrip(",").strip()
 
 
-def environment_objects(text: str) -> dict[str, str]:
+def environment_objects(text: str, attribute: str) -> dict[str, str]:
+    require(attribute in {"value", "valueFrom"}, "Unknown ECS environment attribute")
     require(text.startswith("[") and text.endswith("]"), "Expected literal environment array")
     if not text[1:-1].strip():
         return {}
     objects = strict_matches(
-        rf'\s*\{{\s*name\s*=\s*"({ENV_IDENTIFIER})"\s*,?\s*(?:value|valueFrom)\s*=\s*((?:{STRING}|[^{{}}"])+?)\s*,?\s*\}}\s*,?\s*',
+        rf'\s*\{{\s*name\s*=\s*"({ENV_IDENTIFIER})"\s*,?\s*{attribute}\s*=\s*((?:{STRING}|[^{{}}"])+?)\s*,?\s*\}}\s*,?\s*',
         text[1:-1],
-        "environment assignments",
+        f"environment assignments requiring {attribute}",
     )
     result = {}
     for item in objects:
@@ -349,6 +351,28 @@ def combined(*groups: dict[str, str]) -> dict[str, str]:
         require(not (result.keys() & group.keys()), "Duplicate process environment assignment")
         result.update(group)
     return result
+
+
+def ecs_process_inputs(
+    process: str, environment: dict[str, str], secrets: dict[str, str]
+) -> dict[str, str]:
+    sensitive = {
+        "server": {
+            "AEGAEON_DATABASE_URL",
+            "AEGAEON_KEY_ENCRYPTION_KEY",
+            "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
+            *(name for name in environment.keys() | secrets.keys() if name.endswith("_REDIS_URL")),
+        },
+        "migrate": {"DATABASE_URL"},
+        "hosted_bootstrap": {
+            "AEGAEON_DATABASE_URL",
+            "AEGAEON_KEY_ENCRYPTION_KEY",
+            "AEGAEON_HOSTED_BOOTSTRAP_OWNER_PASSWORD",
+        },
+    }[process]
+    misplaced = sorted(sensitive & environment.keys())
+    require(not misplaced, f"{process}: sensitive names must use ECS secrets: {misplaced}")
+    return combined(environment, secrets)
 
 
 def task_container(ecs: str, task: str) -> str:
@@ -392,10 +416,13 @@ def staging_processes(module: Path) -> dict[str, dict[str, str]]:
     require(match is not None, "Unsupported server secret environment expression")
     if match is None:
         raise ValueError("Missing server secrets")
-    server = combined(
-        environment_objects(expression(local, "container_environment")),
-        environment_objects(match[1]),
-        dict.fromkeys(redis_names, "aws_secretsmanager_secret.redis_url.arn"),
+    server = ecs_process_inputs(
+        "server",
+        environment_objects(expression(local, "container_environment"), "value"),
+        combined(
+            environment_objects(match[1], "valueFrom"),
+            dict.fromkeys(redis_names, "aws_secretsmanager_secret.redis_url.arn"),
+        ),
     )
     ecs = (module / "ecs.tf").read_text()
     server_task = task_container(ecs, "server")
@@ -407,9 +434,10 @@ def staging_processes(module: Path) -> dict[str, dict[str, str]]:
     result = {"server": server}
     for task in ("migrate", "hosted_bootstrap"):
         body = task_container(ecs, task)
-        result[task] = combined(
-            environment_objects(expression(body, "environment")),
-            environment_objects(expression(body, "secrets")),
+        result[task] = ecs_process_inputs(
+            task,
+            environment_objects(expression(body, "environment"), "value"),
+            environment_objects(expression(body, "secrets"), "valueFrom"),
         )
     return result
 
@@ -453,6 +481,257 @@ def perf_server_environment_wiring(template: str) -> None:
     )
 
 
+# Exact reviewed Bash/service shapes: changes require explicit review, not substring admission.
+SHELL_BODY_SHAPES = {
+    "/usr/local/bin/aegaeon-docker-login": {
+        "source": ("aba0123fbe0d221327d4e961f5f8bb0025c1607fbca6181c34376b8b3619dce6"),
+        "rendered": ("3ea9a5647dd87b675648a1f732a49ec6068b21c10cefe186415b857295d0a6db"),
+    },
+    "/etc/systemd/system/aegaeon-server.service": {
+        "source": ("44c733de01cab8c5b62cd8c1c0f43f928eaac0b5cec4bfa8a673a12b90ffef2a"),
+        "rendered": ("44c733de01cab8c5b62cd8c1c0f43f928eaac0b5cec4bfa8a673a12b90ffef2a"),
+    },
+    "/usr/local/bin/aegaeon-run-loadtest": {
+        "source": ("ded6b6a5c572ad5db6b035c858074729600660180ca595f45d315ba30d9c1570"),
+        "rendered": ("e5fd3ac9a170a09119348a04295c85b8dc24260f9f27d4032ea2c35eaf9010f3"),
+    },
+    "/etc/systemd/system/aegaeon-loadtest.service": {
+        "source": ("88e14cd224ed36367fd9e8c904264812d5bf2a3ecb9a6999086f1a58ec80884f"),
+        "rendered": ("88e14cd224ed36367fd9e8c904264812d5bf2a3ecb9a6999086f1a58ec80884f"),
+    },
+}
+TEMPLATE_SCAFFOLD_SHAPES = {
+    "server-source": ("bea9a4a278e77be30de66501ac589f5a04af90267e5a9db12a9671a19e2d4a6f"),
+    "server-False": ("0cd3b452d3ceb6e92874b10e4358f61f916c9cef4e848b81b2da75addeb79335"),
+    "server-True": ("0cd3b452d3ceb6e92874b10e4358f61f916c9cef4e848b81b2da75addeb79335"),
+    "loadgen-source": ("86f84e47c93ba87084eb97d95fb727c22a3a38a5ec959c21e019dbc67f755148"),
+    "loadgen-False": ("7ac65fe8dd70901ae4875de01f259cff1dc33e28a1fa25e35c9f4c5cb3648ddf"),
+    "loadgen-True": ("c0539fe094b71d057bf9a13f0093fe1ad0360d465b3cc6c9288ce2ec22ba22ee"),
+}
+SHELL_HEREDOC = re.compile(r"(?m)^cat >(/[^\s]+) <<('?)([A-Za-z_]\w*)\2\n")
+
+
+def active_shape(text: str) -> str:
+    return "\n".join(
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
+def semantic_shell_shape(text: str, *, rendered: bool) -> str:
+    # Terraform escaping is interpreted only in source mode; rendered dollars are actual Bash.
+    return active_shape(text if rendered else text.replace("$${", "${"))
+
+
+def template_sections(template: str) -> tuple[dict[str, str], str]:
+    sections: dict[str, str] = {}
+    scaffold = []
+    offset = 0
+    while match := SHELL_HEREDOC.search(template, offset):
+        end = re.search(r"(?m)^" + re.escape(match[3]) + r"$", template[match.end() :])
+        require(end is not None, "Unclosed supported template heredoc")
+        if end is None:
+            raise ValueError("Missing template heredoc terminator")
+        stop = match.end() + end.start()
+        finish = match.end() + end.end()
+        require(match[1] not in sections, "Duplicate template process/service heredoc")
+        sections[match[1]] = template[match.end() : stop]
+        scaffold.extend(
+            [template[offset : match.end()], "<" + match[1] + ">\n", template[stop:finish]]
+        )
+        offset = finish
+    scaffold.append(template[offset:])
+    return sections, "".join(scaffold)
+
+
+def reviewed_template_sections(
+    template: str, role: str, *, rendered: bool, enabled: bool = False
+) -> dict[str, str]:
+    sections, scaffold = template_sections(template)
+    expected = {
+        "/etc/aegaeon/registry.env",
+        "/usr/local/bin/aegaeon-docker-login",
+    } | (
+        {"/etc/aegaeon/server.env", "/etc/systemd/system/aegaeon-server.service"}
+        if role == "server"
+        else {
+            "/etc/aegaeon/loadtest.env",
+            "/usr/local/bin/aegaeon-run-loadtest",
+            "/etc/systemd/system/aegaeon-loadtest.service",
+        }
+    )
+    require(set(sections) == expected, "Changed template process/service inventory")
+    key = role + "-" + (str(enabled) if rendered else "source")
+    require(
+        hashlib.sha256(active_shape(scaffold).encode()).hexdigest()
+        == TEMPLATE_SCAFFOLD_SHAPES[key],
+        "Unsupported active template launch scaffold",
+    )
+    return sections
+
+
+def require_body_shape(path: str, body: str, *, rendered: bool) -> None:
+    if path.startswith("/usr/local/bin/"):
+        require(body.startswith("#!/usr/bin/env bash\n"), "Unsupported process script interpreter")
+    require(
+        hashlib.sha256(active_shape(body).encode()).hexdigest()
+        == SHELL_BODY_SHAPES[path]["rendered" if rendered else "source"],
+        "Unsupported reviewed active process/service shape: " + path,
+    )
+
+
+def registry_helper_wiring(
+    template: str, role: str, *, rendered: bool, enabled: bool = False
+) -> None:
+    sections = reviewed_template_sections(template, role, rendered=rendered, enabled=enabled)
+    path = "/usr/local/bin/aegaeon-docker-login"
+    body = semantic_shell_shape(sections[path], rendered=rendered)
+    require(
+        "set -a\nsource /etc/aegaeon/registry.env\nset +a" in body,
+        "Registry helper must source/export the validated registry environment",
+    )
+    for variable, command, options in (
+        (
+            "GHCR_TOKEN_SSM_PARAMETER_NAME",
+            ["ssm", "get-parameter"],
+            [
+                "--with-decryption",
+                "--name",
+                "$GHCR_TOKEN_SSM_PARAMETER_NAME",
+                "--query",
+                "Parameter.Value",
+            ],
+        ),
+        (
+            "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID",
+            ["secretsmanager", "get-secret-value"],
+            ["--secret-id", "$GHCR_TOKEN_SECRETSMANAGER_SECRET_ID", "--query", "SecretString"],
+        ),
+    ):
+        branches = re.findall(
+            r'(?m)^if \[\[ -n "\$\{' + variable + r':-\}" \]\]; then\n(.*?)\nfi$',
+            body,
+            re.DOTALL,
+        )
+        require(
+            len(branches) == 1,
+            "Missing or duplicate active registry credential branch: " + variable,
+        )
+        commands = branches[0].replace("\\\n", " ").splitlines()
+        require(
+            len(commands) == 2 and commands[1] == "exit 0",
+            "Unsupported active registry credential branch",
+        )
+        expected = [
+            "AWS_REGION=$region",
+            "AWS_DEFAULT_REGION=$region",
+            "aws",
+            *command,
+            *options,
+            "--output",
+            "text",
+            "|",
+            "docker",
+            "login",
+            "ghcr.io",
+            "--username",
+            "$GHCR_USERNAME",
+            "--password-stdin",
+            ">/dev/null",
+        ]
+        require(
+            shlex.split(commands[0]) == expected,
+            "Invalid active registry secret-to-login pipeline: " + variable,
+        )
+    require_body_shape(path, sections[path], rendered=rendered)
+    if role == "server":
+        unit_path = "/etc/systemd/system/aegaeon-server.service"
+        unit = active_shape(sections[unit_path])
+        image = "registry.example/aegaeon:test" if rendered else "${server_image}"
+        port = "8080" if rendered else "${server_port}"
+        require(
+            unit.splitlines().count("ExecStartPre=/usr/local/bin/aegaeon-docker-login " + image)
+            == 1,
+            "Actual server service must invoke the validated registry helper",
+        )
+        require(
+            unit.splitlines().count(
+                "ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host "
+                "--env-file /etc/aegaeon/server.env " + image + " --host 0.0.0.0 --port " + port
+            )
+            == 1,
+            "Unsupported actual server service command/environment wiring",
+        )
+        bound = (
+            sections[unit_path]
+            .replace(image, "${server_image}")
+            .replace("--port " + port, "--port ${server_port}")
+        )
+        require_body_shape(unit_path, bound, rendered=rendered)
+    else:
+        perf_loadgen_environment_wiring(template, rendered=rendered, enabled=enabled)
+
+
+def perf_loadgen_environment_wiring(
+    template: str, *, rendered: bool, enabled: bool = False
+) -> None:
+    sections = reviewed_template_sections(template, "loadgen", rendered=rendered, enabled=enabled)
+    path = "/usr/local/bin/aegaeon-run-loadtest"
+    body = semantic_shell_shape(sections[path], rendered=rendered)
+    require(
+        "set -a\nsource /etc/aegaeon/loadtest.env\nset +a" in body,
+        "Load-generator environment-file sourcing/export wiring changed",
+    )
+    require(
+        body.splitlines().count('/usr/local/bin/aegaeon-docker-login "${SERVER_IMAGE}"') == 1,
+        "Actual load-generator registry-helper invocation wiring changed",
+    )
+    commands = [
+        line for line in body.replace("\\\n", " ").splitlines() if line.startswith("docker run ")
+    ]
+    expected = [
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "host",
+        "--entrypoint",
+        "${LOADTEST_BIN}",
+        "-v",
+        "${OUT_DIR}:/results",
+        "${SERVER_IMAGE}",
+        "--url",
+        "${SERVER_URL}",
+        "--workers",
+        "${WORKERS}",
+        "--run-time",
+        "${RUN_TIME}",
+        "--warmup",
+        "${WARMUP}",
+        "--rps",
+        "${RPS}",
+        "--scenario",
+        "${SCENARIO}",
+        "--report-file",
+        "/results/report.json",
+        ">${OUT_DIR}/loadtest.stdout.log",
+        "2>${OUT_DIR}/loadtest.stderr.log",
+    ]
+    require(
+        len(commands) == 1 and shlex.split(commands[0]) == expected,
+        "Actual load-generator workload argv wiring changed",
+    )
+    unit_path = "/etc/systemd/system/aegaeon-loadtest.service"
+    unit = active_shape(sections[unit_path])
+    starts = [line for line in unit.splitlines() if line.startswith("ExecStart=")]
+    require(
+        starts == ["ExecStart=" + path], "Actual load-generator service executable wiring changed"
+    )
+    require_body_shape(path, sections[path], rendered=rendered)
+    require_body_shape(unit_path, sections[unit_path], rendered=rendered)
+
+
 def process_inputs(module: Path) -> dict[str, dict[str, str]]:
     if module.name == "aegaeon-aws-staging":
         return staging_processes(module)
@@ -460,6 +739,9 @@ def process_inputs(module: Path) -> dict[str, dict[str, str]]:
         server = (module / "user_data_server.sh.tftpl").read_text()
         loadgen = (module / "user_data_loadgen.sh.tftpl").read_text()
         perf_server_environment_wiring(server)
+        perf_loadgen_environment_wiring(loadgen, rendered=False)
+        registry_helper_wiring(server, "server", rendered=False)
+        registry_helper_wiring(loadgen, "loadgen", rendered=False)
         return {
             "server": heredoc_environment(server, "server"),
             "server_registry": heredoc_environment(server, "registry"),
@@ -477,7 +759,31 @@ def process_inputs(module: Path) -> dict[str, dict[str, str]]:
     return {"kms_parity": {pair[1]: pair[2].strip() for pair in pairs}}
 
 
+BOOTSTRAP_REGION_INPUTS = ("AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION", "AWS_REGION")
+
+
+def bootstrap_region_inputs(root: Path) -> tuple[str, str]:
+    source = uncomment((root / "crates/server/src/bin/aegaeon-hosted-bootstrap.rs").read_text())
+    body = block(source, "fn bootstrap_input_from_env() -> Result<HostedBootstrapInput>")
+    alternatives = re.findall(
+        rf'\benv_or_required_env\("({ENV_IDENTIFIER})",\s*"({ENV_IDENTIFIER})"\)', body
+    )
+    require(
+        alternatives == [BOOTSTRAP_REGION_INPUTS], "Changed hosted-bootstrap region alternatives"
+    )
+    return BOOTSTRAP_REGION_INPUTS
+
+
+def nonempty_input(value: str) -> bool:
+    value = value.strip()
+    if value.startswith('"'):
+        decoded = json.loads(value)
+        return isinstance(decoded, str) and bool(decoded.strip())
+    return value not in {"", "''"}
+
+
 def process_profiles(root: Path) -> dict[str, tuple[set[str], set[str]]]:
+    bootstrap_region_inputs(root)
     source = uncomment((root / "crates/server/src/bin/aegaeon-hosted-bootstrap.rs").read_text())
     body = block(source, "fn bootstrap_input_from_env() -> Result<HostedBootstrapInput>")
     bootstrap = set(
@@ -545,6 +851,17 @@ def runtime_contract(module: Path, root: Path) -> dict[str, Any]:
         violations.extend(
             {"process": process, "name": name, "reason": "missing required assignment"}
             for name in sorted(mandatory - values.keys())
+        )
+    if "hosted_bootstrap" in processes and not any(
+        nonempty_input(processes["hosted_bootstrap"].get(name, ""))
+        for name in BOOTSTRAP_REGION_INPUTS
+    ):
+        violations.append(
+            {
+                "process": "hosted_bootstrap",
+                "name": " or ".join(BOOTSTRAP_REGION_INPUTS),
+                "reason": "missing or empty required region alternative",
+            }
         )
     report = {
         "status": "failed" if violations else "passed",
@@ -698,12 +1015,23 @@ def template_values() -> dict[str, Any]:
     }
 
 
-def rendered_contract(rendered: str, role: str, *, enabled: bool) -> None:
-    require("--password-stdin" in rendered, "Registry credentials must use password stdin")
-    require("--with-decryption" in rendered, "SSM secret retrieval contract missing")
+def rendered_contract(
+    rendered: str, role: str, *, enabled: bool, registry_enabled: bool = True
+) -> None:
+    registry_helper_wiring(rendered, role, rendered=True, enabled=enabled)
+    values = template_values()
+    registry = heredoc_environment(rendered, "registry")
+    expected_registry = {
+        "AWS_REGION": values["aws_region"],
+        "AWS_DEFAULT_REGION": values["aws_region"],
+        "GHCR_AUTH_ENABLED": "1" if registry_enabled else "0",
+        "GHCR_USERNAME": values["ghcr_username"],
+        "GHCR_TOKEN_SSM_PARAMETER_NAME": values["ghcr_token_ssm_parameter_name"],
+        "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID": values["ghcr_token_secretsmanager_secret"],
+    }
     require(
-        "GHCR_TOKEN_SSM_PARAMETER_NAME=/aegaeon/registry-token" in rendered,
-        "Template lost secret reference",
+        registry == expected_registry,
+        "Rendered registry environment lost bound input/secret reference",
     )
     if role == "server":
         require(

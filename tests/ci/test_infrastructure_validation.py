@@ -432,9 +432,300 @@ class InfrastructureTests(unittest.TestCase):
         with pytest.raises(ValueError, match="template inventory"):
             infra.check_templates(module, infra.Commands(self.root, {}), "tofu", "bash", self.root)
 
+    def fixture_rendered_template(self, role, enabled=True, registry_enabled=True):
+        text = (self.module("perf-aws-ec2") / f"user_data_{role}.sh.tftpl").read_text()
+        # Bounded substitution fixture; no OpenTofu execution is implied.
+        text = text.replace("$${", "@@SHELL_DOLLAR@@")
+        values = infra.template_values()
+        values.update(
+            expose_metrics_on_main=enabled,
+            auto_run_loadtest=enabled,
+            ghcr_auth_enabled=registry_enabled,
+        )
+        for name, value in values.items():
+            text = text.replace("${" + name + "}", str(value))
+            text = text.replace("${" + name + ' ? "1" : "0"}', "1" if value else "0")
+        text = text.replace(
+            "%{ if auto_run_loadtest }\nsystemctl start aegaeon-loadtest.service\n%{ endif }",
+            "systemctl start aegaeon-loadtest.service" if enabled else "",
+        )
+        return text.replace("@@SHELL_DOLLAR@@", "${")
+
+    def test_ecs_credentials_remain_in_typed_secret_collections(self):
+        self.valid_staging()
+        module = self.module()
+        assert infra.runtime_contract(module, self.root)["status"] == "passed"
+        locals_path = module / "locals.tf"
+        ecs_path = module / "ecs.tf"
+        original_locals = locals_path.read_text()
+        original_ecs = ecs_path.read_text()
+        profiles = {
+            "server": [
+                "AEGAEON_DATABASE_URL",
+                "AEGAEON_KEY_ENCRYPTION_KEY",
+                "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
+            ],
+            "migrate": ["DATABASE_URL"],
+            "hosted_bootstrap": [
+                "AEGAEON_DATABASE_URL",
+                "AEGAEON_KEY_ENCRYPTION_KEY",
+                "AEGAEON_HOSTED_BOOTSTRAP_OWNER_PASSWORD",
+            ],
+        }
+        for process, names in profiles.items():
+            for name in names:
+                locals_path.write_text(original_locals)
+                ecs_path.write_text(original_ecs)
+                path = locals_path if process == "server" else ecs_path
+                text = path.read_text()
+                body = (
+                    text
+                    if process == "server"
+                    else infra.block(text, f'resource "aws_ecs_task_definition" "{process}"')
+                )
+                pattern = (
+                    r'\{\s*name\s*=\s*"' + name + r'"\s*,?\s*valueFrom\s*=\s*([^{}]+?)\s*\}\s*,?'
+                )
+                matches = list(re.finditer(pattern, body))
+                assert len(matches) == 1
+                entry = matches[0].group(0)
+                changed = body.replace(entry, "", 1)
+                marker = "container_environment = [" if process == "server" else "environment = ["
+                assert marker in changed
+                plain = entry.replace("valueFrom", "value").rstrip().rstrip(",")
+                changed = changed.replace(marker, marker + "\n" + plain + ",", 1)
+                path.write_text(changed if process == "server" else text.replace(body, changed, 1))
+                with (
+                    self.subTest(process=process, name=name),
+                    pytest.raises(
+                        ValueError, match="sensitive names must use ECS secrets"
+                    ) as failure,
+                ):
+                    infra.runtime_contract(module, self.root)
+                assert name in str(failure.value)
+                assert "aws_secretsmanager_secret" not in str(failure.value)
+
+    def test_ecs_field_kinds_and_sensitive_redis_names_rejected(self):
+        self.valid_staging()
+        module = self.module()
+        locals_path = module / "locals.tf"
+        original_locals = locals_path.read_text()
+        for attribute, replacement in [("valueFrom", "value"), ("value", "valueFrom")]:
+            marker = (
+                'name = "AEGAEON_DATABASE_URL", valueFrom'
+                if attribute == "valueFrom"
+                else 'name = "AWS_REGION", value'
+            )
+            locals_path.write_text(
+                original_locals.replace(marker, marker.replace(attribute, replacement), 1)
+            )
+            with (
+                self.subTest(attribute=attribute),
+                pytest.raises(ValueError, match="assignments requiring"),
+            ):
+                infra.runtime_contract(module, self.root)
+        locals_path.write_text(original_locals)
+        server = infra.staging_processes(module)["server"]
+        redis_name = next(name for name in server if name.endswith("_REDIS_URL"))
+        with pytest.raises(ValueError, match="sensitive names must use ECS secrets"):
+            infra.ecs_process_inputs("server", {redis_name: "credential-sentinel"}, {})
+        with pytest.raises(ValueError, match="Duplicate process environment"):
+            infra.ecs_process_inputs("server", {"AWS_REGION": "region"}, {"AWS_REGION": "region"})
+
+    def test_hosted_region_alternatives_follow_nonempty_runtime_pair(self):
+        self.valid_staging()
+        module = self.module()
+        path = module / "ecs.tf"
+        original = path.read_text()
+        body = infra.block(original, 'resource "aws_ecs_task_definition" "hosted_bootstrap"')
+        assert body in original
+        without_fallback = re.sub(r'(?m)^.*name = "AWS_REGION".*\n', "", body)
+        original = original.replace(body, without_fallback, 1)
+        name = "AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION"
+        marker = next(
+            line for line in original.splitlines(keepends=True) if f'name = "{name}"' in line
+        )
+        cases = [
+            ('"us-east-1"', None, True),
+            (None, '"us-east-1"', True),
+            ('"us-east-1"', '"us-west-2"', True),
+            ('""', '"us-east-1"', True),
+            ('"   "', '"us-east-1"', True),
+            ('"us-east-1"', '""', True),
+            (None, None, False),
+            ('""', '""', False),
+            ('"   "', '"\\t"', False),
+            ('""', None, False),
+            (None, '"   "', False),
+            ("data.aws_region.current.region", None, True),
+        ]
+        for preferred, fallback, accepted in cases:
+            assignments = ""
+            for key, value in [(name, preferred), ("AWS_REGION", fallback)]:
+                if value is not None:
+                    assignments += f'        {{ name = "{key}", value = {value} }},\n'
+            path.write_text(
+                original.replace(marker, assignments + "        # " + marker.strip() + "\n")
+            )
+            report = infra.runtime_contract_report(module, self.root)
+            with self.subTest(preferred=preferred, fallback=fallback):
+                assert (report["status"] == "passed") == accepted
+                if not accepted:
+                    assert any(
+                        v["reason"] == "missing or empty required region alternative"
+                        for v in report["violations"]
+                    )
+        path.write_text(original)
+        source = self.root / "crates/server/src/bin/aegaeon-hosted-bootstrap.rs"
+        source.write_text(
+            source.read_text().replace(
+                'env_or_required_env("AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION", "AWS_REGION")',
+                'env_or_required_env("AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION", "AWS_DEFAULT_REGION")',
+            )
+        )
+        with pytest.raises(ValueError, match="Changed hosted-bootstrap region alternatives"):
+            infra.process_profiles(self.root)
+
+    def test_perf_loadgen_execution_binds_validated_envfile_and_argv(self):
+        module = self.module("perf-aws-ec2")
+        path = module / "user_data_loadgen.sh.tftpl"
+        original = path.read_text()
+        assert "loadgen" in infra.process_inputs(module)
+        changes = [
+            ("source /etc/aegaeon/loadtest.env", "source /etc/aegaeon/unused.env"),
+            ("source /etc/aegaeon/loadtest.env", "# source /etc/aegaeon/loadtest.env"),
+            (
+                "source /etc/aegaeon/loadtest.env",
+                "source /etc/aegaeon/loadtest.env\nsource /etc/aegaeon/override.env",
+            ),
+            (
+                "source /etc/aegaeon/loadtest.env\nset +a",
+                "source /etc/aegaeon/loadtest.env\nset +a\nSERVER_URL=http://unused.example",
+            ),
+            ("set -a\nsource /etc/aegaeon/loadtest.env", "source /etc/aegaeon/loadtest.env"),
+            ('--url "$${SERVER_URL}"', '--url "$${OTHER_URL}"'),
+            ("ExecStart=/usr/local/bin/aegaeon-run-loadtest", "ExecStart=/usr/local/bin/unused"),
+            (
+                "ExecStart=/usr/local/bin/aegaeon-run-loadtest",
+                "# ExecStart=/usr/local/bin/aegaeon-run-loadtest\nExecStart=/usr/local/bin/unused",
+            ),
+            (
+                "ExecStart=/usr/local/bin/aegaeon-run-loadtest",
+                "ExecStart=/usr/local/bin/aegaeon-run-loadtest\nExecStart=/usr/local/bin/unused",
+            ),
+            (
+                '/usr/local/bin/aegaeon-docker-login "$${SERVER_IMAGE}"',
+                '/usr/local/bin/unused "$${SERVER_IMAGE}"',
+            ),
+            (
+                "source /etc/aegaeon/loadtest.env\nset +a",
+                "source /etc/aegaeon/loadtest.env\nset +a\nunset SERVER_URL",
+            ),
+            (
+                "cat >/usr/local/bin/aegaeon-run-loadtest <<'EOF'",
+                "if false; then\ncat >/usr/local/bin/aegaeon-run-loadtest <<'EOF'",
+            ),
+        ]
+        for old, new in changes:
+            assert old in original
+            path.write_text(original.replace(old, new, 1))
+            with (
+                self.subTest(change=new),
+                pytest.raises(ValueError, match=r"wiring|shape|scaffold"),
+            ):
+                infra.process_inputs(module)
+        path.write_text(original)
+        report = infra.runtime_contract_report(module, self.root)
+        assert report["status"] == "failed"
+        assert len(report["violations"]) == 21
+        assert sum(v["reason"] == "missing required assignment" for v in report["violations"]) == 19
+
+    def test_source_and_rendered_dollar_escapes_remain_distinct(self):
+        for role in ("server", "loadgen"):
+            rendered = self.fixture_rendered_template(role)
+            infra.rendered_contract(rendered, role, enabled=True)
+            variable = "${GHCR_TOKEN_SSM_PARAMETER_NAME:-}"
+            branch = 'if [[ -n "' + variable + '" ]]; then'
+            assert branch in rendered
+            mutated = rendered.replace(branch, branch.replace(variable, "$" + variable), 1)
+            with (
+                self.subTest(role=role),
+                pytest.raises(ValueError, match="active registry credential branch"),
+            ):
+                infra.rendered_contract(mutated, role, enabled=True)
+        rendered = self.fixture_rendered_template("loadgen")
+        assert "${SERVER_URL}" in rendered
+        mutated = rendered.replace('--url "${SERVER_URL}"', '--url "$${SERVER_URL}"', 1)
+        with pytest.raises(ValueError, match="workload argv wiring"):
+            infra.rendered_contract(mutated, "loadgen", enabled=True)
+        module = self.module("perf-aws-ec2")
+        for role in ("server", "loadgen"):
+            path = module / f"user_data_{role}.sh.tftpl"
+            original = path.read_text()
+            assert "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}" in original
+            path.write_text(
+                original.replace(
+                    "$${GHCR_TOKEN_SSM_PARAMETER_NAME:-}", "${GHCR_TOKEN_SSM_PARAMETER_NAME:-}", 1
+                )
+            )
+            with (
+                self.subTest(source_role=role),
+                pytest.raises(ValueError, match="reviewed active process/service shape"),
+            ):
+                infra.process_inputs(module)
+            path.write_text(original)
+
+    def test_active_registry_pipelines_and_rendered_inputs_are_bound(self):
+        for role in ("server", "loadgen"):
+            for enabled in (False, True):
+                for registry_enabled in (False, True):
+                    rendered = self.fixture_rendered_template(role, enabled, registry_enabled)
+                    with self.subTest(
+                        role=role, enabled=enabled, registry_enabled=registry_enabled
+                    ):
+                        infra.rendered_contract(
+                            rendered, role, enabled=enabled, registry_enabled=registry_enabled
+                        )
+            rendered = self.fixture_rendered_template(role)
+            decryption_line = "      --with-decryption " + chr(92) + "\n"
+            changes = [
+                (decryption_line, "      # --with-decryption " + chr(92) + "\n"),
+                (decryption_line, ""),
+                ("--password-stdin >/dev/null", "> /dev/null # --password-stdin"),
+                ('--name "$GHCR_TOKEN_SSM_PARAMETER_NAME"', '--name "$OTHER_PARAMETER"'),
+                ("'Parameter.Value'", "'Parameter.ARN'"),
+                ("| docker login ghcr.io", "; docker login ghcr.io"),
+                (
+                    '--secret-id "$GHCR_TOKEN_SECRETSMANAGER_SECRET_ID"',
+                    '--secret-id "$OTHER_SECRET"',
+                ),
+                ("'SecretString'", "'ARN'"),
+                ("source /etc/aegaeon/registry.env", "source /etc/aegaeon/unused.env"),
+            ]
+            for old, new in changes:
+                assert old in rendered
+                mutated = rendered.replace(old, new, 1) + "\n# --with-decryption --password-stdin\n"
+                with (
+                    self.subTest(role=role, change=new),
+                    pytest.raises(
+                        ValueError, match=r"pipeline|branch|wiring|environment|shape|scaffold"
+                    ),
+                ):
+                    infra.rendered_contract(mutated, role, enabled=True)
+            # Decoy flags in unrelated active commands cannot satisfy the reviewed helper.
+            mutated = rendered.replace(decryption_line, "", 1)
+            mutated += "\necho --with-decryption --password-stdin\n"
+            with pytest.raises(ValueError, match=r"pipeline|scaffold"):
+                infra.rendered_contract(mutated, role, enabled=True)
+
     def test_rendered_contract_missing_secret_reference_fails(self):
-        with pytest.raises(ValueError, match="password stdin"):
-            infra.rendered_contract("echo broken", "server", enabled=True)
+        rendered = self.fixture_rendered_template("server")
+        rendered = rendered.replace(
+            "GHCR_TOKEN_SSM_PARAMETER_NAME=/aegaeon/registry-token\n",
+            "# GHCR_TOKEN_SSM_PARAMETER_NAME=/aegaeon/registry-token\n",
+        )
+        with pytest.raises(ValueError, match="bound input/secret reference"):
+            infra.rendered_contract(rendered, "server", enabled=True)
 
     def test_support_and_mixed_paths_select_union(self):
         paths = ["scripts/perf/aws_sweep.sh", "infra/tofu/oidc-aws-kms-parity/kms.tf"]
