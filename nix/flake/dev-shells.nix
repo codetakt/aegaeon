@@ -28,6 +28,10 @@ let
   '';
 in
 {
+  typescript = pkgs.mkShellNoCC {
+    packages = [ pkgs.nodejs_24 ];
+  };
+
   docs = pkgs.mkShellNoCC {
     packages = [
       (pkgs.python3.withPackages (pythonPackages: [

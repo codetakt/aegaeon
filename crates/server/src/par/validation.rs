@@ -51,7 +51,7 @@ impl ParStore {
                 } else if method.eq_ignore_ascii_case("client_secret_basic")
                     || method.eq_ignore_ascii_case("client_secret_post")
                 {
-                    client_secret.is_some_and(|provided| {
+                    client_secret.map_or(client_authenticated, |provided| {
                         verify_client_secret_material(
                             client.client_secret.as_deref(),
                             secret_credentials.get(client_id).map_or(&[], Vec::as_slice),
