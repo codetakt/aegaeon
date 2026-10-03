@@ -796,6 +796,39 @@ class InfrastructureTests(unittest.TestCase):
             for registry in (False, True)
         }
 
+    def test_all_rendered_loadtest_inputs_are_bound(self):
+        rendered = self.fixture_rendered_template("loadgen")
+        expected = infra.heredoc_environment(rendered, "loadtest")
+        infra.rendered_contract(rendered, "loadgen", enabled=True)
+        for name, value in expected.items():
+            for replacement in (
+                f"{name}=unreviewed",
+                f"# {name}={value}",
+                f"{name}={value}\nEXTRA=1",
+            ):
+                with self.subTest(name=name, replacement=replacement):
+                    changed = rendered.replace(f"{name}={value}\n", replacement + "\n", 1)
+                    with pytest.raises(ValueError, match="bound input"):
+                        infra.rendered_contract(changed, "loadgen", enabled=True)
+        swapped = rendered.replace("WORKERS=2\nRPS=10\n", "WORKERS=10\nRPS=2\n")
+        with pytest.raises(ValueError, match="bound input"):
+            infra.rendered_contract(swapped, "loadgen", enabled=True)
+
+    def test_rendered_server_environment_matches_metrics_state(self):
+        for enabled in (False, True):
+            rendered = self.fixture_rendered_template("server", enabled=enabled)
+            infra.rendered_contract(rendered, "server", enabled=enabled)
+            original = "AEGAEON_EXPOSE_METRICS_ON_MAIN=" + ("1" if enabled else "0")
+            for replacement in (
+                "AEGAEON_EXPOSE_METRICS_ON_MAIN=" + ("0" if enabled else "1"),
+                "# " + original,
+                original + "\nEXTRA=1",
+            ):
+                with self.subTest(enabled=enabled, replacement=replacement):
+                    changed = rendered.replace(original + "\n", replacement + "\n", 1)
+                    with pytest.raises(ValueError, match="bound input"):
+                        infra.rendered_contract(changed, "server", enabled=enabled)
+
     def test_rendered_contract_missing_secret_reference_fails(self):
         rendered = self.fixture_rendered_template("server")
         rendered = rendered.replace(

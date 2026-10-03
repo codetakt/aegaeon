@@ -1109,17 +1109,37 @@ def rendered_contract(
         "Rendered registry environment lost bound input/secret reference",
     )
     if role == "server":
+        expected_server = {
+            "BASE_URL": "http://${LOCAL_IPV4}:" + str(values["server_port"]),
+            "AEGAEON_EXPOSE_METRICS_ON_MAIN": "1" if enabled else "0",
+            "AEGAEON_TRUSTED_PROXIES": str(values["trusted_proxies"]),
+        }
         require(
-            "AEGAEON_TRUSTED_PROXIES=127.0.0.1/32\n" in rendered, "Trusted proxy rendering changed"
+            heredoc_environment(rendered, "server") == expected_server,
+            "Rendered server environment lost bound input",
         )
         require(
             "registry.example/aegaeon:test --host 0.0.0.0 --port 8080" in rendered,
             "Server CLI rendering changed",
         )
     else:
+        expected_loadtest = {
+            name: str(values[fixture])
+            for name, fixture in {
+                "SERVER_URL": "server_url",
+                "SERVER_IMAGE": "server_image",
+                "ARTIFACT_BUCKET": "artifact_bucket",
+                "ARTIFACT_PREFIX": "artifact_prefix",
+                "WORKERS": "workers",
+                "RPS": "rps",
+                "RUN_TIME": "run_time",
+                "WARMUP": "warmup",
+                "SCENARIO": "scenario",
+            }.items()
+        }
         require(
-            "SERVER_URL=http://server.example:8080\n" in rendered,
-            "Loadtest target rendering changed",
+            heredoc_environment(rendered, "loadtest") == expected_loadtest,
+            "Rendered loadtest environment lost bound input",
         )
         require(
             '--report-file "/results/report.json"' in rendered, "Loadtest report contract changed"
