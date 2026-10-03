@@ -44,6 +44,9 @@ fn verify_token(key: &OidcSigningKey, token: &str, typ: &str) -> TestResult<Valu
     let jwk = jwks.keys.first().ok_or_else(|| anyhow::anyhow!("JWK"))?;
     let modulus = URL_SAFE_NO_PAD.decode(jwk.n.as_deref().ok_or_else(|| anyhow::anyhow!("n"))?)?;
     let exponent = URL_SAFE_NO_PAD.decode(jwk.e.as_deref().ok_or_else(|| anyhow::anyhow!("e"))?)?;
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
     let payload = aegaeon_jose::verify_compact_with_context(
         token,
         aegaeon_jose::VerificationKey::RsaPkcs1Sha256 {
