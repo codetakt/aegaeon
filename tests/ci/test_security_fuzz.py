@@ -884,7 +884,7 @@ write_json = fail_evidence
                 else:
                     shutil.rmtree(corpus)
 
-    def test_backup_rejects_top_level_raw_symlink_without_removal(self):
+    def test_collection_rejects_top_level_raw_symlink_without_removal(self):
         outside = Path(self.temporary) / "outside"
         outside.mkdir()
         marker = outside / "preserve-marker"
@@ -896,7 +896,10 @@ write_json = fail_evidence
         self.assertFalse((self.root.parent / "cleanup-called").exists())
         self.assertTrue((self.root / "fuzz/artifacts").is_symlink())
         self.assertEqual(marker.read_bytes(), b"external fixture")
-        self.assertIn("owned raw directory roots", result.stderr)
+        self.assertIn(
+            "owned raw directory roots",
+            (self.artifacts / "summary/security.log").read_text(),
+        )
 
     def test_restore_rejects_missing_empty_backup_and_symlinked_containers(self):
         for mutation in ("missing-empty", "raw", "evidence"):
@@ -1590,6 +1593,236 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
         self.assertIn("configuration references", result.stderr)
 
 
+# This source is inserted into the existing fixture module; it is not a standalone test runner.
+class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
+    helper_python = SecurityFuzzReceiptBoundaryTests.helper_python
+
+    def test_direct_collection_entrypoints_reject_all_raw_root_aliases_before_changes(self):
+        outside = Path(self.temporary) / "outside"
+        (outside / TARGETS[0] / "nested").mkdir(parents=True)
+        sentinel = outside / TARGETS[0] / "nested/external-input"
+        sentinel.write_bytes(b"external fixture must stay private")
+        expressions = (
+            "h['collect_corpus']()",
+            "h['ensure_directories'](list(h['REQUIRED_TARGETS']))",
+            "h['gather_stats'](list(h['REQUIRED_TARGETS']))",
+            "h['create_archive']()",
+            "h['gather_crash_stats']()",
+            "h['archive_crashes']([h['CrashStat'](names[0],1,1,None,[])], None)",
+        )
+        for name in ("corpus", "artifacts", "corpus_archive"):
+            raw = self.root / "fuzz" / name
+            raw.symlink_to(outside)
+            for expression in expressions:
+                with self.subTest(raw=name, entrypoint=expression):
+                    result = self.helper_python(
+                        "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+                        "names=h['REQUIRED_TARGETS']\n" + expression + "\n"
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("owned raw directory roots", result.stderr)
+                    self.assertEqual(sentinel.read_bytes(), b"external fixture must stay private")
+                    self.assertEqual(
+                        sorted(p.relative_to(outside).as_posix() for p in outside.rglob("*")),
+                        [TARGETS[0], TARGETS[0] + "/nested", TARGETS[0] + "/nested/external-input"],
+                    )
+                    self.assertFalse((self.root / "fuzz/corpus_meta").exists())
+                    self.assertFalse(self.artifacts.exists())
+            raw.unlink()
+
+    def test_passed_and_failed_collection_reject_raw_aliases_and_preserve_execution(self):
+        outside = Path(self.temporary) / "outside"
+        (outside / TARGETS[0] / "nested").mkdir(parents=True)
+        sentinel = outside / TARGETS[0] / "nested/external-input"
+        sentinel.write_bytes(b"never archive this external fixture")
+        for name in ("corpus", "artifacts", "corpus_archive"):
+            for case in ("ok", "run-fail"):
+                with self.subTest(raw=name, case=case):
+                    saved_raw = Path(self.temporary) / ("original-" + name)
+                    self.install_helper_hooks(
+                        {
+                            "--finish-run": "original_collect=collect_corpus\n"
+                            "def alias_collect(data):\n"
+                            f" raw=FUZZ_DIR/{name!r}\n"
+                            f" original=Path({str(saved_raw)!r})\n"
+                            " if raw.exists(): raw.rename(original)\n"
+                            f" raw.symlink_to({str(outside)!r})\n"
+                            " original_collect(data)\n"
+                            "collect_corpus=alias_collect\n"
+                        }
+                    )
+                    result = self.run_suite(case, FAIL_TARGET=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn(
+                        "owned raw directory roots",
+                        (self.artifacts / "summary/security.log").read_text(),
+                    )
+                    directory = self.artifacts / "fuzz"
+                    execution = json.loads((directory / "execution.json").read_text())
+                    self.assertEqual(
+                        execution["status"], "awaiting-cleanup" if case == "ok" else "failed"
+                    )
+                    self.assertEqual(
+                        execution["targets"][0]["run"]["exit_code"], 0 if case == "ok" else 23
+                    )
+                    self.assertFalse((directory / "collection.ok").exists())
+                    self.assertFalse((directory / "run_summary.json").exists())
+                    self.assertFalse(list(directory.glob("*.tar.gz")))
+                    self.assertFalse((self.root / "fuzz/corpus_meta").exists())
+                    self.assertEqual(sentinel.read_bytes(), b"never archive this external fixture")
+                    alias = self.root / "fuzz" / name
+                    self.assertTrue(alias.is_symlink())
+                    alias.unlink()
+                    original = Path(self.temporary) / ("original-" + name)
+                    if original.exists():
+                        original.rename(alias)
+
+    def test_nested_collection_links_are_inert_in_statistics_and_archives(self):
+        outside = Path(self.temporary) / "outside"
+        (outside / "nested").mkdir(parents=True)
+        sentinel = outside / "nested/external-input"
+        sentinel.write_bytes(b"external contents must not be collected")
+        for name in ("corpus", "artifacts"):
+            raw = self.root / "fuzz" / name
+            target = raw / TARGETS[0]
+            target.mkdir(parents=True)
+            (target / "owned-input").write_bytes(b"owned")
+            (target / "file-link").symlink_to(sentinel)
+            (target / "directory-link").symlink_to(outside)
+            (raw / TARGETS[1]).symlink_to(outside)
+        result = self.helper_python(
+            "import runpy,sys\nh=runpy.run_path(sys.argv[1])\nh['collect_corpus']()\n",
+            FUZZ_RUN_ARTIFACT_DIR=str(self.artifacts),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = json.loads((self.artifacts / "run_summary.json").read_text())
+        corpus = {row["name"]: row for row in summary["targets"]}
+        self.assertEqual((corpus[TARGETS[0]]["files"], corpus[TARGETS[0]]["size_bytes"]), (1, 5))
+        self.assertEqual(corpus[TARGETS[1]]["files"], 0)
+        self.assertEqual(
+            [(row["name"], row["files"], row["size_bytes"]) for row in summary["crashes"]],
+            [(TARGETS[0], 1, 5)],
+        )
+        for key, prefix in (("corpus_archive", "corpus/"), ("crash_archive", "")):
+            with tarfile.open(self.artifacts / summary[key]) as archive:
+                names = archive.getnames()
+                self.assertFalse(
+                    any("external-input" in value or "/nested" in value for value in names)
+                )
+                for link in ("file-link", "directory-link"):
+                    entry = archive.getmember(prefix + TARGETS[0] + "/" + link)
+                    self.assertTrue(entry.issym())
+                self.assertEqual(
+                    archive.extractfile(prefix + TARGETS[0] + "/owned-input").read(), b"owned"
+                )
+        self.assertEqual(sentinel.read_bytes(), b"external contents must not be collected")
+
+    def test_collection_summary_alias_blocks_marker_for_passed_and_failed_runs(self):
+        outside = Path(self.temporary) / "external-summary"
+        outside.write_bytes(b"preserve external summary")
+        directory = self.artifacts / "fuzz"
+        directory.mkdir(parents=True)
+        alias = directory / "collection-summary.json"
+        alias.symlink_to(outside)
+        self.install_cleanup_hook("pass")
+        for case in ("ok", "run-fail"):
+            with self.subTest(case=case):
+                result = self.run_suite(case, FAIL_TARGET=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(
+                    "receipt destination is not a regular file",
+                    (self.artifacts / "summary/security.log").read_text(),
+                )
+                self.assertTrue(alias.is_symlink())
+                self.assertEqual(outside.read_bytes(), b"preserve external summary")
+                self.assertFalse((directory / "collection.ok").exists())
+                self.assertFalse((self.root.parent / "cleanup-called").exists())
+                self.assertEqual(
+                    self.summary()["status"], "awaiting-cleanup" if case == "ok" else "failed"
+                )
+                self.assertTrue(list((self.root / "fuzz/corpus").rglob("seed")))
+
+    def test_collection_summary_mismatch_cannot_authorize_cleanup(self):
+        self.install_helper_hooks(
+            {
+                "--finish-run": "original_collect=collect_corpus\n"
+                "def mismatched_collect(data):\n"
+                " original_collect(data)\n"
+                " path=RUN_ARTIFACT_DIR/'run_summary.json'\n"
+                " summary=json.loads(path.read_text())\n"
+                " summary['execution']['run_id']='different-run'\n"
+                " write_json(path,summary)\n"
+                "collect_corpus=mismatched_collect\n"
+            }
+        )
+        self.install_cleanup_hook("pass")
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "run summary differs from the verified execution",
+            (self.artifacts / "summary/security.log").read_text(),
+        )
+        self.assertFalse((self.artifacts / "fuzz/collection.ok").exists())
+        self.assertFalse((self.artifacts / "fuzz/collection-summary.json").exists())
+        self.assertFalse((self.root.parent / "cleanup-called").exists())
+
+    def test_compiler_overrides_reject_before_wrapper_mutation_and_direct_helper_actions(self):
+        marker, raw = self.seed_stale_results()
+        previous = {p: p.read_bytes() for p in marker.parent.iterdir() if p.is_file()}
+        tool = Path(self.temporary) / "unsupported-compiler"
+        tool.write_text(f"#!{sys.executable}\nraise SystemExit('unsupported compiler executed')\n")
+        tool.chmod(0o755)
+        actions = (
+            ["--prepare-run", str(marker.parent)],
+            ["--record-environment", str(marker.parent)],
+            ["--execution-cache", str(marker.parent)],
+            ["--cleanup-cache", str(marker.parent), "invalid-run"],
+            ["--backup-cleanup", str(marker.parent)],
+            ["--finish-run", str(marker.parent), "0"],
+        )
+        for name in (
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_ENCODED_RUSTFLAGS",
+        ):
+            for value in ("", str(tool)):
+                with self.subTest(override=name, present_empty=value == ""):
+                    result = self.run_suite(**{name: value})
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("override is not supported", result.stderr)
+                    self.assertEqual(self.calls(), [])
+                    for action in actions:
+                        direct = subprocess.run(  # noqa: S603 - owned helper with unsupported inputs
+                            [
+                                sys.executable,
+                                str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                                *action,
+                            ],
+                            cwd=self.root,
+                            env={**self.env, name: value},
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        self.assertEqual(direct.returncode, 2, direct.stdout + direct.stderr)
+                        self.assertIn("override is not supported", direct.stderr)
+                    for p, expected in {**previous, **raw}.items():
+                        self.assertEqual(p.read_bytes(), expected)
+        for expression in (
+            "h['prepare_run'](destination)",
+            "h['configured_cache'](destination)",
+            "h['load_execution'](destination)",
+        ):
+            result = self.helper_python(
+                "import pathlib,runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+                f"destination=pathlib.Path({str(marker.parent)!r})\n" + expression,
+                RUSTC="",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("override is not supported", result.stderr)
+
+
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
     def setUp(self):
         super().setUp()
@@ -1717,3 +1950,27 @@ class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
                 self.assertIn("inherited Git identity overrides", result.stderr)
                 self.assertFalse((self.root.parent / "outer-git-calls.jsonl").exists())
                 self.assertFalse(self.dispatch.exists())
+
+    def test_outer_compiler_overrides_reject_before_git_and_preserve_nonfuzz_dispatch(self):
+        for name in (
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_ENCODED_RUSTFLAGS",
+        ):
+            for value in ("", "unsupported-compiler-fixture"):
+                for arguments in ([], ["--stage", "fuzz"], ["--stage", "sbom", "--stage", "fuzz"]):
+                    with self.subTest(
+                        override=name, arguments=arguments, present_empty=value == ""
+                    ):
+                        result = self.run_outer(arguments, **{name: value})
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn("inherited compiler overrides", result.stderr)
+                        self.assertFalse((self.root.parent / "outer-git-calls.jsonl").exists())
+                        self.assertFalse(self.dispatch.exists())
+        arguments = ["--stage", "geiger"]
+        result = self.run_outer(
+            arguments, GIT_DIR=str(self.external), RUSTC="unsupported-compiler-fixture"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(self.dispatch.read_text())["argv"], arguments)

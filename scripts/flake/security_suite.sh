@@ -31,6 +31,12 @@ if [[ ${#security_outer_stages[@]} -gt 0 ]]; then
 	done
 fi
 if [[ $security_fuzz_entry -eq 1 ]]; then
+	for security_compiler_override in RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_ENCODED_RUSTFLAGS; do
+		if [[ -v $security_compiler_override ]]; then
+			echo "[security] inherited compiler overrides are not supported for fuzz execution or cleanup" >&2
+			exit 1
+		fi
+	done
 	for security_git_identity in \
 		GIT_DIR \
 		GIT_WORK_TREE \
