@@ -249,7 +249,7 @@ Current status (2026-05-12):
 - Draft DB Schema / Migration for federation configuration (the `federation` block) has been added to `docs/specs/management-plane-phase1.md`.
 - The security team has prepared a draft Federation Threat Model (STRIDE), and mitigations for the main risks have been agreed.
 
-**Goal**: Provide `@aegaeon/rp-core` and server configuration to support RP flows with external IdPs (for example, Google Workplace).
+**Goal**: Provide `@aegaeon/rp-core` and server configuration to support RP flows with external IdPs (for example, Google Workspace).
 
 Scope:
 
