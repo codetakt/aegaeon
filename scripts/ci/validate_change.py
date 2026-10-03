@@ -251,13 +251,12 @@ def classify(bound: dict[str, str], output: Path) -> dict[str, Any]:
                     raise ValueError("component plan source hash mismatch")
             if result.get("base") != base or result.get("head") != head:
                 raise ValueError("component plan source range mismatch")
-            result["component_plan"].update(
-                {
-                    **bound,
-                    "classifier_sha256": result["classifier_sha256"],
-                    "policy_sha256": result["policy_sha256"],
-                }
-            )
+            result["component_plan_provenance"] = {
+                **bound,
+                "classifier_sha256": result["classifier_sha256"],
+                "policy_sha256": result["policy_sha256"],
+            }
+        validate_component_plan(result, protected_policy)
         return result
 
 
@@ -294,6 +293,11 @@ def run(*, bootstrap: bool) -> None:
         if "component_plan" in plan:
             stream.write(
                 "component_plan=" + json.dumps(plan["component_plan"], separators=(",", ":")) + "\n"
+            )
+            stream.write(
+                "component_plan_provenance="
+                + json.dumps(plan["component_plan_provenance"], separators=(",", ":"))
+                + "\n"
             )
 
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import test_merge_queue
 import validate_change
 from pr_plan import (
     COMPONENTS,
@@ -307,8 +308,9 @@ def test_protected_classifier_ignores_candidate_policy_and_binds_source(tmp_path
         patch.object(validate_change.subprocess, "run", side_effect=protected_execution),
     ):
         result = validate_change.classify(bound, tmp_path / "plan.json")
-    value = result["component_plan"]
-    assert value["components"] == ["python-example"]
+    validate_component_plan(json.loads(json.dumps(result)), json.loads(policy))
+    assert result["component_plan"]["components"] == ["python-example"]
+    value = result["component_plan_provenance"]
     assert all(value[key] == expected for key, expected in bound.items())
     assert value["policy_sha256"] == hashlib.sha256(policy).hexdigest()
     assert value["classifier_sha256"] == hashlib.sha256(source).hexdigest()
@@ -337,3 +339,28 @@ def test_complete_group_diff_uses_protected_main_not_event_parent():
     )
     assert result["component_plan"]["components"] == ["infrastructure", "python-example"]
     validate_component_plan(result, POLICY)
+
+
+def test_published_component_plan_and_provenance_remain_separate():
+    bound = {"base": test_merge_queue.BASE, "source_head": test_merge_queue.HEAD}
+    classified = plan(change("examples/minimal-rp/app.py"))
+    classified["component_plan_provenance"] = {**bound, "classifier_sha256": "1" * 64}
+    case = test_merge_queue.RunTests()
+    case.setUp()
+    try:
+        with (
+            patch.object(validate_change, "git", side_effect=test_merge_queue.graph),
+            patch.object(validate_change, "classify", return_value=classified),
+            patch.object(validate_change, "verify_signatures", return_value=[]),
+        ):
+            validate_change.run(bootstrap=False)
+        recorded = json.loads(Path("ci-plan.json").read_text())
+        validate_component_plan(recorded, POLICY)
+        outputs = dict(line.split("=", 1) for line in case.output.read_text().splitlines())
+        component = json.loads(outputs["component_plan"])
+        provenance = json.loads(outputs["component_plan_provenance"])
+        assert component == recorded["component_plan"]
+        assert provenance == recorded["component_plan_provenance"]
+        assert provenance == classified["component_plan_provenance"]
+    finally:
+        case.doCleanups()
