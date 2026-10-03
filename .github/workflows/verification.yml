@@ -457,6 +457,7 @@ jobs:
           run_test -p aegaeon-server --lib \
             raw_id_token_payload_parser_rejects_unknown_surface_backend_override \
             -- --nocapture
+          run_test -p aegaeon-server --lib oidc_pss_hash_ -- --nocapture
           run_test -p aegaeon-server --lib \
             compat_profile_falls_back_when_hash_runtime_is_unavailable -- --nocapture
           run_test -p aegaeon-server --lib \
@@ -587,6 +588,8 @@ jobs:
             --features "$strict_features" -- --nocapture
           run_test -p aegaeon-server --lib \
             test_extract_nonce_from_proof_rejects_duplicate_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib oidc_pss_hash_ \
             --features "$strict_features" -- --nocapture
           run_test -p aegaeon-server --test oidc_hash_vectors \
             --features "$strict_features" -- --nocapture

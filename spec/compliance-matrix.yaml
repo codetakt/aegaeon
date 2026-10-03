@@ -5547,6 +5547,9 @@ openid_core:
     test: crates/server/tests/oidc_hash_vectors.rs
   notes:
   - See `crates/server/src/authcode/token/tests/oidc_id_token.rs::test_hash_computation` for known OIDC vectors (RS256 / SHA-256 / left-most 128 bits).
+  - "For already admitted PS256/384/512 signatures, the server adapter selects the existing SHA-256/384/512 hash operation without changing the verified signature algorithm."
+  - "The extracted dispatcher and public FFI accepted-name domain remain unchanged. The PSS digest-selector mapping is covered by finite Rust/Low* runtime and real signed-token tests, not by an expanded formal proof claim."
+  - "See crates/server/src/web/upstream_tests/id_token/tests/pss_hash.rs and crates/server/src/oidc/id_token/tests/pss_hash.rs; supplied hash claims require source material and omitted code-flow claims remain optional."
 - id: OIDC-1-004
   section: max_age / auth_time
   requirement: MUST
