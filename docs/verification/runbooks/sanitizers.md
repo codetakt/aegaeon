@@ -1,6 +1,6 @@
 # Sanitizers - Developer Guide
 
-Last updated: 2026-07-07
+Last updated: 2026-10-04
 
 Status: current implementation baseline
 
@@ -13,77 +13,92 @@ is standardised on Nix.
 
 ## Quickstart
 
-### Via the security suite (recommended)
-
 ```bash
-# Runs deny/audit/vet plus fuzz/sanitizers/SBOM/geiger/udeps.
+# Run the security suite, including its sanitizer stage.
 nix run .#security-suite
+
+# Run sanitizers directly in the supported environment.
+nix develop .#asan --command bash scripts/sanitizers/run_sanitizers.sh
 ```
 
-### Run sanitizers explicitly
+The runner requires Rust, Cargo, Clang, the configured ASan runtime, Python,
+`nm` and `readelf`. It passes an explicit native `--target` matching the Rust
+host so host build scripts and procedural macros do not receive target ASan
+linker flags. The default ffi features and serial curve backend are retained.
 
-```bash
-# Enter the ASan devShell.
-nix develop .#asan
+## Configuration
 
-# Confirm the shared runtime path (set automatically).
-echo "$SANITIZER_RUNTIME_DIR"
-ls "$SANITIZER_RUNTIME_DIR"/libclang_rt.asan-*.so
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SANITIZERS` | `address` | The configured runtime supports AddressSanitizer. Other selections fail. |
+| `SANITIZER_TARGETS` | `ffi` | Comma-separated Cargo packages. |
+| `SANITIZER_CARGO_FLAGS` | empty | Additional feature flags, for example `--features lowstar_hash`. Required target and profile selection cannot be overridden. |
+| `SANITIZER_TARGET_DIR` | `target/sanitizers` | Cargo outputs, separated by sanitizer, package and host target. |
+| `SANITIZER_ARTIFACT_DIR` | `$SANITIZER_TARGET_DIR/artifacts` | Raw command output and `run-summary.json`. |
+| `SANITIZER_TIMEOUT` | `120` | Fallback deadline in seconds. |
+| `SANITIZER_BUILD_TIMEOUT` | `$SANITIZER_TIMEOUT` | Metadata/build command deadline. |
+| `SANITIZER_RUN_TIMEOUT` | `$SANITIZER_TIMEOUT` | Deadline for each binary listing, inspection and execution. |
+| `SANITIZER_TIMEOUT_KILL` | `130` | Grace after termination before killing a remaining process group. |
+| `ASAN_VERIFY_LINK_ORDER` | `0` | ASan runtime link-order check. |
 
-# Run the sanitizer suite.
-scripts/run_sanitizers.sh
+Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
+accepted. A timeout fails the run. The supervisor terminates remaining processes
+in each command's process group on timeout, interruption or capture failure.
+A normally exiting leader with running descendants also fails after cleanup.
+The existing security job's outer timeout still bounds the whole stage.
+
+The runner sets these execution options explicitly:
+
+```text
+ASAN_OPTIONS=abort_on_error=1:detect_stack_use_after_return=1:detect_leaks=0:verify_asan_link_order=0:verbosity=0
+LSAN_OPTIONS=abort_on_error=1:detect_leaks=0
+UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 ```
 
-You can tune the targets via environment variables.
+`ASAN_VERIFY_LINK_ORDER` changes the corresponding ASan option. Leak detection
+is disabled in this suite. `SANITIZER_EXEC_LD_PRELOAD` or
+`SANITIZER_EXEC_FORCE_PRELOAD=1` enables the existing execution preload route.
 
-```bash
-# Targets to run (comma-separated).
-export SANITIZER_TARGETS=ffi
+## Required execution and evidence
 
-# Sanitizers to run.
-export SANITIZERS=address
+Cargo metadata defines the current library/integration target inventory; the
+nine baseline ffi targets remain a required minimum. A successful Cargo build
+must report an executable for every applicable target through compiler-artifact
+JSON. Binary basenames need not contain `ffi`. Valid Cargo cache reuse is
+accepted when Cargo binds the executable to the selected package, target,
+source and native output directory. Missing, duplicate, malformed or unrelated
+artifacts fail even if an old executable exists.
 
-# Additional cargo flags.
-export SANITIZER_CARGO_FLAGS="--no-default-features"
+For each binary the runner retains symbol and ELF inspection, lists all and
+ignored test identities, and validates normal libtest JSON completion against
+those names. Ignored tests retain their existing policy and are reported
+separately. Every required binary needs runnable tests, including the native
+JOSE header integration test. When `lowstar_hash` is disabled,
+`oidc_hash_runtime_test` has no applicable tests: its binary must still build,
+list and execute normally, and the summary qualifies that zero-test result.
+Enabling the feature requires nonempty execution in that binary too.
 
-# Output directory.
-export SANITIZER_TARGET_DIR=target/sanitizers
-```
+`run-summary.json` records commands, deadlines, exits, target/source/binary
+identities and SHA-256 digests, flags, runtime linkage, expected tests and named
+results. Raw stdout and stderr are retained for successful and failed commands.
+Build failures, crashes, missing named completion, malformed evidence and output
+or cleanup errors fail the run.
 
-## devShell differences
-
-| Item | `nix develop .#default` | `nix develop .#asan` |
-|------|--------------------------|----------------------|
-| Rust toolchain | nightly (standard) | fenix nightly + ASan |
-| Shared runtime | none | bundles `libclang_rt.asan.*` |
-| Primary use | day-to-day development | running sanitizers |
-
-`nix run .#security-suite` invokes `nix develop .#asan --command scripts/run_sanitizers.sh`
-internally, so you can run the short smoke suite without entering the devShell manually. For more
-extensive runs, execute commands directly inside the ASan devShell.
-
-## ASan options
-
-You can tune runtime behaviour via `ASAN_OPTIONS`. The scripts use the following defaults:
-
-```bash
-ASAN_OPTIONS=abort_on_error=1:detect_stack_use_after_return=1:detect_leaks=0:verify_asan_link_order=0:verbosity=1
-```
-
-To write logs to a file, add `log_path`:
-
-```bash
-ASAN_OPTIONS="$ASAN_OPTIONS:log_path=asan.log"
-```
+ASan markers and the isolated validation canary establish instrumentation of
+the Rust test binaries checked. They do not establish instrumentation of all C
+libraries or dependencies, universal memory safety, or release-server coverage.
 
 ## Troubleshooting
 
-- **Link-order warnings**: suppress them with `ASAN_VERIFY_LINK_ORDER=0` (default). Only set it to
-  `1` when you need extra diagnostics and can tolerate the warnings.
-- **LeakSanitizer false positives**: CI runs with `detect_leaks=0`. For local leak checks, add
-  `detect_leaks=1` to `ASAN_OPTIONS`.
-- **Sanitizer crashes**: inspect the binaries/logs under `target/sanitizers`, then rerun the exact
-  command recorded in the final section of `scripts/run_sanitizers.sh` to capture more detail.
+- **Missing tools/runtime**: enter `nix develop .#asan` and inspect
+  `SANITIZER_RUNTIME_DIR`; required inputs cannot be skipped.
+- **Link-order warnings**: the default is `ASAN_VERIFY_LINK_ORDER=0`. Enable the
+  check only when investigating runtime ordering.
+- **Build/test failure**: inspect `run-summary.json` and the corresponding raw
+  logs under the artifact directory. Reproduce the recorded command and flags
+  in the same pinned environment.
+- **Deadline exceeded**: distinguish build time from binary execution time in
+  the summary. Preserve the failed evidence before adjusting a deadline.
 
 ## References
 

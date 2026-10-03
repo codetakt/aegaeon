@@ -132,7 +132,7 @@ cleanup_fuzz_outputs() {
 }
 
 cleanup_sanitizer_outputs() {
-	rm -rf target/sanitizers || true
+	rm -rf target/sanitizers
 }
 
 discover_devtools_manifests() {
@@ -272,9 +272,9 @@ warn_step() {
 
 sanitize() {
 	local dir="$ARTIFACT_BASE/sanitizers"
-	mkdir -p "$dir"
+	mkdir -p "$dir" || return $?
 	SANITIZER_ARTIFACT_DIR="$dir" \
-		nix develop .#asan --command scripts/sanitizers/run_sanitizers.sh
+		nix develop .#asan --command bash scripts/sanitizers/run_sanitizers.sh
 }
 
 DEFAULT_FUZZ_TARGETS=(
@@ -566,8 +566,19 @@ run_fuzz_stage() {
 }
 
 run_sanitizers_stage() {
-	warn_step "sanitizer smoke" sanitize
-	cleanup_sanitizer_outputs
+	local status=0 cleanup_status=0
+	echo "[security] >>> sanitizer smoke" | tee -a "$LOG_FILE" || return $?
+	if sanitize >>"$LOG_FILE" 2>&1; then
+		echo "[security] <<< sanitizer smoke: ok" | tee -a "$LOG_FILE" || status=$?
+	else
+		status=$?
+		echo "[security] <<< sanitizer smoke: failed (exit=$status)" | tee -a "$LOG_FILE" || true
+	fi
+	cleanup_sanitizer_outputs >>"$LOG_FILE" 2>&1 || cleanup_status=$?
+	if [[ $status -ne 0 ]]; then
+		return "$status"
+	fi
+	return "$cleanup_status"
 }
 
 run_sbom_stage() {
@@ -798,7 +809,16 @@ if stage_enabled "fuzz"; then
 		suite_result=$?
 	fi
 fi
-stage_enabled "sanitizers" && run_sanitizers_stage
+if stage_enabled "sanitizers"; then
+	if run_sanitizers_stage; then
+		:
+	else
+		sanitizer_result=$?
+		if [[ $suite_result -eq 0 ]]; then
+			suite_result=$sanitizer_result
+		fi
+	fi
+fi
 stage_enabled "sbom" && run_sbom_stage
 stage_enabled "geiger" && run_geiger_stage
 stage_enabled "udeps" && run_udeps_stage
