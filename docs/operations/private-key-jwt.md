@@ -1,6 +1,6 @@
 # private_key_jwt Operations (jwks_uri / RSA n,e)
 
-Last updated: 2026-07-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -10,7 +10,7 @@ Audience: operators, maintainers
 
 ## Overview
 
-- Clients authenticate to the token/introspection/revocation/PAR endpoints with `private_key_jwt`.
+- Clients authenticate to the token/device authorization/introspection/revocation/PAR endpoints with `private_key_jwt`.
 - For RSA keys, the Authorization Server resolves the client's public key from `jwks_uri`
   (JWK with `kty=RSA`, `n`, `e`) and verifies RS256 signatures.
 - JWKS fetcher hardening knobs (timeouts/retries/stale/circuit/shared-cache/pinning) are documented in:
@@ -20,6 +20,31 @@ Audience: operators, maintainers
 - **Verification-boundary note**: this server-side `RS256` `private_key_jwt` verification path is
   part of the promoted `RS256 Interop Slice`. Broad RSA and non-promoted interoperability surfaces
   remain outside the general verified allowlist.
+
+## Client identification
+
+Send both `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`
+and the signed JWT in `client_assertion`. At `/token`, `/device_authorization`,
+`/introspect`, and `/revoke`, the outer `client_id` may be omitted (RFC 7521
+section 4.2). The assertion's nonempty `sub` identifies the registered client;
+Aegaeon requires `iss` to identify that same client. Any supplied outer
+`client_id` must match exactly. An unverified subject is only a lookup hint:
+registered method, algorithm, key, signature, audience, time, and replay checks
+must all succeed before the request is authenticated.
+
+All `/par` requests require the outer authorization parameter `client_id`,
+including when authenticating with HTTP Basic or an assertion and when carrying
+a signed Request Object (RFC 9126 section 2.1; RFC 9101 sections 5 and 6.3).
+Requests that previously relied on authentication or a Request Object to supply
+this outer parameter must add it. The outer value, authenticated client, and
+verified Request Object `client_id` must match. Missing outer identification is
+rejected before assertion or Request Object replay state is consumed.
+
+Do not combine authentication methods. Empty, incomplete, malformed, or
+unsupported assertion credentials are rejected even when endpoint policy permits
+public clients. Unauthenticated token, device, revocation and PAR requests still
+need their own client identification. Use a new assertion `jti` for each request.
+The existing endpoint-specific assertion audience checks remain in effect.
 
 ## Operational Pattern (Recommended)
 

@@ -12,7 +12,7 @@ use crate::runtime_configuration::load_active_runtime_configuration_revision_for
 
 use super::state::RUNTIME_AUTHORITY_DATABASE_REVISION_CACHE_TTL;
 
-const SERVER_REQUEST_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+pub(super) const SERVER_REQUEST_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 
 pub fn build_router(state: AppState) -> Router {
     let management_router = management::router(state.management.clone());

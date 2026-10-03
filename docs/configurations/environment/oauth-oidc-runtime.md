@@ -243,6 +243,11 @@ monitor exits if a node cannot converge to the DB projection.
 
 ## PAR (Pushed Authorization Requests)
 
+All `/par` forms require outer `client_id`, including those using Basic or
+assertion authentication or a signed Request Object. Its value must match the
+authenticated client and the verified Request Object `client_id`. See
+[client assertion identification](../../operations/private-key-jwt.md#client-identification).
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_PAR_EXPIRES_IN` | _removed_ | `environment` | Removed startup-environment fallback `expires_in` for `request_uri` values (seconds, valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.parExpiresInSeconds` is authoritative. |

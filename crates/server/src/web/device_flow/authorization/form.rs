@@ -15,9 +15,7 @@ pub(super) fn device_authorization_form_from_params(
     params: &[(String, String)],
     issuer_base: &str,
 ) -> Result<DeviceAuthorizationForm, Response> {
-    let client_id = optional_token_param(params, "client_id", issuer_base)?
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+    let client_id = optional_token_param(params, "client_id", issuer_base)?;
     let scope = optional_token_param(params, "scope", issuer_base)?;
     let resource = params
         .iter()

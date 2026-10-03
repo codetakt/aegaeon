@@ -69,7 +69,7 @@ pub(in crate::web) fn client_auth_presence(
 ) -> ClientAuthPresence {
     let basic_present = auth_header.is_some_and(ClientRegistry::basic_auth_present);
     let post_present = non_empty(client_secret);
-    let pkjwt_present = non_empty(client_assertion) || non_empty(client_assertion_type);
+    let pkjwt_present = client_assertion.is_some() || client_assertion_type.is_some();
     ClientAuthPresence::from_parts(basic_present, post_present, pkjwt_present)
 }
 
@@ -120,7 +120,7 @@ pub(in crate::web) async fn validate_private_key_jwt_client_assertion(
     }
 }
 
-fn client_assertion_internal_error_response(
+pub(super) fn client_assertion_internal_error_response(
     issuer_base: &str,
     assertion_kind: &'static str,
     message: &str,
@@ -142,6 +142,7 @@ fn client_assertion_internal_error_response(
 }
 
 pub(super) fn token_resolve_client_id(
+    state: &AppState,
     auth_header: Option<&str>,
     form: &TokenForm,
 ) -> Result<(String, ClientAuthPresence), Response> {
@@ -163,6 +164,22 @@ pub(super) fn token_resolve_client_id(
         ),
         _ => None,
     };
+    let client_id_from_assertion = if presence.private_key_jwt {
+        Some(
+            super::assertion_subject::private_key_jwt_client_id(
+                state,
+                form.client_id.as_deref(),
+                form.client_assertion_type.as_deref(),
+                form.client_assertion.as_deref(),
+            )?
+            .ok_or_else(|| {
+                token_error_response(StatusCode::UNAUTHORIZED, "invalid_client", None)
+            })?,
+        )
+    } else {
+        None
+    };
+    let client_id_from_basic = client_id_from_basic.or(client_id_from_assertion);
     let client_id_from_form = form.client_id.clone();
     let client_id = match (
         client_id_from_form.as_deref(),
