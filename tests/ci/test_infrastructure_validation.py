@@ -179,14 +179,21 @@ class InfrastructureTests(unittest.TestCase):
             "AEGAEON_FEDERATION_LIST_RATE_LIMIT_REDIS_URL",
             "AEGAEON_RATE_LIMIT_REDIS_URL",
         )
-        assignments = "\n".join(f'    {{ name = "{name}", value = "legacy" }},' for name in removed)
-        path.write_text(
-            path.read_text().replace(
-                "container_environment = [",
-                "container_environment = [\n" + assignments,
-                1,
-            )
-        )
+        text = path.read_text()
+        for name in removed:
+            if name.endswith("_REDIS_URL"):
+                text = text.replace(
+                    "redis_secret_env_names = toset([",
+                    f'redis_secret_env_names = toset([\n    "{name}",',
+                    1,
+                )
+            else:
+                text = text.replace(
+                    "container_environment = [",
+                    f'container_environment = [\n    {{ name = "{name}", value = "legacy" }},',
+                    1,
+                )
+        path.write_text(text)
         with pytest.raises(infra.RuntimeContractError) as staging:
             infra.runtime_contract(self.module(), self.root)
         assert len(staging.value.report["violations"]) == 4
@@ -234,15 +241,24 @@ class InfrastructureTests(unittest.TestCase):
         original = path.read_text()
         _, removed, _ = infra.server_inventory(self.root)
         for name in sorted(removed):
+            sensitive = name.endswith("_REDIS_URL") or name in {
+                "AEGAEON_DATABASE_URL",
+                "AEGAEON_KEY_ENCRYPTION_KEY",
+                "AEGAEON_MANAGEMENT_BOOTSTRAP_TOKEN",
+            }
+            marker = (
+                "secret_environment = concat(\n    [" if sensitive else "container_environment = ["
+            )
+            attribute = "valueFrom" if sensitive else "value"
             path.write_text(
                 original.replace(
-                    "container_environment = [",
-                    f'container_environment = [\n    {{ name = "{name}", value = "" }},',
+                    marker, marker + f'\n    {{ name = "{name}", {attribute} = "" }},', 1
                 )
             )
-            with self.subTest(name=name), pytest.raises(infra.RuntimeContractError) as failure:
-                infra.runtime_contract(self.module(), self.root)
-            assert {v["name"] for v in failure.value.report["violations"]} == {name}
+            with self.subTest(name=name):
+                with pytest.raises(infra.RuntimeContractError) as failure:
+                    infra.runtime_contract(self.module(), self.root)
+                assert {v["name"] for v in failure.value.report["violations"]} == {name}
 
     def test_explicit_removed_inventory_overrides_classified_allow_entry(self):
         path = self.root / infra.CONTRACT_SOURCES[0]
@@ -372,7 +388,7 @@ class InfrastructureTests(unittest.TestCase):
             '[{ name = "RUST_LOG", value = "x", extra = true }]',
         ]:
             with pytest.raises(ValueError, match=r"."):
-                infra.environment_objects(expression)
+                infra.environment_objects(expression, "value")
         with pytest.raises(ValueError, match="explicit environment expression"):
             infra.expression("metadata = {\n environment = []\n}\n", "environment")
 
@@ -717,6 +733,68 @@ class InfrastructureTests(unittest.TestCase):
             mutated += "\necho --with-decryption --password-stdin\n"
             with pytest.raises(ValueError, match=r"pipeline|scaffold"):
                 infra.rendered_contract(mutated, role, enabled=True)
+
+    def test_actual_ec2_template_arguments_have_exact_role_ownership(self):
+        module = self.module("perf-aws-ec2")
+        path = module / "instances.tf"
+        original = path.read_text()
+        infra.resource_contract(module, {"aws": "6.66.0"})
+        for before, after in (
+            (
+                "trusted_proxies                  = local.server_trusted_proxies",
+                "trusted_proxies                  = var.server_image",
+            ),
+            (
+                "ghcr_auth_enabled                = var.ghcr_auth_enabled",
+                "ghcr_auth_enabled                = false",
+            ),
+            ("    scenario                         = var.loadtest_scenario\n", ""),
+            (
+                "    warmup                           = var.loadtest_warmup",
+                "    extra = var.loadtest_warmup\n    warmup = var.loadtest_warmup",
+            ),
+            ("user_data_server.sh.tftpl", "user_data_loadgen.sh.tftpl"),
+            ("  user_data = templatefile", "  user_data_base64 = templatefile"),
+            ('ghcr_username == null ? ""', 'ghcr_username == null ? " "'),
+        ):
+            assert before in original
+            path.write_text(
+                original.replace(before, after, 1) + "\nlocals { decorative = templatefile("
+                '"${path.module}/user_data_server.sh.tftpl", {}) }\n'
+            )
+            with self.subTest(change=after), pytest.raises(ValueError, match=r"."):
+                infra.resource_contract(module, {"aws": "6.66.0"})
+        path.write_text(original)
+
+    def test_actual_template_checks_request_both_registry_states(self):
+        module = self.module("perf-aws-ec2")
+        cases = []
+
+        def fake_command(argv, cwd, stdin=None):
+            if argv[1] == "console":
+                role = "server" if "user_data_server" in stdin else "loadgen"
+                encoded = stdin.split(", ", 1)[1].rsplit("))", 1)[0]
+                values = json.loads(encoded)
+                cases.append((role, values["auto_run_loadtest"], values["ghcr_auth_enabled"]))
+                rendered = self.fixture_rendered_template(
+                    role, values["auto_run_loadtest"], values["ghcr_auth_enabled"]
+                )
+                return json.dumps(json.dumps(rendered))
+            return ""
+
+        with patch.object(infra.Commands, "run", side_effect=fake_command):
+            assert (
+                infra.check_templates(
+                    module, infra.Commands(self.root, {}), "tofu", "bash", self.root
+                )
+                == 8
+            )
+        assert set(cases) == {
+            (role, auto, registry)
+            for role in ("server", "loadgen")
+            for auto in (False, True)
+            for registry in (False, True)
+        }
 
     def test_rendered_contract_missing_secret_reference_fails(self):
         rendered = self.fixture_rendered_template("server")

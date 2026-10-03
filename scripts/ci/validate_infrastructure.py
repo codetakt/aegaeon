@@ -732,10 +732,84 @@ def perf_loadgen_environment_wiring(
     require_body_shape(unit_path, sections[unit_path], rendered=rendered)
 
 
+PERF_TEMPLATE_BINDINGS = {
+    "server": {
+        "aws_region": "data.aws_region.current.id",
+        "server_image": "var.server_image",
+        "server_port": "var.server_port",
+        "expose_metrics_on_main": "var.expose_metrics_on_main",
+        "trusted_proxies": "local.server_trusted_proxies",
+        "ghcr_auth_enabled": "var.ghcr_auth_enabled",
+        "ghcr_username": 'var.ghcr_username == null ? "" : var.ghcr_username',
+        "ghcr_token_ssm_parameter_name": (
+            'var.ghcr_token_ssm_parameter_name == null ? "" : var.ghcr_token_ssm_parameter_name'
+        ),
+        "ghcr_token_secretsmanager_secret": (
+            'var.ghcr_token_secretsmanager_secret_id == null ? "" : '
+            "var.ghcr_token_secretsmanager_secret_id"
+        ),
+    },
+    "loadgen": {
+        "aws_region": "data.aws_region.current.id",
+        "server_image": "var.server_image",
+        "server_url": "local.loadtest_server_url",
+        "artifact_bucket": "local.artifact_bucket_name",
+        "artifact_prefix": "var.artifact_prefix",
+        "auto_run_loadtest": "var.auto_run_loadtest",
+        "workers": "var.loadtest_workers",
+        "rps": "var.loadtest_rps",
+        "run_time": "var.loadtest_run_time",
+        "warmup": "var.loadtest_warmup",
+        "scenario": "var.loadtest_scenario",
+        "ghcr_auth_enabled": "var.ghcr_auth_enabled",
+        "ghcr_username": 'var.ghcr_username == null ? "" : var.ghcr_username',
+        "ghcr_token_ssm_parameter_name": (
+            'var.ghcr_token_ssm_parameter_name == null ? "" : var.ghcr_token_ssm_parameter_name'
+        ),
+        "ghcr_token_secretsmanager_secret": (
+            'var.ghcr_token_secretsmanager_secret_id == null ? "" : '
+            "var.ghcr_token_secretsmanager_secret_id"
+        ),
+    },
+}
+
+
+def compact_expression(text: str) -> str:
+    return re.sub(
+        r'"(?:[^"\\]|\\.)*"|\s+', lambda match: match[0] if match[0].startswith('"') else "", text
+    )
+
+
+def perf_template_bindings(module: Path) -> None:
+    source = (module / "instances.tf").read_text()
+    for role, expected in PERF_TEMPLATE_BINDINGS.items():
+        resource = block(source, f'resource "aws_instance" "{role}"')
+        names = re.findall(r"(?m)^\s*(user_data(?:_base64)?)\s*=", resource)
+        require(names == ["user_data"], "Changed active EC2 userdata ownership")
+        value = expression(resource, "user_data")
+        header = 'templatefile("${path.module}/user_data_' + role + '.sh.tftpl",'
+        require(
+            value.startswith(header) and value.endswith("})"),
+            "Changed active role-specific template identity",
+        )
+        mapping = block(value, header)
+        entries = strict_matches(
+            r"\s*(\w+)\s*=\s*([^\n]+)\n?", mapping, "EC2 templatefile argument map"
+        )
+        pairs = [(item[1], item[2]) for item in entries]
+        require(len(pairs) == len({key for key, _ in pairs}), "Duplicate EC2 templatefile argument")
+        actual = {key: compact_expression(value) for key, value in pairs}
+        require(
+            actual == {key: compact_expression(value) for key, value in expected.items()},
+            "Changed active EC2 templatefile argument source or inventory",
+        )
+
+
 def process_inputs(module: Path) -> dict[str, dict[str, str]]:
     if module.name == "aegaeon-aws-staging":
         return staging_processes(module)
     if module.name == "perf-aws-ec2":
+        perf_template_bindings(module)
         server = (module / "user_data_server.sh.tftpl").read_text()
         loadgen = (module / "user_data_loadgen.sh.tftpl").read_text()
         perf_server_environment_wiring(server)
@@ -893,6 +967,7 @@ def runtime_contract_report(module: Path, root: Path) -> dict[str, Any]:
 
 def resource_contract(module: Path, providers: dict[str, str]) -> None:
     if module.name == "perf-aws-ec2":
+        perf_template_bindings(module)
         instances = (module / "instances.tf").read_text()
         for name in ("server", "loadgen"):
             body = block(instances, f'resource "aws_instance" "{name}"')
@@ -1067,17 +1142,24 @@ def check_templates(module: Path, commands: Commands, tofu: str, bash: str, work
     evaluation.mkdir()
     for template in templates:
         for enabled in (False, True):
-            values = template_values()
-            values.update(expose_metrics_on_main=enabled, auto_run_loadtest=enabled)
-            expression = (
-                f"jsonencode(templatefile({json.dumps(str(template))}, {json.dumps(values)}))\n"
-            )
-            raw = commands.run([tofu, "console", "-no-color"], evaluation, expression)
-            rendered = json.loads(json.loads(raw))
-            role = template.name.split("_")[2].split(".")[0]
-            rendered_contract(rendered, role, enabled=enabled)
-            commands.run([bash, "-n"], evaluation, rendered)
-    return len(templates) * 2
+            for registry_enabled in (False, True):
+                values = template_values()
+                values.update(
+                    expose_metrics_on_main=enabled,
+                    auto_run_loadtest=enabled,
+                    ghcr_auth_enabled=registry_enabled,
+                )
+                expression = (
+                    f"jsonencode(templatefile({json.dumps(str(template))}, {json.dumps(values)}))\n"
+                )
+                raw = commands.run([tofu, "console", "-no-color"], evaluation, expression)
+                rendered = json.loads(json.loads(raw))
+                role = template.name.split("_")[2].split(".")[0]
+                rendered_contract(
+                    rendered, role, enabled=enabled, registry_enabled=registry_enabled
+                )
+                commands.run([bash, "-n"], evaluation, rendered)
+    return len(templates) * 4
 
 
 def check_support(module: Path, root: Path, commands: Commands, bash: str) -> dict[str, str]:
