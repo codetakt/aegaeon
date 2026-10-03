@@ -58,7 +58,7 @@ pub(in crate::web) fn token_auth_presence(
 }
 
 fn non_empty(value: Option<&str>) -> bool {
-    value.is_some_and(|value| !value.trim().is_empty())
+    value.is_some_and(|value| !value.is_empty())
 }
 
 pub(in crate::web) fn client_auth_presence(

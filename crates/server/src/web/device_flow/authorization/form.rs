@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::Response};
 
 use crate::util;
 
-use super::super::super::oauth_errors::json_error_with_iss;
+use super::super::super::oauth_errors::no_cache_json_error_with_iss;
 use super::super::super::{optional_token_param, TokenForm, DEVICE_CODE_GRANT_TYPE};
 
 pub(super) struct DeviceAuthorizationForm {
@@ -23,7 +23,7 @@ pub(super) fn device_authorization_form_from_params(
         .map(|(_, value)| value.clone())
         .collect::<Vec<_>>();
     let resource = util::parse_single_resource_indicator(&resource).map_err(|description| {
-        json_error_with_iss(
+        no_cache_json_error_with_iss(
             StatusCode::BAD_REQUEST,
             "invalid_target",
             Some(&description),

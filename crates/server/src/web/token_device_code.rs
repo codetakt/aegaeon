@@ -27,7 +27,6 @@ fn required_device_code(ctx: &TokenEndpointContext) -> Result<String, Response> 
     ctx.form
         .device_code
         .as_deref()
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .ok_or_else(|| {

@@ -446,6 +446,24 @@ fn validate_resource_indicator_enforces_absolute_uri_and_no_fragment() {
 }
 
 #[test]
+fn resource_indicator_preserves_spelling_and_rejects_raw_whitespace() {
+    let exact = "HTTPS://example.com:443/a%20b/%2f";
+    assert_eq!(validate_resource_indicator(exact).as_deref(), Ok(exact));
+    for resource in [
+        format!(" {exact}"),
+        format!("{exact} "),
+        format!("{exact}\t"),
+        format!("{exact}\0"),
+        format!("{exact}\u{00a0}"),
+    ] {
+        assert!(
+            validate_resource_indicator(&resource).is_err(),
+            "{resource:?}"
+        );
+    }
+}
+
+#[test]
 fn parse_single_resource_indicator_rejects_multiple_values() {
     let values = vec![
         "https://example.com/one".to_string(),

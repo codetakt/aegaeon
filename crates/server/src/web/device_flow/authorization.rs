@@ -40,6 +40,7 @@ pub(in crate::web) async fn device_authorization(
         return form_parse_error_response(issuer_base);
     };
 
+    let params = super::super::token_form::effective_oauth_form(params);
     let device_form = match device_authorization_form_from_params(&params, issuer_base) {
         Ok(form) => form,
         Err(response) => return response,

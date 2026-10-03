@@ -294,6 +294,24 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-015
+  section: '1.9, 3.1, 3.2'
+  requirement: MUST
+  description: OAuth form parameters without values are omitted; effective singleton duplicates reject and grant types retain exact spelling.
+  module: crates/server/src/web/token_form.rs
+  tests:
+  - crates/server/src/web/assertion_client/tests/oauth_forms.rs
+  - crates/server/src/web/assertion_client/tests/oauth_grants.rs
+  - crates/server/src/web/assertion_client/tests/resources.rs
+  - crates/server/src/web/token_exchange/tests/form_parameters.rs
+  - crates/server/src/web/authorization_consent_tests/request_objects/response_modes.rs
+  status: implemented
+  runtime_link: crates/server/src/web/token_endpoint.rs
+  notes:
+  - Applies to token, PAR, device authorization, introspection and revocation form admission.
+  - Empty occurrences are omitted before singleton checks, authentication and extension parsing; repeated nonempty resource/audience selectors retain endpoint resolver semantics.
+  - Exact grant spelling and query/form_post response modes are runtime behavior; Request Object JSON typing is unchanged.
+  - Existing 2 MiB raw body limit remains; these form entrances have no separate raw parameter-count limit. Finite route tests do not establish universal parser or product assurance.
 rfc_6750:
 - id: 6750-001
   section: '2.1'

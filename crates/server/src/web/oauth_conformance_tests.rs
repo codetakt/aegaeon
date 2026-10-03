@@ -62,16 +62,34 @@ async fn rar_constraints_are_never_ignored_by_any_token_grant() -> TestResult {
 }
 
 #[tokio::test]
-async fn rar_duplicates_are_invalid_even_when_empty() -> TestResult {
-    let params = vec![
-        ("grant_type".into(), "client_credentials".into()),
-        ("authorization_details".into(), "".into()),
-        ("authorization_details".into(), "".into()),
+async fn rar_omits_empty_occurrences_before_duplicate_checks() -> TestResult {
+    let cases: &[(&[&str], Option<&str>)] = &[
+        (&["", ""], None),
+        (&["", "[]"], Some("invalid_authorization_details")),
+        (&["[]", ""], Some("invalid_authorization_details")),
+        (&["[]", "[]"], Some("invalid_request")),
+        (&["", "[]", "", "{}", ""], Some("invalid_request")),
     ];
-    let response = token_form_from_params(&params, "https://issuer.example")
-        .err()
-        .ok_or("duplicate accepted")?;
-    error(response, StatusCode::BAD_REQUEST, "invalid_request").await
+    for (details, expected_error) in cases {
+        let mut params = vec![("grant_type".into(), "client_credentials".into())];
+        params.extend(
+            details
+                .iter()
+                .map(|value| ("authorization_details".into(), (*value).into())),
+        );
+        match expected_error {
+            Some(code) => {
+                let response = token_form_from_params(&params, "https://issuer.example")
+                    .err()
+                    .ok_or("nonempty authorization_details accepted")?;
+                error(response, StatusCode::BAD_REQUEST, code).await?;
+            }
+            None => {
+                assert!(token_form_from_params(&params, "https://issuer.example").is_ok());
+            }
+        }
+    }
+    Ok(())
 }
 
 #[test]
