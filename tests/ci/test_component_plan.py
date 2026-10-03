@@ -419,3 +419,34 @@ def test_large_complete_plan_has_compact_outputs_bound_to_retained_file():
         )
     finally:
         case.doCleanups()
+
+
+@pytest.mark.parametrize(
+    ("status", "old", "new"),
+    [
+        ("A", "100644", "100644"),
+        ("A", "100644", "000000"),
+        ("D", "100644", "100644"),
+        ("D", "000000", "100644"),
+        ("M", "000000", "100644"),
+        ("M", "100644", "000000"),
+        ("T", "100644", "100644"),
+        ("T", "100755", "100755"),
+        ("T", "000000", "100644"),
+    ],
+)
+def test_malformed_status_mode_combinations_select_all(status, old, new):
+    result = plan(change("examples/minimal-rp/app.py", status, old, new))
+    assert result["scope"] == "full"
+    assert result["component_plan"]["components"] == list(COMPONENTS)
+    assert result["component_plan"]["infrastructure_modules"] == list(INFRASTRUCTURE_MODULES)
+
+
+@pytest.mark.parametrize(
+    ("status", "old", "new"),
+    [("A", "000000", "100644"), ("D", "100644", "000000"), ("M", "100644", "100644")],
+)
+def test_valid_regular_status_mode_combinations_keep_registered_component(status, old, new):
+    result = plan(change("examples/minimal-rp/app.py", status, old, new))
+    assert result["component_plan"]["components"] == ["python-example"]
+    assert result["component_plan"]["infrastructure_modules"] == []

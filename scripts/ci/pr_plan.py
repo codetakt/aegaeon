@@ -146,7 +146,12 @@ def ambiguous_change(change: dict[str, str], policy: dict[str, Any]) -> bool:
         or p.is_absolute()
         or ".." in p.parts
         or any(ord(c) < 32 for c in path)
-        or change["status"] not in {"A", "D", "M", "T"}
+        # Type changes are always conservative; regular A/D/M records must
+        # agree with the absent/present sides declared by their Git status.
+        or change["status"] not in {"A", "D", "M"}
+        or (change["status"] == "A" and change["old_mode"] != "000000")
+        or (change["status"] == "D" and change["new_mode"] != "000000")
+        or (change["status"] == "M" and "000000" in {change["old_mode"], change["new_mode"]})
         or not modes
         or not modes <= {"100644", "100755"}
         or len(modes) > 1
