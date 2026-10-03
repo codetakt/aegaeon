@@ -243,9 +243,9 @@ monitor exits if a node cannot converge to the DB projection.
 
 ## PAR (Pushed Authorization Requests)
 
-Plain `/par` forms require `client_id` even with Basic or assertion authentication.
-A signed Request Object may supply the authorization `client_id` internally;
-its verified value must match the authenticated client. See
+All `/par` forms require outer `client_id`, including those using Basic or
+assertion authentication or a signed Request Object. Its value must match the
+authenticated client and the verified Request Object `client_id`. See
 [client assertion identification](../../operations/private-key-jwt.md#client-identification).
 
 | Variable | Default | Scope | Notes |

@@ -2106,7 +2106,7 @@ rfc_7521:
   - client
   notes:
   - "Assertion-based client authentication is implemented for JWT assertions via RFC 7523 (private_key_jwt)."
-  - "RFC 7521 section 4.2 permits omitted outer client_id at token, device authorization, introspection and revocation when the assertion subject identifies the fully authenticated client. Plain PAR independently requires outer client_id (RFC 9126 section 2.1); signed Request Object PAR binds its verified client_id to the authenticated client (section 3)."
+  - "RFC 7521 section 4.2 permits omitted outer client_id at token, device authorization, introspection and revocation when the assertion subject identifies the fully authenticated client. All PAR independently requires outer client_id (RFC 9126 section 2.1; RFC 9101 sections 5 and 6.3); signed Request Object PAR binds its verified client_id to that outer value and the authenticated client."
   - "Assertion authorization grants are supported for JWT bearer (RFC 7523) when the management policy `allowedGrantTypes` includes `urn:ietf:params:oauth:grant-type:jwt-bearer`; other assertion types are not supported."
   - "Client-side assertion usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 

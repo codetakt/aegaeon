@@ -46,11 +46,11 @@ pub(super) async fn authenticate_par_client(
             "Multiple client authentication methods are not allowed",
         ));
     }
-    if form.request.is_none() && form.client_id.is_none() {
+    if form.client_id.is_none() {
         return Err(super::super::oauth_errors::no_cache_json_error_with_iss(
             axum::http::StatusCode::BAD_REQUEST,
             "invalid_request",
-            Some("client_id is required for a plain pushed authorization request"),
+            Some("client_id is required for a pushed authorization request"),
             state.issuer.as_str(),
         ));
     }
