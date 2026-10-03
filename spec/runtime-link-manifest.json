@@ -382,7 +382,7 @@
       "critical": false
     },
     "crates/server/src/web/token_lifecycle.rs": {
-      "sha256": "9ed49addf3130165303bb0a5f9c6d8518ab33ac30f5504d40ab0511f1b799542",
+      "sha256": "096ea3ccf74ed263c456ccb16159e0445afcb68586ff086ce107d87ef397598a",
       "entries": [
         "7009-002",
         "7009-003",
