@@ -105,11 +105,60 @@ async fn logout_profile_keeps_id_token_type_and_claims() -> TestResult {
     .nonce("login-nonce".to_string())
     .build();
     let claims = serde_json::to_value(&token.claims)?;
-    for signed in [
+    let signed_tokens = [
         key.sign_rs256_jwt(&token.claims)?,
         key.sign_rs256_jwt_async(&token.claims).await?,
-    ] {
+    ];
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
+    for signed in signed_tokens {
         assert_eq!(verify_token(&key, &signed, "JWT")?, claims);
+        let decoded = crate::web::logout_id_token_hint::decode_id_token_hint(
+            &config(key.clone()),
+            &signed,
+            aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
+        )
+        .map_err(|e| anyhow::anyhow!("{}", e.public_description()))?;
+        assert_eq!(serde_json::to_value(decoded)?, claims);
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_profile_signed_production_token_is_not_an_id_token_hint() -> TestResult {
+    let cfg = config(local_key()?);
+    let token = build_backchannel_logout_token_async(
+        &cfg,
+        "client",
+        "session",
+        Some("subject"),
+        "logout-event",
+    )
+    .await
+    .map_err(anyhow::Error::msg)?;
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
+    let claims = verify_logout(&cfg.signing_key, &token, "client", Some("subject"))?;
+    assert_eq!(claims["iss"], cfg.issuer);
+    assert_eq!(claims["aud"], "client");
+    let now = crate::util::now_unix_epoch_secs_i64()?;
+    assert!(claims["exp"].as_i64().is_some_and(|exp| exp > now));
+    let err = crate::web::logout_id_token_hint::decode_id_token_hint(
+        &cfg,
+        &token,
+        aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
+    )
+    .err()
+    .ok_or_else(|| {
+        anyhow::anyhow!("signed production Logout Token accepted as an ID Token hint")
+    })?;
+    assert_eq!(err.status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(err.error, "invalid_request");
+    assert_eq!(
+        err.public_description(),
+        "id_token_hint must be an ID Token"
+    );
     Ok(())
 }

@@ -1,6 +1,6 @@
 # Back-Channel Logout Token profile
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 Status: current implementation baseline
 
@@ -28,7 +28,12 @@ requires `exp` and recommends explicit typing. Aegaeon adopts that recommendatio
 The five-minute duration is not mandated by the specification. On upgrade, relying
 parties that previously accepted only `typ: JWT` for Logout Tokens must accept
 `logout+jwt` and validate expiration along with the signature, issuer, audience,
-event and session/subject binding. Ordinary ID Tokens retain `typ: JWT`.
+event and session/subject binding. Ordinary ID Tokens retain `typ: JWT`. Aegaeon's
+`id_token_hint` consumer rejects `logout+jwt` and `application/logout+jwt`
+case-insensitively. After signature verification and duplicate-safe claim decoding,
+it also rejects the back-channel logout event key, including in tokens with
+`typ: JWT` or no type. Ordinary ID Tokens remain accepted with an absent or
+standard type.
 
 Tokens preserve the existing logout event's `jti`, issuer, recipient audience,
 `sid`, and empty `http://schemas.openid.net/event/backchannel-logout` event object.

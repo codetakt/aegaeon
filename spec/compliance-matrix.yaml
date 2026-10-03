@@ -5880,6 +5880,7 @@ openid_logout:
   notes:
   - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
   - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
+  - The id_token_hint consumer rejects logout+jwt and application/logout+jwt case-insensitively and rejects the exact back-channel logout event key after signature verification and duplicate-safe typed decoding, including JWT and untyped legacy tokens. Signed finite tests isolate each guard and preserve ordinary ID Token compatibility.
   - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
   - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
 - id: OIDC-3-004
