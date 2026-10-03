@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::time::SystemTime;
 
 /// PAR request as per RFC 9126
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ParRequest {
     pub client_id: String,
     pub redirect_uri: String,
@@ -35,11 +35,11 @@ pub struct ParRequest {
     /// RFC 9396 Rich Authorization Requests (`authorization_details`).
     #[serde(default)]
     pub authorization_details: Option<Value>,
-    // Client authentication
-    #[serde(default)]
+    /// Transient credential for local validation; never serialized or restored from storage.
+    #[serde(skip)]
     pub client_secret: Option<String>,
-    /// True only when endpoint-layer client authentication already succeeded with a non-secret
-    /// method such as `private_key_jwt`.
+    /// Internal outcome of successful endpoint-layer client authentication.
+    /// The HTTP form parser never accepts this field from the client.
     #[serde(default)]
     pub client_authenticated: bool,
     /// Raw Request Object (signed JWT) provided via JAR.
@@ -47,6 +47,17 @@ pub struct ParRequest {
     pub request_object: Option<String>,
     #[serde(default)]
     pub request_object_claims: Option<RequestObjectClaims>,
+}
+
+impl std::fmt::Debug for ParRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ParRequest")
+            .field("client_id", &self.client_id)
+            .field("response_type", &self.response_type)
+            .field("client_authenticated", &self.client_authenticated)
+            .finish_non_exhaustive()
+    }
 }
 
 /// PAR response as per RFC 9126
@@ -88,7 +99,8 @@ pub struct StoredParRequest {
 pub(super) struct ValidatedParRequest(ParRequest);
 
 impl ValidatedParRequest {
-    pub(super) fn new(request: ParRequest) -> Self {
+    pub(super) fn new(mut request: ParRequest) -> Self {
+        request.client_secret = None;
         Self(request)
     }
 
