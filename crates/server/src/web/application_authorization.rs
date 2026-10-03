@@ -7,6 +7,7 @@ pub(super) async fn authorization_context(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::ConnectInfo(remote): axum::extract::ConnectInfo<std::net::SocketAddr>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
+    method: axum::http::Method,
     headers: axum::http::HeaderMap,
 ) -> Response {
     // This application surface accepts exactly the authenticated UserInfo credential and
@@ -15,6 +16,7 @@ pub(super) async fn authorization_context(
         axum::extract::State(state.clone()),
         axum::extract::ConnectInfo(remote),
         axum::extract::OriginalUri(uri),
+        method,
         headers.clone(),
     )
     .await;

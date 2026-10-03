@@ -78,6 +78,14 @@ encoded: if `b64` is supplied, it must be Boolean `true` (RFC 7797 section 7).
 These checks apply to both public FFI DPoP verification entry points as well as
 the server's production verification path.
 
+DPoP `htm` matches the actual HTTP method exactly, including case (RFC 9449
+section 4.3 item 8 and RFC 9110 section 9.1). `/resource` and `/userinfo` handle
+HEAD with the same authentication checks as GET, require a proof for HEAD, and
+return no response body. `/application/authorization`, which delegates its
+credential validation to UserInfo, also forwards the actual method. UserInfo
+POST continues to require a proof for POST. Resource latency metrics use the
+actual GET or HEAD method with the fixed `/resource` route label.
+
 Both FFI entry points compare `htu` using HTTP(S) URI normalization from RFC
 9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Scheme and host
 case, percent-escape hex case, escaped unreserved characters, dot segments,

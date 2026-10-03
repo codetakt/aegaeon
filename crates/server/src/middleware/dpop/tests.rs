@@ -487,3 +487,35 @@ fn empty_proof_identifier_is_rejected_before_replay_storage() -> TestResult {
         .is_ok());
     Ok(())
 }
+
+#[test]
+fn dpop_method_tokens_are_case_sensitive() -> TestResult {
+    // The test verifier checks claims only; real signatures are covered in FFI tests.
+    for (actual, claimed, accepted) in [
+        ("get", "get", true),
+        ("GET", "GET", true),
+        ("get", "GET", false),
+        ("GET", "get", false),
+    ] {
+        let middleware = DpopMiddleware::new_process_local_for_tests();
+        let proof = build_test_proof(claimed, "http://localhost/resource", None)?;
+        let method = actual.parse().map_err(|e| format!("method: {e}"))?;
+        let uri = "/resource".parse().map_err(|e| format!("URI: {e}"))?;
+        let result = middleware.verify_components_for(
+            DpopEndpointRole::ResourceServer,
+            &method,
+            &uri,
+            &proof,
+            None,
+        );
+        assert_eq!(
+            result.is_ok(),
+            accepted,
+            "actual {actual}, claimed {claimed}"
+        );
+        if !accepted {
+            assert_eq!(result, Err(DpopError::InvalidProof));
+        }
+    }
+    Ok(())
+}

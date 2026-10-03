@@ -237,7 +237,7 @@
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "05261bc146352a80e8ff1118870d004ad6d943c8e2fff545ad9cff9fc538a61b",
+      "sha256": "163d1d8d2b5046bd97340e238277d0cbf8f8e2b682e2d8d9b6f5cae885849d57",
       "entries": [
         "9449-004",
         "9449-005",
@@ -275,7 +275,6 @@
       "entries": [
         "OIDC-3-001",
         "OIDC-3-002",
-        "OIDC-3-003",
         "OIDC-3-004"
       ],
       "critical": false
@@ -388,7 +387,7 @@
       "critical": false
     },
     "crates/server/src/web/token_lifecycle.rs": {
-      "sha256": "9ed49addf3130165303bb0a5f9c6d8518ab33ac30f5504d40ab0511f1b799542",
+      "sha256": "096ea3ccf74ed263c456ccb16159e0445afcb68586ff086ce107d87ef397598a",
       "entries": [
         "7009-002",
         "7009-003",
