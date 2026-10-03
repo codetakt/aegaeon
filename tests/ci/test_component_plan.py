@@ -46,7 +46,12 @@ def plan(*changes):
         ("tests/examples/minimal_rp/check_flow.py", ["python-example"], []),
         ("scripts/oidf_conformance/suite/Dockerfile", ["conformance"], []),
         ("tests/ci/test_conformance_runner.py", ["conformance"], []),
-        (".github/workflows/oidf-conformance.yml", ["conformance"], []),
+        pytest.param(
+            ".github/workflows/oidf-conformance.yml",
+            ["conformance", "development-tools"],
+            [],
+            id="conformance-workflow-overlap",
+        ),
         ("crates/server/tests/process_local_runtime_state_guard_test.rs", ["conformance"], []),
         ("package-lock.json", ["development-tools"], []),
         ("package.json", ["development-tools"], []),
@@ -69,6 +74,23 @@ def test_exact_inputs(path, components, modules):
     assert result["selected"] == POLICY["scopes"][result["scope"]]
     if components:
         assert result["scope"] == "full"
+
+
+@pytest.mark.parametrize(
+    ("status", "old", "new"),
+    [("A", "000000", "100644"), ("D", "100644", "000000"), ("M", "100644", "100644")],
+)
+def test_overlapping_workflow_retains_all_consumers_and_complete_record(status, old, new):
+    workflow = change(".github/workflows/oidf-conformance.yml", status, old, new)
+    result = plan(workflow)
+    assert result["component_plan"]["components"] == ["conformance", "development-tools"]
+    assert result["component_plan"]["infrastructure_modules"] == []
+    records = result["component_plan"]["changes"]
+    assert len(records) == 1
+    assert {key: records[0][key] for key in workflow} == workflow
+    assert records[0]["components"] == ["conformance", "development-tools"]
+    assert "conformance suite" in records[0]["reason"]
+    assert "TypeScript consumer" in records[0]["reason"]
 
 
 @pytest.mark.parametrize(

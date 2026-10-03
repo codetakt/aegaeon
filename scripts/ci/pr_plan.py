@@ -43,6 +43,8 @@ CONFORMANCE_INPUTS = {
     "tests/ci/test_conformance_https.py",
 }
 DEVELOPMENT_INPUTS = {
+    # The registered conformance workflow is also read by workflow inventory.
+    ".github/workflows/oidf-conformance.yml",
     "package.json",
     "package-lock.json",
     "tsconfig.json",
@@ -167,24 +169,34 @@ def component_targets(
     scope, _ = path_scope(path, policy)
     if ambiguous_change(change, policy):
         return list(COMPONENTS), list(INFRASTRUCTURE_MODULES), "ambiguous path, change or file mode"
+    components = []
+    modules = []
+    reasons = []
     if path.startswith("infra/tofu/"):
-        if (
+        if not (
             len(p.parts) == 4
             and p.parts[2] in INFRASTRUCTURE_MODULES
             and (p.suffix in {".tf", ".tftpl"} or p.name == ".terraform.lock.hcl")
         ):
-            return ["infrastructure"], [p.parts[2]], "registered OpenTofu module input"
-        return (
-            list(COMPONENTS),
-            list(INFRASTRUCTURE_MODULES),
-            "unregistered infrastructure input or module",
-        )
+            return (
+                list(COMPONENTS),
+                list(INFRASTRUCTURE_MODULES),
+                "unregistered infrastructure input or module",
+            )
+        components.append("infrastructure")
+        modules.append(p.parts[2])
+        reasons.append("registered OpenTofu module input")
     if path in PYTHON_INPUTS:
-        return ["python-example"], [], "Python example dependency, application or flow test"
+        components.append("python-example")
+        reasons.append("Python example dependency, application or flow test")
     if path.startswith("scripts/oidf_conformance/") or path in CONFORMANCE_INPUTS:
-        return ["conformance"], [], "conformance suite or fixture guard input"
+        components.append("conformance")
+        reasons.append("conformance suite or fixture guard input")
     if path in DEVELOPMENT_INPUTS:
-        return ["development-tools"], [], "root development dependency or exact TypeScript consumer"
+        components.append("development-tools")
+        reasons.append("root development dependency or exact TypeScript consumer")
+    if components:
+        return sorted(components), modules, "; ".join(reasons)
     if scope in {"docs", "integrity"}:
         return [], [], "document or integrity input without a declared component dependency"
     return (
