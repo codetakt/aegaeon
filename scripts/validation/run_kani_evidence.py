@@ -20,6 +20,7 @@ import posixpath
 import re
 import resource
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -824,23 +825,17 @@ def metadata_files(target: pathlib.Path) -> set[pathlib.Path]:
     return set(target.rglob("*.kani-metadata.json")) if target.exists() else set()
 
 
-def request_target(
-    group: dict[str, Any],
-    meta: dict[str, Any],
-    build_root: pathlib.Path,
-    shared_targets: dict[tuple[Any, ...], pathlib.Path],
-) -> pathlib.Path:
-    """Reuse compatible server request targets only within the caller's evaluation."""
-    separate = build_root / f"group-{group['id']}"
+def server_compile_context(group: dict[str, Any], meta: dict[str, Any]) -> tuple[Any, ...] | None:
+    """The server contexts admitted for same-evaluation dependency reuse."""
     if (
         group["id"] not in SERVER_REQUEST_GROUPS
         or group["package"] != {"name": "aegaeon-server", "manifest": "crates/server/Cargo.toml"}
         or group["crate"] != "aegaeon_server"
     ):
-        return separate
+        return None
     # Tools, source root, target and environment are fixed for the whole evaluation.
     # sha256 binds the complete Cargo metadata output, including dependency resolution.
-    context = (
+    return (
         group["package"]["name"],
         group["package"]["manifest"],
         group["crate"],
@@ -849,7 +844,115 @@ def request_target(
         tuple(group["cfg"]),
         meta["sha256"],
     )
-    return shared_targets.setdefault(context, separate)
+
+
+def request_target(
+    group: dict[str, Any],
+    meta: dict[str, Any],
+    build_root: pathlib.Path,
+    shared_targets: dict[tuple[Any, ...], pathlib.Path],
+) -> pathlib.Path:
+    """Reuse compatible server request targets only within the caller's evaluation."""
+    separate = build_root / f"group-{group['id']}"
+    context = server_compile_context(group, meta)
+    return separate if context is None else shared_targets.setdefault(context, separate)
+
+
+def discovery_primary_paths(
+    target: pathlib.Path, cargo_target: str, paths: list[tuple[pathlib.Path, bool]]
+) -> list[tuple[pathlib.Path, bool]]:
+    """Select only server-owned artifacts in the pinned Cargo/Kani profile layout."""
+    profiles = (target / "kani/debug", target / "kani" / cargo_target / "debug")
+    structural = {target / "kani", target / "kani" / cargo_target}
+    for profile in profiles:
+        structural.update(
+            profile / part for part in (".", "deps", ".fingerprint", "build", "incremental")
+        )
+    if any(path in structural and not directory for path, directory in paths):
+        raise AdmissionError("unsupported discovery Cargo profile layout")
+    selected: list[tuple[pathlib.Path, bool]] = []
+    for profile in profiles:
+        selected.extend(server_profile_primary_paths(profile, paths))
+    return sorted(selected, key=lambda entry: len(entry[0].parts))
+
+
+def server_profile_primary_paths(
+    profile: pathlib.Path, paths: list[tuple[pathlib.Path, bool]]
+) -> list[tuple[pathlib.Path, bool]]:
+    """Package fingerprints bind hash-bearing crate outputs in this exact profile."""
+    package = re.compile(r"aegaeon-server-([0-9a-f]{16})")
+    artifact = re.compile(
+        r"(?:lib)?aegaeon_server-([0-9a-f]{16})"
+        r"(?:\.(?:d|rlib|rmeta|kani-metadata\.json)|"
+        r"__R[A-Za-z0-9_]+\.(?:out|symtab\.out|type_map\.json|pretty_name_map\.json))"
+    )
+    selected: list[tuple[pathlib.Path, bool]] = []
+    hashes: set[str] = set()
+    for path, directory in paths:
+        match = package.fullmatch(path.name)
+        if path.parent in {profile / ".fingerprint", profile / "build"} and match is not None:
+            if not directory:
+                raise AdmissionError("unsupported discovery package output layout")
+            selected.append((path, directory))
+            if path.parent == profile / ".fingerprint":
+                hashes.add(match[1])
+    for path, directory in paths:
+        if path.parent not in {profile, profile / "deps"}:
+            continue
+        match = artifact.fullmatch(path.name)
+        plain = path.parent == profile and path.name in {
+            "libaegaeon_server.d",
+            "libaegaeon_server.rlib",
+            "libaegaeon_server.rmeta",
+        }
+        if path == profile / "incremental":
+            selected.append((path, directory))
+        elif plain or (match is not None and match[1] in hashes):
+            if directory:
+                raise AdmissionError("unsupported discovery crate artifact layout")
+            selected.append((path, directory))
+    return selected
+
+
+def clear_discovery_primary(
+    target: pathlib.Path, build_root: pathlib.Path, cargo_target: str
+) -> list[str]:
+    """Invalidate primary server state without relocating its live dependencies."""
+    try:
+        if (
+            target.parent != build_root
+            or not stat.S_ISDIR(build_root.stat(follow_symlinks=False).st_mode)
+            or not stat.S_ISDIR(target.stat(follow_symlinks=False).st_mode)
+            or target.resolve().parent != build_root.resolve()
+        ):
+            raise AdmissionError("discovery target is not an evaluation-owned directory")
+        paths: list[tuple[pathlib.Path, bool]] = []
+        pending = [target]
+        # rglob and is_file/is_dir can suppress OSError. Inventory strictly and finish
+        # validating every entry before deleting anything; never follow a discovered link.
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    path = pathlib.Path(entry.path)
+                    mode = path.stat(follow_symlinks=False).st_mode
+                    directory = stat.S_ISDIR(mode)
+                    if not (directory or stat.S_ISREG(mode)):
+                        raise AdmissionError("unsupported discovery target entry")
+                    paths.append((path, directory))
+                    if directory:
+                        pending.append(path)
+        removed: list[pathlib.Path] = []
+        for path, directory in discovery_primary_paths(target, cargo_target, paths):
+            if any(parent in removed for parent in path.parents):
+                continue
+            if directory:
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            removed.append(path)
+    except OSError as error:
+        raise AdmissionError(f"discovery primary invalidation failed: {error}") from error
+    return [path.relative_to(target).as_posix() for path in removed]
 
 
 def discover(
@@ -864,6 +967,11 @@ def discover(
     source_base: str,
 ) -> dict[str, Any]:
     """Compile once with the group's exact configuration and read every harness identity."""
+    # Even a successful command cannot admit a primary metadata file left by an earlier discovery.
+    for candidate in metadata_files(target):
+        document = read_metadata(candidate)
+        if document is not None and document.get("crate_name") == group["crate"]:
+            raise AdmissionError("discovery target contains pre-existing primary metadata")
     command = kani_command(kani, group, manifest, registry, None, only_codegen=True)
     env = {**env, "CARGO_TARGET_DIR": str(target)}
     record = run_process(
@@ -1506,6 +1614,7 @@ def run(args: argparse.Namespace) -> int:
     )
     record["inputs"] = input_digests(root, groups, path_dependencies)
     shared_request_targets: dict[tuple[Any, ...], pathlib.Path] = {}
+    discovery_targets: dict[tuple[Any, ...], pathlib.Path] = {}
     index = 0
     for group in groups:
         group_dir = run_dir / "groups" / group["id"]
@@ -1514,6 +1623,13 @@ def run(args: argparse.Namespace) -> int:
             if group["id"] in group_faults:
                 raise AdmissionError(group_faults[group["id"]])
             meta = metadata_by_group[group["id"]]
+            discovery_target = build_root / f"discovery-{group['id']}"
+            context = server_compile_context(group, meta)
+            previous = discovery_targets.get(context) if context is not None else None
+            removed = []
+            if previous is not None:
+                discovery_target = previous
+                removed = clear_discovery_primary(discovery_target, build_root, registry["target"])
             discovery = discover(
                 group,
                 manifest,
@@ -1521,11 +1637,14 @@ def run(args: argparse.Namespace) -> int:
                 registry,
                 env,
                 group_dir,
-                build_root / f"discovery-{group['id']}",
+                discovery_target,
                 root,
                 meta["source_base"],
             )
+            discovery["primary_outputs_removed"] = removed
             write_json_new(group_dir / "discovery.json", discovery)
+            if context is not None:
+                discovery_targets.setdefault(context, discovery_target)
         except AdmissionError as error:
             # A runner/preflight fault is typed: it blocks every scope and never counts as
             # a mathematical rejection of the group's requests.

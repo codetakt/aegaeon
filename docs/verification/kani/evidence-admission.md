@@ -78,8 +78,16 @@ For a required or diagnostic request the runner
    `application-authorization-revision` may sequentially reuse an earlier group's
    request target when the server package/manifest/lib, ordered features,
    no-default-features, cfg and complete Cargo metadata digest match. Otherwise
-   the group uses a fresh target. Every discovery uses a separate fresh target;
-   request targets are never reused between evaluations. Each request retains
+   the group uses a fresh target. Discovery may reuse a separate, stable target
+   under the same server group and context restrictions. Before each repeated
+   discovery, the adapter validates the target layout and removes server primary
+   artifacts and package fingerprint/build outputs at the pinned Cargo profile
+   locations, plus those profiles' incremental directories. Hash-bearing crate
+   artifacts must match a server fingerprint in the same profile;
+   dependency artifacts stay at their original paths. Remaining primary metadata
+   rejects before codegen. Each group still runs discovery and retains its own
+   fresh metadata and log. Discovery and request targets are disjoint, and neither
+   is reused between evaluations. Each request retains
    its exact invocation and must produce one new matching metadata path:
    `timeout --kill-after=10 <budget> cargo-kani kani --manifest-path … -p <package>
    --lib [--features …] [--no-default-features] --exact --harness <name> --solver
