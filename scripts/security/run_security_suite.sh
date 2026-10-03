@@ -44,6 +44,13 @@ stage_enabled() {
 	return 1
 }
 
+if stage_enabled "fuzz"; then
+	# Resolve the physical script route before any override-influenced Git call
+	# or prior-receipt invalidation. Other stages retain their existing dispatch.
+	fuzz_guard_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
+	python3 "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
+fi
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export ROOT
 # Retire previous fuzz results before any directory setup or suite logging can fail.

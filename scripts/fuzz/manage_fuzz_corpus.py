@@ -14,14 +14,16 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -275,13 +277,11 @@ def write_run_summary(
         summary["status"] = execution["status"]
     META_DIR.mkdir(parents=True, exist_ok=True)
     summary_path = META_DIR / "latest_run.json"
-    summary_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    write_json(summary_path, summary)
 
     if RUN_ARTIFACT_DIR is not None:
         RUN_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-        (RUN_ARTIFACT_DIR / "run_summary.json").write_bytes(summary_path.read_bytes())
+        write_json(RUN_ARTIFACT_DIR / "run_summary.json", summary)
 
     if HISTORY_OUT_DIR is not None:
         HISTORY_OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -340,9 +340,22 @@ def digest(path: Path) -> str:
 
 
 def write_json(path: Path, data: dict) -> None:
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    # The destination's parent is owned by the caller's approved evidence route.
+    # Refuse aliases before creating our exclusive temporary file; an old fixed
+    # execution.tmp/run_summary.tmp is never opened or removed.
+    parent = path.parent
+    if parent.resolve() != parent.absolute() or not parent.is_dir():
+        invalid("fuzz receipt parent is not an owned directory")
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        invalid("fuzz receipt destination is not a regular file")
+    descriptor, name = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(json.dumps(data, indent=2) + "\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def seconds(value: str, name: str) -> int:
@@ -406,8 +419,155 @@ def selected_sources(selected: list[str]) -> list[Path]:
     return paths
 
 
-def source_hashes(selected: list[str]) -> dict:
-    source_files = [
+GIT_IDENTITY_OVERRIDES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+    "GIT_NAMESPACE",
+    "GIT_SHALLOW_FILE",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+)
+
+
+def validate_git_environment() -> None:
+    # Do not sanitize an override after using it to discover ROOT or record HEAD.
+    if any(name in os.environ for name in GIT_IDENTITY_OVERRIDES) or any(
+        name.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")) for name in os.environ
+    ):
+        invalid("inherited Git identity overrides are not supported for fuzz execution or cleanup")
+
+
+def source_exclusions() -> set[Path]:
+    # Identified runtime/build outputs only. Everything else, including ignored
+    # and untracked files, is an input until its ownership is explicitly known.
+    excluded = {
+        ROOT / ".git",
+        ROOT / "target",
+        FUZZ_DIR / "target",
+        *(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta")),
+        ROOT / "artifacts/security",
+        ROOT / "result",
+        ROOT / "result-server",
+    }
+    for name, default in (
+        ("CARGO_TARGET_DIR", "target/security-suite"),
+        ("CARGO_HOME", ""),
+        ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"),
+        ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
+        ("FUZZ_RUN_ARTIFACT_DIR", ""),
+        ("FUZZ_HISTORY_DIR", ""),
+    ):
+        value = os.environ.get(name, default)
+        if not value:
+            continue
+        path = repository_path(Path(value))
+        if not path.is_relative_to(ROOT):
+            continue
+        if (
+            path == ROOT
+            or any(
+                overlaps(path, ROOT / source)
+                for source in CACHE_SOURCE_ROOTS
+                if source not in {".git", "artifacts"}
+            )
+            or overlaps(path, FUZZ_DIR / "fuzz_targets")
+            or any(
+                overlaps(path, ROOT / relative)
+                for relative in (
+                    "artifacts/karamel",
+                    "artifacts/ct",
+                    "fuzz/Cargo.toml",
+                    "fuzz/Cargo.lock",
+                )
+            )
+        ):
+            invalid("fuzz runtime output overlaps local source inputs")
+        excluded.add(path)
+    return excluded
+
+
+KANI_OUTPUT_POINTER = "crates/kani-harness/kani"
+KANI_OUTPUT_TARGET = "result/bin/cargo-kani"
+KANI_OUTPUT_MODE = 0o777
+
+
+def local_fuzz_manifests(inventory: dict[str, dict[str, Any]], excluded: set[Path]) -> set[Path]:
+    pending = [FUZZ_DIR / "Cargo.toml"]
+    visited = set()
+    while pending:
+        manifest = pending.pop()
+        if manifest in visited:
+            continue
+        visited.add(manifest)
+        document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        for route in cargo_path_values(document):
+            check_local_cargo_path(manifest, route, inventory, excluded)
+            target = (manifest.parent / route).resolve()
+            if target.is_relative_to(ROOT / "crates/kani-harness"):
+                invalid("Kani output pointer became relevant to the fuzz dependency closure")
+            if target.is_dir():
+                pending.append(target / "Cargo.toml")
+    return visited
+
+
+def kani_output_pointer() -> dict[str, Any]:
+    # One root-reviewed workspace-excluded tool launcher. Retain its literal
+    # bytes/mode without resolving or traversing the dangling tool output.
+    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    if "crates/kani-harness" not in manifest.get("workspace", {}).get("exclude", []):
+        invalid("Kani output pointer is no longer workspace-excluded")
+    path = ROOT / KANI_OUTPUT_POINTER
+    if (
+        not path.is_symlink()
+        or os.fsencode(path.readlink()) != os.fsencode(KANI_OUTPUT_TARGET)
+        or stat.S_IMODE(path.lstat().st_mode) != KANI_OUTPUT_MODE
+    ):
+        invalid("root-reviewed Kani output pointer is missing or changed")
+    return {
+        "type": "unrelated-tool-output-pointer",
+        "mode": KANI_OUTPUT_MODE,
+        "git_mode": "120000",
+        "target": KANI_OUTPUT_TARGET,
+        "sha256": hashlib.sha256(os.fsencode(path.readlink())).hexdigest(),
+    }
+
+
+def validate_kani_output_relevance(
+    inventory: dict[str, dict[str, Any]], excluded: set[Path]
+) -> None:
+    packages = {manifest.parent for manifest in local_fuzz_manifests(inventory, excluded)}
+    for relative, record in inventory.items():
+        if record["type"] != "file":
+            continue
+        candidate = ROOT / relative
+        if candidate.is_relative_to(ROOT / ".cargo"):
+            if b"kani-harness" in candidate.read_bytes():
+                invalid("Cargo configuration references the Kani output pointer")
+        elif (
+            any(candidate.is_relative_to(package) for package in packages)
+            and candidate.suffix in {".rs", ".toml", ".c", ".h", ".sh", ".py"}
+            and b"kani-harness" in candidate.read_bytes()
+        ):
+            invalid("local fuzz source/build input references the Kani output pointer")
+    if any("kani-harness" in value for value in os.environ.values()):
+        invalid("build environment references the Kani output pointer")
+
+
+def source_hashes(selected: list[str]) -> dict[str, dict[str, Any]]:
+    validate_git_environment()
+    required = [
         ROOT / path
         for path in (
             "Cargo.toml",
@@ -420,12 +580,112 @@ def source_hashes(selected: list[str]) -> dict:
             "scripts/fuzz/manage_fuzz_corpus.py",
         )
     ]
-    source_files = [required_source(path) for path in source_files]
-    source_files.extend(selected_sources(selected))
-    source_files.extend(
-        required_source(path) for path in sorted((FUZZ_DIR / "fuzz_targets").glob("*.rs"))
-    )
-    return {str(path.relative_to(ROOT)): digest(path) for path in source_files}
+    required.extend(selected_sources(selected))
+    excluded = source_exclusions()
+    for path in required:
+        required_source(path)
+        if any(path.is_relative_to(output) for output in excluded):
+            invalid("required fuzz source is excluded by a runtime output")
+    pointer = kani_output_pointer()
+    inventory = local_source_inventory(excluded, pointer)
+    validate_local_cargo_paths(inventory, excluded)
+    validate_kani_output_relevance(inventory, excluded)
+    return dict(sorted(inventory.items()))
+
+
+def local_source_inventory(
+    excluded: set[Path], pointer: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    inventory: dict[str, dict[str, Any]] = {}
+
+    # os.walk does not silently follow symlink directories or discard their
+    # identity. Errors are fatal, and directory records detect empty additions.
+    def traversal_error(error: OSError) -> NoReturn:
+        raise error
+
+    for base, directories, files in os.walk(ROOT, followlinks=False, onerror=traversal_error):
+        directory = Path(base)
+        directories[:] = [name for name in directories if directory / name not in excluded]
+        for name in sorted([*directories, *files]):
+            path = directory / name
+            if path in excluded:
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if path.is_symlink():
+                if relative != KANI_OUTPUT_POINTER:
+                    invalid(f"symlink or external local source input is not supported: {relative}")
+                inventory[relative] = pointer
+                continue
+            mode = stat.S_IMODE(path.stat().st_mode)
+            if path.is_dir():
+                inventory[relative] = {"type": "directory", "mode": mode}
+            elif path.is_file():
+                inventory[relative] = {"type": "file", "mode": mode, "sha256": digest(path)}
+            else:
+                invalid(f"special local source input is not supported: {relative}")
+    return inventory
+
+
+def inherited_cargo_dependencies(document: dict[str, Any]) -> list[Any]:
+    inherited_values = []
+    for table in ("dependencies", "dev-dependencies", "build-dependencies"):
+        for name, dependency in document.get(table, {}).items():
+            if not isinstance(dependency, dict) or dependency.get("workspace") is not True:
+                continue
+            workspace = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+            inherited = workspace.get("workspace", {}).get("dependencies", {}).get(name)
+            if inherited is None or (isinstance(inherited, dict) and inherited.get("workspace")):
+                invalid("unresolved inherited local Cargo dependency")
+            if isinstance(inherited, dict) and "path" in inherited:
+                inherited = {**inherited, "path": str(ROOT / inherited["path"])}
+            inherited_values.append(inherited)
+    return inherited_values
+
+
+def cargo_path_values(document: dict[str, Any]) -> list[str]:
+    paths = []
+    pending: list[Any] = [document]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+            pending.extend(inherited_cargo_dependencies(value))
+            if "path" in value:
+                route = value["path"]
+                if not isinstance(route, str) or not route:
+                    invalid("malformed local Cargo source path")
+                paths.append(route)
+        elif isinstance(value, list):
+            pending.extend(value)
+    return paths
+
+
+def check_local_cargo_path(
+    manifest: Path, route: str, inventory: dict[str, dict[str, Any]], excluded: set[Path]
+) -> None:
+    target = manifest.parent / route
+    resolved = target.resolve()
+    if (
+        not resolved.is_relative_to(ROOT)
+        or not target.exists()
+        or any(resolved.is_relative_to(output) for output in excluded)
+        or (target.is_dir() and not (target / "Cargo.toml").is_file())
+    ):
+        invalid("external, missing or excluded local Cargo source path")
+    if resolved.relative_to(ROOT).as_posix() not in inventory:
+        invalid("local Cargo source path is absent from the input inventory")
+
+
+def validate_local_cargo_paths(inventory: dict[str, dict[str, Any]], excluded: set[Path]) -> None:
+    # Reject external/missing local Cargo paths; manifests cannot introduce an
+    # excluded output or another repository as unrecorded implementation.
+    for relative, record in inventory.items():
+        if record["type"] != "file" or Path(relative).name != "Cargo.toml":
+            continue
+        manifest = ROOT / relative
+        document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        for route in cargo_path_values(document):
+            check_local_cargo_path(manifest, route, inventory, excluded)
 
 
 # Source roots are disjoint from supported build caches, including fuzz/target.
@@ -468,6 +728,7 @@ def overlaps(left: Path, right: Path) -> bool:
 
 
 def git_metadata_paths() -> list[Path]:  # noqa: PLR0912 - validate Git metadata pointers
+    validate_git_environment()
     git_entry = ROOT / ".git"
     if not git_entry.exists():
         if git_entry.is_symlink():
@@ -532,7 +793,9 @@ def configured_cache(directory: Path) -> Path:
 
 
 def prepare_run(directory: Path) -> None:
+    validate_git_environment()
     selected = selected_targets()
+    inputs = source_hashes(selected)
     total = os.environ.get("FUZZ_TOTAL_TIMEOUT", "")
     maximum = os.environ.get("FUZZ_MAX_TOTAL", "30")
     watchdog = os.environ.get("FUZZ_TIMEOUT", "60s")
@@ -585,7 +848,7 @@ def prepare_run(directory: Path) -> None:
         "source": {
             "commit": capture(["git", "rev-parse", "HEAD"]),
             "tree": capture(["git", "rev-parse", "HEAD^{tree}"]),
-            "files": source_hashes(selected),
+            "files": inputs,
         },
         "tools": tools,
         "targets": [
@@ -721,6 +984,8 @@ def validate_phase(directory: Path, row: dict, phase: str) -> bool:
 
 def finish_run(directory: Path, exit_code: int) -> bool:
     data = load_execution(directory)
+    if source_hashes(data["selected_targets"]) != data["source"]["files"]:
+        invalid("fuzz source identity changed during execution")
     passed = exit_code == 0
     for row in data["targets"]:
         for phase in ("build", "run"):
@@ -1013,6 +1278,7 @@ def cleanup_cache(directory: Path, run_id: str) -> Path:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--validate-git-environment", action="store_true")
     actions.add_argument("--validate-cache", type=Path)
     actions.add_argument("--cleanup-cache", nargs=2, metavar=("DIR", "RUN_ID"))
     actions.add_argument("--execution-cache", type=Path)
@@ -1028,7 +1294,10 @@ def parse_arguments() -> argparse.Namespace:
 
 def cleanup_action(args: argparse.Namespace) -> int | None:
     result = None
-    if args.validate_cache:
+    if args.validate_git_environment:
+        validate_git_environment()
+        result = 0
+    elif args.validate_cache:
         configured_cache(args.validate_cache)
         result = 0
     elif args.execution_cache:

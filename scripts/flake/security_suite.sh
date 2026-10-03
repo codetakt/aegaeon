@@ -1,6 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The Nix app runs from the store, so reject inherited identity overrides here
+# before Git can select the repository and inner wrapper. Preserve its arguments.
+security_outer_arguments=("$@")
+security_outer_stages=()
+security_outer_index=0
+while [[ $security_outer_index -lt ${#security_outer_arguments[@]} ]]; do
+	case "${security_outer_arguments[security_outer_index]}" in
+	--fuzz-long) ;;
+	--stage)
+		security_outer_index=$((security_outer_index + 1))
+		if [[ $security_outer_index -ge ${#security_outer_arguments[@]} ]]; then
+			echo "[security] --stage requires a value" >&2
+			exit 1
+		fi
+		security_outer_stages+=("${security_outer_arguments[security_outer_index]}")
+		;;
+	-- | *) break ;;
+	esac
+	security_outer_index=$((security_outer_index + 1))
+done
+security_fuzz_entry=1
+if [[ ${#security_outer_stages[@]} -gt 0 ]]; then
+	security_fuzz_entry=0
+	for security_outer_stage in "${security_outer_stages[@]}"; do
+		if [[ $security_outer_stage == fuzz ]]; then
+			security_fuzz_entry=1
+		fi
+	done
+fi
+if [[ $security_fuzz_entry -eq 1 ]]; then
+	for security_git_identity in \
+		GIT_DIR \
+		GIT_WORK_TREE \
+		GIT_COMMON_DIR \
+		GIT_INDEX_FILE \
+		GIT_OBJECT_DIRECTORY \
+		GIT_ALTERNATE_OBJECT_DIRECTORIES \
+		GIT_CEILING_DIRECTORIES \
+		GIT_DISCOVERY_ACROSS_FILESYSTEM \
+		GIT_NAMESPACE \
+		GIT_SHALLOW_FILE \
+		GIT_REPLACE_REF_BASE \
+		GIT_NO_REPLACE_OBJECTS \
+		GIT_CONFIG \
+		GIT_CONFIG_PARAMETERS \
+		GIT_CONFIG_COUNT \
+		GIT_CONFIG_SYSTEM \
+		GIT_CONFIG_GLOBAL \
+		GIT_CONFIG_NOSYSTEM \
+		"${!GIT_CONFIG_KEY_@}" "${!GIT_CONFIG_VALUE_@}"; do
+		if [[ -n $security_git_identity && -v $security_git_identity ]]; then
+			echo "[security] inherited Git identity overrides are not supported for fuzz execution or cleanup" >&2
+			exit 1
+		fi
+	done
+fi
+
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$ROOT"
 
