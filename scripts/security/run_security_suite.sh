@@ -139,11 +139,15 @@ from pathlib import Path
 import sys
 target = Path(sys.argv[1]).resolve()
 workspace = Path(sys.argv[2]).resolve()
+artifacts = Path(sys.argv[3]).resolve()
 if target == workspace or target in workspace.parents:
     print("[security] unsafe sanitizer target directory; refusing cleanup", file=sys.stderr)
     sys.exit(1)
+if target == artifacts or target in artifacts.parents or artifacts in target.parents:
+    print("[security] sanitizer target overlaps security artifacts; refusing cleanup", file=sys.stderr)
+    sys.exit(1)
 print(str(target) + ".")
-' "${SANITIZER_TARGET_DIR:-target/sanitizers}" "$ROOT")" || return $?
+' "${SANITIZER_TARGET_DIR:-target/sanitizers}" "$ROOT" "$ARTIFACT_BASE")" || return $?
 	# Keep trailing newlines through command substitution, then remove the sentinel.
 	dir=${dir%.}
 	rm -rf -- "$dir"

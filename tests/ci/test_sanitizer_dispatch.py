@@ -39,6 +39,10 @@ import json, os, pathlib, sys
 args = sys.argv[1:]
 root = pathlib.Path(os.environ['FIXTURE_ROOT'])
 workspace = root.resolve()
+artifacts = (root / os.environ['SECURITY_ARTIFACT_DIR']).resolve()
+recursive = any(arg == '--recursive' or
+                (arg.startswith('-') and not arg.startswith('--') and 'r' in arg[1:])
+                for arg in args)
 for arg in args:
     if arg.startswith('-'):
         continue
@@ -49,6 +53,14 @@ for arg in args:
                                  'exit_code': 83}) + '\n')
         print('intercepted dangerous cleanup; no deletion delegated', file=sys.stderr)
         raise SystemExit(83)
+    overlaps = (resolved == artifacts or resolved in artifacts.parents
+                or artifacts in resolved.parents)
+    if recursive and overlaps:
+        with (root / 'dispatch-calls.jsonl').open('a') as out:
+            out.write(json.dumps({'kind': 'artifact-overlap-cleanup', 'args': args,
+                                 'exit_code': 84}) + '\n')
+        print('intercepted artifact overlap; no deletion delegated', file=sys.stderr)
+        raise SystemExit(84)
 target = str((root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve())
 if target in args:
     root = pathlib.Path(os.environ['FIXTURE_ROOT'])
@@ -138,6 +150,124 @@ class SanitizerDispatchTests(unittest.TestCase):
             link.symlink_to(destination, target_is_directory=True)
             return setting
         return setting
+
+    def artifact_target_directory(self, fixture, setting):
+        artifact_name = "retained artifacts/security evidence\n"
+        fixture.artifacts = fixture.root / artifact_name
+        # Resolve the same relative/absolute artifact semantics as ARTIFACT_BASE.
+        fixture.env["SECURITY_ARTIFACT_DIR"] = artifact_name
+        fixture.artifacts.mkdir(parents=True)
+        destinations = {
+            "root": fixture.artifacts,
+            "descendant": fixture.artifacts / "sanitizers",
+            "ancestor": fixture.artifacts.parent,
+            "absolute-artifacts": fixture.artifacts / "sanitizers",
+        }
+        aliases = {
+            "root-symlink": fixture.artifacts,
+            "ancestor-symlink": fixture.artifacts.parent,
+            "descendant-symlink": fixture.artifacts / "sanitizers",
+        }
+        if setting in destinations:
+            target = str(destinations[setting])
+            if setting == "absolute-artifacts":
+                fixture.env["SECURITY_ARTIFACT_DIR"] = str(fixture.artifacts)
+        elif setting == "normalized":
+            target = artifact_name + "/missing-parent/.."
+        elif setting in aliases:
+            destination = aliases[setting]
+            destination.mkdir(parents=True, exist_ok=True)
+            (fixture.root / setting).symlink_to(destination, target_is_directory=True)
+            target = setting
+        elif setting == "artifact-symlink":
+            (fixture.root / "artifact-alias").symlink_to(
+                fixture.artifacts, target_is_directory=True
+            )
+            fixture.env["SECURITY_ARTIFACT_DIR"] = "artifact-alias"
+            target = str(fixture.artifacts)
+        else:
+            raise ValueError(setting)
+        return target
+
+    def seed_retained_evidence(self, fixture):
+        files = {
+            "sanitizers/run-summary.json": '{"status": "retained"}',
+            "sanitizers/raw.stderr.log": "retained sanitizer raw diagnostic",
+            "prior-stage/raw.log": "retained earlier-stage evidence",
+        }
+        for path, text in files.items():
+            destination = fixture.artifacts / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(text)
+        return files
+
+    def test_artifact_overlap_cleanup_is_rejected_and_all_evidence_is_preserved(self):
+        for aggregate in (False, True):
+            for setting in (
+                "root",
+                "descendant",
+                "ancestor",
+                "normalized",
+                "root-symlink",
+                "ancestor-symlink",
+                "descendant-symlink",
+                "artifact-symlink",
+                "absolute-artifacts",
+            ):
+                for child in (0, 71):
+                    with self.subTest(aggregate=aggregate, setting=setting, child=child):
+                        fixture = self.fixture()
+                        target = self.artifact_target_directory(fixture, setting)
+                        retained = self.seed_retained_evidence(fixture)
+                        result = self.run_suite(
+                            fixture,
+                            aggregate=aggregate,
+                            SANITIZER_TARGET_DIR=target,
+                            SANITIZER_CHILD_EXIT=str(child),
+                            SANITIZER_UNSAFE_TARGET_TEST="1",
+                        )
+                        self.assertEqual(
+                            result.returncode, child or 1, result.stdout + result.stderr
+                        )
+                        self.assertEqual(self.receipt(fixture)["exit_code"], child)
+                        self.assertEqual(self.calls(fixture, "cleanup"), [])
+                        self.assertEqual(self.calls(fixture, "unsafe-cleanup"), [])
+                        self.assertEqual(self.calls(fixture, "artifact-overlap-cleanup"), [])
+                        for path, text in retained.items():
+                            self.assertEqual((fixture.artifacts / path).read_text(), text)
+                        log = (fixture.artifacts / "summary/security.log").read_text()
+                        self.assertIn(
+                            "sanitizer target overlaps security artifacts; refusing cleanup", log
+                        )
+                        self.assertIn(
+                            "sanitizer child diagnostic: SUCCESS! exit=" + str(child), log
+                        )
+                        if aggregate:
+                            self.assertTrue((fixture.artifacts / "fuzz/collection.ok").is_file())
+
+    def test_sibling_target_cleanup_preserves_retained_evidence(self):
+        for aggregate in (False, True):
+            for child in (0, 71):
+                with self.subTest(aggregate=aggregate, child=child):
+                    fixture = self.fixture()
+                    self.artifact_target_directory(fixture, "root")
+                    retained = self.seed_retained_evidence(fixture)
+                    # Preserve similarly named artifact root ending in a newline.
+                    target = str(fixture.artifacts).rstrip("\n")
+                    result = self.run_suite(
+                        fixture,
+                        aggregate=aggregate,
+                        SANITIZER_TARGET_DIR=target,
+                        SANITIZER_CHILD_EXIT=str(child),
+                    )
+                    self.assertEqual(result.returncode, child, result.stdout + result.stderr)
+                    self.assertEqual(self.receipt(fixture)["exit_code"], child)
+                    self.assertFalse(Path(target).exists())
+                    self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
+                    self.assertEqual(self.calls(fixture, "artifact-overlap-cleanup"), [])
+                    for path, text in retained.items():
+                        self.assertEqual((fixture.artifacts / path).read_text(), text)
+                    self.assertTrue((fixture.artifacts / "summary/security.log").is_file())
 
     def test_unsafe_target_cleanup_is_rejected_without_removal(self):
         for aggregate in (False, True):

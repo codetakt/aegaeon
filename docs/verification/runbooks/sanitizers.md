@@ -50,9 +50,11 @@ The existing security job's outer timeout still bounds the whole stage.
 The security-suite dispatcher resolves `SANITIZER_TARGET_DIR` before removing
 transient outputs after the sanitizer stage. Cleanup rejects the workspace
 itself and every workspace ancestor, including `/`, even through symlinks or
-`..` aliases. A rejected cleanup fails a successful stage; an earlier child
-failure retains its original exit code. Custom output directories must resolve
-to another location.
+`..` aliases. It also rejects targets equal to, inside, or containing the
+resolved security artifact directory (`SECURITY_ARTIFACT_DIR`); the suite writes
+sanitizer evidence to its `sanitizers` subdirectory. A rejected cleanup fails a
+successful stage; an earlier child failure retains its original exit code.
+Custom output directories must resolve outside these protected locations.
 
 The runner sets these execution options explicitly:
 
