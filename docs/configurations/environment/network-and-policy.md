@@ -86,6 +86,27 @@ credential validation to UserInfo, also forwards the actual method. UserInfo
 POST continues to require a proof for POST. Resource latency metrics use the
 actual GET or HEAD method with the fixed `/resource` route label.
 
+Both FFI entry points compare `htu` using HTTP(S) URI normalization from RFC
+9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Scheme and host
+case, percent-escape hex case, escaped unreserved characters, dot segments,
+default or empty ports, and an empty path are normalized. For example,
+`HTTPS://ISSUER.EXAMPLE:443/a/../%7Euser` matches
+`https://issuer.example/~user`. Signature verification still covers the
+original JWT bytes.
+
+Path case, repeated and trailing slashes, nondefault ports, trailing host dots,
+numeric host spellings, and escaped reserved delimiters remain distinct.
+`/a%2Fb` does not match `/a/b`. IPv6 literals are validated and compared without
+rewriting their address spelling beyond case. Invalid URI syntax, userinfo,
+non-ASCII raw input, whitespace, backslashes, and malformed escapes are rejected,
+even when the two inputs are identical. The proof's `htu` cannot contain a
+query or fragment; valid query and fragment components on the expected request
+URI are excluded from comparison. No configuration or state migration is needed.
+
+The existing `validate_dpop_htu_for_spec_oracle` remains an exact-string
+equality oracle. Its model does not establish these runtime parsing and
+normalization properties; signed FFI regression tests cover finite examples.
+
 ## Authorization endpoint behaviour
 
 | Variable | Default | Scope | Notes |
