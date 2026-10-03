@@ -30,8 +30,38 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+stage_enabled() {
+	local requested="$1"
+	if [[ ${#SECURITY_STAGES[@]} -eq 0 ]]; then
+		return 0
+	fi
+	local stage
+	for stage in "${SECURITY_STAGES[@]}"; do
+		if [[ $stage == "$requested" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export ROOT
+# Retire previous fuzz results before any directory setup or suite logging can fail.
+# Relative evidence and target paths keep their repository-root interpretation.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target/security-suite}"
+if stage_enabled "fuzz"; then
+	fuzz_receipt_dir="${SECURITY_ARTIFACT_DIR:-artifacts/security/latest}/fuzz"
+	if [[ $fuzz_receipt_dir != /* ]]; then
+		fuzz_receipt_dir="$ROOT/$fuzz_receipt_dir"
+	fi
+	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
+		"$fuzz_receipt_dir/run_summary.json"; then
+		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
+		exit 1
+	fi
+	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
+fi
+
 # Preserve the caller's configuration, anchoring a relative Cargo home before
 # build tools change directory. A private relative home can pollute crate trees.
 if [[ -n ${CARGO_HOME:-} ]]; then
@@ -69,25 +99,7 @@ LOG_FILE="$LOG_DIR/security.log"
 mkdir -p "$LOG_DIR"
 : >"$LOG_FILE"
 
-# Keep Rust build outputs in a dedicated target directory so we can prune it
-# between phases in CI to avoid exhausting runner disk.
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target/security-suite}"
-
 echo "[security] starting security suite…" | tee -a "$LOG_FILE"
-
-stage_enabled() {
-	local requested="$1"
-	if [[ ${#SECURITY_STAGES[@]} -eq 0 ]]; then
-		return 0
-	fi
-	local stage
-	for stage in "${SECURITY_STAGES[@]}"; do
-		if [[ $stage == "$requested" ]]; then
-			return 0
-		fi
-	done
-	return 1
-}
 
 validate_stages() {
 	local known=(
@@ -128,7 +140,12 @@ reset_cargo_target_dir() {
 }
 
 cleanup_fuzz_outputs() {
-	rm -rf fuzz/target fuzz/artifacts fuzz/corpus fuzz/corpus_archive
+	local cache
+	cache="$(python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
+	# The terminal sentinel preserves even trailing newlines in a configured path.
+	[[ $cache == *$'\n.' ]] || return 1
+	cache="${cache%$'\n.'}"
+	rm -rf -- "$cache" fuzz/artifacts fuzz/corpus fuzz/corpus_archive
 }
 
 cleanup_sanitizer_outputs() {
@@ -364,11 +381,10 @@ run_fuzz_targets() (
 	local targets_text="${FUZZ_TARGETS//$'\n'/ }" targets=()
 	targets_text="${targets_text//$'\r'/ }"
 	read -r -a targets <<<"$targets_text"
-	local target_dir="$CARGO_TARGET_DIR"
-	if [[ $target_dir != /* ]]; then
-		target_dir="$ROOT/$target_dir"
-	fi
-	target_dir+="/fuzz"
+	local target_dir
+	target_dir="$(python3 scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2
+	[[ $target_dir == *$'\n.' ]] || return 2
+	target_dir="${target_dir%$'\n.'}"
 	for target in "${targets[@]}"; do
 		mkdir -p "$dir/$target" || return 2
 		echo "[security] Building $target"
@@ -563,9 +579,9 @@ run_cargo_vet_stage() {
 
 run_fuzz_stage() {
 	local result=0 cleanup_result=0 recovery_run_id dir="$ARTIFACT_BASE/fuzz"
-	# Invalidate the previous receipt before logging or child setup can fail.
-	if ! rm -f "$dir/collection.ok"; then
-		echo "[security] cannot invalidate previous fuzz receipt; retaining transient outputs" >&2
+	# Retire every result before stage logging or child setup can fail.
+	if ! rm -f -- "$dir/collection.ok" "$dir/execution.json" "$dir/run_summary.json"; then
+		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
 		return 1
 	fi
 	if run_step "cargo fuzz smoke" run_fuzz; then
@@ -576,7 +592,7 @@ run_fuzz_stage() {
 	# A collected failure still needs its raw corpus and crashes for upload.
 	if [[ $result -eq 0 && -f "$dir/collection.ok" ]]; then
 		if recovery_run_id="$(python3 scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
-			if cleanup_fuzz_outputs; then
+			if cleanup_fuzz_outputs "$dir" "$recovery_run_id"; then
 				cleanup_result=0
 			else
 				cleanup_result=$?

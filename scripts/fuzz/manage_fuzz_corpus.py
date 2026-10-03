@@ -428,6 +428,109 @@ def source_hashes(selected: list[str]) -> dict:
     return {str(path.relative_to(ROOT)): digest(path) for path in source_files}
 
 
+# Source roots are disjoint from supported build caches, including fuzz/target.
+# Root-level regular inputs are also protected; unknown output directories are
+# not promoted to source roots merely because a prior build created them.
+CACHE_SOURCE_ROOTS = (
+    ".cargo",
+    ".flakehub",
+    ".git",
+    ".github",
+    "artifacts",
+    "assets",
+    "c",
+    "ci",
+    "crates",
+    "db",
+    "dev-tools",
+    "docs",
+    "examples",
+    "fstar",
+    "generated",
+    "include",
+    "infra",
+    "nix",
+    "proofs",
+    "scripts",
+    "spec",
+    "supply-chain",
+    "tests",
+    "xtask",
+)
+
+
+def repository_path(path: Path) -> Path:
+    return (path if path.is_absolute() else ROOT / path).resolve()
+
+
+def overlaps(left: Path, right: Path) -> bool:
+    return left.is_relative_to(right) or right.is_relative_to(left)
+
+
+def git_metadata_paths() -> list[Path]:  # noqa: PLR0912 - validate Git metadata pointers
+    git_entry = ROOT / ".git"
+    if not git_entry.exists():
+        if git_entry.is_symlink():
+            invalid("fuzz cache cannot resolve Git metadata pointer")
+        return []
+    if git_entry.is_file():
+        record = git_entry.read_bytes().decode("utf-8").removesuffix("\n")
+        if (
+            not record.startswith("gitdir: ")
+            or not record[len("gitdir: ") :]
+            or record.endswith("\r")
+        ):
+            invalid("fuzz cache cannot resolve Git metadata pointer")
+        git_dir = Path(record[len("gitdir: ") :])
+        git_dir = (git_dir if git_dir.is_absolute() else ROOT / git_dir).resolve()
+    elif git_entry.is_dir():
+        git_dir = git_entry.resolve()
+    else:
+        invalid("fuzz cache cannot resolve Git metadata entry")
+    if not git_dir.is_dir():
+        invalid("fuzz cache Git metadata pointer does not name a directory")
+    paths = [git_dir]
+    common_file = git_dir / "commondir"
+    if common_file.exists() or common_file.is_symlink():
+        record = common_file.read_bytes().decode("utf-8").removesuffix("\n")
+        if not record or record.endswith("\r"):
+            invalid("fuzz cache cannot resolve shared Git metadata pointer")
+        common_dir = Path(record)
+        common_dir = (common_dir if common_dir.is_absolute() else git_dir / common_dir).resolve()
+        if not common_dir.is_dir():
+            invalid("fuzz cache shared Git metadata pointer does not name a directory")
+        paths.append(common_dir)
+    return paths
+
+
+def cache_protected_paths(directory: Path) -> list[Path]:
+    evidence_root = repository_path(directory).parent
+    paths = [ROOT / name for name in CACHE_SOURCE_ROOTS]
+    paths.extend(git_metadata_paths())
+    paths.extend(path for path in ROOT.iterdir() if path.is_file())
+    paths.extend(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta", "fuzz_targets"))
+    paths.extend(selected_sources(selected_targets()))
+    paths.extend([FUZZ_DIR / "Cargo.toml", FUZZ_DIR / "Cargo.lock", evidence_root])
+    paths.append(
+        repository_path(Path(os.environ.get("SECURITY_HISTORY_DIR", "artifacts/security/history")))
+    )
+    return [path.resolve() for path in paths]
+
+
+def configured_cache(directory: Path) -> Path:
+    base = repository_path(Path(os.environ["CARGO_TARGET_DIR"]))
+    cache = (base / "fuzz").resolve()
+    # Descendant caches are allowed; the workspace and fuzz root themselves,
+    # or any ancestor that can remove them, are never cleanup destinations.
+    if any(root.is_relative_to(path) for root in (ROOT, FUZZ_DIR) for path in (base, cache)):
+        invalid("fuzz cache cannot be a workspace root or ancestor")
+    if any(overlaps(cache, path) for path in cache_protected_paths(directory)):
+        invalid("fuzz cache overlaps protected source, raw or evidence paths")
+    if cache.exists() and not cache.is_dir():
+        invalid("fuzz cache is not a directory")
+    return cache
+
+
 def prepare_run(directory: Path) -> None:
     selected = selected_targets()
     total = os.environ.get("FUZZ_TOTAL_TIMEOUT", "")
@@ -476,7 +579,7 @@ def prepare_run(directory: Path) -> None:
         "kill_grace_seconds": 10,
         "aggregate_internal_allocation": seconds(total, "FUZZ_TOTAL_TIMEOUT") if total else None,
         "target_triple": target,
-        "target_dir": str(Path(os.environ["CARGO_TARGET_DIR"]).resolve() / "fuzz"),
+        "target_dir": str(configured_cache(directory)),
         "profile": "release with debug assertions",
         "sanitizer": "address",
         "source": {
@@ -708,6 +811,7 @@ def recovery_directory(directory: Path, run_id: str, *, create: bool = False) ->
     if str(uuid.UUID(run_id)) != run_id:
         invalid("malformed fuzz recovery run ID")
     owned = directory.resolve()
+    configured_cache(directory)
     if any(owned.is_relative_to(FUZZ_DIR / name) for name in (*RECOVERY_RAW_NAMES, "target")):
         invalid("fuzz recovery evidence must be outside transient output roots")
     container = owned / "cleanup-recovery"
@@ -756,6 +860,8 @@ def backup_cleanup(directory: Path) -> str:
     data = collected_execution(directory)
     if data["status"] != "awaiting-cleanup":
         invalid("only successful current fuzz execution can prepare cleanup")
+    if data["target_dir"] != str(configured_cache(directory)):
+        invalid("fuzz cleanup cache differs from current execution")
     snapshots = {}
     for name in RECOVERY_EVIDENCE_NAMES:
         path = directory / name
@@ -882,9 +988,34 @@ def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -
     return report["status"] == "restored"
 
 
+def execution_cache(directory: Path) -> Path:
+    data = load_execution(directory)
+    cache = configured_cache(directory)
+    if data["target_dir"] != str(cache):
+        invalid("fuzz cache differs from the current execution")
+    return cache
+
+
+def cleanup_cache(directory: Path, run_id: str) -> Path:
+    data = collected_execution(directory)
+    recovery, manifest, snapshots = load_cleanup_backup(directory, run_id)
+    cache = execution_cache(directory)
+    if not cache.is_dir():
+        invalid("fuzz current build cache is missing")
+    saved = json.loads(snapshots["execution.json"])
+    if data != saved or source_hashes(data["selected_targets"]) != manifest["source"]:
+        invalid("fuzz cleanup cache is not bound to current recovery evidence")
+    if data["target_dir"] != str(cache) or overlaps(cache, recovery):
+        invalid("fuzz cleanup cache differs from current execution or overlaps recovery")
+    return cache
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--validate-cache", type=Path)
+    actions.add_argument("--cleanup-cache", nargs=2, metavar=("DIR", "RUN_ID"))
+    actions.add_argument("--execution-cache", type=Path)
     actions.add_argument("--prepare-run", type=Path)
     actions.add_argument("--record-environment", type=Path)
     actions.add_argument("--record-target", nargs=4, metavar=("DIR", "TARGET", "PHASE", "EXIT"))
@@ -897,7 +1028,17 @@ def parse_arguments() -> argparse.Namespace:
 
 def cleanup_action(args: argparse.Namespace) -> int | None:
     result = None
-    if args.cleanup_result:
+    if args.validate_cache:
+        configured_cache(args.validate_cache)
+        result = 0
+    elif args.execution_cache:
+        print(str(execution_cache(args.execution_cache)) + "\n.", end="")
+        result = 0
+    elif args.cleanup_cache:
+        directory, run_id = args.cleanup_cache
+        print(str(cleanup_cache(Path(directory), run_id)) + "\n.", end="")
+        result = 0
+    elif args.cleanup_result:
         directory, code = args.cleanup_result
         cleanup_result(Path(directory), int(code))
         result = 0
