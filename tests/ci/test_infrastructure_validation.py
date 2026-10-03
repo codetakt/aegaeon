@@ -24,6 +24,10 @@ class InfrastructureTests(unittest.TestCase):
         self.temporary = self.enterContext(tempfile.TemporaryDirectory())
         self.root = Path(self.temporary)
         shutil.copytree(ROOT / "infra/tofu", self.root / "infra/tofu")
+        for name in infra.CONTRACT_SOURCES:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, path)
 
     def module(self, name="aegaeon-aws-staging"):
         return self.root / "infra/tofu" / name
@@ -151,8 +155,249 @@ class InfrastructureTests(unittest.TestCase):
         path.write_text(
             path.read_text().replace("AEGAEON_DATABASE_URL", "AEGAEON_DATABASE_URl_TYPO")
         )
-        with pytest.raises(ValueError, match="Unknown runtime"):
+        with pytest.raises(ValueError, match="environment assignments"):
             infra.runtime_contract(self.module(), ROOT)
+
+    def valid_staging(self):
+        path = self.module() / "locals.tf"
+        text = path.read_text()
+        for name in (
+            "AEGAEON_CSRF_REDIS_URL",
+            "AEGAEON_RATE_LIMIT_REDIS_URL",
+            "AEGAEON_FEDERATION_LIST_RATE_LIMIT_REDIS_URL",
+            "AEGAEON_EXPOSE_METRICS_ON_MAIN",
+        ):
+            text = re.sub(r"(?m)^.*\b" + name + r"\b.*\n", "", text)
+        path.write_text(text)
+        return path
+
+    def test_explicit_legacy_profiles_report_complete_name_only_failures(self):
+        path = self.valid_staging()
+        removed = (
+            "AEGAEON_CSRF_REDIS_URL",
+            "AEGAEON_EXPOSE_METRICS_ON_MAIN",
+            "AEGAEON_FEDERATION_LIST_RATE_LIMIT_REDIS_URL",
+            "AEGAEON_RATE_LIMIT_REDIS_URL",
+        )
+        assignments = "\n".join(f'    {{ name = "{name}", value = "legacy" }},' for name in removed)
+        path.write_text(
+            path.read_text().replace(
+                "container_environment = [",
+                "container_environment = [\n" + assignments,
+                1,
+            )
+        )
+        with pytest.raises(infra.RuntimeContractError) as staging:
+            infra.runtime_contract(self.module(), self.root)
+        assert len(staging.value.report["violations"]) == 4
+        assert all(
+            v["reason"] == "removed startup variable" for v in staging.value.report["violations"]
+        )
+        path = self.module("perf-aws-ec2") / "user_data_server.sh.tftpl"
+        legacy = (
+            "cat >/etc/aegaeon/server.env <<EOF\n"
+            "BASE_URL=http://server.example:8080\n"
+            "AEGAEON_EXPOSE_METRICS_ON_MAIN=1\n"
+            "AEGAEON_TRUSTED_PROXIES=127.0.0.1/32\nEOF"
+        )
+        template, replacements = re.subn(
+            r"(?m)^cat >/etc/aegaeon/server\.env <<EOF\n.*?\nEOF$",
+            lambda _: legacy,
+            path.read_text(),
+            flags=re.DOTALL,
+        )
+        assert replacements == 1
+        path.write_text(template)
+        with pytest.raises(infra.RuntimeContractError) as perf:
+            infra.runtime_contract(self.module("perf-aws-ec2"), self.root)
+        violations = perf.value.report["violations"]
+        assert len(violations) == 21
+        assert {v["name"] for v in violations if v["reason"] == "removed startup variable"} == {
+            "BASE_URL",
+            "AEGAEON_EXPOSE_METRICS_ON_MAIN",
+        }
+        assert all(set(v) == {"process", "name", "reason"} for v in violations)
+
+    def test_corrected_staging_and_separate_parity_profiles_bind_sources(self):
+        self.valid_staging()
+        report = infra.runtime_contract(self.module(), self.root)
+        assert report["status"] == "passed"
+        assert set(report["processes"]) == {"server", "migrate", "hosted_bootstrap"}
+        assert report["processes"]["migrate"] == ["DATABASE_URL"]
+        assert set(report["runtime_sources"]) == set(infra.CONTRACT_SOURCES)
+        parity = infra.runtime_contract(self.module("oidc-aws-kms-parity"), self.root)
+        assert parity["status"] == "passed"
+        assert "AEGAEON_OIDC_SIGNING_BACKEND" in parity["processes"]["kms_parity"]
+
+    def test_each_removed_empty_variable_rejected(self):
+        path = self.valid_staging()
+        original = path.read_text()
+        _, removed, _ = infra.server_inventory(self.root)
+        for name in sorted(removed):
+            path.write_text(
+                original.replace(
+                    "container_environment = [",
+                    f'container_environment = [\n    {{ name = "{name}", value = "" }},',
+                )
+            )
+            with self.subTest(name=name), pytest.raises(infra.RuntimeContractError) as failure:
+                infra.runtime_contract(self.module(), self.root)
+            assert {v["name"] for v in failure.value.report["violations"]} == {name}
+
+    def test_explicit_removed_inventory_overrides_classified_allow_entry(self):
+        path = self.root / infra.CONTRACT_SOURCES[0]
+        declaration = "const MAIN_ENV_INVENTORY: &[(&str, MainEnvAuthority)] = &["
+        path.write_text(
+            path.read_text().replace(
+                declaration,
+                declaration
+                + '\n("AEGAEON_EXPOSE_METRICS_ON_MAIN", MainEnvAuthority::SystemBootstrap),',
+                1,
+            )
+        )
+        allowed, removed, _ = infra.server_inventory(self.root)
+        assert "AEGAEON_EXPOSE_METRICS_ON_MAIN" in removed
+        assert "AEGAEON_EXPOSE_METRICS_ON_MAIN" not in allowed
+
+    def test_migration_does_not_accept_server_database_alias(self):
+        self.valid_staging()
+        path = self.module() / "ecs.tf"
+        path.write_text(
+            path.read_text().replace('name = "DATABASE_URL"', 'name = "AEGAEON_DATABASE_URL"')
+        )
+        with pytest.raises(infra.RuntimeContractError) as failure:
+            infra.runtime_contract(self.module(), self.root)
+        assert {v["process"] for v in failure.value.report["violations"]} == {"migrate"}
+
+    def test_nested_container_metadata_cannot_supply_process_environment(self):
+        self.valid_staging()
+        path = self.module() / "ecs.tf"
+        path.write_text(
+            path.read_text().replace(
+                "      environment = local.container_environment",
+                "      metadata = {\n        environment = local.container_environment\n      }",
+                1,
+            )
+        )
+        report = infra.runtime_contract_report(self.module(), self.root)
+        assert report["status"] == "failed"
+        assert set(report["runtime_sources"]) == set(infra.CONTRACT_SOURCES)
+        assert "explicit environment expression" in report["violations"][0]["reason"]
+
+    def test_perf_server_inputs_must_feed_actual_container_command(self):
+        module = self.module("perf-aws-ec2")
+        path = module / "user_data_server.sh.tftpl"
+        original = path.read_text()
+        infra.perf_server_environment_wiring(original)
+        marker = "--env-file /etc/aegaeon/server.env "
+        for replacement in [
+            "",
+            "--env-file /etc/aegaeon/unused.env ",
+            marker + "--env-file /etc/aegaeon/override.env ",
+        ]:
+            path.write_text(original.replace(marker, replacement))
+            report = infra.runtime_contract_report(module, self.root)
+            assert report["status"] == "failed"
+            assert "environment-file wiring" in report["violations"][0]["reason"]
+
+    def test_every_required_assignment_must_exist_despite_comments(self):
+        path = self.valid_staging()
+        original = path.read_text()
+        _, _, required = infra.server_inventory(self.root)
+        for name in sorted(required):
+            mutated = re.sub(r"(?m)^.*\b" + name + r"\b.*\n", "", original)
+            assert mutated != original
+            path.write_text(mutated + f'\n# {name} = "present only in a comment"\n')
+            with self.subTest(name=name), pytest.raises(infra.RuntimeContractError) as failure:
+                infra.runtime_contract(self.module(), self.root)
+            assert {v["name"] for v in failure.value.report["violations"]} == {name}
+
+    def test_test_only_other_process_and_comment_names_cannot_authorize_server(self):
+        path = self.valid_staging()
+        original = path.read_text()
+        source = self.root / infra.CONTRACT_SOURCES[0]
+        source.write_text(source.read_text() + "\n// AEGAEON_FAKE_RUNTIME_INPUT\n")
+        for name in [
+            "AEGAEON_FAKE_RUNTIME_INPUT",
+            "AEGAEON_JWKS_INSECURE_SKIP_VERIFY",
+            "AEGAEON_HOSTED_BOOTSTRAP_ISSUER_URL",
+            "AEGAEON_OIDC_SIGNING_BACKEND",
+            "BASE_URl",
+        ]:
+            path.write_text(
+                original.replace(
+                    "container_environment = [",
+                    "container_environment = [\n"
+                    f'    {{ name = "{name}", value = "secret-marker" }},',
+                )
+            )
+            with self.subTest(name=name), pytest.raises(ValueError, match=r".") as failure:
+                infra.runtime_contract(self.module(), self.root)
+            assert "secret-marker" not in str(failure.value)
+
+    def test_empty_required_value_and_duplicate_assignment_rejected(self):
+        path = self.valid_staging()
+        original = path.read_text()
+        path.write_text(original.replace("value = local.runtime_issuer_host", 'value = ""'))
+        with pytest.raises(infra.RuntimeContractError, match="empty required value"):
+            infra.runtime_contract(self.module(), self.root)
+        path.write_text(
+            original.replace(
+                "container_environment = [",
+                "container_environment = [\n"
+                '    { name = "AEGAEON_RUNTIME_ISSUER_HOST", value = "example.test" },',
+            )
+        )
+        with pytest.raises(ValueError, match="Duplicate"):
+            infra.runtime_contract(self.module(), self.root)
+
+    def test_malformed_unknown_and_duplicate_authority_entries_rejected(self):
+        path = self.root / infra.CONTRACT_SOURCES[0]
+        original = path.read_text()
+        for mutated in [
+            original.replace(
+                "MainEnvAuthority::SystemBootstrap,", "MainEnvAuthority::UnknownClass,", 1
+            ),
+            original.replace('"AEGAEON_DB_MAX_CONNECTIONS"', '"AEGAEON_DATABASE_URL"', 1),
+            original.replace('"AEGAEON_DB_MAX_CONNECTIONS"', "dynamic_name()", 1),
+        ]:
+            path.write_text(mutated)
+            with pytest.raises(ValueError, match=r"."):
+                infra.server_inventory(self.root)
+
+    def test_unresolved_and_nested_assignments_cannot_supply_environment(self):
+        for expression in [
+            '[{ name = var.dynamic_name, value = "x" }]',
+            '[{ name = "RUST_LOG", value = unknown() }]',
+            '[{ name = "RUST_LOG", value = "x", extra = true }]',
+        ]:
+            with pytest.raises(ValueError, match=r"."):
+                infra.environment_objects(expression)
+        with pytest.raises(ValueError, match="explicit environment expression"):
+            infra.expression("metadata = {\n environment = []\n}\n", "environment")
+
+    def test_main_provenance_timeout_preserves_summary_and_partial_logs(self):
+        output = self.root / "provenance-timeout"
+        failure = subprocess.TimeoutExpired(["nix", "path-info"], 300, b"partial", b"timeout")
+
+        def provenance(root, directory, tools):
+            return infra.Commands(directory, {}).run(["nix", "path-info"], root)
+
+        with (
+            patch(
+                "sys.argv",
+                ["validate_infrastructure.py", "--root", str(self.root), "--output", str(output)],
+            ),
+            patch.object(infra, "toolchain_provenance", side_effect=provenance),
+            patch.object(infra.shutil, "which", return_value=sys.executable),
+            patch.object(infra.subprocess, "run", side_effect=failure),
+        ):
+            assert infra.main() == 1
+        summary = json.loads((output / "summary.json").read_text())
+        assert summary["status"] == "failed"
+        assert "timed out" in summary["error"]
+        commands = json.loads((output / "commands.json").read_text())
+        assert (output / commands[0]["stdout"]).read_bytes() == b"partial"
 
     def test_aws_and_cli_configuration_not_inherited(self):
         inherited = {

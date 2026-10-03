@@ -30,7 +30,6 @@ SUPPORT_PATHS = {
     "scripts/validation/run_oidc_aws_kms_parity_from_tofu.sh": ("oidc-aws-kms-parity",),
 }
 TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|/\*.*?\*/|//[^\n]*|\#[^\n]*|[{}]', re.DOTALL)
-ENV_NAME = re.compile(r"\bAEGAEON_[A-Za-z0-9_]+\b")
 COMMAND_TIMEOUT = 300
 
 
@@ -157,23 +156,422 @@ def lock_contract(module: Path) -> dict[str, str]:
     return result
 
 
-def runtime_contract(module: Path, root: Path) -> dict[str, Any]:
-    names = set()
-    for path in module_inputs(module):
-        if path.suffix in {".tf", ".tftpl"}:
-            names.update(ENV_NAME.findall(uncomment(path.read_text())))
-    rust = sorted((root / "crates/server/src").rglob("*.rs"))
-    require(bool(rust), "Runtime environment contract source is missing")
-    source_bytes = {p: p.read_bytes() for p in rust}
-    known = set().union(*(set(ENV_NAME.findall(raw.decode())) for raw in source_bytes.values()))
-    require(names <= known, f"Unknown runtime environment names: {sorted(names - known)}")
-    return {
-        "environment_names": sorted(names),
-        "runtime_sources": {
-            str(p.relative_to(root)): hashlib.sha256(raw).hexdigest()
-            for p, raw in source_bytes.items()
-        },
+CONTRACT_SOURCES = (
+    "crates/server/src/main/tests/env_inventory.rs",
+    "crates/server/src/config/removed_env.rs",
+    "crates/server/src/config/runtime_boundary/shared_store/inventory.rs",
+    "crates/server/src/config/runtime_boundary/shared_store/preflight.rs",
+    "crates/server/src/config/environment.rs",
+    "crates/server/src/config/database.rs",
+    "crates/server/src/config/oidc_boundary.rs",
+    "crates/server/src/config/startup_policy_boundary.rs",
+    "crates/server/src/config/runtime_boundary/key_material.rs",
+    "crates/server/src/main/bootstrap_env.rs",
+    "crates/server/src/main/runtime_config.rs",
+    "crates/server/src/bin/aegaeon-hosted-bootstrap.rs",
+    "crates/server/src/key_encryption.rs",
+    "crates/server/src/web/management/state/config/bootstrap_env.rs",
+    "scripts/validation/run_oidc_aws_kms_parity_from_tofu.sh",
+    "scripts/validation/run_oidc_kms_parity.sh",
+    "scripts/perf/aws_sweep.sh",
+    "scripts/ci/validate_infrastructure.py",
+    "tests/ci/test_infrastructure_validation.py",
+    "crates/server/src/main.rs",
+    "crates/server/src/config/transport.rs",
+    "crates/server/src/config/runtime_boundary/authority.rs",
+    "crates/server/src/config/runtime_boundary/raw_json.rs",
+    "crates/server/src/oidc/config/tests/kms_parity.rs",
+)
+ENV_IDENTIFIER = r"[A-Z][A-Z0-9_]*"
+STRING = r'"(?:[^"\\]|\\.)*"'
+EXPRESSION_TOKEN = re.compile(STRING + r"|[\[\]{}()\n]")
+REFERENCE = r"(?:var|local|data|aws_[a-z0-9_]+)(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
+VALUE = re.compile(
+    rf"(?:{STRING}|{REFERENCE}|true|false|[0-9]+|{REFERENCE}\s*\?\s*{STRING}\s*:\s*{STRING})"
+)
+
+
+class RuntimeContractError(ValueError):
+    def __init__(self, report: dict[str, Any]) -> None:
+        self.report = report
+        super().__init__(
+            "Runtime environment contract rejected: " + json.dumps(report["violations"])
+        )
+
+
+def strict_matches(pattern: str, text: str, label: str) -> list[re.Match[str]]:
+    matches = list(re.finditer(pattern, text, re.DOTALL))
+    require(
+        bool(matches) and not re.sub(pattern, "", text, flags=re.DOTALL).strip(),
+        f"Malformed {label}",
+    )
+    return matches
+
+
+def quoted_names(text: str) -> list[str]:
+    matches = strict_matches(rf'\s*"({ENV_IDENTIFIER})"\s*,?\s*', text, "environment-name list")
+    names = [match[1] for match in matches]
+    require(len(names) == len(set(names)), "Duplicate environment name")
+    return names
+
+
+def server_inventory(root: Path) -> tuple[set[str], set[str], set[str]]:
+    source = uncomment((root / CONTRACT_SOURCES[0]).read_text())
+    tables = re.findall(r"const MAIN_ENV_INVENTORY:.*?=\s*&\[(.*?)\];", source, re.DOTALL)
+    require(len(tables) == 1, "Missing or duplicate classified server inventory")
+    entries = strict_matches(
+        rf'\s*\(\s*"({ENV_IDENTIFIER})"\s*,\s*MainEnvAuthority::(\w+)\s*,?\s*\)\s*,?\s*',
+        tables[0],
+        "classified server inventory",
+    )
+    classes = {entry[1]: entry[2] for entry in entries}
+    require(len(classes) == len(entries), "Duplicate classified environment name")
+    allowed_classes = {
+        "SystemBootstrap",
+        "BootstrapSecret",
+        "HostLocalObservability",
+        "HostLocalTrustBundle",
+        "SharedRuntimeStore",
     }
+    require(
+        set(classes.values()) <= allowed_classes | {"RemovedRejected", "TestOnlyBootstrap"},
+        "Unknown environment authority class",
+    )
+    removed_source = uncomment((root / CONTRACT_SOURCES[1]).read_text())
+    prefix = removed_source.split("pub(super) fn reject_removed_database_runtime_envs()", 1)
+    require(len(prefix) == 2, "Missing removed-environment rejection entrypoint")
+    declarations = prefix[0].replace("use super::ConfigError;", "").strip()
+    constants = strict_matches(
+        r"\s*const REMOVED_\w+\s*:\s*(&str|&\[&str\])\s*=\s*(.*?)\s*;\s*",
+        declarations,
+        "removed-environment constants",
+    )
+    removed: set[str] = {
+        name for name, category in classes.items() if category == "RemovedRejected"
+    }
+    for constant in constants:
+        value = constant[2]
+        if constant[1] == "&[&str]":
+            require(value.startswith("&[") and value.endswith("]"), "Malformed removed-name list")
+            value = value[2:-1]
+        removed.update(quoted_names(value))
+    required = required_server_inputs(root)
+    allowed = {name for name, category in classes.items() if category in allowed_classes} - removed
+    require(
+        len(required) == 19 and required <= allowed,
+        "Changed bootstrap/shared-store inventory requires review",
+    )
+    return allowed | {"AWS_REGION", "RUST_LOG"}, removed, required
+
+
+def required_server_inputs(root: Path) -> set[str]:
+    inventory = uncomment((root / CONTRACT_SOURCES[2]).read_text())
+    required = {"AEGAEON_RUNTIME_ISSUER_HOST", "AEGAEON_DATABASE_URL"}
+    for name in ("base", "upstream"):
+        body = block(
+            inventory,
+            f"fn {name}_shared_runtime_store_requirements() -> Vec<SharedRuntimeStoreRequirement>",
+        )
+        match = re.fullmatch(r"\s*vec!\[(.*)\]\s*", body, re.DOTALL)
+        require(match is not None, "Malformed shared-store requirement body")
+        if match is None:
+            raise ValueError("Missing shared-store body")
+        entries = strict_matches(
+            rf'\s*SharedRuntimeStoreRequirement::new\(\s*{STRING}\s*,\s*"({ENV_IDENTIFIER})"\s*,?\s*\)\s*,?\s*',
+            match[1],
+            "shared-store requirements",
+        )
+        names = [entry[1] for entry in entries]
+        require(
+            not (set(names) & required) and len(names) == len(set(names)),
+            "Duplicate shared-store requirement",
+        )
+        required.update(names)
+    return required
+
+
+def top_level_position(text: str, position: int) -> bool:
+    stack: list[str] = []
+    pairs = {"]": "[", "}": "{", ")": "("}
+    for token in EXPRESSION_TOKEN.finditer(text, 0, position):
+        if token[0] in ("[", "{", "("):
+            stack.append(token[0])
+        elif token[0] in pairs:
+            require(bool(stack) and stack.pop() == pairs[token[0]], "Unbalanced input scope")
+    return not stack
+
+
+def expression(text: str, name: str) -> str:
+    text = uncomment(text)
+    matches = [
+        match
+        for match in re.finditer(r"(?m)^\s*" + re.escape(name) + r"\s*=\s*", text)
+        if top_level_position(text, match.end())
+    ]
+    require(len(matches) == 1, f"Expected one explicit {name} expression")
+    start = matches[0].end()
+    stack: list[str] = []
+    pairs = {"]": "[", "}": "{", ")": "("}
+    for token in EXPRESSION_TOKEN.finditer(text, start):
+        value = token[0]
+        if value in ("[", "{", "("):
+            stack.append(value)
+        elif value in pairs:
+            require(bool(stack) and stack.pop() == pairs[value], "Unbalanced expression")
+        elif value == "\n" and not stack:
+            return text[start : token.start()].strip().rstrip(",").strip()
+    require(not stack, "Unclosed expression")
+    return text[start:].strip().rstrip(",").strip()
+
+
+def environment_objects(text: str) -> dict[str, str]:
+    require(text.startswith("[") and text.endswith("]"), "Expected literal environment array")
+    if not text[1:-1].strip():
+        return {}
+    objects = strict_matches(
+        rf'\s*\{{\s*name\s*=\s*"({ENV_IDENTIFIER})"\s*,?\s*(?:value|valueFrom)\s*=\s*((?:{STRING}|[^{{}}"])+?)\s*,?\s*\}}\s*,?\s*',
+        text[1:-1],
+        "environment assignments",
+    )
+    result = {}
+    for item in objects:
+        require(item[1] not in result, f"Duplicate environment assignment: {item[1]}")
+        require(
+            VALUE.fullmatch(item[2].strip()) is not None, f"Unsupported value expression: {item[1]}"
+        )
+        result[item[1]] = item[2].strip()
+    return result
+
+
+def combined(*groups: dict[str, str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for group in groups:
+        require(not (result.keys() & group.keys()), "Duplicate process environment assignment")
+        result.update(group)
+    return result
+
+
+def task_container(ecs: str, task: str) -> str:
+    body = block(ecs, f'resource "aws_ecs_task_definition" "{task}"')
+    containers = expression(body, "container_definitions")
+    match = re.fullmatch(r"jsonencode\(\s*\[\s*\{(.*)\}\s*\]\s*\)", containers, re.DOTALL)
+    require(match is not None, "Unsupported container definition shape")
+    if match is None:
+        raise ValueError("Missing container definition")
+    require(top_level_position(match[1], len(match[1])), "Unbalanced container definition")
+    expected = {
+        "server": "aegaeon-server",
+        "migrate": "aegaeon-migrate",
+        "hosted_bootstrap": "aegaeon-hosted-bootstrap",
+    }[task]
+    require(expression(match[1], "name") == json.dumps(expected), "Unexpected process container")
+    if task == "hosted_bootstrap":
+        require(
+            expression(match[1], "entryPoint") == '["/usr/local/bin/aegaeon-hosted-bootstrap"]',
+            "Unexpected hosted-bootstrap entrypoint",
+        )
+    return match[1]
+
+
+def staging_processes(module: Path) -> dict[str, dict[str, str]]:
+    local = block((module / "locals.tf").read_text(), "locals")
+    redis = expression(local, "redis_secret_env_names")
+    require(
+        redis.startswith("toset([") and redis.endswith("])"),
+        "Unsupported Redis secret-name collection",
+    )
+    redis_names = quoted_names(redis[7:-2])
+    secret = expression(local, "secret_environment")
+    match = re.fullmatch(
+        r"concat\(\s*(\[.*?\])\s*,\s*\[for name in local\.redis_secret_env_names\s*:\s*"
+        r"\{\s*name\s*=\s*name\s*valueFrom\s*=\s*"
+        r"aws_secretsmanager_secret\.redis_url\.arn\s*\}\s*\]\s*,?\s*\)",
+        secret,
+        re.DOTALL,
+    )
+    require(match is not None, "Unsupported server secret environment expression")
+    if match is None:
+        raise ValueError("Missing server secrets")
+    server = combined(
+        environment_objects(expression(local, "container_environment")),
+        environment_objects(match[1]),
+        dict.fromkeys(redis_names, "aws_secretsmanager_secret.redis_url.arn"),
+    )
+    ecs = (module / "ecs.tf").read_text()
+    server_task = task_container(ecs, "server")
+    require(
+        expression(server_task, "environment") == "local.container_environment"
+        and expression(server_task, "secrets") == "local.secret_environment",
+        "Unreviewed server environment wiring",
+    )
+    result = {"server": server}
+    for task in ("migrate", "hosted_bootstrap"):
+        body = task_container(ecs, task)
+        result[task] = combined(
+            environment_objects(expression(body, "environment")),
+            environment_objects(expression(body, "secrets")),
+        )
+    return result
+
+
+def heredoc_environment(text: str, name: str) -> dict[str, str]:
+    matches = re.findall(
+        r"(?m)^cat >/etc/aegaeon/" + re.escape(name) + r"\.env <<EOF\n(.*?)\nEOF$", text, re.DOTALL
+    )
+    require(len(matches) == 1, f"Missing or duplicate {name} environment heredoc")
+    result = {}
+    for line in matches[0].splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(rf"({ENV_IDENTIFIER})=(.*)", line)
+        require(match is not None, f"Malformed {name} environment assignment")
+        if match is None:
+            raise ValueError("Missing environment assignment")
+        require(match[1] not in result, f"Duplicate environment assignment: {match[1]}")
+        result[match[1]] = match[2]
+    return result
+
+
+def perf_server_environment_wiring(template: str) -> None:
+    units = re.findall(
+        r"(?m)^cat >/etc/systemd/system/aegaeon-server\.service <<'EOF'\n(.*?)\nEOF$",
+        template,
+        re.DOTALL,
+    )
+    require(len(units) == 1, "Missing or duplicate server service definition")
+    starts = re.findall(r"(?m)^ExecStart=.*$", units[0])
+    require(
+        starts
+        == [
+            (
+                "ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host "
+                "--env-file /etc/aegaeon/server.env ${server_image} "
+                "--host 0.0.0.0 --port ${server_port}"
+            )
+        ],
+        "Unsupported server command or environment-file wiring",
+    )
+
+
+def process_inputs(module: Path) -> dict[str, dict[str, str]]:
+    if module.name == "aegaeon-aws-staging":
+        return staging_processes(module)
+    if module.name == "perf-aws-ec2":
+        server = (module / "user_data_server.sh.tftpl").read_text()
+        loadgen = (module / "user_data_loadgen.sh.tftpl").read_text()
+        perf_server_environment_wiring(server)
+        return {
+            "server": heredoc_environment(server, "server"),
+            "server_registry": heredoc_environment(server, "registry"),
+            "loadgen_registry": heredoc_environment(loadgen, "registry"),
+            "loadgen": heredoc_environment(loadgen, "loadtest"),
+        }
+    output = block((module / "outputs.tf").read_text(), 'output "oidc_signing_env"')
+    value = expression(output, "value")
+    require(value.startswith("{") and value.endswith("}"), "Malformed KMS parity environment map")
+    pairs = strict_matches(
+        rf"\s*({ENV_IDENTIFIER})\s*=\s*([^\n]+)\n?", value[1:-1], "KMS parity map"
+    )
+    require(len({pair[1] for pair in pairs}) == len(pairs), "Duplicate parity environment name")
+    require(all(VALUE.fullmatch(pair[2].strip()) for pair in pairs), "Unsupported parity value")
+    return {"kms_parity": {pair[1]: pair[2].strip() for pair in pairs}}
+
+
+def process_profiles(root: Path) -> dict[str, tuple[set[str], set[str]]]:
+    source = uncomment((root / "crates/server/src/bin/aegaeon-hosted-bootstrap.rs").read_text())
+    body = block(source, "fn bootstrap_input_from_env() -> Result<HostedBootstrapInput>")
+    bootstrap = set(
+        re.findall(rf'\b(?:required_env|env_or|env_or_required_env)\("({ENV_IDENTIFIER})"', body)
+    )
+    required = set(re.findall(rf'\brequired_env\("({ENV_IDENTIFIER})"', body)) | {
+        "AEGAEON_DATABASE_URL"
+    }
+    require(len(bootstrap) == 13 and len(required) == 6, "Changed hosted-bootstrap input profile")
+    bootstrap |= {"AEGAEON_DATABASE_URL", "AEGAEON_KEY_ENCRYPTION_KEY", "AWS_REGION", "RUST_LOG"}
+    parity = {
+        "AEGAEON_OIDC_SIGNING_BACKEND",
+        "AEGAEON_OIDC_SIGNING_AWS_REGION",
+        "AEGAEON_OIDC_SIGNING_AWS_KMS_KEY_ID",
+        "AEGAEON_OIDC_SIGNING_KID",
+        "AWS_REGION",
+    }
+    registry = {
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "GHCR_AUTH_ENABLED",
+        "GHCR_USERNAME",
+        "GHCR_TOKEN_SSM_PARAMETER_NAME",
+        "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID",
+    }
+    loadgen = {
+        "SERVER_URL",
+        "SERVER_IMAGE",
+        "ARTIFACT_BUCKET",
+        "ARTIFACT_PREFIX",
+        "WORKERS",
+        "RPS",
+        "RUN_TIME",
+        "WARMUP",
+        "SCENARIO",
+    }
+    return {
+        "hosted_bootstrap": (bootstrap, required),
+        "migrate": ({"DATABASE_URL"}, {"DATABASE_URL"}),
+        "kms_parity": (parity, parity),
+        "server_registry": (registry, {"AWS_REGION", "AWS_DEFAULT_REGION", "GHCR_AUTH_ENABLED"}),
+        "loadgen_registry": (registry, {"AWS_REGION", "AWS_DEFAULT_REGION", "GHCR_AUTH_ENABLED"}),
+        "loadgen": (loadgen, loadgen),
+    }
+
+
+def runtime_contract(module: Path, root: Path) -> dict[str, Any]:
+    sources = {path: digest(root / path) for path in CONTRACT_SOURCES}
+    allowed, removed, required = server_inventory(root)
+    profiles = {**process_profiles(root), "server": (allowed, required)}
+    processes = process_inputs(module)
+    violations = []
+    for process, values in processes.items():
+        permitted, mandatory = profiles[process]
+        for name in sorted(values):
+            reason = None
+            if process == "server" and name in removed:
+                reason = "removed startup variable"
+            elif name not in permitted:
+                reason = "unknown or forbidden variable for this process"
+            elif name in mandatory and values[name].strip() in {"", '""', "''"}:
+                reason = "empty required value"
+            if reason:
+                violations.append({"process": process, "name": name, "reason": reason})
+        violations.extend(
+            {"process": process, "name": name, "reason": "missing required assignment"}
+            for name in sorted(mandatory - values.keys())
+        )
+    report = {
+        "status": "failed" if violations else "passed",
+        "runtime_sources": sources,
+        "processes": {name: sorted(values) for name, values in processes.items()},
+        "violations": violations,
+        "external_conditions": (
+            "Database schema, active managed policy/key readiness, conditional stores and live "
+            "connectivity are not established by this static check."
+        ),
+    }
+    if violations:
+        raise RuntimeContractError(report)
+    return report
+
+
+def runtime_contract_report(module: Path, root: Path) -> dict[str, Any]:
+    try:
+        return runtime_contract(module, root)
+    except RuntimeContractError as error:
+        return error.report
+    except ValueError as error:
+        return {
+            "status": "failed",
+            "runtime_sources": {path: digest(root / path) for path in CONTRACT_SOURCES},
+            "violations": [{"process": "input parser", "name": "unresolved", "reason": str(error)}],
+        }
 
 
 def resource_contract(module: Path, providers: dict[str, str]) -> None:
@@ -309,10 +707,6 @@ def rendered_contract(rendered: str, role: str, *, enabled: bool) -> None:
     )
     if role == "server":
         require(
-            f"AEGAEON_EXPOSE_METRICS_ON_MAIN={int(enabled)}\n" in rendered,
-            "Metrics boolean rendering changed",
-        )
-        require(
             "AEGAEON_TRUSTED_PROXIES=127.0.0.1/32\n" in rendered, "Trusted proxy rendering changed"
         )
         require(
@@ -425,7 +819,7 @@ def validate_module(
             commands.run([tools["tofu"], "fmt", "-check", "-diff"], copy)
             report.update(initialize_providers(copy, module, commands, tools["tofu"], work))
             report["validation"] = validate_schema(commands, tools["tofu"], copy)
-            report["runtime_contract"] = runtime_contract(copy, root)
+            report["runtime_contract"] = runtime_contract_report(copy, root)
             resource_contract(copy, report["providers"])
             report["rendered_template_cases"] = check_templates(
                 copy, commands, tools["tofu"], tools["bash"], work
@@ -443,6 +837,10 @@ def validate_module(
             require(
                 all(digest(root / path) == value for path, value in checked_sources.items()),
                 "Repository inputs changed during validation",
+            )
+            require(
+                report["runtime_contract"]["status"] == "passed",
+                "Runtime environment contract failed; see process/name/reason diagnostics",
             )
             report["status"] = "passed"
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
@@ -527,7 +925,7 @@ def main() -> int:
             "Toolchain inputs changed during validation",
         )
         summary["status"] = "passed"
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         summary["error"] = str(error)
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(f"Infrastructure validation: {summary['status']}; evidence: {args.output}")
