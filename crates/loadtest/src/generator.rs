@@ -109,6 +109,14 @@ impl TestDataGenerator {
         URL_SAFE_NO_PAD.encode(digest)
     }
 
+    /// RFC 7638 thumbprint of this worker's persistent public DPoP key.
+    pub fn dpop_jkt(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let x = URL_SAFE_NO_PAD.encode(self.dpop_signing_key.verifying_key().as_bytes());
+        let canonical = format!("{{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"{x}\"}}");
+        URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
+    }
+
     /// Generate a `DPoP` proof `JWT`.
     pub fn dpop_proof(
         &mut self,
@@ -234,6 +242,39 @@ mod tests {
             .decode(payload)
             .expect("base64url payload decoding");
         serde_json::from_slice(&decoded).expect("JSON payload decoding")
+    }
+
+    #[test]
+    fn nonce_retry_retains_key_and_ath_but_changes_jti() {
+        let mut generator = TestDataGenerator::new();
+        let first = generator.dpop_proof(
+            "GET",
+            "https://issuer.example.test/userinfo",
+            None,
+            Some("token"),
+        );
+        let retry = generator.dpop_proof(
+            "GET",
+            "https://issuer.example.test/userinfo",
+            Some("nonce"),
+            Some("token"),
+        );
+        let header = |proof: &str| -> Value {
+            serde_json::from_slice(
+                &URL_SAFE_NO_PAD
+                    .decode(proof.split('.').next().unwrap())
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        assert_eq!(header(&first)["jwk"], header(&retry)["jwk"]);
+        let first = decode_payload(&first);
+        let retry = decode_payload(&retry);
+        assert_ne!(first["jti"], retry["jti"]);
+        assert_eq!(first["ath"], retry["ath"]);
+        assert_eq!(retry["nonce"], "nonce");
+        assert_eq!(retry["htu"], "https://issuer.example.test/userinfo");
+        assert_eq!(retry["htm"], "GET");
     }
 
     #[test]

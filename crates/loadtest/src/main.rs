@@ -1,17 +1,22 @@
 #![forbid(unsafe_code)]
 use aegaeon_loadtest::{
-    scenarios::ScenarioExecutor, LoadTestConfig, LoadTestResults, TestScenario,
+    profile::{required_env, sha256},
+    scenarios::ScenarioExecutor,
+    LoadTestConfig, LoadTestResults, ReportIdentity, TestScenario,
 };
-use anyhow::Result;
+use anyhow::{ensure, Context, Result};
 use clap::Parser;
 use num_traits::ToPrimitive;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{
+    io::{Seek, SeekFrom, Write},
+    sync::Arc,
+};
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
-use tracing::{error, info};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
@@ -38,7 +43,7 @@ struct Args {
     #[arg(long = "run-time", alias = "run_time")]
     run_time: Option<String>,
 
-    /// Target requests per second
+    /// Target scenario invocations per second
     #[arg(short, long, default_value_t = 100.0)]
     rps: f64,
 
@@ -46,13 +51,13 @@ struct Args {
     #[arg(long = "spawn-rate", alias = "spawn_rate")]
     spawn_rate: Option<f64>,
 
-    /// Warmup duration in seconds
-    #[arg(long, default_value_t = 10)]
-    warmup: u64,
+    /// Warmup duration: numeric seconds or a duration such as 10s or 1m
+    #[arg(long, default_value = "10")]
+    warmup: String,
 
     /// Report output file (JSON format)
-    #[arg(long = "report-file", alias = "report_file")]
-    report_file: Option<String>,
+    #[arg(long = "report-file", alias = "report_file", required = true)]
+    report_file: String,
 
     /// Test scenario
     #[arg(short, long, value_enum, default_value = "smoke")]
@@ -101,144 +106,338 @@ impl From<CliScenario> for TestScenario {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-
-    // Initialize logging
-    let filter = if args.debug {
-        EnvFilter::new("debug")
-    } else {
-        EnvFilter::new("info")
-    };
-
     tracing_subscriber::fmt()
-        .with_env_filter(filter)
+        .with_env_filter(if args.debug {
+            EnvFilter::new("debug")
+        } else {
+            EnvFilter::new("info")
+        })
         .json()
         .init();
-
-    // Parse alternative arguments
-    let workers = args.users.unwrap_or(args.workers);
-    let rps = args.spawn_rate.unwrap_or(args.rps);
-
-    // Parse run_time if provided (supports "60s", "5m" format)
-    let duration = if let Some(run_time) = args.run_time {
-        parse_duration(&run_time).unwrap_or_else(|_| Duration::from_secs(args.duration))
-    } else {
-        Duration::from_secs(args.duration)
+    // Reserve a new report before setup; a failed run cannot overwrite prior evidence.
+    let mut report = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&args.report_file)
+        .context("cannot create a new report file")?;
+    report.write_all(b"{\"schema_version\":2,\"complete\":false,\"stage\":\"setup\"}\n")?;
+    report.sync_all()?;
+    let duration = match args.run_time.as_deref().map(parse_duration).transpose() {
+        Ok(value) => value.unwrap_or(Duration::from_secs(args.duration)),
+        Err(error) => {
+            write_report(
+                &mut report,
+                &serde_json::json!({"schema_version":2,"complete":false,"stage":"setup","error":error.to_string()}),
+            )?;
+            return Err(error);
+        }
     };
-
-    // Create configuration
+    let warmup_duration = match parse_duration(&args.warmup) {
+        Ok(duration) => duration,
+        Err(error) => {
+            write_report(
+                &mut report,
+                &serde_json::json!({"schema_version":2,"complete":false,"stage":"setup","error":format!("invalid warmup: {error}")}),
+            )?;
+            return Err(error.context("invalid warmup duration"));
+        }
+    };
     let config = LoadTestConfig {
-        target_url: args.url.clone(),
-        workers,
+        target_url: args.url,
+        workers: args.users.unwrap_or(args.workers),
         duration,
-        target_rps: rps,
-        warmup_duration: Duration::from_secs(args.warmup),
+        target_rps: args.spawn_rate.unwrap_or(args.rps),
+        warmup_duration,
         scenario: args.scenario.into(),
         debug: args.debug,
     };
-
-    info!("Starting load test");
-    info!("Target: {}", config.target_url);
-    info!("Workers: {}", config.workers);
-    info!("Duration: {:?}", config.duration);
-    info!("Target RPS: {}", config.target_rps);
-    info!("Scenario: {:?}", config.scenario);
-
-    let target_rps = config.target_rps;
-
-    // Run load test
-    let results = run_load_test(config).await?;
-
-    // Print results
-    results.print_summary(target_rps);
-
-    // Save report to file if specified
-    if let Some(report_file) = args.report_file {
-        let report_json = serde_json::to_string_pretty(&results)?;
-        std::fs::write(&report_file, report_json)?;
-        info!("Report saved to: {}", report_file);
+    let mut results = run_load_test(config.clone(), &args.report_file).await?;
+    if let Err(error) = results.validate_complete() {
+        results.completion_errors.push(error.to_string());
     }
-
-    // Check if SLOs are met
-    if !results.meets_slos(target_rps) {
-        error!("Load test failed to meet SLOs");
-        std::process::exit(1);
-    }
-
+    results.print_summary(config.target_rps);
+    write_report(&mut report, &results)?;
+    ensure!(
+        results.meets_slos(config.target_rps),
+        "load test failed completeness or unchanged SLO thresholds; failed report preserved"
+    );
     info!("Load test completed successfully");
     Ok(())
 }
 
-type ScenarioOutcome = (TestScenario, bool, u64);
+fn write_report(file: &mut std::fs::File, value: &impl serde::Serialize) -> Result<()> {
+    let mut bytes = serde_json::to_vec_pretty(value)?;
+    bytes.push(b'\n');
+    file.seek(SeekFrom::Start(0))?;
+    file.set_len(0)?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    Ok(())
+}
 
-async fn run_load_test(config: LoadTestConfig) -> Result<LoadTestResults> {
-    let results = Arc::new(RwLock::new(LoadTestResults::try_new()?));
-    let memory_monitor_handle = spawn_memory_monitor(results.clone());
+fn validate_config(config: &LoadTestConfig) -> Result<()> {
+    ensure!(
+        config.workers > 0 && u32::try_from(config.workers).is_ok(),
+        "worker count must be positive and representable"
+    );
+    ensure!(
+        config.target_rps.is_finite() && config.target_rps > 0.0,
+        "target invocation rate must be finite and positive"
+    );
+    ensure!(
+        !config.duration.is_zero()
+            && config.duration.as_secs() <= 86_400
+            && config.warmup_duration.as_secs() <= 86_400,
+        "run durations must be bounded and main duration positive"
+    );
+    let seconds = (config.workers as f64) / config.target_rps;
+    ensure!(
+        seconds.is_finite() && seconds <= 86_400.0,
+        "worker pacing interval exceeds bound"
+    );
+    Ok(())
+}
 
-    run_warmup_phase(&config).await;
+fn report_identity(config: &LoadTestConfig, path: &str) -> Result<ReportIdentity> {
+    let source_sha256 = required_env("AEG_LOADTEST_SOURCE_SHA256")?;
+    ensure!(
+        source_sha256.len() == 64
+            && source_sha256
+                .bytes()
+                .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()),
+        "source identity must be the lowercase SHA256 of the frozen source manifest"
+    );
+    let binary = std::fs::read(std::env::current_exe()?)
+        .context("cannot identify actual load generator binary")?;
+    let config_json = serde_json::to_string(config)?;
+    Ok(ReportIdentity {
+        source_sha256,
+        artifact_sha256: sha256(&binary),
+        config_sha256: sha256(config_json.as_bytes()),
+        config_json,
+        report_id: uuid::Uuid::new_v4().to_string(),
+        report_path: path.into(),
+        profile_sha256: None,
+        session_provenance_sha256: None,
+    })
+}
 
-    info!("Starting main test phase");
-    let test_start = Instant::now();
-    let test_end = test_start + config.duration;
-    let worker_delay = calculate_worker_delay(&config);
-    let handles = spawn_workers(&config, &results, test_end, worker_delay);
-
-    wait_for_workers(handles).await;
-    memory_monitor_handle.abort();
-
-    finalize_results(&results, test_start.elapsed()).await
+async fn run_load_test(config: LoadTestConfig, report_path: &str) -> Result<LoadTestResults> {
+    let mut initial = LoadTestResults::try_new()?;
+    initial.selected_scenario = Some(config.scenario.clone());
+    initial.warmup_requested = !config.warmup_duration.is_zero();
+    let setup = (|| -> Result<ScenarioExecutor> {
+        validate_config(&config)?;
+        initial.identity = Some(report_identity(&config, report_path)?);
+        let executor = ScenarioExecutor::for_scenario(config.target_url.clone(), &config.scenario)?;
+        if let Some((profile, session)) = executor.supplier_identity() {
+            let identity = initial
+                .identity
+                .as_mut()
+                .context("missing report identity")?;
+            identity.profile_sha256 = Some(profile);
+            identity.session_provenance_sha256 = Some(session);
+        }
+        Ok(executor)
+    })();
+    let prototype = match setup {
+        Ok(executor) => executor,
+        Err(error) => {
+            initial.completion_errors.push(error.to_string());
+            return Ok(initial);
+        }
+    };
+    let results = Arc::new(RwLock::new(initial));
+    if config.warmup_duration.is_zero() || run_warmup_phase(&config, &prototype, &results).await? {
+        info!("Starting main test phase");
+        let memory_monitor = spawn_memory_monitor(results.clone());
+        let start = Instant::now();
+        let end = start + config.duration;
+        let delay = Duration::from_secs_f64(config.workers as f64 / config.target_rps);
+        let mut handles = Vec::new();
+        for worker in 0..config.workers {
+            let executor = prototype.fork_worker();
+            let worker_config = config.clone();
+            let worker_results = results.clone();
+            handles.push(tokio::spawn(async move {
+                run_worker(
+                    &worker_config,
+                    executor,
+                    &worker_results,
+                    end,
+                    delay,
+                    worker,
+                )
+                .await
+            }));
+        }
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => results
+                    .write()
+                    .await
+                    .completion_errors
+                    .push(error.to_string()),
+                Err(error) => results
+                    .write()
+                    .await
+                    .completion_errors
+                    .push(format!("worker join failure: {error}")),
+            }
+        }
+        results.write().await.finalize(start.elapsed()).await;
+        memory_monitor.abort();
+        match memory_monitor.await {
+            Err(error) if error.is_cancelled() => {}
+            Err(error) => results
+                .write()
+                .await
+                .completion_errors
+                .push(format!("memory monitor join failure: {error}")),
+            Ok(()) => results
+                .write()
+                .await
+                .completion_errors
+                .push("memory monitor terminated early".into()),
+        }
+    }
+    let result = results.read().await.clone();
+    Ok(result)
 }
 
 fn spawn_memory_monitor(results: Arc<RwLock<LoadTestResults>>) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut sys = System::new_all();
-        let mut memory_interval = interval(Duration::from_secs(1));
         let pid = Pid::from_u32(std::process::id());
-
+        let mut ticks = interval(Duration::from_secs(1));
         loop {
-            memory_interval.tick().await;
+            ticks.tick().await;
             sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
-
             if let Some(process) = sys.process(pid) {
-                let memory_mb = process
-                    .memory()
-                    .to_f64()
-                    .map_or(0.0, |memory| memory / 1024.0 / 1024.0);
-                results.write().await.record_memory_sample(memory_mb);
+                if let Some(memory) = process.memory().to_f64() {
+                    results
+                        .write()
+                        .await
+                        .record_memory_sample(memory / 1024.0 / 1024.0);
+                } else {
+                    results
+                        .write()
+                        .await
+                        .completion_errors
+                        .push("load generator memory is not representable".into());
+                }
+            } else {
+                results
+                    .write()
+                    .await
+                    .completion_errors
+                    .push("load generator memory sample unavailable".into());
             }
         }
     })
 }
 
-async fn run_warmup_phase(config: &LoadTestConfig) {
-    if config.warmup_duration.is_zero() {
-        return;
-    }
-
-    info!("Starting warmup phase ({:?})", config.warmup_duration);
-    let warmup_end = Instant::now() + config.warmup_duration;
-
-    while Instant::now() < warmup_end {
-        let Ok(mut executor) = ScenarioExecutor::new(config.target_url.clone()) else {
-            error!("failed to initialize loadtest scenario executor during warmup");
-            break;
-        };
-
-        let _ = execute_warmup_scenario(&mut executor, config.scenario.clone()).await;
+async fn run_warmup_phase(
+    config: &LoadTestConfig,
+    prototype: &ScenarioExecutor,
+    results: &Arc<RwLock<LoadTestResults>>,
+) -> Result<bool> {
+    let mut executor = prototype.fork_worker();
+    let end = Instant::now() + config.warmup_duration;
+    let mut iteration = 0;
+    while Instant::now() < end {
+        record_invocation(&mut executor, &config.scenario, iteration, results, true).await?;
+        iteration += 1;
         sleep(Duration::from_millis(100)).await;
     }
-
-    info!("Warmup phase completed");
+    let mut results = results.write().await;
+    if let Err(error) = results
+        .warmup_phase
+        .validate(&config.scenario.required_legs())
+    {
+        results
+            .completion_errors
+            .push(format!("warmup failed: {error}"));
+        return Ok(false);
+    }
+    Ok(true)
 }
 
-async fn execute_warmup_scenario(
+async fn run_worker(
+    config: &LoadTestConfig,
+    mut executor: ScenarioExecutor,
+    results: &Arc<RwLock<LoadTestResults>>,
+    end: Instant,
+    delay: Duration,
+    worker: usize,
+) -> Result<()> {
+    let mut iteration = 0;
+    sleep(Duration::from_millis((worker as u64).saturating_mul(100))).await;
+    while Instant::now() < end {
+        let start = Instant::now();
+        record_invocation(&mut executor, &config.scenario, iteration, results, false).await?;
+        iteration += 1;
+        if let Some(remaining) = delay.checked_sub(start.elapsed()) {
+            sleep(remaining).await;
+        }
+    }
+    Ok(())
+}
+
+async fn record_invocation(
     executor: &mut ScenarioExecutor,
-    scenario: TestScenario,
+    scenario: &TestScenario,
+    iteration: u64,
+    results: &Arc<RwLock<LoadTestResults>>,
+    warmup: bool,
+) -> Result<()> {
+    let (leg, rejection) = scenario.leg(iteration);
+    let start = Instant::now();
+    let outcome = execute_scenario(executor, scenario, iteration).await;
+    let latency = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let (success, error) = match outcome {
+        Ok((true, _)) => (true, None),
+        Ok((false, _)) => (false, Some(format!("{leg}: scenario returned failure"))),
+        Err(error) => (false, Some(format!("{leg}: {error}"))),
+    };
+    let http = executor.take_accounting();
+    let mut results = results.write().await;
+    let phase = if warmup {
+        &mut results.warmup_phase
+    } else {
+        &mut results.main_phase
+    };
+    phase
+        .legs
+        .entry(leg)
+        .or_default()
+        .record(success, rejection);
+    if let Err(error) = phase.http.merge(http) {
+        phase.errors.push(error.to_string());
+    }
+    if warmup {
+        if let Some(error) = error {
+            phase.errors.push(error);
+        }
+    } else {
+        results.record_request(latency, success, error).await;
+    }
+    if let Some(digest) = &executor.jwks_sha256 {
+        if !results.jwks_sha256.contains(digest) {
+            results.jwks_sha256.push(digest.clone());
+        }
+    }
+    Ok(())
+}
+
+async fn execute_scenario(
+    executor: &mut ScenarioExecutor,
+    scenario: &TestScenario,
+    iteration: u64,
 ) -> Result<(bool, u64)> {
     match scenario {
-        TestScenario::Smoke => executor
-            .smoke_flow(0)
-            .await
-            .map(|(_, success, latency)| (success, latency)),
+        TestScenario::Smoke => executor.smoke_flow(iteration).await.map(|(_, a, b)| (a, b)),
         TestScenario::AuthorizationCode => executor.authorization_code_flow().await,
         TestScenario::Introspection => executor.introspection_flow().await,
         TestScenario::Revocation => executor.revocation_flow().await,
@@ -247,197 +446,86 @@ async fn execute_warmup_scenario(
         TestScenario::Discovery => executor.discovery_flow().await,
         TestScenario::Jwks => executor.jwks_flow().await,
         TestScenario::PAR => executor.par_flow().await,
+        TestScenario::Mixed => executor.mixed_flow(iteration).await.map(|(_, a, b)| (a, b)),
         TestScenario::PolicyMixed => executor
-            .policy_mixed_flow(0)
+            .policy_mixed_flow(iteration)
             .await
-            .map(|(_scenario, success, latency)| (success, latency)),
+            .map(|(_, a, b)| (a, b)),
         TestScenario::KeyRotation => executor.key_rotation_flow().await,
-        TestScenario::Mixed => executor
-            .mixed_flow(0)
-            .await
-            .map(|(_scenario, success, latency)| (success, latency)),
     }
 }
 
-fn calculate_worker_delay(config: &LoadTestConfig) -> Duration {
-    let delay_between_requests = Duration::from_secs_f64(1.0 / config.target_rps);
-    let worker_count = u32::try_from(config.workers).unwrap_or(u32::MAX);
-    delay_between_requests * worker_count
-}
-
-fn spawn_workers(
-    config: &LoadTestConfig,
-    results: &Arc<RwLock<LoadTestResults>>,
-    test_end: Instant,
-    worker_delay: Duration,
-) -> Vec<JoinHandle<()>> {
-    let mut handles = Vec::new();
-
-    for worker_id in 0..config.workers {
-        let worker_config = config.clone();
-        let worker_results = results.clone();
-        handles.push(tokio::spawn(async move {
-            run_worker(
-                &worker_config,
-                &worker_results,
-                test_end,
-                worker_delay,
-                worker_id,
-            )
-            .await;
-        }));
+fn parse_duration(value: &str) -> Result<Duration> {
+    let value = value.trim();
+    ensure!(!value.is_empty(), "empty duration");
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Ok(Duration::from_secs(seconds));
     }
-
-    handles
-}
-
-async fn run_worker(
-    config: &LoadTestConfig,
-    results: &Arc<RwLock<LoadTestResults>>,
-    test_end: Instant,
-    worker_delay: Duration,
-    worker_id: usize,
-) {
-    let Ok(mut executor) = ScenarioExecutor::new(config.target_url.clone()) else {
-        error!("failed to initialize loadtest scenario executor");
-        return;
+    let position = value.char_indices().last().context("empty duration")?.0;
+    let (number, unit) = value.split_at(position);
+    let count: u64 = number.parse().context("invalid duration number")?;
+    let multiplier = match unit {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3600,
+        _ => anyhow::bail!("unknown duration unit"),
     };
-    let mut iteration = 0u64;
+    Ok(Duration::from_secs(
+        count.checked_mul(multiplier).context("duration overflow")?,
+    ))
+}
 
-    sleep(initial_worker_delay(worker_id)).await;
-
-    while Instant::now() < test_end {
-        let request_start = Instant::now();
-        let (scenario, success, latency_ms) =
-            execute_scenario(&mut executor, config.scenario.clone(), iteration).await;
-
-        results
-            .write()
-            .await
-            .record_request(
-                latency_ms,
-                success,
-                scenario_error_label(&scenario, success),
-            )
-            .await;
-
-        iteration += 1;
-        if let Some(remaining) = worker_delay.checked_sub(request_start.elapsed()) {
-            sleep(remaining).await;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn warmup_accepts_legacy_seconds_and_driver_duration_syntax() {
+        for (input, seconds) in [
+            ("0", 0),
+            ("1", 1),
+            ("1s", 1),
+            ("10s", 10),
+            ("1m", 60),
+            ("1h", 3600),
+        ] {
+            let args = Args::try_parse_from([
+                "aegaeon-loadtest",
+                "--report-file",
+                "unused.json",
+                "--warmup",
+                input,
+            ])
+            .unwrap();
+            assert_eq!(
+                parse_duration(&args.warmup).unwrap(),
+                Duration::from_secs(seconds)
+            );
+        }
+        for input in ["bad", "5秒", "18446744073709551615h"] {
+            let args = Args::try_parse_from([
+                "aegaeon-loadtest",
+                "--report-file",
+                "unused.json",
+                "--warmup",
+                input,
+            ])
+            .unwrap();
+            assert!(parse_duration(&args.warmup).is_err());
         }
     }
-}
-
-fn initial_worker_delay(worker_id: usize) -> Duration {
-    let delay_millis = u64::try_from(worker_id)
-        .unwrap_or(u64::MAX / 100)
-        .saturating_mul(100);
-    Duration::from_millis(delay_millis)
-}
-
-async fn execute_scenario(
-    executor: &mut ScenarioExecutor,
-    scenario: TestScenario,
-    iteration: u64,
-) -> ScenarioOutcome {
-    match scenario {
-        TestScenario::Smoke => {
-            executor
-                .smoke_flow(iteration)
-                .await
-                .unwrap_or((TestScenario::Smoke, false, 0))
+    #[test]
+    fn config_rejects_zero_and_nonfinite_execution_parameters() {
+        let mut config = LoadTestConfig::default();
+        assert!(validate_config(&config).is_ok());
+        for rps in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            config.target_rps = rps;
+            assert!(validate_config(&config).is_err());
         }
-        TestScenario::AuthorizationCode => scenario_outcome(
-            TestScenario::AuthorizationCode,
-            executor.authorization_code_flow().await,
-        ),
-        TestScenario::Introspection => scenario_outcome(
-            TestScenario::Introspection,
-            executor.introspection_flow().await,
-        ),
-        TestScenario::Revocation => {
-            scenario_outcome(TestScenario::Revocation, executor.revocation_flow().await)
-        }
-        TestScenario::DPoP => scenario_outcome(TestScenario::DPoP, executor.dpop_flow().await),
-        TestScenario::Userinfo => {
-            scenario_outcome(TestScenario::Userinfo, executor.userinfo_flow().await)
-        }
-        TestScenario::Discovery => {
-            scenario_outcome(TestScenario::Discovery, executor.discovery_flow().await)
-        }
-        TestScenario::Jwks => scenario_outcome(TestScenario::Jwks, executor.jwks_flow().await),
-        TestScenario::PAR => scenario_outcome(TestScenario::PAR, executor.par_flow().await),
-        TestScenario::PolicyMixed => executor.policy_mixed_flow(iteration).await.unwrap_or((
-            TestScenario::PolicyMixed,
-            false,
-            0,
-        )),
-        TestScenario::KeyRotation => scenario_outcome(
-            TestScenario::KeyRotation,
-            executor.key_rotation_flow().await,
-        ),
-        TestScenario::Mixed => {
-            executor
-                .mixed_flow(iteration)
-                .await
-                .unwrap_or((TestScenario::Mixed, false, 0))
-        }
-    }
-}
-
-fn scenario_outcome(scenario: TestScenario, outcome: Result<(bool, u64)>) -> ScenarioOutcome {
-    let scenario_for_success = scenario.clone();
-    outcome
-        .map(|(success, latency)| (scenario_for_success, success, latency))
-        .unwrap_or((scenario, false, 0))
-}
-
-fn scenario_error_label(scenario: &TestScenario, success: bool) -> Option<String> {
-    if success {
-        None
-    } else {
-        Some(format!("{scenario:?}_error"))
-    }
-}
-
-async fn wait_for_workers(handles: Vec<JoinHandle<()>>) {
-    for handle in handles {
-        let _ = handle.await;
-    }
-}
-
-async fn finalize_results(
-    results: &Arc<RwLock<LoadTestResults>>,
-    test_duration: Duration,
-) -> Result<LoadTestResults> {
-    let mut final_results = results.write().await;
-    final_results.finalize(test_duration).await;
-    Ok(final_results.clone())
-}
-
-fn parse_duration(s: &str) -> Result<Duration> {
-    // Parse duration strings like "60s", "5m", "1h"
-    if let Ok(secs) = s.parse::<u64>() {
-        // Plain number - interpret as seconds
-        return Ok(Duration::from_secs(secs));
-    }
-
-    let s = s.trim();
-    if s.is_empty() {
-        return Err(anyhow::anyhow!("Empty duration string"));
-    }
-
-    let (num_str, unit) = s.split_at(s.len() - 1);
-    let num: u64 = num_str
-        .parse()
-        .map_err(|_| anyhow::anyhow!("Invalid number in duration: {num_str}"))?;
-
-    match unit {
-        "s" => Ok(Duration::from_secs(num)),
-        "m" => Ok(Duration::from_secs(num * 60)),
-        "h" => Ok(Duration::from_secs(num * 3600)),
-        _ => Err(anyhow::anyhow!(
-            "Unknown duration unit: {unit}. Use 's', 'm', or 'h'"
-        )),
+        config.target_rps = 1.0;
+        config.workers = 0;
+        assert!(validate_config(&config).is_err());
+        assert!(parse_duration("18446744073709551615h").is_err());
+        assert!(parse_duration("bad").is_err());
+        assert!(parse_duration("5秒").is_err());
     }
 }
