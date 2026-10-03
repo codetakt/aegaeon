@@ -20,6 +20,7 @@ import posixpath
 import re
 import resource
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -859,28 +860,37 @@ def request_target(
 
 def clear_discovery_primary(target: pathlib.Path, build_root: pathlib.Path) -> list[str]:
     """Invalidate primary server state without relocating its live dependencies."""
-    if (
-        target.parent != build_root
-        or build_root.is_symlink()
-        or target.is_symlink()
-        or not target.is_dir()
-        or target.resolve().parent != build_root.resolve()
-    ):
-        raise AdmissionError("discovery target is not an evaluation-owned directory")
-    primary = re.compile(r"^(?:lib)?aegaeon[_-]server(?:[-_.]|$)")
-    paths = list(target.rglob("*"))
-    # Check the entire layout before deleting anything. Never follow an unexpected link.
-    for path in paths:
-        if path.is_symlink() or not (path.is_file() or path.is_dir()):
-            raise AdmissionError("unsupported discovery target entry")
-    removed: list[pathlib.Path] = []
     try:
-        for path in sorted(paths, key=lambda entry: len(entry.parts)):
+        if (
+            target.parent != build_root
+            or not stat.S_ISDIR(build_root.stat(follow_symlinks=False).st_mode)
+            or not stat.S_ISDIR(target.stat(follow_symlinks=False).st_mode)
+            or target.resolve().parent != build_root.resolve()
+        ):
+            raise AdmissionError("discovery target is not an evaluation-owned directory")
+        primary = re.compile(r"^(?:lib)?aegaeon[_-]server(?:[-_.]|$)")
+        paths: list[tuple[pathlib.Path, bool]] = []
+        pending = [target]
+        # rglob and is_file/is_dir can suppress OSError. Inventory strictly and finish
+        # validating every entry before deleting anything; never follow a discovered link.
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    path = pathlib.Path(entry.path)
+                    mode = path.stat(follow_symlinks=False).st_mode
+                    directory = stat.S_ISDIR(mode)
+                    if not (directory or stat.S_ISREG(mode)):
+                        raise AdmissionError("unsupported discovery target entry")
+                    paths.append((path, directory))
+                    if directory:
+                        pending.append(path)
+        removed: list[pathlib.Path] = []
+        for path, directory in sorted(paths, key=lambda entry: len(entry[0].parts)):
             if not (primary.match(path.name) or path.name == "incremental"):
                 continue
             if any(parent in removed for parent in path.parents):
                 continue
-            if path.is_dir():
+            if directory:
                 shutil.rmtree(path)
             else:
                 path.unlink()
