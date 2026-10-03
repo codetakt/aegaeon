@@ -24,9 +24,10 @@ with (root / 'dispatch-calls.jsonl').open('a') as out:
 if sanitizer:
     directory = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
     (directory / 'child-receipt.json').write_text(json.dumps({'exit_code': code}))
-    scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
-    scratch.mkdir(parents=True, exist_ok=True)
-    (scratch / 'child-output').write_text('transient sanitizer output')
+    if not os.environ.get('SANITIZER_UNSAFE_TARGET_TEST'):
+        scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
+        scratch.mkdir(parents=True, exist_ok=True)
+        (scratch / 'child-output').write_text('transient sanitizer output')
     print('sanitizer child diagnostic: SUCCESS! exit=' + str(code))
 else:
     print('optional SBOM fixture exit=' + str(code))
@@ -37,6 +38,17 @@ RM = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
 root = pathlib.Path(os.environ['FIXTURE_ROOT'])
+workspace = root.resolve()
+for arg in args:
+    if arg.startswith('-'):
+        continue
+    resolved = (root / arg).resolve()
+    if resolved == workspace or resolved in workspace.parents:
+        with (root / 'dispatch-calls.jsonl').open('a') as out:
+            out.write(json.dumps({'kind': 'unsafe-cleanup', 'args': args,
+                                 'exit_code': 83}) + '\n')
+        print('intercepted dangerous cleanup; no deletion delegated', file=sys.stderr)
+        raise SystemExit(83)
 target = str((root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve())
 if target in args:
     root = pathlib.Path(os.environ['FIXTURE_ROOT'])
@@ -76,6 +88,7 @@ class SanitizerDispatchTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
         fixture.env.pop("SANITIZER_TARGET_DIR", None)
+        fixture.env.pop("SANITIZER_UNSAFE_TARGET_TEST", None)
         fixture.install("nix", NIX)
         fixture.install("rm", "ACTUAL_RM = " + repr(shutil.which("rm")) + "\n" + RM)
         fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
@@ -114,6 +127,56 @@ class SanitizerDispatchTests(unittest.TestCase):
             (fixture.root / "sanitizer-link").symlink_to(directory, target_is_directory=True)
             return "sanitizer-link"
         return setting
+
+    def unsafe_target_directory(self, fixture, setting):
+        if setting in ("workspace-absolute", "parent-absolute"):
+            directory = fixture.root if setting == "workspace-absolute" else fixture.root.parent
+            return str(directory)
+        if setting in ("workspace-symlink", "parent-symlink"):
+            destination = fixture.root if setting == "workspace-symlink" else fixture.root.parent
+            link = fixture.root / setting
+            link.symlink_to(destination, target_is_directory=True)
+            return setting
+        return setting
+
+    def test_unsafe_target_cleanup_is_rejected_without_removal(self):
+        for aggregate in (False, True):
+            for setting in (
+                ".",
+                "workspace-absolute",
+                "..",
+                "parent-absolute",
+                "/",
+                "workspace-symlink",
+                "parent-symlink",
+                "missing-parent/..",
+                "missing-parent/../..",
+            ):
+                for child in (0, 71):
+                    with self.subTest(aggregate=aggregate, setting=setting, child=child):
+                        fixture = self.fixture()
+                        target = self.unsafe_target_directory(fixture, setting)
+                        marker = fixture.root / "workspace-marker"
+                        marker.write_text("preserve checkout")
+                        parent_marker = fixture.root.parent / "parent-marker"
+                        parent_marker.write_text("preserve parent")
+                        result = self.run_suite(
+                            fixture,
+                            aggregate=aggregate,
+                            SANITIZER_TARGET_DIR=target,
+                            SANITIZER_CHILD_EXIT=str(child),
+                            SANITIZER_UNSAFE_TARGET_TEST="1",
+                        )
+                        self.assertEqual(
+                            result.returncode, child or 1, result.stdout + result.stderr
+                        )
+                        self.assertEqual(self.receipt(fixture)["exit_code"], child)
+                        self.assertEqual(self.calls(fixture, "cleanup"), [])
+                        self.assertEqual(self.calls(fixture, "unsafe-cleanup"), [])
+                        self.assertEqual(marker.read_text(), "preserve checkout")
+                        self.assertEqual(parent_marker.read_text(), "preserve parent")
+                        log = (fixture.artifacts / "summary/security.log").read_text()
+                        self.assertIn("unsafe sanitizer target directory; refusing cleanup", log)
 
     def test_configured_target_cleanup_preserves_unrelated_directories(self):
         for aggregate in (False, True):

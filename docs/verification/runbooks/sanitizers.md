@@ -47,6 +47,13 @@ in each command's process group on timeout, interruption or capture failure.
 A normally exiting leader with running descendants also fails after cleanup.
 The existing security job's outer timeout still bounds the whole stage.
 
+The security-suite dispatcher resolves `SANITIZER_TARGET_DIR` before removing
+transient outputs after the sanitizer stage. Cleanup rejects the workspace
+itself and every workspace ancestor, including `/`, even through symlinks or
+`..` aliases. A rejected cleanup fails a successful stage; an earlier child
+failure retains its original exit code. Custom output directories must resolve
+to another location.
+
 The runner sets these execution options explicitly:
 
 ```text
