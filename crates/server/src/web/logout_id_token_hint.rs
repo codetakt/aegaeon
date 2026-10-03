@@ -78,6 +78,13 @@ pub(super) fn decode_id_token_hint(
             "id_token_hint must be signed with RS256",
         ));
     }
+    if header.typ.as_deref().is_some_and(|typ| {
+        typ.eq_ignore_ascii_case("logout+jwt") || typ.eq_ignore_ascii_case("application/logout+jwt")
+    }) {
+        return Err(IdTokenHintDecodeError::invalid(
+            "id_token_hint must be an ID Token",
+        ));
+    }
     let kid = header
         .kid
         .as_deref()
@@ -121,6 +128,20 @@ pub(super) fn decode_id_token_hint(
             }
             _ => IdTokenHintDecodeError::invalid("id_token_hint payload invalid"),
         })?;
+    // Legacy Logout Tokens may use JWT or omit typ. Check the authenticated,
+    // duplicate-safe typed claims before admitting the token for ID Token use.
+    if claims
+        .additional_claims
+        .get("events")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|events| {
+            events.contains_key("http://schemas.openid.net/event/backchannel-logout")
+        })
+    {
+        return Err(IdTokenHintDecodeError::invalid(
+            "id_token_hint must be an ID Token",
+        ));
+    }
     validate_id_token_hint_claims(cfg, &claims).map_err(IdTokenHintDecodeError::invalid)?;
     Ok(claims)
 }

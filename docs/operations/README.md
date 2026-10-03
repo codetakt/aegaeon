@@ -19,6 +19,9 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [Back-Channel Logout Token profile](backchannel-logout.md) —
+  explicit token type, expiration, recipient compatibility and delivery scope.
+
 - `[runbook]` [Launch against a matching migration inventory](schema-guarded-launch.md) —
   immutable executable binding, guarded OCI entrypoints, and upgrade/rollback scope.
 - `[runbook]` [Configuration membership recovery](configuration-membership-recovery.md) —

@@ -41,6 +41,7 @@ pub fn sign_required_id_token(
     claims: &IdTokenClaims,
     signing_key: &OidcSigningKey,
 ) -> Result<String, RequiredRs256Error> {
+    validate_output_subject(claims)?;
     signing_key.sign_rs256_jwt(claims).map_err(Into::into)
 }
 
@@ -48,8 +49,18 @@ pub async fn sign_required_id_token_async(
     claims: &IdTokenClaims,
     signing_key: &OidcSigningKey,
 ) -> Result<String, RequiredRs256Error> {
+    validate_output_subject(claims)?;
     signing_key
         .sign_rs256_jwt_async(claims)
         .await
         .map_err(Into::into)
+}
+
+fn validate_output_subject(claims: &IdTokenClaims) -> Result<(), RequiredRs256Error> {
+    if !super::subject::is_valid_subject(&claims.sub)
+        || claims.additional_claims.contains_key("sub")
+    {
+        return Err(RequiredRs256Error::InvalidPayload);
+    }
+    Ok(())
 }
