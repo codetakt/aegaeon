@@ -18,7 +18,8 @@ fn metrics() -> TestResult<(f64, f64)> {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_parent_introspection_skips_lookup_when_retention_is_disabled() -> TestResult {
+async fn shared_redis_refresh_parent_introspection_skips_lookup_when_retention_is_disabled(
+) -> TestResult {
     let fixture = Fixture::new(false).await?;
     let state = &fixture.state;
     let result = async {
@@ -54,7 +55,8 @@ async fn refresh_parent_introspection_skips_lookup_when_retention_is_disabled() 
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_parent_introspection_backend_error_is_not_an_active_observation() -> TestResult {
+async fn shared_redis_refresh_parent_introspection_backend_error_is_not_an_active_observation(
+) -> TestResult {
     let fixture = Fixture::new(true).await?;
     let state = &fixture.state;
     let result = async {
@@ -130,7 +132,7 @@ async fn refresh_parent_introspection_backend_error_is_not_an_active_observation
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis; run serially"]
-async fn refresh_parent_introspection_counts_final_application_status_and_signing_errors(
+async fn shared_redis_refresh_parent_introspection_counts_final_application_status_and_signing_errors(
 ) -> TestResult {
     let mut fixture = Fixture::new(true).await?;
     let result = async {

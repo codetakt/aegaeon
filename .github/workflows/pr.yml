@@ -3,13 +3,16 @@ name: PR Validation
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    branches: [main]
+    types: [checks_requested]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-validation-${{ github.event.pull_request.number }}
+  group: pr-validation-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -19,44 +22,54 @@ jobs:
   plan:
     name: Select checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       scope: ${{ steps.plan.outputs.scope }}
+      base: ${{ steps.plan.outputs.base }}
+      source_head: ${{ steps.plan.outputs.source_head }}
+      test_sha: ${{ steps.plan.outputs.test_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Classify using the base revision
+      - name: Validate event, signatures and protected base policy
         id: plan
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          trusted="$RUNNER_TEMP/pr-policy"
-          mkdir -p "$trusted"
-          if git cat-file -e "$PR_BASE_SHA:scripts/ci/pr_plan.py" &&
-             git cat-file -e "$PR_BASE_SHA:ci/pr-policy.json"; then
-            git show "$PR_BASE_SHA:scripts/ci/pr_plan.py" > "$trusted/pr_plan.py"
-            git show "$PR_BASE_SHA:ci/pr-policy.json" > "$trusted/policy.json"
-            python3 "$trusted/pr_plan.py" --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" \
-              --policy "$trusted/policy.json" --output ci-plan.json
+          [[ "$EVENT_BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then
+            # Event base may be a speculative parent; only real main is authority.
+            TRUSTED_BASE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          elif [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            TRUSTED_BASE_SHA="$EVENT_BASE_SHA"
           else
-            echo 'scope=full' >> "$GITHUB_OUTPUT"
-            python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          Path('ci-plan.json').write_text(json.dumps({
-              'scope': 'full', 'fallback': 'base revision has no PR classification policy',
-              'base': os.environ['PR_BASE_SHA'], 'head': os.environ['PR_HEAD_SHA'],
-          }, indent=2) + '\n')
-          PY
+            exit 1
           fi
-      - name: Preserve classification evidence
+          [[ "$TRUSTED_BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
+          export TRUSTED_BASE_SHA
+          git fetch --no-tags origin "$TRUSTED_BASE_SHA"
+          git merge-base --is-ancestor "$TRUSTED_BASE_SHA" "$GITHUB_SHA"
+          trusted="$RUNNER_TEMP/validate_change.py"
+          if git cat-file -e "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py"; then
+            git show "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py" > "$trusted"
+            python3 "$trusted"
+          else
+            # Installation only: exact base and same-repository branch are checked.
+            # Maintainers must also perform the mandatory manual signature gate.
+            [[ "$GITHUB_EVENT_NAME" == pull_request ]]
+            python3 scripts/ci/validate_change.py --bootstrap
+          fi
+      - name: Preserve validation evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-ci-plan
-          path: ci-plan.json
+          path: |
+            ci-plan.json
+            ci-validation.json
           if-no-files-found: error
 
   docs:
@@ -72,8 +85,8 @@ jobs:
       - uses: ./.github/actions/setup-nix-ci
       - name: Check documentation and PR metadata
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ needs.plan.outputs.base }}
+          PR_HEAD_SHA: ${{ needs.plan.outputs.source_head }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: nix develop .#docs --command bash scripts/ci/run_docs.sh
 
@@ -171,9 +184,16 @@ jobs:
     needs: [plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
     steps:
+      - name: Require a validated protected base
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          BASE_SHA: ${{ needs.plan.outputs.base }}
+        run: |
+          [[ "$PLAN_RESULT" == success ]]
+          [[ "$BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ needs.plan.outputs.base }}
           persist-credentials: false
       - name: Require success of every selected check
         env:
