@@ -155,22 +155,22 @@ fn signed_hash_scenario(alg: Algorithm) -> TestResult {
 }
 
 #[test]
-fn upstream_ps256_signed_hash_claims() -> TestResult {
+fn oidc_pss_hash_upstream_ps256_signed_hash_claims() -> TestResult {
     signed_hash_scenario(Algorithm::PS256)
 }
 #[test]
-fn upstream_ps384_signed_hash_claims() -> TestResult {
+fn oidc_pss_hash_upstream_ps384_signed_hash_claims() -> TestResult {
     signed_hash_scenario(Algorithm::PS384)
 }
 #[test]
-fn upstream_ps512_signed_hash_claims() -> TestResult {
+fn oidc_pss_hash_upstream_ps512_signed_hash_claims() -> TestResult {
     signed_hash_scenario(Algorithm::PS512)
 }
 #[test]
-fn upstream_rs256_signed_hash_control() -> TestResult {
+fn oidc_pss_hash_upstream_rs256_signed_hash_control() -> TestResult {
     signed_hash_scenario(Algorithm::RS256)
 }
 #[test]
-fn upstream_es256_signed_hash_control() -> TestResult {
+fn oidc_pss_hash_upstream_es256_signed_hash_control() -> TestResult {
     signed_hash_scenario(Algorithm::ES256)
 }
