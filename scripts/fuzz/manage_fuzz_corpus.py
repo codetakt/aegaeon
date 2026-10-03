@@ -135,23 +135,27 @@ def load_targets() -> list[str]:
 
 
 def ensure_directories(targets: list[str]) -> None:
+    validate_collection_roots()
     CORPUS_ROOT.mkdir(parents=True, exist_ok=True)
     META_DIR.mkdir(parents=True, exist_ok=True)
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     for target in targets:
-        (CORPUS_ROOT / target).mkdir(parents=True, exist_ok=True)
+        path = CORPUS_ROOT / target
+        if not path.is_symlink():
+            path.mkdir(parents=True, exist_ok=True)
 
 
 def gather_stats(targets: list[str]) -> list[CorpusStat]:
+    validate_collection_roots()
     stats: list[CorpusStat] = []
     for target in targets:
         path = CORPUS_ROOT / target
         file_count = 0
         size_bytes = 0
         latest_mtime: float | None = None
-        if path.exists():
+        if path.exists() and not path.is_symlink():
             for file in path.rglob("*"):
-                if file.is_file():
+                if not file.is_symlink() and file.is_file():
                     file_count += 1
                     stat = file.stat()
                     size_bytes += stat.st_size
@@ -183,6 +187,7 @@ def append_history(stats: list[CorpusStat]) -> None:
 
 
 def create_archive() -> Path | None:
+    validate_collection_roots()
     keep_archives = parse_env_int("CORPUS_ARCHIVE_KEEP", 3)
     if keep_archives <= 0:
         return None
@@ -191,7 +196,7 @@ def create_archive() -> Path | None:
     archive_path = ARCHIVE_DIR / f"{timestamp}.tar.gz"
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
-    with tarfile.open(archive_path, "w:gz") as tar:
+    with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
         if CORPUS_ROOT.exists():
             tar.add(CORPUS_ROOT, arcname="corpus")
 
@@ -204,19 +209,20 @@ def create_archive() -> Path | None:
 
 
 def gather_crash_stats() -> list[CrashStat]:
+    validate_collection_roots()
     stats: list[CrashStat] = []
     if not CRASH_ROOT.exists():
         return stats
 
     for target_dir in sorted(CRASH_ROOT.iterdir()):
-        if not target_dir.is_dir():
+        if target_dir.is_symlink() or not target_dir.is_dir():
             continue
         file_count = 0
         size_bytes = 0
         latest_mtime: float | None = None
         samples: list[str] = []
         for file in sorted(target_dir.rglob("*")):
-            if not file.is_file():
+            if file.is_symlink() or not file.is_file():
                 continue
             file_count += 1
             stat = file.stat()
@@ -242,6 +248,7 @@ def copy_into(path: Path, dest_dir: Path | None) -> Path | None:
 
 
 def archive_crashes(stats: list[CrashStat], dest_dir: Path | None) -> Path | None:
+    validate_collection_roots()
     total = sum(s.file_count for s in stats)
     if total == 0:
         return None
@@ -250,7 +257,7 @@ def archive_crashes(stats: list[CrashStat], dest_dir: Path | None) -> Path | Non
     target_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S%fZ")
     archive_path = target_dir / f"crashes_{timestamp}.tar.gz"
-    with tarfile.open(archive_path, "w:gz") as tar:
+    with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
         for stat in stats:
             if stat.file_count > 0:
                 tar.add(CRASH_ROOT / stat.name, arcname=stat.name)
@@ -290,6 +297,7 @@ def write_run_summary(
 
 
 def collect_corpus(execution: dict | None = None) -> None:
+    validate_collection_roots()
     targets = load_targets()
     ensure_directories(targets)
     stats = gather_stats(targets)
@@ -439,6 +447,14 @@ GIT_IDENTITY_OVERRIDES = (
     "GIT_CONFIG_GLOBAL",
     "GIT_CONFIG_NOSYSTEM",
 )
+
+
+def validate_compiler_environment() -> None:
+    # Cargo can bypass the PATH compiler or RUSTFLAGS through these inputs.
+    # Presence, including an empty value, is unsupported; never disclose values.
+    for name in ("RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_ENCODED_RUSTFLAGS"):
+        if name in os.environ:
+            invalid(f"inherited {name} override is not supported for fuzz execution or cleanup")
 
 
 def validate_git_environment() -> None:
@@ -779,6 +795,7 @@ def cache_protected_paths(directory: Path) -> list[Path]:
 
 
 def configured_cache(directory: Path) -> Path:
+    validate_compiler_environment()
     base = repository_path(Path(os.environ["CARGO_TARGET_DIR"]))
     cache = (base / "fuzz").resolve()
     # Descendant caches are allowed; the workspace and fuzz root themselves,
@@ -793,6 +810,7 @@ def configured_cache(directory: Path) -> Path:
 
 
 def prepare_run(directory: Path) -> None:
+    validate_compiler_environment()
     validate_git_environment()
     selected = selected_targets()
     inputs = source_hashes(selected)
@@ -861,6 +879,7 @@ def prepare_run(directory: Path) -> None:
 
 
 def load_execution(directory: Path) -> dict:
+    validate_compiler_environment()
     data = json.loads((directory / "execution.json").read_text(encoding="utf-8"))
     if (
         data["schema_version"] != 1
@@ -1006,7 +1025,12 @@ def finish_run(directory: Path, exit_code: int) -> bool:
     # This marker authorizes cleanup only after summary/history/archive writes succeeded.
     if exit_code != EVIDENCE_ERROR:
         collected_summary = directory / "collection-summary.json"
-        collected_summary.write_bytes((directory / "run_summary.json").read_bytes())
+        summary = json.loads((directory / "run_summary.json").read_text(encoding="utf-8"))
+        if summary["execution"] != data or summary["status"] != data["status"]:
+            invalid("fuzz run summary differs from the verified execution")
+        write_json(collected_summary, summary)
+        if json.loads(collected_summary.read_text(encoding="utf-8")) != summary:
+            invalid("fuzz collection summary write did not preserve the verified execution")
         write_json(
             directory / "collection.ok",
             {
@@ -1070,6 +1094,13 @@ def owned_raw_root(name: str) -> Path:
     if path.exists() and not path.is_dir():
         invalid("fuzz recovery raw root is not a directory")
     return path
+
+
+def validate_collection_roots() -> None:
+    # Check all roots before collection can create directories or inspect raw input.
+    # Nested symlinks are archive entries, never inputs to statistics or traversal.
+    for name in RECOVERY_RAW_NAMES:
+        owned_raw_root(name)
 
 
 def recovery_directory(directory: Path, run_id: str, *, create: bool = False) -> Path:
@@ -1326,6 +1357,7 @@ def main() -> int:
     args = parse_arguments()
     result = 0
     try:
+        validate_compiler_environment()
         recovery_result = cleanup_action(args)
         if recovery_result is not None:
             result = recovery_result
