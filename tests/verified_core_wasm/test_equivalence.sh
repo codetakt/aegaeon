@@ -201,6 +201,9 @@ node_command=(node)
 if [[ $wasm_state != failed ]]; then
 	if [[ ! -f $WASM ]]; then
 		unavailable wasm "$require_wasm" "WASM artifact missing: $WASM"
+	elif ! command -v python3 >/dev/null 2>&1 ||
+		[[ ! -x "$(command -v python3)" ]]; then
+		unavailable wasm "$require_wasm" "python3 missing"
 	else
 		printf 'type Probe = number; console.log(0);\n' >"$scratch/node-probe.ts"
 		if ! command -v node >/dev/null 2>&1 ||

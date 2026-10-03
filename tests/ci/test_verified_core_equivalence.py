@@ -239,6 +239,52 @@ exit "${WASM_RC:-0}"
         output = self.run_wrapper(0, AEGAEON_REQUIRE_WASM="0")
         self.assertIn("REGRESSION EXECUTION INCOMPLETE", output)
 
+    def test_optional_missing_python_with_present_wasm_is_incomplete(self):
+        self.real_node()
+        (self.bin / "python3").unlink()
+        self.assertTrue(self.wasm.is_file())
+        output = self.run_wrapper(0, AEGAEON_REQUIRE_NATIVE_EQUIV="0", AEGAEON_REQUIRE_WASM="0")
+        self.assertIn("[skip] wasm unavailable: python3 missing", output)
+        self.assertIn("NATIVE_RESULT=skipped WASM_RESULT=skipped", output)
+        self.assertIn("REGRESSION EXECUTION INCOMPLETE", output)
+        self.assertNotIn("REGRESSION EXECUTION COMPLETE", output)
+        self.assertNotIn("WASM_ARTIFACT", output)
+
+    def test_required_missing_python_is_fail_closed_for_each_lane_flag(self):
+        self.real_node()
+        (self.bin / "python3").unlink()
+        self.assertTrue(self.wasm.is_file())
+        for native, wasm in (("0", "1"), ("1", "0"), ("1", "1")):
+            with self.subTest(require_native=native, require_wasm=wasm):
+                output = self.run_wrapper(
+                    1, AEGAEON_REQUIRE_NATIVE_EQUIV=native, AEGAEON_REQUIRE_WASM=wasm
+                )
+                self.assertIn("NATIVE_RESULT=skipped WASM_RESULT=skipped", output)
+                self.assertIn("REGRESSION EXECUTION FAILED", output)
+                self.assertNotIn("WASM_ARTIFACT", output)
+                if native == "1":
+                    self.assertIn(
+                        "[error] native required but unavailable: python3 missing", output
+                    )
+                if wasm == "1":
+                    self.assertIn("[error] wasm required but unavailable: python3 missing", output)
+                else:
+                    self.assertIn("[skip] wasm unavailable: python3 missing", output)
+
+    def test_optional_wasm_missing_python_preserves_native_execution_failure(self):
+        self.real_node()
+        self.tool("cargo", 'rm -f "$REMOVED_PYTHON"\nexit 19\n')
+        output = self.run_wrapper(
+            1,
+            AEGAEON_REQUIRE_WASM="0",
+            REMOVED_PYTHON=str(self.bin / "python3"),
+        )
+        self.assertIn("[skip] wasm unavailable: python3 missing", output)
+        self.assertIn("NATIVE_RESULT=failed WASM_RESULT=skipped", output)
+        self.assertIn("REGRESSION EXECUTION FAILED", output)
+        self.assertNotIn("REGRESSION EXECUTION INCOMPLETE", output)
+        self.assertNotIn("WASM_ARTIFACT", output)
+
     def test_broken_linker_is_enforced_only_by_native_flag(self):
         wrapper = self.root / "sysroot/lib/rustlib/test-host/bin/gcc-ld/ld.lld"
         wrapper.parent.mkdir(parents=True)
