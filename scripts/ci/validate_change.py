@@ -17,6 +17,103 @@ BOOTSTRAP_BASE = "b162b7b8440307ad210ce2c3ef846c0a0cbd8e33"
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    # This verifier is extracted as a standalone protected-base file.
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+COMPONENTS = ["conformance", "development-tools", "infrastructure", "python-example"]
+INFRASTRUCTURE_MODULES = ["aegaeon-aws-staging", "oidc-aws-kms-parity", "perf-aws-ec2"]
+CHANGE_IDENTITY = ("path", "status", "old_mode", "new_mode")
+
+
+def validate_targets(item: dict[str, Any]) -> None:
+    for key, allowed in [
+        ("components", COMPONENTS),
+        ("infrastructure_modules", INFRASTRUCTURE_MODULES),
+    ]:
+        selected = item.get(key)
+        if (
+            not isinstance(selected, list)
+            or any(not isinstance(name, str) for name in selected)
+            or selected != sorted(set(selected))
+            or not set(selected) <= set(allowed)
+        ):
+            raise ValueError("invalid or unsorted component targets")
+    if bool(item["infrastructure_modules"]) != ("infrastructure" in item["components"]):
+        raise ValueError("invalid infrastructure module relation")
+
+
+def validate_component_records(records: list[Any], original: object) -> None:
+    keys = []
+    for item in records:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {*CHANGE_IDENTITY, "components", "infrastructure_modules", "reason"}
+            or any(
+                not isinstance(item[key], str) or not item[key]
+                for key in (*CHANGE_IDENTITY, "reason")
+            )
+        ):
+            raise ValueError("malformed component change record")
+        validate_targets(item)
+        keys.append(tuple(item[key] for key in CHANGE_IDENTITY))
+    if keys != sorted(set(keys)):
+        raise ValueError("component change records must be sorted and unique")
+    if (
+        not isinstance(original, list)
+        or any(not isinstance(item, dict) for item in original)
+        or any(
+            any(not isinstance(item.get(key), str) for key in CHANGE_IDENTITY) for item in original
+        )
+    ):
+        raise ValueError("missing classified changes")
+    if keys != sorted(tuple(item[key] for key in CHANGE_IDENTITY) for item in original):
+        raise ValueError("component change records differ from classified changes")
+
+
+def validate_component_plan(plan: dict[str, Any], policy: dict[str, Any]) -> None:
+    """Reject incomplete outputs instead of interpreting them as empty selection."""
+    if "component_plan_version" not in policy:
+        return  # Legacy protected classifiers have no component output contract.
+    if (
+        type(policy["component_plan_version"]) is not int
+        or policy["component_plan_version"] != 1
+        or policy.get("components") != COMPONENTS
+        or policy.get("infrastructure_modules") != INFRASTRUCTURE_MODULES
+    ):
+        raise ValueError("invalid protected component policy")
+    value = plan.get("component_plan")
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"version", "components", "infrastructure_modules", "changes", "fallback"}
+        or type(value["version"]) is not int
+        or value["version"] != 1
+        or not isinstance(value["changes"], list)
+        or not isinstance(value["fallback"], str)
+    ):
+        raise ValueError("missing or malformed component plan")
+    validate_targets(value)
+    records = value["changes"]
+    validate_component_records(records, plan.get("changes"))
+    for key, all_targets in [
+        ("components", COMPONENTS),
+        ("infrastructure_modules", INFRASTRUCTURE_MODULES),
+    ]:
+        expected = sorted({target for item in records for target in item[key]})
+        if not records or value["fallback"]:
+            expected = all_targets
+        if value[key] != expected:
+            raise ValueError("component targets do not match the complete change union")
+    if (not records or value["fallback"]) and plan.get("scope") != "full":
+        raise ValueError("empty or failed classification must retain full scope")
+
+
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True, stderr=subprocess.PIPE).strip()
 
@@ -143,7 +240,24 @@ def classify(bound: dict[str, str], output: Path) -> dict[str, Any]:
             # Publish scope only after signatures and context have succeeded.
             env={key: value for key, value in os.environ.items() if key != "GITHUB_OUTPUT"},
         )
-        result: dict[str, Any] = json.loads(output.read_text())
+        result: dict[str, Any] = json.loads(
+            output.read_text(), object_pairs_hook=unique_json_object
+        )
+        protected_policy = json.loads(sources[1], object_pairs_hook=unique_json_object)
+        validate_component_plan(result, protected_policy)
+        if "component_plan_version" in protected_policy:
+            for field, source in [("classifier_sha256", sources[0]), ("policy_sha256", sources[1])]:
+                if result.get(field) != hashlib.sha256(source).hexdigest():
+                    raise ValueError("component plan source hash mismatch")
+            if result.get("base") != base or result.get("head") != head:
+                raise ValueError("component plan source range mismatch")
+            result["component_plan"].update(
+                {
+                    **bound,
+                    "classifier_sha256": result["classifier_sha256"],
+                    "policy_sha256": result["policy_sha256"],
+                }
+            )
         return result
 
 
@@ -177,6 +291,10 @@ def run(*, bootstrap: bool) -> None:
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
         stream.write(f"scope={plan['scope']}\nbase={bound['base']}\n")
         stream.write(f"source_head={bound['source_head']}\ntest_sha={bound['test_sha']}\n")
+        if "component_plan" in plan:
+            stream.write(
+                "component_plan=" + json.dumps(plan["component_plan"], separators=(",", ":")) + "\n"
+            )
 
 
 def main() -> int:
