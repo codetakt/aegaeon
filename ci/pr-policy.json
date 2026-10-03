@@ -55,6 +55,12 @@
     "docs/releases/evidence/"
   ],
   "integrity_paths": [
+    "docs/policies/oauth-doc-only-rfcs.md",
+    "docs/policies/saml-facade-policy.md",
+    "docs/policies/verified-crypto-policy.md",
+    "docs/program-management/historical/roadmaps/oidc-execution-plan.md",
+    "docs/program-management/initiatives/oauth/oauth-formal-verification-plan.md",
+    "docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md",
     "docs/product-positioning.md",
     "spec/compliance-matrix.yaml",
     "spec/server-assurance-contract.v1.json",
