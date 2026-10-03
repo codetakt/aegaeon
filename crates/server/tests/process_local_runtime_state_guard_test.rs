@@ -42,6 +42,7 @@ const FORBIDDEN_PRODUCTION_PROCESS_LOCAL_BACKEND_LABELS: &[&str] =
     &["backend: in-memory", "\"in-memory\""];
 
 const TEST_ONLY_HELPER_API_CFG: &str = "#[cfg(test)]";
+const FUZZ_HELPER_API_CFG: &str = "#[cfg(any(test, fuzzing))]";
 const RETIRED_INTEGRATION_FIXTURE_MARKERS: &[&str] = &[
     "aegaeon_integration_test_fixtures",
     "AEGAEON_ENABLE_INTEGRATION_TEST_FIXTURES",
@@ -107,7 +108,11 @@ fn process_local_test_helper_apis_are_not_exposed_in_release_builds() -> TestRes
         let mut previous_lines = Vec::<&str>::new();
         for (line_index, line) in source.lines().enumerate() {
             if public_test_helper_api_requires_cfg_gate(line)
-                && !has_test_cfg_gate(previous_lines.iter().rev().take(8).copied())
+                && !has_process_local_helper_gate(
+                    &path,
+                    line,
+                    previous_lines.iter().rev().take(8).copied(),
+                )
             {
                 findings.push(format!(
                     "{}:{}: test helper API must have `{}`",
@@ -126,6 +131,39 @@ fn process_local_test_helper_apis_are_not_exposed_in_release_builds() -> TestRes
         findings.join("\n")
     );
     Ok(())
+}
+
+#[test]
+fn fuzz_helper_gate_is_limited_to_adopted_process_local_constructors() {
+    let signature = "pub fn new_process_local_for_tests() -> Self {";
+    for path in ["src/par.rs", "src/middleware/dpop.rs"] {
+        assert!(has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            [FUZZ_HELPER_API_CFG]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            "pub fn new_process_local_other() -> Self {",
+            [FUZZ_HELPER_API_CFG]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            ["#[cfg(debug_assertions)]"]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            []
+        ));
+    }
+    assert!(!has_process_local_helper_gate(
+        Path::new("src/authcode/store.rs"),
+        signature,
+        [FUZZ_HELPER_API_CFG]
+    ));
+    assert!(!has_test_cfg_gate([FUZZ_HELPER_API_CFG]));
 }
 
 #[test]
@@ -553,6 +591,20 @@ fn has_test_cfg_gate<'a>(lines: impl IntoIterator<Item = &'a str>) -> bool {
     lines
         .into_iter()
         .any(|candidate| candidate.trim() == TEST_ONLY_HELPER_API_CFG)
+}
+
+fn has_process_local_helper_gate<'a>(
+    path: &Path,
+    signature: &str,
+    lines: impl IntoIterator<Item = &'a str>,
+) -> bool {
+    let adopted_constructor = (path.ends_with("src/par.rs")
+        || path.ends_with("src/middleware/dpop.rs"))
+        && signature.trim() == "pub fn new_process_local_for_tests() -> Self {";
+    lines.into_iter().any(|candidate| {
+        candidate.trim() == TEST_ONLY_HELPER_API_CFG
+            || (adopted_constructor && candidate.trim() == FUZZ_HELPER_API_CFG)
+    })
 }
 
 const fn is_identifier_char(ch: char) -> bool {
