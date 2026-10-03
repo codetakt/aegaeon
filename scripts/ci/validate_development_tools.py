@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import io
 import json
@@ -260,9 +261,18 @@ def locked_entry(path: str, entry: dict[str, Any]) -> None:
     )
     integrity = str(entry.get("integrity", ""))
     require(not integrity.startswith("sha1-"), "SHA-1 package integrity is not supported")
+    matched = re.fullmatch(r"(sha512|sha256)-([A-Za-z0-9+/=]+)", integrity)
+    if matched is None:
+        raise ValueError("Missing or unknown package integrity")
+    algorithm, encoded = matched.groups()
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+    except binascii.Error as error:
+        raise ValueError("Invalid package integrity digest") from error
     require(
-        bool(re.fullmatch(r"sha(?:512|256)-[A-Za-z0-9+/=]+", integrity)),
-        "Missing or unknown package integrity",
+        len(decoded) == {"sha256": 32, "sha512": 64}[algorithm]
+        and base64.b64encode(decoded).decode() == encoded,
+        "Invalid package integrity digest",
     )
 
 
@@ -539,6 +549,23 @@ def consumer_entrypoints(
     return result
 
 
+def checked_consumer_entrypoint(source: Path, command: str, recorded: dict[str, str | int]) -> str:
+    relative = {
+        "eslint": "node_modules/eslint/bin/eslint.js",
+        "tsc": "node_modules/typescript/bin/tsc",
+    }[command]
+    target = source
+    for part in PurePosixPath(relative).parts:
+        target = target / part
+        require(not target.is_symlink(), f"Symlink in consumer package path: {target}")
+    require(target.is_file(), f"Missing regular consumer package file: {target}")
+    require(
+        recorded == {"path": str(target), **identity(target)},
+        f"Consumer entrypoint changed before invocation: {command}",
+    )
+    return str(target)
+
+
 def consumers(
     commands: Commands,
     source: Path,
@@ -549,14 +576,20 @@ def consumers(
     # npm run would prepend untrusted dependency-provided .bin names to PATH.
     commands.run(
         "lint-ts",
-        [tools["node"], str(entrypoints["eslint"]["path"]), "--max-warnings", "0", *CONSUMERS],
+        [
+            tools["node"],
+            checked_consumer_entrypoint(source, "eslint", entrypoints["eslint"]),
+            "--max-warnings",
+            "0",
+            *CONSUMERS,
+        ],
         source,
     )
     commands.run(
         "typecheck-ts",
         [
             tools["node"],
-            str(entrypoints["tsc"]["path"]),
+            checked_consumer_entrypoint(source, "tsc", entrypoints["tsc"]),
             "--project",
             "tsconfig.json",
             "--pretty",

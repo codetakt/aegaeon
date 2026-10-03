@@ -1,3 +1,5 @@
+# Security assertions remain active under Python -O.
+# ruff: noqa: PT009
 """Regression controls for the bounded root development-tools profile."""
 
 from __future__ import annotations
@@ -216,6 +218,30 @@ class DevelopmentToolsTests(unittest.TestCase):
         ):
             tools.locked_entry(path, candidate)
 
+    def test_short_long_and_noncanonical_lock_integrity_rejected(self):
+        path, entry = next((p, v) for p, v in self.lock["packages"].items() if p)
+        for algorithm, size in (("sha256", 32), ("sha512", 64)):
+            valid = base64.b64encode(bytes(size)).decode()
+            plain = valid.rstrip("=")
+            noncanonical = plain[:-1] + "B" + valid[len(plain) :]
+            encodings = (
+                "YWJj",
+                base64.b64encode(bytes(size - 1)).decode(),
+                base64.b64encode(bytes(size + 1)).decode(),
+                plain,
+                valid + "=",
+                "=" + valid,
+                plain[:2] + "=" + plain[2:] + valid[len(plain) :],
+                noncanonical,
+            )
+            self.assertEqual(base64.b64decode(noncanonical), bytes(size))
+            for encoded in encodings:
+                with (
+                    self.subTest(algorithm=algorithm, encoded=encoded),
+                    pytest.raises(ValueError, match="Invalid package integrity digest"),
+                ):
+                    tools.locked_entry(path, {**entry, "integrity": algorithm + "-" + encoded})
+
     def test_audit_complete_dev_graph_passes(self):
         tools.audit_contract(clean_audit(), sample_lock())
 
@@ -346,16 +372,79 @@ class DevelopmentToolsTests(unittest.TestCase):
         commands = tools.Commands(self.root, {"PATH": str(bins)})
         entrypoints = tools.consumer_entrypoints(self.root, installed)
         tools.consumers(commands, self.root, {"node": str(runtime), "npm": "unused"}, entrypoints)
-        assert len(commands.records) == 6
-        assert all(record["argv"][0] == str(runtime) for record in commands.records)
-        assert all(
-            (self.root / record["stdout"]).read_text() == "validated consumer executed\n"
-            for record in commands.records
+        self.assertEqual(len(commands.records), 6)
+        self.assertTrue(all(record["argv"][0] == str(runtime) for record in commands.records))
+        self.assertTrue(
+            all(
+                (self.root / record["stdout"]).read_text() == "validated consumer executed\n"
+                for record in commands.records
+            )
         )
-        assert not (self.root / "hijacked").exists()
+        self.assertFalse((self.root / "hijacked").exists())
         Path(entrypoints["eslint"]["path"]).write_text("raise SystemExit(7)\n")
+        with pytest.raises(ValueError, match="entrypoint changed before invocation: eslint"):
+            tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints)
+        self.assertEqual(len(commands.records), 6)
+        entrypoints = tools.consumer_entrypoints(self.root, installed)
         with pytest.raises(ValueError, match="lint-ts failed with exit 7"):
             tools.consumers(commands, self.root, {"node": str(runtime)}, entrypoints)
+
+    def test_successful_earlier_consumer_cannot_replace_later_entrypoint(self):
+        installed = self.install_consumer_fixtures()
+        tsc = self.root / "node_modules/typescript/bin/tsc"
+        marker = self.root / "noop-tsc-executed"
+        replacement = f"from pathlib import Path\nPath({str(marker)!r}).touch()\n"
+        eslint = self.root / "node_modules/eslint/bin/eslint.js"
+        eslint.write_text(
+            f"from pathlib import Path\nPath({str(tsc)!r}).write_text({replacement!r})\n"
+            "print('earlier consumer passed')\n"
+        )
+        entrypoints = tools.consumer_entrypoints(self.root, installed)
+        commands = tools.Commands(self.root, {})
+        with pytest.raises(ValueError, match="entrypoint changed before invocation: tsc") as caught:
+            tools.consumers(commands, self.root, {"node": sys.executable}, entrypoints)
+        (self.root / "rejection.txt").write_text(str(caught.value))
+        self.assertEqual([row["name"] for row in commands.records], ["lint-ts"])
+        self.assertEqual(commands.records[0]["exit"], 0)
+        self.assertFalse(marker.exists())
+        self.assertEqual((self.root / "lint-ts.stdout").read_text(), "earlier consumer passed\n")
+
+    def test_invocation_revalidation_rejects_changed_path_identity_and_symlinks(self):
+        installed = self.install_consumer_fixtures()
+        entrypoints = tools.consumer_entrypoints(self.root, installed)
+        for command, recorded in entrypoints.items():
+            target = Path(recorded["path"])
+            original = target.read_bytes()
+            for field, value in (
+                ("path", str(self.root / "other")),
+                ("sha256", "changed"),
+                ("mode", 0),
+            ):
+                with (
+                    self.subTest(command=command, field=field),
+                    pytest.raises(ValueError, match="entrypoint changed"),
+                ):
+                    tools.checked_consumer_entrypoint(
+                        self.root, command, {**recorded, field: value}
+                    )
+            for alias in (target, target.parent):
+                saved = alias.with_name("saved")
+                alias.rename(saved)
+                alias.symlink_to(saved)
+                with (
+                    self.subTest(command=command, alias=alias),
+                    pytest.raises(ValueError, match="Symlink"),
+                ):
+                    tools.checked_consumer_entrypoint(self.root, command, recorded)
+                alias.unlink()
+                saved.rename(alias)
+            target.unlink()
+            with pytest.raises(ValueError, match="Missing regular"):
+                tools.checked_consumer_entrypoint(self.root, command, recorded)
+            target.write_bytes(original)
+            self.assertEqual(
+                tools.checked_consumer_entrypoint(self.root, command, recorded), str(target)
+            )
 
     def test_audit_errors_unknown_schema_and_incomplete_reports_rejected(self):
         candidates = [
@@ -441,7 +530,11 @@ class DevelopmentToolsTests(unittest.TestCase):
         locked = {
             "packages": {
                 "": {},
-                "node_modules/tool": {"version": "1.0.0", "integrity": "sha512-test"},
+                "node_modules/tool": {
+                    "version": "1.0.0",
+                    "integrity": "sha512-"
+                    + base64.b64encode(hashlib.sha512(b"tool").digest()).decode(),
+                },
             }
         }
         for actual in [
