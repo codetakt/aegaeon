@@ -62,6 +62,54 @@ class DevelopmentToolsTests(unittest.TestCase):
         self.assertTrue(package["devDependencies"])
         self.assertGreater(len(lock["packages"]), 1)
 
+    def test_root_package_missing_blank_and_nonstring_names_raise_value_error(self):
+        for name in (None, False, 7, [], {}, "", " \t\n"):
+            with self.subTest(name=name):
+                package = {**self.package, "name": name}
+                (self.root / "package.json").write_text(json.dumps(package))
+                with pytest.raises(ValueError, match="Malformed root package name"):
+                    tools.package_contract(self.root)
+        package = dict(self.package)
+        package.pop("name")
+        (self.root / "package.json").write_text(json.dumps(package))
+        with pytest.raises(ValueError, match="Malformed root package name"):
+            tools.package_contract(self.root)
+
+    def test_invalid_root_names_write_failed_receipts_before_bootstrap(self):
+        for index, name in enumerate((None, [])):
+            package = dict(self.package)
+            if name is None:
+                package.pop("name")
+            else:
+                package["name"] = name
+            (self.root / "package.json").write_text(json.dumps(package))
+            output = self.root / f"root-name-failure-{index}"
+
+            def controlled_snapshot(_root, destination):
+                destination.mkdir()
+                for filename in ("package.json", "package-lock.json"):
+                    shutil.copyfile(self.root / filename, destination / filename)
+                return {}
+
+            with (
+                patch.object(tools, "snapshot", side_effect=controlled_snapshot),
+                patch.object(tools, "bootstrap_npm") as bootstrap,
+                patch.object(tools, "consumers") as consumers,
+                patch.object(tools.shutil, "which", side_effect=lambda tool: f"/nix/store/{tool}"),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["validate-tools", "--root", str(self.root), "--output", str(output)],
+                ),
+            ):
+                self.assertEqual(tools.main(), 1)
+            bootstrap.assert_not_called()
+            consumers.assert_not_called()
+            receipt = json.loads((output / "summary.json").read_text())
+            self.assertEqual(receipt["status"], "failed")
+            self.assertEqual(receipt["error"], "Malformed root package name")
+            self.assertEqual(receipt["runner_sha256"], tools.sha(Path(tools.__file__).read_bytes()))
+
     def test_bootstrap_hash_mismatch_rejected_before_extraction(self):
         with (
             patch.object(tools.urllib.request, "urlopen", return_value=io.BytesIO(b"invalid")),

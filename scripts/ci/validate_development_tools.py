@@ -201,6 +201,8 @@ def unchanged(root: Path, inputs: dict[str, dict[str, str | int]]) -> None:
 def package_contract(source: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     require(not (source / ".npmrc").exists(), "Project npm configuration requires explicit review")
     package = mapping(json.loads((source / "package.json").read_text()), "package manifest")
+    name = package.get("name")
+    require(isinstance(name, str) and bool(name.strip()), "Malformed root package name")
     lock = mapping(json.loads((source / "package-lock.json").read_text()), "lock manifest")
     scripts = mapping(package.get("scripts"), "package scripts")
     require(package.get("private") is True, "Root development package must remain private")
