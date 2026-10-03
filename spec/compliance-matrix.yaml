@@ -1675,6 +1675,7 @@ rfc_9449:
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests/request_method.rs
   ci_check: dpop-htm-match
   status: verified
   runtime_link: crates/server/src/middleware/dpop.rs
@@ -1683,6 +1684,9 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Htm_validation.fst#validate_htm
     rust: crates/ffi/src/lib.rs#validate_dpop_htm_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "Runtime handlers forward the actual GET or HEAD method for resource/UserInfo and delegated application authorization; middleware preserves method-token case (RFC 9449 section 4.3 item 8; RFC 9110 section 9.1)."
+  - "The cited oracle covers the equality predicate, not router method extraction. HTTP regressions use the claims-only DPoP test double; real-signature FFI regressions remain separate. No new formal discharge is asserted."
 - id: 9449-006
   section: '4.3'
   requirement: MUST

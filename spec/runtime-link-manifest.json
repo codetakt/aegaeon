@@ -230,7 +230,7 @@
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "05261bc146352a80e8ff1118870d004ad6d943c8e2fff545ad9cff9fc538a61b",
+      "sha256": "163d1d8d2b5046bd97340e238277d0cbf8f8e2b682e2d8d9b6f5cae885849d57",
       "entries": [
         "9449-004",
         "9449-005",
