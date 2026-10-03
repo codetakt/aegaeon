@@ -68,9 +68,11 @@ pub enum AuthorizationCodeIssueError {
     #[error("PKCE required (S256)")]
     PkceS256Required,
 
+    /// Retained for source compatibility; normal issuance no longer emits this variant.
     #[error("State already used")]
     StateUsed,
 
+    /// Retained for source compatibility; normal issuance no longer emits this variant.
     #[error("Nonce already used")]
     NonceUsed,
 
@@ -96,8 +98,6 @@ pub enum AuthorizationCodeIssueError {
 impl AuthorizationCodeIssueError {
     fn from_store(error: StoreCodeError) -> Self {
         match error {
-            StoreCodeError::StateUsed => Self::StateUsed,
-            StoreCodeError::NonceUsed => Self::NonceUsed,
             StoreCodeError::CodeCollision => Self::CodeCollision,
             StoreCodeError::Expired => Self::CodeExpired,
             StoreCodeError::PushedAuthorizationRequestMissing => {

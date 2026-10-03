@@ -119,7 +119,7 @@ Missing Origin does not assert that a stored transaction is expired or already u
 Each consent submission receives a server-generated `x-request-id`; structured warning events carry
 that identifier and a stable reason for Origin, session, snapshot, or transaction admission failures.
 Storage failures remain `503 temporarily_unavailable`. Authorization-code refusals log a stable
-reason including `state_reused` or `nonce_reused` with the authorization request identifier.
+reason with the authorization request identifier.
 Events do not include raw state, nonce, code, consent token, Request Object, or database payloads.
 The public OAuth error categories and redirect validation remain unchanged.
 
@@ -255,3 +255,37 @@ an existing deployment has purged old secrets. Include retained Redis backups
 and snapshots in the deployment's credential-retention review. No key rotation,
 configuration change, or persistent schema migration is required by the format
 change itself.
+
+## RP state and nonce observations
+
+Distinct authorization transactions may carry the same admissible RP-supplied
+`state` or `nonce`, including requests from the same client. Aegaeon preserves
+both decoded values in their own authorization-code context, echoes `state` in
+the authorization response, and includes `nonce` in the ID Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
+sections 4.1.1, 4.1.2 and 10.12 and OpenID Connect Core sections 3.1.2.1 and
+3.1.3.7 leave the RP responsible for its state/nonce validation and
+unpredictability obligations. Existing required-presence, encoding, length and
+profile checks still apply.
+
+Redis and the process-local test backend retain distinct recently observed
+state/nonce markers. Successful repeated values refresh the existing marker's
+last-observation TTL and Redis sorted-index expiry. The TTL continues to derive
+from `policy.authorizationCodeTimeToLiveSeconds`. `try_state_count`,
+`try_nonce_count` and the historical `AuthCodeSnapshot.used_states`/`used_nonces`
+fields describe retained observations, not transaction totals, accepted code
+counts or prevented attacks. Membership never authorizes or rejects issuance.
+The public `AuthorizationCodeIssueError::StateUsed` and `NonceUsed` variants
+remain for source compatibility; normal issuance no longer emits them.
+
+Authorization codes remain distinct and single-use, bound to their original
+client, redirect URI and PKCE verifier. Repeating state/nonce does not permit
+reuse of a PAR handle or a signed Request Object's `jti`. The existing Redis
+code/PAR/JTI commit preflights version-counter and index errors before mutation.
+No extra replay store or configuration variable is introduced.
+
+Stored codes and the Redis keyspace remain readable without a flush, backfill
+or identifier change. Update every authorization-serving instance for consistent
+repeat acceptance: older instances still reject repeated values. Finite router
+and Redis regressions cover repeated values and transaction isolation; older
+proof-model assumptions of globally unique RP values are not evidence for this
+behavior and require separate reassessment.

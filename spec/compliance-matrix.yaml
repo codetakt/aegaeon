@@ -4612,6 +4612,8 @@ draft_oauth_v2_1:
   notes:
   - PostgreSQL-backed management policy projects requireStateParameter into ServerConfig.require_state.
   - validate_authorize_request rejects missing state whenever the active runtime policy or OAuth profile requires it.
+  - RP state/nonce values may repeat across distinct transactions, including one client; the runtime preserves each original value and keeps code/PAR/JTI single-use controls. Observation markers and counts do not reject issuance.
+  - Existing proof models that assume globally unique RP state values do not establish correspondence for repeat acceptance; their assumptions require separate reassessment. This runtime change does not expand proof scope or discharge.
   - PKCE also provides CSRF protection per OAuth 2.1 §2.3.3.
 - id: v21-011
   section: '2.3.5'

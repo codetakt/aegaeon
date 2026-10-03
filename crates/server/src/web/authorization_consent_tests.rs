@@ -2,6 +2,7 @@
 mod admission;
 mod availability;
 mod reauthentication;
+mod repeated_values;
 mod repetition;
 mod request_objects;
 mod retention;
