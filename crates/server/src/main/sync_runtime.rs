@@ -1,6 +1,6 @@
-use aegaeon_server::client_registry::ClientRegistry;
-use aegaeon_server::runtime_authority::RuntimeAuthorityState;
-use aegaeon_server::runtime_configuration::DatabaseRuntimeConfiguration;
+use crate::client_registry::ClientRegistry;
+use crate::runtime_authority::RuntimeAuthorityState;
+use crate::runtime_configuration::DatabaseRuntimeConfiguration;
 use anyhow::Result;
 use sqlx::PgPool;
 

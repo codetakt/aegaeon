@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use aegaeon_server::management::runtime_commands::{
+use crate::management::runtime_commands::{
     reconcile_stale_management_user_runtime_commands, runtime_command_stale_after,
 };
-use aegaeon_server::web::AppState;
+use crate::web::AppState;
 use sqlx::PgPool;
 
 const CLEANUP_JOB_TIMEOUT_SECS: u64 = 30;
@@ -42,7 +42,7 @@ async fn run_cleanup_blocking(
 }
 
 async fn read_authorization_code_counters_blocking(
-    issuer: Arc<aegaeon_server::authcode::TokenIssuer>,
+    issuer: Arc<crate::authcode::TokenIssuer>,
 ) -> Result<
     Result<(Result<usize, String>, Result<usize, String>), tokio::task::JoinError>,
     tokio::time::error::Elapsed,
@@ -111,7 +111,7 @@ pub(super) fn spawn_cleanup_task(state: &AppState, cleanup_interval_secs: u64) {
                     async {
                         match tokio::time::timeout(
                             job_timeout,
-                            aegaeon_server::web::cleanup_expired_authorization_transactions(
+                            crate::web::cleanup_expired_authorization_transactions(
                                 &cleanup_authorization_pool,
                                 cleanup_environment,
                             ),

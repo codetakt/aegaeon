@@ -31,6 +31,9 @@ pub(super) async fn upstream_authorize(
     Path(connection_id): Path<String>,
     Query(params): Query<UpstreamAuthorizeQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {
         return transport_rejection(&state, kind);

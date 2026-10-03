@@ -26,6 +26,9 @@ pub(in crate::web) async fn device_approve(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !state.cfg.grant_runtime().device_authorization_enabled() {
         return no_cache_json_error_with_iss(
             StatusCode::NOT_FOUND,
@@ -121,6 +124,9 @@ pub(in crate::web) async fn device_deny(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !state.cfg.grant_runtime().device_authorization_enabled() {
         return no_cache_json_error_with_iss(
             StatusCode::NOT_FOUND,

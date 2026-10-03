@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
-use aegaeon_server::metrics_integration::MetricsIntegration;
-use aegaeon_server::par::{ParEndpoint, ParStore};
-use aegaeon_server::request_object_store::RequestObjectJtiStore;
-use aegaeon_server::stepup::StepUpStore;
+use crate::config::{RuntimeStateNamespace, ServerConfig};
+use crate::metrics_integration::MetricsIntegration;
+use crate::par::{ParEndpoint, ParStore};
+use crate::request_object_store::RequestObjectJtiStore;
+use crate::stepup::StepUpStore;
 use anyhow::Result;
 
 pub(super) struct ProtocolRuntimeStores {

@@ -108,6 +108,9 @@ pub(in crate::web) async fn submit(
     headers: HeaderMap,
     form: Result<Form<Vec<(String, String)>>, FormRejection>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let request_id = uuid::Uuid::new_v4().to_string();
     let mut response = async {
         let (token, choice) = match fields(form) {

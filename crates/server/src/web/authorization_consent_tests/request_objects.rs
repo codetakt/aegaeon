@@ -165,6 +165,7 @@ async fn run_signed(mode: &str) -> TestResult {
         let (mut state, sid) = fixture(&pool, &env).await?;
         if mode == "par-redis" {
             shared_protocol_stores(&mut state)?;
+            state.validate_subject_namespace().await?;
         }
         let jwt = signed_request(&state, mode)?;
         if mode == "legacy-target" {

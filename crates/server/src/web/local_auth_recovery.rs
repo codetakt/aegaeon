@@ -41,6 +41,9 @@ pub(super) async fn local_activate_get(
     OriginalUri(uri): OriginalUri,
     Query(query): Query<LocalRecoveryQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if let Err(resp) = enforce_no_credentials_in_uri_with_policy(
         &uri,
         state.issuer.as_str(),
@@ -86,6 +89,9 @@ pub(super) async fn local_activate_post(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     handle_local_recovery_post(state, &headers, form, RecoveryTokenPurpose::Activation).await
 }
 
@@ -94,6 +100,9 @@ pub(super) async fn local_password_reset_get(
     OriginalUri(uri): OriginalUri,
     Query(query): Query<LocalRecoveryQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if let Err(resp) = enforce_no_credentials_in_uri_with_policy(
         &uri,
         state.issuer.as_str(),
@@ -139,6 +148,9 @@ pub(super) async fn local_password_reset_post(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     handle_local_recovery_post(state, &headers, form, RecoveryTokenPurpose::PasswordReset).await
 }
 

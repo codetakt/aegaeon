@@ -127,6 +127,9 @@ async fn health() -> &'static str {
 }
 
 async fn readiness(State(state): State<AppState>) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if state.runtime_restart.is_requested() {
         return readiness_unavailable(&state, "runtime restart requested");
     }

@@ -125,29 +125,44 @@ async fn pg_policy_patch_preserves_signing_and_client_secret_provenance() -> Tes
 async fn pg_configuration_membership_sql_failure_rolls_back_all_rows() -> TestResult {
     use super::configuration_version_store::switch_active_configuration_version;
     let pool = membership_test_pool().await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
+    let fault = format!("membership_fault_{}", env.environment_id.simple());
     let result: TestResult = async {
         seed_configuration_members(&pool,&env).await?;
         let next = membership_version(&pool,&env,3,"DRAFT").await?;
         let before = configuration_transition_snapshot(&pool,&env).await?;
+        // Only the separate setup identity installs the environment-scoped fault.
+        // The operation and its transaction retain the restricted runtime login.
+        sqlx::raw_sql(&format!("CREATE FUNCTION aegaeon.{fault}() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN IF NEW.environment_id = '{}'::uuid THEN RAISE EXCEPTION 'injected membership write failure'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER {fault} BEFORE UPDATE OF configuration_version_id ON aegaeon.connections
+            FOR EACH ROW EXECUTE FUNCTION aegaeon.{fault}();", env.environment_id))
+            .execute(&admin).await?;
         let mut tx = pool.begin().await?;
-        // Transaction-local fault injection after earlier membership updates.
-        // The trigger creation is rolled back and never published to other sessions.
-        sqlx::raw_sql("CREATE FUNCTION pg_temp.reject_membership_update() RETURNS trigger LANGUAGE plpgsql AS
-            $$ BEGIN RAISE EXCEPTION 'injected membership write failure'; END $$;
-            CREATE TRIGGER membership_write_failure BEFORE UPDATE OF configuration_version_id ON aegaeon.connections
-            FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_membership_update();")
-            .execute(&mut *tx).await?;
         let result = switch_active_configuration_version(&mut tx,env.environment_id,env.configuration_version_id,next,"membership-failure").await;
-        assert!(matches!(result,Err(ref r) if r.status()==StatusCode::INTERNAL_SERVER_ERROR));
         tx.rollback().await?;
+        // Remove only this owned fault before checking the failure oracle.
+        sqlx::raw_sql(&format!("DROP TRIGGER {fault} ON aegaeon.connections; DROP FUNCTION aegaeon.{fault}()"))
+            .execute(&admin).await?;
+        assert!(matches!(result,Err(ref r) if r.status()==StatusCode::INTERNAL_SERVER_ERROR));
         let active: Uuid = sqlx::query_scalar("SELECT active_configuration_version_id FROM aegaeon.environments WHERE id=$1")
             .bind(env.environment_id).fetch_one(&pool).await?;
         assert_eq!(active,env.configuration_version_id);
         assert_eq!(configuration_transition_snapshot(&pool,&env).await?,before);
+        // The same real updater succeeds once its injected fault is removed.
+        let mut control = pool.begin().await?;
+        let positive = switch_active_configuration_version(&mut control,env.environment_id,env.configuration_version_id,next,"membership-failure-control").await;
+        control.rollback().await?;
+        positive.map_err(|response| io::Error::other(format!("same-fixture updater control failed: {}", response.status())))?;
+        assert_eq!(configuration_transition_snapshot(&pool,&env).await?,before);
         assert_configuration_runtime_members(&pool,&env).await?;
         Ok(())
     }.await;
+    let remove_fault = sqlx::raw_sql(&format!("DROP TRIGGER IF EXISTS {fault} ON aegaeon.connections; DROP FUNCTION IF EXISTS aegaeon.{fault}()"))
+        .execute(&admin).await;
+    admin.close().await;
+    remove_fault?;
     let cleanup = cleanup_configuration_members(&pool, &env).await;
     finish_runtime_key_pg_test(result, cleanup)
 }
@@ -156,6 +171,7 @@ async fn pg_configuration_membership_sql_failure_rolls_back_all_rows() -> TestRe
 #[ignore = "requires isolated AEGAEON_DATABASE_URL-backed PostgreSQL"]
 async fn pg_policy_patch_audit_failure_rolls_back_configuration() -> TestResult {
     let pool = membership_test_pool().await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
     let result: TestResult = async {
         seed_configuration_members(&pool,&env).await?;
@@ -170,10 +186,10 @@ async fn pg_policy_patch_audit_failure_rolls_back_configuration() -> TestResult 
         // mocking, the handler must roll back its real PostgreSQL transaction.
         let constraint = format!("membership_audit_{}",env.environment_id.simple());
         sqlx::query(&format!("ALTER TABLE aegaeon.audit_events ADD CONSTRAINT {constraint} CHECK (environment_id <> '{}') NOT VALID",env.environment_id))
-            .execute(&pool).await?;
+            .execute(&admin).await?;
         let response = app.oneshot(request).await;
         sqlx::query(&format!("ALTER TABLE aegaeon.audit_events DROP CONSTRAINT {constraint}"))
-            .execute(&pool).await?;
+            .execute(&admin).await?;
         let response = response?;
         assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(management_error_response_body(response).await?.error_code,"audit_failure");
@@ -181,6 +197,7 @@ async fn pg_policy_patch_audit_failure_rolls_back_configuration() -> TestResult 
         assert_configuration_runtime_members(&pool,&env).await?;
         Ok(())
     }.await;
+    admin.close().await;
     let cleanup = cleanup_configuration_members(&pool, &env).await;
     finish_runtime_key_pg_test(result, cleanup)
 }

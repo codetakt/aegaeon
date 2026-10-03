@@ -1,6 +1,6 @@
 use super::spawn_supervised_runtime_task;
-use aegaeon_server::runtime_configuration::DatabaseRuntimeConfiguration;
-use aegaeon_server::web::AppState;
+use crate::runtime_configuration::DatabaseRuntimeConfiguration;
+use crate::web::AppState;
 use anyhow::Result;
 
 #[path = "runtime_config/monitor.rs"]

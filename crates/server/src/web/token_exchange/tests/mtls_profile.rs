@@ -213,7 +213,7 @@ async fn shared_redis_mtls_profile_preserves_binding_under_dpop_default() -> Tes
         cfg.token_exchange = serde_json::from_value(exchange)?;
         state.transport = TransportSecurity::new(TransportSecurityConfig { require_tls_proxy: true,
             trusted_proxies: vec!["127.0.0.3/32".parse()?], ..TransportSecurityConfig::default() });
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }.await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)

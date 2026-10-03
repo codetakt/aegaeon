@@ -32,6 +32,9 @@ pub(super) async fn handle_token_exchange_grant(
     ctx: &TokenEndpointContext,
     issuer_base: &str,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     if !state.cfg.grant_runtime().token_exchange_enabled() {
         return token_error_response(StatusCode::BAD_REQUEST, "unsupported_grant_type", None);
     }

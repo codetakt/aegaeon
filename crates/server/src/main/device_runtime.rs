@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
-use aegaeon_server::device_authz::{CsrfTokenStore, DeviceCodeStore, VerificationRateLimiter};
+use crate::config::{RuntimeStateNamespace, ServerConfig};
+use crate::device_authz::{CsrfTokenStore, DeviceCodeStore, VerificationRateLimiter};
 use anyhow::Result;
 
 pub(super) struct DeviceRuntimeStores {

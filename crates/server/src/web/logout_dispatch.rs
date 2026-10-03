@@ -1,12 +1,15 @@
 use super::backchannel_logout::dispatch_backchannel_logout_async;
-use super::AppState;
-use crate::oidc::{OidcConfig, OidcLogoutEvent};
+use super::namespace_runtime::NamespaceCapability;
+use crate::oidc::OidcLogoutEvent;
 
 pub(super) async fn dispatch_backchannel_logout_if_enabled(
-    state: &AppState,
-    cfg: &OidcConfig,
+    namespace: &NamespaceCapability<'_>,
     logout_events: Vec<OidcLogoutEvent>,
 ) {
+    let state = namespace.state();
+    let Some(cfg) = state.oidc.config.as_ref() else {
+        return;
+    };
     if !cfg.backchannel_logout_enabled {
         return;
     }

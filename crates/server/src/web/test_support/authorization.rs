@@ -88,6 +88,7 @@ pub(crate) async fn reload_authorization_runtime(state: &mut AppState) -> TestRe
     state.oidc.config = derived.oidc();
     state.runtime_authority =
         crate::web::RuntimeAuthorityState::from_authorization_runtime(derived);
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 
