@@ -106,17 +106,13 @@ fn make_test_jws(header: &Value, payload: &Value) -> String {
     format!("{h}.{p}.{s}")
 }
 
+fn sample_signing_key() -> &'static InMemoryKeyManager {
+    static KEY: std::sync::OnceLock<InMemoryKeyManager> = std::sync::OnceLock::new();
+    KEY.get_or_init(InMemoryKeyManager::new)
+}
+
 fn sample_jwks_value() -> Value {
-    json!({
-        "keys": [{
-            "kty": "EC",
-            "crv": "P-256",
-            "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-            "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0",
-            "kid": "test-key-1",
-            "use": "sig"
-        }]
-    })
+    federation_jwks_value(sample_signing_key())
 }
 
 fn sample_jwks() -> JwkSet {
@@ -162,6 +158,7 @@ fn sign_entity_statement_for_test(
 }
 
 struct SignedDirectChain {
+    leaf_key: InMemoryKeyManager,
     anchor_jwks: Value,
     leaf_config: EntityStatement,
     leaf_jws: String,
@@ -202,6 +199,7 @@ fn signed_direct_chain_with_constraints(
     let anchor_config_jws = sign_entity_statement_for_test(&anchor_key, &anchor_config);
 
     SignedDirectChain {
+        leaf_key,
         anchor_jwks,
         leaf_config,
         leaf_jws,
@@ -282,7 +280,8 @@ impl MockFetcher {
     }
 
     fn add_entity_config(&mut self, entity_id: &str, stmt: EntityStatement) {
-        self.entity_configs.insert(entity_id.to_string(), stmt);
+        let jws = sign_entity_statement_for_test(sample_signing_key(), &stmt);
+        self.add_entity_config_with_jws(entity_id, stmt, jws);
     }
 
     fn add_entity_config_with_jws(&mut self, entity_id: &str, stmt: EntityStatement, jws: String) {
@@ -291,8 +290,8 @@ impl MockFetcher {
     }
 
     fn add_subordinate_stmt(&mut self, authority_id: &str, sub_id: &str, stmt: EntityStatement) {
-        self.subordinate_stmts
-            .insert((authority_id.to_string(), sub_id.to_string()), stmt);
+        let jws = sign_entity_statement_for_test(sample_signing_key(), &stmt);
+        self.add_subordinate_stmt_with_jws(authority_id, sub_id, stmt, jws);
     }
 
     fn add_subordinate_stmt_with_jws(
@@ -442,4 +441,9 @@ mod repositories {
 mod pg_repositories {
     use super::*;
     include!("tests/pg_repositories.rs");
+}
+
+mod endorsed_keys {
+    use super::*;
+    include!("tests/endorsed_keys.rs");
 }
