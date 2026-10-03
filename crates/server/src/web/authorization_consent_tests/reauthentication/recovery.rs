@@ -18,7 +18,8 @@ async fn seed_token(
     sqlx::query("INSERT INTO aegaeon.end_users(id,environment_id,subject,status) VALUES ($1,$2,$3,$4::aegaeon.end_user_status)")
         .bind(id).bind(env.environment_id).bind(SUBJECT).bind(status).execute(pool).await?;
     if purpose == RecoveryTokenPurpose::PasswordReset {
-        let hash = crate::local_credentials::hash_password("previous-recovery-route-password")?;
+        let previous_password = Uuid::new_v4().to_string();
+        let hash = crate::local_credentials::hash_password(&previous_password)?;
         sqlx::query("INSERT INTO aegaeon.end_user_password_credentials(end_user_id,password_hash) VALUES ($1,$2)")
             .bind(id).bind(hash).execute(pool).await?;
     }
