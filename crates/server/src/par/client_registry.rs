@@ -1,7 +1,9 @@
 use super::{
     try_write_lock, Client, ParRuntimeClientProjectionWriteGuard, ParStateError, ParStore,
 };
+#[cfg(test)]
 use crate::client_registry::ClientSecretCredential;
+#[cfg(test)]
 use std::collections::HashMap;
 
 impl ParStore {
@@ -13,7 +15,7 @@ impl ParStore {
     }
 
     /// Register a client in the process-local runtime projection cache.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub fn register_client(&self, client: Client) {
         if let Err(error) = self.try_register_client(client) {
             tracing::error!(%error, "PAR client registration failed");
@@ -106,6 +108,7 @@ impl ParStore {
     ) -> Result<ParRuntimeClientProjectionWriteGuard<'_>, ParStateError> {
         Ok(ParRuntimeClientProjectionWriteGuard {
             clients: try_write_lock(&self.clients, "clients write")?,
+            #[cfg(test)]
             client_secret_credentials: try_write_lock(
                 &self.client_secret_credentials,
                 "client secret credentials write",
@@ -134,6 +137,7 @@ impl ParRuntimeClientProjectionWriteGuard<'_> {
         self.client_secret_credentials.remove(client_id);
     }
 
+    #[cfg(test)]
     pub(crate) fn replace_clients(
         &mut self,
         clients: HashMap<String, Client>,

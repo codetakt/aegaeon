@@ -1,7 +1,7 @@
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use super::{state_error_to_par_error, try_read_lock, ParStateError};
 use super::{ParError, ParRequest, ParStore, ValidatedParRequest};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use crate::client_registry::verify_client_secret_material;
 
 fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
@@ -26,7 +26,7 @@ fn validate_pkce(request: &ParRequest) -> Result<(), ParError> {
 
 impl ParStore {
     /// Validate client authentication.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     fn try_validate_client(
         &self,
         client_id: &str,
@@ -75,7 +75,7 @@ impl ParStore {
     }
 
     /// Validate redirect URI against client registry.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub(super) fn try_validate_redirect_uri(
         &self,
         client_id: &str,
@@ -88,7 +88,7 @@ impl ParStore {
     }
 
     /// Validate requested scopes against client policy.
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     pub(super) fn try_validate_scopes(
         &self,
         client_id: &str,
@@ -107,7 +107,7 @@ impl ParStore {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     fn validate_test_process_local_client(&self, request: &ParRequest) -> Result<(), ParError> {
         if !self
             .try_validate_client(
@@ -150,7 +150,7 @@ impl ParStore {
         &self,
         request: ParRequest,
     ) -> Result<ValidatedParRequest, ParError> {
-        #[cfg(test)]
+        #[cfg(any(test, fuzzing))]
         self.validate_test_process_local_client(&request)?;
         validate_pkce(&request)?;
 
