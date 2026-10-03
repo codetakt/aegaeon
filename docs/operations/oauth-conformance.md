@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-01
+Last updated: 2026-10-03
 
 Status: current implementation baseline
 

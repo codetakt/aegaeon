@@ -1,5 +1,4 @@
 {
-  "generated": "2026-10-01T15:24:12.763362+00:00",
   "files": {
     "crates/ffi/build.rs": {
       "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
@@ -16,7 +15,7 @@
       "critical": true
     },
     "crates/ffi/src/lib.rs": {
-      "sha256": "5a866b202e4e07348c0e926af0846e549e98ff4f4026a48f61b6a8c8c8c25d39",
+      "sha256": "ece64dba89e2acd100d88f19d0dd2dd8d0070466310cfe406ea9b07a98d68bf3",
       "entries": [
         "9449-001",
         "9449-002"
@@ -146,7 +145,7 @@
       "critical": false
     },
     "crates/server/src/authcode/token/tests/oidc_id_token.rs": {
-      "sha256": "f7e724eb859bdfdc94df21e5567eaeec5a47ac3d89ad8d90fb681adfa3694e80",
+      "sha256": "f9f973d1cf50c11e4145bc1d2e8384947395da533f642c47d6b277a3852398be",
       "entries": [
         "OIDC-1-001",
         "OIDC-1-002",
@@ -156,7 +155,7 @@
       "critical": false
     },
     "crates/server/src/client_registry.rs": {
-      "sha256": "69ac96c8c5ec635b77f5e712f1b9d6c15141729fbf97399617b5da615db641e2",
+      "sha256": "8c1e6ac5639f7be75e2811ef1927ed7b5b5e567e5fcf5d31b3fd7a237d7c2fa2",
       "entries": [
         "6749-001",
         "7521-202",
@@ -252,14 +251,14 @@
       "critical": false
     },
     "crates/server/src/oidc/mod.rs": {
-      "sha256": "2f4a5fb7311734ee0449c811f83dd714c3a53631adc1a5a9c70e34fed36be754",
+      "sha256": "08e64e1447ca184e6ec11e59a9bcf8239009cff470ac81fd7af390b804eb2e2a",
       "entries": [
         "OIDC-1-006"
       ],
       "critical": false
     },
     "crates/server/src/oidc/required_rs256.rs": {
-      "sha256": "bf58f6b59eccb425c314d3bcc3844d450392913ef7625ac2dd57eb75ae23868e",
+      "sha256": "01638429dbbd0d9faad8e5a9aa35178806f717259fa157a831caa56b76da272f",
       "entries": [
         "OIDC-1-010"
       ],
@@ -383,7 +382,7 @@
       "critical": false
     },
     "crates/server/src/web/token_lifecycle.rs": {
-      "sha256": "0604ef585bc97e8e34180b9bc779b7f3db305f09069a8831b8c86c4d0d7d4438",
+      "sha256": "44b57491d11379774ddf763d31e5e91cc7507478ff622550a6ba4c4580bb2097",
       "entries": [
         "7009-002",
         "7009-003",

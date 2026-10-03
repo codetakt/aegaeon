@@ -157,7 +157,7 @@ Audience: contributors, maintainers
 | `docs/program-management/roadmaps/active/current-execution-plan.md` | roadmap | Current Execution Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md` | roadmap | Enterprise Readiness, Certification, and Verified UI Claim Plan | active plan | 2026-05-20 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/management-platform-follow-on-plan.md` | roadmap | Management Platform Follow-on Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
-| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-09-07 | Program Management | maintainers, planning contributors |
+| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-10-01 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/oidc-spec-coverage-roadmap.md` | roadmap | OIDC Spec Coverage Roadmap (OP + OIDC RP) | active plan | 2026-03-30 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/proofs-roadmap.md` | roadmap | Proofs Roadmap | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/verified-oidc-server-client-backlog.md` | roadmap | Verified OIDC Server / Client Implementation Backlog | active plan | 2026-03-16 | Program Management | maintainers, planning contributors |
@@ -343,7 +343,7 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
-| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-09-30 | Operations | operators, maintainers, OAuth client developers |
+| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-01 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
@@ -358,9 +358,10 @@ Audience: contributors, maintainers
 | `docs/operations/monitoring/alertmanager.md` | runbook | Alertmanager (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/grafana-dashboard.md` | runbook | Grafana Dashboard (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/prometheus-rules.md` | runbook | Prometheus Rules (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
-| `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
+| `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-10-03 | Operations | operators, maintainers |
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
+| `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
@@ -389,4 +390,6 @@ Audience: contributors, maintainers
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
+| `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-02 | Engineering | contributors, maintainers |
+| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-10-02 | Engineering | maintainers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |

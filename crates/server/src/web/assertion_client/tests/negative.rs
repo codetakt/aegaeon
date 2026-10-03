@@ -118,8 +118,9 @@ async fn invalid_claims(state: &AppState) -> TestResult {
 }
 
 #[tokio::test]
-#[ignore = "requires PostgreSQL"]
-async fn assertion_subject_rejects_invalid_signed_claims_and_malformed_credentials() -> TestResult {
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_assertion_subject_rejects_invalid_signed_claims_and_malformed_credentials(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -138,33 +139,66 @@ async fn assertion_subject_rejects_invalid_signed_claims_and_malformed_credentia
     finish_test(result, cleanup_test_environment(&pool, &env).await)
 }
 
-#[tokio::test]
-#[ignore = "requires PostgreSQL; isolated environment-policy process"]
-async fn assertion_subject_parser_backend_failure_is_server_error() -> TestResult {
+#[test]
+#[ignore = "requires PostgreSQL and Redis; isolated environment-policy process"]
+fn shared_redis_assertion_subject_parser_backend_failure_is_server_error() -> TestResult {
+    const CHILD: &str = "AEGAEON_TEST_ASSERTION_BACKEND_CHILD";
+    const BACKEND: &str = "AEGAEON_RAW_JSON_BACKEND_PRIVATE_KEY_JWT_PAYLOAD";
+    let test = concat!(
+        module_path!(),
+        "::shared_redis_assertion_subject_parser_backend_failure_is_server_error"
+    )
+    .split_once("::")
+    .ok_or("test module lacks crate prefix")?
+    .1;
+    if let Some(marker) = std::env::var_os(CHILD) {
+        assert_eq!(marker, test, "unexpected backend child marker");
+        assert_eq!(std::env::var(BACKEND)?, "unsupported-test-backend");
+        return tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(backend_failure());
+    }
+    // Set the override only for the new process, before its runtime or threads.
+    let output = std::process::Command::new(std::env::current_exe()?)
+        .args([
+            test,
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+            "--format=pretty",
+            "--color=never",
+        ])
+        .env(CHILD, test)
+        .env(BACKEND, "unsupported-test-backend")
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success()
+            && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;")
+            && stdout.contains(&format!("test {test} ... ok")),
+        "backend child failed or did not run exactly one test: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        output.status
+    );
+    Ok(())
+}
+
+async fn backend_failure() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let state = fixture(&pool, &env).await?;
-        let key = "AEGAEON_RAW_JSON_BACKEND_PRIVATE_KEY_JWT_PAYLOAD";
-        let previous = std::env::var_os(key);
-        std::env::set_var(key, "unsupported-test-backend");
-        let result = async {
-            for path in PATHS {
-                let jwt = sign(&claims(&state, path)?)?;
-                let (status, body) = send(&state, path, &fields(path, &jwt), None).await?;
-                assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{path}: {body}");
-                assert_eq!(body["error"], "server_error");
-            }
-            Ok(())
+        for path in PATHS {
+            let jwt = sign(&claims(&state, path)?)?;
+            let (status, body) = send(&state, path, &fields(path, &jwt), None).await?;
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{path}: {body}");
+            assert_eq!(body["error"], "server_error");
         }
-        .await;
-        match previous {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
-        }
-        result
+        Ok(())
     }
     .await;
     finish_test(result, cleanup_test_environment(&pool, &env).await)

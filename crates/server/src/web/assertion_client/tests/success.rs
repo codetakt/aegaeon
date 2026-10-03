@@ -88,8 +88,9 @@ async fn exercise(state: &AppState) -> TestResult {
     Ok(())
 }
 #[tokio::test]
-#[ignore = "requires PostgreSQL"]
-async fn assertion_subject_authenticates_token_code_device_and_lifecycle_routes() -> TestResult {
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_assertion_subject_authenticates_token_code_device_and_lifecycle_routes(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -100,7 +101,8 @@ async fn assertion_subject_authenticates_token_code_device_and_lifecycle_routes(
 
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn assertion_subject_does_not_supply_anonymous_public_client_identity() -> TestResult {
+async fn shared_redis_assertion_subject_does_not_supply_anonymous_public_client_identity(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

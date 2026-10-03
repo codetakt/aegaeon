@@ -14,6 +14,18 @@ fn request_object_resource(state: &AppState, resource: &str) -> TestResult<Strin
         &jsonwebtoken::EncodingKey::from_rsa_pem(PEM)?,
     )?)
 }
+async fn reject_empty_par_identity(state: &AppState, pairs: &[(&str, &str)]) -> TestResult {
+    let device_before = state.device.code_store.try_active_count()?;
+    let par_before = par_count(state)?;
+    let (status, body) = send(state, "/par", pairs, Some(&basic())).await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"], "invalid_request");
+    assert!(body.get("request_uri").is_none());
+    assert_eq!(state.device.code_store.try_active_count()?, device_before);
+    assert_eq!(par_count(state)?, par_before);
+    Ok(())
+}
+
 async fn resource_requests(state: &AppState) -> TestResult {
     const RESOURCE: &str = "HTTPS://resource.example:443/a%20b/%2f";
     for resource in [
@@ -46,6 +58,11 @@ async fn resource_requests(state: &AppState) -> TestResult {
                         ("scope", ""),
                         ("client_id", ""),
                     ];
+                    if valid {
+                        reject_empty_par_identity(state, &f).await?;
+                    }
+                    // Keep the empty occurrence omitted and reuse the same Request Object.
+                    f.push(("client_id", BASIC));
                     if valid {
                         let mut excluded = f.clone();
                         excluded.push(("unknown", "nonempty"));
@@ -98,7 +115,8 @@ async fn resource_requests(state: &AppState) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn oauth_forms_resource_spelling_and_whitespace_are_preserved_at_routes() -> TestResult {
+async fn shared_redis_oauth_forms_resource_spelling_and_whitespace_are_preserved_at_routes(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

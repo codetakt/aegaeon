@@ -9,6 +9,8 @@ mod client_assertion_policy;
 mod client_queries;
 mod client_types;
 mod construction;
+#[cfg(test)]
+pub(crate) mod dummy_secret_test_hook;
 mod jwks_cache_control;
 mod jwks_circuit;
 mod jwks_fetch;

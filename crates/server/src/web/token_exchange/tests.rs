@@ -323,13 +323,34 @@ async fn scenarios(state: &AppState) -> TestResult {
     assert!(output["exp"].as_u64() <= claims["exp"].as_u64());
     assert!(first.get("refresh_token").is_none());
     let token = first["access_token"].as_str().ok_or("missing output")?;
+    let (status, empty_scope) = exchange(
+        state,
+        source,
+        &[("audience", "internal-api"), ("scope", "")],
+        true,
+    )
+    .await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "empty scope is omitted: {empty_scope}"
+    );
+    assert_eq!(empty_scope["scope"], "api.read");
+    let empty_claims = jwt(&empty_scope)?;
+    assert_eq!(empty_claims["scope"], "api.read");
+    assert_eq!(empty_claims["aud"], "internal-api");
+    assert_eq!(empty_claims["sub"], claims["sub"]);
+    assert!(
+        empty_claims["exp"].as_u64().ok_or("empty-scope expiry")?
+            <= claims["exp"].as_u64().ok_or("source expiry")?
+    );
+    assert!(empty_scope.get("refresh_token").is_none());
     for selectors in [
         vec![],
         vec![("audience", "unknown")],
         vec![("audience", "internal-api"), ("audience", "unknown")],
         vec![("resource", "https://api.example/resource#f")],
         vec![("audience", "internal-api"), ("scope", "api.admin")],
-        vec![("audience", "internal-api"), ("scope", "")],
     ] {
         let (status, body) = exchange(state, source, &selectors, true).await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{selectors:?}: {body}");

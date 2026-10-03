@@ -71,7 +71,24 @@ For a required or diagnostic request the runner
    target and yields the crate's `*.kani-metadata.json`: every executable entry of
    the group must be present at its declared file. (`cargo kani list` cannot take
    feature flags and fails on feature-gated harness crates; it is not used.)
-5. **Invocation.** One process per request, from a fresh per-run group target:
+5. **Invocation.** One process per request, using request targets owned by a fresh
+   evaluation. Targets are normally separate per group. The server groups
+   `server-regressions`, `authorization-grant-predicates`,
+   `server-exchange-lifetime`, `redis-boolean-encoding` and
+   `application-authorization-revision` may sequentially reuse an earlier group's
+   request target when the server package/manifest/lib, ordered features,
+   no-default-features, cfg and complete Cargo metadata digest match. Otherwise
+   the group uses a fresh target. Discovery may reuse a separate, stable target
+   under the same server group and context restrictions. Before each repeated
+   discovery, the adapter validates the target layout and removes server primary
+   artifacts and package fingerprint/build outputs at the pinned Cargo profile
+   locations, plus those profiles' incremental directories. Hash-bearing crate
+   artifacts must match a server fingerprint in the same profile;
+   dependency artifacts stay at their original paths. Remaining primary metadata
+   rejects before codegen. Each group still runs discovery and retains its own
+   fresh metadata and log. Discovery and request targets are disjoint, and neither
+   is reused between evaluations. Each request retains
+   its exact invocation and must produce one new matching metadata path:
    `timeout --kill-after=10 <budget> cargo-kani kani --manifest-path … -p <package>
    --lib [--features …] [--no-default-features] --exact --harness <name> --solver
    <solver> --default-unwind <n> [--unwind <per-harness>]`, with RLIMIT_AS and wall

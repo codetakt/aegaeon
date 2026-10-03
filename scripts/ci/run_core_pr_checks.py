@@ -50,8 +50,8 @@ def partition(checks: dict[str, str], packages: dict[str, str]) -> dict[str, dic
 
 
 def run() -> None:
-    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
-        raise ValueError("check delegation is only supported by full PR validation")
+    if os.environ.get("GITHUB_EVENT_NAME") not in {"pull_request", "merge_group"}:
+        raise ValueError("check delegation is only supported by full PR/group validation")
     # Preserve evaluation of every flake output, including packages, apps and shells.
     subprocess.run(["nix", "flake", "check", "--no-build", "--print-build-logs"], check=True)
     checks = evaluate(

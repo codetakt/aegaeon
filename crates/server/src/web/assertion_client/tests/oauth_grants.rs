@@ -129,7 +129,7 @@ async fn jwt_grant(state: &AppState) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn oauth_forms_exact_grants_code_device_jwt_and_case_refusals() -> TestResult {
+async fn shared_redis_oauth_forms_exact_grants_code_device_jwt_and_case_refusals() -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

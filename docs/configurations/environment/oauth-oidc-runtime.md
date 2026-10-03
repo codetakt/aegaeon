@@ -58,6 +58,17 @@ and `runtimeKeys/{runtimeKeyId}/revoke` for revocation; changing the ACTIVE/RETI
 is monitor-visible and causes management-database nodes to restart rather than continue serving
 stale key material.
 
+### UserInfo token presentation
+
+The enabled `/userinfo` endpoint accepts GET and POST requests authenticated with
+an `Authorization` header (OIDC Core section 5.3.1). An empty POST body needs no
+`Content-Type`. A nonempty POST body must use
+`application/x-www-form-urlencoded`; Bearer tokens may use its `access_token`
+field instead of the header (RFC 6750 section 2.2). Supplying both transports or
+duplicate `access_token` fields is rejected. DPoP-bound tokens require the DPoP
+Authorization scheme and a proof for the actual POST method and token hash
+(RFC 9449 section 7). The router's request-body size limit also applies.
+
 ## Browser endpoint query admission
 
 `/authorize` and `/logout` use strict form decoding for GET and implicit HEAD
@@ -232,9 +243,9 @@ monitor exits if a node cannot converge to the DB projection.
 
 ## PAR (Pushed Authorization Requests)
 
-Plain `/par` forms require `client_id` even with Basic or assertion authentication.
-A signed Request Object may supply the authorization `client_id` internally;
-its verified value must match the authenticated client. See
+All `/par` forms require outer `client_id`, including those using Basic or
+assertion authentication or a signed Request Object. Its value must match the
+authenticated client and the verified Request Object `client_id`. See
 [client assertion identification](../../operations/private-key-jwt.md#client-identification).
 
 | Variable | Default | Scope | Notes |

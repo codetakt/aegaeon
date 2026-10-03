@@ -670,12 +670,15 @@ rfc_7009:
     file: fstar/revocation/Revocation.fst
     invariant: cascade_revoke
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: revocation-cascade
   status: verified
   runtime_link: crates/server/src/web/token_lifecycle.rs
   notes:
   - Revoking a refresh token deactivates the associated access token (revocation_introspection_http_test).
+  - "With retainRefreshChain enabled, HTTP introspection shares resource/UserInfo checks for a recorded rotated, missing or tombstoned refresh parent. This does not extend grant-wide ancestor revocation, refresh retention or expiry coverage; disabled retention preserves the existing rotation policy. The cited cascade model does not discharge those remaining runtime obligations."
 rfc_7662:
 - id: 7662-001
   section: '2'
@@ -751,6 +754,8 @@ rfc_7662:
     file: proofs/tamarin/introspection/introspection_security.spthy
     lemma: introspection_inactive_claim_sound
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: introspection-response-active
   status: verified
@@ -762,6 +767,8 @@ rfc_7662:
     test: crates/server/tests/introspection_schema_test.rs
   notes:
   - Active tokens return RFC 7662 fields (client_id, token_type, exp).
+  - "After token-store and caller-visibility checks, HTTP introspection enforces the selected retainRefreshChain parent policy. Invalid recorded parents yield inactive JSON or signed JWT inner bodies; parent-store failures return no-cache 503. No parent or disabled retention preserves existing behavior."
+  - "Redis/PostgreSQL lifecycle tests exercise actual regular grant commits and rotations; signed introspection fixtures verify the configured Ed25519 signature. Final response metrics distinguish inactive application currentness from active responses and exclude backend/signing errors. These finite tests do not prove all active criteria or close grant-wide ancestor revocation obligations."
   - The cited models describe their abstract response and issuance/revocation facts;
     they do not establish the new client-credentials authority or currentness decision.
     Runtime inactive responses also cover unauthorized disclosure and absent or stale authority.
@@ -1606,6 +1613,7 @@ rfc_9449:
     rule: verify_dpop_compact_jwt
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_header_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-jwt-format
   status: verified
@@ -1613,6 +1621,9 @@ rfc_9449:
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (dpop_authentication); JWT well-formedness has no single F* function counterpart."
+  notes:
+  - "The production Rust verifier rejects private OKP d members, all present crit parameters, duplicate protected-header/JWK names, and b64 values other than Boolean true (RFC 9449 sections 4.2-4.3, RFC 7515 sections 4/4.1.11, RFC 7797 section 7). Unknown noncritical fields remain permitted."
+  - "Real Ed25519 signed regressions exercise both public FFI entry points. These runtime tests do not extend the cited protocol model or establish new formal discharge."
 - id: 9449-002
   section: '4.2'
   requirement: MUST
@@ -2113,7 +2124,7 @@ rfc_7521:
   - client
   notes:
   - "Assertion-based client authentication is implemented for JWT assertions via RFC 7523 (private_key_jwt)."
-  - "RFC 7521 section 4.2 permits omitted outer client_id at token, device authorization, introspection and revocation when the assertion subject identifies the fully authenticated client. Plain PAR independently requires outer client_id (RFC 9126 section 2.1); signed Request Object PAR binds its verified client_id to the authenticated client (section 3)."
+  - "RFC 7521 section 4.2 permits omitted outer client_id at token, device authorization, introspection and revocation when the assertion subject identifies the fully authenticated client. All PAR independently requires outer client_id (RFC 9126 section 2.1; RFC 9101 sections 5 and 6.3); signed Request Object PAR binds its verified client_id to that outer value and the authenticated client."
   - "Assertion authorization grants are supported for JWT bearer (RFC 7523) when the management policy `allowedGrantTypes` includes `urn:ietf:params:oauth:grant-type:jwt-bearer`; other assertion types are not supported."
   - "Client-side assertion usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
@@ -4368,11 +4379,11 @@ rfc_9728:
   applies_to:
   - rs
   notes:
-  - "Phase 6 implementation complete. /.well-known/oauth-protected-resource endpoint and ProtectedResourceMetadata struct."
+  - "The /resource metadata locator is /.well-known/oauth-protected-resource/resource; the former host-root locator redirects with 308. ProtectedResourceMetadata fields are unchanged."
 - id: 9728-101
   section: '3'
   requirement: MUST
-  description: Protected resource MUST publish metadata at /.well-known/oauth-protected-resource including resource identifier
+  description: Protected resource MUST publish metadata at the RFC 9728 resource-derived well-known URI including its resource identifier
   module: crates/server/src/metadata.rs
   proof:
   - type: fstar
@@ -4382,6 +4393,7 @@ rfc_9728:
     detail: ProtectedResourceMetadata::for_issuer populates resource, authorization_servers, scopes_supported, bearer_methods_supported
   tests:
   - crates/server/src/metadata.rs
+  - crates/server/src/web/metadata/tests.rs
   ci_check: resource-metadata-endpoint
   status: verified
   runtime_link: crates/server/src/metadata.rs
@@ -4392,6 +4404,8 @@ rfc_9728:
     test: crates/server/src/metadata/tests/resource.rs
   notes:
   - "ProtectedResourceMetadata struct with resource, authorization_servers, scopes_supported, bearer_methods_supported, dpop_signing_alg_values_supported."
+  - "For the configured issuer origin plus /resource, the router serves /.well-known/oauth-protected-resource/resource; the host-root locator returns a fixed relative 308 redirect. Router regression cases are in crates/server/src/web/metadata/tests.rs."
+  - "The cited F* lemma checks a nonempty modeled resource only; it does not prove HTTP locator derivation or router correspondence. Route tests provide bounded implementation evidence, without a proof-status upgrade."
 
 rfc_9901:
 - id: 9901-001
@@ -5555,6 +5569,9 @@ openid_core:
     test: crates/server/tests/oidc_hash_vectors.rs
   notes:
   - See `crates/server/src/authcode/token/tests/oidc_id_token.rs::test_hash_computation` for known OIDC vectors (RS256 / SHA-256 / left-most 128 bits).
+  - "For already admitted PS256/384/512 signatures, the server adapter selects the existing SHA-256/384/512 hash operation without changing the verified signature algorithm."
+  - "The extracted dispatcher and public FFI accepted-name domain remain unchanged. The PSS digest-selector mapping is covered by finite Rust/Low* runtime and real signed-token tests, not by an expanded formal proof claim."
+  - "See crates/server/src/web/upstream_tests/id_token/tests/pss_hash.rs and crates/server/src/oidc/id_token/tests/pss_hash.rs; supplied hash claims require source material and omitted code-flow claims remain optional."
 - id: OIDC-1-004
   section: max_age / auth_time
   requirement: MUST
@@ -5754,6 +5771,26 @@ openid_core:
   - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
   - "A supplied Request Object prompt must be a JSON string. Null and other non-string values are rejected with invalid_request; omitting the claim requests no prompt action."
   - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
+- id: OIDC-1-025
+  section: '2 (sub), 5.7, 8'
+  requirement: MUST
+  description: OIDC End-User subject producers and ID Token/UserInfo boundaries enforce nonempty ASCII values of at most 255 characters without output normalization
+  module: crates/server/src/oidc/subject.rs
+  tests:
+  - crates/server/src/oidc/required_rs256/tests.rs
+  - crates/server/src/oidc/userinfo/tests.rs
+  - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/subject_format.rs
+  - crates/server/src/web/upstream_callback_users/jit/subject_tests.rs
+  - crates/server/src/web/upstream_tests/id_token/validation.rs
+  - crates/server/src/web/oauth_conformance_tests/sender_contract.rs
+  ci_check: cargo-test
+  status: implemented
+  runtime_link: crates/server/src/oidc/subject.rs
+  notes:
+  - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use opaque UUIDv4 values; collisions refuse instead of adopting an existing user."
+  - "Existing linked identities and explicit email reuse are preserved. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
+  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; that obligation and legacy-history reconciliation remain open."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
