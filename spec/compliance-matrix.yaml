@@ -4342,11 +4342,11 @@ rfc_9728:
   applies_to:
   - rs
   notes:
-  - "Phase 6 implementation complete. /.well-known/oauth-protected-resource endpoint and ProtectedResourceMetadata struct."
+  - "The /resource metadata locator is /.well-known/oauth-protected-resource/resource; the former host-root locator redirects with 308. ProtectedResourceMetadata fields are unchanged."
 - id: 9728-101
   section: '3'
   requirement: MUST
-  description: Protected resource MUST publish metadata at /.well-known/oauth-protected-resource including resource identifier
+  description: Protected resource MUST publish metadata at the RFC 9728 resource-derived well-known URI including its resource identifier
   module: crates/server/src/metadata.rs
   proof:
   - type: fstar
@@ -4356,6 +4356,7 @@ rfc_9728:
     detail: ProtectedResourceMetadata::for_issuer populates resource, authorization_servers, scopes_supported, bearer_methods_supported
   tests:
   - crates/server/src/metadata.rs
+  - crates/server/src/web/metadata/tests.rs
   ci_check: resource-metadata-endpoint
   status: verified
   runtime_link: crates/server/src/metadata.rs
@@ -4366,6 +4367,8 @@ rfc_9728:
     test: crates/server/src/metadata/tests/resource.rs
   notes:
   - "ProtectedResourceMetadata struct with resource, authorization_servers, scopes_supported, bearer_methods_supported, dpop_signing_alg_values_supported."
+  - "For the configured issuer origin plus /resource, the router serves /.well-known/oauth-protected-resource/resource; the host-root locator returns a fixed relative 308 redirect. Router regression cases are in crates/server/src/web/metadata/tests.rs."
+  - "The cited F* lemma checks a nonempty modeled resource only; it does not prove HTTP locator derivation or router correspondence. Route tests provide bounded implementation evidence, without a proof-status upgrade."
 
 rfc_9901:
 - id: 9901-001
