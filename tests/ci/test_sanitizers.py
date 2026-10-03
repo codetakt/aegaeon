@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+import selectors
 import shutil
 import signal
 import subprocess
@@ -12,6 +14,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "scripts/sanitizers/run_sanitizers.sh"
@@ -400,6 +403,54 @@ class SanitizerTests(unittest.TestCase):
                 result = self.run_wrapper(mode)
                 assert result.returncode != 0, (mode, result.stdout)
                 assert self.summary()["status"] == "failed"
+
+    def test_final_cleanup_failure_preserves_observed_child_exit(self):
+        # Compile only the actual command/Failure definitions; execute a real
+        # child, with the final terminate call failing after wait observes exit.
+        text = WRAPPER.read_text().split("<<'PYTHON'\n", 1)[1].rsplit("\nPYTHON", 1)[0]
+        parsed = ast.parse(text)
+        definitions = [
+            item
+            for item in parsed.body
+            if isinstance(item, (ast.FunctionDef, ast.ClassDef))
+            and item.name in {"command", "Failure", "require"}
+        ]
+        self.assertEqual(len(definitions), 3)  # noqa: PT009 - active under Python -O
+        for child, expected in (
+            ("import sys;sys.exit(9)", 9),
+            ("import os,signal;os.kill(os.getpid(),signal.SIGTERM)", 143),
+            ("import sys;sys.exit(0)", 1),
+        ):
+            with self.subTest(child=child):
+                artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                terminate = Mock(side_effect=[False, OSError("controlled final cleanup failure")])
+                namespace = {
+                    "subprocess": subprocess,
+                    "selectors": selectors,
+                    "os": os,
+                    "sys": sys,
+                    "time": time,
+                    "artifacts": artifacts,
+                    "summary": {"commands": []},
+                    "counter": 0,
+                    "kill_grace": 1,
+                    "group_alive": lambda _pid: False,
+                    "terminate": terminate,
+                    "save": lambda: None,
+                }
+                code = ast.fix_missing_locations(ast.Module(body=definitions, type_ignores=[]))
+                exec(compile(code, str(WRAPPER), "exec"), namespace)  # noqa: S102 - exact local definitions
+                with self.assertRaisesRegex(  # noqa: PT027 - unittest discovery without pytest
+                    namespace["Failure"], "controlled final cleanup"
+                ) as caught:
+                    namespace["command"](
+                        [sys.executable, "-c", child], os.environ.copy(), 5, "probe"
+                    )
+                self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
+                self.assertEqual(terminate.call_count, 2)  # noqa: PT009 - active under Python -O
+                self.assertEqual(namespace["summary"]["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
+                self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
+                self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
 
     def test_original_exits_and_crash_signals_propagate(self):
         for mode, expected in (("build-signal", 143), ("run-failure", 9), ("run-signal", 134)):

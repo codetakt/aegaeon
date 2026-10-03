@@ -382,6 +382,9 @@ def command(args, environment, seconds, phase, *, echo=False):
         interrupted_failure = error
     finally:
         if process is not None:
+            # Preserve a status already observed before final cleanup can fail.
+            if original_status is None:
+                original_status = process.poll()
             try:
                 terminate(process, kill_grace)
             except Exception as error:
