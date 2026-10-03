@@ -88,6 +88,11 @@ sys.exit(2)
         assert not set(owners["core"]) & set(owners["verification"])
         assert owners["verification"] == self.formal
 
+    def test_merge_group_uses_the_same_complete_check_inventory(self):
+        result = self.invoke(GITHUB_EVENT_NAME="merge_group")
+        assert result.returncode == 0, result.stderr
+        assert any(command[0] == "build" for command in self.commands())
+
     def test_missing_delegated_check_fails_before_build(self):
         del self.checks["verifyKani"]
         self.write_inventory()

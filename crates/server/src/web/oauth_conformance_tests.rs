@@ -11,6 +11,7 @@ use serde_json::Value;
 
 mod sender_contract;
 mod transport_contract;
+mod userinfo_post;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
