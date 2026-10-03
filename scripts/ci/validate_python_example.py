@@ -26,11 +26,15 @@ EXPECTED_TESTS = frozenset(
         "ApplicationSmoke.test_callback_decodes_without_signature_verification",
         "ApplicationSmoke.test_missing_code_and_wrong_state",
         "ApplicationSmoke.test_missing_pkce_verifier",
+        "ApplicationSmoke.test_missing_or_invalid_expected_state",
+        "ApplicationSmoke.test_missing_or_invalid_expected_nonce",
+        "ApplicationSmoke.test_malformed_token_payload_rejected",
+        "ApplicationSmoke.test_token_transport_failure_rejected",
         "ApplicationSmoke.test_nonce_mismatch_and_missing_claim",
-        "ApplicationSmoke.test_protocol_error_escaping",
-        "ApplicationSmoke.test_token_error_escaping_and_limit",
+        "ApplicationSmoke.test_protocol_error_does_not_echo_provider_details",
+        "ApplicationSmoke.test_token_error_does_not_echo_provider_details",
         "ApplicationSmoke.test_claims_escaping_and_logout",
-        "ApplicationSmoke.test_no_id_token_branch",
+        "ApplicationSmoke.test_missing_empty_or_malformed_id_token_rejected",
         "HttpProviderContract.test_discovery_registration_and_token_exchange_over_http",
         "PyJwtCryptographyLibraryCheck.test_rs256_es256_sign_verify_and_tamper",
     ]
@@ -94,6 +98,10 @@ def audit_verdict(value: Any, graph: dict[str, str], exit_code: int) -> dict[str
 def require_tests(value: Any, exit_code: int) -> None:  # noqa: ANN401 - validate report
     if not isinstance(value, dict):
         raise ValueError("sample tests omitted their result inventory")  # noqa: TRY004
+    for key in ("tests_run", "failures", "errors", "skipped"):
+        counter = value.get(key)
+        if type(counter) is not int or counter < 0:
+            raise ValueError("sample test counters must be nonnegative integers")
     identifiers = value.get("test_ids")
     if (
         value.get("status") != "passed"

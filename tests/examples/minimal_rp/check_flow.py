@@ -44,6 +44,8 @@ class Response:
         self.payload, self.status_code, self.text = payload, status_code, text
 
     def json(self):
+        if isinstance(self.payload, Exception):
+            raise self.payload
         return self.payload
 
     def raise_for_status(self):
@@ -81,6 +83,28 @@ class ApplicationSmoke(unittest.TestCase):
                 "/callback", query_string={"code": "code-1", "state": saved["oauth_state"]}
             )
         return result, post
+
+    def assert_rejected(self, result, saved):
+        self.assertEqual(result.status_code, 400)
+        for secret in (b"sample-secret", b"not-stored", b"secret-token-marker"):
+            self.assertNotIn(secret, result.data)
+        with self.client.session_transaction() as session:
+            for key in ("oauth_state", "pkce_verifier", "nonce", "id_token_claims", "access_token"):
+                self.assertNotIn(key, session)
+        with patch.object(rp.requests, "post") as post:
+            replay = self.client.get(
+                "/callback", query_string={"code": "code-1", "state": saved["oauth_state"]}
+            )
+        self.assertEqual(replay.status_code, 400)
+        post.assert_not_called()
+        with self.client.session_transaction() as session:
+            self.assertNotIn("id_token_claims", session)
+
+    def failure_begin(self):
+        _, saved = self.begin()
+        with self.client.session_transaction() as session:
+            session["id_token_claims"] = {"sub": "previous-session"}
+        return saved
 
     def test_bootstrap_discovery_registration(self):
         with (
@@ -152,60 +176,118 @@ class ApplicationSmoke(unittest.TestCase):
         replay_post.assert_not_called()
 
     def test_missing_code_and_wrong_state(self):
-        _, saved = self.begin()
-        with patch.object(rp.requests, "post") as post:
-            missing = self.client.get("/callback", query_string={"state": saved["oauth_state"]})
-            wrong = self.client.get("/callback", query_string={"code": "code-1", "state": "wrong"})
-        self.assertEqual(missing.status_code, 400)
-        self.assertIn(b"Missing authorization code", missing.data)
-        self.assertEqual(wrong.status_code, 400)
-        self.assertIn(b"State mismatch", wrong.data)
-        post.assert_not_called()
+        for query in ({}, {"code": "code-1", "state": "wrong"}):
+            with self.subTest(query=query):
+                saved = self.failure_begin()
+                with patch.object(rp.requests, "post") as post:
+                    result = self.client.get("/callback", query_string=query)
+                self.assert_rejected(result, saved)
+                post.assert_not_called()
 
     def test_missing_pkce_verifier(self):
-        _, saved = self.begin()
+        saved = self.failure_begin()
         with self.client.session_transaction() as session:
             del session["pkce_verifier"]
         with patch.object(rp.requests, "post") as post:
             result = self.client.get(
                 "/callback", query_string={"code": "code-1", "state": saved["oauth_state"]}
             )
-        self.assertEqual(result.status_code, 400)
         self.assertIn(b"Missing PKCE verifier", result.data)
+        self.assert_rejected(result, saved)
         post.assert_not_called()
 
-    def test_nonce_mismatch_and_missing_claim(self):
-        for claim in ({"sub": "subject-1", "nonce": "wrong"}, {"sub": "subject-1"}):
-            with self.subTest(claim=claim):
-                _, saved = self.begin()
-                result, _ = self.callback(saved, claims=claim)
-                self.assertEqual(result.status_code, 400)
-                self.assertIn(b"Nonce mismatch", result.data)
+    def test_missing_or_invalid_expected_state(self):
+        for expected in (None, "", False, 1, []):
+            with self.subTest(expected=expected):
+                saved = self.failure_begin()
                 with self.client.session_transaction() as session:
-                    self.assertNotIn("id_token_claims", session)
+                    if expected is None:
+                        del session["oauth_state"]
+                    else:
+                        session["oauth_state"] = expected
+                with patch.object(rp.requests, "post") as post:
+                    # Absent returned state must not equal an absent session state.
+                    result = self.client.get("/callback", query_string={"code": "code-1"})
+                self.assertIn(b"State mismatch", result.data)
+                self.assert_rejected(result, saved)
+                post.assert_not_called()
 
-    def test_protocol_error_escaping(self):
-        result = self.client.get(
-            "/callback",
-            query_string={
-                "error": "<script>x</script>",
-                "error_description": "<img src=x onerror=x>",
-            },
-        )
-        self.assertEqual(result.status_code, 400)
+    def test_missing_or_invalid_expected_nonce(self):
+        for expected in (None, "", False, 1, []):
+            with self.subTest(expected=expected):
+                saved = self.failure_begin()
+                with self.client.session_transaction() as session:
+                    if expected is None:
+                        del session["nonce"]
+                    else:
+                        session["nonce"] = expected
+                result, post = self.callback(saved, claims={"sub": "no-nonce"})
+                self.assertIn(b"Missing nonce", result.data)
+                self.assert_rejected(result, saved)
+                post.assert_not_called()
+
+    def test_nonce_mismatch_and_missing_claim(self):
+        for claim in (
+            {"sub": "subject-1", "nonce": "wrong"},
+            {"sub": "subject-1"},
+            {"nonce": None},
+        ):
+            with self.subTest(claim=claim):
+                saved = self.failure_begin()
+                result, _ = self.callback(saved, claims=claim)
+                self.assertIn(b"Nonce mismatch", result.data)
+                self.assert_rejected(result, saved)
+
+    def test_protocol_error_does_not_echo_provider_details(self):
+        saved = self.failure_begin()
+        with patch.object(rp.requests, "post") as post:
+            result = self.client.get(
+                "/callback",
+                query_string={
+                    "error": "<script>secret-token-marker</script>",
+                    "error_description": "<img src=x onerror=x>",
+                },
+            )
         self.assertNotIn(b"<script>", result.data)
         self.assertNotIn(b"<img", result.data)
-        self.assertIn(b"&lt;script&gt;", result.data)
+        self.assert_rejected(result, saved)
+        post.assert_not_called()
 
-    def test_token_error_escaping_and_limit(self):
-        _, saved = self.begin()
+    def test_token_error_does_not_echo_provider_details(self):
+        saved = self.failure_begin()
         result, _ = self.callback(
-            saved, response=Response(status_code=400, text="<script>x</script>" + "a" * 600)
+            saved,
+            response=Response(
+                status_code=400, text="<script>secret-token-marker</script>" + "a" * 600
+            ),
         )
-        self.assertEqual(result.status_code, 400)
         self.assertNotIn(b"<script>", result.data)
-        self.assertIn(b"&lt;script&gt;", result.data)
         self.assertNotIn(b"a" * 501, result.data)
+        self.assert_rejected(result, saved)
+
+    def test_malformed_token_payload_rejected(self):
+        for payload in (
+            None,
+            [],
+            "secret-token-marker",
+            True,
+            42,
+            rp.requests.exceptions.JSONDecodeError("secret-token-marker", "invalid-json", 0),
+        ):
+            with self.subTest(payload=type(payload).__name__):
+                saved = self.failure_begin()
+                result, _ = self.callback(saved, response=Response(payload))
+                self.assert_rejected(result, saved)
+
+    def test_token_transport_failure_rejected(self):
+        for failure in (rp.requests.Timeout, rp.requests.ConnectionError, rp.requests.HTTPError):
+            with self.subTest(failure=failure):
+                saved = self.failure_begin()
+                with patch.object(rp.requests, "post", side_effect=failure("secret-token-marker")):
+                    result = self.client.get(
+                        "/callback", query_string={"code": "code-1", "state": saved["oauth_state"]}
+                    )
+                self.assert_rejected(result, saved)
 
     def test_claims_escaping_and_logout(self):
         _, saved = self.begin()
@@ -220,13 +302,27 @@ class ApplicationSmoke(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertEqual(dict(session), {})
 
-    def test_no_id_token_branch(self):
-        _, saved = self.begin()
-        result, _ = self.callback(saved, response=Response({"access_token": "not-stored"}))
-        self.assertEqual(result.status_code, 302)
-        with self.client.session_transaction() as session:
-            self.assertEqual(session["id_token_claims"], {"note": "No id_token in response"})
-            self.assertNotIn("access_token", session)
+    def test_missing_empty_or_malformed_id_token_rejected(self):
+        payloads = [{"access_token": "not-stored"}]
+        payloads.extend(
+            {"id_token": token}
+            for token in (
+                None,
+                "",
+                " ",
+                False,
+                1,
+                [],
+                {},
+                "secret-token-marker",
+                unsigned_token([]),
+            )
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                saved = self.failure_begin()
+                result, _ = self.callback(saved, response=Response(payload))
+                self.assert_rejected(result, saved)
 
 
 class HttpProviderContract(unittest.TestCase):

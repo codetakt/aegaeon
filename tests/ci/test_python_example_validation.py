@@ -105,3 +105,22 @@ class ValidationControls(unittest.TestCase):
                 require_tests(invalid, 0)
         with self.assertRaises(ValueError):
             require_tests(result, 1)
+
+    def test_result_counters_require_exact_nonnegative_integers(self):
+        valid = {
+            "status": "passed",
+            "tests_run": len(EXPECTED_TESTS),
+            "test_ids": sorted(EXPECTED_TESTS),
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0,
+        }
+        for key in ("tests_run", "failures", "errors", "skipped"):
+            for counter in (False, True, 0.0, float(len(EXPECTED_TESTS)), "0", None, -1):
+                with self.subTest(key=key, counter=counter), self.assertRaises(ValueError):
+                    require_tests({**valid, key: counter}, 0)
+            missing = valid.copy()
+            del missing[key]
+            with self.subTest(key=key, missing=True), self.assertRaises(ValueError):
+                require_tests(missing, 0)
+        require_tests(valid, 0)
