@@ -21,9 +21,9 @@ Keep it concise and suitable for PDF layout.
 
 ## Short description
 
-Aegaeon は、既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤です。
-サーバ側の高保証コア、Secure Defaults、運用統制を一体で整備し、
-認証認可の実装リスクと運用リスクの低減を支援します。
+Aegaeon is an OAuth/OIDC platform that can be embedded in existing services and enterprise infrastructure.
+It brings together a high-assurance server-side core, Secure Defaults, and operational controls
+to help reduce implementation and operational risks in authentication and authorization.
 
 ## Highlights
 

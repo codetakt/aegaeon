@@ -25,15 +25,15 @@ It is not public-facing copy. It helps keep answers consistent and within the re
 
 Short answer:
 
-- `既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤です。サーバ側の高保証コア、Secure Defaults、運用統制を一体で整備しています。`
+- `It is an OAuth/OIDC platform that can be embedded in existing services and enterprise infrastructure. It brings together a high-assurance server-side core, Secure Defaults, and operational controls.`
 
 ## FAQ
 
-### Q. 何が他の OAuth/OIDC 実装と違うのですか
+### Q. How does it differ from other OAuth/OIDC implementations?
 
 Short answer:
 
-- `プロトコルの実装だけでなく、運用で壊れやすい部分まで含めて整備している点です。`
+- `It addresses both protocol implementation and the areas that tend to be fragile in operation.`
 
 Longer answer:
 
@@ -41,77 +41,77 @@ Longer answer:
 - `Verified Core`
 - `Operational Controls`
 
-### Q. 形式検証済みということですか
+### Q. Does that mean it is formally verified?
 
 Safe answer:
 
-- `現時点の対外表現は、サーバ側の security-critical な OAuth/OIDC コアに関するものです。`
+- `Our current public wording concerns the security-critical server-side OAuth/OIDC core.`
 
 Do not say:
 
-- `製品全体が形式検証済みです`
+- `The entire product is formally verified`
 
-### Q. 管理UIも形式検証済みですか
+### Q. Is the admin UI also formally verified?
 
 Safe answer:
 
-- `いいえ。Aegaeon Admin Console は first-party control-plane UI ですが、UI 自体を形式検証済みとは表現していません。`
+- `No. Aegaeon Admin Console is a first-party control-plane UI, but we do not describe the UI itself as formally verified.`
 
-### Q. SDK やクライアントももう出ていますか
+### Q. Have the SDK and clients already been released?
 
 Safe answer for first launch:
 
-- `初回公開ではサーバと Admin Console が中心です。SDK / client track は別の公開単位として扱っています。`
+- `The first release focuses on the server and Admin Console. We treat the SDK / client track as a separate release.`
 
-### Q. SaaS ですか
-
-Safe answer:
-
-- `初回公開では OSS / Self-hosted の評価導線を中心に案内しています。`
-
-### Q. どんな会社やチームに向いていますか
+### Q. Is it SaaS?
 
 Safe answer:
 
-- `既存サービスへ認証基盤を組み込みたいチーム、複数サービスの共通認証・API 保護基盤を整備したいチーム、監査や変更管理を厳密にしたい組織に向いています。`
+- `For the first release, we focus on evaluation paths for OSS / Self-hosted use.`
 
-### Q. まず何を見ればよいですか
+### Q. What kinds of companies or teams is it suited to?
 
 Safe answer:
 
-- `ホワイトペーパーと Spec Sheet をご覧いただき、必要ならプレビュー版や PoC の相談につなげるのが一番早いです。`
+- `It is suited to teams embedding an authentication foundation in existing services, teams establishing shared authentication and API protection across multiple services, and organizations seeking stricter audits and change management.`
+
+### Q. What should I look at first?
+
+Safe answer:
+
+- `The quickest route is to read the whitepaper and Spec Sheet, then discuss a preview or PoC if needed.`
 
 ## Objection handling
 
-### Objection 1: 「OAuth/OIDC サーバなら既製品がいろいろありますよね」
+### Objection 1: "There are already plenty of OAuth/OIDC servers available, aren't there?"
 
 Response:
 
-- `その通りです。Aegaeon は単に規格対応をするだけでなく、実装リスクと運用リスクを一緒に下げたいケースに向いています。`
+- `That is true. Aegaeon is suited to cases where you want to reduce both implementation and operational risks, beyond simply supporting the standards.`
 
-### Objection 2: 「形式検証は現場では過剰ではないですか」
-
-Response:
-
-- `Aegaeon は形式手法だけを売りにしているわけではありません。サーバ側の security-critical なコアに高保証アプローチを使いつつ、日々の運用を支える Secure Defaults と運用統制を組み合わせています。`
-
-### Objection 3: 「結局、運用が難しいのでは」
+### Objection 2: "Isn't formal verification excessive in practice?"
 
 Response:
 
-- `むしろその逆を狙っています。変更管理、監査、鍵運用、例外設定の扱いを運用の中で壊れにくくすることが Aegaeon の価値です。`
+- `Formal methods are not Aegaeon's only selling point. We use a high-assurance approach for the security-critical server-side core and combine it with Secure Defaults and operational controls that support day-to-day operations.`
 
-### Objection 4: 「UI まで保証されていないなら弱いのでは」
-
-Response:
-
-- `現在の主張範囲を明確に区切っている点が重要です。サーバ側の高保証主張と、first-party control-plane UI としての Admin Console を混同しない運用を取っています。`
-
-### Objection 5: 「まずは普通の OSS サーバで十分では」
+### Objection 3: "Won't it still be difficult to operate?"
 
 Response:
 
-- `PoC や小規模用途ならそうした判断もあります。ただ、長期運用や監査、鍵運用、例外設定管理まで含めて考える場合には、最初からその前提で設計された基盤の価値が出ます。`
+- `We aim for the opposite. Aegaeon's value is in making change management, audits, key operations, and exception handling more resilient in operation.`
+
+### Objection 4: "Isn't the assurance weak if it does not cover the UI?"
+
+Response:
+
+- `The key point is that we clearly define the scope of the current claim. We keep the server-side high-assurance claim distinct from Admin Console as a first-party control-plane UI.`
+
+### Objection 5: "Wouldn't an ordinary OSS server be enough to start with?"
+
+Response:
+
+- `That can be a reasonable choice for a PoC or small-scale use. When you also consider long-term operations, audits, key operations, and exception management, a foundation designed for those needs from the start becomes valuable.`
 
 ## Escalation path for booth staff
 
@@ -124,6 +124,6 @@ Route the conversation to a deeper owner when:
 
 ## Useful closes
 
-- `もし評価を進めるなら、ホワイトペーパーと Spec Sheet を先にご覧いただくのがおすすめです。`
-- `具体的な導入前提がおありなら、プレビュー版や PoC の相談をご案内できます。`
-- `ブースでは概要中心ですが、必要であれば技術的な背景までご説明します。`
+- `If you would like to proceed with an evaluation, we recommend starting with the whitepaper and Spec Sheet.`
+- `If you have concrete adoption requirements, we can arrange a preview or PoC discussion.`
+- `We focus on the overview at the booth, but can explain the technical background if needed.`

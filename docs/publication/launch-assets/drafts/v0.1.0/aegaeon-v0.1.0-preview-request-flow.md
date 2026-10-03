@@ -20,85 +20,85 @@ This draft covers the public-facing evaluation / preview inquiry path for the fi
 
 ## Form title
 
-Aegaeon プレビュー版 / PoC 相談申し込み
+Aegaeon Preview / PoC Consultation Request
 
 ## Intro copy
 
-Aegaeon の評価や PoC をご検討中の方向けに、プレビュー版のご案内と個別相談を受け付けています。
-導入予定のユースケースや現在の課題を共有いただければ、適した進め方をご案内します。
+If you are considering an Aegaeon evaluation or PoC, we welcome requests for preview information and individual consultations.
+Share your intended use case and current challenges so we can suggest a suitable way forward.
 
 ## Required fields
 
-- 氏名
-- 会社名 / 組織名
-- メールアドレス
-- 役割
-  - 経営 / 事業責任者
-  - プロダクト責任者
-  - エンジニアリング責任者
-  - セキュリティ / IT 管理者
-  - 開発担当
-- お問い合わせ種別
-  - プレビュー版を試したい
-  - PoC を相談したい
-  - 導入を前提に相談したい
-  - パートナー / 協業について相談したい
-- 想定ユースケース
-- 現在の課題
+- Full name
+- Company / organization name
+- Email address
+- Role
+  - Executive / business leader
+  - Product leader
+  - Engineering leader
+  - Security / IT administrator
+  - Developer
+- Inquiry type
+  - I would like to try the preview
+  - I would like to discuss a PoC
+  - I would like to discuss adoption
+  - I would like to discuss a partnership / collaboration
+- Intended use case
+- Current challenges
 
 ## Optional fields
 
-- 想定導入時期
-- 対象ユーザー数 / テナント数
-- 必要な要件
+- Expected adoption timeframe
+- Number of users / tenants in scope
+- Requirements
   - Self-hosted
-  - 監査
-  - 鍵運用
+  - Audits
+  - Key operations
   - Federation
-  - 教育用途
-  - エンタープライズ統合
-- 補足資料 / URL
+  - Educational use
+  - Enterprise integration
+- Supporting materials / URLs
 
 ## Consent block
 
-- プライバシーポリシーへの同意
-- 評価・導入相談に関する連絡を受け取ることへの同意
+- Consent to the privacy policy
+- Consent to receive communications about evaluation and adoption consultations
 
 ## Internal routing suggestion
 
-- `導入を前提に相談したい`:
+- `I would like to discuss adoption`:
   - highest priority
-- `PoC を相談したい`:
+- `I would like to discuss a PoC`:
   - technical discovery route
-- `プレビュー版を試したい`:
+- `I would like to try the preview`:
   - nurture / self-serve route
-- `パートナー / 協業`:
+- `Partnership / collaboration`:
   - business development route
 
 ## Thank-you page copy
 
-お申し込みありがとうございます。
-内容を確認のうえ、担当者よりご連絡します。
-あわせて、ホワイトペーパーと Spec Sheet もご参照ください。
+Thank you for your request.
+A team member will contact you after reviewing the details.
+Please also take a look at the whitepaper and Spec Sheet.
 
 ## Auto-reply email draft
 
 ### Subject
 
-Aegaeon へのお問い合わせを受け付けました
+We have received your Aegaeon inquiry
 
 ### Body
 
-このたびは Aegaeon へお問い合わせいただきありがとうございます。
-お送りいただいた内容を確認のうえ、担当者よりご連絡します。
+Thank you for contacting Aegaeon.
+A team member will contact you after reviewing your submission.
 
-先にご確認いただける資料:
+Materials to review in the meantime:
 
-- ホワイトペーパー
+- Whitepaper
 - Spec Sheet
-- GitHub リポジトリ
+- GitHub repository
 
-※ ご相談内容によっては返信まで数営業日いただく場合があります。
+Note: Depending on your inquiry, a reply may take several business days.
 
 ## Operational notes
 
