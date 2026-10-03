@@ -862,6 +862,110 @@ class DevelopmentToolsTests(unittest.TestCase):
             with pytest.raises(ValueError, match=r"version|lifecycle"):
                 tools.installed_graph(self.root, locked)
 
+    def installed_name_fixture(self, actual, *, path="node_modules/tool"):
+        package_dir = self.root / path
+        package_dir.mkdir(parents=True, exist_ok=True)
+        (package_dir / "package.json").write_text(json.dumps(actual))
+        locked = {
+            "packages": {
+                "": {},
+                path: {"version": "1.0.0", "integrity": "fixture-integrity"},
+            }
+        }
+        (self.root / "node_modules/.package-lock.json").write_text(
+            json.dumps({"packages": {path: locked["packages"][path]}})
+        )
+        return locked
+
+    def test_installed_manifest_missing_empty_and_nonstring_names_raise_value_error(self):
+        candidates = [{"version": "1.0.0"}]
+        candidates.extend(
+            {"name": value, "version": "1.0.0"} for value in (None, False, 7, [], {}, "", " \t\n")
+        )
+        for actual in candidates:
+            with self.subTest(manifest=actual):
+                locked = self.installed_name_fixture(actual)
+                with pytest.raises(ValueError, match="Malformed installed package name"):
+                    tools.installed_graph(self.root, locked)
+
+    def test_installed_manifest_malformed_json_and_objects_raise_value_error(self):
+        locked = self.installed_name_fixture({"name": "tool", "version": "1.0.0"})
+        manifest = self.root / "node_modules/tool/package.json"
+        for content in ("{", "[]", "null", "7"):
+            with self.subTest(content=content):
+                manifest.write_text(content)
+                with pytest.raises(ValueError, match=r"."):
+                    tools.installed_graph(self.root, locked)
+
+    def test_installed_manifest_valid_names_preserve_graph_and_alias_identity(self):
+        actual = {
+            "name": "tool",
+            "version": "1.0.0",
+            "peerDependencies": {"optional": "^1.0.0"},
+            "peerDependenciesMeta": {"optional": {"optional": True}},
+        }
+        locked = self.installed_name_fixture(actual)
+        installed = tools.installed_graph(self.root, locked)
+        row = installed["node_modules/tool"]
+        self.assertEqual(row["name"], "tool")
+        self.assertEqual(row["version"], locked["packages"]["node_modules/tool"]["version"])
+        self.assertEqual(row["locked_integrity"], "fixture-integrity")
+        self.assertEqual(
+            row["manifest_sha256"],
+            tools.sha((self.root / "node_modules/tool/package.json").read_bytes()),
+        )
+        omissions = tools.graph_contract(
+            {
+                "name": "aegaeon",
+                "version": "0.0.0",
+                "dependencies": {"tool": {"version": "1.0.0", "dependencies": {"optional": {}}}},
+            },
+            {"name": "aegaeon", "devDependencies": {"tool": "1.0.0"}},
+            installed,
+        )
+        self.assertEqual(omissions[0]["parent"], "tool")
+        shutil.rmtree(self.root / "node_modules")
+        actual = {"name": "@scope/tool", "version": "1.0.0"}
+        locked = self.installed_name_fixture(actual, path="node_modules/alias")
+        self.assertEqual(
+            tools.installed_graph(self.root, locked)["node_modules/alias"]["name"],
+            "@scope/tool",
+        )
+
+    def test_installed_manifest_invalid_names_write_failed_main_receipts(self):
+        for index, actual in enumerate([{"version": "1.0.0"}, {"name": [], "version": "1.0.0"}]):
+            locked = self.installed_name_fixture(actual)
+            output = self.root / f"failed-evidence-{index}"
+
+            def controlled_snapshot(_root, destination):
+                destination.mkdir()
+                shutil.copytree(self.root / "node_modules", destination / "node_modules")
+                return {}
+
+            with (
+                patch.object(tools, "snapshot", side_effect=controlled_snapshot),
+                patch.object(tools, "package_contract", return_value=({"name": "aegaeon"}, locked)),
+                patch.object(tools, "bootstrap_npm", return_value=(self.root / "npm-cli.js", {})),
+                patch.object(tools, "tool_identity", return_value={}),
+                patch.object(tools.Commands, "run", return_value="{}"),
+                patch.object(tools, "consumers") as consumers,
+                patch.object(
+                    tools.shutil, "which", side_effect=lambda name: f"/nix/store/fixture/{name}"
+                ),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["validate-tools", "--root", str(self.root), "--output", str(output)],
+                ),
+            ):
+                result = tools.main()
+            self.assertEqual(result, 1)
+            consumers.assert_not_called()
+            receipt = json.loads((output / "summary.json").read_text())
+            self.assertEqual(receipt["status"], "failed")
+            self.assertIn("Malformed installed package name", receipt["error"])
+            self.assertEqual(receipt["runner_sha256"], tools.sha(Path(tools.__file__).read_bytes()))
+
     def test_inherited_npm_and_node_configuration_removed(self):
         with patch.dict(
             os.environ,

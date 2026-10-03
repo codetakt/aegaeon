@@ -382,6 +382,11 @@ def installed_graph(source: Path, lock: dict[str, Any]) -> dict[str, dict[str, A
             )
             raw = manifest.read_bytes()
             actual = mapping(json.loads(raw), "installed manifest")
+            name = actual.get("name")
+            require(
+                isinstance(name, str) and bool(name.strip()),
+                f"Malformed installed package name: {path}",
+            )
             require(
                 not (set(mapping(actual.get("scripts", {}), "installed scripts")) & INSTALL_HOOKS),
                 f"Installed package requires lifecycle execution: {path}",
@@ -391,7 +396,7 @@ def installed_graph(source: Path, lock: dict[str, Any]) -> dict[str, dict[str, A
                 f"Installed version differs from lock: {path}",
             )
             result[path] = {
-                "name": actual["name"],
+                "name": name,
                 "version": actual["version"],
                 "manifest_sha256": sha(raw),
                 "locked_integrity": entry["integrity"],
