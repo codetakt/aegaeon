@@ -43,10 +43,10 @@ jobs:
             --output "$PREVIEW_EVIDENCE/ci-before-build.json"
 
       - name: Install Determinate Nix
-        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
+        uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
 
       - name: Cache build outputs on FlakeHub
-        uses: DeterminateSystems/flakehub-cache-action@e62e272c914d4ad8e4d1587a864e9c3ad2cba9de # v3.21.9
+        uses: DeterminateSystems/flakehub-cache-action@83282a8aef353db1d659d3bacf4a28b6683de0b3 # v3.22.5
         with:
           use-gha-cache: disabled
 
@@ -128,7 +128,7 @@ jobs:
         run: echo "PREVIEW_EVIDENCE=$RUNNER_TEMP/server-preview" >> "$GITHUB_ENV"
 
       - name: Install Determinate Nix
-        uses: DeterminateSystems/determinate-nix-action@021c8a1bd3570eb21f5c20a054812b0c4d9ca614 # v3.22.3
+        uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3.22.5
 
       - name: Download the build manifest
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -137,7 +137,7 @@ jobs:
           path: ${{ env.PREVIEW_EVIDENCE }}
 
       - name: Enable authenticated CLI substitution
-        uses: DeterminateSystems/flakehub-cache-action@e62e272c914d4ad8e4d1587a864e9c3ad2cba9de # v3.21.9
+        uses: DeterminateSystems/flakehub-cache-action@83282a8aef353db1d659d3bacf4a28b6683de0b3 # v3.22.5
         with:
           use-gha-cache: disabled
 
