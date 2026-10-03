@@ -656,6 +656,7 @@ rfc_7009:
   - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   - crates/server/src/authcode/store/tests/refresh_grant_family.rs
+  - crates/server/src/authcode/store/tests/redis_publication_failure.rs
   - crates/server/src/web/token_lifecycle/tests/grant_family.rs
   ci_check: revocation-cascade
   status: verified
@@ -663,6 +664,7 @@ rfc_7009:
   notes:
   - Revoking a refresh token deactivates the associated access token (revocation_introspection_http_test).
   - "Runtime refresh grants now share independently retained versioned authority. Revocation/reuse denies every generation regardless of retainRefreshChain; optional parent policy can additionally reject rotated or missing parents. Atomic publication extends exact retention, and denial precedes bounded cleanup. Legacy dependent records require reauthorization. The cited cascade model does not establish this storage schema, retention, failure or concurrency implementation; finite tests are not a formal discharge of those obligations."
+  - "Direct issuance and sender-binding updates defer authority publication until after fallible preparation. Optional Redis ACL checks avoid denied-command residue; older engines retain final-publication ordering and indexed cleanup. These finite failure and cleanup tests do not establish whole-store rollback or adjacent publication-path failure atomicity."
 rfc_7662:
 - id: 7662-001
   section: '2'

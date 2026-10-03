@@ -5,7 +5,8 @@ use crate::authcode::types::{RefreshGrantRecord, RefreshGrantRef};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Appended envelope: three keys and eight arguments. Existing script slots stay
-/// fixed; every publisher calls commit_refresh_grant after all its preflight.
+/// fixed. Publishers can separate expiry preparation from final authority
+/// publication; the combined helper preserves adjacent callers' commit shape.
 pub(super) struct GrantCommit {
     keys: [String; 3],
     args: [String; 8],
@@ -37,11 +38,29 @@ if grant_mode ~= '0' then
     if time[1] ~= ARGV[ga+6] or tonumber(time[2]) * 1000 >= tonumber(ARGV[ga+7]) then return 'invalid' end
   end
 end
-local function commit_refresh_grant()
+-- Older engines lack this helper. Publication ordering remains the safety
+-- boundary there; a present malformed capability must never permit a write.
+local acl_check = rawget(redis, 'acl_check_cmd')
+local function acl_allows(...)
+  if acl_check == nil then return true end
+  return type(acl_check) == 'function' and acl_check(...) == true
+end
+local function refresh_grant_acl_allows()
+  return grant_mode == '0' or
+    (acl_allows('ZADD', KEYS[gk+1], ARGV[ga+4], ARGV[ga+3]) and
+     acl_allows('SET', KEYS[gk], ARGV[ga+2]))
+end
+local function prepare_refresh_grant_index()
   if grant_mode ~= '0' then
-    redis.call('SET', KEYS[gk], ARGV[ga+2])
     redis.call('ZADD', KEYS[gk+1], ARGV[ga+4], ARGV[ga+3])
   end
+end
+local function publish_refresh_grant()
+  if grant_mode ~= '0' then redis.call('SET', KEYS[gk], ARGV[ga+2]) end
+end
+local function commit_refresh_grant()
+  prepare_refresh_grant_index()
+  publish_refresh_grant()
 end
 ";
 
@@ -365,6 +384,36 @@ mod barriers {
             resume
                 .recv_timeout(std::time::Duration::from_secs(20))
                 .expect("barrier released");
+        }
+    }
+}
+
+#[cfg(test)]
+mod acl_tests {
+    #[test]
+    #[ignore = "requires AEGAEON_TEST_REDIS_URL; synthetic Lua capability values"]
+    fn redis_grant_acl_capability_absent_or_malformed() {
+        let mut conn = redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL").unwrap())
+            .unwrap()
+            .get_connection()
+            .unwrap();
+        for (capability, expected) in [("nil", "ok"), ("true", "acl_denied")] {
+            let key = format!("grant-acl-synthetic:{}", uuid::Uuid::new_v4());
+            let source = format!(
+                "local redis = {{call=redis.call, acl_check_cmd={capability}}}\n{}\n\
+                 if not acl_allows('SET', KEYS[1], 'published') then return 'acl_denied' end\n\
+                 redis.call('SET', KEYS[1], 'published'); return 'ok'",
+                super::PREPARE,
+            );
+            let result: String = redis::Script::new(&source)
+                .key(&[&key, &key, &key])
+                .arg(&["0", "", "", "", "0", "", "0", "0"])
+                .invoke(&mut conn)
+                .unwrap();
+            assert_eq!(result, expected);
+            let stored: Option<String> = redis::cmd("GET").arg(&key).query(&mut conn).unwrap();
+            assert_eq!(stored.as_deref(), (expected == "ok").then_some("published"));
+            redis::cmd("DEL").arg(&key).query::<()>(&mut conn).unwrap();
         }
     }
 }

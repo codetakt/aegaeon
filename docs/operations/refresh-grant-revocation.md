@@ -54,6 +54,23 @@ Success does not promise complete physical deletion. Authorization-code publicat
 consumes its code before irreversible token writes; a later Redis failure requires
 fresh authorization, not replay of the same code.
 
+Direct issuance publishes its initial grant authority last, or publishes the new
+access record last when using independent or existing authority. Sender-binding
+updates publish the refresh record after version and retention work. Redis
+command failures before that final write cannot activate the new tokens or
+change the binding. When available, Redis ACL checks reject denied command/key
+permissions before mutation; engines without that helper retain the same final
+publication ordering. No minimum Redis version is added by this check.
+
+Earlier writes can leave non-authoritative payloads, expiry/subject indexes or a
+version increment. Expiry indexes precede payloads, and bearer metadata retains
+the owner needed to remove an unpublished access token's subject membership.
+Expiry or subject cleanup reclaims this residue after the required permissions
+and service availability are restored. These rules do not promise transaction
+rollback, successful cleanup under permanently denied permissions, or failure
+atomicity for every authorization-code, rotation and exchange write. A final
+publication followed by a lost reply remains an uncertain outcome.
+
 ## Upgrade and inventory
 
 This is a deliberate storage compatibility change. Legacy refresh records have

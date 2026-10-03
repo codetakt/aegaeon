@@ -500,7 +500,10 @@ fn refresh_grant_code_publication_acl_failure_keeps_code_consumed() -> StoreTest
             .store_issued_authorization_code_grant(commit())
             .expect_err("SADD permission failure");
         assert!(
-            error.contains("permission") || error.contains("NOPERM"),
+            error.contains("permission")
+                || error.contains("NOPERM")
+                || error
+                    .contains("The user executing the script can't run this command or subcommand"),
             "{error}"
         );
         assert!(

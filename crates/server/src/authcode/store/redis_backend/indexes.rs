@@ -56,6 +56,19 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
+    pub(super) fn prune_missing_subject_member(
+        &self,
+        conn: &mut redis::Connection,
+        key: String,
+        token: &str,
+    ) -> Result<(), TokenStoreStorageError> {
+        redis::cmd("SREM")
+            .arg(key)
+            .arg(token)
+            .query::<()>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+    }
+
     #[cfg(test)]
     pub(super) fn index_access_cmd(&self, pipe: &mut redis::Pipeline, token: &AccessToken) {
         pipe.cmd("SADD")

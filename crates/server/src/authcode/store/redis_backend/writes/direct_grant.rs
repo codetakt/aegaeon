@@ -28,20 +28,40 @@ for _, i in ipairs({5,6,7,8,9,10,11}) do
     if actual ~= 'none' and actual ~= expected then return 'index_type' end
   end
 end
-commit_refresh_grant()
-redis.call('SET', KEYS[2], ARGV[2])
-redis.call('SET', KEYS[3], ARGV[3])
-redis.call('SADD', KEYS[6], ARGV[5])
-redis.call('SADD', KEYS[7], ARGV[5])
+if not refresh_grant_acl_allows() or
+   not acl_allows('INCR', KEYS[1]) or
+   not acl_allows('SET', KEYS[2], ARGV[2]) or
+   not acl_allows('SET', KEYS[3], ARGV[3]) or
+   not acl_allows('SADD', KEYS[6], ARGV[5]) or
+   not acl_allows('SADD', KEYS[7], ARGV[5]) or
+   not acl_allows('ZADD', KEYS[9], ARGV[7], ARGV[5]) or
+   not acl_allows('ZADD', KEYS[10], ARGV[8], ARGV[5]) then return 'acl_denied' end
+if ARGV[1] ~= '0' and not acl_allows('SET', KEYS[5], ARGV[10]) then return 'acl_denied' end
+if ARGV[1] == '1' and
+   (not acl_allows('SET', KEYS[4], ARGV[4]) or
+    not acl_allows('SADD', KEYS[8], ARGV[6]) or
+    not acl_allows('ZADD', KEYS[11], ARGV[9], ARGV[6])) then return 'acl_denied' end
+
+-- Index each payload before storing it. Metadata retains the owner of an
+-- unpublished access token so expiry/subject cleanup can remove its membership.
+redis.call('INCR', KEYS[1])
+prepare_refresh_grant_index()
 redis.call('ZADD', KEYS[9], ARGV[7], ARGV[5])
 redis.call('ZADD', KEYS[10], ARGV[8], ARGV[5])
-if ARGV[1] ~= '0' then redis.call('SET', KEYS[5], ARGV[10]) end
+redis.call('SET', KEYS[3], ARGV[3])
+redis.call('SADD', KEYS[7], ARGV[5])
+if ARGV[1] == '1' then redis.call('SET', KEYS[2], ARGV[2]) end
+redis.call('SADD', KEYS[6], ARGV[5])
 if ARGV[1] == '1' then
+  redis.call('ZADD', KEYS[11], ARGV[9], ARGV[6])
   redis.call('SET', KEYS[4], ARGV[4])
   redis.call('SADD', KEYS[8], ARGV[6])
-  redis.call('ZADD', KEYS[11], ARGV[9], ARGV[6])
 end
-redis.call('INCR', KEYS[1])
+if ARGV[1] ~= '0' then redis.call('SET', KEYS[5], ARGV[10]) end
+-- An initial grant gates both new tokens. An existing grant cannot gate a new
+-- descendant, so independent/reminted access is itself published last.
+publish_refresh_grant()
+if ARGV[1] ~= '1' then redis.call('SET', KEYS[2], ARGV[2]) end
 return 'ok'
 ";
 

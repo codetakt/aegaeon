@@ -114,6 +114,11 @@ impl RedisTokenStoreBackend {
                     }
                     Some(_) => {}
                     None => {
+                        self.prune_missing_subject_member(
+                            conn,
+                            self.keyspace.subject_bearer_key(subject),
+                            &token,
+                        )?;
                         mutation.delete_bearer_token(token);
                     }
                 }
@@ -166,6 +171,11 @@ impl RedisTokenStoreBackend {
                     }
                     Some(_) => {}
                     None => {
+                        self.prune_missing_subject_member(
+                            conn,
+                            self.keyspace.subject_refresh_key(subject),
+                            &token,
+                        )?;
                         mutation.delete_refresh_token(token);
                     }
                 }

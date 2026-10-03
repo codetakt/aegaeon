@@ -36,8 +36,17 @@ impl RedisTokenStoreBackend {
             .delete_bearer_tokens
             .iter()
             .map(|token| {
-                Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))
-                    .map(|record| (token.clone(), record))
+                let record =
+                    Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?;
+                if record.as_ref().is_some_and(|meta| meta.token_id != *token) {
+                    return Err(TokenStoreStorageError::InvariantViolation(
+                        "bearer metadata token identity mismatch during cleanup".into(),
+                    ));
+                }
+                let access_missing = record.is_some()
+                    && Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
+                        .is_none();
+                Ok((token.clone(), record, access_missing))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -63,8 +72,21 @@ impl RedisTokenStoreBackend {
                 .arg(self.keyspace.refresh_key(token))
                 .ignore();
             self.deindex_refresh_cmd(&mut pipe, token, record.as_ref());
+            if record.is_none() {
+                pipe.cmd("DEL")
+                    .arg(self.keyspace.refresh_children_key(token))
+                    .ignore();
+            }
         }
-        for (token, record) in &bearer_records {
+        for (token, record, access_missing) in &bearer_records {
+            if let Some(meta) = record.as_ref().filter(|_| *access_missing) {
+                // Metadata is the owner carrier when final access publication failed.
+                // Prune before losing it; never remove an extant access membership.
+                pipe.cmd("SREM")
+                    .arg(self.keyspace.subject_access_key(&meta.user_id))
+                    .arg(token)
+                    .ignore();
+            }
             pipe.cmd("DEL")
                 .arg(self.keyspace.bearer_key(token))
                 .ignore();

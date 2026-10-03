@@ -343,9 +343,11 @@ impl RedisTokenStoreBackend {
 if redis.call('GET', KEYS[1]) ~= ARGV[1] or redis.call('EXISTS', KEYS[3]) ~= 0 then return 'invalid' end
 local time = redis.call('TIME')
 if decimal_ge(time[1], ARGV[3]) and (time[1] ~= ARGV[3] or tonumber(time[2])*1000 >= tonumber(ARGV[4])) then return 'invalid' end
-commit_refresh_grant()
-redis.call('SET', KEYS[1], ARGV[2])
+if not refresh_grant_acl_allows() or not acl_allows('INCR', KEYS[2]) or not acl_allows('SET', KEYS[1], ARGV[2]) then return 'acl_denied' end
 redis.call('INCR', KEYS[2])
+commit_refresh_grant()
+-- The binding is the final publication; earlier failure preserves its old bytes.
+redis.call('SET', KEYS[1], ARGV[2])
 return 'ok'
 ");
             let mut call = script.prepare_invoke();
