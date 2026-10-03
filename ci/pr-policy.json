@@ -20,6 +20,9 @@
       "container"
     ]
   },
+  "supplemental_lanes": {
+    "components": "pending"
+  },
   "runtime_document_paths": [
     "README.md",
     "docs/performance/README.md",

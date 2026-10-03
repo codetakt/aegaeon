@@ -13,6 +13,28 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCOPES = ("docs", "integrity", "full")
+ORIGINAL_LANES = (
+    "docs",
+    "integrity",
+    "core",
+    "lint",
+    "security",
+    "verification",
+    "compliance",
+    "kms",
+    "container",
+)
+SUPPLEMENTAL_LANES = {"components"}
+
+
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Do not allow repeated policy/result keys to silently replace an earlier value."""
+    result: dict[str, Any] = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError(f"duplicate JSON key: {name}")
+        result[name] = value
+    return result
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -20,14 +42,29 @@ def git(repo: Path, *args: str) -> bytes:
 
 
 def validate_policy(policy: dict[str, Any]) -> None:
-    if policy["version"] != 1 or set(policy["scopes"]) != set(SCOPES):
+    if not isinstance(policy, dict):
+        raise ValueError("policy must be a JSON object")  # noqa: TRY004 - invalid policy
+    scopes = policy.get("scopes")
+    if (
+        type(policy.get("version")) is not int
+        or policy["version"] != 1
+        or not isinstance(scopes, dict)
+        or set(scopes) != set(SCOPES)
+    ):
         raise ValueError("unsupported policy version or scopes")
-    scopes = policy["scopes"]
     if scopes["docs"] != ["docs"] or scopes["integrity"] != ["docs", "integrity"]:
         raise ValueError("documentation and integrity checks cannot be omitted")
-    full = scopes["full"]
-    if not {"docs", "integrity"} < set(full) or len(full) != len(set(full)):
-        raise ValueError("invalid full-check inventory")
+    if scopes["full"] != list(ORIGINAL_LANES):
+        raise ValueError("invalid original full-check inventory")
+    supplemental = policy.get("supplemental_lanes", {})
+    if not isinstance(supplemental, dict):
+        raise ValueError("malformed supplemental check inventory")  # noqa: TRY004
+    if set(supplemental) & (set(ORIGINAL_LANES) | {"plan"}):
+        raise ValueError("supplemental check inventory overlaps original checks")
+    if set(supplemental) - SUPPLEMENTAL_LANES:
+        raise ValueError("unknown supplemental check inventory")
+    if any(state not in ("pending", "required") for state in supplemental.values()):
+        raise ValueError("supplemental check state must be pending or required")
 
 
 def path_scope(path: str, policy: dict[str, Any]) -> tuple[str, str]:
@@ -117,7 +154,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     policy_bytes = args.policy.read_bytes()
-    policy = json.loads(policy_bytes)
+    policy = json.loads(policy_bytes, object_pairs_hook=unique_json_object)
     validate_policy(policy)
     try:
         plan = build_plan(args.repo, args.base, args.head, policy)
