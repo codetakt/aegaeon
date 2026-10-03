@@ -1,0 +1,50 @@
+name: Infrastructure Validation
+
+on:
+  workflow_call:
+    inputs:
+      paths-json:
+        description: JSON array of changed infra/tofu paths; empty selects all modules.
+        type: string
+        default: ""
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  infrastructure:
+    name: OpenTofu modules and template contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Nix CI
+        uses: ./.github/actions/setup-nix-ci
+      - name: Check infrastructure runner regressions
+        env:
+          PYTHONPATH: scripts/ci
+        run: |
+          nix develop .#integrity --command python3 -m unittest discover \
+            -s tests/ci -p test_infrastructure_validation.py
+      - name: Validate infrastructure inputs
+        env:
+          INFRASTRUCTURE_PATHS_JSON: ${{ inputs.paths-json }}
+        run: |
+          args=()
+          if [[ -n "$INFRASTRUCTURE_PATHS_JSON" ]]; then
+            printf '%s\n' "$INFRASTRUCTURE_PATHS_JSON" > "$RUNNER_TEMP/infrastructure-paths.json"
+            args+=(--paths-json "$RUNNER_TEMP/infrastructure-paths.json")
+          fi
+          nix shell --inputs-from . nixpkgs#opentofu nixpkgs#python3 nixpkgs#bash \
+            --command python3 scripts/ci/validate_infrastructure.py "${args[@]}"
+      - name: Preserve infrastructure diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: infrastructure-validation
+          path: artifacts/infrastructure-validation
+          if-no-files-found: error
