@@ -11,13 +11,13 @@ on:
   workflow_call:
     inputs:
       delegate-formal-checks:
-        description: Full PR validation owns formal checks in its verification workflow.
+        description: Full PR/group validation owns formal checks in its verification workflow.
         type: boolean
         default: false
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -40,6 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Nix CI
@@ -195,6 +196,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -215,6 +218,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci

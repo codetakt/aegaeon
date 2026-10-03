@@ -52,7 +52,25 @@ fn hash_backed_client_secret_authentication_enforces_expiry() -> TestResult {
         request_object_claims: None,
     };
 
-    assert!(process_par_request(&store, request(Some("db-secret"))).is_ok());
+    let response = process_par_request(&store, request(Some("db-secret")))
+        .map_err(|err| format!("valid secret should succeed: {err:?}"))?;
+    let stored = store
+        .try_consume_request(&response.request_uri)
+        .map_err(|err| format!("consume request: {err:?}"))?
+        .ok_or("stored request missing")?;
+    assert!(stored.client_secret.is_none());
+    let mut authenticated = request(None);
+    authenticated.client_authenticated = true;
+    assert!(process_par_request(&store, authenticated.clone()).is_ok());
+    authenticated.client_secret = Some("wrong".into());
+    assert_eq!(
+        test_err(
+            process_par_request(&store, authenticated),
+            "wrong secret must still fail"
+        )?
+        .error,
+        "invalid_client"
+    );
 
     let wrong_secret = test_err(
         process_par_request(&store, request(Some("wrong"))),
