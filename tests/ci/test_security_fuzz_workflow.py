@@ -4,17 +4,47 @@
 # ruff: noqa: PT009
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 
+import test_security_fuzz
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class SecurityFuzzWorkflowEnvironmentTests(test_security_fuzz.SecurityFuzzFixture):
+    def test_workflow_environment_archives_nonempty_successful_corpus(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+        environment = {name: str(value) for name, value in workflow["env"].items()}
+        result = self.run_suite(CI="true", **environment)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary()
+        self.assertEqual(summary["status"], "passed")
+        self.assertEqual(summary["execution"]["coverage"], "full")
+        directory = self.artifacts / "fuzz"
+        archive_path = directory / summary["corpus_archive"]
+        with tarfile.open(archive_path) as archive:
+            for target in test_security_fuzz.TARGETS:
+                self.assertEqual(archive.extractfile(f"corpus/{target}/seed").read(), b"input")
+        self.assertEqual(
+            archive_path.read_bytes(),
+            (Path(self.env["SECURITY_HISTORY_DIR"]) / archive_path.name).read_bytes(),
+        )
+        marker = json.loads((directory / "collection.ok").read_text())
+        self.assertEqual(marker["run_id"], summary["execution"]["run_id"])
+        self.assertEqual(
+            marker["summary_sha256"],
+            hashlib.sha256((directory / marker["summary_file"]).read_bytes()).hexdigest(),
+        )
+        self.assertFalse((self.root / "fuzz/corpus").exists())
 
 
 class SecurityFuzzWorkflowTests(unittest.TestCase):
@@ -54,10 +84,11 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
     def step(self, name):
         return next(step for step in self.steps if step.get("name") == name)
 
-    def execute(self, name, stage="fuzz"):
+    def execute(self, name, stage="fuzz", *, outcome="failure"):
         body = self.step(name)["run"]
         body = body.replace("${{ matrix.stage }}", stage)
         body = body.replace("${{ job.status }}", "failure")
+        body = body.replace("${{ steps.run_security_stage.outcome }}", outcome)
         return subprocess.run(  # noqa: S603
             [self.bash, "-e", "-o", "pipefail", "-c", body],
             cwd=self.root,
@@ -78,7 +109,7 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
 
     def test_missing_collection_receipt_preserves_corpus_and_crashes(self):
         paths = self.seed()
-        process = self.execute("Cleanup transient outputs")
+        process = self.execute("Cleanup transient outputs", outcome="success")
         self.assertEqual(process.returncode, 0, process.stderr)
         for path in paths[:2]:
             self.assertFalse((self.root / path).exists())
@@ -92,11 +123,34 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         receipt = self.root / "artifacts/security/latest/fuzz/collection.ok"
         receipt.parent.mkdir(parents=True)
         receipt.write_text("checked by required collector")
-        process = self.execute("Cleanup transient outputs")
+        process = self.execute("Cleanup transient outputs", outcome="success")
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertTrue(receipt.is_file())
         for path in paths:
             self.assertFalse((self.root / path).exists())
+
+    def test_failed_cancelled_and_skipped_stages_preserve_raw_inputs_with_stale_receipt(self):
+        paths = self.seed()
+        receipt = self.root / "artifacts/security/latest/fuzz/collection.ok"
+        receipt.parent.mkdir(parents=True)
+        receipt.write_text("stale receipt from an earlier stage invocation")
+        for outcome in ("failure", "cancelled", "skipped"):
+            with self.subTest(outcome=outcome):
+                process = self.execute("Cleanup transient outputs", outcome=outcome)
+                self.assertEqual(process.returncode, 0, process.stderr)
+                for path in paths[:2]:
+                    self.assertFalse((self.root / path).exists())
+                for path in paths[2:]:
+                    self.assertEqual(
+                        (self.root / path / "input").read_text(),
+                        "preserve incomplete evidence",
+                    )
+                self.assertEqual(
+                    receipt.read_text(), "stale receipt from an earlier stage invocation"
+                )
+
+    def test_cleanup_outcome_refers_to_identified_security_step(self):
+        self.assertEqual(self.step("Run security stage")["id"], "run_security_stage")
 
     def test_other_stage_cleanup_keeps_existing_policy(self):
         paths = self.seed()

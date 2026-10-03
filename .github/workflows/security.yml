@@ -10,7 +10,7 @@ on:
 env:
   NIX_CONFIG: experimental-features = nix-command flakes
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CORPUS_ARCHIVE_KEEP: 0
+  CORPUS_ARCHIVE_KEEP: 1
   CORPUS_HISTORY_KEEP: 100
 
 jobs:
@@ -81,6 +81,7 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run security stage
+        id: run_security_stage
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
@@ -93,7 +94,10 @@ jobs:
         if: always()
         run: |
           rm -rf target fuzz/target || true
-          if [ "${{ matrix.stage }}" != "fuzz" ] || [ -f artifacts/security/latest/fuzz/collection.ok ]; then
+          if [ "${{ matrix.stage }}" != "fuzz" ] || {
+            [ "${{ steps.run_security_stage.outcome }}" = "success" ] &&
+            [ -f artifacts/security/latest/fuzz/collection.ok ]
+          }; then
             rm -rf fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
           fi
           rm -rf ~/.cache/trivy ~/.cache/grype || true

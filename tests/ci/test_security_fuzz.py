@@ -85,7 +85,7 @@ raise SystemExit(subprocess.run(sys.argv[3:], check=False).returncode)
 """
 
 
-class SecurityFuzzTests(unittest.TestCase):
+class SecurityFuzzFixture(unittest.TestCase):
     def setUp(self):
         self.temporary = self.enterContext(
             tempfile.TemporaryDirectory(prefix="security-fuzz-test-")
@@ -197,6 +197,74 @@ class SecurityFuzzTests(unittest.TestCase):
     def calls(self):
         path = self.root / "calls.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def seed_stale_collection(self):
+        marker = self.artifacts / "fuzz/collection.ok"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('{"run_id":"previous-run","summary_file":"collected-summary.json"}')
+        raw = {}
+        for name in ("corpus", "artifacts", "corpus_archive"):
+            path = self.root / "fuzz" / name / TARGETS[0] / "previous-input"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"preserve original " + name.encode())
+            raw[path] = path.read_bytes()
+        return marker, raw
+
+
+class SecurityFuzzTests(SecurityFuzzFixture):
+    def test_stale_receipt_removal_failure_preserves_raw_evidence_without_starting_stage(self):
+        marker, raw = self.seed_stale_collection()
+        stale_marker = marker.read_bytes()
+        actual_rm = shutil.which("rm")
+        self.install(
+            "rm",
+            "import os,sys\n"
+            "if any(arg.endswith('/collection.ok') for arg in sys.argv[1:]):\n"
+            " raise SystemExit(31)\n"
+            f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+        self.assertEqual(marker.read_bytes(), stale_marker)
+        self.assertNotIn(">>> cargo fuzz smoke", result.stdout + result.stderr)
+        self.assertEqual(self.calls(), [])
+
+    def test_stale_receipt_invalidated_before_stage_log_entry_failure(self):
+        marker, raw = self.seed_stale_collection()
+        actual_tee = shutil.which("tee")
+        self.install(
+            "tee",
+            "import subprocess,sys\n"
+            "data=sys.stdin.buffer.read()\n"
+            "if b'>>> cargo fuzz smoke' in data:\n raise SystemExit(32)\n"
+            f"raise SystemExit(subprocess.run([{actual_tee!r}] + sys.argv[1:], "
+            "input=data).returncode)",
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_stale_receipt_invalidated_before_fuzz_directory_setup_failure(self):
+        marker, raw = self.seed_stale_collection()
+        actual_mkdir = shutil.which("mkdir")
+        failed_directory = str(self.artifacts / "fuzz")
+        self.install(
+            "mkdir",
+            "import os,sys\n"
+            f"if {failed_directory!r} in sys.argv[1:]:\n raise SystemExit(33)\n"
+            f"os.execv({actual_mkdir!r}, [{actual_mkdir!r}] + sys.argv[1:])",
+        )
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.calls(), [])
 
     def test_default_executes_exactly_seven_targets_and_records_receipts(self):
         result = self.run_suite()

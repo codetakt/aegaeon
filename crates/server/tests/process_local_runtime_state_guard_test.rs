@@ -167,6 +167,52 @@ fn fuzz_helper_gate_is_limited_to_adopted_process_local_constructors() {
 }
 
 #[test]
+fn actual_fuzz_process_local_constructor_gates_are_preserved() -> TestResult {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let signature = "pub fn new_process_local_for_tests() -> Self {";
+    for relative_path in ["src/par.rs", "src/middleware/dpop.rs"] {
+        let path = manifest_dir.join(relative_path);
+        let source = fs::read_to_string(&path).test_context(&format!(
+            "constructor source should be readable: {}",
+            path.display()
+        ))?;
+        let lines = source.lines().collect::<Vec<_>>();
+        let matches = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.trim() == signature)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            matches.len(),
+            1,
+            "{relative_path} must retain exactly one process-local fuzz constructor"
+        );
+        let attributes = lines[..matches[0]]
+            .iter()
+            .rev()
+            .map(|line| line.trim())
+            .take_while(|line| line.starts_with("#[") || line.starts_with("///") || line.is_empty())
+            .collect::<Vec<_>>();
+        let cfg_attributes = attributes
+            .iter()
+            .copied()
+            .filter(|line| line.starts_with("#[cfg(") || line.starts_with("#[cfg_attr("))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            cfg_attributes,
+            [FUZZ_HELPER_API_CFG],
+            "{relative_path} constructor must retain its exact test-or-fuzzing gate"
+        );
+        assert!(
+            has_process_local_helper_gate(&path, signature, attributes.iter().copied()),
+            "{relative_path} real constructor gate must satisfy the limited-path guard"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn standalone_refresh_mutation_helpers_are_not_exposed_in_release_builds() -> TestResult {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let checks = [

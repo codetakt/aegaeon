@@ -545,6 +545,11 @@ run_cargo_vet_stage() {
 
 run_fuzz_stage() {
 	local result=0 cleanup_result=0 dir="$ARTIFACT_BASE/fuzz"
+	# Invalidate the previous receipt before logging or child setup can fail.
+	if ! rm -f "$dir/collection.ok"; then
+		echo "[security] cannot invalidate previous fuzz receipt; retaining transient outputs" >&2
+		return 1
+	fi
 	if run_step "cargo fuzz smoke" run_fuzz; then
 		result=0
 	else
