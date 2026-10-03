@@ -29,7 +29,7 @@ CARGO = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
 root = pathlib.Path(os.environ['FIXTURE_ROOT'])
-with (root / 'calls.jsonl').open('a') as out:
+with (root.parent / 'calls.jsonl').open('a') as out:
     out.write(json.dumps(args) + '\n')
 if args == ['--version']:
     print('cargo fixture')
@@ -53,6 +53,9 @@ if phase == 'build':
         binary.chmod(0o755)
     print('build complete')
 else:
+    if mode == 'transitive-source-change':
+        changed = root / 'crates/server/src/web/par_endpoint.rs'
+        changed.write_text('// changed during fuzz execution\n')
     if mode == 'malformed-evidence':
         pathlib.Path(os.environ['SECURITY_ARTIFACT_DIR'], 'fuzz/execution.json').write_text('{}')
     if mode == 'blocked-summary':
@@ -135,6 +138,30 @@ class SecurityFuzzFixture(unittest.TestCase):
             destination = self.root / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, destination)
+        (self.root / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["crates/server", "crates/ffi"]\n'
+            'exclude = ["crates/kani-harness"]\n'
+        )
+        for package in ("server", "ffi"):
+            local = self.root / "crates" / package
+            (local / "src").mkdir(parents=True)
+            (local / "Cargo.toml").write_text(f'[package]\nname = "{package}"\nversion = "0.0.0"\n')
+            (local / "src/lib.rs").write_text("// local implementation fixture\n")
+        kani = self.root / "crates/kani-harness"
+        kani.mkdir()
+        (kani / "Cargo.toml").write_text('[package]\nname="fixture-kani"\nversion="0.0.0"\n')
+        (kani / "kani").symlink_to("result/bin/cargo-kani")
+        (self.root / ".cargo").mkdir()
+        (self.root / ".cargo/config.toml").write_text("# local build configuration\n")
+        (self.root / "fuzz/Cargo.toml").write_text(
+            '[package]\nname = "fixture-fuzz"\nversion = "0.0.0"\n'
+            '[dependencies]\nserver = { path = "../crates/server" }\n'
+            'ffi = { path = "../crates/ffi" }\n'
+            + "".join(
+                f'[[bin]]\nname = "{target}"\npath = "fuzz_targets/{target}.rs"\n'
+                for target in TARGETS
+            )
+        )
         # Other stages are controlled independently when checking aggregate dispatch.
         geiger = self.root / "scripts/security/run_geiger.sh"
         geiger.write_text("#!/usr/bin/env bash\nexit 0\n")
@@ -198,7 +225,7 @@ class SecurityFuzzFixture(unittest.TestCase):
         return json.loads((self.artifacts / "fuzz/run_summary.json").read_text())
 
     def calls(self):
-        path = self.root / "calls.jsonl"
+        path = self.root.parent / "calls.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def seed_stale_collection(self):
@@ -299,7 +326,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "import os,pathlib,shutil,sys\n"
             "if 'fuzz/corpus' in sys.argv[1:]:\n"
             " root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
-            " (root / 'cleanup-called').write_text('called')\n"
+            " (root.parent / 'cleanup-called').write_text('called')\n"
             + "\n".join(" " + line for line in code.splitlines())
             + "\n"
             + f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
@@ -717,7 +744,7 @@ write_json = silent_corruption
                 _, raw = self.seed_stale_collection()
                 result = self.run_suite(aggregate=aggregate)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertTrue((self.root / "cleanup-called").exists())
+                self.assertTrue((self.root.parent / "cleanup-called").exists())
                 self.assert_restored(raw, "removal", 31)
 
     def test_backup_copy_failure_skips_removal_and_keeps_partial_copy(self):
@@ -736,7 +763,7 @@ shutil.copytree = fail_copy
         )
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertFalse((self.root / "cleanup-called").exists())
+        self.assertFalse((self.root.parent / "cleanup-called").exists())
         for path, content in raw.items():
             self.assertEqual(path.read_bytes(), content)
         recovery = self.artifacts / "fuzz/cleanup-recovery" / self.summary()["execution"]["run_id"]
@@ -771,7 +798,7 @@ shutil.copytree = change_after_copy
                     else "source identity changed before cleanup"
                 )
                 self.assertIn(expected, result.stderr)
-                self.assertFalse((self.root / "cleanup-called").exists())
+                self.assertFalse((self.root.parent / "cleanup-called").exists())
                 for path, content in raw.items():
                     self.assertEqual(path.read_bytes(), content)
                 recovery = (
@@ -866,7 +893,7 @@ write_json = fail_evidence
         self.install_cleanup_hook("pass")
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertFalse((self.root / "cleanup-called").exists())
+        self.assertFalse((self.root.parent / "cleanup-called").exists())
         self.assertTrue((self.root / "fuzz/artifacts").is_symlink())
         self.assertEqual(marker.read_bytes(), b"external fixture")
         self.assertIn("owned raw directory roots", result.stderr)
@@ -1152,7 +1179,7 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                 result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("missing" if missing else "differs", result.stderr)
-                self.assertFalse((self.root / "cleanup-called").exists())
+                self.assertFalse((self.root.parent / "cleanup-called").exists())
                 self.assert_restored(raw, "removal", 1)
 
     def test_missing_cleanup_command_blocks_and_keeps_raw_recovery(self):
@@ -1267,3 +1294,426 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
+    def helper_python(self, code, **environment):
+        return subprocess.run(  # noqa: S603 - isolated controlled helper and test code
+            [sys.executable, "-c", code, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
+            cwd=self.root,
+            env={**self.env, **environment},
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+    def test_exclusive_receipt_temporary_files_ignore_fixed_symlinks(self):
+        directory = self.artifacts / "fuzz"
+        directory.mkdir(parents=True)
+        external = Path(self.temporary) / "external-input"
+        external.write_bytes(b"preserve external input")
+        for filename in ("execution.json", "run_summary.json"):
+            temporary = directory / Path(filename).with_suffix(".tmp")
+            temporary.symlink_to(external)
+            result = self.helper_python(
+                "import pathlib,runpy,sys\n"
+                "helper=runpy.run_path(sys.argv[1])\n"
+                f"destination=pathlib.Path({str(directory / filename)!r})\n"
+                "helper['write_json'](destination, {'new': True})\n"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(external.read_bytes(), b"preserve external input")
+            self.assertTrue(temporary.is_symlink())
+            self.assertEqual(json.loads((directory / filename).read_text()), {"new": True})
+            self.assertEqual(list(directory.glob("." + filename + ".*.tmp")), [])
+
+    def test_failed_receipt_replace_cleans_only_its_exclusive_temporary(self):
+        directory = self.artifacts / "fuzz"
+        directory.mkdir(parents=True)
+        destination = directory / "execution.json"
+        destination.write_text('{"old": true}')
+        unrelated = directory / "execution.tmp"
+        unrelated.write_bytes(b"unrelated temporary input")
+        result = self.helper_python(
+            "import pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+            "helper=runpy.run_path(sys.argv[1])\n"
+            "with patch.object(pathlib.Path, 'replace', side_effect=OSError('blocked replace')):\n"
+            f" try: helper['write_json'](pathlib.Path({str(destination)!r}), {{'new': True}})\n"
+            " except OSError: pass\n"
+            " else: raise RuntimeError('replace unexpectedly passed')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(destination.read_text()), {"old": True})
+        self.assertEqual(unrelated.read_bytes(), b"unrelated temporary input")
+        self.assertEqual(list(directory.glob(".execution.json.*.tmp")), [])
+
+    def test_git_identity_overrides_fail_before_discovery_or_receipt_removal(self):
+        marker, raw = self.seed_stale_results()
+        evidence = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        external = Path(self.temporary) / "external-git-input"
+        external.mkdir()
+        owned = external / "owned"
+        owned.write_bytes(b"preserve effective Git input")
+        names = (
+            "GIT_DIR",
+            "GIT_COMMON_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CEILING_DIRECTORIES",
+            "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+            "GIT_NAMESPACE",
+            "GIT_SHALLOW_FILE",
+            "GIT_REPLACE_REF_BASE",
+            "GIT_NO_REPLACE_OBJECTS",
+            "GIT_CONFIG",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_CONFIG_COUNT",
+            "GIT_CONFIG_SYSTEM",
+            "GIT_CONFIG_GLOBAL",
+            "GIT_CONFIG_NOSYSTEM",
+            "GIT_CONFIG_KEY_0",
+            "GIT_CONFIG_VALUE_0",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                result = self.run_suite(**{name: str(external)})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("inherited Git identity overrides", result.stderr)
+                self.assertEqual(self.calls(), [])
+                for path, contents in {**evidence, **raw}.items():
+                    self.assertEqual(path.read_bytes(), contents)
+                self.assertEqual(owned.read_bytes(), b"preserve effective Git input")
+                direct = self.helper_python(
+                    "import pathlib,runpy,sys\n"
+                    "helper=runpy.run_path(sys.argv[1])\n"
+                    "helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n",
+                    **{name: str(external)},
+                )
+                self.assertNotEqual(direct.returncode, 0)
+                self.assertIn("inherited Git identity overrides", direct.stderr)
+
+    def test_dirty_and_ignored_transitive_inputs_and_inventory_changes_are_bound(self):
+        inputs = (
+            "crates/server/src/web/par_endpoint.rs",
+            "crates/ffi/build.rs",
+            "crates/ffi/src/new_ignored.rs",
+            ".cargo/config.toml",
+            "generated/local/header.h",
+            "c/local_bridge.c",
+            "include/local_bridge.h",
+            "scripts/extraction/local_generator.py",
+            "tests/fixtures/local/input.json",
+        )
+        for name in inputs:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("original local build/source input\n")
+        (self.root / ".gitignore").write_text("new_ignored.rs\n")
+        self.install(
+            "git",
+            "import os,sys\n"
+            "print(os.environ['FIXTURE_ROOT'] if '--show-toplevel' in sys.argv else "
+            "'a7a0274fe1783a6d9055350c65ec52c765709739')\n",
+        )
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        inventory = self.summary()["execution"]["source"]["files"]
+        for name in inputs:
+            self.assertEqual(
+                inventory[name]["sha256"],
+                hashlib.sha256((self.root / name).read_bytes()).hexdigest(),
+            )
+        receipt = self.artifacts / "fuzz/execution.json"
+        baseline = json.loads(receipt.read_text())
+        mutations = (
+            "(root / 'crates/server/src/web/par_endpoint.rs').write_text('dirty PAR change')",
+            "(root / 'crates/ffi/src/added.rs').write_text('new ignored implementation')",
+            "(root / 'include/local_bridge.h').unlink()",
+            "(root / 'crates/ffi/build.rs').chmod(0o755)",
+            "(root / 'crates/ffi/build.rs').chmod(0o4755)",
+            "(root / 'crates/ffi/src/new-empty-import-directory').mkdir()",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                result = self.helper_python(
+                    "import json,pathlib,runpy,sys\nhelper=runpy.run_path(sys.argv[1])\n"
+                    "root=helper['ROOT']\n"
+                    f"before=helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n{mutation}\n"
+                    "after=helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n"
+                    "if before == after: raise RuntimeError('source change not detected')\n"
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("source change not detected", result.stderr)
+                self.assertEqual(
+                    json.loads(receipt.read_text())["source"]["commit"]["output"].strip(),
+                    baseline["source"]["commit"]["output"].strip(),
+                )
+
+    def test_transitive_changes_during_backup_block_destructive_cleanup(self):
+        for mutation in (
+            "(ROOT / 'crates/server/src/lib.rs').write_text('dirty server implementation')",
+            "(ROOT / 'crates/ffi/src/ignored-new.rs').write_text('new ignored implementation')",
+            "(ROOT / 'crates/ffi/src/lib.rs').unlink(missing_ok=True)",
+        ):
+            with self.subTest(mutation=mutation):
+                _, raw = self.seed_stale_collection()
+                self.install_cleanup_hook("pass")
+                self.install_helper_hooks(
+                    {
+                        "--backup-cleanup": "original_copy = shutil.copytree\n"
+                        "def mutate_after_copy(source, destination, *args, **kwargs):\n"
+                        " result = original_copy(source, destination, *args, **kwargs)\n"
+                        f" {mutation}\n"
+                        " return result\n"
+                        "shutil.copytree = mutate_after_copy\n"
+                    }
+                )
+                result = self.run_suite()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("source identity changed before cleanup", result.stderr)
+                self.assertFalse((self.root.parent / "cleanup-called").exists())
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
+                self.assertTrue(Path(self.env["CARGO_TARGET_DIR"]).is_dir())
+
+    def test_changed_server_par_source_rejects_successful_controlled_execution(self):
+        par = self.root / "crates/server/src/web/par_endpoint.rs"
+        par.parent.mkdir(parents=True)
+        par.write_text("// PAR input before execution\n")
+        result = self.run_suite(case="transitive-source-change")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "source identity changed during execution",
+            (self.artifacts / "summary/security.log").read_text(),
+        )
+        self.assertEqual(par.read_text(), "// changed during fuzz execution\n")
+        self.assertFalse((self.artifacts / "fuzz/collection.ok").exists())
+        self.assertTrue(list((self.root / "fuzz/corpus").rglob("seed")))
+
+    def test_external_missing_and_symlink_local_inputs_fail_closed(self):
+        external = Path(self.temporary) / "external-source"
+        external.mkdir()
+        (external / "Cargo.toml").write_text('[package]\nname="external"\nversion="0.0.0"\n')
+        declarations = (str(external), "../missing-crate", "../target/hidden-source")
+        manifest = self.root / "crates/ffi/Cargo.toml"
+        original = manifest.read_bytes()
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                manifest.write_text(
+                    "[dependencies]\nother = { path = " + json.dumps(declaration) + " }\n"
+                )
+                result = self.helper_python(
+                    "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+                    "h['source_hashes'](list(h['REQUIRED_TARGETS']))\n"
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("local Cargo source path", result.stderr)
+        manifest.write_bytes(original)
+        alias = self.root / "crates/ffi/src/external.rs"
+        alias.symlink_to(external / "Cargo.toml")
+        result = self.helper_python(
+            "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+            "h['source_hashes'](list(h['REQUIRED_TARGETS']))\n"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symlink or external local source", result.stderr)
+
+    def test_exact_kani_tool_pointer_is_recorded_without_traversal_and_changes_reject(self):
+        pointer = self.root / "crates/kani-harness/kani"
+        code = (
+            "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+            "v=h['source_hashes'](list(h['REQUIRED_TARGETS']))\n"
+            "print(v['crates/kani-harness/kani'])\n"
+        )
+        result = self.helper_python(code)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unrelated-tool-output-pointer", result.stdout)
+        self.assertIn("result/bin/cargo-kani", result.stdout)
+        self.assertIn(hashlib.sha256(b"result/bin/cargo-kani").hexdigest(), result.stdout)
+        self.assertIn("120000", result.stdout)
+        pointer.unlink()
+        for kind in ("missing", "file", "changed-target"):
+            with self.subTest(kind=kind):
+                if kind == "file":
+                    pointer.write_text("tool output")
+                if kind == "changed-target":
+                    pointer.symlink_to("different-tool")
+                result = self.helper_python(code)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Kani output pointer is missing or changed", result.stderr)
+                pointer.unlink(missing_ok=True)
+        pointer.symlink_to("result/bin/cargo-kani")
+
+    def test_kani_pointer_literal_environment_reference_rejects(self):
+        code = (
+            "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+            "h['source_hashes'](list(h['REQUIRED_TARGETS']))\n"
+        )
+        for name in ("RUSTC", "RUSTC_WRAPPER", "CARGO_ENCODED_RUSTFLAGS", "LOCAL_TOOL"):
+            with self.subTest(name=name):
+                result = self.helper_python(code, **{name: "crates/kani-harness/kani"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("build environment references", result.stderr)
+
+    def test_kani_pointer_new_dependency_or_configuration_reference_rejects(self):
+        code = (
+            "import runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+            "h['source_hashes'](list(h['REQUIRED_TARGETS']))\n"
+        )
+        root_manifest = self.root / "Cargo.toml"
+        original = root_manifest.read_bytes()
+        root_manifest.write_text('[workspace]\nmembers = ["crates/server"]\n')
+        result = self.helper_python(code)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no longer workspace-excluded", result.stderr)
+        root_manifest.write_bytes(original)
+        ffi_manifest = self.root / "crates/ffi/Cargo.toml"
+        ffi_manifest.write_text('[dependencies]\nkani = { path="../kani-harness" }\n')
+        result = self.helper_python(code)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("became relevant", result.stderr)
+        root_manifest.write_text(
+            original.decode() + '[workspace.dependencies]\nkani = { path="crates/kani-harness" }\n'
+        )
+        ffi_manifest.write_text("[dependencies]\nkani = { workspace=true }\n")
+        result = self.helper_python(code)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("became relevant", result.stderr)
+        root_manifest.write_bytes(original)
+        ffi_manifest.write_text('[package]\nname="ffi"\nversion="0.0.0"\n')
+        (self.root / ".cargo/config.toml").write_text("# kani-harness/kani tool reference\n")
+        result = self.helper_python(code)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("configuration references", result.stderr)
+
+
+class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
+    def setUp(self):
+        super().setUp()
+        # The app script lives outside the checkout, as it does in the Nix store.
+        self.outer = Path(self.temporary) / "store/bin/security-suite"
+        self.outer.parent.mkdir(parents=True)
+        outer_source = self.root / "scripts/flake/security_suite.sh"
+        outer_source.parent.mkdir(parents=True)
+        shutil.copyfile(ROOT / "scripts/flake/security_suite.sh", outer_source)
+        shutil.copyfile(outer_source, self.outer)
+        self.external = Path(self.temporary) / "external-repository"
+        (self.external / "scripts/security").mkdir(parents=True)
+        self.dispatch = Path(self.temporary) / "outer-dispatch.json"
+        external_wrapper = self.external / "scripts/security/run_security_suite.sh"
+        external_wrapper.write_text(
+            f"#!{sys.executable}\n"
+            "import json,os,pathlib,sys\n"
+            f"pathlib.Path({str(self.dispatch)!r}).write_text(json.dumps({{"
+            "'argv':sys.argv[1:],'cwd':os.getcwd(),'GIT_DIR':os.environ.get('GIT_DIR')}))\n"
+        )
+        external_wrapper.chmod(0o755)
+        (self.external / "owned-input").write_bytes(b"preserve external input")
+        (self.root / "scripts/security/run_security_suite.sh").chmod(0o755)
+        self.install(
+            "git",
+            "import json,os,pathlib,sys\n"
+            "root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
+            "with (root.parent/'outer-git-calls.jsonl').open('a') as out:\n"
+            " out.write(json.dumps(sys.argv[1:])+'\\n')\n"
+            "print(os.environ.get('GIT_DIR') or str(root) if '--show-toplevel' in sys.argv "
+            "else 'a7a0274fe1783a6d9055350c65ec52c765709739')\n",
+        )
+
+    def run_outer(self, arguments, **environment):
+        return subprocess.run(  # noqa: S603 - actual outer wrapper and owned controlled routes
+            [str(self.bin / "bash"), str(self.outer), *arguments],
+            cwd=self.root,
+            env={**self.env, **environment},
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+    def test_outer_fuzz_and_default_reject_overrides_before_git_or_external_dispatch(self):
+        marker, raw = self.seed_stale_results()
+        previous = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        names = (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CEILING_DIRECTORIES",
+            "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+            "GIT_NAMESPACE",
+            "GIT_SHALLOW_FILE",
+            "GIT_REPLACE_REF_BASE",
+            "GIT_NO_REPLACE_OBJECTS",
+            "GIT_CONFIG",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_CONFIG_COUNT",
+            "GIT_CONFIG_SYSTEM",
+            "GIT_CONFIG_GLOBAL",
+            "GIT_CONFIG_NOSYSTEM",
+            "GIT_CONFIG_KEY_0",
+            "GIT_CONFIG_VALUE_0",
+            "GIT_CONFIG_KEY_custom",
+            "GIT_CONFIG_VALUE_custom",
+        )
+        for arguments in ([], ["--stage", "fuzz"]):
+            for name in names:
+                for value in ("", str(self.external)):
+                    with self.subTest(arguments=arguments, name=name, value=value):
+                        result = self.run_outer(arguments, **{name: value})
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn("inherited Git identity overrides", result.stderr)
+                        self.assertFalse((self.root.parent / "outer-git-calls.jsonl").exists())
+                        self.assertFalse(self.dispatch.exists())
+                        for path, contents in {**previous, **raw}.items():
+                            self.assertEqual(path.read_bytes(), contents)
+                        self.assertEqual(
+                            (self.external / "owned-input").read_bytes(), b"preserve external input"
+                        )
+
+    def test_outer_store_script_executes_controlled_fuzz_with_unchanged_arguments(self):
+        result = self.run_outer(["--stage", "fuzz"])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertEqual(execution["status"], "passed")
+        self.assertEqual(execution["selected_targets"], list(TARGETS))
+        self.assertFalse(self.dispatch.exists())
+        self.assertTrue((self.root.parent / "outer-git-calls.jsonl").exists())
+        self.assertFalse((self.root / "fuzz/corpus").exists())
+
+    def test_outer_nonfuzz_selected_dispatch_preserves_effective_git_route(self):
+        for arguments in (
+            ["--stage", "sbom"],
+            ["--fuzz-long", "--stage", "sbom"],
+            ["--stage", "sbom", "--", "--stage", "fuzz"],
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.run_outer(arguments, GIT_DIR=str(self.external))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                data = json.loads(self.dispatch.read_text())
+                self.assertEqual(data["argv"], arguments)
+                self.assertEqual(data["cwd"], str(self.external))
+                self.assertEqual(data["GIT_DIR"], str(self.external))
+                self.assertEqual(
+                    (self.external / "owned-input").read_bytes(), b"preserve external input"
+                )
+
+    def test_outer_default_and_mixed_argument_selection_reject_before_git(self):
+        for arguments in (
+            ["--fuzz-long"],
+            ["--"],
+            ["unknown-argument"],
+            ["--stage", "sbom", "--stage", "fuzz"],
+            ["--fuzz-long", "--stage", "fuzz"],
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.run_outer(arguments, GIT_DIR=str(self.external))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("inherited Git identity overrides", result.stderr)
+                self.assertFalse((self.root.parent / "outer-git-calls.jsonl").exists())
+                self.assertFalse(self.dispatch.exists())
