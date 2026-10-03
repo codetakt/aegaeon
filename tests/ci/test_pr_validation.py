@@ -12,13 +12,14 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 import yaml
 from check_doc_links import broken_links, local_links, snapshot
 from check_pr_results import check_results
-from pr_plan import build_plan, classify, path_scope
+from pr_plan import build_plan, classify, path_scope, unique_json_object, validate_policy
 from validate_change import classify as classify_change
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -153,6 +154,191 @@ class AggregateTests(unittest.TestCase):
         for needs in mutations:
             with pytest.raises(ValueError, match=r"classification|check inventory"):
                 check_results(needs, POLICY)
+
+
+class SupplementalAggregateTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(redirect_stdout(io.StringIO()))
+
+    def test_pending_and_required_presence_for_every_scope(self):
+        for scope in POLICY["scopes"]:
+            for state in ["pending", "required"]:
+                policy = deepcopy(POLICY)
+                policy["supplemental_lanes"] = {"components": state}
+                needs = results(scope)
+                if state == "pending":
+                    check_results(needs, policy)
+                else:
+                    with pytest.raises(ValueError, match="missing required supplemental"):
+                        check_results(needs, policy)
+                needs["components"] = {"result": "success"}
+                check_results(needs, policy)
+                for outcome in ["failure", "skipped", "cancelled", "neutral", "", None, [], {}]:
+                    needs["components"] = {"result": outcome}
+                    with (
+                        self.subTest(scope=scope, state=state, outcome=outcome),
+                        pytest.raises(ValueError, match="supplemental check must succeed"),
+                    ):
+                        check_results(needs, policy)
+                needs["components"] = {}
+                with pytest.raises(ValueError, match="supplemental check must succeed"):
+                    check_results(needs, policy)
+
+    def test_supplemental_success_cannot_replace_any_original_check(self):
+        for scope in POLICY["scopes"]:
+            for state in ["pending", "required"]:
+                policy = deepcopy(POLICY)
+                policy["supplemental_lanes"] = {"components": state}
+                for lane in POLICY["scopes"]["full"]:
+                    needs = results(scope)
+                    needs["components"] = {"result": "success"}
+                    del needs[lane]
+                    with pytest.raises(ValueError, match="check inventory"):
+                        check_results(needs, policy)
+                    for outcome in ["failure", "cancelled", None]:
+                        needs[lane] = {"result": outcome}
+                        with pytest.raises(ValueError, match=rf"^{lane}:"):
+                            check_results(needs, policy)
+                    needs[lane] = {"result": "skipped"}
+                    if lane in policy["scopes"][scope]:
+                        with pytest.raises(ValueError, match=rf"^{lane}:"):
+                            check_results(needs, policy)
+                    else:
+                        check_results(needs, policy)
+
+    def test_legacy_policy_does_not_authorize_an_unregistered_lane(self):
+        policy = deepcopy(POLICY)
+        del policy["supplemental_lanes"]
+        for scope in POLICY["scopes"]:
+            needs = results(scope)
+            check_results(needs, policy)
+            needs["components"] = {"result": "success"}
+            with pytest.raises(ValueError, match="check inventory"):
+                check_results(needs, policy)
+
+    def test_unknown_needs_and_malformed_result_shapes_reject(self):
+        needs = results("docs")
+        needs["other"] = {"result": "success"}
+        with pytest.raises(ValueError, match="check inventory"):
+            check_results(needs, POLICY)
+        for value in [None, [], "success", 1]:
+            with pytest.raises(ValueError, match="JSON object"):
+                check_results(value, POLICY)
+            for lane in ["plan", "docs", "components"]:
+                needs = results("docs")
+                needs[lane] = value
+                with pytest.raises(ValueError, match="result object"):
+                    check_results(needs, POLICY)
+        for outputs in [None, [], "docs", {"scope": []}, {"scope": None}]:
+            needs = results("docs")
+            needs["plan"]["outputs"] = outputs
+            with pytest.raises(ValueError, match=r"classification|Classification"):
+                check_results(needs, POLICY)
+
+    def test_policy_rejects_unknown_overlap_duplicate_and_invalid_state(self):
+        for supplemental in [
+            None,
+            [],
+            "pending",
+            {"components": "optional"},
+            {"components": None},
+            {"components": []},
+            {"components": True},
+            {"other": "pending"},
+            {"docs": "pending"},
+            {"plan": "pending"},
+        ]:
+            policy = deepcopy(POLICY)
+            policy["supplemental_lanes"] = supplemental
+            with pytest.raises(ValueError, match="supplemental"):
+                validate_policy(policy)
+            with pytest.raises(ValueError, match="supplemental"):
+                check_results(results("full"), policy)
+        for full in [
+            [],
+            ["docs", "integrity"],
+            [*POLICY["scopes"]["full"], "components"],
+            [*POLICY["scopes"]["full"], "core"],
+            "full",
+            None,
+        ]:
+            policy = deepcopy(POLICY)
+            policy["scopes"]["full"] = full
+            with pytest.raises(ValueError, match="original full-check inventory"):
+                validate_policy(policy)
+        for policy in [
+            None,
+            [],
+            {"version": True, "scopes": POLICY["scopes"]},
+            {"version": 1, "scopes": []},
+        ]:
+            with pytest.raises(ValueError, match=r"policy|scopes"):
+                validate_policy(policy)
+        for raw in [
+            '{"components":"pending","components":"required"}',
+            '{"docs":{"result":"failure"},"docs":{"result":"success"}}',
+            '{"version":1,"version":1}',
+        ]:
+            with pytest.raises(ValueError, match="duplicate JSON key"):
+                json.loads(raw, object_pairs_hook=unique_json_object)
+
+    def test_classification_and_workflow_inventory_remain_original(self):
+        expected = [
+            "docs",
+            "integrity",
+            "core",
+            "lint",
+            "security",
+            "verification",
+            "compliance",
+            "kms",
+            "container",
+        ]
+        assert POLICY["scopes"] == {
+            "docs": ["docs"],
+            "integrity": ["docs", "integrity"],
+            "full": expected,
+        }
+        assert POLICY["supplemental_lanes"] == {"components": "pending"}
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        assert set(workflow["jobs"]["required"]["needs"]) == {"plan", *expected}
+        assert "components" not in workflow["jobs"]
+        for path, scope in [
+            ("SECURITY.md", "docs"),
+            ("spec/compliance-matrix.yaml", "integrity"),
+            ("examples/minimal-rp/requirements.txt", "full"),
+        ]:
+            plan = classify([change(path)], POLICY)
+            assert plan["scope"] == scope
+            assert plan["selected"] == POLICY["scopes"][scope]
+
+    def test_cli_malformed_json_reports_a_clear_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy_path = Path(temporary) / "policy.json"
+            policy_path.write_text(json.dumps(POLICY))
+            cases = [
+                "not-json",
+                "[]",
+                '{"plan":null}',
+                '{"plan":{"result":"success","outputs":{"scope":[]}}}',
+                '{"plan":{},"plan":{}}',
+            ]
+            for raw in cases:
+                result = subprocess.run(  # noqa: S603 - fixed checker and isolated JSON input
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts/ci/check_pr_results.py"),
+                        "--policy",
+                        str(policy_path),
+                    ],
+                    env={**os.environ, "PR_NEEDS_JSON": raw},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert result.returncode == 1
+                assert "PR validation failed:" in result.stdout
+                assert "Traceback" not in result.stderr
 
 
 class GitTests(unittest.TestCase):
