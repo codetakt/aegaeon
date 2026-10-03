@@ -7,6 +7,13 @@
       ],
       "critical": false
     },
+    "crates/ffi/src/dpop_uri.rs": {
+      "sha256": "32fdc3ba6cc649ef63bf8648a52d2c0ce2250ebf68a5f0c15ed682d1f78ad32d",
+      "entries": [
+        "9449-006"
+      ],
+      "critical": true
+    },
     "crates/ffi/src/id_token.rs": {
       "sha256": "322c452bfbe870e6247b89673d861079b43ae5ae463e08d3e4d1bb04bacce968",
       "entries": [
@@ -15,7 +22,7 @@
       "critical": true
     },
     "crates/ffi/src/lib.rs": {
-      "sha256": "ece64dba89e2acd100d88f19d0dd2dd8d0070466310cfe406ea9b07a98d68bf3",
+      "sha256": "4f6c5d725916f2c4d9688b1cab9bc2235f36088dcda177fd0271f8837df4d62c",
       "entries": [
         "9449-001",
         "9449-002"
@@ -234,7 +241,6 @@
       "entries": [
         "9449-004",
         "9449-005",
-        "9449-006",
         "9449-007",
         "9449-008",
         "9449-011",
