@@ -1,4 +1,4 @@
-# Crypto Extraction Roadmap (指示書1)
+# Crypto Extraction Roadmap (Instruction Document 1)
 
 Last updated: 2026-07-24
 

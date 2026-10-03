@@ -39,56 +39,56 @@ Aegaeon
 
 #### Tagline
 
-高保証コアと運用統制を備えた OAuth/OIDC 基盤
+An OAuth/OIDC platform with a high-assurance core and operational controls
 
 #### One-line definition
 
-既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC サーバと、
-それを支える control-plane を一体で整備するためのプラットフォームです。
+A platform that brings together an OAuth/OIDC server for embedding in existing services
+and enterprise infrastructure, and the control plane that supports it.
 
 ### Three pillars
 
 #### Secure Defaults
 
-危険な構成を避けやすい既定値と、例外設定を統制下で扱う運用を支援します。
+We support defaults that help avoid dangerous configurations and operations that keep exception settings under control.
 
 #### Verified Core
 
-PKCE、DPoP、JOSE など、サーバ側の security-critical な OAuth/OIDC コア領域に
-高保証アプローチを適用します。
+We apply a high-assurance approach to security-critical server-side OAuth/OIDC core areas
+such as PKCE, DPoP, and JOSE.
 
 #### Operational Controls
 
-変更管理、監査、RBAC、鍵・秘密情報のライフサイクル管理を、
-運用者が追跡しやすい形で扱えるようにします。
+We enable change management, audits, RBAC, and key / secret lifecycle management
+in a form that is easy for operators to track.
 
 ### What ships now
 
 - OAuth 2.0 / OAuth 2.1 server
 - OpenID Connect 1.0 provider
 - OpenID Connect Federation runtime support
-- Aegaeon Admin Console による control-plane 操作
+- Control-plane operations through Aegaeon Admin Console
 - OSS / Self-hosted evaluation path
 
 ### Use cases
 
-- 既存プロダクトへの認証基盤の組み込み
-- 複数サービスにまたがる共通認証・API 保護基盤の整備
-- 鍵運用、監査、設定変更まで含めた運用統制の強化
+- Embedding an authentication foundation into existing products
+- Establishing a shared authentication and API protection foundation across multiple services
+- Strengthening operational controls, including key operations, audits, and configuration changes
 
 ### Boundary note
 
-現時点の高保証に関する対外表現は、サーバ側の security-critical な OAuth/OIDC コアを
-対象としたものです。Aegaeon Admin Console は first-party control-plane UI ですが、
-UI 自体を形式検証済みとは表現しません。
+Current public wording about high assurance concerns the security-critical server-side
+OAuth/OIDC core. Aegaeon Admin Console is a first-party control-plane UI,
+but we do not describe the UI itself as formally verified.
 
 ### CTA block
 
-資料と評価導線:
+Materials and evaluation paths:
 
-- ホワイトペーパー
+- Whitepaper
 - Spec Sheet
-- プレビュー版 / PoC 相談
+- Preview / PoC consultation
 
 ### QR labels
 

@@ -46,7 +46,7 @@ Audience: contributors, maintainers
 | `docs/specs/openid-federation-spec.md` | spec | OpenID Connect Federation 1.0 Runtime Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-local-credential-plane.md` | spec | Primary Authority Local Credential Plane Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-user-management.md` | spec | Primary Authority User Management Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
-| `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot（v1） | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot (v1) | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/verified-core-wasm.md` | spec | Verified Core WASM Extraction | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 
 ## Design
@@ -321,8 +321,8 @@ Audience: contributors, maintainers
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/README.md` | index | Verification Workplan Analysis | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/blockers.md` | verification | Verification blockers and upstream dependency analysis | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
-| `docs/verification/workplans/analysis/karamel-warning15-analysis.md` | verification | KaRaMeL Warning 15 (2026-01-14 時点) 分析メモ | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
-| `docs/verification/workplans/crypto-extraction-roadmap.md` | verification | Crypto Extraction Roadmap (指示書1) | active plan | 2026-07-24 | Verification | verification contributors, maintainers |
+| `docs/verification/workplans/analysis/karamel-warning15-analysis.md` | verification | KaRaMeL Warning 15 Analysis Memo (as of 2026-01-14) | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
+| `docs/verification/workplans/crypto-extraction-roadmap.md` | verification | Crypto Extraction Roadmap (Instruction Document 1) | active plan | 2026-07-24 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/lemma-hardening-plan.md` | verification | Lemma Hardening Plan | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/phase-d/README.md` | index | Phase D Workplan Details | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/phase-d/abi-sdk-and-tests.md` | verification | Phase D ABI, SDK, And Test Strategy | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
@@ -347,7 +347,7 @@ Audience: contributors, maintainers
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Token profile | current implementation baseline | 2026-10-03 | Operations | operators, maintainers, relying party implementers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
-| `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
+| `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |

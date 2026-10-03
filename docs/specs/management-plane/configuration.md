@@ -100,24 +100,24 @@ Recommended defaults (policy guidance; not normative):
 - refresh token: 2592000 (30 days)
 - authorisation code: 300
 
-### DPoP リプレイ検知（Redis 前提）
+### DPoP replay detection (Redis required)
 
-- Verified Core は DPoP 検証時に `replay_ticket`（JTI などの素材を含むチケット）を返すだけで、ストレージは担当しない。
-- 制御プレーン/データプレーンは環境ごとの **名前空間 (namespace)** と TTL を決め、Redis 等の外部ストアに単一操作（`SET <key> 1 NX PX <ttl>`）で記録する。
-- 推奨 TTL:
-  - `AEGAEON_DPOP_IAT_WINDOW_SECS`（既存の受理窓＝5 分相当）＋ `AEGAEON_JWT_LEEWAY_SECS`（60 秒）を合算し、デフォルト 360 秒とする。
-  - future skew（時計ズレ）を考慮した余裕を持たせる。
-- キー素材:
-  - 環境の namespace（例: `AEGAEON_DPOP_NAMESPACE` で明示。未設定時は issuer URL を使用）。
-  - メソッド（大文字化された `htm`）、正規化済み URI (`htu`)、`jti`、公開鍵 thumbprint (`jkt`)、必要に応じて `ath`。
-  - 上記を SHA-256 でハッシュし base64url で表現 → `dpop:v1:{namespace}:{hash}` を Redis キーとする。
-- バックエンド実装要件:
-  - `AEGAEON_DPOP_REDIS_URL` を必須とし、Redis を利用する。`noeviction`（明示的に eviction を禁止）設定を推奨。
-  - Redis に接続できない／SET が失敗した場合は **fail-close**（`503 Temporarily Unavailable`, `error="temporarily_unavailable"`）としてクライアントに通知。
-  - 旧来の未設定時インメモリ実装は protocol-level test harness 専用の名残であり、server runtime の supported configuration からは廃止する。
-  - 同一キーが既に存在した場合は replay と判定し、`invalid_token`（DPoP replay）で拒否。
-- 監査:
-  - 成功・再試行・障害（バックエンド unavailable）それぞれを audit event として記録できるようにする。
+- During DPoP validation, Verified Core only returns a `replay_ticket` (a ticket containing inputs such as the JTI); it does not manage storage.
+- The control plane/data plane determines a **namespace** and TTL for each environment and records the ticket in an external store such as Redis using a single operation (`SET <key> 1 NX PX <ttl>`).
+- Recommended TTL:
+  - Add `AEGAEON_DPOP_IAT_WINDOW_SECS` (the existing acceptance window, equivalent to 5 minutes) and `AEGAEON_JWT_LEEWAY_SECS` (60 seconds), for a default of 360 seconds.
+  - Allow a margin for future clock skew.
+- Key inputs:
+  - The environment namespace (for example, set explicitly with `AEGAEON_DPOP_NAMESPACE`; use the issuer URL if unset).
+  - The method (uppercase `htm`), normalized URI (`htu`), `jti`, public key thumbprint (`jkt`), and `ath` when applicable.
+  - Hash these inputs with SHA-256 and encode the result as base64url to form the Redis key `dpop:v1:{namespace}:{hash}`.
+- Backend implementation requirements:
+  - Require `AEGAEON_DPOP_REDIS_URL` and use Redis. The `noeviction` setting (explicitly prohibiting eviction) is recommended.
+  - If Redis cannot be reached or SET fails, **fail closed** and notify the client (`503 Temporarily Unavailable`, `error="temporarily_unavailable"`).
+  - The legacy in-memory fallback for absent configuration remains only for protocol-level test harnesses and is removed from supported server runtime configurations.
+  - If the same key already exists, classify the request as a replay and reject it with `invalid_token` (DPoP replay).
+- Auditing:
+  - Support recording success, retry, and failure (backend unavailable) as audit events.
 
 ## Environment configuration
 

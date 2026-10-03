@@ -180,12 +180,12 @@ Note:
 
 Preferred:
 
-- `認証認可を、実装だけでなく運用まで壊れにくくする`
+- `Make authentication and authorization more resilient, from implementation through operations`
 
 Alternative:
 
-- `OAuth/OIDC を、導入後も運用で崩れにくい基盤にする`
-- `高保証コアと運用統制で、認証認可の運用負債を抑えやすくする`
+- `Make OAuth/OIDC a foundation that remains resilient in operation after adoption`
+- `Help reduce operational debt in authentication and authorization with a high-assurance core and operational controls`
 
 ### Problem framing style
 
@@ -194,7 +194,7 @@ Alternative:
 
 Preferred opening:
 
-- `OAuth/OIDC の課題は、実装したあとに本番運用で顕在化しやすい`
+- `OAuth/OIDC problems often emerge in production after implementation`
 
 ### Pillar section style
 
@@ -208,12 +208,12 @@ Preferred opening:
 
 Preferred phrasing:
 
-- `現時点の対外表現は、サーバ側の security-critical な OAuth/OIDC コアに関する主張に基づきます。`
+- `Our current public wording is based on claims about the security-critical server-side OAuth/OIDC core.`
 
 Avoid:
 
-- `全体を完全に形式検証`
-- `すべての機能を証明済み`
+- `Fully formally verified in its entirety`
+- `All features have been proven`
 
 ## Suggested wireframe notes
 
@@ -240,20 +240,20 @@ Avoid:
 
 ### Primary CTA label options
 
-- `プレビュー版を申し込む`
-- `PoC を相談する`
-- `評価について相談する`
+- `Request a preview`
+- `Discuss a PoC`
+- `Discuss an evaluation`
 
 Recommendation:
 
-- use `プレビュー版を申し込む` on the public LP
+- use `Request a preview` on the public LP
 - route enterprise-intent users inside the form
 
 ### Secondary CTA label options
 
-- `ホワイトペーパーを読む`
-- `Spec Sheet を見る`
-- `GitHub を確認する`
+- `Read the whitepaper`
+- `View the Spec Sheet`
+- `Visit GitHub`
 
 Recommendation:
 
