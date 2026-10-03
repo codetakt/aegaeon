@@ -266,7 +266,9 @@ def test_output_published_only_after_context_and_signatures(tmp_path, monkeypatc
         validate_change.run(bootstrap=False)
     lines = output.read_text().splitlines()
     component_lines = [
-        line.removeprefix("component_plan=") for line in lines if line.startswith("component_plan=")
+        line.removeprefix("component_targets=")
+        for line in lines
+        if line.startswith("component_targets=")
     ]
     assert len(component_lines) == 1
     assert json.loads(component_lines[0])["components"] == ["development-tools"]
@@ -367,10 +369,53 @@ def test_published_component_plan_and_provenance_remain_separate():
         recorded = json.loads(Path("ci-plan.json").read_text())
         validate_component_plan(recorded, POLICY)
         outputs = dict(line.split("=", 1) for line in case.output.read_text().splitlines())
-        component = json.loads(outputs["component_plan"])
+        component = json.loads(outputs["component_targets"])
         provenance = json.loads(outputs["component_plan_provenance"])
-        assert component == recorded["component_plan"]
+        assert component == {
+            key: recorded["component_plan"][key]
+            for key in ("version", "components", "infrastructure_modules", "fallback")
+        }
+        assert (
+            outputs["component_plan_sha256"]
+            == hashlib.sha256(Path("ci-plan.json").read_bytes()).hexdigest()
+        )
+        assert "component_plan" not in outputs
         assert provenance == recorded["component_plan_provenance"]
         assert provenance == classified["component_plan_provenance"]
+    finally:
+        case.doCleanups()
+
+
+def test_large_complete_plan_has_compact_outputs_bound_to_retained_file():
+    bound = {"base": test_merge_queue.BASE, "source_head": test_merge_queue.HEAD}
+    classified = plan(*(change(f"crates/server/src/shared_{i:04d}.rs") for i in range(3000)))
+    classified["component_plan_provenance"] = {**bound, "classifier_sha256": "1" * 64}
+    case = test_merge_queue.RunTests()
+    case.setUp()
+    try:
+        with (
+            patch.object(validate_change, "git", side_effect=test_merge_queue.graph),
+            patch.object(validate_change, "classify", return_value=classified),
+            patch.object(validate_change, "verify_signatures", return_value=[]),
+        ):
+            validate_change.run(bootstrap=False)
+        raw = Path("ci-plan.json").read_bytes()
+        recorded = json.loads(raw)
+        validate_component_plan(recorded, POLICY)
+        assert len(recorded["component_plan"]["changes"]) == 3000
+        outputs_raw = case.output.read_text()
+        assert len(outputs_raw.encode("utf-16-le")) < 8192
+        outputs = dict(line.split("=", 1) for line in outputs_raw.splitlines())
+        assert "component_plan" not in outputs
+        assert "changes" not in json.loads(outputs["component_targets"])
+        assert outputs["component_plan_sha256"] == hashlib.sha256(raw).hexdigest()
+        assert json.loads(outputs["component_targets"]) == {
+            key: recorded["component_plan"][key]
+            for key in ("version", "components", "infrastructure_modules", "fallback")
+        }
+        assert (
+            json.loads(outputs["component_plan_provenance"])
+            == classified["component_plan_provenance"]
+        )
     finally:
         case.doCleanups()

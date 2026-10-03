@@ -291,8 +291,17 @@ def run(*, bootstrap: bool) -> None:
         stream.write(f"scope={plan['scope']}\nbase={bound['base']}\n")
         stream.write(f"source_head={bound['source_head']}\ntest_sha={bound['test_sha']}\n")
         if "component_plan" in plan:
+            # Retain complete records in ci-plan.json; job outputs carry only
+            # bounded targets and a digest of that exact retained artifact.
+            targets = {
+                key: plan["component_plan"][key]
+                for key in ("version", "components", "infrastructure_modules", "fallback")
+            }
+            stream.write("component_targets=" + json.dumps(targets, separators=(",", ":")) + "\n")
             stream.write(
-                "component_plan=" + json.dumps(plan["component_plan"], separators=(",", ":")) + "\n"
+                "component_plan_sha256="
+                + hashlib.sha256(Path("ci-plan.json").read_bytes()).hexdigest()
+                + "\n"
             )
             stream.write(
                 "component_plan_provenance="
