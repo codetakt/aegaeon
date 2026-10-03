@@ -252,10 +252,16 @@ def test_output_published_only_after_context_and_signatures(tmp_path, monkeypatc
     ):
         validate_change.run(bootstrap=False)
     assert not output.exists()
+    classified = plan(change("package.json"))
+    classified["component_plan_provenance"] = {
+        **bound,
+        "classifier_sha256": "1" * 64,
+        "policy_sha256": "2" * 64,
+    }
     with (
         patch.object(validate_change, "context", return_value=bound),
         patch.object(validate_change, "verify_signatures", return_value=[]),
-        patch.object(validate_change, "classify", return_value=plan(change("package.json"))),
+        patch.object(validate_change, "classify", return_value=classified),
     ):
         validate_change.run(bootstrap=False)
     lines = output.read_text().splitlines()
@@ -264,6 +270,10 @@ def test_output_published_only_after_context_and_signatures(tmp_path, monkeypatc
     ]
     assert len(component_lines) == 1
     assert json.loads(component_lines[0])["components"] == ["development-tools"]
+    outputs = dict(line.split("=", 1) for line in lines)
+    assert (
+        json.loads(outputs["component_plan_provenance"]) == classified["component_plan_provenance"]
+    )
 
 
 def test_protected_classifier_ignores_candidate_policy_and_binds_source(tmp_path, monkeypatch):
