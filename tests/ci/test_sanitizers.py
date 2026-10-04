@@ -1532,6 +1532,124 @@ done
                 self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime preflight
 
 
+class SanitizerCheckoutRootTests(SanitizerFixture, unittest.TestCase):
+    """Source protection follows the physical script checkout and external cwd."""
+
+    def setUp(self):
+        super().setUp()
+        (self.bin / "bash").symlink_to(shutil.which("bash"))
+        self.checkout = self.root / "checkout root\n"
+        self.scripts = self.checkout / "scripts/sanitizers"
+        self.scripts.mkdir(parents=True)
+        for name in (
+            "run_sanitizers.sh",
+            "run_sanitizers_build_std.sh",
+            "sanitizer_paths.sh",
+            "sanitizer_options.py",
+            "sanitizer_runner.py",
+        ):
+            shutil.copy2(WRAPPER.parent / name, self.scripts / name)
+        self.subdirectory = self.checkout / "crates/ffi"
+        self.subdirectory.mkdir(parents=True)
+
+    def run_checkout(self, entry, cwd, mode="rustc-version-failure", **overrides):
+        return subprocess.run(  # noqa: S603 - copied real entrypoints and controlled tools
+            [shutil.which("bash"), str(entry)],
+            cwd=cwd,
+            env={**self.environment, "SANITIZER_FIXTURE_MODE": mode, **overrides},
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def assert_checkout_route_rejected(
+        self, entry, cwd, variable, route, *, default_artifact=False
+    ):
+        overrides = {variable: str(route)}
+        if default_artifact:
+            overrides["SANITIZER_ARTIFACT_DIR"] = ""
+        before = self.boundary_snapshot()
+        result = self.run_checkout(entry, cwd, **overrides)
+        after = self.boundary_snapshot()
+        if variable == "SANITIZER_TARGET_DIR" and not default_artifact:
+            before = {
+                key: value
+                for key, value in before.items()
+                if not key.startswith("evidence/") and key != "evidence"
+            }
+            after = {
+                key: value
+                for key, value in after.items()
+                if not key.startswith("evidence/") and key != "evidence"
+            }
+            self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - safe evidence is failed first
+            self.assertEqual(self.summary()["preflight_phase"], "target")  # noqa: PT009 - original preflight order
+        self.assertNotEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under Python -O
+        self.assertIn("overlaps protected source inputs", result.stderr)  # noqa: PT009 - source guard before tools
+        self.assertEqual(after, before)  # noqa: PT009 - source and unsafe evidence retain exact bytes
+        self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime launched
+
+    def test_subdirectory_relative_sources_reject_before_initialization(self):
+        self.seed_completed_at(self.checkout / "docs/artifacts")
+        self.seed_completed_at(self.checkout / "artifacts/security")
+        for entry in (
+            self.scripts / "run_sanitizers.sh",
+            "../../scripts/sanitizers/run_sanitizers.sh",
+            self.scripts / "run_sanitizers_build_std.sh",
+        ):
+            for variable, route, default_artifact in (
+                ("SANITIZER_TARGET_DIR", "../../docs", True),
+                ("SANITIZER_TARGET_DIR", "../../docs", False),
+                ("SANITIZER_ARTIFACT_DIR", "../../scripts", False),
+                ("SANITIZER_ARTIFACT_DIR", "../../artifacts/security", False),
+            ):
+                with self.subTest(
+                    entry=entry, variable=variable, route=route, default=default_artifact
+                ):
+                    self.assert_checkout_route_rejected(
+                        entry, self.subdirectory, variable, route, default_artifact=default_artifact
+                    )
+
+    def test_external_cwd_cannot_write_checkout_or_caller_sources(self):
+        for source in (
+            self.checkout / "docs",
+            self.checkout / "scripts",
+            self.checkout / "crates",
+            self.root / "docs",
+        ):
+            self.seed_completed_at(source)
+            for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
+                with self.subTest(source=source, variable=variable):
+                    self.assert_checkout_route_rejected(
+                        self.scripts / "run_sanitizers.sh", self.root, variable, source
+                    )
+
+    def test_symlink_entrypoints_and_external_fallback_keep_source_boundary(self):
+        alias = self.root / "script-directory-alias"
+        alias.symlink_to(self.scripts, target_is_directory=True)
+        self.seed_completed_at(self.checkout / "docs")
+        for name in ("run_sanitizers.sh", "run_sanitizers_build_std.sh"):
+            with self.subTest(entry=name):
+                self.assert_checkout_route_rejected(
+                    alias / name, self.root, "SANITIZER_ARTIFACT_DIR", self.checkout / "docs"
+                )
+                result = self.run_checkout(alias / name, self.root, mode="success")
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - external fixture still supported
+                self.assertEqual(self.summary()["status"], "completed")  # noqa: PT009 - actual controlled runner finished
+                (self.root / "calls.jsonl").unlink()
+        entry = self.root / "file-entrypoint"
+        entry.symlink_to(self.scripts / "run_sanitizers.sh")
+        (self.root / "sanitizer_paths.sh").write_text(
+            "printf 'unexpected helper sourcing' > helper-sourced\n"
+        )
+        before = self.boundary_snapshot()
+        result = self.run_checkout(entry, self.root)
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - file alias rejects before sourcing
+        self.assertIn("entrypoint must not be a file symlink", result.stderr)  # noqa: PT009 - explicit entrypoint policy
+        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - helper and evidence were not touched
+
+
 class SanitizerLoggingFixture(SanitizerFixture):
     """Shared shell/log setup without inheriting behavioral test methods."""
 

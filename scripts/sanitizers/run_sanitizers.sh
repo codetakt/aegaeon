@@ -73,12 +73,27 @@ SANITIZER_ADD_DYNAMIC_RT=${SANITIZER_ADD_DYNAMIC_RT:-1}
 SANITIZER_EXEC_LD_PRELOAD=${SANITIZER_EXEC_LD_PRELOAD:-}
 SANITIZER_ARTIFACT_DIR=${SANITIZER_ARTIFACT_DIR:-}
 
+# Pin the physical checkout before sourcing helpers or initializing evidence.
+# File-symlink entrypoints cannot supply a different helper/source root.
+if [[ -L ${BASH_SOURCE[0]} ]]; then
+	fail "Sanitizer script entrypoint must not be a file symlink"
+	exit 1
+fi
+sanitizer_script_dir=${BASH_SOURCE[0]%/*}
+[[ ${BASH_SOURCE[0]} == */* ]] || sanitizer_script_dir=.
+sanitizer_script_dir=$(cd -- "$sanitizer_script_dir" && pwd -P && printf .) || exit 1
+sanitizer_script_dir=${sanitizer_script_dir%$'\n'.}
+sanitizer_checkout_root=$(cd -- "$sanitizer_script_dir/../.." && pwd -P && printf .) || exit 1
+sanitizer_checkout_root=${sanitizer_checkout_root%$'\n'.}
+workspace=$(pwd -P && printf .) || exit 1
+workspace=${workspace%$'\n'.}
+# Protect both the script checkout and an external fixture's working directory.
 # Both standalone execution and destructive outer cleanup use one source policy.
 # shellcheck source=scripts/sanitizers/sanitizer_paths.sh
-source "${BASH_SOURCE[0]%/*}/sanitizer_paths.sh"
-workspace=$(pwd -P)
+source "$sanitizer_script_dir/sanitizer_paths.sh"
 preflight_route "${SANITIZER_ARTIFACT_DIR:-${SANITIZER_TARGET_ROOT}/artifacts}" || exit 1
 SANITIZER_ARTIFACT_DIR=$PREFLIGHT_ROUTE
+sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$sanitizer_checkout_root" || exit 1
 sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$workspace" || exit 1
 # Safe owned evidence is failed before any later target or tool preflight fails.
 # Unsafe evidence is never initialized or archived.
@@ -97,6 +112,7 @@ sanitizer_validate_cargo_flags "$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS
 PREFLIGHT_PHASE=target
 preflight_route "$SANITIZER_TARGET_ROOT" || exit 1
 SANITIZER_TARGET_ROOT=$PREFLIGHT_ROUTE
+sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$sanitizer_checkout_root" || exit 1
 sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$workspace" || exit 1
 # A standalone evidence descendant is supported: standalone has no outer cleanup.
 sanitizer_validate_pair "$SANITIZER_TARGET_ROOT" "$SANITIZER_ARTIFACT_DIR" runner || exit 1
@@ -264,7 +280,7 @@ else
 	exec_ld_preload="${SANITIZER_EXEC_LD_PRELOAD}"
 fi
 
-exec python3 -I "${BASH_SOURCE[0]%/*}/sanitizer_runner.py" "$SANITIZER_LIST" "$SANITIZER_TARGETS" "$SANITIZER_TARGET_ROOT" \
+exec python3 -I "$sanitizer_script_dir/sanitizer_runner.py" "$SANITIZER_LIST" "$SANITIZER_TARGETS" "$SANITIZER_TARGET_ROOT" \
 	"${SANITIZER_ARTIFACT_DIR:-${SANITIZER_TARGET_ROOT}/artifacts}" \
 	"$CARGO_BIN" "$host_triple" "${sanitize_flags_base[*]}" "${curve_flags[*]}" \
 	"$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS" \
