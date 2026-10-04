@@ -75,6 +75,7 @@ cleanup_sanitizer_outputs() {
 sanitize() {
 	SANITIZER_ARTIFACT_DIR="$SANITIZER_ARTIFACT_DIR" \
 		SANITIZER_TARGET_DIR="$SANITIZER_VALIDATED_TARGET" \
+		SANITIZER_INVOCATION_BINDING="$SANITIZER_EVIDENCE_BINDING" \
 		nix develop .#asan --command bash scripts/sanitizers/run_sanitizers.sh
 }
 
@@ -118,7 +119,17 @@ run_sanitizers_stage() {
 	fi
 	if initial_summary=$(sanitizer_target_binding summary-snapshot "$SANITIZER_EVIDENCE_BINDING"); then
 		if sanitize >&"$sanitizer_log_fd" 2>&1; then
-			status=0
+			# A launcher can return zero without running the controller. Replay
+			# this invocation's complete receipt before deleting its executables.
+			if sanitizer_target_binding validate-completed "$SANITIZER_EVIDENCE_BINDING" \
+				"$initial_summary" "$SANITIZER_VALIDATED_TARGET" >&"$sanitizer_log_fd" 2>&1; then
+				status=0
+			else
+				status=$?
+				sanitizer_target_binding launcher-failure "$SANITIZER_EVIDENCE_BINDING" \
+					"$initial_summary" "$status" >&"$sanitizer_log_fd" 2>&1 || evidence_status=1
+				sanitizer_stage_log "[security] <<< sanitizer smoke: invalid completion receipt" || logging_status=$?
+			fi
 		else
 			status=$?
 			# Only our still-identical initialization receipt can describe a

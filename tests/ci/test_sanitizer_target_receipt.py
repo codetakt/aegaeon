@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import runpy
 import shutil
 import stat
 import subprocess
@@ -25,11 +26,9 @@ HELPER = ROOT / "scripts/sanitizers/sanitizer_paths.sh"
 
 class SanitizerTargetReceiptTests(unittest.TestCase):
     def modeled_binding(self, operation, *, final_owner, parent_owner):
-        body = (
-            HELPER.read_text()
-            .split("<<'SANITIZER_BINDING'\n", 1)[1]
-            .split("\nSANITIZER_BINDING", 1)[0]
-        )
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_binding.py"))
+        binding_main = namespace["main"]
+        failure = binding_main.__globals__["require"].__globals__["Failure"]
         identities = [[1, 10], [1, 11], [1, 12]]
         value = (
             "/system-parent/producer-target"
@@ -46,7 +45,14 @@ class SanitizerTargetReceiptTests(unittest.TestCase):
         # or recursive removal are delegated by these ownership models.
         with (
             patch.object(sys, "argv", ["binding", operation, value, "", ""]),
-            patch("os.open", side_effect=[10, 11, 12]),
+            patch(
+                "os.open",
+                side_effect=lambda name, *args, **kwargs: {
+                    "/": 10,
+                    "system-parent": 11,
+                    "producer-target": 12,
+                }[name],
+            ),
             patch("os.fstat", side_effect=lambda descriptor: metadata[descriptor]),
             patch("os.mkdir") as mkdir,
             patch("os.close"),
@@ -58,8 +64,8 @@ class SanitizerTargetReceiptTests(unittest.TestCase):
             contextlib.redirect_stdout(output),
         ):
             try:
-                exec(compile(body, str(HELPER), "exec"), {})  # noqa: S102 - exact owned inline source under inert OS boundary
-            except ValueError as error:
+                binding_main()
+            except failure as error:
                 return error, output.getvalue(), scan.called, remove.called, mkdir.call_count
         return None, output.getvalue(), scan.called, remove.called, mkdir.call_count
 
@@ -69,7 +75,7 @@ class SanitizerTargetReceiptTests(unittest.TestCase):
                 error, output, scanned, removed, _ = self.modeled_binding(
                     operation, final_owner=os.getuid() + 1, parent_owner=os.getuid()
                 )
-                self.assertIsInstance(error, ValueError)
+                self.assertIsNotNone(error)
                 self.assertIn("must belong to the producer", str(error))
                 self.assertEqual(output, "")
                 self.assertFalse(scanned)

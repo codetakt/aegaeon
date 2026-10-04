@@ -18,7 +18,7 @@ from unittest import mock
 import test_security_fuzz as fuzz_fixture
 
 NIX = r"""
-import json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys
 root = pathlib.Path(os.environ['FIXTURE_ROOT'])
 args = sys.argv[1:]
 expected = ['develop', '.#asan', '--command', 'bash', 'scripts/sanitizers/run_sanitizers.sh']
@@ -30,11 +30,18 @@ with (root / 'dispatch-calls.jsonl').open('a') as out:
 if sanitizer:
     directory = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
     (directory / 'child-receipt.json').write_text(json.dumps({'exit_code': code}))
-    (directory / 'run-summary.json').write_text(json.dumps({
+    if code == 0:
+        config = json.loads(pathlib.Path(os.environ['SANITIZER_MODEL_CONFIG']).read_text())
+        result = subprocess.run(config['argv'],
+                                env={**os.environ, **config['environment']}, check=False)
+        if result.returncode:
+            raise SystemExit(result.returncode)
+    else:
+        (directory / 'run-summary.json').write_text(json.dumps({
         'status': 'completed' if code == 0 else 'failed', 'exit_code': code,
         'commands': [{'phase': 'run', 'exit_code': code}],
-        'units': [{'package': 'ffi', 'targets': [{'name': 'ffi', 'status':
-                   'completed' if code == 0 else 'failed'}]}]}))
+            'units': [{'package': 'ffi', 'targets': [{'name': 'ffi', 'status':
+                       'completed' if code == 0 else 'failed'}]}]}))
     if not os.environ.get('SANITIZER_UNSAFE_TARGET_TEST'):
         scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
         scratch.mkdir(parents=True, exist_ok=True)

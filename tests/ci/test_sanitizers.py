@@ -315,6 +315,9 @@ elif tool == "nm":
 elif tool == "readelf":
     print("NEEDED libc.so.6")
 elif tool == "cargo":
+    if args.count("--no-run") > 1:
+        print("duplicate no-run rejected by Cargo model", file=sys.stderr)
+        raise SystemExit(2)
     metadata = json.loads((root / "metadata.json").read_text())
     if "metadata" in args:
         if mode == "metadata-missing":
@@ -503,6 +506,42 @@ else:
         )
     )
 """
+
+
+def install_sanitizer_model(testcase, workspace, environment):
+    """Install the existing Cargo/libtest model behind a separate tool path.
+
+    Aggregate fixtures keep their fuzz Cargo intact. The actual sanitizer
+    wrapper/controller executes the same nine-target model in their workspace.
+    This remains orchestration evidence, not a native ASan build.
+    """
+
+    class ModelFixture(SanitizerFixture, unittest.TestCase):
+        pass
+
+    model = ModelFixture()
+    testcase.addCleanup(model.doCleanups)
+    model.setUp()
+    metadata = json.loads((model.root / "metadata.json").read_text())
+    metadata["workspace_root"] = str(workspace)
+    (model.root / "metadata.json").write_text(json.dumps(metadata))
+    config = model.root / "model-config.json"
+    variables = (
+        "PATH",
+        "SANITIZER_FIXTURE",
+        "SANITIZER_RUNTIME_DIR",
+        "LIBASAN_PATH",
+        "LIBCXXABI_PATH",
+    )
+    config.write_text(
+        json.dumps(
+            {
+                "argv": [shutil.which("bash"), str(WRAPPER)],
+                "environment": {name: model.environment[name] for name in variables},
+            }
+        )
+    )
+    environment["SANITIZER_MODEL_CONFIG"] = str(config)
 
 
 class SanitizerFixture:
@@ -1891,6 +1930,8 @@ class SanitizerCheckoutRootTests(SanitizerFixture, unittest.TestCase):
             "sanitizer_runner.py",
         ):
             shutil.copy2(WRAPPER.parent / name, self.scripts / name)
+        shutil.copy2(WRAPPER.parent / "sanitizer_binding.py", self.scripts / "sanitizer_binding.py")
+        shutil.copytree(WRAPPER.parent / "sanitizer_support", self.scripts / "sanitizer_support")
         self.subdirectory = self.checkout / "crates/ffi"
         self.subdirectory.mkdir(parents=True)
 
@@ -2068,6 +2109,13 @@ class SanitizerLoggingFixture(SanitizerFixture):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, path)
+        shutil.copy2(
+            WRAPPER.parent / "sanitizer_binding.py",
+            self.root / "scripts/sanitizers/sanitizer_binding.py",
+        )
+        shutil.copytree(
+            WRAPPER.parent / "sanitizer_support", self.root / "scripts/sanitizers/sanitizer_support"
+        )
         self.shared = self.root / "shared"
         self.environment.update(
             SECURITY_ARTIFACT_DIR=str(self.shared),
@@ -2082,11 +2130,16 @@ class SanitizerLoggingFixture(SanitizerFixture):
             "nix",
             """
 import os
+import subprocess
 from pathlib import Path
 root = Path(os.environ["SANITIZER_FIXTURE"])
 evidence = Path(os.environ["SANITIZER_ARTIFACT_DIR"])
 (root / "producer-called").write_text("inert model only")
 mode = os.environ.get("MODEL_CHILD", "success")
+if mode != "child-failure":
+    status = subprocess.run(MODEL_COMMAND, check=False).returncode
+    if status:
+        raise SystemExit(status)
 if mode == "replace-log":
     log = root / "shared/summary/security.log"
     log.rename(log.with_name("retained-security.log"))
@@ -2095,10 +2148,11 @@ if mode == "cleanup-swap":
     target = Path(os.environ["SANITIZER_TARGET_DIR"])
     target.rename(target.with_name("held-target"))
     target.mkdir()
-(evidence / "run-summary.json").write_text('{"status":"completed","commands":[],"units":[]}')
+if mode == "child-failure":
+    (evidence / "run-summary.json").write_text('{"status":"failed","commands":[],"units":[]}')
 print("inert modeled sanitizer output")
 raise SystemExit(23 if mode == "child-failure" else 0)
-""",
+""".replace("MODEL_COMMAND", repr([shutil.which("bash"), str(WRAPPER)])),
         )
         self.real_tee = shutil.which("tee")
         (self.bin / "tee").unlink()

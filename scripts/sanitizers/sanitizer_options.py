@@ -77,7 +77,9 @@ def cargo_flags(extra_text: str, build_text: str) -> tuple[list[str], list[str]]
             value = next(pending, "")
         if not valid_value(kind, value):
             raise ValueError(ERROR)
-    return extra, build
+    # The controller owns this mandatory switch; keep documented input support
+    # without emitting duplicate SetTrue options rejected by Cargo.
+    return [argument for argument in extra if argument != "--no-run"], build
 
 
 COMPILER_ENVIRONMENT_ERROR = "Inherited Rust compiler overrides are not supported for sanitizers"

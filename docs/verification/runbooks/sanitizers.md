@@ -58,6 +58,8 @@ are rejected, except repeated `-v`. Package, profile, target, Cargo configuratio
 and unstable `-Z` options cannot pass through this channel.
 `SANITIZER_BUILD_EXTRA_ARGS` separately accepts only `-Zbuild-std=std` or
 `-Z build-std=std`; an empty value uses the ordinary configured build.
+The runner emits its mandatory `--no-run` once even when the extra channel
+already includes it.
 
 Both entry routes reject inherited Bash functions before helper calls. They
 leave prior evidence untouched when startup admission is refused; the nonzero
@@ -78,6 +80,9 @@ If process inspection fails, cleanup still kills the owned group and reaps its
 leader, then reports the inspection failure.
 Interrupted evidence writes retain the signal-derived exit status; an earlier
 failure keeps its original status if the final receipt cannot be written.
+Terminal output is flushed before the final receipt. A reporting failure
+invalidates an otherwise successful run and preserves an earlier child or
+supervisor failure code.
 The existing security job's outer timeout still bounds the whole stage.
 
 The security-suite dispatcher resolves `SANITIZER_TARGET_DIR` before removing
@@ -146,6 +151,22 @@ identities and SHA-256 digests, flags, runtime linkage, expected tests and named
 results. Raw stdout and stderr are retained for successful and failed commands.
 Build failures, crashes, missing named completion, malformed evidence and output
 or cleanup errors fail the run.
+
+The controller separates orchestration, process supervision, Cargo/libtest
+admission and evidence storage in a fixed sibling support package. Summaries
+and raw logs use the same admitted directory identities and fd-relative,
+no-follow operations. Existing raw leaves must be owned regular files with
+one link before truncation; later directory substitutions are rejected.
+
+Before accepting a zero launcher exit, the security-suite stage validates
+the completed receipt against its original invocation and prescribed selections.
+It replays the retained metadata, build artifacts, inspection, test listings
+and named completion, and checks the complete command and target inventory
+before removing executables. Zero without this evidence fails. A rejected
+completed summary is retained byte-for-byte as `rejected-summary-*.json`,
+and the current summary records failure. Nonzero child receipts retain their
+original bytes and exit codes. These checks do not freeze arbitrary concurrent
+workspace mutations.
 
 ASan markers and the isolated validation canary establish instrumentation of
 the Rust test binaries checked. They do not establish instrumentation of all C
