@@ -83,7 +83,7 @@ sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$workspace" || exit 1
 # Safe owned evidence is failed before any later target or tool preflight fails.
 # Unsafe evidence is never initialized or archived.
 sanitizer_initialize_evidence || exit 1
-PREFLIGHT_PHASE=target
+PREFLIGHT_PHASE=cargo-flags
 preflight_exit() {
 	local status=$?
 	trap - EXIT
@@ -93,8 +93,8 @@ preflight_exit() {
 	exit "$status"
 }
 trap preflight_exit EXIT
-PREFLIGHT_PHASE=cargo-flags
 sanitizer_validate_cargo_flags "$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS" || exit 1
+PREFLIGHT_PHASE=target
 preflight_route "$SANITIZER_TARGET_ROOT" || exit 1
 SANITIZER_TARGET_ROOT=$PREFLIGHT_ROUTE
 sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$workspace" || exit 1
@@ -147,6 +147,7 @@ if [[ -z ${host_triple} ]]; then
 	exit 1
 fi
 
+PREFLIGHT_PHASE=runtime
 asan_suffix="${host_triple%%-*}"
 asan_runtime="${clang_lib_dir}/libclang_rt.asan-${asan_suffix}.so"
 if [[ ! -f ${asan_runtime} ]]; then

@@ -1255,16 +1255,17 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                     link.symlink_to(original)
 
     def test_runtime_and_host_preflight_failures_replace_stale_success(self):
-        for mode, overrides in (
-            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "missing-runtime")}),
-            ("bad-host", {}),
-            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "empty-runtime")}),
+        for mode, overrides, phase in (
+            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "missing-runtime")}, "runtime"),
+            ("bad-host", {}, "host"),
+            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "empty-runtime")}, "runtime"),
         ):
             with self.subTest(mode=mode, overrides=overrides):
                 (self.root / "empty-runtime").mkdir(exist_ok=True)
                 evidence, raw = self.seed_completed_preflight()
                 result = self.run_wrapper(mode, **overrides)
                 self.assert_failed_preflight_preserved(result, evidence, raw)
+                self.assertEqual(self.summary()["preflight_phase"], phase)  # noqa: PT009 - active under Python -O
 
     def test_missing_python_archives_summary_without_truncation(self):
         evidence, raw = self.seed_completed_preflight()
@@ -1518,11 +1519,12 @@ done
         sentinel.write_bytes(b"external completed sentinel\n")
         (self.root / "target-alias").symlink_to(external, target_is_directory=True)
         (self.root / "target-file").write_bytes(b"target file sentinel\n")
-        for target in ("target-alias", "target-file", "generated/unsafe-target"):
+        for target in ("target-alias", "target-file", "generated/unsafe-target", "evidence/target"):
             with self.subTest(target=target):
                 evidence, raw = self.seed_completed_preflight()
                 result = self.run_wrapper(SANITIZER_TARGET_DIR=target)
                 self.assert_failed_preflight_preserved(result, evidence, raw)
+                self.assertEqual(self.summary()["preflight_phase"], "target")  # noqa: PT009 - active under Python -O
                 self.assertEqual(sentinel.read_bytes(), b"external completed sentinel\n")  # noqa: PT009 - external bytes preserved
                 self.assertEqual(  # noqa: PT009 - file preserved
                     (self.root / "target-file").read_bytes(), b"target file sentinel\n"
