@@ -130,7 +130,7 @@ jobs:
             echo "- Job status: \`${{ job.status }}\`"
             echo ""
             if [ -f artifacts/security/latest/fuzz/run_summary.json ]; then
-              python - <<'PY'
+              python -I - <<'PY'
           import json
           from pathlib import Path
 
