@@ -154,6 +154,59 @@ class FuzzCorpusTests(unittest.TestCase):
                     manifest.write_text(content)
                 self.assertNotEqual(self.run_helper().returncode, 0)
 
+    def test_archive_copy_source_aliases_and_specials_do_not_copy_external_bytes(self):
+        for kind in ("symlink", "dangling-symlink", "hardlink", "parent-symlink", "fifo"):
+            with self.subTest(source=kind):
+                external = self.root.parent / ("external-source-" + kind)
+                external.mkdir()
+                sentinel = external / "archive.tar.gz"
+                if kind != "dangling-symlink":
+                    sentinel.write_bytes(b"external archive bytes remain private")
+                route = self.root / "fuzz" / kind
+                if kind == "parent-symlink":
+                    route.symlink_to(external, target_is_directory=True)
+                else:
+                    route.mkdir()
+                    archive = route / sentinel.name
+                    if kind in ("symlink", "dangling-symlink"):
+                        archive.symlink_to(sentinel)
+                    elif kind == "hardlink":
+                        os.link(sentinel, archive)
+                    else:
+                        os.mkfifo(archive)
+                destination = self.artifacts / kind
+                result = self.copy_archive(route / sentinel.name, destination)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse((destination / sentinel.name).exists())
+                if kind != "dangling-symlink":
+                    self.assertEqual(
+                        sentinel.read_bytes(), b"external archive bytes remain private"
+                    )
+
+    def test_archive_same_file_copy_rejects_before_truncating_source(self):
+        archive = self.root / "fuzz/owned-archive.tar.gz"
+        archive.write_bytes(b"preserve same-file archive bytes")
+        original = archive.stat()
+        result = self.copy_archive(archive, archive.parent)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("source and destination are the same file", result.stderr)
+        self.assertEqual(archive.read_bytes(), b"preserve same-file archive bytes")
+        self.assertEqual(archive.stat().st_ino, original.st_ino)
+        self.assertEqual(archive.stat().st_mtime_ns, original.st_mtime_ns)
+
+    def test_archive_copy_preserves_mode_and_timestamp_from_opened_source(self):
+        archive = self.root / "fuzz/owned-archive.tar.gz"
+        archive.write_bytes(b"regular archive snapshot")
+        archive.chmod(0o640)
+        os.utime(archive, ns=(1_500_000_000_000_000_000, 1_600_000_000_000_000_000))
+        result = self.copy_archive(archive, self.artifacts)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        copied = self.artifacts / archive.name
+        self.assertEqual(copied.read_bytes(), b"regular archive snapshot")
+        self.assertEqual(copied.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(copied.stat().st_mtime_ns, 1_600_000_000_000_000_000)
+        self.assertEqual(copied.stat().st_nlink, 1)
+
     def test_failed_archive_or_history_copy_is_not_silently_ignored(self):
         corpus = self.root / "fuzz/corpus/fuzz_par"
         corpus.mkdir(parents=True)

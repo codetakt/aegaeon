@@ -544,7 +544,7 @@
           export AEG_HOST_CC=${llvmPackages.clang}/bin/clang
           export AEG_HOST_CXX=${llvmPackages.clang}/bin/clang++
           export AEG_HOST_BIN="$(dirname "$AEG_HOST_CC")"
-          export AEG_HOST_AR=${pkgs.binutils}/bin/ar
+          export AEG_HOST_AR=${llvmPackages.bintools}/bin/ar
           export AEG_HOST_LD=${llvmPackages.bintools}/bin/ld.lld
           export PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationZ3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
           if [[ "${"CC:-"}" == *"wasm32-unknown-wasi"* ]]; then
@@ -563,6 +563,9 @@
           export CXX="$AEG_HOST_CXX"
           export AR="$AEG_HOST_AR"
           export LD="$AEG_HOST_LD"
+          export CC_FOR_BUILD="$AEG_HOST_CC"
+          export CXX_FOR_BUILD="$AEG_HOST_CXX"
+          export AR_FOR_BUILD="$AEG_HOST_AR"
           export CC_x86_64_unknown_linux_gnu="$AEG_HOST_CC"
           export CXX_x86_64_unknown_linux_gnu="$AEG_HOST_CXX"
           export AR_x86_64_unknown_linux_gnu="$AEG_HOST_AR"
