@@ -116,6 +116,9 @@ if stage_enabled "fuzz"; then
 	if [[ $fuzz_receipt_dir != /* ]]; then
 		fuzz_receipt_dir="$ROOT/$fuzz_receipt_dir"
 	fi
+	# Use the same suite-owned collection destinations for every helper action.
+	# An inherited helper-only route must not change the source exclusions midway.
+	export FUZZ_RUN_ARTIFACT_DIR="$fuzz_receipt_dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR"
 	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
@@ -470,8 +473,7 @@ run_fuzz() {
 	cat "$dir/run.log" || result=1
 	# Collect corpus and crash archives even after setup, build or run failures.
 	# Collection writes its marker only after all evidence has been checked.
-	if ! FUZZ_RUN_ARTIFACT_DIR="$dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR" \
-		python3 scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
+	if ! python3 scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
 		result=1
 	fi
 	return "$result"

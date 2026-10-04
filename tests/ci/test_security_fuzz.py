@@ -2789,7 +2789,7 @@ os.link(binary,ROOT.parent/'external-compiled-artifact')
         self.assertIn(hashlib.sha256(b"result/bin/cargo-kani").hexdigest(), result.stdout)
         self.assertIn("120000", result.stdout)
         pointer.unlink()
-        for kind in ("missing", "file", "changed-target"):
+        for kind in ("file", "changed-target"):
             with self.subTest(kind=kind):
                 if kind == "file":
                     pointer.write_text("tool output")
@@ -3468,6 +3468,224 @@ class SecurityFuzzPreflightConsistencyTests(SecurityFuzzFixture):
         self.assert_receipts_unchanged(prior)
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.root / "relative-home").exists())
+
+
+class SecurityFuzzArtifactDestinationTests(SecurityFuzzFixture):
+    def setUp(self):
+        super().setUp()
+        for tool in ("cc", "c++", "ar"):
+            self.install(tool, "print('nonsecret native-version fixture')")
+
+    def test_packaging_rejects_both_cargo_home_overlaps_before_entry_reads(self):
+        result = SecurityFuzzReceiptBoundaryTests.helper_python(
+            self,
+            "import os,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['package_upload'].__globals__\n"
+            "root=h['ROOT']; output=root/'artifacts/upload-control'\n"
+            "def forbidden_inventory(): raise RuntimeError('unsafe entry inventory reached')\n"
+            "state['upload_inventory']=forbidden_inventory\n"
+            "for name in h['UPLOAD_ROOTS']:\n"
+            " source=root/name\n"
+            " for home in (source,source/'cargo-home',source.parent):\n"
+            "  os.environ['CARGO_HOME']=str(home)\n"
+            "  try: h['package_upload'](output)\n"
+            "  except ValueError as error:\n"
+            "   if str(error)!='upload paths overlap Cargo home': raise\n"
+            "  else: raise RuntimeError('Cargo home overlap admitted')\n"
+            "for home in (output,output/'cargo-home',output.parent):\n"
+            " os.environ['CARGO_HOME']=str(home)\n"
+            " try: h['package_upload'](output)\n"
+            " except ValueError as error:\n"
+            "  if str(error)!='upload paths overlap Cargo home': raise\n"
+            " else: raise RuntimeError('output Cargo home overlap admitted')\n"
+            "if output.exists(): raise RuntimeError('rejected upload output was created')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_packaging_default_home_and_home_alias_reject_before_inventory(self):
+        result = SecurityFuzzReceiptBoundaryTests.helper_python(
+            self,
+            "import os,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['package_upload'].__globals__\n"
+            "root=h['ROOT']; output=root/'artifacts/upload-default-control'\n"
+            "def forbidden_inventory(): raise RuntimeError('unsafe entry inventory reached')\n"
+            "state['upload_inventory']=forbidden_inventory\n"
+            "os.environ.pop('CARGO_HOME',None)\n"
+            "pathlib.Path.home=classmethod(lambda cls: root/'artifacts/security/latest')\n"
+            "try: h['package_upload'](output)\n"
+            "except ValueError as error:\n"
+            " if str(error)!='upload paths overlap Cargo home': raise\n"
+            "else: raise RuntimeError('default Cargo home overlap admitted')\n"
+            "home=root.parent/'owned-cargo-home'; home.mkdir()\n"
+            "(home/'credentials.toml').write_bytes(b'nonsecret credential fixture')\n"
+            "alias=root.parent/'cargo-home-alias'; alias.symlink_to(home)\n"
+            "os.environ['CARGO_HOME']=str(alias)\n"
+            "try: h['package_upload'](output)\n"
+            "except ValueError as error:\n"
+            " if 'symlink components' not in str(error): raise\n"
+            "else: raise RuntimeError('Cargo home alias admitted')\n"
+            "if output.exists(): raise RuntimeError('rejected upload output was created')\n"
+            "if (home/'credentials.toml').read_bytes()!=b'nonsecret credential fixture':\n"
+            " raise RuntimeError('fixture credentials changed')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_collection_summary_destinations_reject_before_retiring_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        summary = self.artifacts / "fuzz/collection-summary.json"
+        sentinel = Path(self.temporary) / "summary-sentinel"
+        sentinel.write_bytes(b"preserve nonsecret summary sentinel")
+        for kind in ("symlink", "hardlink", "directory", "fifo"):
+            with self.subTest(kind=kind):
+                if kind == "symlink":
+                    summary.symlink_to(sentinel)
+                elif kind == "hardlink":
+                    os.link(sentinel, summary)
+                elif kind == "directory":
+                    summary.mkdir()
+                else:
+                    os.mkfifo(summary)
+                try:
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("owned output destination", result.stderr)
+                    self.assert_receipts_unchanged(previous)
+                    self.assertEqual(self.calls(), [])
+                    self.assertFalse((self.artifacts / "summary/security.log").exists())
+                    self.assertEqual(sentinel.read_bytes(), b"preserve nonsecret summary sentinel")
+                finally:
+                    if kind == "directory":
+                        summary.rmdir()
+                    else:
+                        summary.unlink()
+
+    def test_safe_packaging_preserves_inert_cargo_links_without_reading_credentials(self):
+        result = SecurityFuzzReceiptBoundaryTests.helper_python(
+            self,
+            "import os,pathlib,runpy,sys,tarfile\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['package_upload'].__globals__\n"
+            "root=h['ROOT']; home=root.parent/'owned-cargo-home'; home.mkdir()\n"
+            "credential=home/'credentials.toml'\n"
+            "credential.write_bytes(b'nonsecret credential fixture')\n"
+            "os.environ['CARGO_HOME']=str(home)\n"
+            "source=root/'artifacts/security/latest'; source.mkdir(parents=True)\n"
+            "(source/'owned').write_bytes(b'owned upload evidence')\n"
+            "(source/'inert-cargo-link').symlink_to(home)\n"
+            "actual=state['open_evidence_file']\n"
+            "def no_credentials(path,*args,**kwargs):\n"
+            " if path.is_relative_to(home): raise RuntimeError('credential read attempted')\n"
+            " return actual(path,*args,**kwargs)\n"
+            "state['open_evidence_file']=no_credentials\n"
+            "output=root/'artifacts/upload-safe-control'; h['package_upload'](output)\n"
+            "with tarfile.open(output/'security-evidence.tar.gz') as archive:\n"
+            " link=archive.getmember('artifacts/security/latest/inert-cargo-link')\n"
+            " if not link.issym() or link.linkname!=str(home):\n"
+            "  raise RuntimeError('inert link identity changed')\n"
+            " if any('credentials.toml' in name for name in archive.getnames()):\n"
+            "  raise RuntimeError('credentials entered upload archive')\n"
+            "if not (output/'manifest.json').is_file(): raise RuntimeError('manifest missing')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_effective_suite_outputs_remain_identical_through_cleanup(self):
+        for route in ("collection-history", "collection-evidence"):
+            path = self.root / route
+            path.mkdir()
+            (path / "existing").write_bytes(b"unchanged inherited route input")
+        phases = (
+            "--validate-preflight",
+            "--prepare-run",
+            "--record-environment",
+            "--record-target",
+            "--finish-run",
+            "--backup-cleanup",
+            "--cleanup-cache",
+            "--cleanup-result",
+        )
+        self.install_helper_hooks(
+            {
+                phase: "with (ROOT.parent/'effective-routes.jsonl').open('a') as stream:\n"
+                f" stream.write(json.dumps({{'action': {phase!r}, "
+                "'artifact': os.environ.get('FUZZ_RUN_ARTIFACT_DIR'), "
+                "'history': os.environ.get('FUZZ_HISTORY_DIR')})+'\\n')\n"
+                for phase in phases
+            }
+        )
+        result = self.run_suite(
+            FUZZ_TARGETS=TARGETS[0],
+            FUZZ_HISTORY_DIR="collection-history",
+            FUZZ_RUN_ARTIFACT_DIR="collection-evidence",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        observations = [
+            json.loads(line)
+            for line in (self.root.parent / "effective-routes.jsonl").read_text().splitlines()
+        ]
+        self.assertEqual({record["action"] for record in observations}, set(phases))
+        for record in observations:
+            self.assertEqual(record["artifact"], str(self.artifacts / "fuzz"))
+            self.assertEqual(record["history"], self.env["SECURITY_HISTORY_DIR"])
+        self.assertEqual(self.summary()["status"], "passed")
+        self.assert_backup()
+        for route in ("collection-history", "collection-evidence"):
+            self.assertIn(route + "/existing", self.summary()["execution"]["source"]["files"])
+            self.assertEqual(
+                (self.root / route / "existing").read_bytes(), b"unchanged inherited route input"
+            )
+
+
+class SecurityFuzzPreflightSourceHistoryTests(SecurityFuzzFixture):
+    def setUp(self):
+        super().setUp()
+        for tool in ("cc", "c++", "ar"):
+            self.install(tool, "print('nonsecret native-version fixture')")
+
+    def test_collection_history_overlap_preserves_previous_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        collection = self.artifacts / "fuzz"
+        for history in (collection, collection / "history", self.artifacts):
+            with self.subTest(history=history):
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], SECURITY_HISTORY_DIR=str(history))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("collection and history directories overlap", result.stderr)
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.artifacts / "summary").exists())
+                self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+
+    def test_transitive_source_alias_rejects_before_retiring_previous_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        sentinel = Path(self.temporary) / "transitive-source-sentinel"
+        sentinel.write_bytes(b"unchanged transitive source sentinel\n")
+        for package in ("server", "ffi"):
+            with self.subTest(package=package):
+                alias = self.root / "crates" / package / "src" / "unmodeled.rs"
+                alias.symlink_to(sentinel)
+                try:
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("symlink or external local source input", result.stderr)
+                    self.assert_receipts_unchanged(previous)
+                    self.assertEqual(self.calls(), [])
+                    self.assertFalse((self.artifacts / "summary").exists())
+                    self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+                    self.assertEqual(
+                        sentinel.read_bytes(), b"unchanged transitive source sentinel\n"
+                    )
+                finally:
+                    alias.unlink()
+
+    def test_retired_kani_pointer_absence_is_bound_without_tool_traversal(self):
+        (self.root / "crates/kani-harness/kani").unlink()
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary()
+        self.assertEqual(summary["status"], "passed")
+        self.assertNotIn("crates/kani-harness/kani", summary["execution"]["source"]["files"])
+        self.assertFalse((self.root / "crates/kani-harness/result").exists())
 
 
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
