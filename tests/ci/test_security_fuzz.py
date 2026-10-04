@@ -274,12 +274,15 @@ class SecurityFuzzFixture(unittest.TestCase):
             "python3",
             "import os,runpy,sys\n"
             f"hooks={hooks!r}\n"
+            "arguments=sys.argv[1:]\n"
+            "if arguments[:1] == ['-I']:\n arguments=arguments[1:]\n"
             "for action, code in hooks.items():\n"
-            " if action in sys.argv:\n"
-            "  namespace=runpy.run_path(sys.argv[1], run_name='fuzz_test_hook')\n"
+            " if action in arguments:\n"
+            "  sys.argv=[sys.argv[0], *arguments]\n"
+            "  namespace=runpy.run_path(arguments[0], run_name='fuzz_test_hook')\n"
             "  state=namespace['main'].__globals__\n"
             "  exec(code, state)\n"
-            "  sys.argv=sys.argv[1:]\n"
+            "  sys.argv=arguments\n"
             "  raise SystemExit(state['main']())\n"
             f"os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])",
         )
@@ -3454,6 +3457,88 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
                             )
                         self.assertFalse(Path(self.env["CARGO_TARGET_DIR"]).exists())
         config.write_bytes(original)
+
+    def test_registry_index_environment_rejects_before_preflight_or_receipt_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        credentials = Path(self.env["CARGO_HOME"]) / "credentials.toml"
+        credentials.parent.mkdir()
+        credentials.write_bytes(b"dummy caller credentials only\n")
+        history = Path(self.env["SECURITY_HISTORY_DIR"])
+        history.mkdir()
+        (history / "previous.json").write_bytes(b"dummy previous history\n")
+        roots = (self.root, self.artifacts, credentials.parent, history)
+        before = {
+            path: path.read_bytes()
+            for root in roots
+            for path in root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        before_paths = {
+            root: sorted(str(path.relative_to(root)) for path in root.rglob("*")) for root in roots
+        }
+        for name in (
+            "CARGO_REGISTRIES_CRATES_IO_INDEX",
+            "CARGO_REGISTRIES_REPLACEMENT_INDEX",
+            "CARGO_REGISTRIES_FUTURE_NAME_INDEX",
+            "CARGO_REGISTRY_INDEX",
+        ):
+            for value in ("https://example.invalid/index", ""):
+                for shared in (False, True):
+                    with self.subTest(variable=name, empty=value == "", shared=shared):
+                        result = (
+                            self.run_suite(FUZZ_TARGETS=TARGETS[0], **{name: value})
+                            if shared
+                            else subprocess.run(  # noqa: S603 - actual owned helper preflight
+                                [
+                                    sys.executable,
+                                    str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                                    "--validate-preflight",
+                                    str(marker.parent),
+                                ],
+                                cwd=self.root,
+                                env={**self.env, name: value},
+                                capture_output=True,
+                                text=True,
+                                timeout=30,
+                                check=False,
+                            )
+                        )
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(
+                            "unmodeled Cargo dependency source environment override", result.stderr
+                        )
+                        self.assertEqual(self.calls(), [])
+                        for path, data in before.items():
+                            self.assertEqual(path.read_bytes(), data, str(path))
+                        for root, paths in before_paths.items():
+                            self.assertEqual(
+                                sorted(str(path.relative_to(root)) for path in root.rglob("*")),
+                                paths,
+                            )
+                        self.assertFalse(Path(self.env["CARGO_TARGET_DIR"]).exists())
+
+    def test_registry_credentials_and_non_source_environment_keep_native_execution(self):
+        credentials = Path(self.env["CARGO_HOME"]) / "credentials.toml"
+        credentials.parent.mkdir()
+        previous = b"dummy caller credentials only\n"
+        credentials.write_bytes(previous)
+        result = self.run_suite(
+            FUZZ_TARGETS=TARGETS[0],
+            CARGO_REGISTRY_TOKEN="dummy-registry-token",  # noqa: S106 - nonsecret fixture
+            CARGO_REGISTRIES_CRATES_IO_TOKEN="dummy-crates-io-token",  # noqa: S106 - nonsecret fixture
+            CARGO_REGISTRIES_REPLACEMENT_TOKEN="dummy-replacement-token",  # noqa: S106 - nonsecret fixture
+            CARGO_REGISTRIES_REPLACEMENT_CREDENTIAL_PROVIDER="cargo:token",
+            CARGO_HTTP_TIMEOUT="30",
+            CARGO_NET_RETRY="2",
+            CARGO_TERM_COLOR="never",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.summary()["execution"]["status"], "passed")
+        self.assertEqual(credentials.read_bytes(), previous)
+        self.assertEqual(
+            self.summary()["execution"]["effective_native_commands"],
+            {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"},
+        )
 
     def test_empty_source_containers_and_non_source_settings_keep_native_execution(self):
         config = self.root / ".cargo/config.toml"

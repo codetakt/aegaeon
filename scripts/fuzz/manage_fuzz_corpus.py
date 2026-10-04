@@ -1036,6 +1036,10 @@ def validate_native_configuration() -> dict[str, str]:
 
 def validate_native_overrides(expected: dict[str, str]) -> None:
     for name, value in os.environ.items():
+        if name == "CARGO_REGISTRY_INDEX" or (
+            name.startswith("CARGO_REGISTRIES_") and name.endswith("_INDEX")
+        ):
+            invalid("unmodeled Cargo dependency source environment override")
         if (
             name.startswith(
                 (
