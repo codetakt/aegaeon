@@ -32,6 +32,57 @@ FFI_TARGETS = {
     "oidc_hash_runtime_test",
     "pkce_verifier_test",
 }
+LIBRARY_KINDS = {"lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"}
+TargetKey = tuple[str, tuple[str, ...]]
+TargetInventory = dict[TargetKey, dict[str, Any]]
+
+
+def target_key(target: dict[str, Any]) -> TargetKey:
+    name, kinds = target.get("name"), target.get("kind")
+    require(
+        isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_-]+", name),
+        "Invalid Cargo target identity",
+    )
+    require(
+        isinstance(kinds, list)
+        and kinds
+        and all(isinstance(kind, str) for kind in kinds)
+        and len(kinds) == len(set(kinds)),
+        "Invalid Cargo target kind",
+    )
+    return name, tuple(sorted(kinds))
+
+
+def target_selector(key: TargetKey) -> list[str]:
+    name, kinds = key
+    if set(kinds) <= LIBRARY_KINDS:
+        return ["--lib"]
+    require(
+        len(kinds) == 1 and kinds[0] in {"bin", "test", "example", "bench"},
+        f"Unsupported test-enabled Cargo target kind: {kinds}",
+    )
+    return ["--" + kinds[0], name]
+
+
+def target_inventory(package: dict[str, Any]) -> TargetInventory:
+    targets = {}
+    for target in package["targets"]:
+        require(type(target.get("test")) is bool, "Invalid Cargo target test setting")
+        if not target["test"]:
+            continue
+        key = target_key(target)
+        target_selector(key)
+        require(key not in targets, "Duplicate Cargo target identity")
+        targets[key] = target
+    require(targets, "Empty required sanitizer target inventory")
+    require(
+        sum(set(key[1]) <= LIBRARY_KINDS for key in targets) <= 1,
+        "Multiple Cargo library targets cannot be selected independently",
+    )
+    if package["name"] == "ffi":
+        baseline = {(name, ("lib" if name == "ffi" else "test",)) for name in FFI_TARGETS}
+        require(set(targets) >= baseline, "Missing required baseline ffi target")
+    return targets
 
 
 class Failure(Exception):  # noqa: N818 - retained failure/status interface
@@ -219,10 +270,6 @@ class Supervisor:
                         output.write(data)
                         output.flush()
             process.wait(timeout=5)
-            # Descendants may close their output and outlive a normal leader.
-            record["lingering_descendants"] = (
-                terminate(process, self.kill_grace) or record["lingering_descendants"]
-            )
 
     def finish_command(
         self, record: dict[str, Any], error: Exception | None, original_status: int | None
@@ -306,7 +353,11 @@ class Supervisor:
             if process is not None:
                 original_status = process.poll() if original_status is None else original_status
                 try:
-                    terminate(process, self.kill_grace)
+                    # One final cleanup also catches descendants that closed their
+                    # output before a normal leader exited; keep its observed status.
+                    record["lingering_descendants"] = (
+                        terminate(process, self.kill_grace) or record["lingering_descendants"]
+                    )
                 except Exception as caught:  # noqa: BLE001 - retain a previously observed exit
                     error = error or caught
                 record["exit_code"] = process.poll()
@@ -364,13 +415,28 @@ class Supervisor:
         require(
             len(package_records) == len(metadata["packages"]), "Duplicate Cargo metadata package"
         )
+        inventories = {}
         for package_name in packages:
             require(package_name in package_records, f"Unknown sanitizer package: {package_name}")
+            inventories[package_name] = target_inventory(package_records[package_name])
+        entries = [(package, key) for package, targets in inventories.items() for key in targets]
+        names = [key[0] for _, key in entries]
+        duplicates = len(names) != len(set(names))
+        labels = [
+            f"target-{index}-{name}" if duplicates else name for index, name in enumerate(names)
+        ]
+        require(len(labels) == len(set(labels)), "Duplicate sanitizer evidence label")
+        routes = dict(zip(entries, labels, strict=True))
+        for package_name in packages:
             self.execute_package(
                 settings,
                 package_records[package_name],
                 (build_seconds, run_seconds),
                 (extra, build_extra),
+                (
+                    inventories[package_name],
+                    {key: routes[package_name, key] for key in inventories[package_name]},
+                ),
             )
 
     def execute_package(
@@ -379,29 +445,11 @@ class Supervisor:
         package: dict[str, Any],
         deadlines: tuple[float, float],
         options: tuple[list[str], list[str]],
+        inventory: tuple[TargetInventory, dict[TargetKey, str]],
     ) -> None:
         extra, build_extra = options
         package_name, sanitizer = package["name"], "address"
-        targets = {
-            target["name"]: target
-            for target in package["targets"]
-            if target.get("test") is True and set(target["kind"]) & {"lib", "test"}
-        }
-        require(
-            len(targets)
-            == sum(
-                target.get("test") is True and bool(set(target["kind"]) & {"lib", "test"})
-                for target in package["targets"]
-            ),
-            "Duplicate Cargo target identity",
-        )
-        require(
-            all(re.fullmatch(r"[A-Za-z0-9_-]+", name) for name in targets),
-            "Invalid Cargo target identity",
-        )
-        require(targets, "Empty required sanitizer target inventory")
-        if package_name == "ffi":
-            require(set(targets) >= FFI_TARGETS, "Missing required baseline ffi target")
+        targets, labels = inventory
         target_dir = (Path(settings.target_text) / f"{sanitizer}-{package_name}").resolve()
         rustflags = f"{settings.base_flags} -Z sanitizer={sanitizer} {settings.curve_flags}".strip()
         unit = {
@@ -413,12 +461,14 @@ class Supervisor:
             "target_directory": str(target_dir),
             "targets": [
                 {
-                    "name": name,
+                    "name": key[0],
+                    "kind": list(key[1]),
+                    "evidence_label": labels[key],
                     "status": "not-run",
                     "source": str(Path(target["src_path"]).resolve()),
                     "source_sha256": digest(Path(target["src_path"])),
                 }
-                for name, target in targets.items()
+                for key, target in targets.items()
             ],
         }
         self.summary["units"].append(unit)
@@ -441,8 +491,7 @@ class Supervisor:
                 *extra,
                 "-p",
                 package_name,
-                "--lib",
-                "--tests",
+                *(argument for key in targets for argument in target_selector(key)),
                 "--no-run",
                 "--target",
                 settings.host,
@@ -452,7 +501,7 @@ class Supervisor:
             deadlines[0],
             f"build-{sanitizer}-{package_name}",
         )
-        found = build_artifacts(output, package, targets, target_dir / settings.host / "debug/deps")
+        found = build_artifacts(output, package, targets, target_dir / settings.host / "debug")
         unit["status"] = "built"
         run_env = {
             **os.environ,
@@ -467,7 +516,7 @@ class Supervisor:
         for target_result in unit["targets"]:
             self.execute_binary(
                 target_result,
-                found[target_result["name"]],
+                found[target_key(target_result)],
                 run_env,
                 deadlines[1],
                 package_name=package_name,
@@ -484,6 +533,7 @@ class Supervisor:
         package_name: str,
     ) -> None:
         name = target_result["name"]
+        label = target_result["evidence_label"]
         binary, record = artifact
         target_result.update(
             {
@@ -494,7 +544,7 @@ class Supervisor:
             }
         )
         symbols = self.command(
-            ["nm", str(binary)], os.environ.copy(), run_seconds, f"symbols-{name}"
+            ["nm", str(binary)], os.environ.copy(), run_seconds, f"symbols-{label}"
         )
         require(
             "__asan_init" in symbols
@@ -503,12 +553,12 @@ class Supervisor:
             "Sanitizer binary lacks ASan instrumentation markers",
         )
         elf = self.command(
-            ["readelf", "-d", str(binary)], os.environ.copy(), run_seconds, f"runtime-{name}"
+            ["readelf", "-d", str(binary)], os.environ.copy(), run_seconds, f"runtime-{label}"
         )
         target_result["runtime_linkage"] = "dynamic" if "libclang_rt.asan" in elf else "embedded"
         all_names = listed(
             self.command(
-                [str(binary), "--list", "--format", "terse"], run_env, run_seconds, f"list-{name}"
+                [str(binary), "--list", "--format", "terse"], run_env, run_seconds, f"list-{label}"
             )
         )
         ignored = listed(
@@ -516,13 +566,14 @@ class Supervisor:
                 [str(binary), "--list", "--ignored", "--format", "terse"],
                 run_env,
                 run_seconds,
-                f"ignored-{name}",
+                f"ignored-{label}",
             )
         )
         require(ignored <= all_names, "Ignored test identities are not in required inventory")
         inactive = (
             package_name == "ffi"
             and name == "oidc_hash_runtime_test"
+            and target_result["kind"] == ["test"]
             and "lowstar_hash" not in record["features"]
         )
         require(
@@ -542,7 +593,7 @@ class Supervisor:
             [str(binary), "-Z", "unstable-options", "--format", "json"],
             run_env,
             run_seconds,
-            f"run-{name}",
+            f"run-{label}",
             echo=True,
         )
         require(
@@ -658,6 +709,7 @@ def artifact_binary(record: dict[str, Any], expected: dict[str, Any], output_dir
     )
     require(isinstance(record.get("executable"), str), "Missing sanitizer test executable")
     binary = Path(record["executable"]).resolve()
+    output_dir = output_dir / ("examples" if expected["kind"] == ["example"] else "deps")
     require(
         binary.is_relative_to(output_dir) and binary.is_file() and os.access(binary, os.X_OK),
         "Missing, stale or outside-target sanitizer executable",
@@ -670,8 +722,8 @@ def artifact_binary(record: dict[str, Any], expected: dict[str, Any], output_dir
 
 
 def build_artifacts(
-    output: str, package: dict[str, Any], targets: dict[str, Any], output_dir: Path
-) -> dict[str, tuple[Path, dict[str, Any]]]:
+    output: str, package: dict[str, Any], targets: TargetInventory, output_dir: Path
+) -> dict[TargetKey, tuple[Path, dict[str, Any]]]:
     found = {}
     build_finished = []
     for line in output.splitlines():
@@ -700,18 +752,19 @@ def build_artifacts(
         if not profile["test"]:
             continue
         target = record.get("target", {})
-        name = target.get("name")
+        require(isinstance(target, dict), "Malformed Cargo artifact target")
+        key = target_key(target)
         require(
-            record.get("package_id") == package["id"] and name in targets,
+            record.get("package_id") == package["id"] and key in targets,
             "Unrelated sanitizer test artifact",
         )
-        require(name not in found, "Duplicate sanitizer test artifact")
-        binary = artifact_binary(record, targets[name], output_dir)
+        require(key not in found, "Duplicate sanitizer test artifact")
+        binary = artifact_binary(record, targets[key], output_dir)
         require(
             all(binary != previous[0] for previous in found.values()),
             "Duplicate sanitizer executable",
         )
-        found[name] = (binary, record)
+        found[key] = (binary, record)
     require(build_finished == [True], "Missing successful Cargo build-finished record")
     require(set(found) == set(targets), "Missing required sanitizer test artifacts")
     return found

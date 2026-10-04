@@ -338,12 +338,27 @@ elif tool == "cargo":
         sys.exit(7)
     if mode == "build-signal":
         os.kill(os.getpid(), signal.SIGTERM)
-    target_dir = Path(os.environ["CARGO_TARGET_DIR"]) / "x86_64-unknown-linux-gnu/debug/deps"
-    target_dir.mkdir(parents=True, exist_ok=True)
+    native_dir = Path(os.environ["CARGO_TARGET_DIR"]) / "x86_64-unknown-linux-gnu/debug"
     package_name = args[args.index("-p") + 1]
     package = next(item for item in metadata["packages"] if item["name"] == package_name)
     targets = package["targets"]
     for index, target in enumerate(targets):
+        kinds = set(target["kind"])
+        library = kinds <= {"lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"}
+        selected = target["test"] and (
+            library and "--lib" in args
+            or any(
+                argument == "--" + kind and args[position + 1] == target["name"]
+                for kind in kinds
+                for position, argument in enumerate(args[:-1])
+            )
+        )
+        if not selected and not (
+            mode == "artifact-disabled-target" and target["name"] == "disabled"
+        ):
+            continue
+        target_dir = native_dir / ("examples" if kinds == {"example"} else "deps")
+        target_dir.mkdir(parents=True, exist_ok=True)
         binary = target_dir / f"nonstandard-name-{index}"
         binary.write_text((root / "fixture").read_text())
         binary.chmod(0o755)
@@ -357,6 +372,26 @@ elif tool == "cargo":
             "executable": str(binary),
             "filenames": [str(binary)],
         }
+        if target["name"] == "command":
+            if mode == "artifact-missing-bin":
+                continue
+            if mode == "artifact-wrong-kind":
+                record["target"] = {**target, "kind": ["example"]}
+            if mode == "artifact-bin-wrong-source":
+                record["target"] = {**target, "src_path": str(root / "wrong.rs")}
+            if mode == "artifact-shared-executable":
+                record["executable"] = str(target_dir / "nonstandard-name-0")
+                record["filenames"] = [record["executable"]]
+        if target["name"] == "demo":
+            if mode == "artifact-missing-example":
+                continue
+            if mode == "artifact-example-wrong-directory":
+                wrong = native_dir / "deps" / f"nonstandard-name-{index}"
+                wrong.parent.mkdir(parents=True, exist_ok=True)
+                wrong.write_text((root / "fixture").read_text())
+                wrong.chmod(0o755)
+                record["executable"] = str(wrong)
+                record["filenames"] = [str(wrong)]
         if index == 0:
             if mode == "artifact-missing":
                 continue
@@ -385,7 +420,9 @@ elif tool == "cargo":
         if mode == "artifact-zero":
             continue
         print(json.dumps(record))
-        if index == 0 and mode == "artifact-duplicate":
+        if (index == 0 and mode == "artifact-duplicate") or (
+            target["name"] == "command" and mode == "artifact-duplicate-bin"
+        ):
             print(json.dumps(record))
     if mode == "artifact-unknown-reason":
         print(json.dumps({"reason": "unknown"}))
@@ -540,6 +577,17 @@ class SanitizerFixture:
                 "id": f"{name}-identity",
                 "targets": [{"name": name, "kind": ["lib"], "test": True, "src_path": str(source)}],
             }
+        )
+        metadata_path.write_text(json.dumps(metadata))
+
+    def add_target(self, package, name, kind, *, enabled=True):
+        metadata_path = self.root / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        source = self.root / f"{package}-{kind}-{name}.rs"
+        source.write_text("// additional target source identity\n")
+        selected = next(item for item in metadata["packages"] if item["name"] == package)
+        selected["targets"].append(
+            {"name": name, "kind": [kind], "test": enabled, "src_path": str(source)}
         )
         metadata_path.write_text(json.dumps(metadata))
 
@@ -708,7 +756,8 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 )
                 self.assertTrue(build["args"][-3:-1] == ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009 - active under Python -O
                 self.assertTrue("--lib" in build["args"])  # noqa: PT009 - active under Python -O
-                self.assertTrue("--tests" in build["args"])  # noqa: PT009 - active under Python -O
+                self.assertNotIn("--tests", build["args"])  # noqa: PT009 - active under Python -O
+                self.assertEqual(build["args"].count("--test"), len(TARGETS) - 1)  # noqa: PT009 - active under Python -O
                 self.assertTrue(  # noqa: PT009 - active under Python -O
                     'curve25519_dalek_backend="serial"' in summary["units"][0]["rustflags"]
                 )
@@ -765,6 +814,145 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         builds = [call for call in calls if call["tool"] == "cargo" and "test" in call["args"]]
         self.assertTrue(builds[0]["encoded_flags"] is None)  # noqa: PT009 - active under Python -O
+
+    def test_complete_target_inventory_selects_bins_examples_and_benches(self):
+        self.add_package("additional")
+        for name, kind, enabled in (
+            ("command", "bin", True),
+            ("demo", "example", True),
+            ("benchmark", "bench", True),
+            ("disabled", "bin", False),
+        ):
+            self.add_target("additional", name, kind, enabled=enabled)
+        result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional")
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        summary = self.summary()
+        targets = summary["units"][1]["targets"]
+        self.assertEqual(  # noqa: PT009
+            [(target["name"], target["kind"]) for target in targets],
+            [
+                ("additional", ["lib"]),
+                ("command", ["bin"]),
+                ("demo", ["example"]),
+                ("benchmark", ["bench"]),
+            ],
+        )
+        self.assertTrue(all(target["status"] == "completed" for target in targets))  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - active under Python -O
+            [Path(target["binary"]).parent.name for target in targets],
+            ["deps", "deps", "examples", "deps"],
+        )
+        build = next(
+            command
+            for command in summary["commands"]
+            if command["phase"] == "build-address-additional"
+        )
+        self.assertEqual(  # noqa: PT009 - exact emitted compiler inventory, no broad selectors
+            build["args"],
+            [
+                str(self.bin / "cargo"),
+                "test",
+                "-p",
+                "additional",
+                "--lib",
+                "--bin",
+                "command",
+                "--example",
+                "demo",
+                "--bench",
+                "benchmark",
+                "--no-run",
+                "--target",
+                "x86_64-unknown-linux-gnu",
+                "--message-format=json-render-diagnostics",
+            ],
+        )
+
+    def test_same_named_targets_have_distinct_artifacts_and_safe_log_routes(self):
+        self.add_package("additional")
+        self.add_target("additional", "additional", "bin")
+        self.add_target("additional", "target-9-additional", "example")
+        self.add_package("other")
+        metadata_path = self.root / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["packages"][-1]["targets"][0]["name"] = "additional"
+        metadata_path.write_text(json.dumps(metadata))
+        result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional,other")
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        summary = self.summary()
+        targets = [target for unit in summary["units"] for target in unit["targets"]]
+        labels = [target["evidence_label"] for target in targets]
+        self.assertEqual(len(labels), len(set(labels)))  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - active under Python -O
+            labels, [f"target-{index}-{target['name']}" for index, target in enumerate(targets)]
+        )
+        shared = summary["units"][1]["targets"][:2]
+        self.assertEqual([target["kind"] for target in shared], [["lib"], ["bin"]])  # noqa: PT009
+        self.assertNotEqual(shared[0]["binary"], shared[1]["binary"])  # noqa: PT009
+        self.assertNotEqual(shared[0]["source"], shared[1]["source"])  # noqa: PT009
+        phases = [command["phase"] for command in summary["commands"]]
+        self.assertEqual(len(phases), len(set(phases)))  # noqa: PT009
+        for target in targets:
+            self.assertEqual(target["status"], "completed")  # noqa: PT009
+            self.assertIn("run-" + target["evidence_label"], phases)  # noqa: PT009
+        history_before = set((self.root / "evidence").glob(".previous-attempt-*"))
+        result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional,other")
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        (previous,) = set((self.root / "evidence").glob(".previous-attempt-*")) - history_before
+        old = json.loads((previous / "run-summary.json").read_text())
+        for command in old["commands"]:
+            for channel in ("stdout", "stderr"):
+                self.assertTrue((previous / Path(command[channel]).name).is_file())  # noqa: PT009 - duplicate-name raw logs survive retention
+
+    def test_complete_target_artifact_identity_failures(self):
+        self.add_package("additional")
+        self.add_target("additional", "command", "bin")
+        self.add_target("additional", "demo", "example")
+        self.add_target("additional", "disabled", "bin", enabled=False)
+        for mode in (
+            "artifact-missing-bin",
+            "artifact-missing-example",
+            "artifact-duplicate-bin",
+            "artifact-wrong-kind",
+            "artifact-bin-wrong-source",
+            "artifact-disabled-target",
+            "artifact-shared-executable",
+            "artifact-example-wrong-directory",
+        ):
+            with self.subTest(mode=mode):
+                result = self.run_wrapper(mode, SANITIZER_TARGETS="ffi,additional")
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009
+
+    def test_test_enabled_unknown_kind_rejects_before_build(self):
+        self.add_target("ffi", "unsupported", "future-kind")
+        result = self.run_wrapper()
+        self.assertNotEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        self.assertIn("Unsupported test-enabled Cargo target kind", result.stderr)  # noqa: PT009
+        self.assertFalse(  # noqa: PT009 - active under Python -O
+            any(command["phase"].startswith("build-") for command in self.summary()["commands"])
+        )
+
+    def test_library_crate_kinds_use_the_explicit_lib_selector(self):
+        runner = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        for kinds in (
+            ["rlib"],
+            ["dylib"],
+            ["cdylib"],
+            ["staticlib"],
+            ["proc-macro"],
+            ["staticlib", "cdylib"],
+        ):
+            with self.subTest(kinds=kinds):
+                self.add_package("additional")
+                metadata_path = self.root / "metadata.json"
+                metadata = json.loads(metadata_path.read_text())
+                package = metadata["packages"].pop()
+                package["targets"][0]["kind"] = kinds
+                key = ("additional", tuple(sorted(kinds)))
+                self.assertEqual(set(runner["target_inventory"](package)), {key})  # noqa: PT009
+                self.assertEqual(runner["target_selector"](key), ["--lib"])  # noqa: PT009
+                metadata_path.write_text(json.dumps(metadata))
 
     def test_artifact_inventory_and_record_failures(self):
         modes = (
@@ -839,7 +1027,7 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                     namespace["Failure"]("controlled final cleanup failure"),
                 ):
                     with self.subTest(error=type(error).__name__):
-                        terminate = Mock(side_effect=[False, error])
+                        terminate = Mock(side_effect=error)
                         supervisor = supervisor_type(artifacts, {"commands": []}, 1)
                         with (
                             patch.dict(
@@ -856,7 +1044,6 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                                 [sys.executable, "-c", child], os.environ.copy(), 5, "probe"
                             )
                         self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
-                        self.assertEqual(terminate.call_count, 2)  # noqa: PT009 - active under Python -O
                         self.assertEqual(supervisor.summary["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
                         self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
                         self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
@@ -2578,7 +2765,8 @@ class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
                     build[1:3] if value.startswith("--features ") else build[1:2], value.split()
                 )
                 self.assertIn("--lib", build)  # noqa: PT009
-                self.assertIn("--tests", build)  # noqa: PT009
+                self.assertNotIn("--tests", build)  # noqa: PT009
+                self.assertEqual(build.count("--test"), len(TARGETS) - 1)  # noqa: PT009
                 self.assertEqual(build[-3:-1], ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009
                 result = self.run_suite(SANITIZER_CARGO_FLAGS=value)
                 self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
@@ -2632,7 +2820,8 @@ class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
                 build = next(call["args"] for call in cargo_calls if "test" in call["args"])
                 self.assertEqual(build[: len(prefix) + 1], [*prefix, "test"])  # noqa: PT009
                 self.assertIn("--lib", build)  # noqa: PT009
-                self.assertIn("--tests", build)  # noqa: PT009
+                self.assertNotIn("--tests", build)  # noqa: PT009
+                self.assertEqual(build.count("--test"), len(TARGETS) - 1)  # noqa: PT009
                 self.assertEqual(build[-3:-1], ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009
                 result = self.run_suite(SANITIZER_BUILD_EXTRA_ARGS=value)
                 self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009

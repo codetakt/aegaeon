@@ -101,13 +101,23 @@ is disabled in this suite. `SANITIZER_EXEC_LD_PRELOAD` or
 
 ## Required execution and evidence
 
-Cargo metadata defines the current library/integration target inventory; the
-nine baseline ffi targets remain a required minimum. A successful Cargo build
+Cargo metadata defines every test-enabled library, binary, integration test,
+example and benchmark target. The runner selects each explicitly with `--lib`,
+`--bin`, `--test`, `--example` or `--bench`; unsupported test-enabled kinds fail.
+Library crate kinds share the library selector. Disabled targets are not selected;
+an unexpected test executable still fails. Every selected target must produce
+named libtest JSON completion, including custom harnesses and benchmark targets.
+The nine baseline ffi targets remain a required minimum. A successful Cargo build
 must report an executable for every applicable target through compiler-artifact
 JSON. Binary basenames need not contain `ffi`. Valid Cargo cache reuse is
 accepted when Cargo binds the executable to the selected package, target,
 source and native output directory. Missing, duplicate, malformed or unrelated
-artifacts fail even if an old executable exists.
+artifacts fail even if an old executable exists. Target name and kind distinguish
+same-named libraries and binaries, with package and canonical source bound
+independently. Example test executables must be in the native `debug/examples`
+directory; other test executables must be in `debug/deps`. Duplicate target names
+receive unique metadata-index log labels across all selected packages, and those
+raw logs retain the same attempt-history policy.
 
 For each binary the runner retains symbol and ELF inspection, lists all and
 ignored test identities, and validates normal libtest JSON completion against
