@@ -166,14 +166,27 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
             "artifacts/security-upload/manifest.json",
         }
         for name, condition in (
-            ("Upload security metrics", "always() && matrix.stage != 'sbom'"),
-            ("Upload SBOM metrics", "always() && matrix.stage == 'sbom'"),
+            (
+                "Upload security metrics",
+                (
+                    "always() && steps.package_security_upload.outcome == 'success' "
+                    "&& matrix.stage != 'sbom'"
+                ),
+            ),
+            (
+                "Upload SBOM metrics",
+                (
+                    "always() && steps.package_security_upload.outcome == 'success' "
+                    "&& matrix.stage == 'sbom'"
+                ),
+            ),
         ):
             step = self.step(name)
             self.assertEqual(step["if"], condition)
             self.assertEqual(set(step["with"]["path"].splitlines()), expected)
             self.assertEqual(step["with"]["if-no-files-found"], "error")
         self.assertEqual(self.step("Package security upload")["if"], "always()")
+        self.assertEqual(self.step("Package security upload")["id"], "package_security_upload")
 
     def prepare_packager(self):
         destination = self.root / "scripts/fuzz/manage_fuzz_corpus.py"

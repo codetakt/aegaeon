@@ -21,6 +21,15 @@ while [[ $security_outer_index -lt ${#security_outer_arguments[@]} ]]; do
 	esac
 	security_outer_index=$((security_outer_index + 1))
 done
+for security_outer_stage in "${security_outer_stages[@]}"; do
+	case "$security_outer_stage" in
+	supply-chain | runtime-tests | jose-boundaries | cargo-vet | fuzz | sanitizers | sbom | geiger | udeps) ;;
+	*)
+		echo "[security] unknown stage" >&2
+		exit 1
+		;;
+	esac
+done
 security_fuzz_entry=1
 if [[ ${#security_outer_stages[@]} -gt 0 ]]; then
 	security_fuzz_entry=0

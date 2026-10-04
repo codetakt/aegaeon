@@ -71,6 +71,74 @@ class FuzzCorpusTests(unittest.TestCase):
             with tarfile.open(archive) as tar:
                 self.assertEqual(tar.extractfile(member).read(), b"preserve these bytes")
 
+    def copy_archive(self, archive, destination):
+        return subprocess.run(  # noqa: S603 - invoke the actual helper with owned path fixtures
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import pathlib,runpy,sys\n"
+                    "helper=runpy.run_path(sys.argv[1])\n"
+                    "helper['copy_into'](pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))\n"
+                ),
+                str(self.helper),
+                str(archive),
+                str(destination),
+            ],
+            cwd=self.helper.parent,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_archive_copies_reject_file_aliases_specials_and_parent_aliases(self):
+        archive = self.root / "fuzz/archive-control.tar.gz"
+        archive.write_bytes(b"owned archive bytes")
+        for destination in (self.artifacts, self.history):
+            for kind in ("symlink", "dangling-symlink", "hardlink", "parent-symlink", "fifo"):
+                with self.subTest(destination=destination.name, alias=kind):
+                    external = self.root.parent / f"external-{destination.name}-{kind}"
+                    external.mkdir()
+                    sentinel = external / archive.name
+                    if kind != "dangling-symlink":
+                        sentinel.write_bytes(b"external bytes must remain unchanged")
+                    original = {path.name: path.read_bytes() for path in external.iterdir()}
+                    route = destination / kind
+                    if kind == "parent-symlink":
+                        route.parent.mkdir(parents=True, exist_ok=True)
+                        route.symlink_to(external, target_is_directory=True)
+                    else:
+                        route.mkdir(parents=True)
+                        target = route / archive.name
+                        if kind in ("symlink", "dangling-symlink"):
+                            target.symlink_to(sentinel)
+                        elif kind == "hardlink":
+                            os.link(sentinel, target)
+                        else:
+                            os.mkfifo(target)
+                    result = self.copy_archive(archive, route)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(
+                        {path.name: path.read_bytes() for path in external.iterdir()}, original
+                    )
+                    self.assertEqual(archive.read_bytes(), b"owned archive bytes")
+
+    def test_archive_copies_create_new_routes_and_replace_owned_single_link_files(self):
+        archive = self.root / "fuzz/archive-control.tar.gz"
+        archive.write_bytes(b"owned replacement archive")
+        for destination in (self.artifacts, self.history):
+            route = destination / "fresh" / "nested"
+            first = self.copy_archive(archive, route)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            copied = route / archive.name
+            self.assertEqual(copied.read_bytes(), b"owned replacement archive")
+            copied.write_bytes(b"old owned archive")
+            second = self.copy_archive(archive, route)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(copied.read_bytes(), archive.read_bytes())
+            self.assertEqual(copied.stat().st_nlink, 1)
+
     def test_missing_empty_duplicate_malformed_manifests_fail(self):
         manifest = self.root / "fuzz/Cargo.toml"
         for content in (
