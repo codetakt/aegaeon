@@ -21,7 +21,7 @@ import sys
 import tarfile
 import tempfile
 import uuid
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -191,6 +191,139 @@ def append_history(stats: list[CorpusStat]) -> None:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+@contextmanager
+def archive_directory(directory: Path) -> Iterator[tuple[int, tuple[tuple[int, int], ...]]]:
+    route = lexical_directory(directory)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    identities = []
+    with ExitStack() as handles:
+        descriptor = os.open("/", flags)
+        handles.callback(os.close, descriptor)
+        for name in ("", *route.parts[1:]):
+            if name:
+                descriptor = os.open(name, flags, dir_fd=descriptor)
+                handles.callback(os.close, descriptor)
+            info = os.fstat(descriptor)
+            identities.append((info.st_dev, info.st_ino))
+        if info.st_uid != os.geteuid():
+            invalid("archive directory must belong to the producer")
+        yield descriptor, tuple(identities)
+
+
+def validate_archive_directory(directory: Path, identities: tuple[tuple[int, int], ...]) -> None:
+    with archive_directory(directory) as (_, current):
+        if current != identities:
+            invalid("archive directory route changed during construction")
+
+
+def owned_archive_entry(directory: int, name: str, descriptor: int) -> bool:
+    try:
+        current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    opened = os.fstat(descriptor)
+    return (
+        stat.S_ISREG(current.st_mode)
+        and current.st_uid == os.geteuid()
+        and (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino)
+    )
+
+
+def verify_archive_stream(stream: BinaryIO, path: Path) -> None:
+    stream.seek(0)
+    try:
+        with tarfile.open(name=str(path), fileobj=stream, mode="r:gz") as archive:
+            for member in archive:
+                if member.isfile():
+                    content = archive.extractfile(member)
+                    if content is None:
+                        invalid("completed archive has unavailable regular content")
+                    with content:
+                        while content.read(1024 * 1024):
+                            pass
+            # Reach gzip EOF as well as tar EOF so CRC/footer failures are blocking.
+            while archive.fileobj.read(1024 * 1024):
+                pass
+    except (tarfile.TarError, EOFError):
+        invalid("archive construction did not produce a complete archive")
+
+
+def write_exclusive_archive(  # noqa: PLR0912, PLR0915 - complete owned construction/publication boundary
+    path: Path, roots: list[tuple[Path, str]], keep_archives: int | None = None
+) -> None:
+    directory = lexical_directory(path.parent)
+    with archive_directory(directory) as (directory_fd, identities):
+        temporary = ".archive-" + uuid.uuid4().hex + ".tmp"
+        descriptor = os.open(
+            temporary,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o666,
+            dir_fd=directory_fd,
+        )
+        published = False
+        complete = False
+        try:
+            opened = os.fstat(descriptor)
+            if (
+                not owned_archive_entry(directory_fd, temporary, descriptor)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_uid != os.geteuid()
+                or opened.st_nlink != 1
+            ):
+                invalid("archive temporary must be exclusive and producer-owned before writing")
+            with os.fdopen(descriptor, "w+b", closefd=False) as stream:
+                with tarfile.open(
+                    name=str(path), fileobj=stream, mode="w:gz", dereference=False
+                ) as tar:
+                    for source, arcname in roots:
+                        archive_raw_tree(tar, source, arcname)
+                stream.flush()
+                verify_archive_stream(stream, path)
+            validate_archive_directory(directory, identities)
+            opened = os.fstat(descriptor)
+            if (
+                not owned_archive_entry(directory_fd, temporary, descriptor)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_uid != os.geteuid()
+                or opened.st_nlink != 1
+            ):
+                invalid("archive temporary identity or ownership changed")
+            # Atomic no-clobber publication. This does not claim a systemwide
+            # namespace transaction against arbitrary same-UID interleavings.
+            os.link(
+                temporary,
+                path.name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            published = True
+            if not owned_archive_entry(directory_fd, path.name, descriptor):
+                invalid("archive publication identity changed")
+            validate_archive_directory(directory, identities)
+            if keep_archives is not None:
+                names = os.listdir(directory_fd)  # noqa: PTH208 - bound directory fd, no Path equivalent
+                archives = sorted(name for name in names if name.endswith(".tar.gz"))
+                for name in archives[:-keep_archives]:
+                    validate_archive_directory(directory, identities)
+                    os.unlink(name, dir_fd=directory_fd)
+            complete = True
+        finally:
+            try:
+                if (
+                    published
+                    and not complete
+                    and owned_archive_entry(directory_fd, path.name, descriptor)
+                ):
+                    with suppress(FileNotFoundError):
+                        os.unlink(path.name, dir_fd=directory_fd)
+                if owned_archive_entry(directory_fd, temporary, descriptor):
+                    with suppress(FileNotFoundError):
+                        os.unlink(temporary, dir_fd=directory_fd)
+            finally:
+                os.close(descriptor)
+
+
 def create_archive() -> Path | None:
     validate_collection_roots()
     keep_archives = parse_env_int("CORPUS_ARCHIVE_KEEP", 3)
@@ -201,14 +334,8 @@ def create_archive() -> Path | None:
     archive_path = ARCHIVE_DIR / f"{timestamp}.tar.gz"
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
-    with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
-        if CORPUS_ROOT.exists():
-            archive_raw_tree(tar, CORPUS_ROOT, "corpus")
-
-    archives = sorted(ARCHIVE_DIR.glob("*.tar.gz"))
-    excess = len(archives) - keep_archives
-    for old in archives[:-keep_archives] if excess > 0 else []:
-        old.unlink()
+    roots = [(CORPUS_ROOT, "corpus")] if CORPUS_ROOT.exists() else []
+    write_exclusive_archive(archive_path, roots, keep_archives)
 
     return archive_path
 
@@ -260,10 +387,8 @@ def archive_crashes(stats: list[CrashStat], dest_dir: Path | None) -> Path | Non
     target_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S%fZ")
     archive_path = target_dir / f"crashes_{timestamp}.tar.gz"
-    with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
-        for stat in stats:
-            if stat.file_count > 0:
-                archive_raw_tree(tar, CRASH_ROOT / stat.name, stat.name)
+    roots = [(CRASH_ROOT / entry.name, entry.name) for entry in stats if entry.file_count > 0]
+    write_exclusive_archive(archive_path, roots)
     return archive_path
 
 
@@ -507,7 +632,9 @@ def source_exclusions() -> set[Path]:
         ("FUZZ_RUN_ARTIFACT_DIR", ""),
         ("FUZZ_HISTORY_DIR", ""),
     ):
-        value = os.environ.get(name, default)
+        value = (
+            str(effective_cargo_home()) if name == "CARGO_HOME" else os.environ.get(name, default)
+        )
         if not value:
             continue
         path = repository_path(Path(value))
@@ -582,7 +709,7 @@ def kani_output_pointer() -> dict[str, Any] | None:
         return None
     if (
         not path.is_symlink()
-        or os.fsencode(path.readlink()) != os.fsencode(KANI_OUTPUT_TARGET)
+        or os.fsencode(os.readlink(path)) != os.fsencode(KANI_OUTPUT_TARGET)  # noqa: PTH115
         or stat.S_IMODE(path.lstat().st_mode) != KANI_OUTPUT_MODE
     ):
         invalid("root-reviewed Kani output pointer is missing or changed")
@@ -591,7 +718,7 @@ def kani_output_pointer() -> dict[str, Any] | None:
         "mode": KANI_OUTPUT_MODE,
         "git_mode": "120000",
         "target": KANI_OUTPUT_TARGET,
-        "sha256": hashlib.sha256(os.fsencode(path.readlink())).hexdigest(),
+        "sha256": hashlib.sha256(os.fsencode(os.readlink(path))).hexdigest(),  # noqa: PTH115
     }
 
 
@@ -1629,7 +1756,8 @@ def raw_inventory(directory: Path) -> dict:
             name = path.relative_to(directory).as_posix()
             info = path.lstat()
             if stat.S_ISLNK(info.st_mode):
-                inventory[name] = {"type": "symlink", "target": str(path.readlink())}
+                # Literal target spelling is evidence; Path.readlink normalizes it.
+                inventory[name] = {"type": "symlink", "target": os.readlink(path)}  # noqa: PTH115
             elif stat.S_ISREG(info.st_mode):
                 inventory[name] = {"type": "file", "sha256": evidence_digest(path, info)}
             elif stat.S_ISDIR(info.st_mode):

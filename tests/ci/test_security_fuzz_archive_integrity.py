@@ -135,8 +135,279 @@ if not rejected:
 print(json.dumps(record,sort_keys=True))
 """
 
+PUBLICATION_CONTROL = r"""
+import hashlib,json,os,pathlib,runpy,sys,tarfile
+from datetime import datetime,UTC
+h=runpy.run_path(sys.argv[1]); state=h['create_archive'].__globals__
+route,case=sys.argv[2:4]
+root=h['ROOT']; target=h['REQUIRED_TARGETS'][0]
+class FixedTime(datetime):
+    @classmethod
+    def now(cls,tz=None): return cls(2026,10,4,12,34,56,123456,tzinfo=UTC)
+state['datetime']=FixedTime
+os.environ['CORPUS_ARCHIVE_KEEP']='2'
+source=root/'fuzz'/('artifacts' if route=='crash' else 'corpus')/target
+source.mkdir(parents=True)
+(source/'entry').write_bytes(b'preserve raw evidence')
+before=h['raw_inventory'](source)
+output=h['ARCHIVE_DIR'] if route=='corpus' else root/'artifacts/archive-control'
+output.mkdir(parents=True)
+timestamp=FixedTime.now().strftime('%Y%m%dT%H%M%S%fZ')
+final=output/(('crashes_' if route=='crash' else '')+timestamp+'.tar.gz')
+outside=root.parent/'outside'; outside.mkdir()
+sentinel=outside/'external-input'; sentinel.write_bytes(b'preserve external bytes')
+prior=output/'19990101T000000000000Z.tar.gz'; prior.write_bytes(b'prior archive bytes')
+if case=='supported':
+    for number in range(2):
+        (output/f'1998010{number}T000000000000Z.tar.gz').write_bytes(b'old retained archive')
+unrelated=output/'.archive-unrelated.tmp'; unrelated.symlink_to(sentinel)
+prior_external={}
+for number in range(5):
+    path=outside/f'1900010{number}T000000000000Z.tar.gz'
+    path.write_bytes(b'external prior archive '+str(number).encode())
+    prior_external[path.name]=path.read_bytes()
+original_final=b'prior final destination'
+if case=='symlink': final.symlink_to(sentinel)
+elif case=='hardlink': os.link(sentinel,final)
+elif case=='regular': final.write_bytes(original_final)
+elif case=='directory': final.mkdir(); (final/'sentinel').write_bytes(original_final)
+attacks=[]; actual=state['archive_raw_tree']; swapped=None; held=None
+def interleave(tar,path,arcname):
+    global swapped,held
+    if case=='input-failure': raise ValueError('controlled raw input failure')
+    actual(tar,path,arcname)
+    if case=='partial-write': raise OSError('controlled partial archive write')
+    if case=='collision-race':
+        final.write_bytes(original_final); attacks.append(case)
+    if case in ('directory-swap','ancestor-swap'):
+        swapped=output if case=='directory-swap' else output.parent
+        held=swapped.with_name(swapped.name+'.held')
+        swapped.rename(held); swapped.symlink_to(outside,target_is_directory=True)
+        attacks.append(case)
+    if case=='temp-swap':
+        entries=[p for p in output.iterdir() if p.name.startswith('.archive-') and p!=unrelated]
+        if len(entries)!=1: raise RuntimeError('exclusive owned temp was not created')
+        temporary=entries[0]
+        temporary.rename(temporary.with_name(temporary.name+'.held'))
+        temporary.symlink_to(sentinel)
+        attacks.append(case)
+state['archive_raw_tree']=interleave
+if case=='incomplete-footer':
+    original_verify=state['verify_archive_stream']
+    def truncate_footer(stream,path):
+        stream.seek(0,2); stream.truncate(stream.tell()-5); stream.flush()
+        return original_verify(stream,path)
+    state['verify_archive_stream']=truncate_footer
+if case in ('postlink-directory-swap','postlink-final-replacement'):
+    original_link=os.link
+    def after_link(*args,**kwargs):
+        global swapped,held
+        original_link(*args,**kwargs)
+        if case=='postlink-directory-swap':
+            swapped=output; held=output.with_name(output.name+'.held')
+            swapped.rename(held); swapped.symlink_to(outside,target_is_directory=True)
+        else:
+            final.unlink(); final.symlink_to(sentinel)
+        attacks.append(case)
+    state['os'].link=after_link
+rejected=False; reason=''; archive=None
+try:
+    archive=(h['create_archive']() if route=='corpus'
+             else h['archive_crashes'](h['gather_crash_stats'](),output))
+except (ValueError,OSError) as error:
+    rejected=True; reason=str(error)
+finally:
+    if swapped is not None:
+        swapped.unlink(); held.rename(swapped)
+if h['raw_inventory'](source)!=before: raise RuntimeError('raw input was changed')
+record={'route':route,'case':case,'rejected':rejected,'reason':reason,
+        'attacks':attacks,'raw_preserved':True,'optimize':sys.flags.optimize,
+        'external_preserved':sentinel.read_bytes()==b'preserve external bytes',
+        'prior_preserved':prior.exists() and prior.read_bytes()==b'prior archive bytes',
+        'unrelated_temp_preserved':unrelated.is_symlink() and os.readlink(unrelated)==str(sentinel),
+        'external_prior_preserved':all((outside/name).exists() and (outside/name).read_bytes()==data
+                                        for name,data in prior_external.items()),
+        'published':final.exists() or final.is_symlink(),
+        'temps':[p.name for p in output.iterdir()
+                 if p.name.startswith('.archive-') and p!=unrelated],
+        'native_calls':0}
+if case=='temp-swap':
+    foreign=[p for p in output.iterdir() if p.is_symlink() and p!=unrelated]
+    record['replacement_temp_preserved']=len(foreign)==1 and os.readlink(foreign[0])==str(sentinel)
+if case=='postlink-final-replacement':
+    record['replacement_final_preserved']=final.is_symlink() and os.readlink(final)==str(sentinel)
+if case in ('regular','collision-race'):
+    record['original_final_preserved']=final.exists() and final.read_bytes()==original_final
+elif case=='directory':
+    record['original_final_preserved']=(final/'sentinel').read_bytes()==original_final
+elif case=='symlink':
+    record['original_final_preserved']=final.is_symlink() and os.readlink(final)==str(sentinel)
+elif case=='hardlink':
+    record['original_final_preserved']=final.stat().st_ino==sentinel.stat().st_ino
+if not rejected and case=='supported':
+    with tarfile.open(archive) as tar:
+        member=tar.getmember(('corpus/' if route=='corpus' else '')+target+'/entry')
+        stream=tar.extractfile(member)
+        record['archive_raw_bytes_match']=stream.read()==b'preserve raw evidence'
+    record['archive_name']=archive.name
+    record['archive_regular']=archive.is_file() and not archive.is_symlink()
+    record['archive_unaliased']=archive.stat().st_nlink==1
+    record['retained_archives']=sorted(p.name for p in output.glob('*.tar.gz'))
+    header=archive.read_bytes()
+    record['gzip_original_name']=header[10:].split(b'\0',1)[0].decode() if header[3]&8 else None
+print(json.dumps(record,sort_keys=True))
+"""
+
 
 class SecurityFuzzArchiveIntegrityTests(SecurityFuzzFixture):
+    def publication_control(self, route, case):
+        helper = self.root / "scripts/fuzz/manage_fuzz_corpus.py"
+        result = subprocess.run(  # noqa: S603 - actual archive writer with owned negative controls
+            [
+                sys.executable,
+                "-I",
+                *(["-O"] if sys.flags.optimize else []),
+                "-c",
+                PUBLICATION_CONTROL,
+                str(helper),
+                route,
+                case,
+            ],
+            cwd=self.root,
+            env={**self.env, "FUZZ_TARGETS": TARGETS[0]},
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertFalse(Path(self.env["CARGO_TARGET_DIR"]).exists())
+        record = json.loads(result.stdout)
+        self.assertTrue(record["raw_preserved"], record)
+        self.assertTrue(record["external_preserved"], record)
+        self.assertTrue(record["unrelated_temp_preserved"], record)
+        self.assertTrue(record["external_prior_preserved"], record)
+        self.assertEqual(record["optimize"], sys.flags.optimize)
+        return record
+
+    def test_corpus_and_crash_archive_destinations_reject_aliases_and_collisions(self):
+        for route in ("corpus", "crash"):
+            for case in ("symlink", "hardlink", "regular", "directory", "collision-race"):
+                with self.subTest(route=route, case=case):
+                    fixture = SecurityFuzzArchiveIntegrityTests()
+                    fixture.setUp()
+                    try:
+                        record = fixture.publication_control(route, case)
+                        self.assertTrue(record["rejected"], record)
+                        self.assertTrue(record["original_final_preserved"], record)
+                        self.assertTrue(record["prior_preserved"], record)
+                        self.assertEqual(record["temps"], [], record)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_failed_corpus_and_crash_archive_construction_publishes_no_partial_output(self):
+        for route in ("corpus", "crash"):
+            for case in ("input-failure", "partial-write"):
+                with self.subTest(route=route, case=case):
+                    fixture = SecurityFuzzArchiveIntegrityTests()
+                    fixture.setUp()
+                    try:
+                        record = fixture.publication_control(route, case)
+                        self.assertTrue(record["rejected"], record)
+                        self.assertFalse(record["published"], record)
+                        self.assertTrue(record["prior_preserved"], record)
+                        self.assertEqual(record["temps"], [], record)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_archive_directory_swaps_preserve_prior_and_external_outputs(self):
+        for route in ("corpus", "crash"):
+            for case in ("directory-swap", "ancestor-swap"):
+                with self.subTest(route=route, case=case):
+                    fixture = SecurityFuzzArchiveIntegrityTests()
+                    fixture.setUp()
+                    try:
+                        record = fixture.publication_control(route, case)
+                        self.assertTrue(record["rejected"], record)
+                        self.assertFalse(record["published"], record)
+                        self.assertTrue(record["prior_preserved"], record)
+                        self.assertEqual(record["temps"], [], record)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_archive_readback_rejects_incomplete_gzip_footer_before_publication(self):
+        for route in ("corpus", "crash"):
+            with self.subTest(route=route):
+                fixture = SecurityFuzzArchiveIntegrityTests()
+                fixture.setUp()
+                try:
+                    record = fixture.publication_control(route, "incomplete-footer")
+                    self.assertTrue(record["rejected"], record)
+                    self.assertFalse(record["published"], record)
+                    self.assertTrue(record["prior_preserved"], record)
+                    self.assertEqual(record["temps"], [], record)
+                finally:
+                    fixture.doCleanups()
+
+    def test_archive_cleanup_preserves_replaced_temporary_names(self):
+        for route in ("corpus", "crash"):
+            with self.subTest(route=route):
+                fixture = SecurityFuzzArchiveIntegrityTests()
+                fixture.setUp()
+                try:
+                    record = fixture.publication_control(route, "temp-swap")
+                    self.assertTrue(record["rejected"], record)
+                    self.assertFalse(record["published"], record)
+                    self.assertTrue(record["prior_preserved"], record)
+                    self.assertTrue(record["replacement_temp_preserved"], record)
+                    # The moved owned inode and foreign replacement remain held.
+                    self.assertEqual(len(record["temps"]), 2, record)
+                finally:
+                    fixture.doCleanups()
+
+    def test_postlink_mismatch_rejects_success_and_disposes_only_matching_owned_entries(self):
+        for route in ("corpus", "crash"):
+            for case in ("postlink-directory-swap", "postlink-final-replacement"):
+                with self.subTest(route=route, case=case):
+                    fixture = SecurityFuzzArchiveIntegrityTests()
+                    fixture.setUp()
+                    try:
+                        record = fixture.publication_control(route, case)
+                        self.assertTrue(record["rejected"], record)
+                        self.assertTrue(record["prior_preserved"], record)
+                        self.assertEqual(record["temps"], [], record)
+                        if case == "postlink-final-replacement":
+                            self.assertTrue(record["replacement_final_preserved"], record)
+                        else:
+                            self.assertFalse(record["published"], record)
+                    finally:
+                        fixture.doCleanups()
+
+    def test_corpus_and_crash_archive_success_preserves_names_contents_and_retention(self):
+        for route in ("corpus", "crash"):
+            with self.subTest(route=route):
+                fixture = SecurityFuzzArchiveIntegrityTests()
+                fixture.setUp()
+                try:
+                    record = fixture.publication_control(route, "supported")
+                    self.assertFalse(record["rejected"], record)
+                    self.assertTrue(record["archive_raw_bytes_match"], record)
+                    self.assertTrue(record["archive_regular"], record)
+                    self.assertTrue(record["archive_unaliased"], record)
+                    self.assertTrue(record["prior_preserved"], record)
+                    expected = (
+                        "crashes_" if route == "crash" else ""
+                    ) + "20261004T123456123456Z.tar.gz"
+                    self.assertEqual(record["archive_name"], expected)
+                    self.assertEqual(record["gzip_original_name"], expected.removesuffix(".gz"))
+                    self.assertEqual(
+                        len(record["retained_archives"]), 2 if route == "corpus" else 4
+                    )
+                    self.assertEqual(record["temps"], [], record)
+                finally:
+                    fixture.doCleanups()
+
     def archive_control(self, route, case):
         helper = self.root / "scripts/fuzz/manage_fuzz_corpus.py"
         result = subprocess.run(  # noqa: S603 - actual helper, owned fixtures and real tar
