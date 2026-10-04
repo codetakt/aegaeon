@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import runpy
-import selectors
 import shutil
 import signal
 import stat
@@ -805,17 +803,10 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 self.assertTrue(self.summary()["status"] == "failed")  # noqa: PT009 - active under Python -O
 
     def test_final_cleanup_failure_preserves_observed_child_exit(self):
-        # Compile only the actual command/Failure definitions; execute a real
-        # child, with the final terminate call failing after wait observes exit.
-        text = WRAPPER.read_text().split("<<'PYTHON'\n", 1)[1].rsplit("\nPYTHON", 1)[0]
-        parsed = ast.parse(text)
-        definitions = [
-            item
-            for item in parsed.body
-            if isinstance(item, (ast.FunctionDef, ast.ClassDef))
-            and item.name in {"command", "Failure", "require"}
-        ]
-        self.assertEqual(len(definitions), 3)  # noqa: PT009 - active under Python -O
+        # Execute the actual supervisor with a real child; fail final cleanup
+        # after wait observes exit, preserving the original exit/signal status.
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
         for child, expected in (
             ("import sys;sys.exit(9)", 9),
             ("import os,signal;os.kill(os.getpid(),signal.SIGTERM)", 143),
@@ -824,31 +815,22 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
             with self.subTest(child=child):
                 artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
                 terminate = Mock(side_effect=[False, OSError("controlled final cleanup failure")])
-                namespace = {
-                    "subprocess": subprocess,
-                    "selectors": selectors,
-                    "os": os,
-                    "sys": sys,
-                    "time": time,
-                    "artifacts": artifacts,
-                    "summary": {"commands": []},
-                    "counter": 0,
-                    "kill_grace": 1,
-                    "group_alive": lambda _pid: False,
-                    "terminate": terminate,
-                    "save": lambda: None,
-                }
-                code = ast.fix_missing_locations(ast.Module(body=definitions, type_ignores=[]))
-                exec(compile(code, str(WRAPPER), "exec"), namespace)  # noqa: S102 - exact local definitions
-                with self.assertRaisesRegex(  # noqa: PT027 - unittest discovery without pytest
-                    namespace["Failure"], "controlled final cleanup"
-                ) as caught:
-                    namespace["command"](
-                        [sys.executable, "-c", child], os.environ.copy(), 5, "probe"
-                    )
+                supervisor = supervisor_type(artifacts, {"commands": []}, 1)
+                with (
+                    patch.dict(
+                        supervisor_type.command.__globals__,
+                        terminate=terminate,
+                        group_alive=lambda _pid: False,
+                    ),
+                    patch.object(supervisor, "save"),
+                    self.assertRaisesRegex(  # noqa: PT027 - unittest discovery without pytest
+                        namespace["Failure"], "controlled final cleanup"
+                    ) as caught,
+                ):
+                    supervisor.command([sys.executable, "-c", child], os.environ.copy(), 5, "probe")
                 self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
                 self.assertEqual(terminate.call_count, 2)  # noqa: PT009 - active under Python -O
-                self.assertEqual(namespace["summary"]["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
+                self.assertEqual(supervisor.summary["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
                 self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
                 self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
 
@@ -1265,6 +1247,8 @@ class SanitizerLoggingFixture(SanitizerFixture):
             "scripts/security/run_security_suite.sh",
             "scripts/sanitizers/sanitizer_paths.sh",
             "scripts/sanitizers/open_security_log.py",
+            "scripts/sanitizers/sanitizer_options.py",
+            "scripts/sanitizers/security_stage.sh",
         ):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1956,35 +1940,61 @@ class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
                 self.assert_channel_rejected("SANITIZER_CARGO_FLAGS", "-r", route, "release")
 
     def test_runtime_release_alias_rejects_before_tools(self):
-        text = WRAPPER.read_text().split("<<'PYTHON'\n", 1)[1].rsplit("\nPYTHON", 1)[0]
-        parsed = ast.parse(text)
-        validation = next(item for item in parsed.body if isinstance(item, ast.Try))
-        forbidden = next(
-            item
-            for item in validation.body
-            if isinstance(item, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "forbidden" for target in item.targets
-            )
-        )
-        guard = next(
-            item
-            for item in validation.body
-            if isinstance(item, ast.Expr)
-            and any(
-                isinstance(node, ast.Name) and node.id == "forbidden" for node in ast.walk(item)
-            )
-        )
-        code = ast.fix_missing_locations(ast.Module(body=[forbidden, guard], type_ignores=[]))
-
-        def require(condition, message):
-            if not condition:
-                raise ValueError(message)
-
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_options.py"))
         for flag in ("-r", "--release"):
             with self.subTest(flag=flag):
-                namespace = {"extra": [flag], "require": require}
-                self.assertRaises(ValueError, exec, compile(code, str(WRAPPER), "exec"), namespace)  # noqa: PT027 - exact runtime admission code, active under Python -O
+                self.assertRaises(ValueError, namespace["cargo_flags"], flag, "")  # noqa: PT027 - actual shared runtime admission function, active under Python -O
+
+    def test_unstable_and_unknown_flags_reject_both_routes_before_effects(self):
+        for index, value in enumerate(
+            (
+                "-Z build-std=core",
+                "-Zbuild-std=core",
+                "-Z build-std=std",
+                "-Zbuild-std=std",
+                "-Z unstable-options",
+                "-Zunstable-options",
+                "-qr",
+                "-rq",
+                "-vpffi",
+                "--future-build-option",
+                "positional-filter",
+                "--target=x86_64-unknown-linux-gnu",
+            )
+        ):
+            for route in ("standalone", "suite"):
+                with self.subTest(value=value, route=route):
+                    self.assert_channel_rejected(
+                        "SANITIZER_CARGO_FLAGS", value, route, f"unstable-{index}"
+                    )
+
+    def test_supported_feature_options_keep_owned_native_arguments(self):
+        for value in ("--features fixture_feature", "--features=fixture_feature"):
+            with self.subTest(value=value):
+                calls = self.root / "calls.jsonl"
+                if calls.exists():
+                    calls.unlink()
+                result = self.run_wrapper(SANITIZER_CARGO_FLAGS=value)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+                receipt = self.summary()
+                self.assertEqual(receipt["status"], "completed")  # noqa: PT009
+                self.assertEqual(len(receipt["units"][0]["targets"]), len(TARGETS))  # noqa: PT009
+                self.assertIn("-Z sanitizer=address", receipt["units"][0]["rustflags"])  # noqa: PT009
+                cargo_calls = [
+                    json.loads(line)
+                    for line in calls.read_text().splitlines()
+                    if json.loads(line)["tool"] == "cargo"
+                ]
+                build = next(call["args"] for call in cargo_calls if "test" in call["args"])
+                self.assertEqual(  # noqa: PT009 - supported features reach actual controlled Cargo
+                    build[1:3] if value.startswith("--features ") else build[1:2], value.split()
+                )
+                self.assertIn("--lib", build)  # noqa: PT009
+                self.assertIn("--tests", build)  # noqa: PT009
+                self.assertEqual(build[-3:-1], ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009
+                result = self.run_suite(SANITIZER_CARGO_FLAGS=value)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+                self.assertEqual(self.shared_receipt()["status"], "completed")  # noqa: PT009
 
     def test_build_global_alternate_selection_is_rejected_before_effects(self):
         for index, value in enumerate(

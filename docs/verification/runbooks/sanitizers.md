@@ -32,7 +32,7 @@ linker flags. The default ffi features and serial curve backend are retained.
 | --- | --- | --- |
 | `SANITIZERS` | `address` | The configured runtime supports AddressSanitizer. Other selections fail. |
 | `SANITIZER_TARGETS` | `ffi` | Comma-separated Cargo packages; must include `ffi`. Additional packages extend the required inventory. |
-| `SANITIZER_CARGO_FLAGS` | empty | Additional feature flags, for example `--features lowstar_hash`. Required target and profile selection cannot be overridden. |
+| `SANITIZER_CARGO_FLAGS` | empty | Supported feature, scheduling and reporting options, for example `--features lowstar_hash`. Unknown options and positional arguments fail. |
 | `SANITIZER_TARGET_DIR` | `target/sanitizers` | Cargo outputs, separated by sanitizer, package and host target. |
 | `SANITIZER_ARTIFACT_DIR` | `$SANITIZER_TARGET_DIR/artifacts` | Raw command output and `run-summary.json`. |
 | `SANITIZER_TIMEOUT` | `120` | Fallback deadline in seconds. |
@@ -40,6 +40,16 @@ linker flags. The default ffi features and serial curve backend are retained.
 | `SANITIZER_RUN_TIMEOUT` | `$SANITIZER_TIMEOUT` | Deadline for each binary listing, inspection and execution. |
 | `SANITIZER_TIMEOUT_KILL` | `130` | Grace after termination before killing a remaining process group. |
 | `ASAN_VERIFY_LINK_ORDER` | `0` | ASan runtime link-order check. |
+
+The shared Cargo parser accepts `--features`/`-F`, `--all-features`,
+`--no-default-features`, `--jobs`/`-j`, `--color`, `--quiet`/`-q`,
+`--verbose`/`-v`, `--locked`, `--offline`, `--frozen`, `--keep-going`,
+`--no-run` and `--future-incompat-report`. Value options support split and
+equals forms; `-F` and `-j` also accept attached values. Short-option bundles
+are rejected, except repeated `-v`. Package, profile, target, Cargo configuration
+and unstable `-Z` options cannot pass through this channel.
+`SANITIZER_BUILD_EXTRA_ARGS` separately accepts only `-Zbuild-std=std` or
+`-Z build-std=std`; an empty value uses the ordinary configured build.
 
 Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
 accepted. A timeout fails the run. The supervisor terminates remaining processes

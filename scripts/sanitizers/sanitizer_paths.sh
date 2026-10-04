@@ -275,22 +275,7 @@ sanitizer_validate_pair() {
 }
 
 sanitizer_validate_cargo_flags() {
-	python3 -I - "$1" "${2:-}" <<'CARGO_FLAGS'
-import shlex
-import sys
-
-forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "-r", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
-try:
-    extra = shlex.split(sys.argv[1])
-    build_extra = shlex.split(sys.argv[2])
-    if build_extra not in ([], ["-Zbuild-std=std"], ["-Z", "build-std=std"]):
-        raise ValueError("unsupported build option")
-    if any(flag.split("=", 1)[0] in forbidden or flag.startswith("-p") for flag in extra):
-        raise ValueError("selection override")
-except ValueError:
-    print("[FAIL] Cargo flags/build options cannot override required sanitizer selection, configuration or native target", file=sys.stderr)
-    raise SystemExit(1) from None
-CARGO_FLAGS
+	python3 -I "${BASH_SOURCE[0]%/*}/sanitizer_options.py" "$1" "${2:-}"
 }
 
 preflight_receipt() {

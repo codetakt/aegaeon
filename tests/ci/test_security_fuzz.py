@@ -129,6 +129,8 @@ class SecurityFuzzFixture(unittest.TestCase):
             "scripts/security/run_security_suite.sh",
             "scripts/sanitizers/sanitizer_paths.sh",
             "scripts/sanitizers/open_security_log.py",
+            "scripts/sanitizers/sanitizer_options.py",
+            "scripts/sanitizers/security_stage.sh",
             "scripts/fuzz/manage_fuzz_corpus.py",
             "Cargo.toml",
             "Cargo.lock",

@@ -109,9 +109,12 @@ class SanitizerPythonIsolationTests(unittest.TestCase):
                 if logging:
                     self.assertFalse((fixture.shared / "summary/security.log").exists())
                 calls = self.isolated_calls(fixture)
+                options_root = fixture.root if logging else sanitizer_fixture.ROOT
                 self.assertTrue(
                     any(
-                        arguments[1:2] == ["-"] and "--config=build.rustflags=[]" in arguments
+                        arguments[1:2]
+                        == [str(options_root / "scripts/sanitizers/sanitizer_options.py")]
+                        and "--config=build.rustflags=[]" in arguments
                         for arguments in calls
                     )
                 )
@@ -146,8 +149,29 @@ class SanitizerPythonIsolationTests(unittest.TestCase):
         self.assertTrue(
             any(arguments[1:2] == ["-"] and "initialize" in arguments for arguments in calls)
         )
-        self.assertTrue(any(arguments == ["-I", "-", "", ""] for arguments in calls))
-        self.assertTrue(any(arguments[1:4] == ["-", "address", "ffi"] for arguments in calls))
+        self.assertTrue(
+            any(
+                arguments
+                == [
+                    "-I",
+                    str(sanitizer_fixture.ROOT / "scripts/sanitizers/sanitizer_options.py"),
+                    "",
+                    "",
+                ]
+                for arguments in calls
+            )
+        )
+        self.assertTrue(
+            any(
+                arguments[1:4]
+                == [
+                    str(sanitizer_fixture.ROOT / "scripts/sanitizers/sanitizer_runner.py"),
+                    "address",
+                    "ffi",
+                ]
+                for arguments in calls
+            )
+        )
 
     def test_supported_log_opener_validator_and_bound_cleanup_ignore_startup(self):
         fixture = self.fixture(logging=True)
