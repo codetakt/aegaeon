@@ -139,7 +139,7 @@ class SecurityFuzzPythonIsolationTests(SecurityFuzzFixture):
             "--record-target",
             "--finish-run",
             "--backup-cleanup",
-            "--cleanup-cache",
+            "--remove-cleanup",
             "--cleanup-result",
         ):
             self.assertTrue(any(action in arguments for arguments in calls), action)

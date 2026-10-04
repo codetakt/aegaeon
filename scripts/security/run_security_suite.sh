@@ -257,12 +257,7 @@ reset_cargo_target_dir() {
 }
 
 cleanup_fuzz_outputs() {
-	local cache
-	cache="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
-	# The terminal sentinel preserves even trailing newlines in a configured path.
-	[[ $cache == *$'\n.' ]] || return 1
-	cache="${cache%$'\n.'}"
-	rm -rf -- "$cache" fuzz/artifacts fuzz/corpus fuzz/corpus_archive
+	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --remove-cleanup "$1" "$2"
 }
 
 cleanup_sanitizer_outputs() {

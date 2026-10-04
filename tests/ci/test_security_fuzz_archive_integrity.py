@@ -138,13 +138,13 @@ print(json.dumps(record,sort_keys=True))
 PUBLICATION_CONTROL = r"""
 import hashlib,json,os,pathlib,runpy,sys,tarfile
 from datetime import datetime,UTC
-h=runpy.run_path(sys.argv[1]); state=h['create_archive'].__globals__
+h=runpy.run_path(sys.argv[1]); state=h['write_exclusive_archive'].__globals__
 route,case=sys.argv[2:4]
 root=h['ROOT']; target=h['REQUIRED_TARGETS'][0]
 class FixedTime(datetime):
     @classmethod
     def now(cls,tz=None): return cls(2026,10,4,12,34,56,123456,tzinfo=UTC)
-state['datetime']=FixedTime
+h['create_archive'].__globals__['datetime']=FixedTime
 os.environ['CORPUS_ARCHIVE_KEEP']='2'
 source=root/'fuzz'/('artifacts' if route=='crash' else 'corpus')/target
 source.mkdir(parents=True)
