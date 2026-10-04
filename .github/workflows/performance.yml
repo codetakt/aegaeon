@@ -30,14 +30,13 @@ env:
   SLO_TARGET_RPS: "100"
   SLO_MIN_THROUGHPUT_RATIO: "0.9"
   SLO_MAX_ERROR_RATE: "0.01"
+  # Separate supplier/runtime acceptance must replace this pending hold.
+  POLICY_MIXED_PREREQUISITES: pending
 
 jobs:
   # Load Testing
   load-test:
     name: Load Testing
-    env:
-      # Separate supplier/runtime acceptance must replace this pending hold.
-      POLICY_MIXED_PREREQUISITES: pending
     # Runs on schedule (daily regression) and on manual dispatch with run_load_tests.
     if: >-
       ${{
@@ -387,7 +386,14 @@ jobs:
         run: |
           python3 ci/validate_slos.py artifacts/load-test-report.json
 
+      - name: Report pending policy-mixed KPI prerequisites
+        if: ${{ always() && env.POLICY_MIXED_PREREQUISITES != 'accepted' }}
+        run: |
+          echo "::notice::policy-mixed pending: activated HTTPS, client profile, public-login session and supplier prerequisites await separate acceptance"
+          echo "policy-mixed KPIs: pending prerequisites; validation and performance acceptance skipped" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Validate policy-mixed KPIs
+        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
         env:
           SLO_TARGET_RPS: "4"
           SLO_MIN_THROUGHPUT_RATIO: "0.9"
