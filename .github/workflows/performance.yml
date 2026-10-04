@@ -35,6 +35,9 @@ jobs:
   # Load Testing
   load-test:
     name: Load Testing
+    env:
+      # Separate supplier/runtime acceptance must replace this pending hold.
+      POLICY_MIXED_PREREQUISITES: pending
     # Runs on schedule (daily regression) and on manual dispatch with run_load_tests.
     if: >-
       ${{
@@ -91,7 +94,14 @@ jobs:
         run: |
           python3 ci/validate_slos.py artifacts/perf/ci-load-smoke/report.json
 
+      - name: Report pending policy-mixed prerequisites
+        if: ${{ always() && env.POLICY_MIXED_PREREQUISITES != 'accepted' }}
+        run: |
+          echo "::notice::policy-mixed pending: activated HTTPS, client profile, public-login session and supplier prerequisites await separate acceptance"
+          echo "policy-mixed: pending prerequisites; execution and SLO acceptance skipped" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run policy-mixed load smoke
+        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
         env:
           PERF_MANAGE_SERVER: "1"
           PERF_SCENARIO: policy-mixed
@@ -107,10 +117,10 @@ jobs:
           REPORT_PATH: artifacts/perf/ci-policy-mixed/report.json
           LEGACY_REPORT: artifacts/policy-mixed-report.json
         run: |
-          export AEG_LOADTEST_PROOF_ORIGIN="https://127.0.0.1:${PERF_SERVER_PORT}"
           nix run .#perf-load
 
       - name: Validate policy-mixed smoke SLOs
+        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
         env:
           SLO_TARGET_RPS: "4"
         run: |

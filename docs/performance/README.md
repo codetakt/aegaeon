@@ -94,7 +94,11 @@ frozen source digest and source-to-artifact producer evidence.
 The report records the digest of the actual running executable,
 configuration, profile and session provenance, observed JWKS digests, and a
 unique report identifier. `AEG_LOADTEST_CA_CERT` may supply an additional trusted
-PEM CA. Legacy credential and proof-origin overrides are rejected; there are no
+PEM CA; the shared runner uses the same CA for readiness and retains certificate
+and hostname verification. Report, log, build and evidence destinations must be
+disjoint. Only the declared report and legacy-report roles may share a normalized
+leaf; private retention paths reject traversal and stay outside upload roots.
+Legacy credential and proof-origin overrides are rejected; there are no
 default OAuth credentials, management-owner substitution, or forged forwarding
 headers. See the [environment reference](../configurations/environment/federation-observability-and-test.md#load-testing).
 
@@ -123,6 +127,13 @@ All 12 selections remain available. `mixed` must consume all four positive legs
 (DPoP, introspection, revocation, PAR). `policy-mixed` must consume its six legs:
 positive introspection/revocation/UserInfo and each corresponding missing-auth
 rejection. Expected rejections are reported separately from positive successes.
+The scheduled workflow currently reports `policy-mixed` as pending and skips both
+its execution and SLO acceptance under the same prerequisite gate. Activated HTTPS,
+a declared client profile, a public-login session and supplier acceptance remain
+required. A separate bounded runtime acceptance must supply and accept these
+prerequisites before changing that gate; the pending lane is not execution or
+performance evidence. The public smoke caller continues through the shared runner.
+
 `key-rotation` fails explicitly because supported HUMAN management, NEXT key
 replenishment and issuer restart supervision require a separate lifecycle.
 

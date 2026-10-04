@@ -180,12 +180,77 @@ def checked_output(root: pathlib.Path, value: str, *, directory: bool) -> pathli
     return path
 
 
+def output_roles(
+    root: pathlib.Path,
+    evidence: pathlib.Path,
+    outputs: list[tuple[str, bool]],
+    status: pathlib.Path | None = None,
+) -> None:
+    destinations = [(output_path(root, value), directory) for value, directory in outputs]
+    status = status or evidence.parent / "source-status.json"
+    for position, (path, directory) in enumerate(destinations):
+        if (
+            path == evidence
+            or path.is_relative_to(evidence)
+            or (not directory and evidence.is_relative_to(path))
+        ):
+            fail("output collides with source evidence")
+        if (
+            path == status
+            or path.is_relative_to(status)
+            or (not directory and status.is_relative_to(path))
+        ):
+            fail("output collides with source status")
+        for other, other_directory in destinations[:position]:
+            if (
+                path == other
+                or (not directory and other.is_relative_to(path))
+                or (not other_directory and path.is_relative_to(other))
+            ):
+                fail("output roles collide")
+
+
+def private_root(root: pathlib.Path, forbidden: list[pathlib.Path]) -> pathlib.Path:
+    temporary = output_path(root, os.environ.get("TMPDIR") or tempfile.gettempdir())
+    if (
+        temporary.is_symlink()
+        or not temporary.is_dir()
+        or temporary.is_relative_to(root)
+        or any(temporary.is_relative_to(path) for path in forbidden)
+    ):
+        fail("private retention must be outside source and uploads")
+    return temporary
+
+
+def declared_outputs(root: pathlib.Path, args: argparse.Namespace) -> list[tuple[str, bool]]:
+    outputs = [(name, False) for name in args.output_file] + [
+        (name, True) for name in args.output_directory
+    ]
+    reports = [name for name in (args.report_file, args.legacy_report_file) if name is not None]
+    # Only these two declared report roles may intentionally share one leaf.
+    if (
+        args.report_file is not None
+        and args.legacy_report_file is not None
+        and output_path(root, args.report_file) == output_path(root, args.legacy_report_file)
+    ):
+        reports.pop()
+    outputs.extend((name, False) for name in reports)
+    if args.artifact_directory:
+        artifact = output_path(root, args.artifact_directory)
+        output_roles(
+            root, output_path(root, args.evidence), outputs, artifact / "source-status.json"
+        )
+        private_root(root, [artifact])
+    return outputs
+
+
 def output_boundaries(
     root: pathlib.Path,
     domain: dict[str, Any],
     evidence: pathlib.Path,
     outputs: list[tuple[str, bool]],
 ) -> None:
+    output_roles(root, evidence, outputs)
     paths = [checked_output(root, str(evidence), directory=True)]
     paths.extend(checked_output(root, value, directory=is_dir) for value, is_dir in outputs)
     for path, directory in [
@@ -344,15 +409,7 @@ def private_tree(
     contents: dict[str, bytes],
     forbidden: list[pathlib.Path],
 ) -> tuple[str, bytes, pathlib.Path]:
-    temporary_root = pathlib.Path(os.environ.get("TMPDIR") or tempfile.gettempdir()).absolute()
-    ancestors(temporary_root)
-    if (
-        temporary_root.is_relative_to(root)
-        or temporary_root == root
-        or temporary_root.is_symlink()
-        or any(temporary_root.is_relative_to(path) for path in forbidden)
-    ):
-        fail("private source retention must be outside source")
+    temporary_root = private_root(root, forbidden)
     private = pathlib.Path(tempfile.mkdtemp(prefix="aegaeon-perf-source-", dir=temporary_root))
     if private.is_relative_to(root):
         fail("private source preimages must be outside source")
@@ -610,6 +667,11 @@ def status_geometry(
     root: pathlib.Path, outputs: list[tuple[str, bool]], evidence: pathlib.Path
 ) -> None:
     domain = git_domain(root)
+    output_roles(root, evidence, outputs)
+    private_root(
+        root,
+        [evidence.parent] + [output_path(root, value) for value, directory in outputs if directory],
+    )
     # Check real geometry before any prior-status read or private bootstrap.
     for reserved in [root / "target", root / "artifacts/perf"]:
         ancestors(reserved)
@@ -655,19 +717,10 @@ def retain_status(
         kind = "raw"
     if stamp(before) != stamp(path.lstat()):
         fail("prior status changed while being preserved")
-    temporary_root = output_path(root, os.environ.get("TMPDIR") or tempfile.gettempdir())
-    if (
-        temporary_root.is_symlink()
-        or not temporary_root.is_dir()
-        or temporary_root.is_relative_to(root)
-        or any(
-            temporary_root.is_relative_to(output_path(root, value))
-            for value, directory in outputs
-            if directory
-        )
-        or temporary_root.is_relative_to(evidence)
-    ):
-        fail("prior status retention must be outside source and uploads")
+    temporary_root = private_root(
+        root,
+        [evidence.parent] + [output_path(root, value) for value, directory in outputs if directory],
+    )
     private = pathlib.Path(tempfile.mkdtemp(prefix="aegaeon-perf-status-", dir=temporary_root))
     retained = private / ("source-status." + kind)
     with retained.open("xb") as stream:
@@ -679,6 +732,7 @@ def initialize_status(
     root: pathlib.Path, artifact: str, outputs: list[tuple[str, bool]], evidence: pathlib.Path
 ) -> None:
     path = status_boundary(root, artifact)
+    output_roles(root, evidence, outputs, path)
     status_geometry(root, outputs, evidence)
     retain_status(root, path, outputs, evidence)
     write_status(path, "paths", 1)
@@ -690,9 +744,7 @@ def dispatch(args: argparse.Namespace) -> None:
         fail("producer must be the tracked repository entrypoint")
     evidence = checked_output(root, args.evidence, directory=True)
     if args.action == "paths":
-        outputs = [(n, False) for n in args.output_file] + [
-            (n, True) for n in args.output_directory
-        ]
+        outputs = declared_outputs(root, args)
         if args.artifact_directory:
             initialize_status(root, args.artifact_directory, outputs, evidence)
         output_boundaries(root, git_domain(root), evidence, outputs)
@@ -706,9 +758,7 @@ def dispatch(args: argparse.Namespace) -> None:
     elif args.action == "freeze":
         if "AEG_LOADTEST_SOURCE_SHA256" in os.environ:
             fail("caller source digest is not accepted")
-        outputs = [(n, False) for n in args.output_file] + [
-            (n, True) for n in args.output_directory
-        ]
+        outputs = declared_outputs(root, args)
         output_boundaries(root, git_domain(root), evidence, outputs)
         require_fresh_outputs(root, args.fresh_output_file)
         print(freeze(root, evidence, outputs))
@@ -760,6 +810,8 @@ def main() -> int:
     parser.add_argument("--stage")
     parser.add_argument("--exit-status", type=int, default=1)
     parser.add_argument("--output-file", action="append", default=[])
+    parser.add_argument("--report-file")
+    parser.add_argument("--legacy-report-file")
     parser.add_argument("--fresh-output-file", action="append", default=[])
     parser.add_argument("--output-directory", action="append", default=[])
     parser.add_argument("--build-log")

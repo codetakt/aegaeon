@@ -121,8 +121,9 @@ if [ "$(realpath "${BASH_SOURCE[0]}")" != "$REPO_ROOT/scripts/perf/run_load_test
 fi
 SOURCE_STATUS="paths"
 OUTPUT_ARGS=(--output-directory "$ARTIFACT_DIR" --artifact-directory "$ARTIFACT_DIR"
-	--output-file "$LEGACY_REPORT")
-for destination in "$SERVER_LOG" "$LOADTEST_LOG" "$REPORT_PATH" \
+	--report-file "$REPORT_PATH" --legacy-report-file "$LEGACY_REPORT")
+OUTPUT_ARGS+=(--fresh-output-file "$REPORT_PATH")
+for destination in "$SERVER_LOG" "$LOADTEST_LOG" \
 	"$ARTIFACT_DIR/server-build.jsonl" "$ARTIFACT_DIR/build.log" \
 	"$ARTIFACT_DIR/loadtest-build.jsonl" "$ARTIFACT_DIR/loadtest-build.log" \
 	"$ARTIFACT_DIR/db-migrate.log"; do
@@ -224,9 +225,13 @@ if [ "$MANAGE_SERVER" = "1" ]; then
 fi
 
 SOURCE_STATUS="readiness"
+READINESS_CURL_ARGS=(-fsS)
+if [ -n "${AEG_LOADTEST_CA_CERT:-}" ]; then
+	READINESS_CURL_ARGS+=(--cacert "$AEG_LOADTEST_CA_CERT")
+fi
 echo "[perf] waiting for health endpoint at ${BASE_URL}/health..."
 for attempt in $(seq 1 30); do
-	if curl -fsS "${BASE_URL%/}/health" >/dev/null 2>&1; then
+	if curl "${READINESS_CURL_ARGS[@]}" "${BASE_URL%/}/health" >/dev/null 2>&1; then
 		break
 	fi
 	if [ "$attempt" -eq 30 ]; then
@@ -277,7 +282,7 @@ if [ "$BINDING_STATUS" -ne 0 ] && [ "$LOADTEST_STATUS" -eq 0 ]; then
 	exit "$BINDING_STATUS"
 fi
 mkdir -p "$(dirname "$LEGACY_REPORT")"
-if [ "$REPORT_PATH" = "$LEGACY_REPORT" ]; then
+if [ "$(realpath -m -- "$REPORT_PATH")" = "$(realpath -m -- "$LEGACY_REPORT")" ]; then
 	LEGACY_NOTE="same as report path"
 else
 	cp "$REPORT_PATH" "$LEGACY_REPORT"

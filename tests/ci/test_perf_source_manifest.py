@@ -381,6 +381,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         managed: bool = False,
         wrapper: bool = False,
         artifact: str = "artifacts/perf/runner",
+        overrides: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         tools = self.owner / "tools"
         tools.mkdir(exist_ok=True)
@@ -407,6 +408,10 @@ print(json.dumps({"reason":"build-finished","success":True}))
             path.write_text(
                 "#!/usr/bin/env python3\nimport os,pathlib,sys\n"
                 'pathlib.Path(os.environ["FIXTURE_CALLS"]).open("a").write(pathlib.Path(sys.argv[0]).name+"\\n")\n'
+                'expected=os.environ.get("FIXTURE_CA_EXPECTED")\n'
+                'if sys.argv[0].endswith("curl") and expected:\n'
+                '    wanted=["-fsS"]+([] if expected=="absent" else ["--cacert",expected])+["https://example.invalid/health"]\n'
+                "    if sys.argv[1:]!=wanted:sys.exit(29)\n"
                 'sys.exit(1 if os.environ.get("FIXTURE_MODE")=="readiness-failure" and '
                 'sys.argv[0].endswith("curl") else 0)\n'
             )
@@ -437,6 +442,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "AEGAEON_DATABASE_URL": "fixture-only",
             "AEGAEON_RUNTIME_ISSUER_HOST": "example.invalid",
         }
+        env.update(overrides or {})
         script = self.root / (
             "scripts/flake/perf_load.sh" if wrapper else "scripts/perf/run_load_tests.sh"
         )
@@ -767,6 +773,133 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(status.read_bytes(), b"prior complete")
                 self.assertEqual(list(temporary.glob("aegaeon-perf-status-*")), [])
+
+    def test_output_role_collisions_preserve_status_before_retention_or_build(self) -> None:
+        roles = [
+            "server.log",
+            "loadtest.log",
+            "server-build.jsonl",
+            "build.log",
+            "loadtest-build.jsonl",
+            "loadtest-build.log",
+            "db-migrate.log",
+        ]
+        for number, name in enumerate(
+            [*roles, "source-status.json", "source/OUTPUTS.json", "source"]
+        ):
+            with self.subTest(role=name):
+                artifact = f"artifacts/perf/collision-{number}"
+                status = self.write(artifact + "/source-status.json", b"prior complete")
+                result = self.runner(
+                    artifact=artifact, overrides={"LEGACY_REPORT": artifact + "/" + name}
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(list(self.private.iterdir()), [])
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse((status.parent / "source").exists())
+
+    def test_report_legacy_alias_is_explicit_and_cannot_alias_a_third_role(self) -> None:
+        artifact = "artifacts/perf/report-alias"
+        result = self.runner(
+            artifact=artifact, overrides={"LEGACY_REPORT": artifact + "/./report.json"}
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads((self.root / artifact / "source-status.json").read_text())["stage"],
+            "complete",
+        )
+        status = self.write("artifacts/perf/triple-alias/source-status.json", b"prior complete")
+        result = self.runner(
+            artifact="artifacts/perf/triple-alias",
+            overrides={
+                "LEGACY_REPORT": "artifacts/perf/triple-alias/report.json",
+                "SERVER_LOG": "artifacts/perf/triple-alias/report.json",
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(status.read_bytes(), b"prior complete")
+
+    def test_file_directory_and_normalized_alias_collisions_precede_status(self) -> None:
+        status = self.write("artifacts/perf/control/source-status.json", b"prior complete")
+        for outputs in [
+            [
+                "--output-file",
+                str(self.evidence.parent / "leaf"),
+                "--output-file",
+                str(self.evidence.parent) + "/./leaf",
+            ],
+            [
+                "--output-file",
+                str(self.evidence.parent / "leaf"),
+                "--output-directory",
+                str(self.evidence.parent / "leaf/child"),
+            ],
+            ["--output-directory", str(self.evidence)],
+            ["--output-file", str(self.evidence / "SOURCE-MANIFEST.json")],
+            ["--output-file", str(status / "child")],
+        ]:
+            with self.subTest(outputs=outputs):
+                result = self.invoke("paths", "--artifact-directory", str(status.parent), *outputs)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(list(self.private.iterdir()), [])
+
+    def test_private_tmpdir_traversal_alias_and_upload_rejected_without_prior_status(self) -> None:
+        upload = self.owner / "upload"
+        upload.mkdir()
+        alias = self.owner / "private-alias"
+        alias.symlink_to(self.private, target_is_directory=True)
+        for _number, temporary in enumerate(
+            [
+                str(self.private / "../upload"),
+                str(self.private / "../source"),
+                str(alias),
+                str(upload),
+                str(upload / "nested"),
+            ]
+        ):
+            with self.subTest(temporary=temporary):
+                result = self.runner(artifact=str(upload), overrides={"TMPDIR": temporary})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(list(upload.rglob("aegaeon-perf-source-*")), [])
+                self.assertEqual(list(upload.rglob("aegaeon-perf-status-*")), [])
+                self.assertFalse((upload / "source-status.json").exists())
+                self.assertFalse((self.owner / "tool-calls").exists())
+
+    def test_explicit_artifact_status_and_private_root_guard_direct_freeze(self) -> None:
+        artifact = self.owner / "separate-artifact"
+        artifact.mkdir()
+        status = artifact / "source-status.json"
+        status.write_bytes(b"prior complete")
+        for action in ["paths", "freeze"]:
+            with self.subTest(action=action):
+                result = self.invoke(
+                    action, "--artifact-directory", str(artifact), "--output-file", str(status)
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertFalse(self.evidence.exists())
+                self.assertEqual(list(self.private.iterdir()), [])
+        self.environment["TMPDIR"] = str(artifact)
+        for action in ["paths", "freeze"]:
+            with self.subTest(action=action, private_root="artifact"):
+                result = self.invoke(action, "--artifact-directory", str(artifact))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(list(artifact.glob("aegaeon-perf-*")), [])
+
+    def test_readiness_uses_consumer_ca_and_keeps_verified_tls(self) -> None:
+        self.environment.pop("AEG_LOADTEST_CA_CERT", None)
+        ca = self.owner / "fixture-ca.pem"
+        ca.write_text("fixture CA bytes; no live TLS connection\n")
+        for number, expected in enumerate([str(ca), "absent"]):
+            with self.subTest(ca=expected):
+                overrides = {"FIXTURE_CA_EXPECTED": expected}
+                if expected != "absent":
+                    overrides["AEG_LOADTEST_CA_CERT"] = expected
+                result = self.runner(artifact=f"artifacts/perf/tls-{number}", overrides=overrides)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_private_tree_does_not_execute_repo_hooks_or_external_diff(self) -> None:
         sentinel = self.owner / "unexpected-hook"
