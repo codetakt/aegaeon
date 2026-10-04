@@ -927,6 +927,7 @@ def validate_preflight(directory: Path) -> Path:
     validate_evidence_route(artifact / "summary")
     validate_regular_destination(artifact / "summary/security.log")
     validate_fuzz_logs(directory)
+    validate_regular_destination(lexical_directory(directory) / "collection-summary.json")
     for name, default in (
         ("FUZZ_HISTORY_DIR", ""),
         ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
@@ -1830,6 +1831,11 @@ def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
 
 
 def package_upload(directory: Path) -> None:
+    cargo_home = lexical_directory(effective_cargo_home())
+    if any(overlaps(cargo_home, ROOT / name) for name in UPLOAD_ROOTS) or overlaps(
+        cargo_home, lexical_directory(directory)
+    ):
+        invalid("upload paths overlap Cargo home")
     output = lexical_directory(directory)
     if any(overlaps(output, ROOT / name) for name in UPLOAD_ROOTS):
         invalid("upload output overlaps evidence source")
