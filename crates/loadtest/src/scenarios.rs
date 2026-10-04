@@ -2,7 +2,7 @@ use crate::{
     accounting::HttpAccounting,
     generator::{PkcePair, TestDataGenerator},
     oidc::verify_id_token,
-    profile::{scopes, ClientAuth, ClientProfile, ParPolicy, SenderPolicy},
+    profile::{scopes, sha256, ClientAuth, ClientProfile, ParPolicy, SenderPolicy},
     TestScenario,
 };
 use anyhow::{bail, ensure, Context, Result};
@@ -35,6 +35,11 @@ pub struct IntrospectionResponse {
     pub aud: Option<serde_json::Value>,
     pub cnf: Option<serde_json::Value>,
     pub iss: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Userinfo {
+    sub: String,
 }
 
 #[derive(Deserialize)]
@@ -263,7 +268,7 @@ impl ScenarioExecutor {
         Self::with_profile(base_url, profile)
     }
 
-    pub fn with_profile(base_url: String, profile: Option<ClientProfile>) -> Result<Self> {
+    pub fn with_profile(mut base_url: String, profile: Option<ClientProfile>) -> Result<Self> {
         let url = Url::parse(&base_url).context("invalid target URL")?;
         ensure!(
             ["http", "https"].contains(&url.scheme())
@@ -283,9 +288,10 @@ impl ScenarioExecutor {
                 reqwest::Certificate::from_pem(&ca).context("invalid fixture CA certificate")?,
             );
         }
+        base_url.truncate(base_url.trim_end_matches('/').len());
         Ok(Self {
             client: builder.build()?,
-            base_url: base_url.trim_end_matches('/').into(),
+            base_url,
             profile,
             generator: TestDataGenerator::new(),
             cached_access_token: None,
@@ -310,6 +316,7 @@ impl ScenarioExecutor {
         })
     }
 
+    #[must_use]
     pub fn fork_worker(&self) -> Self {
         Self {
             client: self.client.clone(),
@@ -340,12 +347,9 @@ impl ScenarioExecutor {
             .methods_endpoints
             .entry(key.clone())
             .or_default() += 1;
-        let mut response = match request.send().await {
-            Ok(response) => response,
-            Err(_) => {
-                self.accounting.transport_failures += 1;
-                bail!("HTTP transport failed for {key}");
-            }
+        let Ok(mut response) = request.send().await else {
+            self.accounting.transport_failures += 1;
+            bail!("HTTP transport failed for {key}");
         };
         self.accounting.responses += 1;
         let status = response.status();
@@ -366,7 +370,7 @@ impl ScenarioExecutor {
         loop {
             match response.chunk().await {
                 Ok(Some(chunk)) if body.len().saturating_add(chunk.len()) <= MAX_BODY_BYTES => {
-                    body.extend_from_slice(&chunk)
+                    body.extend_from_slice(&chunk);
                 }
                 Ok(None) => break,
                 _ => {
@@ -417,27 +421,16 @@ impl ScenarioExecutor {
         })
     }
 
-    async fn issue_token(&mut self, oidc: bool, force_par: bool) -> Result<CachedToken> {
-        let profile = self.profile()?.clone();
-        let scope = if oidc {
-            profile
-                .supply
-                .oidc_scope
-                .clone()
-                .context("missing OIDC scope")?
-        } else {
-            profile.supply.scope.clone()
-        };
-        let resource = if oidc {
-            Some(format!("{}/userinfo", profile.supply.issuer))
-        } else {
-            profile.supply.resource.clone()
-        };
-        let tx = self.transaction(scope, resource)?;
+    async fn authorization_params(
+        &mut self,
+        profile: &ClientProfile,
+        tx: &Transaction,
+        force_par: bool,
+    ) -> Result<Vec<(String, String)>> {
         let params = if force_par || profile.supply.par_policy == ParPolicy::Required {
             let mut params = tx.params.clone();
             let request = apply_auth(
-                &profile,
+                profile,
                 self.client.post(format!("{}/par", self.base_url)),
                 &mut params,
             )
@@ -460,35 +453,20 @@ impl ScenarioExecutor {
         } else {
             tx.params.clone()
         };
-        let request = self
-            .client
-            .get(format!("{}/authorize", self.base_url))
-            .query(&params)
-            .header(reqwest::header::COOKIE, profile.session_cookie.clone());
-        let response = self.send("GET", "/authorize", request).await?;
-        let code = authorization_code(
-            response.status,
-            &response.headers,
-            &profile.supply.redirect_uri,
-            &tx.state,
-            &profile.supply.issuer,
-        )?;
-        let mut params = vec![
-            ("grant_type".into(), "authorization_code".into()),
-            ("code".into(), code.clone()),
-            ("client_id".into(), profile.supply.client_id.clone()),
-            ("redirect_uri".into(), profile.supply.redirect_uri.clone()),
-            ("code_verifier".into(), tx.pkce.verifier),
-        ];
-        if let Some(value) = &tx.resource {
-            params.push(("resource".into(), value.clone()));
-        }
+        Ok(params)
+    }
+
+    async fn exchange_token(
+        &mut self,
+        profile: &ClientProfile,
+        params: &[(String, String)],
+    ) -> Result<TokenResponse> {
         let mut nonce = None;
         let mut token = None;
         for attempt in 0..2 {
             let mut request = self.client.post(format!("{}/token", self.base_url));
-            let mut wire_params = params.clone();
-            request = apply_auth(&profile, request, &mut wire_params).form(&wire_params);
+            let mut wire_params = params.to_vec();
+            request = apply_auth(profile, request, &mut wire_params).form(&wire_params);
             if profile.supply.sender_policy == SenderPolicy::Dpop {
                 let proof = self.generator.dpop_proof(
                     "POST",
@@ -528,6 +506,14 @@ impl ScenarioExecutor {
             break;
         }
         let token = token.context("token exchange did not complete")?;
+        Ok(token)
+    }
+
+    fn validate_access_token(
+        profile: &ClientProfile,
+        token: &TokenResponse,
+        authorized_scope: &str,
+    ) -> Result<(String, u64)> {
         ensure!(!token.access_token.trim().is_empty(), "empty access token");
         ensure!(
             token.token_type
@@ -542,8 +528,7 @@ impl ScenarioExecutor {
             .expires_in
             .filter(|v| *v > 0)
             .context("missing or nonpositive token expiry")?;
-        let effective: String = tx
-            .scope
+        let effective: String = authorized_scope
             .split(' ')
             .filter(|v| *v != "offline_access")
             .collect::<Vec<_>>()
@@ -561,6 +546,56 @@ impl ScenarioExecutor {
             token.refresh_token.is_none(),
             "prompt=none does not establish offline consent"
         );
+        Ok((effective, ttl))
+    }
+
+    async fn issue_token(&mut self, oidc: bool, force_par: bool) -> Result<CachedToken> {
+        let profile = self.profile()?.clone();
+        let scope = if oidc {
+            profile
+                .supply
+                .oidc_scope
+                .clone()
+                .context("missing OIDC scope")?
+        } else {
+            profile.supply.scope.clone()
+        };
+        let resource = if oidc {
+            Some(format!("{}/userinfo", profile.supply.issuer))
+        } else {
+            profile.supply.resource.clone()
+        };
+        let tx = self.transaction(scope, resource)?;
+        let params = self.authorization_params(&profile, &tx, force_par).await?;
+        let request = self
+            .client
+            .get(format!("{}/authorize", self.base_url))
+            .query(&params)
+            .header(reqwest::header::COOKIE, profile.session_cookie.clone());
+        let response = self.send("GET", "/authorize", request).await?;
+        let code = authorization_code(
+            response.status,
+            &response.headers,
+            &profile.supply.redirect_uri,
+            &tx.state,
+            &profile.supply.issuer,
+        )?;
+        let mut params = vec![
+            ("grant_type".into(), "authorization_code".into()),
+            ("code".into(), code.clone()),
+            ("client_id".into(), profile.supply.client_id.clone()),
+            ("redirect_uri".into(), profile.supply.redirect_uri.clone()),
+            ("code_verifier".into(), tx.pkce.verifier),
+        ];
+        if let Some(value) = &tx.resource {
+            params.push(("resource".into(), value.clone()));
+        }
+        let exchange_started = Instant::now();
+        let token = self.exchange_token(&profile, &params).await?;
+        let (effective, ttl) = Self::validate_access_token(&profile, &token, &tx.scope)?;
+        let expires = exchange_started
+            .checked_add(Duration::from_secs(ttl))
+            .context("token expiry exceeds clock range")?;
         let subject = if let Some(expected_nonce) = tx.nonce {
             let id = token
                 .id_token
@@ -574,8 +609,9 @@ impl ScenarioExecutor {
                         .get(format!("{}/.well-known/jwks.json", self.base_url)),
                 )
                 .await?;
+            self.jwks_sha256 = Some(sha256(&response.body));
             ensure!(response.status == StatusCode::OK, "JWKS requires HTTP 200");
-            let (subject, digest) = verify_id_token(
+            let (subject, _) = verify_id_token(
                 id,
                 &response.body,
                 &profile.supply,
@@ -583,7 +619,6 @@ impl ScenarioExecutor {
                 &token.access_token,
                 &code,
             )?;
-            self.jwks_sha256 = Some(digest);
             Some(subject)
         } else {
             ensure!(
@@ -592,14 +627,13 @@ impl ScenarioExecutor {
             );
             None
         };
+        ensure!(expires > Instant::now(), "token expired before delivery");
         Ok(CachedToken {
             access_token: token.access_token,
             scope: effective,
             resource: tx.resource,
             subject,
-            expires: Instant::now()
-                .checked_add(Duration::from_secs(ttl))
-                .context("token expiry exceeds clock range")?,
+            expires,
         })
     }
 
@@ -797,10 +831,6 @@ impl ScenarioExecutor {
                 response.status == StatusCode::OK,
                 "UserInfo requires HTTP 200"
             );
-            #[derive(Deserialize)]
-            struct Userinfo {
-                sub: String,
-            }
             let value: Userinfo =
                 serde_json::from_slice(&response.body).context("invalid UserInfo response")?;
             ensure!(
@@ -901,7 +931,7 @@ impl ScenarioExecutor {
                 && metadata["token_endpoint"].as_str()
                     == Some(format!("{}/token", self.base_url).as_str())
                 && metadata["jwks_uri"].as_str()
-                    == Some(format!("{}/.well-known/jwks.json", self.base_url).as_str()),
+                    == Some(format!("{}/jwks", self.base_url).as_str()),
             "Discovery endpoint/issuer mismatch"
         );
         Ok((true, elapsed(start)))
@@ -916,12 +946,13 @@ impl ScenarioExecutor {
                 self.client.get(format!("{}{endpoint}", self.base_url)),
             )
             .await?;
+        self.jwks_sha256 = Some(sha256(&response.body));
         ensure!(response.status == StatusCode::OK, "JWKS requires HTTP 200");
         let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_slice(&response.body)?;
         ensure!(!jwks.keys.is_empty(), "JWKS has no activated signing keys");
         Ok((true, elapsed(start)))
     }
-    pub async fn key_rotation_flow(&mut self) -> Result<(bool, u64)> {
+    pub fn key_rotation_flow(&mut self) -> Result<(bool, u64)> {
         bail!(
             "key-rotation is unsupported: HUMAN/NEXT/restart supervisor contract remains required"
         )
@@ -1031,7 +1062,16 @@ mod tests {
         let thread = std::thread::spawn(move || {
             let (mut stream, _) = issuer.accept().unwrap();
             let mut bytes = [0; 4096];
-            stream.read(&mut bytes).unwrap();
+            let mut request = Vec::new();
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let count = stream.read(&mut bytes).unwrap();
+                assert!(count > 0, "request ended before its headers");
+                request.extend_from_slice(&bytes[..count]);
+                assert!(
+                    request.len() <= 16 * 1024,
+                    "request headers exceed fixture bound"
+                );
+            }
             stream.write_all(format!("HTTP/1.1 302 Found\r\nLocation: {destination}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).unwrap();
         });
         let mut executor = ScenarioExecutor::with_profile(base.clone(), None).unwrap();
@@ -1201,5 +1241,387 @@ mod tests {
             .headers
             .append("DPoP-Nonce", HeaderValue::from_static("second"));
         assert!(nonce_challenge(&response, true).is_err());
+    }
+
+    struct FixtureReply {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    }
+
+    fn fixture_reply(status: u16, body: Vec<u8>) -> FixtureReply {
+        FixtureReply {
+            status,
+            headers: Vec::new(),
+            body,
+        }
+    }
+
+    fn http_fixture(
+        steps: usize,
+        mut handler: impl FnMut(usize, &str, &str) -> FixtureReply + Send + 'static,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server_base = base.clone();
+        let thread = std::thread::spawn(move || {
+            for step in 0..steps {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let mut stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(Instant::now() < deadline, "fixture request was not sent");
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
+                        Err(error) => panic!("fixture accept failed: {error}"),
+                    }
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut bytes = [0; 4096];
+                loop {
+                    let count = stream.read(&mut bytes).unwrap();
+                    assert!(count > 0, "fixture request ended prematurely");
+                    request.extend_from_slice(&bytes[..count]);
+                    assert!(request.len() <= 16 * 1024);
+                    if let Some(end) = request.windows(4).position(|v| v == b"\r\n\r\n") {
+                        let headers = std::str::from_utf8(&request[..end]).unwrap();
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                let (name, value) = line.split_once(':')?;
+                                name.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap_or(0);
+                        if request.len() >= end + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                let reply = handler(step, std::str::from_utf8(&request).unwrap(), &server_base);
+                let mut headers = format!(
+                    "HTTP/1.1 {} Fixture\r\nContent-Length: {}\r\nConnection: close\r\n",
+                    reply.status,
+                    reply.body.len()
+                );
+                for (name, value) in reply.headers {
+                    use std::fmt::Write as _;
+                    write!(headers, "{name}: {value}\r\n").unwrap();
+                }
+                stream.write_all(headers.as_bytes()).unwrap();
+                stream.write_all(b"\r\n").unwrap();
+                stream.write_all(&reply.body).unwrap();
+            }
+        });
+        (base, thread)
+    }
+
+    fn fixture_profile(base: &str, oidc: bool) -> ClientProfile {
+        let mut profile = test_profile(ClientAuth::ClientSecretBasic);
+        profile.supply.issuer = base.to_owned();
+        profile.supply.par_policy = ParPolicy::Optional;
+        if oidc {
+            profile.supply.oidc_scope = Some("openid".into());
+            profile.supply.id_token_alg = Some("RS256".into());
+        }
+        profile
+    }
+
+    fn authorization_fixture_reply(request: &str, base: &str) -> (FixtureReply, Option<String>) {
+        let path = request.split_whitespace().nth(1).unwrap();
+        let url = Url::parse(&format!("{base}{path}")).unwrap();
+        assert_eq!(url.path(), "/authorize");
+        let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        let mut redirect = Url::parse(&query["redirect_uri"]).unwrap();
+        redirect
+            .query_pairs_mut()
+            .append_pair("code", "code")
+            .append_pair("state", &query["state"])
+            .append_pair("iss", base);
+        let mut reply = fixture_reply(302, Vec::new());
+        reply
+            .headers
+            .push(("Location".into(), redirect.to_string()));
+        (reply, query.get("nonce").cloned())
+    }
+
+    fn fixture_token(oidc: bool, expiry: u64) -> serde_json::Value {
+        serde_json::json!({"access_token":"token","token_type":"DPoP","expires_in":expiry,
+            "scope":if oidc { "openid" } else { "read" }})
+    }
+
+    #[tokio::test]
+    async fn discovery_requires_advertised_jwks_and_exact_issuer_and_token_endpoint() {
+        for changed in [
+            None,
+            Some("issuer"),
+            Some("token_endpoint"),
+            Some("jwks_uri"),
+            Some("alias"),
+        ] {
+            let (base, thread) = http_fixture(1, move |_, request, base| {
+                assert!(request.starts_with("GET /.well-known/oauth-authorization-server "));
+                let mut metadata = serde_json::json!({"issuer":base,"token_endpoint":format!("{base}/token"),"jwks_uri":format!("{base}/jwks")});
+                if let Some(field) = changed {
+                    if field == "alias" {
+                        metadata["jwks_uri"] = format!("{base}/.well-known/jwks.json").into();
+                    } else {
+                        metadata[field] = "https://other.example.test/endpoint".into();
+                    }
+                }
+                fixture_reply(200, serde_json::to_vec(&metadata).unwrap())
+            });
+            let mut executor = ScenarioExecutor::with_profile(base, None).unwrap();
+            assert_eq!(executor.discovery_flow().await.is_ok(), changed.is_none());
+            thread.join().unwrap();
+            let accounting = executor.take_accounting();
+            accounting.validate().unwrap();
+            assert_eq!(accounting.attempts, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn standalone_jwks_digest_identifies_latest_success_or_failed_body() {
+        let bodies = [
+            (
+                200,
+                br#"{"keys":[{"kty":"oct","k":"AQAB"}]}"#.to_vec(),
+                true,
+            ),
+            (503, b"unavailable".to_vec(), false),
+            (200, b"invalid JSON".to_vec(), false),
+            (200, br#"{"keys":[]}"#.to_vec(), false),
+        ];
+        let expected: Vec<_> = bodies
+            .iter()
+            .map(|(_, body, success)| (sha256(body), *success))
+            .collect();
+        let (base, thread) = http_fixture(bodies.len(), move |index, request, _| {
+            assert!(request.starts_with("GET /.well-known/jwks.json "));
+            fixture_reply(bodies[index].0, bodies[index].1.clone())
+        });
+        let mut executor = ScenarioExecutor::with_profile(base, None).unwrap();
+        executor.jwks_sha256 = Some(sha256(b"previous accepted body"));
+        for (digest, success) in expected {
+            assert_eq!(executor.jwks_flow().await.is_ok(), success);
+            assert_eq!(executor.jwks_sha256.as_deref(), Some(digest.as_str()));
+        }
+        thread.join().unwrap();
+        let accounting = executor.take_accounting();
+        accounting.validate().unwrap();
+        assert_eq!(accounting.attempts, 4);
+    }
+
+    #[tokio::test]
+    async fn oidc_failure_records_received_jwks_before_status_or_verification() {
+        for (status, body) in [
+            (503, b"unavailable".to_vec()),
+            (200, b"invalid JSON".to_vec()),
+            (200, br#"{"keys":[]}"#.to_vec()),
+        ] {
+            let digest = sha256(&body);
+            let (base, thread) = http_fixture(3, move |step, request, base| match step {
+                0 => authorization_fixture_reply(request, base).0,
+                1 => {
+                    assert!(request.starts_with("POST /token "));
+                    let mut token = fixture_token(true, 300);
+                    token["id_token"] = "invalid.signature.token".into();
+                    fixture_reply(200, serde_json::to_vec(&token).unwrap())
+                }
+                _ => {
+                    assert!(request.starts_with("GET /.well-known/jwks.json "));
+                    fixture_reply(status, body.clone())
+                }
+            });
+            let mut executor =
+                ScenarioExecutor::with_profile(base.clone(), Some(fixture_profile(&base, true)))
+                    .unwrap();
+            executor.jwks_sha256 = Some(sha256(b"previous accepted body"));
+            assert!(executor.ensure_token(true).await.is_err());
+            assert!(executor.cached_userinfo_access_token.is_none());
+            assert_eq!(executor.jwks_sha256.as_deref(), Some(digest.as_str()));
+            thread.join().unwrap();
+            let accounting = executor.take_accounting();
+            accounting.validate().unwrap();
+            assert_eq!(accounting.attempts, 3);
+        }
+    }
+
+    fn rsa_fixture_key() -> (jsonwebtoken::EncodingKey, Vec<u8>) {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+        use std::{fs, process::Command};
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let directory =
+            std::env::temp_dir().join(format!("aegaeon-loadtest-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let _cleanup = Cleanup(directory.clone());
+        let key = directory.join("key.pem");
+        let generated = Command::new("openssl")
+            .args([
+                "genpkey",
+                "-algorithm",
+                "RSA",
+                "-pkeyopt",
+                "rsa_keygen_bits:2048",
+                "-out",
+            ])
+            .arg(&key)
+            .output()
+            .unwrap();
+        assert!(generated.status.success());
+        let modulus = Command::new("openssl")
+            .args(["rsa", "-modulus", "-noout", "-in"])
+            .arg(&key)
+            .output()
+            .unwrap();
+        assert!(modulus.status.success());
+        let hex = String::from_utf8(modulus.stdout).unwrap();
+        let hex = hex.trim().strip_prefix("Modulus=").unwrap();
+        let bytes: Vec<_> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        let jwks = serde_json::to_vec(&serde_json::json!({"keys":[{"kty":"RSA","kid":"signing","alg":"RS256","use":"sig","n":URL_SAFE_NO_PAD.encode(bytes),"e":"AQAB"}]})).unwrap();
+        (
+            jsonwebtoken::EncodingKey::from_rsa_pem(&fs::read(key).unwrap()).unwrap(),
+            jwks,
+        )
+    }
+
+    #[tokio::test]
+    async fn token_deadline_includes_nonce_retry_and_delayed_jwks_without_stale_reuse() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let (key, jwks) = rsa_fixture_key();
+        let expected_digest = sha256(&jwks);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut nonce = String::new();
+        let (base, thread) = http_fixture(7, move |step, request, base| match step {
+            0 | 4 => {
+                let (reply, received_nonce) = authorization_fixture_reply(request, base);
+                nonce = received_nonce.unwrap();
+                reply
+            }
+            1 => {
+                assert!(request.starts_with("POST /token "));
+                sender.send(Instant::now()).unwrap();
+                std::thread::sleep(Duration::from_millis(100));
+                let mut reply = fixture_reply(400, br#"{"error":"use_dpop_nonce"}"#.to_vec());
+                reply
+                    .headers
+                    .push(("DPoP-Nonce".into(), uuid::Uuid::new_v4().to_string()));
+                reply
+            }
+            2 | 5 => {
+                assert!(request.starts_with("POST /token "));
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let claims = serde_json::json!({"iss":base,"sub":"subject","aud":"client+ id","nonce":nonce,"iat":now,"exp":now+300});
+                let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
+                header.kid = Some("signing".into());
+                let id = jsonwebtoken::encode(&header, &claims, &key).unwrap();
+                let mut token = fixture_token(true, 1);
+                token["id_token"] = id.into();
+                fixture_reply(200, serde_json::to_vec(&token).unwrap())
+            }
+            _ => {
+                assert!(request.starts_with("GET /.well-known/jwks.json "));
+                if step == 3 {
+                    std::thread::sleep(Duration::from_millis(1200));
+                }
+                fixture_reply(200, jwks.clone())
+            }
+        });
+        let mut executor =
+            ScenarioExecutor::with_profile(base.clone(), Some(fixture_profile(&base, true)))
+                .unwrap();
+        let error = executor.ensure_token(true).await.err().unwrap();
+        let first_request = receiver.recv().unwrap();
+        assert!(first_request + Duration::from_secs(1) <= Instant::now());
+        assert!(error.to_string().contains("token expired before delivery"));
+        assert!(executor.cached_userinfo_access_token.is_none());
+        assert_eq!(
+            executor.jwks_sha256.as_deref(),
+            Some(expected_digest.as_str())
+        );
+        executor.accounting.validate().unwrap();
+        assert_eq!(executor.accounting.attempts, 4);
+        let replacement = executor.ensure_token(true).await.unwrap();
+        assert!(replacement.expires > Instant::now());
+        assert_eq!(replacement.subject.as_deref(), Some("subject"));
+        assert!(executor.cached_userinfo_access_token.is_some());
+        assert_eq!(
+            executor.jwks_sha256.as_deref(),
+            Some(expected_digest.as_str())
+        );
+        thread.join().unwrap();
+        let accounting = executor.take_accounting();
+        accounting.validate().unwrap();
+        assert_eq!(accounting.attempts, 7);
+        assert_eq!(accounting.nonce_challenges["authorization_server"], 1);
+        assert_eq!(accounting.nonce_retries["authorization_server"], 1);
+    }
+
+    #[tokio::test]
+    async fn token_expiry_and_sender_scope_validation_remain_fatal() {
+        for field in [
+            "zero",
+            "missing",
+            "overflow",
+            "token_type",
+            "scope",
+            "refresh_token",
+            "access_token",
+        ] {
+            let (base, thread) = http_fixture(2, move |step, request, base| {
+                if step == 0 {
+                    return authorization_fixture_reply(request, base).0;
+                }
+                assert!(request.starts_with("POST /token "));
+                let mut token = fixture_token(false, 300);
+                match field {
+                    "zero" => token["expires_in"] = 0.into(),
+                    "missing" => token
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("expires_in")
+                        .map(|_| ())
+                        .unwrap(),
+                    "overflow" => token["expires_in"] = u64::MAX.into(),
+                    "token_type" => token["token_type"] = "Bearer".into(),
+                    "scope" => token["scope"] = "other".into(),
+                    "refresh_token" => token["refresh_token"] = "unexpected".into(),
+                    _ => token["access_token"] = "".into(),
+                }
+                fixture_reply(200, serde_json::to_vec(&token).unwrap())
+            });
+            let mut executor =
+                ScenarioExecutor::with_profile(base.clone(), Some(fixture_profile(&base, false)))
+                    .unwrap();
+            assert!(
+                executor.ensure_token(false).await.is_err(),
+                "accepted {field}"
+            );
+            assert!(executor.cached_access_token.is_none());
+            thread.join().unwrap();
+            let accounting = executor.take_accounting();
+            accounting.validate().unwrap();
+            assert_eq!(accounting.attempts, 2);
+        }
     }
 }

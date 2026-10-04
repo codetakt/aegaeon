@@ -193,50 +193,56 @@ mod tests {
     }
     #[test]
     fn id_token_claim_bindings_reject_wrong_nonce_party_subject_and_time() {
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let mismatch_nonce = uuid::Uuid::new_v4().to_string();
+        assert_ne!(nonce, mismatch_nonce);
         let mut claims: IdClaims = serde_json::from_value(serde_json::json!({"iss":"https://issuer.example.test",
-            "sub":"subject","aud":["client","other"],"azp":"client","nonce":"nonce","iat":100,"exp":300})).unwrap();
+            "sub":"subject","aud":["client","other"],"azp":"client","nonce":nonce,"iat":100,"exp":300})).unwrap();
         assert!(claims
-            .validate(&supply(), "nonce", 200, "token", "code")
+            .validate(&supply(), &nonce, 200, "token", "code")
             .is_ok());
         assert!(claims
-            .validate(&supply(), "wrong", 200, "token", "code")
+            .validate(&supply(), &mismatch_nonce, 200, "token", "code")
             .is_err());
         claims.azp = None;
         assert!(claims
-            .validate(&supply(), "nonce", 200, "token", "code")
+            .validate(&supply(), &nonce, 200, "token", "code")
             .is_err());
         claims.azp = Some("client".into());
         claims.sub = "other".into();
         assert!(claims
-            .validate(&supply(), "nonce", 200, "token", "code")
+            .validate(&supply(), &nonce, 200, "token", "code")
             .is_err());
         claims.sub = "subject".into();
         assert!(claims
-            .validate(&supply(), "nonce", 300, "token", "code")
+            .validate(&supply(), &nonce, 300, "token", "code")
             .is_err());
         claims.iat = 261;
         assert!(claims
-            .validate(&supply(), "nonce", 200, "token", "code")
+            .validate(&supply(), &nonce, 200, "token", "code")
             .is_err());
         claims.iat = 100;
         claims.at_hash = Some("wrong".into());
         assert!(claims
-            .validate(&supply(), "nonce", 200, "token", "code")
+            .validate(&supply(), &nonce, 200, "token", "code")
             .is_err());
     }
 
     #[test]
     fn rs256_signature_jwks_algorithm_and_nonce_are_verified_before_consumption() {
         use std::{fs, process::Command};
-        let directory =
-            std::env::temp_dir().join(format!("aegaeon-loadtest-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&directory).unwrap();
         struct Cleanup(std::path::PathBuf);
         impl Drop for Cleanup {
             fn drop(&mut self) {
                 let _ = fs::remove_dir_all(&self.0);
             }
         }
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let mismatch_nonce = uuid::Uuid::new_v4().to_string();
+        assert_ne!(nonce, mismatch_nonce);
+        let directory =
+            std::env::temp_dir().join(format!("aegaeon-loadtest-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
         let _cleanup = Cleanup(directory.clone());
         let key = directory.join("key.pem");
         let generated = Command::new("openssl")
@@ -273,7 +279,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let claims = serde_json::json!({"iss":"https://issuer.example.test","sub":"subject","aud":"client","nonce":"nonce",
+        let claims = serde_json::json!({"iss":"https://issuer.example.test","sub":"subject","aud":"client","nonce":nonce,
             "iat":now,"exp":now+300,"at_hash":oidc_hash("token"),"c_hash":oidc_hash("code")});
         let mut header = jsonwebtoken::Header::new(Algorithm::RS256);
         header.kid = Some("signing".into());
@@ -284,18 +290,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            verify_id_token(&token, &jwks, &supply(), "nonce", "token", "code")
+            verify_id_token(&token, &jwks, &supply(), &nonce, "token", "code")
                 .unwrap()
                 .0,
             "subject"
         );
-        assert!(verify_id_token(&token, &jwks, &supply(), "wrong", "token", "code").is_err());
-        assert!(verify_id_token(&token, &jwks, &supply(), "nonce", "wrong", "code").is_err());
+        assert!(
+            verify_id_token(&token, &jwks, &supply(), &mismatch_nonce, "token", "code").is_err()
+        );
+        assert!(verify_id_token(&token, &jwks, &supply(), &nonce, "wrong", "code").is_err());
         let mut parts: Vec<String> = token.split('.').map(str::to_owned).collect();
         let replacement = if parts[2].starts_with('A') { "B" } else { "A" };
         parts[2].replace_range(..1, replacement);
         assert!(
-            verify_id_token(&parts.join("."), &jwks, &supply(), "nonce", "token", "code").is_err()
+            verify_id_token(&parts.join("."), &jwks, &supply(), &nonce, "token", "code").is_err()
         );
         let hmac = jsonwebtoken::encode(
             &jsonwebtoken::Header::new(Algorithm::HS256),
@@ -303,15 +311,9 @@ mod tests {
             &jsonwebtoken::EncodingKey::from_secret(b"key-confusion-probe"),
         )
         .unwrap();
-        assert!(verify_id_token(&hmac, &jwks, &supply(), "nonce", "token", "code").is_err());
-        assert!(verify_id_token(
-            &token,
-            b"{\"keys\":[]}",
-            &supply(),
-            "nonce",
-            "token",
-            "code"
-        )
-        .is_err());
+        assert!(verify_id_token(&hmac, &jwks, &supply(), &nonce, "token", "code").is_err());
+        assert!(
+            verify_id_token(&token, b"{\"keys\":[]}", &supply(), &nonce, "token", "code").is_err()
+        );
     }
 }

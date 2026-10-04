@@ -77,8 +77,21 @@ Set these inputs privately before selecting `auth-code`, `dpop`, `introspection`
   receipt is an input, not an independent assertion of authentication.
 
 Every run requires `AEG_LOADTEST_SOURCE_SHA256`, the SHA256 of its frozen source
-manifest, and a new `--report-file` path. The producer must bind that source to the
-built artifact. The report records the digest of the actual running executable,
+manifest, and a new `--report-file` path. `perf-load` produces that digest from
+its complete tracked source before compilation and rejects any inherited value,
+including an empty one. Invoke it in a source-only Git worktree with canonical
+0644/0755 regular-file modes; tracked dirty bytes and literal symlinks are recorded.
+Unknown untracked or ignored files are rejected. Keep protected runtime inputs
+outside the checkout. Only the conventional `target/`, reserved `artifacts/perf/`
+outputs and the two legacy report files are excluded; no tracked path is excluded.
+Custom build/evidence outputs can be outside the source. The driver retains the
+manifest and observations on failure, checks source again before each build and
+launch, and binds the report to the actual Cargo-selected executable. Raw source
+preimages and dirty patches remain private outside upload roots. These checks
+establish observed source identity; native/OCI/supplier and performance acceptance
+remain separate. Direct binary invocations still require a real independently
+frozen source digest and source-to-artifact producer evidence.
+The report records the digest of the actual running executable,
 configuration, profile and session provenance, observed JWKS digests, and a
 unique report identifier. `AEG_LOADTEST_CA_CERT` may supply an additional trusted
 PEM CA. Legacy credential and proof-origin overrides are rejected; there are no

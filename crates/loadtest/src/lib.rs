@@ -94,19 +94,23 @@ pub enum TestScenario {
 }
 
 impl TestScenario {
+    #[must_use]
     pub fn requires_profile(&self) -> bool {
         !matches!(
             self,
             Self::Smoke | Self::Discovery | Self::Jwks | Self::KeyRotation
         )
     }
+    #[must_use]
     pub fn requires_oidc(&self) -> bool {
         matches!(self, Self::Userinfo | Self::PolicyMixed)
     }
+    #[must_use]
     pub fn requires_dpop(&self) -> bool {
         matches!(self, Self::DPoP | Self::Mixed)
     }
     /// Leg identity is chosen before execution, including failures before HTTP setup.
+    #[must_use]
     pub fn leg(&self, iteration: u64) -> (String, bool) {
         let name = match self {
             Self::Smoke => {
@@ -140,6 +144,7 @@ impl TestScenario {
             matches!(self, Self::PolicyMixed) && iteration % 6 % 2 == 1,
         )
     }
+    #[must_use]
     pub fn required_legs(&self) -> Vec<String> {
         let count = match self {
             Self::Smoke => 2,
@@ -386,6 +391,15 @@ impl LoadTestResults {
             }
         }
 
+        self.print_slo_summary(target_rps, min_successful_throughput, max_error_rate);
+    }
+
+    fn print_slo_summary(
+        &self,
+        target_rps: f64,
+        min_successful_throughput: f64,
+        max_error_rate: f64,
+    ) {
         // Check SLOs
         println!("\n---------- SLO Validation ----------");
         let slo_p50_pass = self.p50_latency_ms <= 50.0;
@@ -623,8 +637,8 @@ mod report_tests {
         for raw in [
             saved.config_json.replace("PolicyMixed", "Smoke"),
             saved.config_json.replace("\"secs\":0", "\"secs\":1"),
-            saved.config_json.replacen("{", "{\"unexpected\":true,", 1),
-            saved.config_json.replacen("{", "{\"workers\":3,", 1),
+            saved.config_json.replacen('{', "{\"unexpected\":true,", 1),
+            saved.config_json.replacen('{', "{\"workers\":3,", 1),
             "{}".into(),
         ] {
             report.identity.as_mut().unwrap().config_sha256 = profile::sha256(raw.as_bytes());

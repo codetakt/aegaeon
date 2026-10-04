@@ -88,6 +88,7 @@ impl LegAccounting {
             self.positive_successes += 1;
         }
     }
+    #[must_use]
     pub fn valid(&self) -> bool {
         self.positive_successes
             .checked_add(self.expected_rejections)
@@ -104,6 +105,7 @@ pub struct PhaseAccounting {
 }
 
 impl PhaseAccounting {
+    #[must_use]
     pub fn positive_successes(&self) -> u64 {
         self.legs.values().map(|v| v.positive_successes).sum()
     }
@@ -118,7 +120,7 @@ impl PhaseAccounting {
             "phase has setup/join/accounting failures"
         );
         ensure!(
-            self.legs.values().all(|v| v.valid()),
+            self.legs.values().all(LegAccounting::valid),
             "inconsistent leg accounting"
         );
         for leg in required_legs {

@@ -190,7 +190,9 @@ fn validate_config(config: &LoadTestConfig) -> Result<()> {
             && config.warmup_duration.as_secs() <= 86_400,
         "run durations must be bounded and main duration positive"
     );
-    let seconds = (config.workers as f64) / config.target_rps;
+    let seconds =
+        (f64::from(u32::try_from(config.workers).context("worker count must be representable")?))
+            / config.target_rps;
     ensure!(
         seconds.is_finite() && seconds <= 86_400.0,
         "worker pacing interval exceeds bound"
@@ -253,7 +255,10 @@ async fn run_load_test(config: LoadTestConfig, report_path: &str) -> Result<Load
         let memory_monitor = spawn_memory_monitor(results.clone());
         let start = Instant::now();
         let end = start + config.duration;
-        let delay = Duration::from_secs_f64(config.workers as f64 / config.target_rps);
+        let delay = Duration::from_secs_f64(
+            f64::from(u32::try_from(config.workers).context("worker count must be representable")?)
+                / config.target_rps,
+        );
         let mut handles = Vec::new();
         for worker in 0..config.workers {
             let executor = prototype.fork_worker();
@@ -451,7 +456,7 @@ async fn execute_scenario(
             .policy_mixed_flow(iteration)
             .await
             .map(|(_, a, b)| (a, b)),
-        TestScenario::KeyRotation => executor.key_rotation_flow().await,
+        TestScenario::KeyRotation => executor.key_rotation_flow(),
     }
 }
 

@@ -110,6 +110,7 @@ impl TestDataGenerator {
     }
 
     /// RFC 7638 thumbprint of this worker's persistent public DPoP key.
+    #[must_use]
     pub fn dpop_jkt(&self) -> String {
         use sha2::{Digest, Sha256};
         let x = URL_SAFE_NO_PAD.encode(self.dpop_signing_key.verifying_key().as_bytes());
