@@ -1618,6 +1618,289 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
             check=False,
         )
 
+    def test_whole_cargo_target_sibling_overlaps_preserve_previous_evidence(self):
+        base = Path(self.temporary) / "aggregate-target"
+        for role in ("evidence", "history", "cargo-home", "git-metadata"):
+            with self.subTest(protected_role=role):
+                self.artifacts = Path(self.temporary) / "artifacts"
+                environment = {"CARGO_TARGET_DIR": str(base)}
+                protected = base / role
+                protected.mkdir(parents=True, exist_ok=True)
+                sentinel = protected / "owned-sentinel"
+                sentinel.write_bytes(b"preserve protected sibling")
+                if role == "evidence":
+                    self.artifacts = protected
+                    environment["SECURITY_ARTIFACT_DIR"] = str(protected)
+                elif role == "history":
+                    environment["SECURITY_HISTORY_DIR"] = str(protected)
+                elif role == "cargo-home":
+                    environment["CARGO_HOME"] = str(protected)
+                else:
+                    (self.root / ".git").write_text("gitdir: " + str(protected) + "\n")
+                self.seed_stale_results()
+                prior = self.saved_receipts()
+                result = self.run_suite(aggregate=True, FUZZ_TARGETS=TARGETS[0], **environment)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("overlaps protected", result.stderr)
+                self.assert_receipts_unchanged(prior)
+                self.assertEqual(sentinel.read_bytes(), b"preserve protected sibling")
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.artifacts / "summary/security.log").exists())
+                if role == "git-metadata":
+                    (self.root / ".git").unlink()
+
+    def test_cargo_fuzz_aliases_reject_before_execution_or_receipt_invalidation(self):
+        config = self.root / ".cargo/config.toml"
+        original = config.read_text()
+        self.seed_stale_results()
+        prior = self.saved_receipts()
+        for kind, value in (
+            ("environment", ""),
+            ("environment", "unsupported-dispatch"),
+            ("config", '""'),
+            ("config", '"unsupported-dispatch"'),
+            ("config", '["unsupported-dispatch"]'),
+        ):
+            for aggregate in (False, True):
+                with self.subTest(alias_origin=kind, empty=value == "", aggregate=aggregate):
+                    environment = {"CARGO_ALIAS_FUZZ": value} if kind == "environment" else {}
+                    if kind == "config":
+                        config.write_text(
+                            original.replace("[alias]", "[alias]\nfuzz = " + value, 1)
+                            if "[alias]" in original
+                            else original + "\n[alias]\nfuzz = " + value + "\n"
+                        )
+                    result = self.run_suite(aggregate=aggregate, **environment)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assert_receipts_unchanged(prior)
+                    self.assertEqual(self.calls(), [])
+                    self.assertFalse((self.artifacts / "summary/security.log").exists())
+                    config.write_text(original)
+
+    def test_unrelated_cargo_alias_preserves_supported_execution(self):
+        self.env.pop("CARGO_ALIAS_FUZZ", None)
+        config = self.root / ".cargo/config.toml"
+        original = config.read_text()
+        entry = 'xtask_control = "check"'
+        config.write_text(
+            original.replace("[alias]", "[alias]\n" + entry, 1)
+            if "[alias]" in original
+            else original + "\n[alias]\n" + entry + "\n"
+        )
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0], CARGO_ALIAS_XTASK_CONTROL="check")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.summary()["execution"]["status"], "passed")
+
+    def test_evidence_scan_errors_and_missing_entries_cannot_complete_packaging(self):
+        source = self.root / "artifacts/security/latest"
+        nested = source / "nested"
+        nested.mkdir(parents=True)
+        (nested / "owned-input").write_bytes(b"owned evidence")
+        output = self.root / "artifacts/upload-control"
+        for action in ("inventory", "package", "missing-root"):
+            with self.subTest(action=action):
+                result = self.helper_python(
+                    "import os,pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+                    "h=runpy.run_path(sys.argv[1]); actual=os.scandir\n"
+                    f"source=pathlib.Path({str(source)!r}); nested=source/'nested'\n"
+                    "def blocked(path):\n"
+                    " if pathlib.Path(path)==nested:\n"
+                    "  raise PermissionError('controlled scan failure')\n"
+                    " return actual(path)\n"
+                    "with patch.object(os,'scandir',side_effect=blocked):\n"
+                    " try:\n"
+                    + {
+                        "inventory": "  h['raw_inventory'](source)\n",
+                        "package": f"  h['package_upload'](pathlib.Path({str(output)!r}))\n",
+                        "missing-root": "  h['raw_inventory'](source/'missing-root')\n",
+                    }[action]
+                    + " except OSError: pass\n"
+                    " else: raise RuntimeError('incomplete evidence was admitted')\n"
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(output.exists())
+
+    def test_replaced_evidence_file_rejects_opened_descriptor_identity(self):
+        source = self.root / "fuzz/corpus"
+        source.mkdir()
+        entry = source / "input"
+        entry.write_bytes(b"owned evidence")
+        result = self.helper_python(
+            "import os,pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+            "h=runpy.run_path(sys.argv[1]); actual=os.open\n"
+            f"source=pathlib.Path({str(source)!r}); entry=source/'input'\n"
+            "def replace_after_open(path,*args,**kwargs):\n"
+            " descriptor=actual(path,*args,**kwargs)\n"
+            " if pathlib.Path(path)==entry:\n"
+            "  replacement=source/'replacement'; replacement.write_bytes(b'owned evidence')\n"
+            "  replacement.replace(entry)\n"
+            " return descriptor\n"
+            "with patch.object(os,'open',side_effect=replace_after_open):\n"
+            " try: h['raw_inventory'](source)\n"
+            " except ValueError: pass\n"
+            " else: raise RuntimeError('replaced evidence was admitted')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_external_hardlinks_reject_before_inventory_hashing(self):
+        outside = Path(self.temporary) / "external-input"
+        outside.write_bytes(b"external hardlink fixture")
+        for relative in (
+            "fuzz/corpus/input",
+            "artifacts/security/latest/nested/input",
+            "security-artifacts/security_status.jsonl",
+        ):
+            for action in ("raw", "upload"):
+                with self.subTest(relative=relative, inventory=action):
+                    entry = self.root / relative
+                    entry.parent.mkdir(parents=True, exist_ok=True)
+                    os.link(outside, entry)
+                    result = self.helper_python(
+                        "import hashlib,pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+                        "h=runpy.run_path(sys.argv[1])\n"
+                        "failure=RuntimeError('hash started')\n"
+                        "with patch.object(hashlib,'sha256',side_effect=failure):\n"
+                        " try:\n"
+                        + (
+                            f"  h['raw_inventory'](pathlib.Path({str(entry.parent)!r}))\n"
+                            if action == "raw"
+                            else "  h['upload_inventory']()\n"
+                        )
+                        + " except ValueError: pass\n"
+                        " else: raise RuntimeError('hardlink was admitted')\n"
+                    )
+                    entry.unlink()
+                    self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(outside.read_bytes(), b"external hardlink fixture")
+
+    def test_late_external_hardlinks_reject_before_copy_or_archive_content(self):
+        source = self.root / "fuzz/corpus"
+        source.mkdir()
+        entry = source / "input"
+        entry.write_bytes(b"owned evidence")
+        outside = Path(self.temporary) / "external-input"
+        outside.write_bytes(b"external hardlink fixture")
+        recovery = self.artifacts / "recovery"
+        recovery.mkdir(parents=True)
+        result = self.helper_python(
+            "import os,pathlib,runpy,sys,shutil\nfrom unittest.mock import patch\n"
+            "h=runpy.run_path(sys.argv[1]); actual=shutil.copytree\n"
+            f"entry=pathlib.Path({str(entry)!r}); outside=pathlib.Path({str(outside)!r})\n"
+            "def replace_before_copy(*args,**kwargs):\n"
+            " entry.unlink(); os.link(outside,entry)\n"
+            " return actual(*args,**kwargs)\n"
+            "with patch.object(shutil,'copytree',side_effect=replace_before_copy):\n"
+            f" try: h['copy_raw_backups'](pathlib.Path({str(recovery)!r}))\n"
+            " except ValueError: pass\n"
+            " else: raise RuntimeError('hardlink copy was admitted')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((recovery / "raw/corpus/input").exists())
+        result = self.helper_python(
+            "import io,pathlib,runpy,sys,tarfile\nfrom unittest.mock import patch\n"
+            "h=runpy.run_path(sys.argv[1])\n"
+            "with tarfile.open(fileobj=io.BytesIO(),mode='w') as archive:\n"
+            " with patch.object(archive,'addfile') as addfile:\n"
+            f"  try: h['add_upload_entry'](archive,pathlib.Path({str(entry)!r}))\n"
+            "  except ValueError: pass\n"
+            "  else: raise RuntimeError('hardlink archive was admitted')\n"
+            "  if addfile.called: raise RuntimeError('hardlink archive content was read')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(outside.read_bytes(), b"external hardlink fixture")
+
+    def test_in_repository_canonical_cache_alias_is_excluded_from_both_snapshots(self):
+        base = self.root / "fuzz/target"
+        base.mkdir()
+        cache = self.root / "build-cache"
+        cache.mkdir()
+        (base / "fuzz").symlink_to(cache, target_is_directory=True)
+        sibling = self.root / "build-cache-sibling"
+        sibling.mkdir()
+        (sibling / "owned-input").write_bytes(b"bound local input")
+        result = self.run_suite(CARGO_TARGET_DIR=str(base), FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertEqual(execution["target_dir"], str(cache))
+        self.assertFalse(
+            any(name.startswith("build-cache/") for name in execution["source"]["files"])
+        )
+        self.assertNotIn("build-cache", execution["source"]["files"])
+        self.assertIn("build-cache-sibling/owned-input", execution["source"]["files"])
+        self.assertEqual(execution["status"], "passed")
+        self.assertFalse(cache.exists())
+        self.assertTrue((base / "fuzz").is_symlink())
+
+    def test_prepare_run_git_identity_uses_root_from_foreign_or_noncheckout_cwd(self):
+        self.install(
+            "git",
+            "import os,pathlib,sys\n"
+            "args=sys.argv[1:]; root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
+            "selected=pathlib.Path(args[1]) if args[:1]==['-C'] else pathlib.Path.cwd()\n"
+            "if selected==root: print('1'*40 if args[-1]=='HEAD' else '2'*40)\n"
+            "elif (selected/'.git').exists(): print('3'*40)\n"
+            "else: raise SystemExit(128)\n",
+        )
+        for kind in ("foreign-checkout", "outside-checkout"):
+            with self.subTest(caller=kind):
+                caller = Path(self.temporary) / kind
+                caller.mkdir()
+                if kind == "foreign-checkout":
+                    (caller / ".git").mkdir()
+                directory = self.artifacts / "fuzz"
+                directory.mkdir(parents=True, exist_ok=True)
+                result = subprocess.run(  # noqa: S603 - fixed helper, controlled Git and owned cwd
+                    [
+                        sys.executable,
+                        str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                        "--prepare-run",
+                        str(directory),
+                    ],
+                    cwd=caller,
+                    env={**self.env, "FUZZ_TARGETS": TARGETS[0]},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                source = json.loads((directory / "execution.json").read_text())["source"]
+                self.assertEqual(source["commit"]["output"], "1" * 40 + "\n")
+                self.assertEqual(source["tree"]["output"], "2" * 40 + "\n")
+                self.assertEqual(source["commit"]["exit_code"], 0)
+                self.assertEqual(source["tree"]["exit_code"], 0)
+
+    def test_raw_corpus_and_crash_archives_reject_hardlinks_before_content(self):
+        outside = Path(self.temporary) / "external-input"
+        outside.write_bytes(b"external hardlink fixture")
+        for action in ("corpus", "crash"):
+            with self.subTest(raw_archive=action):
+                source = self.root / "fuzz" / ("corpus" if action == "corpus" else "artifacts")
+                entry = source / TARGETS[0] / "input"
+                entry.parent.mkdir(parents=True)
+                os.link(outside, entry)
+                result = self.helper_python(
+                    "import pathlib,runpy,sys,tarfile\nfrom unittest.mock import patch\n"
+                    "h=runpy.run_path(sys.argv[1]); actual=tarfile.TarFile.addfile\n"
+                    "content_calls=[]\n"
+                    "def record(tar,info,content=None):\n"
+                    " if content is not None: content_calls.append(info.name)\n"
+                    " return actual(tar,info,content)\n"
+                    "with patch.object(tarfile.TarFile,'addfile',new=record):\n"
+                    " try:\n"
+                    + (
+                        "  h['create_archive']()\n"
+                        if action == "corpus"
+                        else "  h['archive_crashes'](h['gather_crash_stats'](),None)\n"
+                    )
+                    + " except ValueError: pass\n"
+                    " else: raise RuntimeError('raw hardlink archive was admitted')\n"
+                    "if content_calls: raise "
+                    "RuntimeError('external raw archive content was read')\n"
+                )
+                entry.unlink()
+                self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(outside.read_bytes(), b"external hardlink fixture")
+
     def test_exclusive_receipt_temporary_files_ignore_fixed_symlinks(self):
         directory = self.artifacts / "fuzz"
         directory.mkdir(parents=True)
