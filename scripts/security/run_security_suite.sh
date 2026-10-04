@@ -143,6 +143,16 @@ fi
 ARTIFACT_BASE="$SECURITY_ARTIFACT_DIR"
 LOG_DIR="$ARTIFACT_BASE/summary"
 LOG_FILE="$LOG_DIR/security.log"
+if stage_enabled "sanitizers"; then
+	# Validate sanitizer-owned evidence before shared logging can create outputs.
+	# shellcheck source=scripts/sanitizers/sanitizer_paths.sh
+	source "$ROOT/scripts/sanitizers/sanitizer_paths.sh"
+	# Shared validators report through the wrapper's existing diagnostics.
+	fail() { echo "[security] $*" >&2; }
+	preflight_route "$ARTIFACT_BASE" || exit 1
+	sanitizer_validate_output "$PREFLIGHT_ROUTE" "$ROOT" || exit 1
+	preflight_route "$LOG_DIR" || exit 1
+fi
 mkdir -p "$LOG_DIR"
 : >"$LOG_FILE"
 
@@ -166,26 +176,26 @@ cleanup_fuzz_outputs() {
 	rm -rf -- "$cache" fuzz/artifacts fuzz/corpus fuzz/corpus_archive
 }
 
+prepare_sanitizer_attempt() {
+	SANITIZER_EVIDENCE_ROUTE_CHANGED=0
+	SANITIZER_CLEANUP_BINDING=""
+	preflight_route "$ARTIFACT_BASE/sanitizers" || return 1
+	SANITIZER_ARTIFACT_DIR=$PREFLIGHT_ROUTE
+	sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$ROOT" || return 1
+	sanitizer_initialize_evidence || return 1
+	SANITIZER_EVIDENCE_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_ARTIFACT_DIR") || return $?
+	preflight_route "${SANITIZER_TARGET_DIR:-target/sanitizers}" || return 1
+	SANITIZER_VALIDATED_TARGET=$PREFLIGHT_ROUTE
+	sanitizer_validate_output "$SANITIZER_VALIDATED_TARGET" "$ROOT" || return 1
+	# Cleanup can never contain or remove retained evidence or other stage logs.
+	preflight_route "$ARTIFACT_BASE" || return 1
+	sanitizer_validate_pair "$SANITIZER_VALIDATED_TARGET" "$PREFLIGHT_ROUTE" cleanup || return 1
+	SANITIZER_CLEANUP_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_VALIDATED_TARGET") || return $?
+}
+
 cleanup_sanitizer_outputs() {
-	local dir
-	# Match the runner's fallback and resolved paths, including symlink roots.
-	dir="$(python3 -c '
-from pathlib import Path
-import sys
-target = Path(sys.argv[1]).resolve()
-workspace = Path(sys.argv[2]).resolve()
-artifacts = Path(sys.argv[3]).resolve()
-if target == workspace or target in workspace.parents:
-    print("[security] unsafe sanitizer target directory; refusing cleanup", file=sys.stderr)
-    sys.exit(1)
-if target == artifacts or target in artifacts.parents or artifacts in target.parents:
-    print("[security] sanitizer target overlaps security artifacts; refusing cleanup", file=sys.stderr)
-    sys.exit(1)
-print(str(target) + ".")
-' "${SANITIZER_TARGET_DIR:-target/sanitizers}" "$ROOT" "$ARTIFACT_BASE")" || return $?
-	# Keep trailing newlines through command substitution, then remove the sentinel.
-	dir=${dir%.}
-	rm -rf -- "$dir"
+	[[ -n $SANITIZER_CLEANUP_BINDING ]] || return 1
+	sanitizer_target_binding cleanup "$SANITIZER_CLEANUP_BINDING"
 }
 
 discover_devtools_manifests() {
@@ -324,9 +334,8 @@ warn_step() {
 }
 
 sanitize() {
-	local dir="$ARTIFACT_BASE/sanitizers"
-	mkdir -p "$dir" || return $?
-	SANITIZER_ARTIFACT_DIR="$dir" \
+	SANITIZER_ARTIFACT_DIR="$SANITIZER_ARTIFACT_DIR" \
+		SANITIZER_TARGET_DIR="$SANITIZER_VALIDATED_TARGET" \
 		nix develop .#asan --command bash scripts/sanitizers/run_sanitizers.sh
 }
 
@@ -637,18 +646,35 @@ run_fuzz_stage() {
 	return "$result"
 }
 
+sanitizer_stage_log() {
+	# The open log inode remains the destination if a child swaps artifact parents.
+	echo "$*" | tee -a "/proc/self/fd/$sanitizer_log_fd"
+}
+
 run_sanitizers_stage() {
-	local status=0 cleanup_status=0
-	echo "[security] >>> sanitizer smoke" | tee -a "$LOG_FILE" || return $?
-	if sanitize >>"$LOG_FILE" 2>&1; then
+	local status=0 cleanup_status=0 evidence_status=0 sanitizer_log_fd
+	prepare_sanitizer_attempt || return $?
+	exec {sanitizer_log_fd}>>"$LOG_FILE" || return $?
+	SANITIZER_LOG_DESTINATION="/proc/self/fd/$sanitizer_log_fd"
+	sanitizer_stage_log "[security] >>> sanitizer smoke" || return $?
+	if sanitize >&"$sanitizer_log_fd" 2>&1; then
 		status=0
 	else
 		status=$?
-		echo "[security] <<< sanitizer smoke: failed (exit=$status)" | tee -a "$LOG_FILE" || true
+		sanitizer_stage_log "[security] <<< sanitizer smoke: failed (exit=$status)" || true
 	fi
-	cleanup_sanitizer_outputs >>"$LOG_FILE" 2>&1 || cleanup_status=$?
+	cleanup_sanitizer_outputs >&"$sanitizer_log_fd" 2>&1 || cleanup_status=$?
 	if [[ $cleanup_status -ne 0 ]]; then
-		echo "[security] <<< sanitizer cleanup: failed (exit=$cleanup_status)" | tee -a "$LOG_FILE" || true
+		sanitizer_stage_log "[security] <<< sanitizer cleanup: failed (exit=$cleanup_status)" || true
+	fi
+	if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING" >&"$sanitizer_log_fd" 2>&1; then
+		if [[ $status -ne 0 || $cleanup_status -ne 0 ]]; then
+			preflight_receipt cleanup "$((status != 0 ? status : cleanup_status))" >&"$sanitizer_log_fd" 2>&1 || true
+		fi
+	else
+		evidence_status=1
+		SANITIZER_EVIDENCE_ROUTE_CHANGED=1
+		sanitizer_stage_log "[security] sanitizer evidence route changed; historical summaries held" || true
 	fi
 	if [[ $status -ne 0 ]]; then
 		return "$status"
@@ -656,7 +682,10 @@ run_sanitizers_stage() {
 	if [[ $cleanup_status -ne 0 ]]; then
 		return "$cleanup_status"
 	fi
-	echo "[security] <<< sanitizer smoke: ok" | tee -a "$LOG_FILE"
+	if [[ $evidence_status -ne 0 ]]; then
+		return "$evidence_status"
+	fi
+	sanitizer_stage_log "[security] <<< sanitizer smoke: ok"
 }
 
 run_sbom_stage() {
@@ -894,6 +923,12 @@ if stage_enabled "sanitizers"; then
 			suite_result=$sanitizer_result
 		fi
 	fi
+fi
+if [[ ${SANITIZER_EVIDENCE_ROUTE_CHANGED:-0} -eq 1 ]]; then
+	# No later logging/output stage may dereference the replaced artifact namespace.
+	echo "[security] unsafe sanitizer evidence; remaining output stages held" |
+		tee -a "$SANITIZER_LOG_DESTINATION" || true
+	exit "$suite_result"
 fi
 stage_enabled "sbom" && run_sbom_stage
 stage_enabled "geiger" && run_geiger_stage

@@ -24,14 +24,51 @@ with (root / 'dispatch-calls.jsonl').open('a') as out:
 if sanitizer:
     directory = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
     (directory / 'child-receipt.json').write_text(json.dumps({'exit_code': code}))
+    (directory / 'run-summary.json').write_text(json.dumps({
+        'status': 'completed' if code == 0 else 'failed', 'commands': [], 'units': []}))
     if not os.environ.get('SANITIZER_UNSAFE_TARGET_TEST'):
         scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
         scratch.mkdir(parents=True, exist_ok=True)
         (scratch / 'child-output').write_text('transient sanitizer output')
+        swap = os.environ.get('SANITIZER_SWAP', '')
+        external = pathlib.Path(os.environ.get('SANITIZER_EXTERNAL', root / 'unused-external'))
+        if swap in ('target-symlink', 'target-directory'):
+            scratch.rename(scratch.with_name(scratch.name + '.held'))
+            if swap == 'target-symlink':
+                scratch.symlink_to(external, target_is_directory=True)
+            else:
+                scratch.mkdir()
+                (scratch / 'replacement-sentinel').write_text('preserve replacement')
+        elif swap == 'ancestor-symlink':
+            scratch.parent.rename(scratch.parent.with_name(scratch.parent.name + '.held'))
+            scratch.parent.symlink_to(external, target_is_directory=True)
+        elif swap == 'nested-symlink':
+            (scratch / 'nested-link').symlink_to(external, target_is_directory=True)
+        elif swap == 'evidence-symlink':
+            directory.rename(directory.with_name(directory.name + '.held'))
+            directory.symlink_to(external, target_is_directory=True)
+        elif swap == 'evidence-ancestor':
+            directory.parent.rename(directory.parent.with_name(directory.parent.name + '.held'))
+            directory.parent.symlink_to(external, target_is_directory=True)
     print('sanitizer child diagnostic: SUCCESS! exit=' + str(code))
 else:
     print('optional SBOM fixture exit=' + str(code))
 raise SystemExit(code)
+"""
+
+PYTHON = r"""
+import json, os, pathlib, sys
+if sys.argv[1:3] == ['-', 'cleanup']:
+    root = pathlib.Path(os.environ['FIXTURE_ROOT'])
+    target = json.loads(sys.argv[3])['target']
+    code = int(os.environ.get('SANITIZER_CLEANUP_EXIT', '0'))
+    with (root / 'dispatch-calls.jsonl').open('a') as out:
+        out.write(json.dumps({'kind': 'cleanup', 'args': ['fd-relative', '--', target],
+                             'exit_code': code}) + '\n')
+    if code:
+        print('sanitizer cleanup failed with exit=' + str(code), file=sys.stderr)
+        raise SystemExit(code)
+os.execv(sys.executable, [sys.executable] + sys.argv[1:])
 """
 
 RM = r"""
@@ -80,7 +117,9 @@ marker = os.environ.get('SANITIZER_LOG_FAILURE', '')
 if marker and marker in text:
     print('controlled sanitizer log write failure', file=sys.stderr)
     raise SystemExit(74)
-raise SystemExit(subprocess.run([ACTUAL_TEE] + sys.argv[1:], input=text, text=True).returncode)
+fds = tuple(int(arg.rsplit('/', 1)[1]) for arg in sys.argv[1:] if arg.startswith('/proc/self/fd/'))
+raise SystemExit(subprocess.run(
+    [ACTUAL_TEE] + sys.argv[1:], input=text, text=True, pass_fds=fds).returncode)
 """
 
 VET = r"""
@@ -121,6 +160,7 @@ class SanitizerDispatchTests(unittest.TestCase):
         fixture.env.pop("SANITIZER_TARGET_DIR", None)
         fixture.env.pop("SANITIZER_UNSAFE_TARGET_TEST", None)
         fixture.install("nix", NIX)
+        fixture.install("python3", PYTHON)
         fixture.install("rm", "ACTUAL_RM = " + repr(shutil.which("rm")) + "\n" + RM)
         fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
         fixture.install("cargo", VET + fuzz_fixture.CARGO)
@@ -221,48 +261,40 @@ class SanitizerDispatchTests(unittest.TestCase):
         return files
 
     def test_artifact_overlap_cleanup_is_rejected_and_all_evidence_is_preserved(self):
-        for aggregate in (False, True):
-            for setting in (
-                "root",
-                "descendant",
-                "ancestor",
-                "normalized",
-                "root-symlink",
-                "ancestor-symlink",
-                "descendant-symlink",
-                "artifact-symlink",
-                "absolute-artifacts",
-            ):
-                for child in (0, 71):
-                    with self.subTest(aggregate=aggregate, setting=setting, child=child):
-                        fixture = self.fixture()
-                        target = self.artifact_target_directory(fixture, setting)
-                        retained = self.seed_retained_evidence(fixture)
-                        result = self.run_suite(
-                            fixture,
-                            aggregate=aggregate,
-                            SANITIZER_TARGET_DIR=target,
-                            SANITIZER_CHILD_EXIT=str(child),
-                            SANITIZER_UNSAFE_TARGET_TEST="1",
-                        )
-                        self.assertEqual(
-                            result.returncode, child or 1, result.stdout + result.stderr
-                        )
-                        self.assertEqual(self.receipt(fixture)["exit_code"], child)
-                        self.assertEqual(self.calls(fixture, "cleanup"), [])
-                        self.assertEqual(self.calls(fixture, "unsafe-cleanup"), [])
-                        self.assertEqual(self.calls(fixture, "artifact-overlap-cleanup"), [])
-                        for path, text in retained.items():
-                            self.assertEqual((fixture.artifacts / path).read_text(), text)
-                        log = (fixture.artifacts / "summary/security.log").read_text()
-                        self.assertIn(
-                            "sanitizer target overlaps security artifacts; refusing cleanup", log
-                        )
-                        self.assertIn(
-                            "sanitizer child diagnostic: SUCCESS! exit=" + str(child), log
-                        )
-                        if aggregate:
-                            self.assertTrue((fixture.artifacts / "fuzz/collection.ok").is_file())
+        for setting in (
+            "root",
+            "descendant",
+            "ancestor",
+            "normalized",
+            "root-symlink",
+            "ancestor-symlink",
+            "descendant-symlink",
+            "artifact-symlink",
+            "absolute-artifacts",
+        ):
+            with self.subTest(setting=setting):
+                fixture = self.fixture()
+                target = self.artifact_target_directory(fixture, setting)
+                retained = self.seed_retained_evidence(fixture)
+                result = self.run_suite(fixture, SANITIZER_TARGET_DIR=target)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                for path, text in retained.items():
+                    if path != "sanitizers/run-summary.json" or setting == "artifact-symlink":
+                        self.assertEqual((fixture.artifacts / path).read_text(), text)
+                if setting != "artifact-symlink":
+                    summary = json.loads(
+                        (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                    )
+                    self.assertEqual(summary["status"], "failed")
+                    old = (
+                        fixture.artifacts
+                        / "sanitizers"
+                        / summary["previous_attempt"]
+                        / "run-summary.json"
+                    )
+                    self.assertEqual(old.read_text(), retained["sanitizers/run-summary.json"])
 
     def test_sibling_target_cleanup_preserves_retained_evidence(self):
         for aggregate in (False, True):
@@ -285,47 +317,44 @@ class SanitizerDispatchTests(unittest.TestCase):
                     self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
                     self.assertEqual(self.calls(fixture, "artifact-overlap-cleanup"), [])
                     for path, text in retained.items():
-                        self.assertEqual((fixture.artifacts / path).read_text(), text)
+                        if path == "sanitizers/run-summary.json":
+                            histories = list(
+                                (fixture.artifacts / "sanitizers").glob(
+                                    ".previous-attempt-*/run-summary.json"
+                                )
+                            )
+                            self.assertTrue(
+                                any(previous.read_text() == text for previous in histories)
+                            )
+                        else:
+                            self.assertEqual((fixture.artifacts / path).read_text(), text)
                     self.assertTrue((fixture.artifacts / "summary/security.log").is_file())
 
     def test_unsafe_target_cleanup_is_rejected_without_removal(self):
-        for aggregate in (False, True):
-            for setting in (
-                ".",
-                "workspace-absolute",
-                "..",
-                "parent-absolute",
-                "/",
-                "workspace-symlink",
-                "parent-symlink",
-                "missing-parent/..",
-                "missing-parent/../..",
-            ):
-                for child in (0, 71):
-                    with self.subTest(aggregate=aggregate, setting=setting, child=child):
-                        fixture = self.fixture()
-                        target = self.unsafe_target_directory(fixture, setting)
-                        marker = fixture.root / "workspace-marker"
-                        marker.write_text("preserve checkout")
-                        parent_marker = fixture.root.parent / "parent-marker"
-                        parent_marker.write_text("preserve parent")
-                        result = self.run_suite(
-                            fixture,
-                            aggregate=aggregate,
-                            SANITIZER_TARGET_DIR=target,
-                            SANITIZER_CHILD_EXIT=str(child),
-                            SANITIZER_UNSAFE_TARGET_TEST="1",
-                        )
-                        self.assertEqual(
-                            result.returncode, child or 1, result.stdout + result.stderr
-                        )
-                        self.assertEqual(self.receipt(fixture)["exit_code"], child)
-                        self.assertEqual(self.calls(fixture, "cleanup"), [])
-                        self.assertEqual(self.calls(fixture, "unsafe-cleanup"), [])
-                        self.assertEqual(marker.read_text(), "preserve checkout")
-                        self.assertEqual(parent_marker.read_text(), "preserve parent")
-                        log = (fixture.artifacts / "summary/security.log").read_text()
-                        self.assertIn("unsafe sanitizer target directory; refusing cleanup", log)
+        for setting in (
+            ".",
+            "workspace-absolute",
+            "..",
+            "parent-absolute",
+            "/",
+            "workspace-symlink",
+            "parent-symlink",
+            "missing-parent/..",
+            "missing-parent/../..",
+        ):
+            with self.subTest(setting=setting):
+                fixture = self.fixture()
+                target = self.unsafe_target_directory(fixture, setting)
+                marker = fixture.root / "workspace-marker"
+                marker.write_text("preserve checkout")
+                parent_marker = fixture.root.parent / "parent-marker"
+                parent_marker.write_text("preserve parent")
+                result = self.run_suite(fixture, SANITIZER_TARGET_DIR=target)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                self.assertEqual(marker.read_text(), "preserve checkout")
+                self.assertEqual(parent_marker.read_text(), "preserve parent")
 
     def test_configured_target_cleanup_preserves_unrelated_directories(self):
         for aggregate in (False, True):
@@ -335,7 +364,6 @@ class SanitizerDispatchTests(unittest.TestCase):
                 "target/sanitizers",
                 "custom sanitizer outputs",
                 "absolute",
-                "symlink",
                 "missing-parent/../normalized outputs",
                 "-custom",
             ):
@@ -356,7 +384,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                     expected = str((fixture.root / (target or "target/sanitizers")).resolve())
                     cleanup = self.calls(fixture, "cleanup")
                     self.assertEqual(len(cleanup), 1)
-                    self.assertEqual(cleanup[0]["args"], ["-rf", "--", expected])
+                    self.assertEqual(cleanup[0]["args"], ["fd-relative", "--", expected])
                     self.assertFalse(Path(expected).exists())
                     if setting == "symlink":
                         self.assertTrue((fixture.root / target).is_symlink())
@@ -385,12 +413,12 @@ class SanitizerDispatchTests(unittest.TestCase):
                     expected = str((fixture.root / target).resolve())
                     cleanup = self.calls(fixture, "cleanup")
                     self.assertEqual(len(cleanup), 1)
-                    self.assertEqual(cleanup[0]["args"], ["-rf", "--", expected])
+                    self.assertEqual(cleanup[0]["args"], ["fd-relative", "--", expected])
                     self.assertFalse(Path(expected).exists())
 
     def test_custom_target_failure_codes_and_outputs_are_preserved(self):
         for aggregate in (False, True):
-            for setting in ("custom sanitizer outputs", "absolute", "symlink", "newline outputs\n"):
+            for setting in ("custom sanitizer outputs", "absolute", "newline outputs\n"):
                 for child, cleanup in ((71, 0), (71, 79), (0, 79)):
                     with self.subTest(
                         aggregate=aggregate, setting=setting, child=child, cleanup=cleanup
@@ -421,12 +449,9 @@ class SanitizerDispatchTests(unittest.TestCase):
                     fixture = self.fixture()
                     fixture.install(
                         "python3",
-                        "import os, sys\n"
-                        "if sys.argv[1:2] == ['-c'] "
-                        "and 'Path(sys.argv[1]).resolve()' in sys.argv[2]:\n"
-                        "    print('controlled target resolution failure', file=sys.stderr)\n"
-                        "    raise SystemExit(81)\n"
-                        "os.execv(sys.executable, [sys.executable] + sys.argv[1:])\n",
+                        "import sys\n"
+                        "if sys.argv[1:3] == ['-', 'cleanup']:\n"
+                        "    raise SystemExit(81)\n" + PYTHON,
                     )
                     result = self.run_suite(
                         fixture,
@@ -485,6 +510,11 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(self.receipt(fixture)["exit_code"], 0)
                 self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 79)
                 self.assertTrue((fixture.root / "target/sanitizers/child-output").is_file())
+                summary = json.loads(
+                    (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                )
+                self.assertEqual(summary["status"], "failed")
+                self.assertEqual(summary["exit_code"], 79)
                 log = (fixture.artifacts / "summary/security.log").read_text()
                 self.assertNotIn("<<< sanitizer smoke: ok", log)
                 self.assertIn("sanitizer cleanup: failed (exit=79)", log)
@@ -503,6 +533,11 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(self.receipt(fixture)["exit_code"], 0)
                 self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 79)
                 self.assertTrue((fixture.root / "target/sanitizers/child-output").is_file())
+                summary = json.loads(
+                    (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                )
+                self.assertEqual(summary["status"], "failed")
+                self.assertEqual(summary["exit_code"], 79)
                 log = (fixture.artifacts / "summary/security.log").read_text()
                 self.assertNotIn("<<< sanitizer smoke: ok", log)
 
@@ -578,6 +613,147 @@ class SanitizerDispatchTests(unittest.TestCase):
         log = (fixture.artifacts / "summary/security.log").read_text()
         self.assertIn("cargo vet check: reported findings (non-blocking)", log)
         self.assertIn("SBOM scan: reported findings (non-blocking)", log)
+
+    def test_protected_source_and_external_symlink_targets_reject_before_child(self):
+        for setting in (
+            "crates/server",
+            "scripts",
+            "generated/nested",
+            ".git",
+            "external-link",
+            "external-link/../target/sanitizers",
+            "custom-parent/alias/target",
+        ):
+            with self.subTest(setting=setting):
+                fixture = self.fixture()
+                external = Path(fixture.temporary) / "external"
+                external.mkdir()
+                sentinel = external / "sentinel"
+                sentinel.write_bytes(b"external sentinel\n")
+                if setting.startswith("external-link"):
+                    (fixture.root / "external-link").symlink_to(external, target_is_directory=True)
+                elif setting == "custom-parent/alias/target":
+                    (fixture.root / "custom-parent").mkdir()
+                    (fixture.root / "custom-parent/alias").symlink_to(
+                        external, target_is_directory=True
+                    )
+                else:
+                    target = fixture.root / setting
+                    target.mkdir(parents=True, exist_ok=True)
+                    (target / "sentinel").write_bytes(b"source sentinel\n")
+                result = self.run_suite(fixture, SANITIZER_TARGET_DIR=setting)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                self.assertEqual(sentinel.read_bytes(), b"external sentinel\n")
+                if not setting.startswith("external-link") and "alias" not in setting:
+                    self.assertEqual((target / "sentinel").read_bytes(), b"source sentinel\n")
+
+    def test_child_target_and_ancestor_swaps_cannot_redirect_cleanup(self):
+        for swap in ("target-symlink", "target-directory", "ancestor-symlink"):
+            for child in (0, 71):
+                with self.subTest(swap=swap, child=child):
+                    fixture = self.fixture()
+                    external = Path(fixture.temporary) / "external"
+                    external.mkdir()
+                    (external / "sentinel").write_bytes(b"external sentinel\n")
+                    result = self.run_suite(
+                        fixture,
+                        SANITIZER_TARGET_DIR="custom-parent/target",
+                        SANITIZER_SWAP=swap,
+                        SANITIZER_EXTERNAL=str(external),
+                        SANITIZER_CHILD_EXIT=str(child),
+                    )
+                    self.assertEqual(result.returncode, child or 1, result.stdout + result.stderr)
+                    self.assertEqual((external / "sentinel").read_bytes(), b"external sentinel\n")
+                    held = fixture.root / (
+                        "custom-parent.held/target"
+                        if swap == "ancestor-symlink"
+                        else "custom-parent/target.held"
+                    )
+                    self.assertEqual(
+                        (held / "child-output").read_text(), "transient sanitizer output"
+                    )
+                    if swap == "target-directory":
+                        self.assertEqual(
+                            (
+                                fixture.root / "custom-parent/target/replacement-sentinel"
+                            ).read_text(),
+                            "preserve replacement",
+                        )
+                    self.assertNotIn("<<< sanitizer smoke: ok", result.stdout)
+
+    def test_nested_child_symlink_is_unlinked_without_following_external_target(self):
+        fixture = self.fixture()
+        external = Path(fixture.temporary) / "external"
+        external.mkdir()
+        (external / "sentinel").write_bytes(b"external sentinel\n")
+        result = self.run_suite(
+            fixture, SANITIZER_SWAP="nested-symlink", SANITIZER_EXTERNAL=str(external)
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((fixture.root / "target/sanitizers").exists())
+        self.assertEqual((external / "sentinel").read_bytes(), b"external sentinel\n")
+
+    def test_unsafe_evidence_route_is_never_initialized_or_logged(self):
+        fixture = self.fixture()
+        external = Path(fixture.temporary) / "external"
+        external.mkdir()
+        sentinel = external / "run-summary.json"
+        sentinel.write_bytes(b"external completed sentinel\n")
+        (fixture.root / "external-evidence").symlink_to(external, target_is_directory=True)
+        result = self.run_suite(fixture, SECURITY_ARTIFACT_DIR="external-evidence")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(fixture, "sanitizer"), [])
+        self.assertEqual(list(external.iterdir()), [sentinel])
+        self.assertEqual(sentinel.read_bytes(), b"external completed sentinel\n")
+
+    def test_child_evidence_swaps_preserve_external_and_hold_completed_summary(self):
+        for swap in ("evidence-symlink", "evidence-ancestor"):
+            for child, aggregate in ((0, False), (71, False), (0, True), (71, True)):
+                with self.subTest(swap=swap, child=child, aggregate=aggregate):
+                    fixture = self.fixture()
+                    external = Path(fixture.temporary) / "external"
+                    external.mkdir()
+                    sentinel = external / "run-summary.json"
+                    sentinel.write_bytes(b"external completed sentinel\n")
+                    (external / "sanitizers").mkdir()
+                    nested = external / "sanitizers/run-summary.json"
+                    nested.write_bytes(b"external nested completed sentinel\n")
+                    (external / "summary").mkdir()
+                    log = external / "summary/security.log"
+                    log.write_bytes(b"external log sentinel\n")
+                    result = self.run_suite(
+                        fixture,
+                        aggregate=aggregate,
+                        SANITIZER_SWAP=swap,
+                        SANITIZER_EXTERNAL=str(external),
+                        SANITIZER_CHILD_EXIT=str(child),
+                    )
+                    self.assertEqual(result.returncode, child or 1, result.stdout + result.stderr)
+                    self.assertEqual(sentinel.read_bytes(), b"external completed sentinel\n")
+                    self.assertEqual(nested.read_bytes(), b"external nested completed sentinel\n")
+                    self.assertEqual(log.read_bytes(), b"external log sentinel\n")
+                    held = (
+                        fixture.artifacts / "sanitizers.held"
+                        if swap == "evidence-symlink"
+                        else fixture.artifacts.with_name(fixture.artifacts.name + ".held")
+                        / "sanitizers"
+                    )
+                    self.assertEqual(
+                        json.loads((held / "run-summary.json").read_text())["status"],
+                        "completed" if child == 0 else "failed",
+                    )
+                    self.assertNotIn("<<< sanitizer smoke: ok", result.stdout)
+                    self.assertEqual(self.calls(fixture, "nix-other"), [])
+
+    def test_private_evidence_stop_flag_is_initialized_by_current_attempt(self):
+        fixture = self.fixture()
+        result = self.run_suite(fixture, aggregate=True, SANITIZER_EVIDENCE_ROUTE_CHANGED="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(self.calls(fixture, "nix-other"))
+        self.assertNotIn("remaining output stages held", result.stdout)
+        self.assertEqual(self.receipt(fixture)["exit_code"], 0)
 
 
 if __name__ == "__main__":

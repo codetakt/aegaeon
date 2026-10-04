@@ -127,6 +127,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             self.install(name, code)
         for path in (
             "scripts/security/run_security_suite.sh",
+            "scripts/sanitizers/sanitizer_paths.sh",
             "scripts/fuzz/manage_fuzz_corpus.py",
             "Cargo.toml",
             "Cargo.lock",

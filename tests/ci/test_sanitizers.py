@@ -18,6 +18,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "scripts/sanitizers/run_sanitizers.sh"
+PATH_HELPER = ROOT / "scripts/sanitizers/sanitizer_paths.sh"
 TARGETS = (
     "ffi",
     "aead_buffer_boundary_test",
@@ -935,7 +936,7 @@ class SanitizerTests(unittest.TestCase):
 
     def test_raw_history_copy_failure_keeps_current_receipt_failed(self):
         evidence, raw = self.seed_completed_preflight()
-        body = WRAPPER.read_text().split("<<'PREFLIGHT'\n", 1)[1].split("\nPREFLIGHT", 1)[0]
+        body = PATH_HELPER.read_text().split("<<'PREFLIGHT'\n", 1)[1].split("\nPREFLIGHT", 1)[0]
         with (
             patch.object(sys, "argv", ["preflight", str(evidence), "initialize", "1"]),
             patch("shutil.copy2", side_effect=OSError("controlled history copy failure")),
@@ -982,9 +983,34 @@ class SanitizerTests(unittest.TestCase):
         self.seed_completed_at(route)
         before = self.boundary_snapshot()
         result = self.run_wrapper("rustc-version-failure", **{variable: str(route)})
-        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - remains active under Python -O
+        after = self.boundary_snapshot()
+        if variable == "SANITIZER_TARGET_DIR":
+            before = {
+                key: value
+                for key, value in before.items()
+                if key != "evidence" and not key.startswith("evidence/")
+            }
+            after = {
+                key: value
+                for key, value in after.items()
+                if key != "evidence" and not key.startswith("evidence/")
+            }
+            if (self.bin / "python3").exists():
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - safe evidence fails first
+            else:
+                markers = list((self.root / "evidence").glob("preflight-failed-*.json"))
+                self.assertTrue(markers)  # noqa: PT009 - missing writer still leaves explicit failure
+                self.assertTrue(  # noqa: PT009 - active under -O
+                    all(json.loads(marker.read_text())["status"] == "failed" for marker in markers)
+                )
+        self.assertEqual(after, before)  # noqa: PT009 - source and unsafe evidence remain exact
         self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - remains active under Python -O
-        self.assertIn("overlaps protected source inputs", result.stderr)  # noqa: PT009 - rejected before tools or output writes
+        diagnostic = (
+            "attempt failed"
+            if variable == "SANITIZER_TARGET_DIR" and not (self.bin / "python3").exists()
+            else "overlaps protected source inputs"
+        )
+        self.assertIn(diagnostic, result.stderr)  # noqa: PT009 - safe marker first, source and tools untouched
         self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime fixture launched
         self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - no success message
 
@@ -1087,6 +1113,23 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
             (histories[0] / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
         )
+
+    def test_safe_evidence_is_failed_before_target_symlink_or_file_preflight(self):
+        external = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        sentinel = external / "run-summary.json"
+        sentinel.write_bytes(b"external completed sentinel\n")
+        (self.root / "target-alias").symlink_to(external, target_is_directory=True)
+        (self.root / "target-file").write_bytes(b"target file sentinel\n")
+        for target in ("target-alias", "target-file", "generated/unsafe-target"):
+            with self.subTest(target=target):
+                evidence, raw = self.seed_completed_preflight()
+                result = self.run_wrapper(SANITIZER_TARGET_DIR=target)
+                self.assert_failed_preflight_preserved(result, evidence, raw)
+                self.assertEqual(sentinel.read_bytes(), b"external completed sentinel\n")  # noqa: PT009 - external bytes preserved
+                self.assertEqual(  # noqa: PT009 - file preserved
+                    (self.root / "target-file").read_bytes(), b"target file sentinel\n"
+                )
+                self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime preflight
 
 
 if __name__ == "__main__":
