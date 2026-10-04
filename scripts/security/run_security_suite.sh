@@ -75,6 +75,15 @@ stage_enabled() {
 	return 1
 }
 
+# Clear only the inherited WASI compiler values handled by the native fallback.
+# Preflight must validate the same effective inputs that native builds will use.
+if [[ ${CC:-} == *"wasm32-unknown-wasi"* ]]; then
+	unset CC
+fi
+if [[ ${CXX:-} == *"wasm32-unknown-wasi"* ]]; then
+	unset CXX
+fi
+
 # Anchor the caller's Cargo home lexically before any preflight or setup.
 # Keep the same destination through validation and later directory creation.
 if [[ -n ${CARGO_HOME:-} ]]; then
@@ -93,6 +102,10 @@ fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 export ROOT
+SECURITY_ARTIFACT_DIR="${SECURITY_ARTIFACT_DIR:-artifacts/security/latest}"
+SECURITY_HISTORY_DIR="${SECURITY_HISTORY_DIR:-artifacts/security/history}"
+export SECURITY_ARTIFACT_DIR SECURITY_HISTORY_DIR
+
 # Retire previous fuzz results before any directory setup or suite logging can fail.
 # Relative evidence and target paths keep their repository-root interpretation.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target/security-suite}"
@@ -116,15 +129,8 @@ if [[ -n ${CARGO_HOME:-} ]]; then
 fi
 cd "$ROOT"
 
-# The dev shell exports WASI tooling for verified-core extraction. Some environments
-# also export CC/CXX pointing at the WASI compiler, which breaks native builds
-# (e.g. aws-lc-sys) during `cargo test`. Ensure native checks use a native compiler.
-if [[ ${CC:-} == *"wasm32-unknown-wasi"* ]]; then
-	unset CC
-fi
-if [[ ${CXX:-} == *"wasm32-unknown-wasi"* ]]; then
-	unset CXX
-fi
+# The handled WASI values were cleared before preflight. Complete the existing
+# native-tool fallback only after validation and receipt invalidation.
 if [[ -z ${CC:-} ]] && command -v cc >/dev/null 2>&1; then
 	CC="$(command -v cc)"
 	export CC
@@ -133,10 +139,6 @@ if [[ -z ${CXX:-} ]] && command -v c++ >/dev/null 2>&1; then
 	CXX="$(command -v c++)"
 	export CXX
 fi
-
-SECURITY_ARTIFACT_DIR="${SECURITY_ARTIFACT_DIR:-artifacts/security/latest}"
-SECURITY_HISTORY_DIR="${SECURITY_HISTORY_DIR:-artifacts/security/history}"
-export SECURITY_ARTIFACT_DIR SECURITY_HISTORY_DIR
 
 ARTIFACT_BASE="$SECURITY_ARTIFACT_DIR"
 LOG_DIR="$ARTIFACT_BASE/summary"

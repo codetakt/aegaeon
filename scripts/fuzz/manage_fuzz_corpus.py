@@ -240,11 +240,9 @@ def gather_crash_stats() -> list[CrashStat]:
 def copy_into(path: Path, dest_dir: Path | None) -> Path | None:
     if dest_dir is None:
         return None
-    dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / path.name
-    if dest_path.exists() and not dest_path.is_file():
-        message = f"archive destination is not a file: {dest_path}"
-        raise OSError(message)
+    validate_regular_destination(dest_path)
+    dest_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, dest_path)
     return dest_path
 
@@ -795,6 +793,11 @@ def git_metadata_paths() -> list[Path]:  # noqa: PLR0912 - validate Git metadata
     return paths
 
 
+def effective_cargo_home() -> Path:
+    path = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
+    return path if path.is_absolute() else ROOT / path
+
+
 def cache_protected_paths(directory: Path) -> list[Path]:
     evidence_root = repository_path(directory).parent
     paths = [ROOT / name for name in CACHE_SOURCE_ROOTS]
@@ -803,6 +806,7 @@ def cache_protected_paths(directory: Path) -> list[Path]:
     paths.extend(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta", "fuzz_targets"))
     paths.extend(selected_sources(selected_targets()))
     paths.extend([FUZZ_DIR / "Cargo.toml", FUZZ_DIR / "Cargo.lock", evidence_root])
+    paths.append(effective_cargo_home())
     paths.append(
         repository_path(Path(os.environ.get("SECURITY_HISTORY_DIR", "artifacts/security/history")))
     )
@@ -818,7 +822,7 @@ def configured_cache(directory: Path) -> Path:
     if any(root.is_relative_to(path) for root in (ROOT, FUZZ_DIR) for path in (base, cache)):
         invalid("fuzz cache cannot be a workspace root or ancestor")
     if any(overlaps(cache, path) for path in cache_protected_paths(directory)):
-        invalid("fuzz cache overlaps protected source, raw or evidence paths")
+        invalid("fuzz cache overlaps protected source, raw, evidence or Cargo home paths")
     if cache.exists() and not cache.is_dir():
         invalid("fuzz cache is not a directory")
     return cache
@@ -876,6 +880,9 @@ def validate_preflight(directory: Path) -> Path:
     validate_compiler_environment()
     validate_git_environment()
     validate_collection_roots()
+    for target in selected_targets():
+        for root in ("corpus", "artifacts"):
+            lexical_directory(FUZZ_DIR / root / target)
     routes = [directory]
     for name, default in (
         ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"),
@@ -900,8 +907,7 @@ def validate_preflight(directory: Path) -> Path:
             path = Path(value)
             path = path if path.is_absolute() else ROOT / path
             validate_regular_destination(path / "fuzz_runs.jsonl")
-    if os.environ.get("CARGO_HOME"):
-        validate_evidence_route(Path(os.environ["CARGO_HOME"]))
+    validate_evidence_route(effective_cargo_home())
     cache = configured_cache(directory)
     lexical_directory(Path(os.environ["CARGO_TARGET_DIR"]))
     lexical_directory(cache)
@@ -915,8 +921,7 @@ def validate_native_configuration() -> dict[str, str]:
     extra = [FUZZ_DIR / ".cargo/config", FUZZ_DIR / ".cargo/config.toml", ROOT / ".cargo/config"]
     for parent in ROOT.parents:
         extra.extend(parent / ".cargo" / name for name in ("config", "config.toml"))
-    cargo_home = Path(os.environ.get("CARGO_HOME", str(Path.home() / ".cargo")))
-    cargo_home = cargo_home if cargo_home.is_absolute() else ROOT / cargo_home
+    cargo_home = effective_cargo_home()
     extra.extend(cargo_home / name for name in ("config", "config.toml"))
     if any(path.exists() or path.is_symlink() for path in extra):
         invalid("unmodeled external or nested Cargo compiler configuration")
@@ -1675,29 +1680,31 @@ def cleanup_action(args: argparse.Namespace) -> int | None:
 
 
 def validate_action_routes(args: argparse.Namespace) -> None:
-    for action in (
-        args.prepare_run,
-        args.record_environment,
-        args.execution_cache,
-        args.validate_cache,
-        args.validate_preflight,
-        args.backup_cleanup,
+    for name in (
+        "prepare_run",
+        "record_environment",
+        "execution_cache",
+        "validate_cache",
+        "validate_preflight",
+        "backup_cleanup",
     ):
+        action = getattr(args, name)
         if action is not None:
-            validate_evidence_route(action)
+            setattr(args, name, validate_evidence_route(action))
             validate_collection_roots()
-    for action in (
-        args.cleanup_cache,
-        args.record_target,
-        args.finish_run,
-        args.cleanup_result,
+    for name in (
+        "cleanup_cache",
+        "record_target",
+        "finish_run",
+        "cleanup_result",
     ):
+        action = getattr(args, name)
         if action is not None:
-            validate_evidence_route(Path(action[0]))
+            action[0] = str(validate_evidence_route(Path(action[0])))
             validate_collection_roots()
     if args.restore_cleanup is not None:
         # Raw-root failures belong to restore_cleanup's recovery error handler.
-        validate_evidence_route(Path(args.restore_cleanup[0]))
+        args.restore_cleanup[0] = str(validate_evidence_route(Path(args.restore_cleanup[0])))
 
 
 def record_target_action(action: list[str]) -> int:

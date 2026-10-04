@@ -1320,6 +1320,288 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
         self.assertFalse((self.root / "relative cargo home").exists())
 
 
+class SecurityFuzzPathDispatchTests(SecurityFuzzFixture):
+    def test_explicit_and_modeled_default_cargo_home_cache_overlap_preserves_receipts(self):
+        marker, _raw = self.seed_stale_results()
+        previous = self.saved_receipts()
+        cache = Path(self.env["CARGO_TARGET_DIR"]) / "fuzz"
+        original_home = self.env.pop("CARGO_HOME")
+        for kind, route in (
+            ("equal", cache),
+            ("descendant", cache / "cargo-home"),
+            ("ancestor", cache.parent),
+            ("default", cache / "modeled-home" / ".cargo"),
+        ):
+            with self.subTest(home_shape=kind):
+                route.mkdir(parents=True, exist_ok=True)
+                sentinel = route / "caller-owned-registry-sentinel"
+                sentinel.write_bytes(b"owned registry fixture")
+                environment = {"CARGO_HOME": str(route)}
+                if kind == "default":
+                    environment = {}
+                    self.install_helper_hooks(
+                        {
+                            "--validate-preflight": (
+                                "Path.home = classmethod(lambda cls: "
+                                f"Path({str(route.parent)!r}))\n"
+                            )
+                        }
+                    )
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], **environment)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("overlaps", result.stderr)
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+                self.assertEqual(sentinel.read_bytes(), b"owned registry fixture")
+                self.assertTrue(marker.is_file())
+        self.env["CARGO_HOME"] = original_home
+
+    def test_explicit_and_modeled_default_cargo_home_aliases_preserve_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        self.env.pop("CARGO_HOME")
+        external = Path(self.temporary) / "external-modeled-cargo-home"
+        external.mkdir()
+        sentinel = external / "preserved-registry-fixture"
+        sentinel.write_bytes(b"owned home fixture")
+        modeled_home = Path(self.temporary) / "modeled-home"
+        modeled_home.mkdir()
+        alias = modeled_home / ".cargo"
+        alias.symlink_to(external, target_is_directory=True)
+        for kind in ("explicit", "default"):
+            with self.subTest(home_kind=kind):
+                environment = {"CARGO_HOME": str(alias)} if kind == "explicit" else {}
+                if kind == "default":
+                    self.install_helper_hooks(
+                        {
+                            "--validate-preflight": (
+                                "Path.home = classmethod(lambda cls: "
+                                f"Path({str(modeled_home)!r}))\n"
+                            )
+                        }
+                    )
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], **environment)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("symlink components", result.stderr)
+                for receipt in previous:
+                    self.assertTrue(receipt.is_file(), "preflight invalidated the previous receipt")
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+                self.assertEqual(list(external.iterdir()), [sentinel])
+                self.assertEqual(sentinel.read_bytes(), b"owned home fixture")
+                self.assertTrue(alias.is_symlink())
+
+    def test_selected_raw_target_directory_aliases_reject_before_execution_or_invalidation(self):
+        marker, _raw = self.seed_stale_results()
+        previous = self.saved_receipts()
+        for name in ("corpus", "artifacts"):
+            with self.subTest(raw_root=name):
+                target = self.root / "fuzz" / name / TARGETS[0]
+                shutil.rmtree(target)
+                external = Path(self.temporary) / ("external-selected-" + name)
+                external.mkdir()
+                sentinel = external / "preserved-input"
+                sentinel.write_bytes(b"external raw fixture")
+                target.symlink_to(external, target_is_directory=True)
+                result = self.run_suite("run-fail", FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("symlink components", result.stderr)
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+                self.assertEqual(list(external.iterdir()), [sentinel])
+                self.assertEqual(sentinel.read_bytes(), b"external raw fixture")
+                self.assertTrue(target.is_symlink())
+                self.assertTrue(marker.is_file())
+                target.unlink()
+                target.mkdir()
+
+    def test_collect_only_selected_target_aliases_remain_inert_archive_entries(self):
+        external = Path(self.temporary) / "external-collect-only"
+        external.mkdir()
+        sentinel = external / "private-input"
+        sentinel.write_bytes(b"inert link fixture")
+        for name in ("corpus", "artifacts"):
+            base = self.root / "fuzz" / name
+            base.mkdir()
+            (base / TARGETS[0]).symlink_to(external, target_is_directory=True)
+            (base / TARGETS[1]).mkdir()
+            (base / TARGETS[1] / "owned").write_bytes(b"owned raw input")
+        result = subprocess.run(  # noqa: S603 - actual collect-only helper and owned inert links
+            [sys.executable, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
+            cwd=self.root,
+            env={
+                **self.env,
+                "FUZZ_RUN_ARTIFACT_DIR": str(self.artifacts / "fuzz"),
+                "FUZZ_HISTORY_DIR": str(Path(self.temporary) / "history"),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary()
+        with tarfile.open(self.artifacts / "fuzz" / summary["corpus_archive"]) as archive:
+            link = archive.getmember("corpus/" + TARGETS[0])
+            self.assertTrue(link.issym())
+            self.assertEqual(link.linkname, str(external))
+            self.assertFalse(any("private-input" in name for name in archive.getnames()))
+        with tarfile.open(self.artifacts / "fuzz" / summary["crash_archive"]) as archive:
+            self.assertNotIn(TARGETS[0], archive.getnames())
+            owned = archive.extractfile(TARGETS[1] + "/owned")
+            self.assertIsNotNone(owned)
+            self.assertEqual(owned.read(), b"owned raw input")
+            self.assertFalse(any("private-input" in name for name in archive.getnames()))
+        for name in ("corpus", "artifacts"):
+            self.assertTrue((self.root / "fuzz" / name / TARGETS[0]).is_symlink())
+            self.assertEqual(
+                (self.root / "fuzz" / name / TARGETS[1] / "owned").read_bytes(),
+                b"owned raw input",
+            )
+        self.assertEqual(sentinel.read_bytes(), b"inert link fixture")
+
+    def test_empty_security_output_values_use_default_guards_before_invalidation(self):
+        external = Path(self.temporary) / "default-output-external"
+        external.mkdir()
+        for variable, output, name in (
+            ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest", "summary/security.log"),
+            ("SECURITY_HISTORY_DIR", "artifacts/security/history", "fuzz_runs.jsonl"),
+        ):
+            with self.subTest(empty_variable=variable):
+                expected = self.root / "artifacts/security/latest/fuzz"
+                expected.mkdir(parents=True, exist_ok=True)
+                receipts = {}
+                for filename in ("collection.ok", "execution.json", "run_summary.json"):
+                    path = expected / filename
+                    path.write_bytes(b"preserve previous default receipt")
+                    receipts[path] = path.read_bytes()
+                sentinel = external / variable
+                sentinel.write_bytes(b"preserve default output sentinel")
+                alias = self.root / output / name
+                alias.parent.mkdir(parents=True, exist_ok=True)
+                alias.symlink_to(sentinel)
+                environment = {variable: ""}
+                if variable == "SECURITY_HISTORY_DIR":
+                    environment["SECURITY_ARTIFACT_DIR"] = ""
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], **environment)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                for receipt in receipts:
+                    self.assertTrue(receipt.is_file(), "preflight invalidated the previous receipt")
+                self.assert_receipts_unchanged(receipts)
+                self.assertEqual(sentinel.read_bytes(), b"preserve default output sentinel")
+                self.assertEqual(self.calls(), [])
+                alias.unlink()
+
+    def test_relative_receipt_actions_pass_absolute_paths_to_every_dispatch_consumer(self):
+        route = "action-evidence\n"
+        expected = self.root / route
+        observed = Path(self.temporary) / "action-dispatch.json"
+        caller = self.root / "scripts"
+        external = Path(self.temporary) / "external-action-route"
+        external.mkdir()
+        sentinel = external / "preserved"
+        sentinel.write_bytes(b"external caller route")
+        (caller / route).symlink_to(external, target_is_directory=True)
+        actions = (
+            ("--prepare-run", "prepare_run", []),
+            ("--record-environment", "record_environment", []),
+            ("--execution-cache", "execution_cache", []),
+            ("--validate-cache", "configured_cache", []),
+            ("--validate-preflight", "validate_preflight", []),
+            ("--backup-cleanup", "backup_cleanup", []),
+            ("--cleanup-cache", "cleanup_cache", ["00000000-0000-0000-0000-000000000001"]),
+            ("--record-target", "record_target", [TARGETS[0], "run", "0"]),
+            ("--finish-run", "finish_run", ["0"]),
+            ("--cleanup-result", "cleanup_result", ["0"]),
+            (
+                "--restore-cleanup",
+                "restore_cleanup",
+                ["00000000-0000-0000-0000-000000000001", "1", "cleanup"],
+            ),
+        )
+        for action, consumer, tail in actions:
+            with self.subTest(action=action):
+                code = (
+                    "import json,pathlib,runpy,sys\n"
+                    "h=runpy.run_path(sys.argv[1]); state=h['main'].__globals__\n"
+                    "def consume(path,*args):\n"
+                    f" pathlib.Path({str(observed)!r}).write_text(json.dumps({{"
+                    "'absolute':path.is_absolute(),'path':str(path),'path_type':isinstance(path,pathlib.Path)}))\n"
+                    " return path\n"
+                    f"state[{consumer!r}]=consume\n"
+                    "sys.argv=sys.argv[1:]\n"
+                    "raise SystemExit(state['main']())\n"
+                )
+                result = subprocess.run(  # noqa: S603 - instrument only final consumers of actual CLI dispatch
+                    [
+                        sys.executable,
+                        "-c",
+                        code,
+                        str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                        action,
+                        route,
+                        *tail,
+                    ],
+                    cwd=caller,
+                    env=self.env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                record = json.loads(observed.read_text())
+                self.assertTrue(record["absolute"])
+                self.assertTrue(record["path_type"])
+                self.assertEqual(record["path"], str(expected))
+                self.assertEqual(sentinel.read_bytes(), b"external caller route")
+                self.assertEqual(list(external.iterdir()), [sentinel])
+
+    def test_relative_cleanup_result_updates_checked_receipts_and_preserves_caller_alias(self):
+        self.artifacts = self.root / "artifacts/security/latest"
+        self.env["SECURITY_ARTIFACT_DIR"] = str(self.artifacts)
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        backup, _manifest = self.assert_backup()
+        directory = self.artifacts / "fuzz"
+        for name in (
+            "execution.json",
+            "run_summary.json",
+            "collection.ok",
+            "collection-summary.json",
+        ):
+            (directory / name).write_bytes((backup / "evidence" / name).read_bytes())
+        external = Path(self.temporary) / "external-caller-evidence"
+        external.mkdir()
+        shutil.copytree(self.root / "artifacts", external / "artifacts")
+        preserved = {
+            path: path.read_bytes()
+            for path in (external / "artifacts/security/latest/fuzz").iterdir()
+            if path.is_file()
+        }
+        caller = Path(self.temporary) / "caller"
+        caller.mkdir()
+        (caller / "artifacts").symlink_to(external / "artifacts", target_is_directory=True)
+        updated = subprocess.run(  # noqa: S603 - actual receipt mutation through checked relative route
+            [
+                sys.executable,
+                str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                "--cleanup-result",
+                "artifacts/security/latest/fuzz",
+                "27",
+            ],
+            cwd=caller,
+            env={**self.env, "FUZZ_TARGETS": TARGETS[0]},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(updated.returncode, 0, updated.stdout + updated.stderr)
+        execution = json.loads((directory / "execution.json").read_text())
+        self.assertEqual(execution["status"], "failed")
+        self.assertEqual(execution["cleanup_exit_code"], 27)
+        for path, content in preserved.items():
+            self.assertEqual(path.read_bytes(), content)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1621,6 +1903,65 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
 
 # This source is inserted into the existing fixture module; it is not a standalone test runner.
 class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
+    def test_handled_wasi_compilers_clear_before_selected_and_default_preflight(self):
+        marker, raw = self.seed_stale_results()
+        previous = self.saved_receipts()
+        admitted = Path(self.temporary) / "native-preflight.json"
+        self.install_helper_hooks(
+            {
+                "--validate-preflight": (
+                    "import json,os,sys\n"
+                    "validate_preflight(Path(sys.argv[-1]))\n"
+                    f"Path({str(admitted)!r}).write_text(json.dumps({{"
+                    "'cc_cleared': 'CC' not in os.environ, "
+                    "'cxx_cleared': 'CXX' not in os.environ, "
+                    "'native': effective_native_commands()}))\n"
+                    "raise SystemExit(37)\n"
+                )
+            }
+        )
+        for aggregate in (False, True):
+            with self.subTest(default_dispatch=aggregate):
+                if admitted.exists():
+                    admitted.unlink()
+                result = self.run_suite(
+                    aggregate=aggregate,
+                    CC="/handled/wasm32-unknown-wasi/bin/clang",
+                    CXX="/handled/wasm32-unknown-wasi/bin/clang++",
+                )
+                # The wrapper normalizes our intentional helper stop to exit1.
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertTrue(admitted.is_file(), result.stdout + result.stderr)
+                observation = json.loads(admitted.read_text())
+                self.assertTrue(observation["cc_cleared"])
+                self.assertTrue(observation["cxx_cleared"])
+                self.assertEqual(
+                    observation["native"],
+                    {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"},
+                )
+                self.assert_receipts_unchanged(previous)
+                self.assertTrue(marker.is_file())
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
+                self.assertEqual(self.calls(), [])
+
+    def test_handled_wasi_compilers_use_bound_native_tools_for_selected_execution(self):
+        result = self.run_suite(
+            FUZZ_TARGETS=TARGETS[0],
+            CC="/handled/wasm32-unknown-wasi/bin/clang",
+            CXX="/handled/wasm32-unknown-wasi/bin/clang++",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertEqual(execution["status"], "passed")
+        self.assertEqual(execution["selected_targets"], [TARGETS[0]])
+        for name, command in (("cc", "cc"), ("cxx", "c++")):
+            tool = execution["tools"][name]
+            self.assertEqual(tool["path"], str(self.bin / command))
+            self.assertEqual(
+                tool["sha256"], hashlib.sha256((self.bin / command).read_bytes()).hexdigest()
+            )
+
     helper_python = SecurityFuzzReceiptBoundaryTests.helper_python
 
     def test_direct_collection_entrypoints_reject_all_raw_root_aliases_before_changes(self):
@@ -2181,6 +2522,29 @@ class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
             timeout=30,
             check=False,
         )
+
+    def test_outer_unknown_stages_reject_before_git_discovery_or_external_dispatch(self):
+        marker, raw = self.seed_stale_results()
+        previous = self.saved_receipts()
+        for arguments in (
+            ["--stage", "unknown"],
+            ["--stage", "sbom", "--stage", "unknown"],
+            ["--stage", "unknown", "--stage", "fuzz"],
+        ):
+            with self.subTest(arguments=arguments):
+                result = self.run_outer(
+                    arguments,
+                    GIT_DIR=str(self.external),
+                    GIT_WORK_TREE=str(self.external),
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("unknown stage", result.stderr)
+                self.assertFalse((self.root.parent / "outer-git-calls.jsonl").exists())
+                self.assertFalse(self.dispatch.exists())
+                self.assert_receipts_unchanged(previous)
+                self.assertTrue(marker.is_file())
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
 
     def test_outer_fuzz_and_default_reject_overrides_before_git_or_external_dispatch(self):
         marker, raw = self.seed_stale_results()
