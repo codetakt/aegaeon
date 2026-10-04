@@ -1013,7 +1013,7 @@ shutil.copytree = change_after_copy
                 "--restore-cleanup": """
 def fail_copy(*args, **kwargs):
     raise OSError('fixture restoration failure')
-shutil.copytree = fail_copy
+restore_missing_file = fail_copy
 """,
             }
         )

@@ -10,6 +10,7 @@ import re
 import stat
 import tarfile
 import uuid
+import zlib
 from contextlib import ExitStack, contextmanager, suppress
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -177,7 +178,7 @@ def archive_retention_plan(
                 with os.fdopen(descriptor, "rb", closefd=False) as stream:
                     try:
                         verify_archive_stream(stream, directory / name)
-                    except (ValueError, gzip.BadGzipFile):
+                    except (ValueError, gzip.BadGzipFile, zlib.error):
                         # Unsupported or incomplete older bytes remain raw evidence.
                         continue
                 digest = descriptor_content_digest(descriptor)

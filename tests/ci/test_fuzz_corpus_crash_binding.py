@@ -88,6 +88,8 @@ def substitute(path, label):
 
 def verify_control(stream, path):
     global constructed, verify_completed
+    if path != final:
+        return actual_verify(stream, path)
     stream.seek(0)
     constructed = hashlib.sha256(stream.read()).hexdigest()
     temporary = next(
@@ -284,6 +286,6 @@ class FuzzCorpusCrashBindingTests(SecurityFuzzFixture):
                     record["archive_name"],
                     ("crashes_" if route == "crash" else "") + "20261004T123456123456Z.tar.gz",
                 )
-                self.assertEqual(len(record["retained_archives"]), 2 if route == "corpus" else 4)
+                self.assertEqual(len(record["retained_archives"]), 4)
                 self.assertEqual(record["retention_scans"], 1 if route == "corpus" else 0)
                 self.assertEqual(record["temps"], [], record)
