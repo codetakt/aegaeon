@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, NoReturn
@@ -82,7 +83,40 @@ def target_inventory(package: dict[str, Any]) -> TargetInventory:
     if package["name"] == "ffi":
         baseline = {(name, ("lib" if name == "ffi" else "test",)) for name in FFI_TARGETS}
         require(set(targets) >= baseline, "Missing required baseline ffi target")
+    validate_libtest_harnesses(package, targets)
     return targets
+
+
+def validate_libtest_harnesses(package: dict[str, Any], targets: TargetInventory) -> None:
+    # Cargo metadata omits `harness`. Inspect the selected package's manifest;
+    # custom harnesses cannot supply the named libtest execution evidence.
+    manifest = package.get("manifest_path")
+    require(
+        isinstance(manifest, str) and Path(manifest).is_absolute(),
+        "Missing absolute Cargo package manifest",
+    )
+    document = tomllib.loads(Path(manifest).read_text())
+    selected: dict[str, set[str]] = {}
+    for name, kinds in targets:
+        kind = "lib" if set(kinds) <= LIBRARY_KINDS else kinds[0]
+        selected.setdefault(kind, set()).add(name)
+    for kind, names in selected.items():
+        declarations = [document.get(kind, {})] if kind == "lib" else document.get(kind, [])
+        require(isinstance(declarations, list), "Malformed Cargo target declarations")
+        for declaration in declarations:
+            require(isinstance(declaration, dict), "Malformed Cargo target declaration")
+            harness = declaration.get("harness", True)
+            require(type(harness) is bool, "Invalid Cargo target harness setting")
+            if harness:
+                continue
+            # Named non-library declarations are required by Cargo itself.
+            name = declaration.get("name")
+            require(kind == "lib" or isinstance(name, str), "Missing Cargo target name")
+            require(
+                kind != "lib" and name not in names,
+                "Unsupported custom Cargo harness (harness = false): "
+                f"{kind} {name or package['name']}",
+            )
 
 
 class Failure(Exception):  # noqa: N818 - retained failure/status interface

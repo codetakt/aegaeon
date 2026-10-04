@@ -21,10 +21,18 @@ nix run .#security-suite
 nix develop .#asan --command bash scripts/sanitizers/run_sanitizers.sh
 ```
 
-The runner requires Rust, Cargo, Clang, the configured ASan runtime, Python,
+The runner requires Rust, Cargo, Clang, the configured ASan runtime, Python 3.11 or later,
 `nm` and `readelf`. It passes an explicit native `--target` matching the Rust
 host so host build scripts and procedural macros do not receive target ASan
 linker flags. The default ffi features and serial curve backend are retained.
+
+Execution evidence requires Rust's standard libtest harness. The runner reads
+each selected package's Cargo manifest because Cargo metadata omits the harness
+setting. A selected test-enabled target with `harness = false` is rejected before
+any package build, including custom Criterion benchmarks. Disabled targets stay
+outside the required inventory; a custom harness is never skipped to report
+success. Standard libtest library, binary, integration-test, example and benchmark
+targets remain supported.
 
 ## Configuration
 

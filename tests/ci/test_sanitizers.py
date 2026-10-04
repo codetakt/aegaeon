@@ -506,6 +506,8 @@ class SanitizerFixture:
         for tool in ("python3", "awk", "dirname", "find", "mkdir", "mktemp", "mv"):
             (self.bin / tool).symlink_to(shutil.which(tool))
         targets = []
+        manifest = self.root / "Cargo.toml"
+        manifest.write_text('[package]\nname = "ffi"\nversion = "0.0.0"\n')
         for name in TARGETS:
             source = self.root / f"{name}.rs"
             source.write_text("// controlled source identity\n")
@@ -521,7 +523,14 @@ class SanitizerFixture:
             json.dumps(
                 {
                     "workspace_root": str(self.root),
-                    "packages": [{"name": "ffi", "id": "ffi-identity", "targets": targets}],
+                    "packages": [
+                        {
+                            "name": "ffi",
+                            "id": "ffi-identity",
+                            "manifest_path": str(manifest),
+                            "targets": targets,
+                        }
+                    ],
                 }
             )
         )
@@ -571,10 +580,14 @@ class SanitizerFixture:
         metadata = json.loads(metadata_path.read_text())
         source = self.root / f"{name}.rs"
         source.write_text("// additional package source identity\n")
+        manifest = self.root / name / "Cargo.toml"
+        manifest.parent.mkdir(exist_ok=True)
+        manifest.write_text(f'[package]\nname = "{name}"\nversion = "0.0.0"\n')
         metadata["packages"].append(
             {
                 "name": name,
                 "id": f"{name}-identity",
+                "manifest_path": str(manifest),
                 "targets": [{"name": name, "kind": ["lib"], "test": True, "src_path": str(source)}],
             }
         )
@@ -931,6 +944,44 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         self.assertIn("Unsupported test-enabled Cargo target kind", result.stderr)  # noqa: PT009
         self.assertFalse(  # noqa: PT009 - active under Python -O
             any(command["phase"].startswith("build-") for command in self.summary()["commands"])
+        )
+
+    def test_custom_harness_rejects_before_any_selected_package_build(self):
+        self.add_package("additional")
+        manifest = self.root / "additional/Cargo.toml"
+        original = manifest.read_text()
+        for kind in ("lib", "bin", "test", "example", "bench"):
+            with self.subTest(kind=kind):
+                if kind != "lib":
+                    self.add_target("additional", "custom", kind)
+                declaration = "[lib]" if kind == "lib" else f"[[{kind}]]"
+                manifest.write_text(
+                    original + f'\n{declaration}\nname = "custom"\nharness = false\n'
+                )
+                result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional")
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                self.assertIn("Unsupported custom Cargo harness", result.stderr)  # noqa: PT009
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009
+                self.assertFalse(  # noqa: PT009 - inventory admission precedes every package build
+                    any(
+                        command["phase"].startswith("build-")
+                        for command in self.summary()["commands"]
+                    )
+                )
+        manifest.write_text(original)
+
+    def test_disabled_custom_harness_and_same_named_libtest_target_remain_supported(self):
+        self.add_package("additional")
+        self.add_target("additional", "custom", "bench", enabled=False)
+        self.add_target("additional", "custom", "bin")
+        manifest = self.root / "additional/Cargo.toml"
+        with manifest.open("a") as stream:
+            stream.write('\n[[bench]]\nname = "custom"\nharness = false\n')
+        result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional")
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - custom bench is disabled, bin of same name completes
+            [(target["name"], target["kind"]) for target in self.summary()["units"][1]["targets"]],
+            [("additional", ["lib"]), ("custom", ["bin"])],
         )
 
     def test_library_crate_kinds_use_the_explicit_lib_selector(self):
