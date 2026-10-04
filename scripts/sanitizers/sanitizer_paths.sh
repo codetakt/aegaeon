@@ -294,7 +294,7 @@ CARGO_FLAGS
 }
 
 preflight_receipt() {
-	python3 -I - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" "${3:-}" <<'PREFLIGHT'
+	python3 -I - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" "${3:-}" "${4:-}" <<'PREFLIGHT'
 import json
 import os
 from pathlib import Path
@@ -329,6 +329,8 @@ else:
     receipt.update(status="failed", stage="preflight", preflight_phase=phase, exit_code=status)
     if sys.argv[4]:
         receipt["logging_exit_code"] = int(sys.argv[4])
+    if sys.argv[5]:
+        receipt["cleanup_exit_code"] = int(sys.argv[5])
 fd, name = tempfile.mkstemp(prefix=".preflight-summary-", dir=root)
 try:
     with os.fdopen(fd, "w") as stream:

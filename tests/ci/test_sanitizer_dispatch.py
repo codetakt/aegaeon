@@ -3,11 +3,17 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
+import io
 import json
+import os
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import test_security_fuzz as fuzz_fixture
 
@@ -61,6 +67,14 @@ import json, os, pathlib, sys
 arguments = sys.argv[1:]
 if arguments[:1] == ['-I']:
     arguments = arguments[1:]
+if len(arguments) > 1 and arguments[1] == 'open-exec-bound':
+    mode = os.environ.get('SANITIZER_OPENER_RECOVERY_UNAVAILABLE', '')
+    if mode:
+        bash = pathlib.Path(os.environ['FIXTURE_ROOT']).parent / 'bin/bash'
+        bash.unlink()
+        if mode == 'exec-failure':
+            bash.write_text('#!/nonexistent-security-recovery-interpreter\n')
+            bash.chmod(0o755)
 if arguments[:2] == ['-', 'cleanup']:
     root = pathlib.Path(os.environ['FIXTURE_ROOT'])
     target = json.loads(arguments[2])['target']
@@ -114,15 +128,45 @@ os.execv(ACTUAL_RM, [ACTUAL_RM] + args)
 """
 
 TEE = r"""
-import os, subprocess, sys
+import os, pathlib, subprocess, sys
 text = sys.stdin.read()
 marker = os.environ.get('SANITIZER_LOG_FAILURE', '')
 if marker and marker in text:
     print('controlled sanitizer log write failure', file=sys.stderr)
     raise SystemExit(74)
 fds = tuple(int(arg.rsplit('/', 1)[1]) for arg in sys.argv[1:] if arg.startswith('/proc/self/fd/'))
-raise SystemExit(subprocess.run(
-    [ACTUAL_TEE] + sys.argv[1:], input=text, text=True, pass_fds=fds).returncode)
+code = subprocess.run(
+    [ACTUAL_TEE] + sys.argv[1:], input=text, text=True, pass_fds=fds).returncode
+swap = os.environ.get('SANITIZER_INITIAL_EVIDENCE_SWAP', '')
+if code == 0 and swap and 'starting security suite' in text:
+    evidence = pathlib.Path(os.environ['SECURITY_ARTIFACT_DIR']) / 'sanitizers'
+    external = pathlib.Path(os.environ['SANITIZER_EXTERNAL'])
+    if swap == 'ancestor-symlink':
+        evidence.parent.rename(evidence.parent.with_name(evidence.parent.name + '.held'))
+        evidence.parent.symlink_to(external, target_is_directory=True)
+    else:
+        evidence.rename(evidence.with_name(evidence.name + '.held'))
+        if swap == 'leaf-symlink':
+            evidence.symlink_to(external, target_is_directory=True)
+        else:
+            evidence.mkdir()
+            (evidence / 'replacement-sentinel').write_bytes(b'preserve replacement\n')
+raise SystemExit(code)
+"""
+
+MKDIR = r"""
+import os, pathlib, subprocess, sys
+summary = str(pathlib.Path(os.environ['SECURITY_ARTIFACT_DIR']) / 'summary')
+if os.environ.get('SANITIZER_MKDIR_FAILURE') and summary in sys.argv[1:]:
+    print('controlled shared log directory failure', file=sys.stderr)
+    raise SystemExit(76)
+external = os.environ.get('SANITIZER_OPENER_LOG_SYMLINK', '')
+if external and summary in sys.argv[1:]:
+    code = subprocess.run([ACTUAL_MKDIR] + sys.argv[1:]).returncode
+    if code == 0:
+        (pathlib.Path(summary) / 'security.log').symlink_to(external)
+    raise SystemExit(code)
+os.execv(ACTUAL_MKDIR, [ACTUAL_MKDIR] + sys.argv[1:])
 """
 
 VET = r"""
@@ -166,15 +210,19 @@ class SanitizerDispatchTests(unittest.TestCase):
         fixture.install("python3", PYTHON)
         fixture.install("rm", "ACTUAL_RM = " + repr(shutil.which("rm")) + "\n" + RM)
         fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
+        fixture.install("mkdir", "ACTUAL_MKDIR = " + repr(shutil.which("mkdir")) + "\n" + MKDIR)
         fixture.install("cargo", VET + fuzz_fixture.CARGO)
         return fixture
 
-    def run_suite(self, fixture, *, aggregate=False, case="ok", **environment):
+    def run_suite(self, fixture, *, aggregate=False, case="ok", stages=None, **environment):
+        args = [] if aggregate else ["--stage", "sanitizers"]
+        if stages is not None:
+            args = [value for stage in stages for value in ("--stage", stage)]
         return subprocess.run(  # noqa: S603 - real wrapper with controlled fixture tools
             [
                 str(fixture.bin / "bash"),
                 str(fixture.root / "scripts/security/run_security_suite.sh"),
-                *([] if aggregate else ["--stage", "sanitizers"]),
+                *args,
             ],
             cwd=fixture.root,
             env={**fixture.env, "CASE": case, **environment},
@@ -571,6 +619,292 @@ class SanitizerDispatchTests(unittest.TestCase):
                     if launched:
                         self.assertEqual(self.receipt(fixture)["exit_code"], 0)
                         self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
+
+    def test_initial_logging_failure_cleans_bound_target_and_records_cleanup(self):
+        for aggregate in (False, True):
+            for marker in (">>> sanitizer smoke", "starting security suite"):
+                for cleanup in (0, 79):
+                    with self.subTest(aggregate=aggregate, marker=marker, cleanup=cleanup):
+                        fixture = self.fixture()
+                        target = fixture.root / "target/sanitizers"
+                        target.mkdir(parents=True)
+                        (target / "prepared-sentinel").write_text("prepared output")
+                        result = self.run_suite(
+                            fixture,
+                            aggregate=aggregate,
+                            SANITIZER_LOG_FAILURE=marker,
+                            SANITIZER_CLEANUP_EXIT=str(cleanup),
+                        )
+                        self.assertEqual(result.returncode, 74, result.stdout + result.stderr)
+                        self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                        self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                        self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], cleanup)
+                        self.assertEqual(target.exists(), bool(cleanup))
+                        summary = json.loads(
+                            (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                        )
+                        self.assertEqual(summary["exit_code"], 74)
+                        self.assertEqual(summary["logging_exit_code"], 74)
+                        self.assertEqual(summary["cleanup_exit_code"], cleanup)
+
+    def test_post_binding_log_setup_failure_cleans_target(self):
+        for aggregate in (False, True):
+            for failure, code in (("mkdir", 76), ("inherited-fd", 1), ("opener", 1)):
+                for cleanup in (0, 79):
+                    with self.subTest(aggregate=aggregate, failure=failure, cleanup=cleanup):
+                        fixture = self.fixture()
+                        target = fixture.root / "target/sanitizers"
+                        target.mkdir(parents=True)
+                        (target / "prepared-sentinel").write_text("prepared output")
+                        settings = {"SANITIZER_CLEANUP_EXIT": str(cleanup)}
+                        sentinel = Path(fixture.temporary) / "external-log"
+                        sentinel.write_bytes(b"external log sentinel\n")
+                        if failure == "mkdir":
+                            settings["SANITIZER_MKDIR_FAILURE"] = "1"
+                        elif failure == "inherited-fd":
+                            settings["SANITIZER_SECURITY_LOG_FD"] = "99999"
+                        else:
+                            # Introduce the unsafe leaf after binding so aggregate
+                            # fuzz preflight cannot reject this control earlier.
+                            settings["SANITIZER_OPENER_LOG_SYMLINK"] = str(sentinel)
+                        result = self.run_suite(fixture, aggregate=aggregate, **settings)
+                        self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+                        self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                        self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                        self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], cleanup)
+                        self.assertEqual(target.exists(), bool(cleanup))
+                        self.assertEqual(sentinel.read_bytes(), b"external log sentinel\n")
+                        summary = json.loads(
+                            (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                        )
+                        self.assertEqual(summary["exit_code"], code)
+                        self.assertEqual(summary["logging_exit_code"], code)
+                        self.assertEqual(summary["cleanup_exit_code"], cleanup)
+
+    def test_existing_evidence_binding_rejects_replacement_before_stage_preparation(self):
+        for swap in ("leaf-symlink", "leaf-directory", "ancestor-symlink"):
+            with self.subTest(swap=swap):
+                fixture = self.fixture()
+                external = Path(fixture.temporary) / "external"
+                external.mkdir()
+                sentinels = {
+                    "run-summary.json": b"external completed sentinel\n",
+                    "sanitizers/run-summary.json": b"external nested completed sentinel\n",
+                    "summary/security.log": b"external log sentinel\n",
+                }
+                for name, data in sentinels.items():
+                    destination = external / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(data)
+                result = self.run_suite(
+                    fixture,
+                    stages=("sanitizers", "sbom"),
+                    SANITIZER_INITIAL_EVIDENCE_SWAP=swap,
+                    SANITIZER_EXTERNAL=str(external),
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(self.calls(fixture, "nix-other"), [])
+                self.assertFalse(Path(fixture.env["SECURITY_HISTORY_DIR"]).exists())
+                self.assertIn("remaining output stages held", result.stdout)
+                for name, data in sentinels.items():
+                    self.assertEqual((external / name).read_bytes(), data)
+                if swap == "leaf-directory":
+                    self.assertEqual(
+                        list((fixture.artifacts / "sanitizers").iterdir()),
+                        [fixture.artifacts / "sanitizers/replacement-sentinel"],
+                    )
+
+    def test_unavailable_opener_recovery_preserves_primary_and_does_not_claim_cleanup(self):
+        for failure in ("missing-bash", "exec-failure"):
+            with self.subTest(failure=failure):
+                fixture = self.fixture()
+                target = fixture.root / "target/sanitizers"
+                target.mkdir(parents=True)
+                sentinel = target / "prepared-sentinel"
+                sentinel.write_text("preserve uncollected output")
+                external = Path(fixture.temporary) / "external-log"
+                external.write_bytes(b"preserve log\n")
+                log = fixture.artifacts / "summary/security.log"
+                log.parent.mkdir(parents=True)
+                log.symlink_to(external)
+                result = self.run_suite(fixture, SANITIZER_OPENER_RECOVERY_UNAVAILABLE=failure)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("safe log descriptor unavailable (exit=1)", result.stderr)
+                self.assertIn("bound cleanup/evidence recovery unavailable", result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                self.assertEqual(sentinel.read_text(), "preserve uncollected output")
+                self.assertEqual(external.read_bytes(), b"preserve log\n")
+                summary = json.loads(
+                    (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                )
+                self.assertEqual(summary["status"], "failed")
+                self.assertNotIn("cleanup_exit_code", summary)
+
+    def test_optional_cleanup_receipt_preserves_rich_evidence_and_absent_field(self):
+        for cleanup in (None, 0, 79):
+            with self.subTest(cleanup=cleanup):
+                fixture = self.fixture()
+                evidence = fixture.artifacts / "sanitizers"
+                evidence.mkdir(parents=True)
+                receipt = {
+                    "status": "completed",
+                    "commands": [{"phase": "run", "exit_code": 0}],
+                    "units": [{"targets": [{"name": "ffi", "status": "completed"}]}],
+                }
+                (evidence / "run-summary.json").write_text(json.dumps(receipt))
+                result = subprocess.run(  # noqa: S603 - fixed shell/helper and owned test evidence
+                    [
+                        str(fixture.bin / "bash"),
+                        "--noprofile",
+                        "--norc",
+                        "-p",
+                        "-c",
+                        (
+                            'source "$1"; SANITIZER_ARTIFACT_DIR=$2; '
+                            'binding=$(sanitizer_target_binding prepare "$2") && '
+                            'sanitizer_target_binding validate "$binding" && '
+                            'preflight_receipt initial-log 74 74 "${3:-}"'
+                        ),
+                        "receipt-control",
+                        str(fixture.root / "scripts/sanitizers/sanitizer_paths.sh"),
+                        str(evidence),
+                        *([] if cleanup is None else [str(cleanup)]),
+                    ],
+                    cwd=fixture.root,
+                    env=fixture.env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                observed = json.loads((evidence / "run-summary.json").read_text())
+                expected = {
+                    **receipt,
+                    "status": "failed",
+                    "stage": "preflight",
+                    "preflight_phase": "initial-log",
+                    "exit_code": 74,
+                    "logging_exit_code": 74,
+                }
+                if cleanup is not None:
+                    expected["cleanup_exit_code"] = cleanup
+                self.assertEqual(observed, expected)
+                self.assertEqual(
+                    (evidence / "run-summary.json").read_text(),
+                    json.dumps(expected, indent=2) + "\n",
+                )
+
+    def test_bound_opener_rejects_unadmitted_cleanup_context(self):
+        for failure in ("source-target", "evidence-overlap", "token-mismatch"):
+            with self.subTest(failure=failure):
+                fixture = self.fixture()
+                evidence = fixture.artifacts / "sanitizers"
+                evidence.mkdir(parents=True)
+                (evidence / "run-summary.json").write_text('{"status":"failed"}')
+                target = fixture.root / "target/sanitizers"
+                target.mkdir(parents=True)
+                (target / "prepared-sentinel").write_text("preserve output")
+                source = fixture.root / "crates/server/src/lib.rs"
+                original_source = source.read_bytes()
+                supplied_target = (
+                    fixture.root / "crates/server"
+                    if failure == "source-target"
+                    else evidence
+                    if failure == "evidence-overlap"
+                    else target
+                )
+                token_target = (
+                    fixture.root / "crates/server"
+                    if failure == "token-mismatch"
+                    else supplied_target
+                )
+                binding = subprocess.run(  # noqa: S603 - existing helper creates only owned fixture bindings
+                    [
+                        str(fixture.bin / "bash"),
+                        "--noprofile",
+                        "--norc",
+                        "-p",
+                        "-c",
+                        (
+                            'source "$1"; sanitizer_target_binding prepare "$2"; '
+                            'sanitizer_target_binding prepare "$3"'
+                        ),
+                        "binding-control",
+                        str(fixture.root / "scripts/sanitizers/sanitizer_paths.sh"),
+                        str(evidence),
+                        str(token_target),
+                    ],
+                    cwd=fixture.root,
+                    env=fixture.env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(binding.returncode, 0, binding.stderr)
+                evidence_binding, cleanup_binding = binding.stdout.splitlines()
+                external = Path(fixture.temporary) / "external-log"
+                external.write_bytes(b"preserve external log\n")
+                log = fixture.artifacts / "summary/security.log"
+                log.parent.mkdir()
+                log.symlink_to(external)
+                result = subprocess.run(  # noqa: S603 - actual opener with owned negative context
+                    [
+                        str(fixture.bin / "python3"),
+                        "-I",
+                        str(fixture.root / "scripts/sanitizers/open_security_log.py"),
+                        "open-exec-bound",
+                        str(log),
+                        str(evidence),
+                        evidence_binding,
+                        str(supplied_target),
+                        cleanup_binding,
+                        "--",
+                        "--stage",
+                        "sanitizers",
+                    ],
+                    cwd=fixture.root,
+                    env=fixture.env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                self.assertEqual(source.read_bytes(), original_source)
+                self.assertEqual((target / "prepared-sentinel").read_text(), "preserve output")
+                self.assertEqual((evidence / "run-summary.json").read_text(), '{"status":"failed"}')
+                self.assertEqual(external.read_bytes(), b"preserve external log\n")
+
+    def test_preexec_failure_closes_the_owned_log_descriptor(self):
+        fixture = self.fixture()
+        source = fixture.root / "scripts/sanitizers/open_security_log.py"
+        spec = importlib.util.spec_from_file_location("security_log_control", source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        log = Path(fixture.temporary) / "owned-log"
+        descriptor = module.checked_log(str(log))
+        try:
+            with (
+                mock.patch.object(sys, "argv", [str(source), "open-exec", str(log)]),
+                mock.patch.object(module, "checked_log", return_value=descriptor),
+                mock.patch.object(module.shutil, "which", return_value=str(fixture.bin / "bash")),
+                mock.patch.object(
+                    module.os, "execve", side_effect=OSError("controlled exec failure")
+                ),
+                contextlib.redirect_stderr(io.StringIO()) as diagnostic,
+            ):
+                self.assertEqual(module.main(), 1)
+            self.assertIn("exit=1", diagnostic.getvalue())
+            with self.assertRaises(OSError):  # noqa: PT027 - standalone unittest control
+                os.fstat(descriptor)
+        finally:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
 
     def test_failed_diagnostic_write_does_not_replace_the_child_failure(self):
         for aggregate in (False, True):
