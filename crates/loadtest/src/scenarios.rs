@@ -80,6 +80,7 @@ struct CachedToken {
 pub struct ScenarioExecutor {
     client: Client,
     base_url: String,
+    discovery_expected_issuer: String,
     generator: TestDataGenerator,
     profile: Option<ClientProfile>,
     cached_access_token: Option<CachedToken>,
@@ -253,6 +254,14 @@ impl ScenarioExecutor {
     }
 
     pub fn for_scenario(base_url: String, scenario: &TestScenario) -> Result<Self> {
+        Self::for_scenario_with_discovery_issuer(base_url, scenario, None)
+    }
+
+    pub fn for_scenario_with_discovery_issuer(
+        base_url: String,
+        scenario: &TestScenario,
+        expected_issuer: Option<&str>,
+    ) -> Result<Self> {
         if matches!(scenario, TestScenario::KeyRotation) {
             bail!("key-rotation is unsupported: HUMAN management/NEXT replenishment/restart supervision remains required");
         }
@@ -265,7 +274,16 @@ impl ScenarioExecutor {
         } else {
             None
         };
-        Self::with_profile(base_url, profile)
+        let mut executor = Self::with_profile(base_url, profile)?;
+        if let Some(issuer) = expected_issuer {
+            let url = crate::profile::issuer_url(issuer)?;
+            ensure!(
+                url.as_str().trim_end_matches('/') == issuer,
+                "discovery issuer must be a canonical HTTPS URL"
+            );
+            executor.discovery_expected_issuer = issuer.to_owned();
+        }
+        Ok(executor)
     }
 
     pub fn with_profile(mut base_url: String, profile: Option<ClientProfile>) -> Result<Self> {
@@ -291,6 +309,7 @@ impl ScenarioExecutor {
         base_url.truncate(base_url.trim_end_matches('/').len());
         Ok(Self {
             client: builder.build()?,
+            discovery_expected_issuer: base_url.clone(),
             base_url,
             profile,
             generator: TestDataGenerator::new(),
@@ -321,6 +340,7 @@ impl ScenarioExecutor {
         Self {
             client: self.client.clone(),
             base_url: self.base_url.clone(),
+            discovery_expected_issuer: self.discovery_expected_issuer.clone(),
             generator: TestDataGenerator::new(),
             profile: self.profile.clone(),
             cached_access_token: None,
@@ -927,11 +947,11 @@ impl ScenarioExecutor {
         );
         let metadata: serde_json::Value = serde_json::from_slice(&response.body)?;
         ensure!(
-            metadata["issuer"].as_str() == Some(&self.base_url)
+            metadata["issuer"].as_str() == Some(&self.discovery_expected_issuer)
                 && metadata["token_endpoint"].as_str()
-                    == Some(format!("{}/token", self.base_url).as_str())
+                    == Some(format!("{}/token", self.discovery_expected_issuer).as_str())
                 && metadata["jwks_uri"].as_str()
-                    == Some(format!("{}/jwks", self.base_url).as_str()),
+                    == Some(format!("{}/jwks", self.discovery_expected_issuer).as_str()),
             "Discovery endpoint/issuer mismatch"
         );
         Ok((true, elapsed(start)))
@@ -1386,6 +1406,73 @@ mod tests {
             let accounting = executor.take_accounting();
             accounting.validate().unwrap();
             assert_eq!(accounting.attempts, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn discovery_http_transport_checks_independent_https_issuer_and_endpoints() {
+        for changed in [
+            None,
+            Some("issuer"),
+            Some("token_endpoint"),
+            Some("jwks_uri"),
+        ] {
+            let canonical = "https://issuer.example.test/tenant";
+            let (base, thread) = http_fixture(1, move |_, request, _| {
+                assert!(request.starts_with("GET /.well-known/oauth-authorization-server "));
+                let mut metadata = serde_json::json!({"issuer":canonical,
+                    "token_endpoint":format!("{canonical}/token"),
+                    "jwks_uri":format!("{canonical}/jwks")});
+                if let Some(field) = changed {
+                    metadata[field] = "https://other.example.test/endpoint".into();
+                }
+                fixture_reply(200, serde_json::to_vec(&metadata).unwrap())
+            });
+            let prototype = ScenarioExecutor::for_scenario_with_discovery_issuer(
+                base,
+                &TestScenario::Discovery,
+                Some(canonical),
+            )
+            .unwrap();
+            let mut executor = prototype.fork_worker();
+            assert_eq!(executor.discovery_flow().await.is_ok(), changed.is_none());
+            thread.join().unwrap();
+            let accounting = executor.take_accounting();
+            accounting.validate().unwrap();
+            assert_eq!(accounting.attempts, 1);
+        }
+    }
+
+    #[test]
+    fn discovery_canonical_issuer_rejects_unsafe_urls_and_preserves_credential_target() {
+        for issuer in [
+            "http://issuer.example.test",
+            "https://issuer.example.test/",
+            "https://user:secret@issuer.example.test",
+            "https://issuer.example.test?query",
+            "https://issuer.example.test#fragment",
+            "https://ISSUER.example.test",
+            "not-a-url",
+        ] {
+            assert!(ScenarioExecutor::for_scenario_with_discovery_issuer(
+                "http://127.0.0.1:18095".into(),
+                &TestScenario::Discovery,
+                Some(issuer),
+            )
+            .is_err());
+        }
+        let profile = fixture_profile("https://issuer.example.test", false);
+        assert!(profile
+            .supply
+            .validate("https://issuer.example.test", false, false)
+            .is_ok());
+        for target in [
+            "http://127.0.0.1:18095",
+            "http://issuer.example.test",
+            "https://other.example.test",
+            "https://issuer.example.test/",
+        ] {
+            assert!(profile.supply.validate(target, false, false).is_err());
         }
     }
 

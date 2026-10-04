@@ -49,7 +49,13 @@ before starting `perf-load`.
 
 ## Load consumer inputs and reporting
 
-Public `smoke`, `discovery`, and `jwks` selections use the supplied target. OAuth
+Public `smoke`, `discovery`, and `jwks` selections use the supplied transport target.
+For `discovery`, `--discovery-expected-issuer` (or
+`PERF_DISCOVERY_EXPECTED_ISSUER` in `perf-load`) independently selects the exact
+canonical HTTPS issuer expected in metadata, including its `/token` and `/jwks`
+URLs. This supports public metadata over an HTTP loopback transport while
+checking an HTTPS issuer. Without the option, discovery retains the target-based
+expectation; smoke and JWKS defaults are unchanged. OAuth
 selections require an actual activated confidential client and a genuine issuer
 session produced by public login. The target must equal the exact HTTPS issuer;
 use ordinary DNS/TLS routing and a trusted fixture CA. The HTTP client disables
@@ -86,7 +92,15 @@ outside the checkout. Only the conventional `target/`, reserved `artifacts/perf/
 outputs and the two legacy report files are excluded; no tracked path is excluded.
 Custom build/evidence outputs can be outside the source. The driver retains the
 manifest and observations on failure, checks source again before each build and
-launch, and binds the report to the actual Cargo-selected executable. Raw source
+launch, and binds the report to the actual Cargo-selected executable. Before
+launching the consumer, it freezes `source/INVOCATION.json` containing the exact
+selected command, source and executable hashes, full normalized configuration,
+an independently generated UUIDv4 passed as `--report-id`, and the exact new
+report path. Target and issuer URLs reject embedded credentials, queries,
+fragments and control characters before this nonsecret record is written.
+Admission checks all configuration fields, selected scenario, UUID
+and destination against that retained record, as well as the SHA256 of the
+report's exact `config_json` string. Raw source
 preimages and dirty patches remain private outside upload roots. These checks
 establish observed source identity; native/OCI/supplier and performance acceptance
 remain separate. Direct binary invocations still require a real independently
@@ -103,7 +117,14 @@ default OAuth credentials, management-owner substitution, or forged forwarding
 headers. See the [environment reference](../configurations/environment/federation-observability-and-test.md#load-testing).
 
 `--warmup` accepts numeric seconds and the same `s`, `m`, or `h` duration syntax as
-`--run-time` (for example `--warmup 10s`); invalid values preserve a failed report.
+`--run-time` (for example `--warmup 10s`); invalid direct-binary values preserve a
+failed report. The managed runner rejects invalid configuration before consumer
+launch and retains its source/build observations. Managed arguments use the
+documented long options and existing long aliases before `--`; arguments after
+`--` support only one `--debug`. Other trailing options, including aliases and
+report/configuration overrides, are rejected. `--debug` and
+`--discovery-expected-issuer` can also be supplied before `--`. Numeric duration
+counts and worker counts use ASCII decimal digits in managed runs.
 
 Authorization retains state, issuer, nonce, scope/resource and PKCE through the
 entire transaction. It requests `prompt=none` and query response mode. Required

@@ -32,7 +32,8 @@ WARMUP="${PERF_WARMUP:-10}"
 RPS="${PERF_RPS:-${PERF_SPAWN_RATE:-100}}"
 SCENARIO="${PERF_SCENARIO:-smoke}"
 MANAGE_SERVER="${PERF_MANAGE_SERVER:-1}"
-EXTRA_ARGS=()
+DISCOVERY_EXPECTED_ISSUER="${PERF_DISCOVERY_EXPECTED_ISSUER:-}"
+DEBUG=0
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -60,6 +61,18 @@ while [ $# -gt 0 ]; do
 	--report-file | --report_file)
 		REPORT_PATH="$2"
 		shift 2
+		;;
+	--discovery-expected-issuer)
+		if [ -z "$2" ]; then
+			echo "[perf] discovery expected issuer must be nonempty" >&2
+			exit 2
+		fi
+		DISCOVERY_EXPECTED_ISSUER="$2"
+		shift 2
+		;;
+	--debug)
+		DEBUG=1
+		shift
 		;;
 	--scenario)
 		SCENARIO="$2"
@@ -92,9 +105,14 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-if [ $# -gt 0 ]; then
-	EXTRA_ARGS+=("$@")
-fi
+while [ $# -gt 0 ]; do
+	if [ "$1" != "--debug" ] || [ "$DEBUG" = 1 ]; then
+		echo "[perf] trailing arguments support --debug only, once" >&2
+		exit 2
+	fi
+	DEBUG=1
+	shift
+done
 
 cleanup() {
 	local original_status=$?
@@ -254,16 +272,24 @@ SOURCE_STATUS="loadtest-launch"
 python3 "$SOURCE_PRODUCER" binary --root "$REPO_ROOT" \
 	--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256" \
 	--name aegaeon-loadtest >/dev/null
+# Freeze the effective command before launch; expectations never come from the child.
+REPORT_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+LOADTEST_ARGS=(--url "$BASE_URL" --workers "$WORKERS" --run-time "$RUN_TIME"
+	--warmup "$WARMUP" --rps "$RPS" --scenario "$SCENARIO"
+	--report-file "$REPORT_PATH" --report-id "$REPORT_ID")
+if [ -n "$DISCOVERY_EXPECTED_ISSUER" ]; then
+	LOADTEST_ARGS+=(--discovery-expected-issuer "$DISCOVERY_EXPECTED_ISSUER")
+fi
+if [ "$DEBUG" = 1 ]; then
+	LOADTEST_ARGS+=(--debug)
+fi
+SOURCE_STATUS="invocation"
+python3 "$SOURCE_PRODUCER" invocation --root "$REPO_ROOT" \
+	--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256" \
+	-- "$LOADTEST_BIN" "${LOADTEST_ARGS[@]}"
+SOURCE_STATUS="loadtest-launch"
 LOADTEST_STATUS=0
-"$LOADTEST_BIN" \
-	--url "$BASE_URL" \
-	--workers "$WORKERS" \
-	--run-time "$RUN_TIME" \
-	--warmup "$WARMUP" \
-	--rps "$RPS" \
-	--scenario "$SCENARIO" \
-	--report-file "$REPORT_PATH" \
-	"${EXTRA_ARGS[@]}" >"$LOADTEST_LOG" 2>&1 || LOADTEST_STATUS=$?
+"$LOADTEST_BIN" "${LOADTEST_ARGS[@]}" >"$LOADTEST_LOG" 2>&1 || LOADTEST_STATUS=$?
 
 if [ ! -f "$REPORT_PATH" ]; then
 	echo "[perf] load test failed before writing a report; see $LOADTEST_LOG" >&2

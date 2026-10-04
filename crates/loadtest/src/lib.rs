@@ -20,6 +20,10 @@ pub struct LoadTestConfig {
     /// Target server URL
     pub target_url: String,
 
+    /// Canonical issuer expected in public discovery, independently of HTTP transport.
+    #[serde(deserialize_with = "required_discovery_issuer")]
+    pub discovery_expected_issuer: Option<String>,
+
     /// Number of concurrent workers
     pub workers: usize,
 
@@ -39,10 +43,21 @@ pub struct LoadTestConfig {
     pub debug: bool,
 }
 
+// A nullable value is required: serde's ordinary Option handling accepts absent fields.
+fn required_discovery_issuer<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    serde::Deserialize::deserialize(deserializer)
+}
+
 impl Default for LoadTestConfig {
     fn default() -> Self {
         Self {
             target_url: "http://localhost:8080".to_string(),
+            discovery_expected_issuer: None,
             workers: 10,
             duration: Duration::from_secs(60),
             target_rps: 100.0,
@@ -636,6 +651,9 @@ mod report_tests {
         report.identity = Some(saved.clone());
         for raw in [
             saved.config_json.replace("PolicyMixed", "Smoke"),
+            saved
+                .config_json
+                .replace(",\"discovery_expected_issuer\":null", ""),
             saved.config_json.replace("\"secs\":0", "\"secs\":1"),
             saved.config_json.replacen('{', "{\"unexpected\":true,", 1),
             saved.config_json.replacen('{', "{\"workers\":3,", 1),

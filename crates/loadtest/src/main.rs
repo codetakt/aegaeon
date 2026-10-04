@@ -27,6 +27,10 @@ struct Args {
     #[arg(short, long, default_value = "http://localhost:8080")]
     url: String,
 
+    /// Canonical HTTPS issuer expected in public discovery metadata
+    #[arg(long)]
+    discovery_expected_issuer: Option<String>,
+
     /// Number of concurrent workers (alias for users)
     #[arg(short, long, default_value_t = 10)]
     workers: usize,
@@ -58,6 +62,10 @@ struct Args {
     /// Report output file (JSON format)
     #[arg(long = "report-file", alias = "report_file", required = true)]
     report_file: String,
+
+    /// Report UUID chosen by an independent driver before launch
+    #[arg(long)]
+    report_id: Option<uuid::Uuid>,
 
     /// Test scenario
     #[arg(short, long, value_enum, default_value = "smoke")]
@@ -144,6 +152,7 @@ async fn main() -> Result<()> {
     };
     let config = LoadTestConfig {
         target_url: args.url,
+        discovery_expected_issuer: args.discovery_expected_issuer,
         workers: args.users.unwrap_or(args.workers),
         duration,
         target_rps: args.spawn_rate.unwrap_or(args.rps),
@@ -151,7 +160,7 @@ async fn main() -> Result<()> {
         scenario: args.scenario.into(),
         debug: args.debug,
     };
-    let mut results = run_load_test(config.clone(), &args.report_file).await?;
+    let mut results = run_load_test(config.clone(), &args.report_file, args.report_id).await?;
     if let Err(error) = results.validate_complete() {
         results.completion_errors.push(error.to_string());
     }
@@ -200,7 +209,16 @@ fn validate_config(config: &LoadTestConfig) -> Result<()> {
     Ok(())
 }
 
-fn report_identity(config: &LoadTestConfig, path: &str) -> Result<ReportIdentity> {
+fn report_identity(
+    config: &LoadTestConfig,
+    path: &str,
+    report_id: Option<uuid::Uuid>,
+) -> Result<ReportIdentity> {
+    let report_id = report_id.unwrap_or_else(uuid::Uuid::new_v4);
+    ensure!(
+        report_id.get_version_num() == 4,
+        "report identity must be UUIDv4"
+    );
     let source_sha256 = required_env("AEG_LOADTEST_SOURCE_SHA256")?;
     ensure!(
         source_sha256.len() == 64
@@ -217,21 +235,29 @@ fn report_identity(config: &LoadTestConfig, path: &str) -> Result<ReportIdentity
         artifact_sha256: sha256(&binary),
         config_sha256: sha256(config_json.as_bytes()),
         config_json,
-        report_id: uuid::Uuid::new_v4().to_string(),
+        report_id: report_id.to_string(),
         report_path: path.into(),
         profile_sha256: None,
         session_provenance_sha256: None,
     })
 }
 
-async fn run_load_test(config: LoadTestConfig, report_path: &str) -> Result<LoadTestResults> {
+async fn run_load_test(
+    config: LoadTestConfig,
+    report_path: &str,
+    report_id: Option<uuid::Uuid>,
+) -> Result<LoadTestResults> {
     let mut initial = LoadTestResults::try_new()?;
     initial.selected_scenario = Some(config.scenario.clone());
     initial.warmup_requested = !config.warmup_duration.is_zero();
     let setup = (|| -> Result<ScenarioExecutor> {
         validate_config(&config)?;
-        initial.identity = Some(report_identity(&config, report_path)?);
-        let executor = ScenarioExecutor::for_scenario(config.target_url.clone(), &config.scenario)?;
+        initial.identity = Some(report_identity(&config, report_path, report_id)?);
+        let executor = ScenarioExecutor::for_scenario_with_discovery_issuer(
+            config.target_url.clone(),
+            &config.scenario,
+            config.discovery_expected_issuer.as_deref(),
+        )?;
         if let Some((profile, session)) = executor.supplier_identity() {
             let identity = initial
                 .identity
@@ -518,6 +544,37 @@ mod tests {
             assert!(parse_duration(&args.warmup).is_err());
         }
     }
+    #[test]
+    fn explicit_report_uuid_and_discovery_issuer_are_parsed_without_transport_override() {
+        let id = "12345678-1234-4234-8234-123456789abc";
+        let args = Args::try_parse_from([
+            "aegaeon-loadtest",
+            "--url",
+            "http://127.0.0.1:18095",
+            "--discovery-expected-issuer",
+            "https://issuer.example.test",
+            "--report-file",
+            "fresh.json",
+            "--report-id",
+            id,
+        ])
+        .unwrap();
+        assert_eq!(args.url, "http://127.0.0.1:18095");
+        assert_eq!(
+            args.discovery_expected_issuer.as_deref(),
+            Some("https://issuer.example.test")
+        );
+        assert_eq!(args.report_id.unwrap().to_string(), id);
+        assert!(Args::try_parse_from([
+            "aegaeon-loadtest",
+            "--report-file",
+            "fresh.json",
+            "--report-id",
+            "malformed"
+        ])
+        .is_err());
+    }
+
     #[test]
     fn config_rejects_zero_and_nonfinite_execution_parameters() {
         let mut config = LoadTestConfig::default();

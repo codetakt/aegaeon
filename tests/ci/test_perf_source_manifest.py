@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 
 SOURCE = pathlib.Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -322,29 +324,388 @@ class PerfSourceManifestTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), str(binary))
-        report = self.evidence.parent / "report.json"
-        report.write_text(
-            json.dumps(
-                {
-                    "identity": {
-                        "source_sha256": sha,
-                        "artifact_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-                    }
-                }
-            )
-        )
+        report, data = self.invocation_report(sha, binary)
+        report.write_text(json.dumps(data))
         self.assertEqual(
             self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
         )
-        report.write_text(
-            json.dumps({"identity": {"source_sha256": "0" * 64, "artifact_sha256": "0" * 64}})
-        )
+        data["identity"]["source_sha256"] = "0" * 64
+        report.write_text(json.dumps(data))
         self.assertNotEqual(
             self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
         )
         binary.write_bytes(b"different")
         self.assertNotEqual(
             self.invoke("binary", "--sha256", sha, "--name", "aegaeon-loadtest").returncode, 0
+        )
+
+    def invocation_report(
+        self, sha: str, binary: pathlib.Path
+    ) -> tuple[pathlib.Path, dict[str, object]]:
+        report = self.evidence.parent / "report.json"
+        report_id = str(uuid.uuid4())
+        argv = [
+            str(binary),
+            "--url",
+            "http://127.0.0.1:18095",
+            "--workers",
+            "2",
+            "--run-time",
+            "1m",
+            "--warmup",
+            "0",
+            "--rps",
+            "5.5",
+            "--scenario",
+            "discovery",
+            "--report-file",
+            str(report),
+            "--report-id",
+            report_id,
+            "--discovery-expected-issuer",
+            "https://issuer.example.test",
+        ]
+        result = self.invoke("invocation", "--sha256", sha, "--", *argv)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = {
+            "target_url": "http://127.0.0.1:18095",
+            "discovery_expected_issuer": "https://issuer.example.test",
+            "workers": 2,
+            "duration": {"secs": 60, "nanos": 0},
+            "target_rps": 5.5,
+            "warmup_duration": {"secs": 0, "nanos": 0},
+            "scenario": "Discovery",
+            "debug": False,
+        }
+        witness = json.dumps(config, ensure_ascii=False)
+        data = {
+            "selected_scenario": "Discovery",
+            "identity": {
+                "source_sha256": sha,
+                "artifact_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                "config_json": witness,
+                "config_sha256": hashlib.sha256(witness.encode("utf-8")).hexdigest(),
+                "report_id": report_id,
+                "report_path": str(report),
+                "profile_sha256": None,
+                "session_provenance_sha256": None,
+            },
+        }
+        invocation = self.evidence / "INVOCATION.json"
+        self.assertEqual(invocation.stat().st_mode & 0o777, 0o444)
+        retained = json.loads(invocation.read_bytes())
+        self.assertEqual(retained["argv"], argv)
+        self.assertEqual(retained["config"], config)
+        self.assertEqual(retained["report_id"], report_id)
+        self.assertEqual(retained["report_path"], str(report))
+        return report, data
+
+    def bound_invocation_report(self) -> tuple[str, pathlib.Path, dict[str, object]]:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        result = self.invoke(
+            "bind",
+            "--sha256",
+            sha,
+            "--name",
+            "aegaeon-loadtest",
+            "--build-log",
+            str(self.build_record(binary)),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report, baseline = self.invocation_report(sha, binary)
+        return sha, report, baseline
+
+    def test_invocation_rejects_unbound_duplicate_nonfinite_and_missing_arguments(self) -> None:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        self.assertEqual(
+            self.invoke(
+                "bind",
+                "--sha256",
+                sha,
+                "--name",
+                "aegaeon-loadtest",
+                "--build-log",
+                str(self.build_record(binary)),
+            ).returncode,
+            0,
+        )
+        report = self.evidence.parent / "report.json"
+        argv = [
+            str(binary),
+            "--url",
+            "https://issuer.example.test",
+            "--workers",
+            "2",
+            "--run-time",
+            "60s",
+            "--warmup",
+            "0",
+            "--rps",
+            "5.5",
+            "--scenario",
+            "smoke",
+            "--report-file",
+            str(report),
+            "--report-id",
+            str(uuid.uuid4()),
+        ]
+        cases = [
+            [*argv, "--users", "1"],
+            [*argv, "--workers", "3"],
+            [*argv, "--debug", "--debug"],
+            [*argv, "--unknown"],
+            argv[:-2],
+        ]
+        for flag, replacement in [
+            ("--rps", "nan"),
+            ("--rps", "inf"),
+            ("--rps", "0"),
+            ("--workers", "0"),
+            ("--workers", "4294967296"),
+            ("--run-time", "0"),
+            ("--run-time", "86401s"),
+            ("--warmup", "invalid"),
+            ("--report-id", "malformed"),
+            ("--report-id", "00000000-0000-1000-8000-000000000000"),
+        ]:
+            changed = argv.copy()
+            changed[changed.index(flag) + 1] = replacement
+            cases.append(changed)
+        for changed in cases:
+            with self.subTest(argv=changed):
+                self.assertNotEqual(
+                    self.invoke("invocation", "--sha256", sha, "--", *changed).returncode, 0
+                )
+                self.assertFalse((self.evidence / "INVOCATION.json").exists())
+        report.write_text("prior report")
+        self.assertNotEqual(self.invoke("invocation", "--sha256", sha, "--", *argv).returncode, 0)
+        self.assertEqual(report.read_text(), "prior report")
+        self.assertFalse((self.evidence / "INVOCATION.json").exists())
+
+    def test_invocation_rejects_secret_bearing_urls_before_record_creation(self) -> None:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        self.assertEqual(
+            self.invoke(
+                "bind",
+                "--sha256",
+                sha,
+                "--name",
+                "aegaeon-loadtest",
+                "--build-log",
+                str(self.build_record(binary)),
+            ).returncode,
+            0,
+        )
+        argv = [
+            str(binary),
+            "--url",
+            "http://127.0.0.1:18095",
+            "--workers",
+            "2",
+            "--run-time",
+            "60s",
+            "--warmup",
+            "0",
+            "--rps",
+            "5.5",
+            "--scenario",
+            "smoke",
+            "--report-file",
+            str(self.evidence.parent / "report.json"),
+            "--report-id",
+            str(uuid.uuid4()),
+        ]
+        for value in [
+            "https://user:fixture-secret@issuer.example.test",
+            "https://user%3Afixture-secret@issuer.example.test",
+            "https://issuer.example.test?fixture-secret",
+            "https://issuer.example.test?",
+            "https://issuer.example.test#fixture-secret",
+            "https://issuer.example.test#",
+            "https://issuer.example.test/\nfixture-secret",
+            "not-a-url",
+        ]:
+            for flag in ["--url", "--discovery-expected-issuer"]:
+                with self.subTest(flag=flag, value=value):
+                    changed = argv.copy()
+                    if flag == "--url":
+                        changed[changed.index(flag) + 1] = value
+                    else:
+                        changed.extend([flag, value])
+                    result = self.invoke("invocation", "--sha256", sha, "--", *changed)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn("fixture-secret", result.stdout + result.stderr)
+                    self.assertFalse((self.evidence / "INVOCATION.json").exists())
+
+    def test_report_all_config_fields_reject_mutation_even_with_recomputed_hash(self) -> None:
+        sha, report, baseline = self.bound_invocation_report()
+        original = json.loads(baseline["identity"]["config_json"])
+        mutations = {
+            "target_url": "https://other.example.test",
+            "discovery_expected_issuer": None,
+            "workers": 3,
+            "duration": {"secs": 61, "nanos": 0},
+            "target_rps": 6.0,
+            "warmup_duration": {"secs": 1, "nanos": 0},
+            "scenario": "Smoke",
+            "debug": True,
+        }
+        witnesses = []
+        for key, changed in mutations.items():
+            config = copy.deepcopy(original)
+            config[key] = changed
+            witnesses.append(("changed-" + key, json.dumps(config)))
+            config = copy.deepcopy(original)
+            del config[key]
+            witnesses.append(("missing-" + key, json.dumps(config)))
+            config = copy.deepcopy(original)
+            config[key] = []
+            witnesses.append(("wrong-type-" + key, json.dumps(config)))
+        witnesses.extend(
+            (
+                "duplicate-" + key,
+                baseline["identity"]["config_json"][:-1]
+                + ","
+                + json.dumps(key)
+                + ":"
+                + json.dumps(original[key])
+                + "}",
+            )
+            for key in original
+        )
+        for name, changes in [
+            ("unknown", {"unknown": 0}),
+            ("bool-workers", {"workers": True}),
+            ("bool-rate", {"target_rps": True}),
+            ("nan", {"target_rps": float("nan")}),
+            ("infinite", {"target_rps": float("inf")}),
+            ("float-seconds", {"duration": {"secs": 60.0, "nanos": 0}}),
+            ("bool-nanos", {"duration": {"secs": 60, "nanos": False}}),
+            ("unknown-duration", {"duration": {"secs": 60, "nanos": 0, "extra": 0}}),
+            ("finite-rate-mismatch", {"target_rps": 1e308}),
+            ("changed-nanos", {"duration": {"secs": 60, "nanos": 1}}),
+            ("missing-nanos", {"duration": {"secs": 60}}),
+            ("missing-seconds", {"warmup_duration": {"nanos": 0}}),
+        ]:
+            witnesses.append((name, json.dumps(original | changes)))
+        witnesses.extend(
+            [
+                (
+                    "nested-duplicate",
+                    baseline["identity"]["config_json"].replace(
+                        '"secs": 60', '"secs": 60, "secs": 60'
+                    ),
+                ),
+                ("malformed", "{"),
+                ("overflow-number", json.dumps(original).replace("5.5", "1e999")),
+            ]
+        )
+        for name, witness in witnesses:
+            with self.subTest(name=name):
+                data = copy.deepcopy(baseline)
+                if name == "changed-scenario":
+                    data["selected_scenario"] = "Smoke"
+                data["identity"]["config_json"] = witness
+                data["identity"]["config_sha256"] = hashlib.sha256(witness.encode()).hexdigest()
+                report.write_text(json.dumps(data))
+                self.assertNotEqual(
+                    self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
+                )
+
+    def test_report_hashes_exact_config_string_without_reserialization(self) -> None:
+        sha, report, baseline = self.bound_invocation_report()
+        # Hash exact bytes: harmless JSON whitespace remains valid with its own digest.
+        data = copy.deepcopy(baseline)
+        data["identity"]["config_json"] += " \n"
+        data["identity"]["config_sha256"] = hashlib.sha256(
+            data["identity"]["config_json"].encode()
+        ).hexdigest()
+        report.write_text(json.dumps(data))
+        self.assertEqual(
+            self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
+        )
+        data["identity"]["config_sha256"] = baseline["identity"]["config_sha256"]
+        report.write_text(json.dumps(data))
+        self.assertNotEqual(
+            self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
+        )
+
+    def test_report_requires_independent_uuid_path_scenario_and_strict_identity(self) -> None:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        self.assertEqual(
+            self.invoke(
+                "bind",
+                "--sha256",
+                sha,
+                "--name",
+                "aegaeon-loadtest",
+                "--build-log",
+                str(self.build_record(binary)),
+            ).returncode,
+            0,
+        )
+        report, baseline = self.invocation_report(sha, binary)
+        cases = []
+        for key in baseline["identity"]:
+            data = copy.deepcopy(baseline)
+            del data["identity"][key]
+            cases.append(("missing-" + key, json.dumps(data)))
+        for key, value in [
+            ("report_id", str(uuid.uuid4())),
+            ("report_path", str(report) + ".other"),
+            ("config_json", {}),
+            ("profile_sha256", []),
+            ("session_provenance_sha256", "invalid"),
+            ("config_sha256", "0" * 64),
+            ("extra", None),
+        ]:
+            data = copy.deepcopy(baseline)
+            data["identity"][key] = value
+            cases.append(("changed-" + key, json.dumps(data)))
+        cases.extend(
+            ("selected-" + str(selected), json.dumps(baseline | {"selected_scenario": selected}))
+            for selected in [None, "Smoke", {}, True]
+        )
+        raw = json.dumps(baseline)
+        cases.append(
+            (
+                "duplicate-identity",
+                raw[:-1] + ',"identity":' + json.dumps(baseline["identity"]) + "}",
+            )
+        )
+        cases.append(
+            (
+                "duplicate-report-id",
+                raw.replace('"report_id":', '"report_id":"duplicate","report_id":'),
+            )
+        )
+        cases.append(
+            (
+                "legacy-two-hashes",
+                json.dumps(
+                    {
+                        "identity": {
+                            "source_sha256": sha,
+                            "artifact_sha256": baseline["identity"]["artifact_sha256"],
+                        }
+                    }
+                ),
+            )
+        )
+        for name, raw in cases:
+            with self.subTest(name=name):
+                report.write_text(raw)
+                self.assertNotEqual(
+                    self.invoke("report", "--sha256", sha, "--report", str(report)).returncode, 0
+                )
+        alternate = self.evidence.parent / "another-report.json"
+        alternate.write_text(json.dumps(baseline))
+        self.assertNotEqual(
+            self.invoke("report", "--sha256", sha, "--report", str(alternate)).returncode, 0
         )
 
     def test_build_missing_duplicate_failed_or_symlink_executables_rejected(self) -> None:
@@ -374,7 +735,7 @@ class PerfSourceManifestTests(unittest.TestCase):
             0,
         )
 
-    def runner(
+    def runner(  # noqa: PLR0913 - independent owned process fixture controls
         self,
         mode: str = "success",
         *,
@@ -382,6 +743,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         wrapper: bool = False,
         artifact: str = "artifacts/perf/runner",
         overrides: dict[str, str] | None = None,
+        arguments: tuple[str, ...] = (),
     ) -> subprocess.CompletedProcess[str]:
         tools = self.owner / "tools"
         tools.mkdir(exist_ok=True)
@@ -421,9 +783,35 @@ import hashlib,json,os,pathlib,sys
 if pathlib.Path(sys.argv[0]).name=="aegaeon-server":raise SystemExit(0)
 mode=os.environ["FIXTURE_MODE"]
 report=pathlib.Path(sys.argv[sys.argv.index("--report-file")+1])
-identity={"source_sha256":os.environ["AEG_LOADTEST_SOURCE_SHA256"],"artifact_sha256":hashlib.sha256(pathlib.Path(sys.argv[0]).read_bytes()).hexdigest()}
+def option(name):return sys.argv[sys.argv.index(name)+1]
+def duration(value):
+ unit=value[-1];count=value[:-1] if unit in "smh" else value
+ return {"secs":int(count)*({"s":1,"m":60,"h":3600}.get(unit,1)),"nanos":0}
+scenarios={"smoke":"Smoke","discovery":"Discovery","dpop":"DPoP",
+ "auth-code":"AuthorizationCode","introspection":"Introspection","revocation":"Revocation",
+ "userinfo":"Userinfo","jwks":"Jwks","par":"PAR","mixed":"Mixed",
+ "policy-mixed":"PolicyMixed","key-rotation":"KeyRotation"}
+config={"target_url":option("--url"),
+ "discovery_expected_issuer":option("--discovery-expected-issuer")
+ if "--discovery-expected-issuer" in sys.argv else None,
+ "workers":int(option("--workers")),"duration":duration(option("--run-time")),
+ "target_rps":float(option("--rps")),"warmup_duration":duration(option("--warmup")),
+ "scenario":scenarios[option("--scenario")],"debug":"--debug" in sys.argv}
+frozen=pathlib.Path(os.environ["ARTIFACT_DIR"])/"source/INVOCATION.json"
+if frozen.stat().st_mode&0o222:raise SystemExit(31)
+retained=json.loads(frozen.read_bytes())
+if retained["argv"]!=sys.argv or retained["report_id"]!=option("--report-id"):raise SystemExit(32)
+if mode.startswith("config-"):
+ key=mode[7:];config[key]=({"target_url":"https://other.example.test","discovery_expected_issuer":"https://other.example.test","workers":7,"duration":{"secs":2,"nanos":0},"target_rps":7.0,"warmup_duration":{"secs":3,"nanos":0},"scenario":"Discovery","debug":True})[key]
+witness=json.dumps(config)
+identity={"source_sha256":os.environ["AEG_LOADTEST_SOURCE_SHA256"],"artifact_sha256":hashlib.sha256(pathlib.Path(sys.argv[0]).read_bytes()).hexdigest(),"config_json":witness,"config_sha256":hashlib.sha256(witness.encode()).hexdigest(),"report_id":option("--report-id"),"report_path":option("--report-file"),"profile_sha256":None,"session_provenance_sha256":None}
 if mode=="mismatch":identity["source_sha256"]="0"*64
-if mode!="no-report":report.write_text(json.dumps({"identity":identity}))
+if mode=="stale-uuid":identity["report_id"]="00000000-0000-4000-8000-000000000000"
+if mode=="wrong-path":identity["report_path"]+=".other"
+if mode=="missing-config":del identity["config_json"]
+if mode!="no-report":
+ report.write_text(json.dumps({"selected_scenario":config["scenario"],
+ "identity":identity}))
 raise SystemExit(17 if mode=="workload-failure" else 0)
 """
         env = self.environment | {
@@ -447,7 +835,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "scripts/flake/perf_load.sh" if wrapper else "scripts/perf/run_load_tests.sh"
         )
         return subprocess.run(  # noqa: S603 - owned local fixture commands
-            [str(shutil.which("bash")), str(script)],
+            [str(shutil.which("bash")), str(script), *arguments],
             cwd=self.root,
             env=env,
             capture_output=True,
@@ -465,6 +853,96 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         self.assertEqual(
             json.loads((directory / "source-status.json").read_bytes())["stage"], "complete"
         )
+
+    def test_runner_effective_aliases_debug_and_discovery_bind_before_launch(self) -> None:
+        result = self.runner(
+            wrapper=True,
+            arguments=(
+                "--users",
+                "2",
+                "--duration",
+                "1m",
+                "--spawn_rate",
+                "5.5",
+                "--warmup",
+                "0",
+                "--scenario",
+                "discovery",
+                "--discovery-expected-issuer",
+                "https://issuer.example.test",
+                "--report_file",
+                "artifacts/perf/runner/selected.json",
+                "--",
+                "--debug",
+            ),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        retained = json.loads(
+            (self.root / "artifacts/perf/runner/source/INVOCATION.json").read_bytes()
+        )
+        self.assertEqual(
+            retained["config"],
+            {
+                "target_url": "https://example.invalid",
+                "discovery_expected_issuer": "https://issuer.example.test",
+                "workers": 2,
+                "duration": {"secs": 60, "nanos": 0},
+                "target_rps": 5.5,
+                "warmup_duration": {"secs": 0, "nanos": 0},
+                "scenario": "Discovery",
+                "debug": True,
+            },
+        )
+        self.assertEqual(retained["report_path"], "artifacts/perf/runner/selected.json")
+        self.assertEqual(uuid.UUID(retained["report_id"]).version, 4)
+
+    def test_runner_recomputed_config_uuid_and_path_mutations_cannot_pass(self) -> None:
+        for number, mode in enumerate(
+            [
+                "config-" + field
+                for field in (
+                    "target_url",
+                    "discovery_expected_issuer",
+                    "workers",
+                    "duration",
+                    "target_rps",
+                    "warmup_duration",
+                    "scenario",
+                    "debug",
+                )
+            ]
+            + ["stale-uuid", "wrong-path", "missing-config"]
+        ):
+            with self.subTest(mode=mode):
+                artifact = "artifacts/perf/mutation-" + str(number)
+                result = self.runner(mode, artifact=artifact)
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertTrue((self.root / artifact / "report.json").is_file())
+                self.assertTrue((self.root / artifact / "source/INVOCATION.json").is_file())
+                self.assertEqual(
+                    json.loads((self.root / artifact / "source-status.json").read_bytes())["stage"],
+                    "report-binding",
+                )
+
+    def test_runner_rejects_unbound_extra_overrides_before_build(self) -> None:
+        for arguments in [
+            ("--", "--users", "1"),
+            ("--", "--report_file", "other.json"),
+            ("--", "-s", "discovery"),
+            ("--", "--url", "http://other.invalid"),
+            ("--", "--report-id", str(uuid.uuid4())),
+            ("--", "--debug", "--debug"),
+            ("--unknown",),
+            ("--discovery-expected-issuer", ""),
+            ("--", "--warmup", "0"),
+        ]:
+            with self.subTest(arguments=arguments):
+                result = self.runner(arguments=arguments)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse(
+                    (self.root / "artifacts/perf/runner/source/INVOCATION.json").exists()
+                )
 
     def test_runner_source_mutation_during_build_prevents_launch(self) -> None:
         result = self.runner("mutate-aegaeon-loadtest")

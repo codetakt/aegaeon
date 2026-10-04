@@ -6,15 +6,19 @@ import argparse
 import hashlib
 import io
 import json
+import math
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
+import uuid
 from typing import Any, Never
+from urllib.parse import urlsplit
 
 MODES = {
     "100644": stat.S_IFREG | 0o644,
@@ -31,6 +35,11 @@ MANDATORY = {
     "scripts/perf/source_manifest.py",
 }
 SHA256_LENGTH = 64
+MAX_RUN_SECONDS = 86_400
+NANOS_PER_SECOND = 1_000_000_000
+UUID_VERSION = 4
+ASCII_SPACE = 0x20
+ASCII_DEL = 0x7F
 LEGACY = {"artifacts/load-test-report.json", "artifacts/policy-mixed-report.json"}
 
 
@@ -391,6 +400,10 @@ def load_json(path: pathlib.Path) -> tuple[bytes, Any]:
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
         raw = stream.read()
 
+    return raw, strict_json(raw)
+
+
+def strict_json(raw: bytes | str) -> object:
     def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, value in pairs:
@@ -399,7 +412,11 @@ def load_json(path: pathlib.Path) -> tuple[bytes, Any]:
             result[key] = value
         return result
 
-    return raw, json.loads(raw, object_pairs_hook=unique)
+    return json.loads(
+        raw,
+        object_pairs_hook=unique,
+        parse_constant=lambda _: fail("nonfinite JSON number"),
+    )
 
 
 def private_tree(
@@ -613,15 +630,256 @@ def verify_binary(root: pathlib.Path, evidence: pathlib.Path, expected: str, nam
     return str(path)
 
 
-def verify_report(evidence: pathlib.Path, expected: str, report: pathlib.Path) -> None:
+SCENARIOS = {
+    "smoke": "Smoke",
+    "auth-code": "AuthorizationCode",
+    "introspection": "Introspection",
+    "revocation": "Revocation",
+    "dpop": "DPoP",
+    "userinfo": "Userinfo",
+    "discovery": "Discovery",
+    "jwks": "Jwks",
+    "par": "PAR",
+    "mixed": "Mixed",
+    "policy-mixed": "PolicyMixed",
+    "key-rotation": "KeyRotation",
+}
+CONFIG_FIELDS = {
+    "target_url",
+    "discovery_expected_issuer",
+    "workers",
+    "duration",
+    "target_rps",
+    "warmup_duration",
+    "scenario",
+    "debug",
+}
+IDENTITY_FIELDS = {
+    "source_sha256",
+    "artifact_sha256",
+    "config_sha256",
+    "config_json",
+    "report_id",
+    "report_path",
+    "profile_sha256",
+    "session_provenance_sha256",
+}
+
+
+def nonsecret_url(value: str, *, issuer: bool = False) -> None:
+    url = urlsplit(value)
+    if (
+        url.scheme not in ({"https"} if issuer else {"http", "https"})
+        or not url.hostname
+        or url.username is not None
+        or url.password is not None
+        or "?" in value
+        or "#" in value
+        or any(ord(char) <= ASCII_SPACE or ord(char) == ASCII_DEL for char in value)
+        or (issuer and value.endswith("/"))
+    ):
+        fail("invocation URL has invalid or secret-bearing components")
+
+
+def validate_config(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.keys() != CONFIG_FIELDS:
+        fail("configuration fields are missing or unknown")
+    if (
+        type(value["target_url"]) is not str
+        or not value["target_url"]
+        or (
+            value["discovery_expected_issuer"] is not None
+            and (
+                type(value["discovery_expected_issuer"]) is not str
+                or not value["discovery_expected_issuer"]
+            )
+        )
+        or type(value["workers"]) is not int
+        or not 0 < value["workers"] <= 2**32 - 1
+        or type(value["target_rps"]) not in (int, float)
+        or not math.isfinite(value["target_rps"])
+        or value["target_rps"] <= 0
+        or type(value["debug"]) is not bool
+        or type(value["scenario"]) is not str
+        or value["scenario"] not in SCENARIOS.values()
+    ):
+        fail("invalid typed configuration field")
+    nonsecret_url(value["target_url"])
+    if value["discovery_expected_issuer"] is not None:
+        nonsecret_url(value["discovery_expected_issuer"], issuer=True)
+    for name in ("duration", "warmup_duration"):
+        duration = value[name]
+        if (
+            not isinstance(duration, dict)
+            or duration.keys() != {"secs", "nanos"}
+            or type(duration["secs"]) is not int
+            or not 0 <= duration["secs"] <= MAX_RUN_SECONDS
+            or type(duration["nanos"]) is not int
+            or not 0 <= duration["nanos"] < NANOS_PER_SECOND
+            or (name == "duration" and duration == {"secs": 0, "nanos": 0})
+        ):
+            fail("invalid typed configuration duration")
+    if value["workers"] / value["target_rps"] > MAX_RUN_SECONDS:
+        fail("worker pacing exceeds bound")
+    return value
+
+
+def invocation_config(argv: list[str]) -> tuple[dict[str, Any], str, str]:
+    options: dict[str, str] = {}
+    debug = False
+    position = 1
+    required_options = {
+        "--url",
+        "--workers",
+        "--run-time",
+        "--warmup",
+        "--rps",
+        "--scenario",
+        "--report-file",
+        "--report-id",
+    }
+    while position < len(argv):
+        name = argv[position]
+        if name == "--debug":
+            if debug:
+                fail("duplicate child option")
+            debug = True
+            position += 1
+            continue
+        if (
+            name not in required_options | {"--discovery-expected-issuer"}
+            or name in options
+            or position + 1 >= len(argv)
+        ):
+            fail("unbound, duplicate or incomplete child option")
+        options[name] = argv[position + 1]
+        position += 2
+    if not options.keys() >= required_options:
+        fail("child invocation lacks required options")
+
+    def duration(value: str) -> dict[str, int]:
+        match = re.fullmatch(r"([0-9]+)([smh]?)", value.strip())
+        if match is None:
+            fail("invalid invocation duration")
+        seconds = int(match[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[match[2]]
+        return {"secs": seconds, "nanos": 0}
+
+    report_id = options["--report-id"]
+    parsed_id = uuid.UUID(report_id)
+    if parsed_id.version != UUID_VERSION or str(parsed_id) != report_id:
+        fail("invocation requires canonical UUIDv4")
+    if re.fullmatch(r"[0-9]+", options["--workers"]) is None:
+        fail("invalid worker count")
+    config = validate_config(
+        {
+            "target_url": options["--url"],
+            "discovery_expected_issuer": options.get("--discovery-expected-issuer"),
+            "workers": int(options["--workers"]),
+            "duration": duration(options["--run-time"]),
+            "target_rps": float(options["--rps"]),
+            "warmup_duration": duration(options["--warmup"]),
+            "scenario": SCENARIOS[options["--scenario"]],
+            "debug": debug,
+        }
+    )
+    return config, report_id, required(options["--report-file"])
+
+
+def freeze_invocation(
+    root: pathlib.Path, evidence: pathlib.Path, expected: str, argv: list[str]
+) -> None:
+    binary = verify_binary(root, evidence, expected, "aegaeon-loadtest")
+    if not argv or argv[0] != binary:
+        fail("invocation executable differs from selected build")
+    config, report_id, report_path = invocation_config(argv)
+    require_fresh_outputs(root, [report_path])
     _, binding = load_json(evidence / "aegaeon-loadtest.json")
-    identity = json.loads(report.read_bytes()).get("identity")
+    publish(
+        evidence / "INVOCATION.json",
+        canonical(
+            {
+                "schema_version": 1,
+                "source_sha256": expected,
+                "artifact_sha256": binding["artifact_sha256"],
+                "argv": argv,
+                "config": config,
+                "report_id": report_id,
+                "report_path": report_path,
+                "normalized_report_path": str(output_path(root, report_path)),
+            }
+        ),
+    )
+
+
+def verify_report(
+    root: pathlib.Path, evidence: pathlib.Path, expected: str, report: pathlib.Path
+) -> None:
+    _, binding = load_json(evidence / "aegaeon-loadtest.json")
+    _, invocation = load_json(evidence / "INVOCATION.json")
+    if (
+        not isinstance(invocation, dict)
+        or invocation.keys()
+        != {
+            "schema_version",
+            "source_sha256",
+            "artifact_sha256",
+            "argv",
+            "config",
+            "report_id",
+            "report_path",
+            "normalized_report_path",
+        }
+        or type(invocation["schema_version"]) is not int
+        or invocation["schema_version"] != 1
+        or not isinstance(invocation["argv"], list)
+        or not invocation["argv"]
+        or any(type(arg) is not str for arg in invocation["argv"])
+        or invocation["argv"][0] != binding["executable"]
+        or binding["source_manifest_sha256"] != expected
+        or invocation["source_sha256"] != expected
+        or invocation["artifact_sha256"] != binding["artifact_sha256"]
+    ):
+        fail("invocation does not match independent build observations")
+    config, report_id, report_path = invocation_config(invocation["argv"])
+    if (
+        validate_config(invocation["config"]) != config
+        or invocation["report_id"] != report_id
+        or invocation["report_path"] != report_path
+        or invocation["normalized_report_path"] != str(output_path(root, report_path))
+        or output_path(root, str(report)) != output_path(root, report_path)
+    ):
+        fail("invocation record or report destination mismatch")
+    report = checked_output(root, str(report), directory=False)
+    before = report.lstat()
+    with os.fdopen(os.open(report, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+        raw = stream.read()
+    if stamp(before) != stamp(report.lstat()):
+        fail("report changed while reading")
+    data = strict_json(raw)
+    if not isinstance(data, dict):
+        fail("report must be a JSON object")
+    identity = data.get("identity")
+    if isinstance(identity, dict):
+        for name in ("profile_sha256", "session_provenance_sha256"):
+            value = identity.get(name)
+            if value is not None and (
+                type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            ):
+                fail("invalid nullable supplier digest")
     if (
         not isinstance(identity, dict)
-        or identity.get("source_sha256") != expected
-        or identity.get("artifact_sha256") != binding["artifact_sha256"]
+        or identity.keys() != IDENTITY_FIELDS
+        or identity["source_sha256"] != expected
+        or identity["artifact_sha256"] != binding["artifact_sha256"]
+        or type(identity["config_json"]) is not str
+        or digest(identity["config_json"].encode("utf-8")) != identity["config_sha256"]
+        or validate_config(strict_json(identity["config_json"])) != config
+        or identity["report_id"] != report_id
+        or identity["report_path"] != report_path
+        or type(data.get("selected_scenario")) is not str
+        or data["selected_scenario"] != config["scenario"]
     ):
-        fail("report does not match source and executable observations")
+        fail("report differs from the independent invocation")
 
 
 def status_boundary(root: pathlib.Path, artifact: str) -> pathlib.Path:
@@ -778,8 +1036,14 @@ def dispatch(args: argparse.Namespace) -> None:
                 )
             ),
             "binary": lambda: print(verify_binary(root, evidence, expected, required(args.name))),
+            "invocation": lambda: freeze_invocation(
+                root,
+                evidence,
+                expected,
+                args.child_args,
+            ),
             "report": lambda: verify_report(
-                evidence, expected, pathlib.Path(required(args.report))
+                root, evidence, expected, pathlib.Path(required(args.report))
             ),
         }
         actions[args.action]()
@@ -801,7 +1065,8 @@ def require_fresh_outputs(root: pathlib.Path, paths: list[str]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=["paths", "freeze", "verify", "bind", "binary", "report", "status"]
+        "action",
+        choices=["paths", "freeze", "verify", "bind", "binary", "invocation", "report", "status"],
     )
     parser.add_argument("--root", required=True)
     parser.add_argument("--evidence", required=True)
@@ -817,10 +1082,19 @@ def main() -> int:
     parser.add_argument("--build-log")
     parser.add_argument("--name", choices=["aegaeon-server", "aegaeon-loadtest"])
     parser.add_argument("--report")
-    args = parser.parse_args()
+    producer_args = sys.argv[1:]
+    child_args: list[str] = []
+    if "--" in producer_args:
+        position = producer_args.index("--")
+        child_args = producer_args[position + 1 :]
+        producer_args = producer_args[:position]
+    args = parser.parse_args(producer_args)
+    args.child_args = child_args
+    if child_args and args.action != "invocation":
+        parser.error("child arguments are only accepted by invocation")
     try:
         dispatch(args)
-    except (OSError, ValueError, KeyError, UnicodeError, SourceError):
+    except (OSError, ValueError, KeyError, TypeError, OverflowError, UnicodeError, SourceError):
         print("[perf] source or executable evidence validation failed", file=sys.stderr)
         return 1
     return 0
