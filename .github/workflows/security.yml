@@ -17,6 +17,9 @@ jobs:
   security-stage:
     name: ${{ matrix.label }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
