@@ -2787,7 +2787,7 @@ os.link(binary,ROOT.parent/'external-compiled-artifact')
         self.assertIn(hashlib.sha256(b"result/bin/cargo-kani").hexdigest(), result.stdout)
         self.assertIn("120000", result.stdout)
         pointer.unlink()
-        for kind in ("missing", "file", "changed-target"):
+        for kind in ("file", "changed-target"):
             with self.subTest(kind=kind):
                 if kind == "file":
                     pointer.write_text("tool output")
@@ -3631,6 +3631,59 @@ class SecurityFuzzArtifactDestinationTests(SecurityFuzzFixture):
             self.assertEqual(
                 (self.root / route / "existing").read_bytes(), b"unchanged inherited route input"
             )
+
+
+class SecurityFuzzPreflightSourceHistoryTests(SecurityFuzzFixture):
+    def setUp(self):
+        super().setUp()
+        for tool in ("cc", "c++", "ar"):
+            self.install(tool, "print('nonsecret native-version fixture')")
+
+    def test_collection_history_overlap_preserves_previous_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        collection = self.artifacts / "fuzz"
+        for history in (collection, collection / "history", self.artifacts):
+            with self.subTest(history=history):
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], SECURITY_HISTORY_DIR=str(history))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("collection and history directories overlap", result.stderr)
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.artifacts / "summary").exists())
+                self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+
+    def test_transitive_source_alias_rejects_before_retiring_previous_receipts(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        sentinel = Path(self.temporary) / "transitive-source-sentinel"
+        sentinel.write_bytes(b"unchanged transitive source sentinel\n")
+        for package in ("server", "ffi"):
+            with self.subTest(package=package):
+                alias = self.root / "crates" / package / "src" / "unmodeled.rs"
+                alias.symlink_to(sentinel)
+                try:
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("symlink or external local source input", result.stderr)
+                    self.assert_receipts_unchanged(previous)
+                    self.assertEqual(self.calls(), [])
+                    self.assertFalse((self.artifacts / "summary").exists())
+                    self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+                    self.assertEqual(
+                        sentinel.read_bytes(), b"unchanged transitive source sentinel\n"
+                    )
+                finally:
+                    alias.unlink()
+
+    def test_retired_kani_pointer_absence_is_bound_without_tool_traversal(self):
+        (self.root / "crates/kani-harness/kani").unlink()
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary()
+        self.assertEqual(summary["status"], "passed")
+        self.assertNotIn("crates/kani-harness/kani", summary["execution"]["source"]["files"])
+        self.assertFalse((self.root / "crates/kani-harness/result").exists())
 
 
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):

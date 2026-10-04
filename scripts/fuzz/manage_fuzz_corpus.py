@@ -570,13 +570,15 @@ def local_fuzz_manifests(inventory: dict[str, dict[str, Any]], excluded: set[Pat
     return visited
 
 
-def kani_output_pointer() -> dict[str, Any]:
-    # One root-reviewed workspace-excluded tool launcher. Retain its literal
-    # bytes/mode without resolving or traversing the dangling tool output.
+def kani_output_pointer() -> dict[str, Any] | None:
+    # If the retired workspace-excluded launcher is present, retain its exact
+    # literal bytes/mode without traversing its tool output. Absence is valid.
     manifest = tomllib.loads(evidence_text(ROOT / "Cargo.toml"))
     if "crates/kani-harness" not in manifest.get("workspace", {}).get("exclude", []):
         invalid("Kani output pointer is no longer workspace-excluded")
     path = ROOT / KANI_OUTPUT_POINTER
+    if not path.exists() and not path.is_symlink():
+        return None
     if (
         not path.is_symlink()
         or os.fsencode(path.readlink()) != os.fsencode(KANI_OUTPUT_TARGET)
@@ -642,7 +644,7 @@ def source_hashes(selected: list[str]) -> dict[str, dict[str, Any]]:
 
 
 def local_source_inventory(
-    excluded: set[Path], pointer: dict[str, Any]
+    excluded: set[Path], pointer: dict[str, Any] | None
 ) -> dict[str, dict[str, Any]]:
     inventory: dict[str, dict[str, Any]] = {}
 
@@ -661,7 +663,7 @@ def local_source_inventory(
             relative = path.relative_to(ROOT).as_posix()
             info = path.lstat()
             if stat.S_ISLNK(info.st_mode):
-                if relative != KANI_OUTPUT_POINTER:
+                if relative != KANI_OUTPUT_POINTER or pointer is None:
                     invalid(f"symlink or external local source input is not supported: {relative}")
                 inventory[relative] = pointer
                 continue
@@ -904,6 +906,20 @@ def validate_fuzz_logs(directory: Path) -> None:
             validate_regular_destination(directory / target / name)
 
 
+def validate_collection_history(directory: Path) -> None:
+    collection_routes = [lexical_directory(directory)]
+    if RUN_ARTIFACT_DIR is not None:
+        collection_routes.append(lexical_directory(RUN_ARTIFACT_DIR))
+    for name, default in (
+        ("FUZZ_HISTORY_DIR", ""),
+        ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
+    ):
+        if value := os.environ.get(name, default):
+            history = lexical_directory(Path(value))
+            if any(overlaps(collection, history) for collection in collection_routes):
+                invalid("fuzz collection and history directories overlap")
+
+
 def validate_preflight(directory: Path) -> Path:
     validate_compiler_environment()
     validate_git_environment()
@@ -922,6 +938,7 @@ def validate_preflight(directory: Path) -> Path:
             routes.append(Path(value))
     for route in routes:
         validate_evidence_route(route)
+    validate_collection_history(directory)
     artifact = Path(os.environ.get("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"))
     artifact = artifact if artifact.is_absolute() else ROOT / artifact
     validate_evidence_route(artifact / "summary")
@@ -941,6 +958,7 @@ def validate_preflight(directory: Path) -> Path:
     lexical_directory(Path(os.environ["CARGO_TARGET_DIR"]))
     lexical_directory(cache)
     effective_native_commands()
+    source_hashes(selected_targets())
     return cache
 
 
