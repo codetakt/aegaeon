@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -160,20 +161,151 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
             self.assertFalse((self.root / path).exists())
 
     def test_upload_includes_raw_fallback_and_existing_evidence(self):
-        step = self.step("Upload security metrics")
-        self.assertEqual(step["if"], "always() && matrix.stage != 'sbom'")
-        paths = set(step["with"]["path"].splitlines())
-        self.assertTrue(
-            {
-                "artifacts/security/latest",
-                "artifacts/security/history",
-                "fuzz/artifacts",
-                "fuzz/corpus",
-                "fuzz/corpus_archive",
-                "fuzz/corpus_meta",
-                "security-artifacts/security_status.jsonl",
-            }.issubset(paths)
+        expected = {
+            "artifacts/security-upload/security-evidence.tar.gz",
+            "artifacts/security-upload/manifest.json",
+        }
+        for name, condition in (
+            ("Upload security metrics", "always() && matrix.stage != 'sbom'"),
+            ("Upload SBOM metrics", "always() && matrix.stage == 'sbom'"),
+        ):
+            step = self.step(name)
+            self.assertEqual(step["if"], condition)
+            self.assertEqual(set(step["with"]["path"].splitlines()), expected)
+            self.assertEqual(step["with"]["if-no-files-found"], "error")
+        self.assertEqual(self.step("Package security upload")["if"], "always()")
+
+    def prepare_packager(self):
+        destination = self.root / "scripts/fuzz/manage_fuzz_corpus.py"
+        destination.parent.mkdir(parents=True)
+        shutil.copyfile(ROOT / "scripts/fuzz/manage_fuzz_corpus.py", destination)
+        self.env.update(SECURITY_UPLOAD_STAGE="fuzz", SECURITY_UPLOAD_OUTCOME="failure")
+
+    def test_upload_archives_complete_raw_recovery_history_sbom_and_literal_links(self):  # noqa: PLR0915 - complete evidence membership and link controls
+        self.prepare_packager()
+        sources = (
+            "artifacts/security/latest/fuzz/cleanup-recovery/id/raw/corpus",
+            "artifacts/security/latest/fuzz/full-logs",
+            "artifacts/security/history",
+            "fuzz/corpus",
+            "fuzz/artifacts",
+            "fuzz/corpus_archive",
+            "fuzz/corpus_meta",
+            "artifacts/sbom",
         )
+        for source in sources:
+            directory = self.root / source
+            directory.mkdir(parents=True)
+            (directory / "input").write_bytes(b"complete preserved evidence " + source.encode())
+        external = self.root / "external-private"
+        external.mkdir()
+        (external / "private").write_bytes(b"never upload external bytes")
+        for source in (sources[0], "fuzz/corpus", "fuzz/artifacts"):
+            directory = self.root / source
+            (directory / "external-dir").symlink_to(external, target_is_directory=True)
+            (directory / "external-file").symlink_to(external / "private")
+        status = self.root / "security-artifacts/security_status.jsonl"
+        status.parent.mkdir()
+        status.write_bytes(b'{"job_status":"failure"}\n')
+        result = self.execute("Package security upload")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = self.root / "artifacts/security-upload"
+        for path in output.iterdir():
+            self.assertFalse(path.is_symlink())
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.stat().st_uid, os.geteuid())
+        manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(manifest["stage_outcome"], "failure")
+        archive = output / "security-evidence.tar.gz"
+        self.assertEqual(
+            manifest["archive"]["sha256"], hashlib.sha256(archive.read_bytes()).hexdigest()
+        )
+        with tarfile.open(archive) as tar:
+            names = tar.getnames()
+            for source in sources:
+                self.assertEqual(
+                    tar.extractfile(source + "/input").read(),
+                    b"complete preserved evidence " + source.encode(),
+                )
+            for source in (sources[0], "fuzz/corpus", "fuzz/artifacts"):
+                for suffix, target in (
+                    ("external-dir", external),
+                    ("external-file", external / "private"),
+                ):
+                    member = tar.getmember(source + "/" + suffix)
+                    self.assertTrue(member.issym())
+                    self.assertEqual(member.linkname, str(target))
+                    self.assertFalse(
+                        any(name.startswith(source + "/" + suffix + "/") for name in names)
+                    )
+            self.assertEqual(
+                tar.extractfile("security-artifacts/security_status.jsonl").read(),
+                status.read_bytes(),
+            )
+            self.assertFalse(any("external-private" in name for name in names))
+        self.assertEqual((external / "private").read_bytes(), b"never upload external bytes")
+
+    def test_upload_packaging_rejects_source_output_aliases_specials_and_overlap(self):  # noqa: PLR0915 - exact filesystem rejection controls
+        self.prepare_packager()
+        raw = self.root / "fuzz/corpus"
+        raw.parent.mkdir()
+        external = self.root / "outside"
+        external.mkdir()
+        sentinel = external / "private"
+        sentinel.write_bytes(b"private external bytes")
+        raw.symlink_to(external, target_is_directory=True)
+        result = self.execute("Package security upload")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "artifacts/security-upload").exists())
+        raw.unlink()
+        raw.mkdir()
+        fifo = raw / "special"
+        os.mkfifo(fifo)
+        result = self.execute("Package security upload")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "artifacts/security-upload").exists())
+        fifo.unlink()
+        output = self.root / "artifacts/security-upload"
+        output.parent.mkdir()
+        output.symlink_to(external, target_is_directory=True)
+        result = self.execute("Package security upload")
+        self.assertNotEqual(result.returncode, 0)
+        output.unlink()
+        os.mkfifo(output)
+        result = self.execute("Package security upload")
+        self.assertNotEqual(result.returncode, 0)
+        output.unlink()
+        result = subprocess.run(  # noqa: S603 - exact owned helper with unsafe output fixture
+            [
+                sys.executable,
+                str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                "--package-upload",
+                str(raw),
+            ],
+            cwd=self.root,
+            env=self.env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(sentinel.read_bytes(), b"private external bytes")
+        self.assertFalse(any(external.glob("*.tar.gz")))
+
+    def test_upload_records_absent_roots_skipped_stage_and_preserves_nonfuzz_dispatch(self):
+        self.prepare_packager()
+        self.env.update(
+            SECURITY_UPLOAD_STAGE="sbom", SECURITY_UPLOAD_OUTCOME="skipped", CARGO_BUILD_RUSTC=""
+        )
+        result = self.execute("Package security upload", stage="sbom", outcome="skipped")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = self.root / "artifacts/security-upload"
+        manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(manifest["stage"], "sbom")
+        self.assertEqual(manifest["stage_outcome"], "skipped")
+        self.assertTrue(all(record == {"present": False} for record in manifest["roots"].values()))
+        with tarfile.open(output / "security-evidence.tar.gz") as tar:
+            self.assertEqual(tar.getnames(), [])
 
     def test_summary_distinguishes_corpus_from_all_execution_results(self):
         summary = self.root / "artifacts/security/latest/fuzz/run_summary.json"

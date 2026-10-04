@@ -111,6 +111,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "python3",
             "cc",
             "c++",
+            "ar",
         ):
             command = shutil.which(name)
             if command:
@@ -152,7 +153,7 @@ class SecurityFuzzFixture(unittest.TestCase):
         (kani / "Cargo.toml").write_text('[package]\nname="fixture-kani"\nversion="0.0.0"\n')
         (kani / "kani").symlink_to("result/bin/cargo-kani")
         (self.root / ".cargo").mkdir()
-        (self.root / ".cargo/config.toml").write_text("# local build configuration\n")
+        shutil.copyfile(ROOT / ".cargo/config.toml", self.root / ".cargo/config.toml")
         (self.root / "fuzz/Cargo.toml").write_text(
             '[package]\nname = "fixture-fuzz"\nversion = "0.0.0"\n'
             '[dependencies]\nserver = { path = "../crates/server" }\n'
@@ -176,6 +177,11 @@ class SecurityFuzzFixture(unittest.TestCase):
             "SECURITY_HISTORY_DIR": str(Path(self.temporary) / "history"),
             "CARGO_TARGET_DIR": str(Path(self.temporary) / "target"),
             "CARGO_HOME": str(Path(self.temporary) / "cargo-home"),
+            # Explicit effective fixture tools, rather than inherited native
+            # compiler names that the real target configuration may override.
+            "CC": str(self.bin / "cc"),
+            "CXX": str(self.bin / "c++"),
+            "AR": str(self.bin / "ar"),
         }
         for name in (
             "FUZZ_TARGETS",
@@ -1785,6 +1791,9 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
             "RUSTC_WRAPPER",
             "RUSTC_WORKSPACE_WRAPPER",
             "CARGO_ENCODED_RUSTFLAGS",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
         ):
             for value in ("", str(tool)):
                 with self.subTest(override=name, present_empty=value == ""):
@@ -1821,6 +1830,190 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("override is not supported", result.stderr)
+
+    def test_preflight_raw_aliases_leave_receipts_and_external_inputs_unchanged(self):
+        marker, raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        for name in ("corpus", "artifacts", "corpus_archive"):
+            with self.subTest(root=name):
+                original = self.root / "fuzz" / name
+                saved = original.with_name(name + "-saved")
+                original.rename(saved)
+                external = Path(self.temporary) / (name + "-external")
+                external.mkdir()
+                sentinel = external / "owned-input"
+                sentinel.write_bytes(b"do not mutate external raw bytes")
+                original.symlink_to(external, target_is_directory=True)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("owned raw directory roots", result.stderr)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.artifacts / "summary/security.log").exists())
+                self.assertEqual(sentinel.read_bytes(), b"do not mutate external raw bytes")
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+                direct = self.helper_python(
+                    "import pathlib,runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+                    f"h['prepare_run'](pathlib.Path({str(marker.parent)!r}))"
+                )
+                self.assertNotEqual(direct.returncode, 0, direct.stderr)
+                self.assertEqual(self.calls(), [])
+                original.unlink()
+                saved.rename(original)
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_evidence_route_alias_and_raw_source_overlaps_reject_before_invalidation(self):
+        external = Path(self.temporary) / "external-evidence"
+        (external / "latest/fuzz").mkdir(parents=True)
+        sentinels = {}
+        for name in ("collection.ok", "execution.json", "run_summary.json"):
+            path = external / "latest/fuzz" / name
+            path.write_bytes(b"private external old receipt")
+            sentinels[path] = path.read_bytes()
+        alias = Path(self.temporary) / "alias"
+        alias.symlink_to(external, target_is_directory=True)
+        raw = self.root / "fuzz/corpus/owned"
+        raw.mkdir(parents=True)
+        for name in ("collection.ok", "execution.json", "run_summary.json"):
+            path = raw / "fuzz" / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"private raw input")
+            sentinels[path] = path.read_bytes()
+        for route in (alias / "latest", raw, self.root / "crates/server", self.root / ".git"):
+            with self.subTest(route=route):
+                result = self.run_suite(SECURITY_ARTIFACT_DIR=str(route))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(), [])
+                for path, content in sentinels.items():
+                    self.assertEqual(path.read_bytes(), content)
+                self.assertFalse((route / "summary/security.log").exists())
+        marker, _unused_raw = self.seed_stale_results()
+        history_alias = alias / "history"
+        result = self.run_suite(SECURITY_HISTORY_DIR=str(history_alias))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(marker.exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_metadata_history_and_summary_log_aliases_reject_before_any_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        external = Path(self.temporary) / "external-log"
+        external.mkdir()
+        sentinel = external / "private"
+        sentinel.write_bytes(b"preserve external log and metadata bytes")
+        destinations = (
+            (self.root / "fuzz/corpus_meta", True),
+            (self.root / "fuzz/corpus_meta/history.jsonl", False),
+            (self.artifacts / "summary", True),
+            (self.artifacts / "summary/security.log", False),
+            (Path(self.env["SECURITY_HISTORY_DIR"]) / "fuzz_runs.jsonl", False),
+        )
+        for path, directory in destinations:
+            with self.subTest(path=path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.symlink_to(external if directory else sentinel, target_is_directory=directory)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(), [])
+                self.assertEqual(sentinel.read_bytes(), b"preserve external log and metadata bytes")
+                for receipt, content in prior.items():
+                    self.assertEqual(receipt.read_bytes(), content)
+                path.unlink()
+
+    def test_fresh_nested_cache_ancestors_are_bound_before_tool_creation(self):
+        cache = self.root / "build/cache"
+        self.assertFalse(cache.parent.exists())
+        result = self.run_suite(CARGO_TARGET_DIR=str(cache), FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertIn("build", execution["source"]["files"])
+        self.assertEqual(execution["source"]["files"]["build"]["type"], "directory")
+        self.assertNotIn("build/cache", execution["source"]["files"])
+        self.assertEqual(execution["status"], "passed")
+        self.assertTrue(cache.is_dir())
+        self.assertFalse((cache / "fuzz").exists())
+
+    def test_effective_forced_native_tools_and_linker_match_actual_config(self):
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.summary()["execution"]
+        for name, command in (("cc", "cc"), ("cxx", "c++"), ("linker", "cc"), ("ar", "ar")):
+            tool = data["tools"][name]
+            self.assertEqual(tool["path"], str(self.bin / command))
+            self.assertEqual(
+                tool["sha256"], hashlib.sha256((self.bin / command).read_bytes()).hexdigest()
+            )
+            self.assertEqual(tool["exit_code"], 0)
+        self.assertEqual(
+            data["effective_native_commands"],
+            {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"},
+        )
+        self.assertIn(".cargo/config.toml", data["source"]["files"])
+
+    def test_preflight_rejects_hardlinked_log_history_and_metadata_destinations(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        history = Path(self.env["SECURITY_HISTORY_DIR"])
+        routes = (
+            self.artifacts / "summary/security.log",
+            history / "fuzz_runs.jsonl",
+            self.root / "fuzz/corpus_meta/history.jsonl",
+            self.root / "fuzz/corpus_meta/latest_run.json",
+        )
+        for index, route in enumerate(routes):
+            with self.subTest(route=route.relative_to(Path(self.temporary))):
+                route.parent.mkdir(parents=True, exist_ok=True)
+                external = Path(self.temporary) / f"external-hardlink-{index}"
+                external.write_bytes(b"external preserved hardlink bytes")
+                os.link(external, route)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(external.read_bytes(), b"external preserved hardlink bytes")
+                self.assertEqual(self.calls(), [])
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+                route.unlink()
+
+    def test_native_compiler_mismatch_and_unmodeled_config_reject_before_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        called = Path(self.temporary) / "native-called"
+        custom = Path(self.temporary) / "custom-cc"
+        custom.write_text(
+            f"#!{sys.executable}\nimport pathlib\npathlib.Path({str(called)!r}).touch()\n"
+        )
+        custom.chmod(0o755)
+        for name in (
+            "CC",
+            "CXX",
+            "AR",
+            "CC_x86_64_unknown_linux_gnu",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
+        ):
+            with self.subTest(override=name):
+                result = self.run_suite(**{name: str(custom)})
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse(called.exists())
+                self.assertEqual(self.calls(), [])
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+        config = self.root / ".cargo/config.toml"
+        previous = config.read_bytes()
+        config.write_text('[build]\nrustc = "unmodeled-compiler"\n')
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [])
+        config.write_bytes(previous)
+        nested = self.root / "fuzz/.cargo/config.toml"
+        nested.parent.mkdir()
+        nested.write_text('[target.x86_64-unknown-linux-gnu]\nlinker="unmodeled-linker"\n')
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [])
+        for path, content in prior.items():
+            self.assertEqual(path.read_bytes(), content)
 
 
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
@@ -1957,6 +2150,9 @@ class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
             "RUSTC_WRAPPER",
             "RUSTC_WORKSPACE_WRAPPER",
             "CARGO_ENCODED_RUSTFLAGS",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
         ):
             for value in ("", "unsupported-compiler-fixture"):
                 for arguments in ([], ["--stage", "fuzz"], ["--stage", "sbom", "--stage", "fuzz"]):

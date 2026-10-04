@@ -61,6 +61,7 @@ if stage_enabled "fuzz"; then
 	if [[ $fuzz_receipt_dir != /* ]]; then
 		fuzz_receipt_dir="$ROOT/$fuzz_receipt_dir"
 	fi
+	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
 		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
