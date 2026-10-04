@@ -4,6 +4,8 @@
 
 set -euo pipefail
 
+SECURITY_ENTRY_ARGS=("$@")
+
 FUZZ_LONG=0
 SECURITY_STAGES=()
 while [[ $# -gt 0 ]]; do
@@ -153,10 +155,7 @@ if stage_enabled "sanitizers"; then
 	sanitizer_validate_output "$PREFLIGHT_ROUTE" "$ROOT" || exit 1
 	preflight_route "$LOG_DIR" || exit 1
 fi
-mkdir -p "$LOG_DIR"
-: >"$LOG_FILE"
-
-echo "[security] starting security suite…" | tee -a "$LOG_FILE"
+SECURITY_LOG_PATH=$LOG_FILE
 
 reset_cargo_target_dir() {
 	local dir="${CARGO_TARGET_DIR:-}"
@@ -184,6 +183,16 @@ prepare_sanitizer_attempt() {
 	sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$ROOT" || return 1
 	sanitizer_initialize_evidence || return 1
 	SANITIZER_EVIDENCE_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_ARTIFACT_DIR") || return $?
+	# Retire stale success before rejecting flags, but never initialize target outputs.
+	if sanitizer_validate_cargo_flags "${SANITIZER_CARGO_FLAGS:-}"; then
+		:
+	else
+		local flag_status=$?
+		if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING"; then
+			preflight_receipt cargo-flags "$flag_status" || return 1
+		fi
+		return "$flag_status"
+	fi
 	preflight_route "${SANITIZER_TARGET_DIR:-target/sanitizers}" || return 1
 	SANITIZER_VALIDATED_TARGET=$PREFLIGHT_ROUTE
 	sanitizer_validate_output "$SANITIZER_VALIDATED_TARGET" "$ROOT" || return 1
@@ -651,30 +660,50 @@ sanitizer_stage_log() {
 	echo "$*" | tee -a "/proc/self/fd/$sanitizer_log_fd"
 }
 
+sanitizer_logging_failure() {
+	local phase=$1 logging_status=$2 primary_status=${3:-$2}
+	if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING"; then
+		preflight_receipt "$phase" "$primary_status" "$logging_status" || return 1
+	else
+		SANITIZER_EVIDENCE_ROUTE_CHANGED=1
+		return 1
+	fi
+}
+
 run_sanitizers_stage() {
-	local status=0 cleanup_status=0 evidence_status=0 sanitizer_log_fd
+	local status=0 cleanup_status=0 evidence_status=0 logging_status=0
 	prepare_sanitizer_attempt || return $?
-	exec {sanitizer_log_fd}>>"$LOG_FILE" || return $?
-	SANITIZER_LOG_DESTINATION="/proc/self/fd/$sanitizer_log_fd"
-	sanitizer_stage_log "[security] >>> sanitizer smoke" || return $?
+	if sanitizer_stage_log "[security] >>> sanitizer smoke"; then
+		:
+	else
+		logging_status=$?
+		sanitizer_logging_failure initial-log "$logging_status" || true
+		return "$logging_status"
+	fi
 	if sanitize >&"$sanitizer_log_fd" 2>&1; then
 		status=0
 	else
 		status=$?
-		sanitizer_stage_log "[security] <<< sanitizer smoke: failed (exit=$status)" || true
+		sanitizer_stage_log "[security] <<< sanitizer smoke: failed (exit=$status)" || logging_status=$?
 	fi
 	cleanup_sanitizer_outputs >&"$sanitizer_log_fd" 2>&1 || cleanup_status=$?
 	if [[ $cleanup_status -ne 0 ]]; then
-		sanitizer_stage_log "[security] <<< sanitizer cleanup: failed (exit=$cleanup_status)" || true
+		sanitizer_stage_log "[security] <<< sanitizer cleanup: failed (exit=$cleanup_status)" || logging_status=$?
 	fi
 	if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING" >&"$sanitizer_log_fd" 2>&1; then
 		if [[ $status -ne 0 || $cleanup_status -ne 0 ]]; then
-			preflight_receipt cleanup "$((status != 0 ? status : cleanup_status))" >&"$sanitizer_log_fd" 2>&1 || true
+			preflight_receipt cleanup "$((status != 0 ? status : cleanup_status))" >&"$sanitizer_log_fd" 2>&1 || evidence_status=1
 		fi
 	else
 		evidence_status=1
 		SANITIZER_EVIDENCE_ROUTE_CHANGED=1
-		sanitizer_stage_log "[security] sanitizer evidence route changed; historical summaries held" || true
+		sanitizer_stage_log "[security] sanitizer evidence route changed; historical summaries held" || logging_status=$?
+	fi
+	if [[ $status -eq 0 && $cleanup_status -eq 0 && $evidence_status -eq 0 ]]; then
+		sanitizer_stage_log "[security] <<< sanitizer smoke: ok" || logging_status=$?
+	fi
+	if [[ $logging_status -ne 0 ]]; then
+		sanitizer_logging_failure final-log "$logging_status" "$((status != 0 ? status : cleanup_status != 0 ? cleanup_status : logging_status))" || evidence_status=1
 	fi
 	if [[ $status -ne 0 ]]; then
 		return "$status"
@@ -682,10 +711,10 @@ run_sanitizers_stage() {
 	if [[ $cleanup_status -ne 0 ]]; then
 		return "$cleanup_status"
 	fi
-	if [[ $evidence_status -ne 0 ]]; then
-		return "$evidence_status"
+	if [[ $logging_status -ne 0 ]]; then
+		return "$logging_status"
 	fi
-	sanitizer_stage_log "[security] <<< sanitizer smoke: ok"
+	return "$evidence_status"
 }
 
 run_sbom_stage() {
@@ -902,6 +931,35 @@ run_context_boundary() {
 	)
 }
 
+# Bind the shared log once, before truncation or initial logging. The helper
+# re-execs this fixed wrapper with an inherited fd; a caller marker is insufficient.
+if stage_enabled "sanitizers"; then
+	prepare_sanitizer_attempt || exit $?
+	mkdir -p "$LOG_DIR" || exit $?
+	if [[ -n ${SANITIZER_SECURITY_LOG_FD:-} ]]; then
+		python3 "$ROOT/scripts/sanitizers/open_security_log.py" validate \
+			"$SECURITY_LOG_PATH" "$SANITIZER_SECURITY_LOG_FD" || exit $?
+		sanitizer_log_fd=$SANITIZER_SECURITY_LOG_FD
+	else
+		exec python3 "$ROOT/scripts/sanitizers/open_security_log.py" open-exec \
+			"$SECURITY_LOG_PATH" "${SECURITY_ENTRY_ARGS[@]}"
+	fi
+	SANITIZER_LOG_DESTINATION="/proc/self/fd/$sanitizer_log_fd"
+	LOG_FILE=$SANITIZER_LOG_DESTINATION
+else
+	mkdir -p "$LOG_DIR"
+	: >"$LOG_FILE"
+fi
+if echo "[security] starting security suite…" | tee -a "$LOG_FILE"; then
+	:
+else
+	log_status=$?
+	if stage_enabled "sanitizers"; then
+		sanitizer_logging_failure shared-initial-log "$log_status" || true
+	fi
+	exit "$log_status"
+fi
+
 stage_enabled "supply-chain" && run_supply_chain_stage
 stage_enabled "runtime-tests" && run_runtime_tests_stage
 stage_enabled "jose-boundaries" && run_jose_boundaries_stage
@@ -934,6 +992,16 @@ stage_enabled "sbom" && run_sbom_stage
 stage_enabled "geiger" && run_geiger_stage
 stage_enabled "udeps" && run_udeps_stage
 
-echo "[security] suite finished. log: $LOG_FILE" | tee -a "$LOG_FILE"
+if echo "[security] suite finished. log: $SECURITY_LOG_PATH" | tee -a "$LOG_FILE"; then
+	:
+else
+	log_status=$?
+	if stage_enabled "sanitizers"; then
+		sanitizer_logging_failure shared-final-log "$log_status" "$((suite_result != 0 ? suite_result : log_status))" || true
+	fi
+	if [[ $suite_result -eq 0 ]]; then
+		suite_result=$log_status
+	fi
+fi
 mkdir -p "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR"
 exit "$suite_result"

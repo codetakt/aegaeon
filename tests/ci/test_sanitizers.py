@@ -5,15 +5,18 @@ from __future__ import annotations
 import ast
 import json
 import os
+import runpy
 import selectors
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1130,6 +1133,226 @@ class SanitizerTests(unittest.TestCase):
                     (self.root / "target-file").read_bytes(), b"target file sentinel\n"
                 )
                 self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime preflight
+
+
+class SanitizerLoggingTests(SanitizerTests):
+    """Actual shell/log boundaries with inert modeled Nix producer only."""
+
+    def setUp(self):
+        super().setUp()
+        self.suite = self.root / "scripts/security/run_security_suite.sh"
+        for relative in (
+            "scripts/security/run_security_suite.sh",
+            "scripts/sanitizers/sanitizer_paths.sh",
+            "scripts/sanitizers/open_security_log.py",
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, path)
+        self.shared = self.root / "shared"
+        self.environment.update(
+            SECURITY_ARTIFACT_DIR=str(self.shared),
+            SECURITY_HISTORY_DIR=str(self.root / "history"),
+            SANITIZER_TARGET_DIR=str(self.root / "suite-target"),
+        )
+        self.environment.pop("SANITIZER_SECURITY_LOG_FD", None)
+        for tool in ("bash", "tee", "rm"):
+            (self.bin / tool).symlink_to(shutil.which(tool))
+        self.make_tool("git", f"print({str(self.root)!r})")
+        self.make_tool(
+            "nix",
+            """
+import os
+from pathlib import Path
+root = Path(os.environ["SANITIZER_FIXTURE"])
+evidence = Path(os.environ["SANITIZER_ARTIFACT_DIR"])
+(root / "producer-called").write_text("inert model only")
+mode = os.environ.get("MODEL_CHILD", "success")
+if mode == "replace-log":
+    log = root / "shared/summary/security.log"
+    log.rename(log.with_name("retained-security.log"))
+    log.symlink_to(root / "external-log")
+if mode == "cleanup-swap":
+    target = Path(os.environ["SANITIZER_TARGET_DIR"])
+    target.rename(target.with_name("held-target"))
+    target.mkdir()
+(evidence / "run-summary.json").write_text('{"status":"completed","commands":[],"units":[]}')
+print("inert modeled sanitizer output")
+raise SystemExit(23 if mode == "child-failure" else 0)
+""",
+        )
+        self.real_tee = shutil.which("tee")
+        (self.bin / "tee").unlink()
+        self.make_tool(
+            "tee",
+            f"""
+import os
+import subprocess
+import sys
+raw = sys.stdin.buffer.read()
+phase = os.environ.get("MODEL_LOG_FAILURE", "")
+markers = {{"shared-initial-log": b"starting security suite", "initial-log": b">>> sanitizer smoke",
+           "final-log": b"<<< sanitizer smoke: ok", "shared-final-log": b"suite finished",
+           "child-failure": b"sanitizer smoke: failed",
+           "cleanup-failure": b"sanitizer cleanup: failed"}}
+if phase and markers[phase] in raw:
+    raise SystemExit(47)
+fds = tuple(int(arg[14:]) for arg in sys.argv[1:] if arg.startswith("/proc/self/fd/"))
+raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
+                              input=raw, pass_fds=fds).returncode)
+""",
+        )
+
+    def make_tool(self, name, source):
+        path = self.bin / name
+        path.write_text(f"#!{sys.executable}\n{source}\n")
+        path.chmod(0o755)
+
+    def run_suite(self, **overrides):
+        return subprocess.run(  # noqa: S603 - controlled real shell and inert tools
+            [shutil.which("bash"), str(self.suite), "--stage", "sanitizers"],
+            cwd=self.root,
+            env={**self.environment, **overrides},
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def shared_receipt(self):
+        return json.loads((self.shared / "sanitizers/run-summary.json").read_text())
+
+    def test_target_dir_override_rejects_before_target_or_cargo(self):
+        for flags in ("--target-dir elsewhere", "--target-dir=elsewhere"):
+            with self.subTest(flags=flags):
+                result = self.run_wrapper(SANITIZER_CARGO_FLAGS=flags)
+                self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "target").exists())  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "elsewhere").exists())  # noqa: PT009 - active under Python -O
+                self.assertEqual(self.summary()["preflight_phase"], "cargo-flags")  # noqa: PT009 - active under Python -O
+
+                evidence = self.shared / "sanitizers"
+                evidence.mkdir(parents=True, exist_ok=True)
+                completed = b'{"status":"completed","commands":[],"units":[]}\n'
+                raw = b"retained previous sanitizer output\n"
+                (evidence / "run-summary.json").write_bytes(completed)
+                (evidence / "001-metadata.stdout.log").write_bytes(raw)
+                result = self.run_suite(SANITIZER_CARGO_FLAGS=flags)
+
+                receipt = self.shared_receipt()
+                self.assertEqual(receipt["status"], "failed")  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["preflight_phase"], "cargo-flags")  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["exit_code"], result.returncode)  # noqa: PT009 - active under Python -O
+                history = evidence / receipt["previous_attempt"]
+                self.assertEqual((history / "run-summary.json").read_bytes(), completed)  # noqa: PT009 - active under Python -O
+                self.assertEqual((history / "001-metadata.stdout.log").read_bytes(), raw)  # noqa: PT009 - active under Python -O
+                self.assertEqual((evidence / "001-metadata.stdout.log").read_bytes(), raw)  # noqa: PT009 - active under Python -O
+                self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "suite-target").exists())  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "producer-called").exists())  # noqa: PT009 - active under Python -O
+
+    def test_shared_log_aliases_reject_before_truncation(self):
+        summary = self.shared / "summary"
+        summary.mkdir(parents=True)
+        log = summary / "security.log"
+        external = self.root / "external-log"
+        external.write_bytes(b"external original")
+        for kind in ("symlink", "hardlink", "directory", "fifo"):
+            with self.subTest(kind=kind):
+                if kind == "symlink":
+                    log.symlink_to(external)
+                elif kind == "hardlink":
+                    log.hardlink_to(external)
+                elif kind == "directory":
+                    log.mkdir()
+                else:
+                    os.mkfifo(log)
+                result = self.run_suite()
+                self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+                self.assertEqual(external.read_bytes(), b"external original")  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "producer-called").exists())  # noqa: PT009 - active under Python -O
+                self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009 - active under Python -O
+                if kind == "directory":
+                    log.rmdir()
+                else:
+                    log.unlink()
+
+    def test_regular_log_and_leaf_swap_retain_validated_descriptor(self):
+        summary = self.shared / "summary"
+        summary.mkdir(parents=True)
+        log = summary / "security.log"
+        log.write_text("old bytes to truncate")
+        external = self.root / "external-log"
+        external.write_bytes(b"external original")
+        result = self.run_suite(MODEL_CHILD="replace-log")
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under Python -O
+        retained = (summary / "retained-security.log").read_text()
+        self.assertNotIn("old bytes to truncate", retained)  # noqa: PT009 - active under Python -O
+        self.assertIn("starting security suite", retained)  # noqa: PT009 - active under Python -O
+        self.assertIn("sanitizer smoke: ok", retained)  # noqa: PT009 - active under Python -O
+        self.assertIn(f"suite finished. log: {log}", retained)  # noqa: PT009 - active under Python -O
+        self.assertEqual(external.read_bytes(), b"external original")  # noqa: PT009 - active under Python -O
+        self.assertEqual(self.shared_receipt()["status"], "completed")  # noqa: PT009 - active under Python -O
+
+    def test_initial_final_and_suite_logging_failures_invalidate_receipt(self):
+        for phase in ("shared-initial-log", "initial-log", "final-log", "shared-final-log"):
+            with self.subTest(phase=phase):
+                result = self.run_suite(MODEL_LOG_FAILURE=phase)
+                self.assertEqual(result.returncode, 47, result.stderr)  # noqa: PT009 - active under Python -O
+                receipt = self.shared_receipt()
+                self.assertEqual(receipt["status"], "failed")  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["preflight_phase"], phase)  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["exit_code"], 47)  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["logging_exit_code"], 47)  # noqa: PT009 - active under Python -O
+
+    def test_logging_failure_preserves_child_and_cleanup_priority(self):
+        for child, phase, expected in (
+            ("child-failure", "child-failure", 23),
+            ("cleanup-swap", "cleanup-failure", 1),
+        ):
+            with self.subTest(child=child):
+                result = self.run_suite(MODEL_CHILD=child, MODEL_LOG_FAILURE=phase)
+                self.assertEqual(result.returncode, expected, result.stderr)  # noqa: PT009 - active under Python -O
+                receipt = self.shared_receipt()
+                self.assertEqual(receipt["status"], "failed")  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["exit_code"], expected)  # noqa: PT009 - active under Python -O
+                self.assertEqual(receipt["logging_exit_code"], 47)  # noqa: PT009 - active under Python -O
+                target = self.root / "suite-target"
+                if target.exists():
+                    target.rmdir()
+
+    def test_safe_opener_wrong_owner_rejects_before_truncation(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/open_security_log.py"))
+        log = self.root / "owned-log"
+        log.write_bytes(b"original bytes")
+        real_fstat = os.fstat
+
+        def wrong_owner(fd):
+            info = real_fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
+                return info
+            return SimpleNamespace(
+                st_mode=info.st_mode,
+                st_nlink=info.st_nlink,
+                st_uid=os.getuid() + 1,
+                st_dev=info.st_dev,
+                st_ino=info.st_ino,
+            )
+
+        with patch("os.fstat", side_effect=wrong_owner):
+            self.assertRaises(ValueError, namespace["checked_log"], str(log))  # noqa: PT027 - active under Python -O
+        self.assertEqual(log.read_bytes(), b"original bytes")  # noqa: PT009 - active under Python -O
+
+    def test_forged_descriptor_marker_does_not_skip_log_admission(self):
+        summary = self.shared / "summary"
+        summary.mkdir(parents=True)
+        log = summary / "security.log"
+        log.write_bytes(b"unchanged original")
+        result = self.run_suite(SANITIZER_SECURITY_LOG_FD="9999")
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+        self.assertEqual(log.read_bytes(), b"unchanged original")  # noqa: PT009 - active under Python -O
+        self.assertFalse((self.root / "producer-called").exists())  # noqa: PT009 - active under Python -O
+        self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009 - active under Python -O
 
 
 if __name__ == "__main__":

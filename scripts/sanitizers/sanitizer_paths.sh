@@ -274,8 +274,24 @@ sanitizer_validate_pair() {
 	fi
 }
 
+sanitizer_validate_cargo_flags() {
+	python3 - "$1" <<'CARGO_FLAGS'
+import shlex
+import sys
+
+forbidden = {"--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
+try:
+    extra = shlex.split(sys.argv[1])
+    if any(flag.split("=", 1)[0] in forbidden or flag.startswith("-p") for flag in extra):
+        raise ValueError("selection override")
+except ValueError:
+    print("[FAIL] Cargo flags cannot override required sanitizer selection or native target", file=sys.stderr)
+    raise SystemExit(1) from None
+CARGO_FLAGS
+}
+
 preflight_receipt() {
-	python3 - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" <<'PREFLIGHT'
+	python3 - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" "${3:-}" <<'PREFLIGHT'
 import json
 import os
 from pathlib import Path
@@ -308,6 +324,8 @@ if phase == "initialize":
 else:
     receipt = json.loads(summary.read_text())
     receipt.update(status="failed", stage="preflight", preflight_phase=phase, exit_code=status)
+    if sys.argv[4]:
+        receipt["logging_exit_code"] = int(sys.argv[4])
 fd, name = tempfile.mkstemp(prefix=".preflight-summary-", dir=root)
 try:
     with os.fdopen(fd, "w") as stream:
