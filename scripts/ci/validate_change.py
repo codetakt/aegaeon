@@ -218,6 +218,9 @@ def classify(bound: dict[str, str], output: Path) -> dict[str, Any]:
         ]
     except subprocess.CalledProcessError:
         return {"scope": "full", "fallback": "base revision has no PR classification policy"}
+    protected_policy = json.loads(sources[1], object_pairs_hook=unique_json_object)
+    if "plan_envelope_version" in protected_policy:
+        return classify_v2(bound, output, protected_policy)
     with tempfile.TemporaryDirectory() as temporary:
         trusted = Path(temporary)
         script, policy = trusted / "pr_plan.py", trusted / "policy.json"
@@ -226,6 +229,7 @@ def classify(bound: dict[str, str], output: Path) -> dict[str, Any]:
         subprocess.run(
             [
                 sys.executable,
+                "-I",
                 str(script),
                 "--base",
                 base,
@@ -258,6 +262,68 @@ def classify(bound: dict[str, str], output: Path) -> dict[str, Any]:
             }
         validate_component_plan(result, protected_policy)
         return result
+
+
+def classify_v2(bound: dict[str, str], output: Path, policy: dict[str, Any]) -> dict[str, Any]:
+    """A protected policy adopts v2 only with all protected transport inputs."""
+    if type(policy["plan_envelope_version"]) is not int or policy["plan_envelope_version"] != 2:
+        raise ValueError("unsupported protected plan envelope version")
+    records = (
+        "scripts/ci/verify_ci_plan.py",
+        "ci/pr-policy.json",
+        "ci/ci-plan.schema.json",
+        "ci/ci-input-union.schema.json",
+        "ci/ci-input-authority.json",
+        "ci/ci-expected-inventory.json",
+        "ci/ci-result-contract.json",
+    )
+    event_bytes = Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes()
+    attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+    if not re.fullmatch(r"[1-9][0-9]*", attempt):
+        raise ValueError("invalid run attempt")
+    producer = {
+        "repository": os.environ["GITHUB_REPOSITORY"],
+        "run_id": os.environ["GITHUB_RUN_ID"],
+        "run_attempt": int(attempt),
+        "job": "plan",
+        "event_payload_sha256": hashlib.sha256(event_bytes).hexdigest(),
+    }
+    with tempfile.TemporaryDirectory() as temporary:
+        trusted = Path(temporary)
+        for path in records:
+            destination = trusted / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(
+                subprocess.check_output(
+                    ["git", "show", f"{bound['base']}:{path}"], stderr=subprocess.PIPE
+                )
+            )
+        context_file, producer_file = trusted / "context.json", trusted / "producer.json"
+        context_file.write_text(json.dumps(bound))
+        producer_file.write_text(json.dumps(producer))
+        subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                str(trusted / records[0]),
+                "--prepare",
+                "--records",
+                str(trusted),
+                "--context",
+                str(context_file),
+                "--producer",
+                str(producer_file),
+                "--plan",
+                str(output),
+                "--union",
+                "ci-input-union.json",
+            ],
+            check=True,
+            env={key: value for key, value in os.environ.items() if key != "GITHUB_OUTPUT"},
+        )
+    result: dict[str, Any] = json.loads(output.read_bytes(), object_pairs_hook=unique_json_object)
+    validate_component_plan(result, policy)
+    return result
 
 
 def run(*, bootstrap: bool) -> None:
@@ -308,6 +374,8 @@ def run(*, bootstrap: bool) -> None:
                 + json.dumps(plan["component_plan_provenance"], separators=(",", ":"))
                 + "\n"
             )
+        if type(plan.get("version")) is int and plan["version"] == 2:
+            stream.write("transport_version=2\n")
 
 
 def main() -> int:

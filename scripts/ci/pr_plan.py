@@ -105,6 +105,12 @@ def validate_policy(policy: dict[str, Any]) -> None:
 
 
 def validate_component_policy(policy: dict[str, Any]) -> None:
+    if "plan_envelope_version" in policy and (
+        type(policy["plan_envelope_version"]) is not int
+        or policy["plan_envelope_version"] != 2
+        or policy.get("component_plan_version") != 1
+    ):
+        raise ValueError("invalid protected full plan envelope version")
     if "component_plan_version" in policy:
         if (
             type(policy["component_plan_version"]) is not int

@@ -4,10 +4,6 @@
     "docs": [
       "docs"
     ],
-    "integrity": [
-      "docs",
-      "integrity"
-    ],
     "full": [
       "docs",
       "integrity",
@@ -18,6 +14,10 @@
       "compliance",
       "kms",
       "container"
+    ],
+    "integrity": [
+      "docs",
+      "integrity"
     ]
   },
   "supplemental_lanes": {
@@ -85,5 +85,6 @@
     "aegaeon-aws-staging",
     "oidc-aws-kms-parity",
     "perf-aws-ec2"
-  ]
+  ],
+  "plan_envelope_version": 2
 }
