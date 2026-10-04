@@ -5,13 +5,13 @@
       "admission": "both configured plans and all required parameter variants/modules; suite available-plan/module discovery and canonical Java result identities may not be replaced by current reduced results; dynamic external inventories remain held"
     },
     "dudect": {
-      "admission": "preserve complete configured schedule and prior admitted nonempty primitive/chunk/sample inventory; observed early termination/30 reports is finite evidence, not90-measurement execution or universal constant-time assurance"
+      "admission": "preserve complete configured schedule and prior admitted nonempty primitive/chunk/sample inventory; observed early termination/30 reports is finite evidence, not 90-measurement execution or universal constant-time assurance"
     },
     "fstar": {
       "admission": "each scheduled module admitted against invocation digests and actual load/dependency records; full imported libraries/include order/checked files and solver identity retained; source module listing not proof of actual verifier closure"
     },
     "fuzz": {
-      "admission": "all seven exact targets nonempty build+actual libFuzzer run, budgets/toolchain/sanitizer/seed-corpus/crash/evidence binding; transitive local crate/build input omissions now held per4174955567"
+      "admission": "all seven exact targets nonempty build+actual libFuzzer run, budgets/toolchain/sanitizer/seed-corpus/crash/evidence binding; transitive local crate/build input omissions now held per 4174955567"
     },
     "infrastructure_component": {
       "admission": "all required modules nonempty provider-schema, readonly lock init/validate, resource/runtime/template/support contracts; no cloud plan/apply or deployment claim"
@@ -20,13 +20,13 @@
       "admission": "full required+diagnostic selection, exact source/manifest/config/features/target/solver/property inventory and gate/citation replay; required and diagnostic dispositions separate"
     },
     "native_wasm": {
-      "admission": "both required lanes with exact native compiler artifact and each1-test result; all vector groups and Node/web helper identities equal the protected baseline, nonempty results, bound WASM/import/ABI/adapter dependencies; dynamic helper catalog retained as constructor source pending exact independently reviewed expansion"
+      "admission": "both required lanes with exact native compiler artifact and each 1-test result; all vector groups and Node/web helper identities equal the protected baseline, nonempty results, bound WASM/import/ABI/adapter dependencies; dynamic helper catalog retained as constructor source pending exact independently reviewed expansion"
     },
     "npm_component": {
       "admission": "all six explicit pinned Node consumers; exact installed lock graph, complete audit before consumers, lifecycle allowlist and entrypoint checks; no partial graph or script substitution"
     },
     "python_component": {
-      "admission": "exact17, zero failed/errors/skipped; complete installed/audited application graph equality"
+      "admission": "exact 17, zero failed/errors/skipped; complete installed/audited application graph equality"
     },
     "sanitizer": {
       "admission": "all Cargo compiler-artifact binaries and full baseline test IDs, zero selection/skip/ignored failures; exact target/features/profile/ASan runtime/preload/instrumentation/canary association; regex filenames or source candidates cannot substitute compiled inventory"

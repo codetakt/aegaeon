@@ -5,6 +5,7 @@ from __future__ import annotations
 # ruff: noqa: PT009, PT027 - unittest assertions must remain active under Python -O.
 import ast
 import base64
+import io
 import os
 import subprocess
 import sys
@@ -37,6 +38,60 @@ BOUND = {
     "test_sha": "c" * 40,
     "test_tree": "d" * 40,
 }
+
+
+class BatchFailingStream(io.BytesIO):
+    def __init__(self, data, operation):
+        super().__init__(data)
+        self.operation = operation
+
+    def read(self, size):
+        if self.operation == "read":
+            raise OSError
+        return super().read(size)
+
+    def readline(self, size):
+        if self.operation == "header":
+            raise OSError
+        return super().readline(size)
+
+    def write(self, data):
+        if self.operation == "write":
+            raise OSError
+        return super().write(data)
+
+    def flush(self):
+        if self.operation == "flush":
+            raise OSError
+        return super().flush()
+
+    def close(self):
+        super().close()
+        if self.operation == "close":
+            raise OSError
+
+
+class BatchFakeProcess:
+    def __init__(self, data, status, failure):
+        self.stdin = BatchFailingStream(
+            b"", failure if failure in ("write", "close", "flush") else ""
+        )
+        self.stdout = BatchFailingStream(data, failure if failure in ("read", "header") else "")
+        self.returncode = None
+        self.status = status
+        self.waited = False
+        self.terminated = False
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self):
+        self.waited = True
+        self.returncode = self.status
+        return self.status
+
+    def terminate(self):
+        self.terminated = True
 
 
 class CiPlanTransportTests(unittest.TestCase):
@@ -143,6 +198,178 @@ class CiPlanTransportTests(unittest.TestCase):
             "component_targets": transport.projection(plan),
             "component_plan_provenance": plan["component_plan_provenance"],
         }
+
+    def assert_metadata_only(self, cache):
+        for metadata in cache.values():
+            self.assertEqual(set(metadata), {"sha256", "symlink_target_base64"})
+            self.assertIsInstance(metadata["sha256"], str)
+            self.assertTrue(
+                metadata["symlink_target_base64"] is None
+                or isinstance(metadata["symlink_target_base64"], str)
+            )
+
+    def test_batch_large_unique_duplicate_and_shared_link_objects_keep_complete_metadata(self):  # noqa: PLR0915 - actual Git process, bounded reads and full three-snapshot identities
+        large = b"owned large Git fixture\x00\n" * 150000
+        shared = b"../unread-link-\xff\n"
+        originals = [(f"input-{i:03}".encode(), "100644", str(i).encode()) for i in range(64)]
+        base = self.tree([*originals, (b"large", "100644", large), (b"shared", "100644", shared)])
+        head = self.tree(
+            [(b"large-duplicate", "100755", large), (b"literal-link", "120000", shared)]
+        )
+        tested = self.tree(
+            [
+                (b"large", "100755", large),
+                (b"literal-link", "120000", shared),
+                (b"only-tested", "100644", b"tested"),
+            ]
+        )
+        trees = {"base": base, "head": head, "tested": tested}
+        commands, body_reads, cached = [], [], []
+        real_popen = subprocess.Popen
+        real_metadata = getattr(transport, "read_blob_metadata", None)
+
+        class BoundedReads:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def read(self, size):
+                body_reads.append(size)
+                return self.stream.read(size)
+
+            def readline(self, size):
+                return self.stream.readline(size)
+
+            def close(self):
+                return self.stream.close()
+
+        def counted(command, **kwargs):
+            commands.append(command)
+            process = real_popen(command, **kwargs)
+            if command[-2:] == ["cat-file", "--batch"]:
+                process.stdout = BoundedReads(process.stdout)
+            return process
+
+        def observed(*args):
+            value = real_metadata(*args)
+            cached.append(value)
+            return value
+
+        with (
+            patch.object(transport.subprocess, "Popen", side_effect=counted),
+            patch.object(transport, "read_blob_metadata", side_effect=observed, create=True),
+        ):
+            entries = transport.union_entries(self.repo, trees, GRAPH)
+        self.assertEqual(len(commands), 4)
+        self.assertEqual(sum(command[-2:] == ["cat-file", "--batch"] for command in commands), 1)
+        self.assertTrue(all(command[1] == "--no-replace-objects" for command in commands))
+        self.assertTrue(body_reads)
+        self.assertLessEqual(max(body_reads), 65536)
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(len(cached[0]), 67)
+        self.assert_metadata_only(cached[0])
+        by_path = {base64.b64decode(entry["raw_path_base64"]): entry for entry in entries}
+        self.assertEqual(
+            set(by_path),
+            {name for name, _mode, _data in originals}
+            | {b"large", b"shared", b"large-duplicate", b"literal-link", b"only-tested"},
+        )
+        self.assertEqual(by_path[b"large"]["base"]["sha256"], transport.digest(large))
+        self.assertEqual(by_path[b"large-duplicate"]["head"]["sha256"], transport.digest(large))
+        self.assertEqual(by_path[b"large"]["tested"]["mode"], "100755")
+        self.assertFalse(by_path[b"large"]["head"]["present"])
+        self.assertIsNone(by_path[b"shared"]["base"]["symlink_target_base64"])
+        for side in ("head", "tested"):
+            link = by_path[b"literal-link"][side]
+            self.assertEqual(link["object_id"], by_path[b"shared"]["base"]["object_id"])
+            self.assertEqual(link["sha256"], transport.digest(shared))
+            self.assertEqual(base64.b64decode(link["symlink_target_base64"]), shared)
+        for entry in entries:
+            self.assertTrue(set(GRAPH["holds"]) <= set(entry["unresolved"]))
+
+    def test_batch_metadata_retains_only_digests_for_large_regular_blobs(self):
+        large = b"regular-body-fixture" * 200000
+        oid = self.blob(large)
+        metadata = transport.read_blob_metadata(self.repo, {oid: False})
+        self.assertEqual(
+            metadata, {oid: {"sha256": transport.digest(large), "symlink_target_base64": None}}
+        )
+
+    def test_batch_literal_base64_survives_chunk_edges_and_empty_objects(self):
+        for size in (0, 1, 2, 65535, 65536, 65537, 131074):
+            with self.subTest(size=size):
+                body = (b"\xff\x00literal\n" * (size // 10 + 1))[:size]
+                oid = self.blob(body)
+                metadata = transport.read_blob_metadata(self.repo, {oid: True})[oid]
+                self.assertEqual(metadata["sha256"], transport.digest(body))
+                self.assertEqual(base64.b64decode(metadata["symlink_target_base64"]), body)
+
+    def test_batch_missing_and_inherited_overrides_fail_before_partial_admission(self):
+        with self.assertRaises(ValueError):
+            transport.read_blob_metadata(self.repo, {"f" * 40: False})
+        for variable in ("GIT_DIR", "GIT_CONFIG_KEY_0"):
+            with (
+                self.subTest(variable=variable),
+                patch.dict(os.environ, {variable: "private-fixture"}),
+                patch.object(transport.subprocess, "Popen") as process,
+            ):
+                with self.assertRaisesRegex(ValueError, "Git authority override"):
+                    transport.read_blob_metadata(self.repo, {"a" * 40: False})
+                process.assert_not_called()
+
+    def test_batch_ignores_replacement_objects(self):
+        original = self.blob(b"original object")
+        replacement = self.blob(b"replacement object")
+        subprocess.run(  # noqa: S603 - commitless local replacement fixture
+            ["git", "-C", str(self.repo), "update-ref", "refs/replace/" + original, replacement],  # noqa: S607 - Git
+            check=True,
+            capture_output=True,
+        )
+        metadata = transport.read_blob_metadata(self.repo, {original: False})[original]
+        self.assertEqual(metadata["sha256"], transport.digest(b"original object"))
+
+    def test_batch_malformed_short_read_write_exit_and_cleanup_failures_reject(self):
+        oid = self.blob(b"abc")
+        frame = oid.encode() + b" blob 3\nabc\n"
+        cases = [
+            ("missing", oid.encode() + b" missing\n", 0),
+            ("wrong-oid", b"f" * 40 + b" blob 3\nabc\n", 0),
+            ("wrong-type", oid.encode() + b" tree 3\nabc\n", 0),
+            ("negative-size", oid.encode() + b" blob -3\nabc\n", 0),
+            ("noncanonical-size", oid.encode() + b" blob 03\nabc\n", 0),
+            ("long-header", oid.encode() + b" blob " + b"9" * 256 + b"\n", 0),
+            ("short-body", oid.encode() + b" blob 3\na", 0),
+            ("bad-trailer", frame[:-1] + b"x", 0),
+            ("trailing-output", frame + b"extra", 0),
+            ("process-exit", frame, 7),
+            ("read-error", frame, 0),
+            ("header-error", frame, 0),
+            ("write-error", frame, 0),
+            ("flush-error", frame, 0),
+            ("close-error", frame, 0),
+            ("second-object-missing", frame + b"f" * 40 + b" missing\n", 0),
+        ]
+
+        for name, data, status in cases:
+            process = BatchFakeProcess(data, status, name.removesuffix("-error"))
+            objects = {oid: False}
+            if name == "second-object-missing":
+                objects["f" * 40] = False
+            with (
+                self.subTest(case=name),
+                patch.object(transport.subprocess, "Popen", return_value=process),
+                self.assertRaises((ValueError, OSError)),
+            ):
+                transport.read_blob_metadata(self.repo, objects)
+            self.assertTrue(process.stdin.closed)
+            self.assertTrue(process.stdout.closed)
+            self.assertTrue(process.waited)
+        with (
+            patch.object(
+                transport.subprocess, "Popen", side_effect=OSError("controlled launch failure")
+            ),
+            self.assertRaises(OSError),
+        ):
+            transport.read_blob_metadata(self.repo, {oid: False})
 
     def test_actual_git_union_retains_modes_rename_deletion_links_raw_and_tested_inputs(self):
         bound, union = self.union()

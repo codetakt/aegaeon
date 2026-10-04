@@ -204,7 +204,12 @@ class ComponentPlanTests(unittest.TestCase):
             with self.subTest(field=field, value=value):
                 policy = deepcopy(POLICY)
                 policy[field] = value
-                with self.assertRaisesRegex(ValueError, "component"):
+                diagnostic = (
+                    "^invalid protected full plan envelope version$"
+                    if field == "component_plan_version" and value == 2
+                    else "component"
+                )
+                with self.assertRaisesRegex(ValueError, diagnostic):
                     validate_policy(policy)
                 with self.assertRaisesRegex(ValueError, "component"):
                     validate_component_plan(plan(), policy)

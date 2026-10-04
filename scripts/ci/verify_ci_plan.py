@@ -16,7 +16,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import IO, Any
 
 RECORD_PATHS = (
     "ci/pr-policy.json",
@@ -164,17 +164,92 @@ def validate_schema(value: object, schema: dict[str, Any]) -> None:
         validate_scalar(value, schema)
 
 
-def git(repo: Path, *args: str) -> bytes:
+def git_command(repo: Path, *args: str) -> list[str]:
     if GIT_OVERRIDES & os.environ.keys() or any(
         key.startswith("GIT_CONFIG_KEY_") for key in os.environ
     ):
         raise ValueError("inherited Git authority override is unsupported")
-    return subprocess.check_output(
-        ["git", "--no-replace-objects", "-C", str(repo), *args], stderr=subprocess.PIPE
+    return ["git", "--no-replace-objects", "-C", str(repo), *args]
+
+
+def git(repo: Path, *args: str) -> bytes:
+    return subprocess.check_output(git_command(repo, *args), stderr=subprocess.PIPE)
+
+
+def batch_blob_metadata(stream: IO[bytes], oid: str, *, literal: bool) -> dict[str, str | None]:
+    header = stream.readline(256)
+    match = re.fullmatch(oid.encode("ascii") + rb" blob (0|[1-9][0-9]*)\n", header)
+    if match is None:
+        raise ValueError("invalid or missing Git batch blob header")
+    remaining = int(match[1])
+    hashed = hashlib.sha256()
+    literal_parts = []
+    carry = b""
+    while remaining:
+        chunk = stream.read(min(remaining, 65536))
+        if not chunk or len(chunk) > remaining:
+            raise ValueError("incomplete Git batch blob body")
+        hashed.update(chunk)
+        remaining -= len(chunk)
+        if literal:
+            chunk = carry + chunk
+            complete = len(chunk) - len(chunk) % 3
+            literal_parts.append(base64.b64encode(chunk[:complete]).decode("ascii"))
+            carry = chunk[complete:]
+    if stream.read(1) != b"\n":
+        raise ValueError("invalid Git batch blob trailer")
+    if literal and carry:
+        literal_parts.append(base64.b64encode(carry).decode("ascii"))
+    return {
+        "sha256": hashed.hexdigest(),
+        "symlink_target_base64": "".join(literal_parts) if literal else None,
+    }
+
+
+def close_batch_process(process: subprocess.Popen[bytes]) -> None:
+    try:
+        if process.stdin is not None:
+            process.stdin.close()
+    finally:
+        try:
+            if process.stdout is not None:
+                process.stdout.close()
+        finally:
+            if process.poll() is None:
+                try:
+                    process.terminate()
+                finally:
+                    process.wait()
+
+
+def read_blob_metadata(repo: Path, objects: dict[str, bool]) -> dict[str, dict[str, str | None]]:
+    if any(not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) for oid in objects):
+        raise ValueError("invalid Git blob object identity")
+    command = git_command(repo, "cat-file", "--batch")
+    if not objects:
+        return {}
+    result = {}
+    process = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
     )
+    try:
+        if process.stdin is None or process.stdout is None:
+            raise ValueError("Git batch streams are unavailable")
+        for oid, literal in objects.items():
+            process.stdin.write(oid.encode("ascii") + b"\n")
+            process.stdin.flush()
+            result[oid] = batch_blob_metadata(process.stdout, oid, literal=literal)
+        process.stdin.close()
+        if process.stdout.read(1):
+            raise ValueError("unexpected trailing Git batch output")
+        if process.wait() != 0:
+            raise ValueError("Git batch blob process failed")
+    finally:
+        close_batch_process(process)
+    return result
 
 
-def tree_entries(repo: Path, tree: str, blobs: dict[str, bytes]) -> dict[bytes, dict[str, Any]]:
+def tree_entries(repo: Path, tree: str) -> dict[bytes, dict[str, Any]]:
     result = {}
     raw = git(repo, "ls-tree", "-r", "-z", "--full-tree", tree)
     for record in raw.split(b"\0")[:-1]:
@@ -185,19 +260,14 @@ def tree_entries(repo: Path, tree: str, blobs: dict[str, bytes]) -> dict[bytes, 
         is_gitlink = mode == "160000"
         if kind != ("commit" if is_gitlink else "blob"):
             raise ValueError("Git type and mode disagree")
-        if not is_gitlink and oid not in blobs:
-            blobs[oid] = git(repo, "cat-file", "blob", oid)
-        content = None if is_gitlink else blobs[oid]
         result[path] = {
             "present": True,
             "tree": tree,
             "mode": mode,
             "type": "gitlink" if is_gitlink else "symlink" if mode == "120000" else "regular",
             "object_id": oid,
-            "sha256": None if content is None else digest(content),
-            "symlink_target_base64": base64.b64encode(blobs[oid]).decode("ascii")
-            if mode == "120000"
-            else None,
+            "sha256": None,
+            "symlink_target_base64": None,
         }
     return result
 
@@ -234,9 +304,27 @@ def ambiguous_path(path: str | None) -> bool:
     )
 
 
+def snapshot_entries(repo: Path, trees: dict[str, str]) -> dict[str, dict[bytes, dict[str, Any]]]:
+    snapshots = {side: tree_entries(repo, tree) for side, tree in trees.items()}
+    objects: dict[str, bool] = {}
+    for snapshot in snapshots.values():
+        for item in snapshot.values():
+            if item["type"] != "gitlink":
+                oid = item["object_id"]
+                objects[oid] = objects.get(oid, False) or item["type"] == "symlink"
+    blobs = read_blob_metadata(repo, objects)
+    for snapshot in snapshots.values():
+        for item in snapshot.values():
+            if item["type"] != "gitlink":
+                metadata = blobs[item["object_id"]]
+                item["sha256"] = metadata["sha256"]
+                if item["type"] == "symlink":
+                    item["symlink_target_base64"] = metadata["symlink_target_base64"]
+    return snapshots
+
+
 def union_entries(repo: Path, trees: dict[str, str], graph: dict[str, Any]) -> list[dict[str, Any]]:
-    blobs: dict[str, bytes] = {}
-    snapshots = {side: tree_entries(repo, tree, blobs) for side, tree in trees.items()}
+    snapshots = snapshot_entries(repo, trees)
     paths = sorted({path for snapshot in snapshots.values() for path in snapshot})
     entries = []
     for path in paths:
