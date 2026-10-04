@@ -200,6 +200,10 @@ initialize_sanitizer_routes() {
 	sanitizer_validate_output "$ARTIFACT_BASE" "$ROOT" || { sanitizer_preparation_failure 1 || exit $?; }
 	preflight_route "$SECURITY_HISTORY_DIR" || { sanitizer_preparation_failure 1 || exit $?; }
 	SECURITY_HISTORY_DIR=$PREFLIGHT_ROUTE
+	# The designated retained-history directory also contains a protected .gitkeep.
+	if [[ $SECURITY_HISTORY_DIR != "$ROOT/artifacts/security/history" ]]; then
+		sanitizer_validate_output "$SECURITY_HISTORY_DIR" "$ROOT" || { sanitizer_preparation_failure 1 || exit $?; }
+	fi
 	LOG_DIR="$ARTIFACT_BASE/summary"
 	preflight_route "$LOG_DIR" || { sanitizer_preparation_failure 1 || exit $?; }
 	LOG_DIR=$PREFLIGHT_ROUTE

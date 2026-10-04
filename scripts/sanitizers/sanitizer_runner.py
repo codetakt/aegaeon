@@ -139,7 +139,8 @@ def parse_json(text: str) -> dict[str, Any]:
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def group_alive(pgid: int) -> bool:
@@ -725,6 +726,7 @@ def build_artifacts(
     output: str, package: dict[str, Any], targets: TargetInventory, output_dir: Path
 ) -> dict[TargetKey, tuple[Path, dict[str, Any]]]:
     found = {}
+    binaries = set()
     build_finished = []
     for line in output.splitlines():
         if not line.strip():
@@ -760,10 +762,8 @@ def build_artifacts(
         )
         require(key not in found, "Duplicate sanitizer test artifact")
         binary = artifact_binary(record, targets[key], output_dir)
-        require(
-            all(binary != previous[0] for previous in found.values()),
-            "Duplicate sanitizer executable",
-        )
+        require(binary not in binaries, "Duplicate sanitizer executable")
+        binaries.add(binary)
         found[key] = (binary, record)
     require(build_finished == [True], "Missing successful Cargo build-finished record")
     require(set(found) == set(targets), "Missing required sanitizer test artifacts")

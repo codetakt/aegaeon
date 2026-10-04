@@ -657,26 +657,114 @@ class SanitizerDispatchTests(unittest.TestCase):
                     self.assertEqual(retained.read_bytes(), raw)
                     self.assertEqual(list(history.iterdir()), [retained])
 
+    def test_protected_history_routes_refuse_children_and_preserve_inputs(self):
+        def snapshot(root):
+            return {
+                str(path.relative_to(root)): (
+                    ("symlink", path.readlink())
+                    if path.is_symlink()
+                    else ("directory", None)
+                    if path.is_dir()
+                    else ("file", path.read_bytes())
+                )
+                for path in root.rglob("*")
+            }
+
+        for aggregate in (False, True):
+            for setting in (
+                "relative",
+                "absolute",
+                "normalized",
+                "git",
+                "workspace",
+                "parent",
+                "history-parent",
+                "marker-leaf",
+                "symlink",
+            ):
+                with self.subTest(aggregate=aggregate, setting=setting):
+                    fixture = self.fixture()
+                    (fixture.root / ".git").mkdir()
+                    for name in (
+                        "artifacts/security/.gitkeep",
+                        "artifacts/security/history/.gitkeep",
+                    ):
+                        marker = fixture.root / name
+                        marker.parent.mkdir(parents=True, exist_ok=True)
+                        marker.write_bytes(b"preserve tracked marker\n")
+                    external = fixture.root.parent / "external-history"
+                    external.mkdir()
+                    retained = external / "previous-run.json"
+                    retained.write_bytes(b"preserve retained history\n")
+                    routes = {
+                        "relative": "crates/server/sanitizer-history",
+                        "absolute": str(fixture.root / "crates/server/sanitizer-history"),
+                        "normalized": "missing/../crates/server/sanitizer-history",
+                        "git": ".git/history",
+                        "workspace": ".",
+                        "parent": "..",
+                        "history-parent": "artifacts/security",
+                        "marker-leaf": "artifacts/security/history/.gitkeep",
+                    }
+                    if setting == "symlink":
+                        (fixture.root / "history-alias").symlink_to(
+                            fixture.root / "crates/server", target_is_directory=True
+                        )
+                        history_route = "history-alias/nested"
+                    else:
+                        history_route = routes[setting]
+                    before = snapshot(fixture.root)
+                    result = self.run_suite(
+                        fixture, aggregate=aggregate, SECURITY_HISTORY_DIR=history_route
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                    self.assertEqual(self.calls(fixture, "nix-other"), [])
+                    self.assertEqual(self.calls(fixture, "cleanup"), [])
+                    self.assertEqual(snapshot(fixture.root), before)
+                    self.assertEqual(retained.read_bytes(), b"preserve retained history\n")
+                    self.assertEqual(list(external.iterdir()), [retained])
+
     def test_history_prefix_sibling_allows_cleanup_and_preserves_history(self):
         for aggregate in (False, True):
-            with self.subTest(aggregate=aggregate):
-                fixture = self.fixture()
-                history = fixture.root / "history"
-                history.mkdir()
-                retained = history / "previous-run.json"
-                retained.write_bytes(b"retained history\n")
-                target = history.with_name("history-build")
-                result = self.run_suite(
-                    fixture,
-                    aggregate=aggregate,
-                    SECURITY_HISTORY_DIR=os.path.relpath(history, fixture.root),
-                    SANITIZER_TARGET_DIR=str(target),
-                )
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(len(self.calls(fixture, "sanitizer")), 1)
-                self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
-                self.assertFalse(target.exists())
-                self.assertEqual(retained.read_bytes(), b"retained history\n")
+            for setting in ("default", "relative"):
+                with self.subTest(aggregate=aggregate, setting=setting):
+                    fixture = self.fixture()
+                    history = fixture.root / (
+                        "artifacts/security/history" if setting == "default" else "history"
+                    )
+                    history.mkdir(parents=True)
+                    markers = {
+                        "artifacts/security/.gitkeep": b"retain security marker\n",
+                        "artifacts/security/history/.gitkeep": b"retain history marker\n",
+                    }
+                    for name, content in markers.items():
+                        marker = fixture.root / name
+                        marker.parent.mkdir(parents=True, exist_ok=True)
+                        marker.write_bytes(content)
+                    retained = history / "previous-run.json"
+                    retained.write_bytes(b"retained history\n")
+                    target = history.with_name("history-build")
+                    if setting == "default":
+                        fixture.env.pop("SECURITY_HISTORY_DIR")
+                        environment = {}
+                    else:
+                        environment = {
+                            "SECURITY_HISTORY_DIR": os.path.relpath(history, fixture.root)
+                        }
+                    result = self.run_suite(
+                        fixture,
+                        aggregate=aggregate,
+                        SANITIZER_TARGET_DIR=str(target),
+                        **environment,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(len(self.calls(fixture, "sanitizer")), 1)
+                    self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
+                    self.assertFalse(target.exists())
+                    self.assertEqual(retained.read_bytes(), b"retained history\n")
+                    for name, content in markers.items():
+                        self.assertEqual((fixture.root / name).read_bytes(), content)
 
     def test_sibling_target_cleanup_preserves_retained_evidence(self):
         for aggregate in (False, True):
