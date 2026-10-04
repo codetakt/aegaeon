@@ -52,7 +52,8 @@ def optional_path_from_env(name: str) -> Path | None:
     value = os.environ.get(name)
     if not value:
         return None
-    return Path(value)
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / path
 
 
 RUN_ARTIFACT_DIR = optional_path_from_env("FUZZ_RUN_ARTIFACT_DIR")
@@ -303,8 +304,7 @@ def collect_corpus(execution: dict | None = None) -> None:
         if route is not None:
             validate_evidence_route(route)
     if HISTORY_OUT_DIR is not None:
-        history = HISTORY_OUT_DIR if HISTORY_OUT_DIR.is_absolute() else ROOT / HISTORY_OUT_DIR
-        validate_regular_destination(history / "fuzz_runs.jsonl")
+        validate_regular_destination(HISTORY_OUT_DIR / "fuzz_runs.jsonl")
     targets = load_targets()
     ensure_directories(targets)
     stats = gather_stats(targets)
@@ -863,6 +863,15 @@ def validate_evidence_route(directory: Path) -> Path:
     return path
 
 
+def validate_fuzz_logs(directory: Path) -> None:
+    directory = directory if directory.is_absolute() else ROOT / directory
+    for name in ("run.log", "cargo-fuzz-help.log"):
+        validate_regular_destination(directory / name)
+    for target in selected_targets():
+        for name in ("build.log", "run.log"):
+            validate_regular_destination(directory / target / name)
+
+
 def validate_preflight(directory: Path) -> Path:
     validate_compiler_environment()
     validate_git_environment()
@@ -882,6 +891,7 @@ def validate_preflight(directory: Path) -> Path:
     artifact = artifact if artifact.is_absolute() else ROOT / artifact
     validate_evidence_route(artifact / "summary")
     validate_regular_destination(artifact / "summary/security.log")
+    validate_fuzz_logs(directory)
     for name, default in (
         ("FUZZ_HISTORY_DIR", ""),
         ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
@@ -1681,11 +1691,13 @@ def validate_action_routes(args: argparse.Namespace) -> None:
         args.record_target,
         args.finish_run,
         args.cleanup_result,
-        args.restore_cleanup,
     ):
         if action is not None:
             validate_evidence_route(Path(action[0]))
             validate_collection_roots()
+    if args.restore_cleanup is not None:
+        # Raw-root failures belong to restore_cleanup's recovery error handler.
+        validate_evidence_route(Path(args.restore_cleanup[0]))
 
 
 def record_target_action(action: list[str]) -> int:

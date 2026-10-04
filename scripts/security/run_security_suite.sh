@@ -30,6 +30,37 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+validate_stages() {
+	local known=(
+		supply-chain
+		runtime-tests
+		jose-boundaries
+		cargo-vet
+		fuzz
+		sanitizers
+		sbom
+		geiger
+		udeps
+	)
+	local stage found
+	for stage in "${SECURITY_STAGES[@]}"; do
+		found=0
+		for known_stage in "${known[@]}"; do
+			if [[ $stage == "$known_stage" ]]; then
+				found=1
+				break
+			fi
+		done
+		if [[ $found -eq 0 ]]; then
+			echo "[security] unknown stage: $stage" >&2
+			echo "[security] allowed stages: ${known[*]}" >&2
+			exit 1
+		fi
+	done
+}
+
+validate_stages
+
 stage_enabled() {
 	local requested="$1"
 	if [[ ${#SECURITY_STAGES[@]} -eq 0 ]]; then
@@ -43,6 +74,15 @@ stage_enabled() {
 	done
 	return 1
 }
+
+# Anchor the caller's Cargo home lexically before any preflight or setup.
+# Keep the same destination through validation and later directory creation.
+if [[ -n ${CARGO_HOME:-} ]]; then
+	if [[ $CARGO_HOME != /* ]]; then
+		CARGO_HOME="$PWD/$CARGO_HOME"
+	fi
+	export CARGO_HOME
+fi
 
 if stage_enabled "fuzz"; then
 	# Resolve the physical script route before any override-influenced Git call
@@ -70,12 +110,9 @@ if stage_enabled "fuzz"; then
 	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
 fi
 
-# Preserve the caller's configuration, anchoring a relative Cargo home before
-# build tools change directory. A private relative home can pollute crate trees.
+# Only create the already validated caller-owned Cargo home after invalidation.
 if [[ -n ${CARGO_HOME:-} ]]; then
 	mkdir -p "$CARGO_HOME"
-	CARGO_HOME="$(cd "$CARGO_HOME" && pwd)"
-	export CARGO_HOME
 fi
 cd "$ROOT"
 
@@ -108,35 +145,6 @@ mkdir -p "$LOG_DIR"
 : >"$LOG_FILE"
 
 echo "[security] starting security suite…" | tee -a "$LOG_FILE"
-
-validate_stages() {
-	local known=(
-		supply-chain
-		runtime-tests
-		jose-boundaries
-		cargo-vet
-		fuzz
-		sanitizers
-		sbom
-		geiger
-		udeps
-	)
-	local stage found
-	for stage in "${SECURITY_STAGES[@]}"; do
-		found=0
-		for known_stage in "${known[@]}"; do
-			if [[ $stage == "$known_stage" ]]; then
-				found=1
-				break
-			fi
-		done
-		if [[ $found -eq 0 ]]; then
-			echo "[security] unknown stage: $stage" >&2
-			echo "[security] allowed stages: ${known[*]}" >&2
-			exit 1
-		fi
-	done
-}
 
 reset_cargo_target_dir() {
 	local dir="${CARGO_TARGET_DIR:-}"
@@ -827,8 +835,6 @@ run_context_boundary() {
 		fi
 	)
 }
-
-validate_stages
 
 stage_enabled "supply-chain" && run_supply_chain_stage
 stage_enabled "runtime-tests" && run_runtime_tests_stage

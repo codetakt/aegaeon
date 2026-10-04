@@ -135,6 +135,28 @@ class FuzzCorpusTests(unittest.TestCase):
                 self.assertFalse((self.root / "fuzz/corpus_meta").exists())
                 self.assertFalse((self.root / "fuzz/corpus_archive").exists())
 
+    def test_relative_optional_outputs_are_repository_anchored_with_newlines(self):
+        self.env["FUZZ_RUN_ARTIFACT_DIR"] = "collection-evidence\n"
+        self.env["FUZZ_HISTORY_DIR"] = "collection-history\n"
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / "collection-evidence\n/run_summary.json").is_file())
+        self.assertTrue((self.root / "collection-history\n/fuzz_runs.jsonl").is_file())
+        self.assertFalse((self.helper.parent / "collection-evidence\n").exists())
+        self.assertFalse((self.helper.parent / "collection-history\n").exists())
+
+    def test_relative_history_does_not_follow_an_unvalidated_caller_alias(self):
+        external = self.root.parent / "external-history"
+        external.mkdir()
+        sentinel = external / "fuzz_runs.jsonl"
+        sentinel.write_bytes(b"preserve external history\n")
+        (self.helper.parent / "relative-history").symlink_to(external)
+        self.env["FUZZ_HISTORY_DIR"] = "relative-history"
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sentinel.read_bytes(), b"preserve external history\n")
+        self.assertTrue((self.root / "relative-history/fuzz_runs.jsonl").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
