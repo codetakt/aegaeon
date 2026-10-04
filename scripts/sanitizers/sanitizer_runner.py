@@ -50,8 +50,24 @@ def report(message: str, *, error: bool = False) -> Exception | None:
     return None
 
 
+def save_exit(supervisor: Supervisor, status: int) -> int:
+    """Require the original bound receipt; never repair a disappeared directory."""
+    summary = supervisor.summary
+    summary["exit_code"] = status
+    try:
+        supervisor.save()
+    except Exception as error:  # noqa: BLE001 - every final evidence failure is nonzero
+        status = status or getattr(error, "status", 1) or 1
+        summary.update(status="failed", exit_code=status, evidence_error=str(error))
+        report(f"[FAIL] Sanitizer evidence write failed: {error}", error=True)
+    return status
+
+
 def finish(supervisor: Supervisor, status: int) -> int:
     summary = supervisor.summary
+    status = status or (0 if summary.get("status") == "completed" else 1)
+    # Success is announced only after an actual bound receipt has been saved.
+    status = save_exit(supervisor, status)
     if status == 0:
         message = (
             "[INFO] Sanitizer-backed tests completed; evidence: "
@@ -61,20 +77,13 @@ def finish(supervisor: Supervisor, status: int) -> int:
         message = f"[FAIL] Sanitizer execution failed: {summary.get('error', 'unknown failure')}"
     logging_error = report(message, error=status != 0)
     if logging_error is not None:
-        logging_status = getattr(logging_error, "status", 1)
+        logging_status = getattr(logging_error, "status", 1) or 1
         summary.update(
             status="failed", logging_error=str(logging_error), logging_exit_code=logging_status
         )
         status = status or logging_status
-    summary["exit_code"] = status
-    try:
-        if supervisor.artifacts.is_dir():
-            supervisor.save()
-    except Exception as error:  # noqa: BLE001 - final evidence failure cannot succeed
-        summary["status"] = "failed"
-        status = status or getattr(error, "status", 1)
-        report(f"[FAIL] Sanitizer evidence write failed: {error}", error=True)
-    return status
+    # Recheck after notification, including when the stream itself failed.
+    return save_exit(supervisor, status)
 
 
 def main() -> int:
@@ -98,14 +107,14 @@ def main() -> int:
         supervisor = Supervisor(artifacts, summary)
     except Exception as error:  # noqa: BLE001 - unsafe evidence must never receive writes
         report(f"[FAIL] Sanitizer evidence admission failed: {error}", error=True)
-        return getattr(error, "status", 1)
+        return getattr(error, "status", 1) or 1
     exit_status = 0
     try:
         supervisor.execute(settings, workspace)
         summary["status"] = "completed"
     except Exception as error:  # noqa: BLE001 - failure receipt covers malformed external evidence
         summary["error"] = str(error)
-        exit_status = getattr(error, "status", 1)
+        exit_status = getattr(error, "status", 1) or 1
     return finish(supervisor, exit_status)
 
 
