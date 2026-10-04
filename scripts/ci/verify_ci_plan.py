@@ -669,7 +669,7 @@ def verify(  # noqa: PLR0913, PLR0917 - separate artifacts and protected authori
     if union["raw_diff"]["merge_base"] != plan["merge_base"]:
         raise ValueError("raw diff and plan merge base differ")
     expected, expected_union = prepare(repo, bound, records, producer)
-    if plan != expected or union != load(expected_union):
+    if plan_bytes != encoded(expected) or union != load(expected_union):
         raise ValueError("plan or input union differs from protected Git-object authority")
     if plan["input_union"]["sha256"] != digest(union_bytes):
         raise ValueError("exact input union artifact digest mismatch")

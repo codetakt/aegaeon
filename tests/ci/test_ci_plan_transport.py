@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import base64
 import io
+import json
 import os
 import subprocess
 import sys
@@ -581,6 +582,29 @@ class CiPlanTransportTests(unittest.TestCase):
                 wrong[key] = {}
                 with self.subTest(wrong=key), self.assertRaises(ValueError):
                     transport.verify(self.repo, bound, RECORDS, PRODUCER, data, union, wrong)
+
+    def test_alternate_plan_bytes_reject_even_with_recomputed_digest(self):
+        bound, plan, union = self.prepared()
+        canonical = transport.encoded(plan)
+        alternatives = [
+            canonical + b" ",
+            canonical.rstrip(b"\n"),
+            json.dumps(plan, separators=(",", ":")).encode(),
+            json.dumps(plan, sort_keys=True, indent=4).encode() + b"\n",
+        ]
+        with patch.object(transport, "prepare", return_value=(plan, union)):
+            receipt = transport.verify(
+                self.repo, bound, RECORDS, PRODUCER, canonical, union, self.outputs(canonical)
+            )
+            self.assertEqual(receipt["component_plan_sha256"], transport.digest(canonical))
+            for data in alternatives:
+                with self.subTest(serialization=data[:40]):
+                    self.assertNotEqual(data, canonical)
+                    self.assertEqual(transport.load(data), plan)
+                    outputs = self.outputs(data)
+                    self.assertEqual(outputs["component_plan_sha256"], transport.digest(data))
+                    with self.assertRaisesRegex(ValueError, "protected Git-object authority"):
+                        transport.verify(self.repo, bound, RECORDS, PRODUCER, data, union, outputs)
 
     def test_full_plan_mutations_reject_even_with_recomputed_digest(self):
         bound, valid, union = self.prepared()
