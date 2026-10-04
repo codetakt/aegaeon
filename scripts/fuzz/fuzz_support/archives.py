@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -176,7 +177,7 @@ def archive_retention_plan(
                 with os.fdopen(descriptor, "rb", closefd=False) as stream:
                     try:
                         verify_archive_stream(stream, directory / name)
-                    except ValueError:
+                    except (ValueError, gzip.BadGzipFile):
                         # Unsupported or incomplete older bytes remain raw evidence.
                         continue
                 digest = descriptor_content_digest(descriptor)

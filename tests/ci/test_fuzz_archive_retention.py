@@ -34,6 +34,9 @@ if case=='unsupported':
     unsupported[alias.name]='hardlink'
     malformed=output/'19980105T000000000000Z.tar.gz';malformed.write_bytes(b'not an archive')
     unsupported[malformed.name]='malformed'
+    corrupt=output/'19980106T000000000000Z.tar.gz'
+    corrupt_bytes=bytearray(next(iter(prior.values())));corrupt_bytes[-8]^=1
+    corrupt.write_bytes(corrupt_bytes);unsupported[corrupt.name]='corrupt-gzip'
     unmanaged=output/'unmanaged.tar.gz';unmanaged.write_bytes(b'unmanaged evidence')
     unsupported[unmanaged.name]='unmanaged'
 if case=='scan-current-change':
@@ -103,6 +106,7 @@ for name,kind in unsupported.items():
     elif kind=='directory':ok=p.is_dir()
     elif kind=='fifo':ok=__import__('stat').S_ISFIFO(p.lstat().st_mode)
     elif kind=='hardlink':ok=p.stat().st_ino==sentinel.stat().st_ino
+    elif kind=='corrupt-gzip':ok=p.read_bytes()==corrupt_bytes
     else:ok=p.read_bytes()==(b'not an archive' if kind=='malformed' else b'unmanaged evidence')
     preserved[name]=ok
 print(json.dumps({'case':case,'failed':failed,'published':published,'valid':valid,
