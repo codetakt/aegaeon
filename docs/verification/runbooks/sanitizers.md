@@ -72,8 +72,10 @@ The security-suite dispatcher resolves `SANITIZER_TARGET_DIR` before removing
 transient outputs after the sanitizer stage. Cleanup rejects the workspace
 itself and every workspace ancestor, including `/`, even through symlinks or
 `..` aliases. It also rejects targets equal to, inside, or containing the
-resolved security artifact directory (`SECURITY_ARTIFACT_DIR`); the suite writes
-sanitizer evidence to its `sanitizers` subdirectory. A rejected cleanup fails a
+resolved current artifact or retained history directory (`SECURITY_ARTIFACT_DIR`
+or `SECURITY_HISTORY_DIR`). The same check applies during bound wrapper re-entry;
+history paths are normalized before logging or stage execution. The suite writes
+sanitizer evidence to its current artifact `sanitizers` subdirectory. A rejected cleanup fails a
 successful stage; an earlier child failure retains its original exit code.
 Custom output directories must resolve outside these protected locations.
 

@@ -439,6 +439,68 @@ class SanitizerDispatchTests(unittest.TestCase):
                     )
                     self.assertEqual(old.read_text(), retained["sanitizers/run-summary.json"])
 
+    def test_history_overlap_refuses_launch_and_cleanup_without_history_loss(self):
+        for aggregate in (False, True):
+            for relation in ("equal", "ancestor", "descendant", "normalized", "relative", "alias"):
+                with self.subTest(aggregate=aggregate, relation=relation):
+                    fixture = self.fixture()
+                    history = (
+                        (fixture.root if relation == "relative" else fixture.root.parent)
+                        / "retained-history"
+                        / "runs\n"
+                    )
+                    history.mkdir(parents=True)
+                    retained = history / "previous-run.json"
+                    raw = b'{"status":"retained","run":"prior"}\n'
+                    retained.write_bytes(raw)
+                    history_route = str(history)
+                    target = {
+                        "equal": str(history),
+                        "ancestor": str(history.parent),
+                        "descendant": str(history / "child"),
+                        "normalized": str(history) + "/missing/..",
+                        "relative": os.path.relpath(history, fixture.root),
+                        "alias": str(history),
+                    }[relation]
+                    if relation == "relative":
+                        history_route = os.path.relpath(history, fixture.root)
+                    elif relation == "alias":
+                        alias = fixture.root / "history-alias"
+                        alias.symlink_to(history, target_is_directory=True)
+                        history_route = str(alias)
+                    result = self.run_suite(
+                        fixture,
+                        aggregate=aggregate,
+                        SECURITY_HISTORY_DIR=history_route,
+                        SANITIZER_TARGET_DIR=target,
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                    self.assertEqual(self.calls(fixture, "cleanup"), [])
+                    self.assertEqual(retained.read_bytes(), raw)
+                    self.assertEqual(list(history.iterdir()), [retained])
+
+    def test_history_prefix_sibling_allows_cleanup_and_preserves_history(self):
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                fixture = self.fixture()
+                history = fixture.root / "history"
+                history.mkdir()
+                retained = history / "previous-run.json"
+                retained.write_bytes(b"retained history\n")
+                target = history.with_name("history-build")
+                result = self.run_suite(
+                    fixture,
+                    aggregate=aggregate,
+                    SECURITY_HISTORY_DIR=os.path.relpath(history, fixture.root),
+                    SANITIZER_TARGET_DIR=str(target),
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(len(self.calls(fixture, "sanitizer")), 1)
+                self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
+                self.assertFalse(target.exists())
+                self.assertEqual(retained.read_bytes(), b"retained history\n")
+
     def test_sibling_target_cleanup_preserves_retained_evidence(self):
         for aggregate in (False, True):
             for child in (0, 71):
