@@ -149,7 +149,10 @@ class SanitizerInterpreterCompositionTests(unittest.TestCase):
                     target = self.prepared_target(fixture)
                     result, operations, bootstraps = self.run_composed(fixture, entry, outer)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assertEqual(operations, ["open-exec-bound", "validate"])
+                    self.assertEqual(
+                        operations,
+                        ["open-exec-bound", "validate-bound", "validate", "validate-bound"],
+                    )
                     self.assertEqual(bootstraps, 3 if outer else 2)
                     self.assertEqual(len(self.calls(fixture, "sanitizer")), 1)
                     self.assertEqual(len(self.calls(fixture, "cleanup")), 1)

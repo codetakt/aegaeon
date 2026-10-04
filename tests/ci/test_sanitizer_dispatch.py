@@ -247,10 +247,15 @@ if sys.argv[1:2] == ['vet']:
 
 
 class SanitizerDispatchTests(unittest.TestCase):
-    def fixture(self):
+    def fixture(self, *, full_fuzz=False, intercept_tee=True):
         fixture = fuzz_fixture.SecurityFuzzTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
+        # Individual sanitizer controls retain aggregate dispatch with one local
+        # fuzz target; dedicated composition controls require all seven.
+        fixture.env["FUZZ_TARGETS"] = " ".join(
+            fuzz_fixture.TARGETS if full_fuzz else fuzz_fixture.TARGETS[:1]
+        )
         # Aggregate dispatch runs fuzz preflight with controlled fixture tools.
         # Remove inherited native target overrides, retaining the fixture's
         # explicit CC/CXX/AR and owned CARGO_TARGET_DIR from SecurityFuzzFixture.
@@ -275,7 +280,8 @@ class SanitizerDispatchTests(unittest.TestCase):
         fixture.install("nix", NIX)
         fixture.install("python3", PYTHON)
         fixture.install("rm", "ACTUAL_RM = " + repr(shutil.which("rm")) + "\n" + RM)
-        fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
+        if intercept_tee:
+            fixture.install("tee", "ACTUAL_TEE = " + repr(shutil.which("tee")) + "\n" + TEE)
         fixture.install("mkdir", "ACTUAL_MKDIR = " + repr(shutil.which("mkdir")) + "\n" + MKDIR)
         fixture.install("cargo", VET + fuzz_fixture.CARGO)
         return fixture
@@ -284,7 +290,7 @@ class SanitizerDispatchTests(unittest.TestCase):
         args = [] if aggregate else ["--stage", "sanitizers"]
         if stages is not None:
             args = [value for stage in stages for value in ("--stage", stage)]
-        return subprocess.run(  # noqa: S603 - real wrapper with controlled fixture tools
+        result = subprocess.run(  # noqa: S603 - real wrapper with controlled fixture tools
             [
                 str(fixture.bin / "bash"),
                 str(fixture.root / "scripts/security/run_security_suite.sh"),
@@ -297,6 +303,23 @@ class SanitizerDispatchTests(unittest.TestCase):
             timeout=30,
             check=False,
         )
+        if aggregate:
+            evidence = fixture.artifacts
+            if evidence.is_symlink():
+                evidence = evidence.with_name(evidence.name + ".held")
+            summary = evidence / "fuzz/run_summary.json"
+            selected = fixture.env["FUZZ_TARGETS"].split()
+            if result.returncode == 0 or selected == list(fuzz_fixture.TARGETS):
+                self.assertTrue(summary.is_file(), result.stdout + result.stderr)
+            if summary.is_file():
+                execution = json.loads(summary.read_text())["execution"]
+                self.assertEqual(execution["required_targets"], list(fuzz_fixture.TARGETS))
+                self.assertEqual(execution["selected_targets"], selected)
+                self.assertEqual(
+                    execution["coverage"],
+                    "full" if selected == list(fuzz_fixture.TARGETS) else "local-subset",
+                )
+        return result
 
     def calls(self, fixture, kind):
         path = fixture.root / "dispatch-calls.jsonl"
@@ -488,7 +511,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                 "-custom",
             ):
                 with self.subTest(aggregate=aggregate, setting=setting):
-                    fixture = self.fixture()
+                    fixture = self.fixture(intercept_tee=False)
                     target = self.target_directory(fixture, setting)
                     default = fixture.root / "target/sanitizers"
                     if target and target != "target/sanitizers":
@@ -543,7 +566,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                     with self.subTest(
                         aggregate=aggregate, setting=setting, child=child, cleanup=cleanup
                     ):
-                        fixture = self.fixture()
+                        fixture = self.fixture(intercept_tee=False)
                         target = self.target_directory(fixture, setting)
                         result = self.run_suite(
                             fixture,
@@ -589,7 +612,7 @@ class SanitizerDispatchTests(unittest.TestCase):
     def test_selected_and_aggregate_success_preserve_artifacts_after_cleanup(self):
         for aggregate in (False, True):
             with self.subTest(aggregate=aggregate):
-                fixture = self.fixture()
+                fixture = self.fixture(full_fuzz=True)
                 result = self.run_suite(fixture, aggregate=aggregate)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(self.receipt(fixture)["exit_code"], 0)
@@ -1298,7 +1321,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
 
     def test_aggregate_runs_sanitizers_after_fuzz_failure_and_preserves_both_results(self):
-        fixture = self.fixture()
+        fixture = self.fixture(full_fuzz=True)
         result = self.run_suite(
             fixture,
             aggregate=True,
@@ -1317,7 +1340,7 @@ class SanitizerDispatchTests(unittest.TestCase):
         self.assertTrue((fixture.artifacts / "fuzz/collection.ok").is_file())
 
     def test_optional_vet_and_sbom_findings_remain_non_blocking(self):
-        fixture = self.fixture()
+        fixture = self.fixture(full_fuzz=True)
         result = self.run_suite(fixture, aggregate=True, VET_EXIT="37", SBOM_EXIT="43")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.receipt(fixture)["exit_code"], 0)

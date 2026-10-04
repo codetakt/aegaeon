@@ -1084,12 +1084,71 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 self.assert_source_boundary_rejected(self.root / "crates/server", variable)
 
     def test_independent_source_inventory_rejects_equal_and_descendant_outputs(self):
-        for relative in PROTECTED_SOURCE_INPUTS:
-            for suffix in ("", "nested output\n"):
-                route = self.root / relative / suffix
-                for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
-                    with self.subTest(relative=relative, suffix=suffix, variable=variable):
-                        self.assert_source_boundary_rejected(route, variable)
+        cases = [
+            (relative, suffix, variable)
+            for relative in PROTECTED_SOURCE_INPUTS
+            for suffix in ("", "nested output\n")
+            for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR")
+        ]
+        inputs = b"".join(
+            b"\0".join(
+                (
+                    str(index).encode(),
+                    variable.encode(),
+                    str(self.root / relative / suffix).encode(),
+                )
+            )
+            + b"\0"
+            for index, (relative, suffix, variable) in enumerate(cases)
+        )
+        before = self.boundary_snapshot()
+        result = subprocess.run(  # noqa: S603 - exact shared guards with complete independent cases
+            [
+                shutil.which("bash"),
+                "-c",
+                r"""
+set -euo pipefail
+source "$1"
+workspace=$2
+fail() { diagnostic=$*; }
+while IFS= read -r -d '' case_id; do
+    IFS= read -r -d '' variable && IFS= read -r -d '' route || exit 2
+    case "$variable" in
+        SANITIZER_ARTIFACT_DIR|SANITIZER_TARGET_DIR) ;;
+        *) exit 2 ;;
+    esac
+    diagnostic=""
+    if preflight_route "$route" && sanitizer_validate_output "$PREFLIGHT_ROUTE" "$workspace"; then
+        status=0
+    else
+        status=$?
+    fi
+    printf '%s\0%s\0%s\0' "$case_id" "$status" "$diagnostic"
+done
+""",
+                "source-boundary-fixture",
+                str(PATH_HELPER),
+                str(self.root),
+            ],
+            cwd=self.root,
+            env={"PATH": os.environ["PATH"]},
+            input=inputs,
+            capture_output=True,
+            check=False,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under Python -O
+        self.assertEqual(result.stderr, b"")  # noqa: PT009 - strict batch protocol
+        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - all source bytes unchanged
+        fields = result.stdout.split(b"\0")
+        self.assertEqual(fields.pop(), b"")  # noqa: PT009 - reject missing final frame
+        self.assertEqual(len(fields), 3 * len(cases))  # noqa: PT009 - exact complete inventory
+        for index, (relative, suffix, variable) in enumerate(cases):
+            with self.subTest(relative=relative, suffix=suffix, variable=variable):
+                case_id, status, diagnostic = fields[3 * index : 3 * index + 3]
+                self.assertEqual(case_id, str(index).encode())  # noqa: PT009 - reject duplicate/reordered IDs
+                self.assertEqual(status, b"1")  # noqa: PT009 - exact rejection status
+                self.assertIn(b"overlaps protected source inputs", diagnostic)  # noqa: PT009 - exact guard
 
     def test_tracked_artifact_ancestors_are_rejected_before_writes(self):
         for relative in (
@@ -1391,17 +1450,19 @@ def snapshot(directory):
         "mode": stat.S_IMODE(path.stat().st_mode),
         "bytes": path.read_bytes().hex() if path.is_file() else None,
     }} for path in [directory, *sorted(directory.rglob("*"))]}}
-record = {{"binding": os.environ.get("SANITIZER_EVIDENCE_BINDING"),
-           "argv": sys.argv[1:]}}
-if os.environ["MODEL_REEXEC"] == "bound-replacement":
-    record["original"] = snapshot(evidence)
-    evidence.rename(root / "held-evidence")
-    evidence.mkdir()
-    (evidence / "run-summary.json").write_bytes(b'{{"status":"completed"}}\\n')
-    (evidence / "retained.stdout.log").write_bytes(b"replacement raw bytes\\n")
-    (evidence / "sentinel").write_bytes(b"replacement sentinel\\n")
-    record["replacement"] = snapshot(evidence)
-(root / "reexec-record.json").write_text(json.dumps(record))
+if (sys.argv[1:2] == [str(root / "scripts/security/run_security_suite.sh")]
+        and "SANITIZER_SECURITY_LOG_FD" in os.environ):
+    record = {{"binding": os.environ.get("SANITIZER_EVIDENCE_BINDING"),
+               "argv": sys.argv[1:]}}
+    if os.environ["MODEL_REEXEC"] == "bound-replacement":
+        record["original"] = snapshot(evidence)
+        evidence.rename(root / "held-evidence")
+        evidence.mkdir()
+        (evidence / "run-summary.json").write_bytes(b'{{"status":"completed"}}\\n')
+        (evidence / "retained.stdout.log").write_bytes(b"replacement raw bytes\\n")
+        (evidence / "sentinel").write_bytes(b"replacement sentinel\\n")
+        record["replacement"] = snapshot(evidence)
+    (root / "reexec-record.json").write_text(json.dumps(record))
 os.execv({real_bash!r}, [{real_bash!r}, *sys.argv[1:]])
 """,
                 )

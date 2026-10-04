@@ -45,7 +45,7 @@ class SanitizerTargetReceiptTests(unittest.TestCase):
         # All filesystem operations are inert. No literal system directory opens
         # or recursive removal are delegated by these ownership models.
         with (
-            patch.object(sys, "argv", ["binding", operation, value]),
+            patch.object(sys, "argv", ["binding", operation, value, "", ""]),
             patch("os.open", side_effect=[10, 11, 12]),
             patch("os.fstat", side_effect=lambda descriptor: metadata[descriptor]),
             patch("os.mkdir") as mkdir,
