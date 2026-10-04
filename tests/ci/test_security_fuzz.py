@@ -654,6 +654,48 @@ class SecurityFuzzTests(SecurityFuzzFixture):
 
 
 class SecurityFuzzRecoveryTests(SecurityFuzzFixture):
+    def test_recovery_validates_both_collection_destinations_before_any_write(self):
+        for name in ("collection.ok", "collection-summary.json"):
+            with self.subTest(destination=name):
+                shutil.rmtree(self.artifacts, ignore_errors=True)
+                self.install_helper_hooks(
+                    {
+                        "--cleanup-result": "raise SystemExit(29)",
+                        "--restore-cleanup": (
+                            "directory = Path(sys.argv[sys.argv.index('--restore-cleanup') + 1])\n"
+                            f"name = {name!r}\n"
+                            "external = ROOT.parent / ('external-' + name)\n"
+                            "external.write_bytes(b'external receipt preserved')\n"
+                            "other = 'collection-summary.json' if name == 'collection.ok' "
+                            "else 'collection.ok'\n"
+                            "(directory / other).write_bytes(b'no partial restoration')\n"
+                            "(directory / name).unlink()\n"
+                            "os.link(external, directory / name)\n"
+                        ),
+                    }
+                )
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                external = self.root.parent / ("external-" + name)
+                self.assertEqual(external.read_bytes(), b"external receipt preserved")
+                other = "collection-summary.json" if name == "collection.ok" else "collection.ok"
+                self.assertEqual(
+                    (self.artifacts / "fuzz" / other).read_bytes(), b"no partial restoration"
+                )
+                self.assertIn("fuzz evidence restoration failed", result.stderr)
+                reports = list(
+                    (self.artifacts / "fuzz/cleanup-recovery").glob("*/recovery-result-*.json")
+                )
+                self.assertEqual(len(reports), 1)
+                report = json.loads(reports[0].read_text())
+                self.assertEqual(report["status"], "failed")
+                self.assertIn("evidence_error", report)
+                self.assertEqual(report["cleanup_exit_code"], 0)
+                self.assertTrue((reports[0].parent / "backup-ready.json").is_file())
+                self.assertEqual(
+                    (self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input"
+                )
+
     def test_empty_long_aggregate_with_explicit_overrides_fails_before_build(self):
         for aggregate in (False, True):
             with self.subTest(aggregate=aggregate):
@@ -1607,6 +1649,82 @@ if __name__ == "__main__":
 
 
 class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
+    def test_source_inventory_rejects_external_hardlink_and_binds_regular_mode_bytes(self):
+        path = self.root / "crates/server/src/lib.rs"
+        original = path.read_bytes()
+        original_mode = path.stat().st_mode & 0o777
+        code = (
+            "import runpy,sys,json\nh=runpy.run_path(sys.argv[1])\n"
+            "value=h['local_source_inventory'](set(),h['kani_output_pointer']())\n"
+            "print(json.dumps(value['crates/server/src/lib.rs']))\n"
+        )
+        result = self.helper_python(code)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {"type": "file", "mode": original_mode, "sha256": hashlib.sha256(original).hexdigest()},
+        )
+        external = self.root.parent / "external-source"
+        external.write_bytes(b"external source preserved")
+        path.unlink()
+        os.link(external, path)
+        result = self.helper_python(code)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stable, unaliased regular file", result.stderr)
+        self.assertEqual(external.read_bytes(), b"external source preserved")
+        self.assertEqual(self.calls(), [])
+
+    def test_source_inventory_rejects_open_and_read_replacements(self):
+        path = self.root / "crates/server/src/lib.rs"
+        original = path.read_bytes()
+        external = self.root.parent / "external-source"
+        external.write_bytes(b"external source preserved")
+        for timing in ("open", "read"):
+            for replacement in ("file", "symlink"):
+                with self.subTest(timing=timing, replacement=replacement):
+                    path.unlink()
+                    path.write_bytes(original)
+                    code = (
+                        "import runpy,sys,os\nfrom pathlib import Path\n"
+                        "h=runpy.run_path(sys.argv[1])\n"
+                        "victim=h['ROOT']/'crates/server/src/lib.rs'\n"
+                        f"external=Path({str(external)!r})\n"
+                        f"timing={timing!r}\nreplacement={replacement!r}\n"
+                        "def swap():\n"
+                        " if replacement=='symlink':\n"
+                        "  victim.unlink();victim.symlink_to(external)\n"
+                        " else:\n"
+                        "  pending=external.parent/'replacement-source'\n"
+                        "  pending.write_bytes(b'replacement regular source')\n"
+                        "  os.replace(pending,victim)\n"
+                        "original_open=os.open\noriginal_fdopen=os.fdopen\n"
+                        "def controlled_open(route,*args,**kwargs):\n"
+                        " if Path(route)==victim and timing=='open': swap()\n"
+                        " return original_open(route,*args,**kwargs)\n"
+                        "class Reader:\n"
+                        " def __init__(self,stream): self.stream=stream;self.changed=False\n"
+                        " def __enter__(self): return self\n"
+                        " def __exit__(self,*args): return self.stream.__exit__(*args)\n"
+                        " def fileno(self): return self.stream.fileno()\n"
+                        " def read(self,*args):\n"
+                        "  content=self.stream.read(*args)\n"
+                        "  if content and not self.changed:\n"
+                        "   self.changed=True;swap()\n"
+                        "  return content\n"
+                        "def controlled_fdopen(fd,*args,**kwargs):\n"
+                        " stream=original_fdopen(fd,*args,**kwargs)\n"
+                        " info=os.fstat(fd);expected=victim.lstat()\n"
+                        " if timing=='read' and (info.st_dev,info.st_ino)=="
+                        "(expected.st_dev,expected.st_ino): return Reader(stream)\n"
+                        " return stream\n"
+                        "os.open=controlled_open;os.fdopen=controlled_fdopen\n"
+                        "h['local_source_inventory'](set(),h['kani_output_pointer']())\n"
+                    )
+                    result = self.helper_python(code)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(external.read_bytes(), b"external source preserved")
+                    self.assertEqual(self.calls(), [])
+
     def helper_python(self, code, **environment):
         return subprocess.run(  # noqa: S603 - isolated controlled helper and test code
             [sys.executable, "-c", code, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
@@ -2150,7 +2268,13 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
             with self.subTest(name=name):
                 result = self.helper_python(code, **{name: "crates/kani-harness/kani"})
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("build environment references", result.stderr)
+                if name == "LOCAL_TOOL":
+                    self.assertIn("build environment references", result.stderr)
+                else:
+                    self.assertIn(
+                        f"inherited {name} override is not supported for fuzz execution or cleanup",
+                        result.stderr,
+                    )
 
     def test_kani_pointer_new_dependency_or_configuration_reference_rejects(self):
         code = (

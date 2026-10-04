@@ -101,10 +101,19 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         )
 
     def seed(self):
-        paths = ["target", "fuzz/target", "fuzz/corpus", "fuzz/corpus_archive", "fuzz/artifacts"]
+        paths = [
+            "target",
+            "fuzz/target",
+            "fuzz/corpus",
+            "fuzz/corpus_archive",
+            "fuzz/artifacts",
+            "target/cargo-home",
+            "target/sibling-evidence",
+            "target/git-metadata",
+        ]
         for path in paths:
             directory = self.root / path
-            directory.mkdir(parents=True)
+            directory.mkdir(parents=True, exist_ok=True)
             (directory / "input").write_text("preserve incomplete evidence")
         return paths
 
@@ -112,9 +121,7 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         paths = self.seed()
         process = self.execute("Cleanup transient outputs", outcome="success")
         self.assertEqual(process.returncode, 0, process.stderr)
-        for path in paths[:2]:
-            self.assertFalse((self.root / path).exists())
-        for path in paths[2:]:
+        for path in paths:
             self.assertEqual(
                 (self.root / path / "input").read_text(), "preserve incomplete evidence"
             )
@@ -128,7 +135,9 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertTrue(receipt.is_file())
         for path in paths:
-            self.assertFalse((self.root / path).exists())
+            self.assertEqual(
+                (self.root / path / "input").read_text(), "preserve incomplete evidence"
+            )
 
     def test_failed_cancelled_and_skipped_stages_preserve_raw_inputs_with_stale_receipt(self):
         paths = self.seed()
@@ -139,9 +148,7 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
             with self.subTest(outcome=outcome):
                 process = self.execute("Cleanup transient outputs", outcome=outcome)
                 self.assertEqual(process.returncode, 0, process.stderr)
-                for path in paths[:2]:
-                    self.assertFalse((self.root / path).exists())
-                for path in paths[2:]:
+                for path in paths:
                     self.assertEqual(
                         (self.root / path / "input").read_text(),
                         "preserve incomplete evidence",
@@ -159,6 +166,47 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         for path in paths:
             self.assertFalse((self.root / path).exists())
+
+    def test_fuzz_outer_cleanup_never_invokes_rm_for_any_outcome_or_receipt(self):
+        remover = self.root / "tools/rm"
+        remover.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json,pathlib,sys\n"
+            "log=pathlib.Path(__file__).parent.parent/'rm-calls.jsonl'\n"
+            "args=['absolute-cache/'+pathlib.Path(name).parent.name+'/'+"
+            "pathlib.Path(name).name if pathlib.Path(name).is_absolute() else name "
+            "for name in sys.argv[1:]]\n"
+            "with log.open('a') as stream: stream.write(json.dumps(args)+'\\n')\n"
+        )
+        remover.chmod(0o755)
+        calls = self.root / "rm-calls.jsonl"
+        receipt = self.root / "artifacts/security/latest/fuzz/collection.ok"
+        receipt.parent.mkdir(parents=True)
+        for outcome in ("success", "failure", "cancelled", "skipped"):
+            for state in ("absent", "current", "stale"):
+                with self.subTest(outcome=outcome, receipt=state):
+                    receipt.unlink(missing_ok=True)
+                    if state != "absent":
+                        receipt.write_text(state + " receipt")
+                    result = self.execute("Cleanup transient outputs", outcome=outcome)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertFalse(calls.exists())
+                    if state != "absent":
+                        self.assertEqual(receipt.read_text(), state + " receipt")
+        result = self.execute("Cleanup transient outputs", stage="runtime-tests")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            [json.loads(line) for line in calls.read_text().splitlines()],
+            [
+                ["-rf", "target", "fuzz/target"],
+                ["-rf", "fuzz/corpus", "fuzz/corpus_archive", "fuzz/artifacts"],
+                [
+                    "-rf",
+                    "absolute-cache/.cache/trivy",
+                    "absolute-cache/.cache/grype",
+                ],
+            ],
+        )
 
     def test_upload_includes_raw_fallback_and_existing_evidence(self):
         expected = {

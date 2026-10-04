@@ -656,16 +656,21 @@ def local_source_inventory(
             if path in excluded:
                 continue
             relative = path.relative_to(ROOT).as_posix()
-            if path.is_symlink():
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
                 if relative != KANI_OUTPUT_POINTER:
                     invalid(f"symlink or external local source input is not supported: {relative}")
                 inventory[relative] = pointer
                 continue
-            mode = stat.S_IMODE(path.stat().st_mode)
-            if path.is_dir():
+            mode = stat.S_IMODE(info.st_mode)
+            if stat.S_ISDIR(info.st_mode):
                 inventory[relative] = {"type": "directory", "mode": mode}
-            elif path.is_file():
-                inventory[relative] = {"type": "file", "mode": mode, "sha256": digest(path)}
+            elif stat.S_ISREG(info.st_mode):
+                inventory[relative] = {
+                    "type": "file",
+                    "mode": mode,
+                    "sha256": evidence_digest(path, info),
+                }
             else:
                 invalid(f"special local source input is not supported: {relative}")
     return inventory
@@ -1572,6 +1577,8 @@ def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -
         for name in RECOVERY_EVIDENCE_NAMES:
             if (directory / name).is_symlink():
                 invalid("fuzz evidence restoration refuses existing symlink traversal")
+        for name in ("collection.ok", "collection-summary.json"):
+            validate_regular_destination(directory / name)
         for name in ("collection.ok", "collection-summary.json"):
             (directory / name).write_bytes(snapshots[name])
         write_json(directory / "execution.json", data)
