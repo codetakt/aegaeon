@@ -1857,35 +1857,54 @@ def upload_inventory() -> dict:
     return inventories
 
 
-def add_evidence_entry(tar: tarfile.TarFile, path: Path, arcname: str) -> None:
+class ArchiveEvidenceReader:
+    def __init__(self, content: BinaryIO) -> None:
+        self.content = content
+        self.sha256 = hashlib.sha256()
+        self.size = 0
+
+    def read(self, size: int) -> bytes:
+        block = self.content.read(size)
+        self.sha256.update(block)
+        self.size += len(block)
+        return block
+
+
+def add_evidence_entry(tar: tarfile.TarFile, path: Path, arcname: str, expected: dict) -> None:
     before = path.lstat()
-    if stat.S_ISREG(before.st_mode):
+    if expected["type"] == "file" and stat.S_ISREG(before.st_mode):
         with open_evidence_file(path, before) as content:
-            info = tar.gettarinfo(str(path), arcname=arcname)
+            info = tar.gettarinfo(str(path), arcname=arcname, fileobj=content)
             if not info.isfile() or info.size != os.fstat(content.fileno()).st_size:
                 invalid("upload entry changed before archiving")
-            tar.addfile(info, content)
+            archived = ArchiveEvidenceReader(content)
+            tar.addfile(info, archived)
+            if archived.size != info.size or archived.sha256.hexdigest() != expected["sha256"]:
+                invalid("archive entry content differs from expected inventory")
     else:
         info = tar.gettarinfo(str(path), arcname=arcname)
-        if (stat.S_ISDIR(before.st_mode) and info.isdir()) or (
-            stat.S_ISLNK(before.st_mode) and info.issym()
+        if (expected["type"] == "directory" and stat.S_ISDIR(before.st_mode) and info.isdir()) or (
+            expected["type"] == "symlink"
+            and stat.S_ISLNK(before.st_mode)
+            and info.issym()
+            and info.linkname == expected["target"]
         ):
             tar.addfile(info)
         else:
-            invalid("upload encountered a changed or special entry")
+            invalid("archive entry type or literal link differs from expected inventory")
 
 
 def archive_raw_tree(tar: tarfile.TarFile, source: Path, arcname: str) -> None:
     inventory = raw_inventory(source)
-    add_evidence_entry(tar, source, arcname)
-    for entry in inventory:
-        add_evidence_entry(tar, source / entry, arcname + "/" + entry)
+    add_evidence_entry(tar, source, arcname, {"type": "directory"})
+    for entry, expected in inventory.items():
+        add_evidence_entry(tar, source / entry, arcname + "/" + entry, expected)
     if raw_inventory(source) != inventory:
         invalid("raw evidence changed during archiving")
 
 
-def add_upload_entry(tar: tarfile.TarFile, path: Path) -> None:
-    add_evidence_entry(tar, path, path.relative_to(ROOT).as_posix())
+def add_upload_entry(tar: tarfile.TarFile, path: Path, expected: dict) -> None:
+    add_evidence_entry(tar, path, path.relative_to(ROOT).as_posix(), expected)
 
 
 def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
@@ -1894,10 +1913,10 @@ def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
             if not record["present"]:
                 continue
             source = ROOT / name
-            add_upload_entry(tar, source)
+            add_upload_entry(tar, source, record)
             if record["type"] == "directory":
-                for entry in record["entries"]:
-                    add_upload_entry(tar, source / entry)
+                for entry, expected in record["entries"].items():
+                    add_upload_entry(tar, source / entry, expected)
 
 
 def package_upload(directory: Path) -> None:

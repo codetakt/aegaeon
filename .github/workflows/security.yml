@@ -174,7 +174,7 @@ jobs:
         env:
           SECURITY_UPLOAD_STAGE: ${{ matrix.stage }}
           SECURITY_UPLOAD_OUTCOME: ${{ steps.run_security_stage.outcome }}
-        run: python3 scripts/fuzz/manage_fuzz_corpus.py --package-upload artifacts/security-upload
+        run: python3 -I scripts/fuzz/manage_fuzz_corpus.py --package-upload artifacts/security-upload
 
       - name: Upload security metrics
         if: always() && steps.package_security_upload.outcome == 'success' && matrix.stage != 'sbom'
