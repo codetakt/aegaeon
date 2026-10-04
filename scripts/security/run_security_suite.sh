@@ -173,6 +173,22 @@ stage_enabled() {
 	return 1
 }
 
+# A resumed invocation already owns a target before any aggregate preflight or
+# shared-log route validation. Recover it through the fixed original helper.
+if stage_enabled "sanitizers"; then
+	sanitizer_recovery_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
+fi
+sanitizer_preparation_failure() {
+	local primary_status=$1
+	if stage_enabled "sanitizers" && [[ -n ${SANITIZER_EVIDENCE_BINDING:-} && -n ${SANITIZER_CLEANUP_BINDING:-} ]]; then
+		"$security_function_python" -I "$sanitizer_recovery_root/scripts/sanitizers/open_security_log.py" recover-bound \
+			"${SANITIZER_ARTIFACT_DIR:-}" "$SANITIZER_EVIDENCE_BINDING" \
+			"${SANITIZER_VALIDATED_TARGET:-}" "$SANITIZER_CLEANUP_BINDING" "$primary_status" || true
+	fi
+	SANITIZER_CLEANUP_BINDING=""
+	return "$primary_status"
+}
+
 # Clear only the inherited WASI compiler values handled by the native fallback.
 # Preflight must validate the same effective inputs that native builds will use.
 if [[ ${CC:-} == *"wasm32-unknown-wasi"* ]]; then
@@ -195,7 +211,7 @@ if stage_enabled "fuzz"; then
 	# Resolve the physical script route before any override-influenced Git call
 	# or prior-receipt invalidation. Other stages retain their existing dispatch.
 	fuzz_guard_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
-	"$security_function_python" -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
+	"$security_function_python" -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || { sanitizer_preparation_failure 1 || exit $?; }
 fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -215,20 +231,20 @@ if stage_enabled "fuzz"; then
 	# Use the same suite-owned collection destinations for every helper action.
 	# An inherited helper-only route must not change the source exclusions midway.
 	export FUZZ_RUN_ARTIFACT_DIR="$fuzz_receipt_dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR"
-	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || { sanitizer_preparation_failure 1 || exit $?; }
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
 		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
-		exit 1
+		sanitizer_preparation_failure 1 || exit $?
 	fi
-	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || { sanitizer_preparation_failure 1 || exit $?; }
 fi
 
 # Only create the already validated caller-owned Cargo home after invalidation.
 if [[ -n ${CARGO_HOME:-} ]]; then
-	mkdir -p "$CARGO_HOME"
+	mkdir -p "$CARGO_HOME" || { sanitizer_preparation_failure $? || exit $?; }
 fi
-cd "$ROOT"
+cd "$ROOT" || { sanitizer_preparation_failure $? || exit $?; }
 
 # The handled WASI values were cleared before preflight. Complete the existing
 # native-tool fallback only after validation and receipt invalidation.
@@ -250,11 +266,15 @@ if stage_enabled "sanitizers"; then
 	source "$ROOT/scripts/sanitizers/sanitizer_paths.sh"
 	# Shared validators report through the wrapper's existing diagnostics.
 	fail() { echo "[security] $*" >&2; }
-	preflight_route "$ARTIFACT_BASE" || exit 1
+	# Caller-only cleanup fields cannot survive into a fresh sanitizer attempt.
+	if [[ -z ${SANITIZER_EVIDENCE_BINDING:-} ]]; then
+		SANITIZER_CLEANUP_BINDING=""
+	fi
+	preflight_route "$ARTIFACT_BASE" || { sanitizer_preparation_failure 1 || exit $?; }
 	ARTIFACT_BASE=$PREFLIGHT_ROUTE
-	sanitizer_validate_output "$ARTIFACT_BASE" "$ROOT" || exit 1
+	sanitizer_validate_output "$ARTIFACT_BASE" "$ROOT" || { sanitizer_preparation_failure 1 || exit $?; }
 	LOG_DIR="$ARTIFACT_BASE/summary"
-	preflight_route "$LOG_DIR" || exit 1
+	preflight_route "$LOG_DIR" || { sanitizer_preparation_failure 1 || exit $?; }
 	LOG_DIR=$PREFLIGHT_ROUTE
 	LOG_FILE="$LOG_DIR/security.log"
 fi
@@ -273,15 +293,43 @@ cleanup_fuzz_outputs() {
 	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --remove-cleanup "$1" "$2"
 }
 
+sanitizer_check_cargo_flags() {
+	# Retire stale success before rejecting flags, but never initialize target outputs.
+	if sanitizer_validate_cargo_flags "${SANITIZER_CARGO_FLAGS:-}" "${SANITIZER_BUILD_EXTRA_ARGS:-}"; then
+		:
+	else
+		local flag_status=$?
+		# Bound attempts record preparation failure only through their original
+		# initialization snapshot in sanitizer_preparation_failure.
+		if [[ -z ${SANITIZER_CLEANUP_BINDING:-} ]] && sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING"; then
+			preflight_receipt cargo-flags "$flag_status" || return 1
+		fi
+		return "$flag_status"
+	fi
+}
+
 prepare_sanitizer_attempt() {
+	local initial_summary
 	if [[ -n ${SANITIZER_EVIDENCE_BINDING:-} ]]; then
 		# A later attempt must not rebind a replaced evidence namespace.
-		if [[ ${SANITIZER_EVIDENCE_ROUTE_CHANGED:-0} -eq 1 ]]; then
+		if [[ ${SANITIZER_EVIDENCE_ROUTE_CHANGED:-0} == 1 ]]; then
 			return 1
 		fi
 		if ! sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING"; then
 			SANITIZER_EVIDENCE_ROUTE_CHANGED=1
 			return 1
+		fi
+		if [[ -n ${SANITIZER_CLEANUP_BINDING:-} ]]; then
+			# Continue the original admitted invocation across opener/stage handoff.
+			# Replacements must never become a newly initialized evidence or target.
+			[[ ${SANITIZER_ARTIFACT_DIR:-} == "$ARTIFACT_BASE/sanitizers" ]] || return 1
+			sanitizer_check_cargo_flags || return $?
+			preflight_route "${SANITIZER_TARGET_DIR:-target/sanitizers}" || return 1
+			[[ ${SANITIZER_VALIDATED_TARGET:-} == "$PREFLIGHT_ROUTE" ]] || return 1
+			"$security_function_python" -I "$ROOT/scripts/sanitizers/open_security_log.py" validate-bound \
+				"$SANITIZER_ARTIFACT_DIR" "$SANITIZER_EVIDENCE_BINDING" \
+				"$SANITIZER_VALIDATED_TARGET" "$SANITIZER_CLEANUP_BINDING" || return 1
+			return 0
 		fi
 	else
 		# Only an initial attempt discards an inherited caller marker.
@@ -293,16 +341,11 @@ prepare_sanitizer_attempt() {
 	sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$ROOT" || return 1
 	sanitizer_initialize_evidence || return 1
 	SANITIZER_EVIDENCE_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_ARTIFACT_DIR") || return $?
-	# Retire stale success before rejecting flags, but never initialize target outputs.
-	if sanitizer_validate_cargo_flags "${SANITIZER_CARGO_FLAGS:-}" "${SANITIZER_BUILD_EXTRA_ARGS:-}"; then
-		:
-	else
-		local flag_status=$?
-		if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING"; then
-			preflight_receipt cargo-flags "$flag_status" || return 1
-		fi
-		return "$flag_status"
-	fi
+	initial_summary=$(sanitizer_target_binding summary-snapshot "$SANITIZER_EVIDENCE_BINDING") || return $?
+	SANITIZER_EVIDENCE_BINDING=$("$security_function_python" -I -c \
+		'import json, sys; binding = json.loads(sys.argv[1]); binding["initial_summary"] = json.loads(sys.argv[2]); print(json.dumps(binding))' \
+		"$SANITIZER_EVIDENCE_BINDING" "$initial_summary") || return $?
+	sanitizer_check_cargo_flags || return $?
 	preflight_route "${SANITIZER_TARGET_DIR:-target/sanitizers}" || return 1
 	SANITIZER_VALIDATED_TARGET=$PREFLIGHT_ROUTE
 	sanitizer_validate_output "$SANITIZER_VALIDATED_TARGET" "$ROOT" || return 1
@@ -791,7 +834,10 @@ sanitizer_early_logging_failure() {
 
 run_sanitizers_stage() {
 	local status=0 cleanup_status=0 evidence_status=0 logging_status=0 initial_summary
-	prepare_sanitizer_attempt || return $?
+	prepare_sanitizer_attempt || {
+		sanitizer_preparation_failure $?
+		return $?
+	}
 	if sanitizer_stage_log "[security] >>> sanitizer smoke"; then
 		:
 	else
@@ -1062,7 +1108,7 @@ run_context_boundary() {
 # Bind the shared log once, before truncation or initial logging. The helper
 # re-execs this fixed wrapper with an inherited fd; a caller marker is insufficient.
 if stage_enabled "sanitizers"; then
-	prepare_sanitizer_attempt || exit $?
+	prepare_sanitizer_attempt || { sanitizer_preparation_failure $? || exit $?; }
 	if mkdir -p "$LOG_DIR"; then
 		:
 	else
@@ -1121,7 +1167,7 @@ if stage_enabled "sanitizers"; then
 		fi
 	fi
 fi
-if [[ ${SANITIZER_EVIDENCE_ROUTE_CHANGED:-0} -eq 1 ]]; then
+if stage_enabled "sanitizers" && [[ ${SANITIZER_EVIDENCE_ROUTE_CHANGED:-0} == 1 ]]; then
 	# No later logging/output stage may dereference the replaced artifact namespace.
 	echo "[security] unsafe sanitizer evidence; remaining output stages held" |
 		tee -a "$SANITIZER_LOG_DESTINATION" || true

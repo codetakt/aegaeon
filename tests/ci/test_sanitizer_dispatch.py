@@ -91,6 +91,64 @@ if arguments[:2] == ['-', 'cleanup']:
 os.execv(sys.executable, [sys.executable] + sys.argv[1:])
 """
 
+HANDOFF_BASH = r"""
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ['FIXTURE_ROOT'])
+if (sys.argv[1:2] == [str(root / 'scripts/security/run_security_suite.sh')]
+        and 'SANITIZER_SECURITY_LOG_FD' in os.environ):
+    evidence = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
+    target = pathlib.Path(os.environ['SANITIZER_VALIDATED_TARGET'])
+    original = (evidence / 'run-summary.json').read_text()
+    with (root / 'dispatch-calls.jsonl').open('a') as out:
+        out.write(json.dumps({'kind': 'handoff', 'evidence': str(evidence),
+            'evidence_binding': os.environ['SANITIZER_EVIDENCE_BINDING'],
+            'target': str(target), 'cleanup_binding': os.environ['SANITIZER_CLEANUP_BINDING'],
+            'summary': original}) + '\n')
+    receipt = os.environ.get('SANITIZER_HANDOFF_RECEIPT', '')
+    summary = evidence / 'run-summary.json'
+    if receipt == 'detailed':
+        summary.write_text(json.dumps({'status': os.environ['SANITIZER_HANDOFF_RECEIPT_STATUS'],
+            'commands': [{'phase': 'run', 'exit_code': 71}],
+            'units': [{'package': 'ffi', 'targets': [{'name': 'ffi', 'status': 'failed'}]}]}))
+    elif receipt:
+        summary.rename(summary.with_name(summary.name + '.held'))
+        if receipt == 'replacement-initial':
+            summary.write_text(original)
+        elif receipt == 'summary-symlink':
+            summary.symlink_to(pathlib.Path(os.environ['SANITIZER_EXTERNAL']) / 'run-summary.json')
+        else:
+            summary.mkdir()
+            (summary / 'replacement-sentinel').write_bytes(b'preserve replacement\n')
+    swap = os.environ.get('SANITIZER_HANDOFF_SWAP', '')
+    if swap:
+        external = pathlib.Path(os.environ['SANITIZER_EXTERNAL'])
+        route = (evidence.parent if swap.startswith('artifact-') else
+                 evidence.parent / 'summary' if swap.startswith('log-') else evidence)
+        route.rename(route.with_name(route.name + '.held'))
+        if swap.endswith('symlink'):
+            route.symlink_to(external, target_is_directory=True)
+        elif swap.endswith('file'):
+            route.write_bytes(b'preserve replacement\n')
+        else:
+            route.mkdir()
+            (route / 'replacement-sentinel').write_bytes(b'preserve replacement\n')
+    swap = os.environ.get('SANITIZER_HANDOFF_TARGET_SWAP', '')
+    if swap:
+        route = target.parent if swap == 'ancestor-symlink' else target
+        route.rename(route.with_name(route.name + '.held'))
+        if swap.endswith('symlink'):
+            route.symlink_to(os.environ['SANITIZER_EXTERNAL'], target_is_directory=True)
+        else:
+            route.mkdir()
+            (route / 'replacement-sentinel').write_bytes(b'preserve replacement\n')
+    for setting, destination in (
+            ('SANITIZER_HANDOFF_FLAGS', 'SANITIZER_CARGO_FLAGS'),
+            ('SANITIZER_HANDOFF_MARKER', 'SANITIZER_EVIDENCE_ROUTE_CHANGED')):
+        if setting in os.environ:
+            os.environ[destination] = os.environ[setting]
+os.execv(ACTUAL_BASH, [ACTUAL_BASH] + sys.argv[1:])
+"""
+
 RM = r"""
 import json, os, pathlib, sys
 args = sys.argv[1:]
@@ -159,6 +217,11 @@ raise SystemExit(code)
 
 MKDIR = r"""
 import os, pathlib, subprocess, sys
+if (os.environ.get('SANITIZER_RESUMED_HOME_FAILURE')
+        and os.environ.get('SANITIZER_SECURITY_LOG_FD')
+        and os.environ['CARGO_HOME'] in sys.argv[1:]):
+    print('controlled resumed Cargo home directory failure', file=sys.stderr)
+    raise SystemExit(76)
 summary = str(pathlib.Path(os.environ['SECURITY_ARTIFACT_DIR']) / 'summary')
 if os.environ.get('SANITIZER_MKDIR_FAILURE') and summary in sys.argv[1:]:
     print('controlled shared log directory failure', file=sys.stderr)
@@ -239,6 +302,9 @@ class SanitizerDispatchTests(unittest.TestCase):
         path = fixture.root / "dispatch-calls.jsonl"
         rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
         return [row for row in rows if row["kind"] == kind]
+
+    def install_handoff_wrapper(self, fixture):
+        fixture.install("bash", "ACTUAL_BASH = " + repr(shutil.which("bash")) + "\n" + HANDOFF_BASH)
 
     def receipt(self, fixture):
         return json.loads((fixture.artifacts / "sanitizers/child-receipt.json").read_text())
@@ -710,6 +776,9 @@ class SanitizerDispatchTests(unittest.TestCase):
         for swap in ("leaf-symlink", "leaf-directory", "ancestor-symlink"):
             with self.subTest(swap=swap):
                 fixture = self.fixture()
+                target = fixture.root / "target/sanitizers"
+                target.mkdir(parents=True)
+                (target / "prepared-sentinel").write_text("prepared output")
                 external = Path(fixture.temporary) / "external"
                 external.mkdir()
                 sentinels = {
@@ -730,6 +799,8 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertEqual(self.calls(fixture, "sanitizer"), [])
                 self.assertEqual(self.calls(fixture, "nix-other"), [])
+                self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                self.assertFalse(target.exists())
                 self.assertFalse(Path(fixture.env["SECURITY_HISTORY_DIR"]).exists())
                 self.assertIn("remaining output stages held", result.stdout)
                 for name, data in sentinels.items():
@@ -739,6 +810,242 @@ class SanitizerDispatchTests(unittest.TestCase):
                         list((fixture.artifacts / "sanitizers").iterdir()),
                         [fixture.artifacts / "sanitizers/replacement-sentinel"],
                     )
+
+    def test_opener_handoff_cleans_original_target_on_early_evidence_rejection(self):
+        for aggregate, swaps in (
+            (
+                False,
+                ("evidence-symlink", "evidence-directory", "artifact-symlink", "artifact-file"),
+            ),
+            (True, ("artifact-symlink", "artifact-file")),
+        ):
+            for swap in swaps:
+                for cleanup in (0, 79):
+                    with self.subTest(aggregate=aggregate, swap=swap, cleanup=cleanup):
+                        fixture = self.fixture()
+                        self.install_handoff_wrapper(fixture)
+                        target = fixture.root / "target/sanitizers"
+                        target.mkdir(parents=True)
+                        (target / "prepared-sentinel").write_text("prepared output")
+                        retained = self.seed_retained_evidence(fixture)
+                        external = Path(fixture.temporary) / "external"
+                        external.mkdir()
+                        sentinel = external / "run-summary.json"
+                        sentinel.write_bytes(b"preserve external completed receipt\n")
+                        result = self.run_suite(
+                            fixture,
+                            aggregate=aggregate,
+                            SANITIZER_HANDOFF_SWAP=swap,
+                            SANITIZER_EXTERNAL=str(external),
+                            SANITIZER_CLEANUP_EXIT=str(cleanup),
+                        )
+                        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                        self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                        handoff = self.calls(fixture, "handoff")
+                        self.assertEqual(len(handoff), 1)
+                        self.assertEqual(
+                            (
+                                handoff[0]["target"],
+                                json.loads(handoff[0]["cleanup_binding"])["target"],
+                                json.loads(handoff[0]["evidence_binding"])["target"],
+                            ),
+                            (str(target), str(target), str(fixture.artifacts / "sanitizers")),
+                        )
+                        self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                        self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], cleanup)
+                        self.assertEqual(target.exists(), bool(cleanup))
+                        self.assertEqual(
+                            sentinel.read_bytes(), b"preserve external completed receipt\n"
+                        )
+                        held = (
+                            fixture.artifacts.with_name(fixture.artifacts.name + ".held")
+                            / "sanitizers"
+                            if swap.startswith("artifact-")
+                            else fixture.artifacts / "sanitizers.held"
+                        )
+                        self.assertEqual(
+                            (held / "run-summary.json").read_text(), handoff[0]["summary"]
+                        )
+                        histories = list(held.glob(".previous-attempt-*/run-summary.json"))
+                        self.assertEqual(len(histories), 1)
+                        self.assertEqual(
+                            histories[0].read_text(), retained["sanitizers/run-summary.json"]
+                        )
+                        if swap.endswith("file"):
+                            self.assertEqual(
+                                fixture.artifacts.read_bytes(), b"preserve replacement\n"
+                            )
+                        elif swap.endswith("directory"):
+                            self.assertEqual(
+                                list((fixture.artifacts / "sanitizers").iterdir()),
+                                [fixture.artifacts / "sanitizers/replacement-sentinel"],
+                            )
+
+    def test_resumed_preparation_and_log_rejection_preserve_primary_cleanup_status(self):
+        for failure, code in (
+            ("log-symlink", 1),
+            ("log-directory", 1),
+            ("flags", 1),
+            ("cargo-home", 76),
+        ):
+            for cleanup in (0, 79):
+                with self.subTest(failure=failure, cleanup=cleanup):
+                    fixture = self.fixture()
+                    self.install_handoff_wrapper(fixture)
+                    target = fixture.root / "target/sanitizers"
+                    target.mkdir(parents=True)
+                    (target / "prepared-sentinel").write_text("prepared output")
+                    external = Path(fixture.temporary) / "external"
+                    external.mkdir()
+                    sentinel = external / "security.log"
+                    sentinel.write_bytes(b"preserve external log\n")
+                    settings = (
+                        {"SANITIZER_HANDOFF_FLAGS": "--target-dir crates/server"}
+                        if failure == "flags"
+                        else {"SANITIZER_RESUMED_HOME_FAILURE": "1"}
+                        if failure == "cargo-home"
+                        else {"SANITIZER_HANDOFF_SWAP": failure}
+                    )
+                    result = self.run_suite(
+                        fixture,
+                        SANITIZER_EXTERNAL=str(external),
+                        SANITIZER_CLEANUP_EXIT=str(cleanup),
+                        **settings,
+                    )
+                    self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+                    self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                    self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                    self.assertEqual(target.exists(), bool(cleanup))
+                    self.assertEqual(sentinel.read_bytes(), b"preserve external log\n")
+                    summary = json.loads(
+                        (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                    )
+                    self.assertEqual(summary["exit_code"], code)
+                    self.assertEqual(summary["cleanup_exit_code"], cleanup)
+
+    def test_replaced_handoff_target_is_preserved_without_rebinding(self):
+        for swap in ("target-symlink", "target-directory", "ancestor-symlink"):
+            with self.subTest(swap=swap):
+                fixture = self.fixture()
+                self.install_handoff_wrapper(fixture)
+                target = fixture.root / "target/sanitizers"
+                target.mkdir(parents=True)
+                (target / "prepared-sentinel").write_text("preserve held output")
+                external = Path(fixture.temporary) / "external"
+                external.mkdir()
+                sentinel = external / "external-sentinel"
+                sentinel.write_bytes(b"preserve external output\n")
+                result = self.run_suite(
+                    fixture, SANITIZER_HANDOFF_TARGET_SWAP=swap, SANITIZER_EXTERNAL=str(external)
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(sentinel.read_bytes(), b"preserve external output\n")
+                held = (
+                    target.parent.with_name(target.parent.name + ".held") / target.name
+                    if swap == "ancestor-symlink"
+                    else target.with_name(target.name + ".held")
+                )
+                self.assertEqual((held / "prepared-sentinel").read_text(), "preserve held output")
+                if swap == "target-directory":
+                    self.assertEqual(list(target.iterdir()), [target / "replacement-sentinel"])
+                self.assertEqual(
+                    len(list((fixture.artifacts / "sanitizers").glob(".previous-attempt-*"))), 0
+                )
+
+    def test_early_recovery_preserves_child_and_replaced_summary_bytes(self):
+        for receipt, child_status in (
+            ("detailed", "completed"),
+            ("detailed", "failed"),
+            ("replacement-initial", ""),
+            ("summary-symlink", ""),
+            ("summary-directory", ""),
+        ):
+            with self.subTest(receipt=receipt, child_status=child_status):
+                fixture = self.fixture()
+                self.install_handoff_wrapper(fixture)
+                external = Path(fixture.temporary) / "external"
+                external.mkdir()
+                sentinel = external / "run-summary.json"
+                sentinel.write_bytes(b"preserve external receipt\n")
+                result = self.run_suite(
+                    fixture,
+                    SANITIZER_HANDOFF_RECEIPT=receipt,
+                    SANITIZER_HANDOFF_RECEIPT_STATUS=child_status,
+                    SANITIZER_RESUMED_HOME_FAILURE="1",
+                    SANITIZER_EXTERNAL=str(external),
+                )
+                self.assertEqual(result.returncode, 76, result.stdout + result.stderr)
+                self.assertEqual(self.calls(fixture, "sanitizer"), [])
+                self.assertEqual(len(self.calls(fixture, "cleanup")), 1)
+                self.assertFalse((fixture.root / "target/sanitizers").exists())
+                self.assertEqual(sentinel.read_bytes(), b"preserve external receipt\n")
+                summary = fixture.artifacts / "sanitizers/run-summary.json"
+                if receipt == "detailed":
+                    self.assertEqual(
+                        summary.read_text(),
+                        json.dumps(
+                            {
+                                "status": child_status,
+                                "commands": [{"phase": "run", "exit_code": 71}],
+                                "units": [
+                                    {
+                                        "package": "ffi",
+                                        "targets": [{"name": "ffi", "status": "failed"}],
+                                    }
+                                ],
+                            }
+                        ),
+                    )
+                elif receipt == "replacement-initial":
+                    self.assertEqual(
+                        summary.read_text(), self.calls(fixture, "handoff")[0]["summary"]
+                    )
+                    self.assertEqual(
+                        summary.with_name(summary.name + ".held").read_text(), summary.read_text()
+                    )
+                elif receipt == "summary-symlink":
+                    self.assertTrue(summary.is_symlink())
+                else:
+                    self.assertEqual(list(summary.iterdir()), [summary / "replacement-sentinel"])
+
+    def test_successful_handoff_retains_original_binding_and_checks_literal_marker(self):
+        for marker in ("0", "1+0", "unset_sanitizer_marker"):
+            with self.subTest(marker=marker):
+                fixture = self.fixture()
+                self.install_handoff_wrapper(fixture)
+                retained = self.seed_retained_evidence(fixture)
+                result = self.run_suite(fixture, SANITIZER_HANDOFF_MARKER=marker)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                handoff = self.calls(fixture, "handoff")[0]
+                cleanup = self.calls(fixture, "cleanup")
+                self.assertEqual(len(cleanup), 1)
+                self.assertEqual(cleanup[0]["args"], ["fd-relative", "--", handoff["target"]])
+                histories = list(
+                    (fixture.artifacts / "sanitizers").glob(".previous-attempt-*/run-summary.json")
+                )
+                self.assertEqual(len(histories), 1)
+                self.assertEqual(histories[0].read_text(), retained["sanitizers/run-summary.json"])
+
+    def test_unrelated_stage_ignores_inherited_sanitizer_marker_and_cleanup(self):
+        for marker in ("1", "1+0", "unset_sanitizer_marker"):
+            with self.subTest(marker=marker):
+                fixture = self.fixture()
+                unrelated = Path(fixture.temporary) / "unrelated-target"
+                unrelated.mkdir()
+                sentinel = unrelated / "preserved-output"
+                sentinel.write_text("preserve unrelated output")
+                result = self.run_suite(
+                    fixture,
+                    stages=("sbom",),
+                    SANITIZER_EVIDENCE_ROUTE_CHANGED=marker,
+                    SANITIZER_CLEANUP_BINDING=json.dumps({"target": str(unrelated)}),
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(len(self.calls(fixture, "nix-other")), 1)
+                self.assertEqual(self.calls(fixture, "cleanup"), [])
+                self.assertNotIn("remaining output stages held", result.stdout)
+                self.assertEqual(sentinel.read_text(), "preserve unrelated output")
 
     def test_unavailable_opener_recovery_preserves_primary_and_does_not_claim_cleanup(self):
         for failure in ("missing-bash", "exec-failure"):
@@ -931,6 +1238,51 @@ class SanitizerDispatchTests(unittest.TestCase):
             with contextlib.suppress(OSError):
                 os.close(descriptor)
 
+    def test_bound_recovery_encoding_and_diagnostic_failure_preserve_primary(self):
+        fixture = self.fixture()
+        source = fixture.root / "scripts/sanitizers/open_security_log.py"
+        spec = importlib.util.spec_from_file_location("security_log_recovery_control", source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        log = Path(fixture.temporary) / "owned-log"
+        for failure in (
+            OSError("recovery unavailable"),
+            UnicodeEncodeError("utf-8", "x", 0, 1, "controlled"),
+        ):
+            with self.subTest(failure=type(failure).__name__):
+                descriptor = module.checked_log(str(log))
+                with (
+                    mock.patch.object(
+                        sys,
+                        "argv",
+                        [
+                            str(source),
+                            "open-exec-bound",
+                            str(log),
+                            "/evidence",
+                            "{}",
+                            "/target",
+                            "{}",
+                            "--",
+                        ],
+                    ),
+                    mock.patch.object(module, "checked_log", return_value=descriptor),
+                    mock.patch.object(
+                        module.shutil, "which", return_value=str(fixture.bin / "bash")
+                    ),
+                    mock.patch.object(
+                        module.os, "execve", side_effect=OSError("controlled exec failure")
+                    ),
+                    mock.patch.object(module.subprocess, "run", side_effect=failure) as recovery,
+                    mock.patch.object(
+                        module, "print", create=True, side_effect=OSError("diagnostic unavailable")
+                    ),
+                ):
+                    self.assertEqual(module.main(), 1)
+                    recovery.assert_called_once()
+                with self.assertRaises(OSError):  # noqa: PT027 - standalone unittest control
+                    os.fstat(descriptor)
+
     def test_failed_diagnostic_write_does_not_replace_the_child_failure(self):
         for aggregate in (False, True):
             with self.subTest(aggregate=aggregate):
@@ -1111,11 +1463,21 @@ class SanitizerDispatchTests(unittest.TestCase):
 
     def test_private_evidence_stop_flag_is_initialized_by_current_attempt(self):
         fixture = self.fixture()
-        result = self.run_suite(fixture, aggregate=True, SANITIZER_EVIDENCE_ROUTE_CHANGED="1")
+        unrelated = Path(fixture.temporary) / "unrelated-target"
+        unrelated.mkdir()
+        sentinel = unrelated / "preserved-output"
+        sentinel.write_text("preserve unrelated output")
+        result = self.run_suite(
+            fixture,
+            aggregate=True,
+            SANITIZER_EVIDENCE_ROUTE_CHANGED="1",
+            SANITIZER_CLEANUP_BINDING=json.dumps({"target": str(unrelated)}),
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(self.calls(fixture, "nix-other"))
         self.assertNotIn("remaining output stages held", result.stdout)
         self.assertEqual(self.receipt(fixture)["exit_code"], 0)
+        self.assertEqual(sentinel.read_text(), "preserve unrelated output")
 
 
 if __name__ == "__main__":

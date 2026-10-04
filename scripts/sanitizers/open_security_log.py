@@ -25,30 +25,57 @@ SANITIZER_ARTIFACT_DIR=$3
 evidence_binding=$4
 target=$5
 cleanup_binding=$6
+operation=$7
+primary_status=$8
 fail() { echo "[security] $*" >&2; }
-preflight_route "$SANITIZER_ARTIFACT_DIR"
-[[ $PREFLIGHT_ROUTE == "$SANITIZER_ARTIFACT_DIR" ]]
-sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$ROOT"
-preflight_route "$target"
-[[ $PREFLIGHT_ROUTE == "$target" ]]
-sanitizer_validate_output "$target" "$ROOT"
-sanitizer_validate_pair "$target" "${SANITIZER_ARTIFACT_DIR%/*}" cleanup
 python3 -I - "$SANITIZER_ARTIFACT_DIR" "$evidence_binding" "$target" "$cleanup_binding" <<'CONTEXT'
 import json
 import sys
 evidence, evidence_binding, target, cleanup_binding = sys.argv[1:]
+for route in (evidence, target):
+    if not route.startswith('/') or any(part in ('', '.', '..') for part in route.split('/')[1:]):
+        raise ValueError("Invalid bound security output route")
 if (json.loads(evidence_binding)["target"] != evidence
         or json.loads(cleanup_binding)["target"] != target):
     raise ValueError("Security log cleanup context does not match admitted paths")
 CONTEXT
+# Evidence constraints are lexical: a rejected evidence namespace must not
+# prevent cleanup of an independently admitted, unchanged target.
+sanitizer_validate_output "$SANITIZER_ARTIFACT_DIR" "$ROOT"
+sanitizer_validate_output "${SANITIZER_ARTIFACT_DIR%/*}" "$ROOT"
+preflight_route "$target"
+[[ $PREFLIGHT_ROUTE == "$target" ]]
+sanitizer_validate_output "$target" "$ROOT"
+sanitizer_validate_pair "$target" "${SANITIZER_ARTIFACT_DIR%/*}" cleanup
+if [[ $operation == validate-bound ]]; then
+    sanitizer_target_binding validate "$evidence_binding"
+    sanitizer_target_binding validate "$cleanup_binding"
+    exit 0
+fi
 cleanup_status=0
 sanitizer_target_binding cleanup "$cleanup_binding" || cleanup_status=$?
 sanitizer_target_binding validate "$evidence_binding"
-preflight_receipt shared-log-open 1 1 "$cleanup_status"
+if [[ $operation == recover-bound ]]; then
+    # A detailed child receipt or a replacement summary owns its bytes. Only
+    # the original invocation initialization receipt may record this failure.
+    current_summary=$(sanitizer_target_binding summary-snapshot "$evidence_binding")
+    python3 -I - "$evidence_binding" "$current_summary" <<'SUMMARY'
+import json
+import sys
+binding, current = map(json.loads, sys.argv[1:])
+if current != binding.get("initial_summary"):
+    raise ValueError("Sanitizer invocation initialization receipt identity changed")
+SUMMARY
+    preflight_receipt shared-preparation "$primary_status" "" "$cleanup_status"
+else
+    preflight_receipt shared-log-open 1 1 "$cleanup_status"
+fi
 """
 
 
-def recover_bound_outputs(bash: str, context: list[str]) -> bool:
+def recover_bound_outputs(
+    bash: str, context: list[str], *, operation: str = "recover-open", primary_status: int = 1
+) -> bool:
     root = Path(__file__).resolve().parents[2]
     try:
         result = subprocess.run(  # noqa: S603 - fixed code/helper and admitted structured paths/bindings
@@ -63,10 +90,12 @@ def recover_bound_outputs(bash: str, context: list[str]) -> bool:
                 str(root / "scripts/sanitizers/sanitizer_paths.sh"),
                 str(root),
                 *context,
+                operation,
+                str(primary_status),
             ],
             check=False,
         )
-    except OSError:
+    except (OSError, ValueError):
         return False
     return result.returncode == 0
 
@@ -130,6 +159,19 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - complete validate/open/exec
     context = None
     try:
         operation, path, *arguments = sys.argv[1:]
+        if operation in {"validate-bound", "recover-bound"}:
+            if len(arguments) != (4 if operation == "recover-bound" else 3):
+                message = "invalid bound security output context"
+                raise ValueError(message)  # noqa: TRY301 - sanitized operation boundary
+            primary_status = int(arguments[3]) if operation == "recover-bound" else 1
+            if not 0 < primary_status <= 255:  # noqa: PLR2004 - shell exit status boundary
+                message = "invalid bound security output status"
+                raise ValueError(message)  # noqa: TRY301 - sanitized operation boundary
+            bash = shutil.which("bash")
+            admitted = bash is not None and recover_bound_outputs(
+                bash, [path, *arguments[:3]], operation=operation, primary_status=primary_status
+            )
+            return int(not admitted)
         if operation == "validate" and len(arguments) == 1:
             descriptor = int(arguments[0])
             if descriptor < 0 or str(descriptor) != arguments[0]:
@@ -154,16 +196,21 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915 - complete validate/open/exec
         environment = dict(os.environ)
         environment["SANITIZER_SECURITY_LOG_FD"] = str(fd)
         if context is not None:
+            environment["SANITIZER_ARTIFACT_DIR"] = context[0]
             environment["SANITIZER_EVIDENCE_BINDING"] = context[1]
+            environment["SANITIZER_VALIDATED_TARGET"] = context[2]
+            environment["SANITIZER_CLEANUP_BINDING"] = context[3]
         wrapper = Path(__file__).resolve().parents[2] / "scripts/security/run_security_suite.sh"
         os.execve(bash, [bash, str(wrapper), *arguments], environment)  # noqa: S606 - fixed wrapper, structured argv
     except (OSError, ValueError):
         if fd is not None:
             with contextlib.suppress(OSError):
                 os.close(fd)
-        print("[security] safe log descriptor unavailable (exit=1)", file=sys.stderr)
+        with contextlib.suppress(OSError, ValueError):
+            print("[security] safe log descriptor unavailable (exit=1)", file=sys.stderr)
         if context is not None and (bash is None or not recover_bound_outputs(bash, context)):
-            print("[security] bound cleanup/evidence recovery unavailable", file=sys.stderr)
+            with contextlib.suppress(OSError, ValueError):
+                print("[security] bound cleanup/evidence recovery unavailable", file=sys.stderr)
         return 1
 
 

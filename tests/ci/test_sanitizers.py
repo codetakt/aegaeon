@@ -545,7 +545,9 @@ class SanitizerFixture:
     def assert_child_stopped(self):
         child = int((self.root / "child.pid").read_text())
         stat = Path(f"/proc/{child}/stat")
-        assert not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
+        self.assertTrue(  # noqa: PT009 - active under Python -O
+            not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
+        )
 
     def seed_completed_preflight(self):
         evidence = self.root / "evidence"
@@ -771,15 +773,15 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         for mode in modes:
             with self.subTest(mode=mode):
                 result = self.run_wrapper(mode)
-                assert result.returncode != 0, (mode, result.stdout)
-                assert self.summary()["status"] == "failed"
+                self.assertTrue(result.returncode != 0, (mode, result.stdout))  # noqa: PT009 - active under Python -O
+                self.assertTrue(self.summary()["status"] == "failed")  # noqa: PT009 - active under Python -O
 
     def test_stale_outputs_cannot_mask_compile_failure(self):
-        assert self.run_wrapper().returncode == 0
+        self.assertTrue(self.run_wrapper().returncode == 0)  # noqa: PT009 - active under Python -O
         result = self.run_wrapper("build-failure")
-        assert result.returncode == 7, result.stderr
-        assert self.summary()["units"][0]["status"] == "not-run"
-        assert (
+        self.assertTrue(result.returncode == 7, result.stderr)  # noqa: PT009 - active under Python -O
+        self.assertTrue(self.summary()["units"][0]["status"] == "not-run")  # noqa: PT009 - active under Python -O
+        self.assertTrue(  # noqa: PT009 - active under Python -O
             "deliberate compiler error"
             in next((self.root / "evidence").glob("*-build-*.stderr.log")).read_text()
         )
@@ -799,8 +801,8 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         ):
             with self.subTest(mode=mode):
                 result = self.run_wrapper(mode)
-                assert result.returncode != 0, (mode, result.stdout)
-                assert self.summary()["status"] == "failed"
+                self.assertTrue(result.returncode != 0, (mode, result.stdout))  # noqa: PT009 - active under Python -O
+                self.assertTrue(self.summary()["status"] == "failed")  # noqa: PT009 - active under Python -O
 
     def test_final_cleanup_failure_preserves_observed_child_exit(self):
         # Compile only the actual command/Failure definitions; execute a real
@@ -854,7 +856,7 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         for mode, expected in (("build-signal", 143), ("run-failure", 9), ("run-signal", 134)):
             with self.subTest(mode=mode):
                 result = self.run_wrapper(mode)
-                assert result.returncode == expected, result.stderr
+                self.assertTrue(result.returncode == expected, result.stderr)  # noqa: PT009 - active under Python -O
 
     def test_build_run_watchdogs_and_closed_output_kill_descendants(self):
         for mode in ("build-timeout", "build-closed-timeout", "run-timeout", "run-closed-timeout"):
@@ -862,8 +864,10 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 result = self.run_wrapper(
                     mode, SANITIZER_BUILD_TIMEOUT="0.5", SANITIZER_RUN_TIMEOUT="0.5"
                 )
-                assert result.returncode == 124, result.stderr
-                assert any(command["timed_out"] for command in self.summary()["commands"])
+                self.assertTrue(result.returncode == 124, result.stderr)  # noqa: PT009 - active under Python -O
+                self.assertTrue(  # noqa: PT009 - active under Python -O
+                    any(command["timed_out"] for command in self.summary()["commands"])
+                )
                 self.assert_child_stopped()
 
     def test_normal_leader_exit_with_running_descendants_fails(self):
@@ -876,11 +880,12 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         ):
             with self.subTest(mode=mode):
                 result = self.run_wrapper(mode)
-                assert result.returncode == (7 if mode == "build-failure-descendant" else 1), (
-                    result.stderr
+                self.assertTrue(  # noqa: PT009 - active under Python -O
+                    result.returncode == (7 if mode == "build-failure-descendant" else 1),
+                    result.stderr,
                 )
-                assert any(
-                    command["lingering_descendants"] for command in self.summary()["commands"]
+                self.assertTrue(  # noqa: PT009 - active under Python -O
+                    any(command["lingering_descendants"] for command in self.summary()["commands"])
                 )
                 self.assert_child_stopped()
 
@@ -896,10 +901,10 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
             deadline = time.monotonic() + 5
             while not (self.root / "child.pid").exists() and time.monotonic() < deadline:
                 time.sleep(0.01)
-            assert (self.root / "child.pid").exists()
+            self.assertTrue((self.root / "child.pid").exists())  # noqa: PT009 - active under Python -O
             process.send_signal(signal.SIGTERM)
             _, stderr = process.communicate(timeout=10)
-            assert process.returncode == 143, stderr
+            self.assertTrue(process.returncode == 143, stderr)  # noqa: PT009 - active under Python -O
             self.assert_child_stopped()
         finally:
             if process.poll() is None:
@@ -930,13 +935,15 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
             link.unlink()
             try:
                 with self.subTest(tool=tool):
-                    assert self.run_wrapper().returncode != 0
+                    self.assertTrue(self.run_wrapper().returncode != 0)  # noqa: PT009 - active under Python -O
             finally:
                 link.symlink_to(original)
-        assert self.run_wrapper(SANITIZER_RUNTIME_DIR=str(self.root / "missing")).returncode != 0
-        assert self.run_wrapper("bad-host").returncode != 0
+        self.assertTrue(  # noqa: PT009 - active under Python -O
+            self.run_wrapper(SANITIZER_RUNTIME_DIR=str(self.root / "missing")).returncode != 0
+        )
+        self.assertTrue(self.run_wrapper("bad-host").returncode != 0)  # noqa: PT009 - active under Python -O
         (self.root / "runtime/libclang_rt.asan-x86_64.so").unlink()
-        assert self.run_wrapper().returncode != 0
+        self.assertTrue(self.run_wrapper().returncode != 0)  # noqa: PT009 - active under Python -O
 
     def test_output_failure_cannot_report_success(self):
         (self.root / "blocked").write_text("not a directory")
