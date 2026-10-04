@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import stat
@@ -23,7 +24,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, BinaryIO, NoReturn
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -51,7 +52,8 @@ def optional_path_from_env(name: str) -> Path | None:
     value = os.environ.get(name)
     if not value:
         return None
-    return Path(value)
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / path
 
 
 RUN_ARTIFACT_DIR = optional_path_from_env("FUZZ_RUN_ARTIFACT_DIR")
@@ -298,6 +300,11 @@ def write_run_summary(
 
 def collect_corpus(execution: dict | None = None) -> None:
     validate_collection_roots()
+    for route in (RUN_ARTIFACT_DIR, HISTORY_OUT_DIR):
+        if route is not None:
+            validate_evidence_route(route)
+    if HISTORY_OUT_DIR is not None:
+        validate_regular_destination(HISTORY_OUT_DIR / "fuzz_runs.jsonl")
     targets = load_targets()
     ensure_directories(targets)
     stats = gather_stats(targets)
@@ -452,7 +459,15 @@ GIT_IDENTITY_OVERRIDES = (
 def validate_compiler_environment() -> None:
     # Cargo can bypass the PATH compiler or RUSTFLAGS through these inputs.
     # Presence, including an empty value, is unsupported; never disclose values.
-    for name in ("RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_ENCODED_RUSTFLAGS"):
+    for name in (
+        "RUSTC",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "CARGO_BUILD_RUSTC",
+        "CARGO_BUILD_RUSTC_WRAPPER",
+        "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    ):
         if name in os.environ:
             invalid(f"inherited {name} override is not supported for fuzz execution or cleanup")
 
@@ -809,11 +824,211 @@ def configured_cache(directory: Path) -> Path:
     return cache
 
 
+def lexical_directory(path: Path) -> Path:
+    path = path if path.is_absolute() else ROOT / path
+    if ".." in path.parts:
+        invalid("owned directory route cannot contain parent traversal")
+    for component in (*reversed(path.parents), path):
+        if component.is_symlink():
+            invalid("owned directory route cannot contain symlink components")
+        if component.exists() and not component.is_dir():
+            invalid("owned directory route contains a special or nondirectory component")
+    return path
+
+
+def validate_regular_destination(path: Path) -> None:
+    lexical_directory(path.parent)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        invalid("owned output destination cannot be a symlink or special entry")
+    if path.exists():
+        info = path.stat()
+        if info.st_uid != os.geteuid() or info.st_nlink != 1:
+            invalid("owned output destination must be unaliased and producer-owned")
+
+
+def validate_evidence_route(directory: Path) -> Path:
+    path = lexical_directory(directory)
+    protected = [ROOT, FUZZ_DIR, *git_metadata_paths()]
+    # ROOT/FUZZ_DIR ancestors are forbidden; their supported output descendants
+    # must also be disjoint from source, Git metadata and every raw root.
+    if any(root.is_relative_to(path) for root in protected):
+        invalid("fuzz evidence route overlaps repository or metadata")
+    sources = [ROOT / name for name in CACHE_SOURCE_ROOTS if name != "artifacts"]
+    sources.extend(ROOT / name for name in ("artifacts/ct", "artifacts/karamel"))
+    sources.extend(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta", "fuzz_targets"))
+    sources.extend([FUZZ_DIR / "Cargo.toml", FUZZ_DIR / "Cargo.lock", *git_metadata_paths()])
+    sources.extend(entry for entry in ROOT.iterdir() if entry.is_file())
+    if any(overlaps(path, source) for source in sources):
+        invalid("fuzz evidence route overlaps source, raw or metadata paths")
+    return path
+
+
+def validate_fuzz_logs(directory: Path) -> None:
+    directory = directory if directory.is_absolute() else ROOT / directory
+    for name in ("run.log", "cargo-fuzz-help.log"):
+        validate_regular_destination(directory / name)
+    for target in selected_targets():
+        for name in ("build.log", "run.log"):
+            validate_regular_destination(directory / target / name)
+
+
+def validate_preflight(directory: Path) -> Path:
+    validate_compiler_environment()
+    validate_git_environment()
+    validate_collection_roots()
+    routes = [directory]
+    for name, default in (
+        ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"),
+        ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
+        ("FUZZ_RUN_ARTIFACT_DIR", ""),
+        ("FUZZ_HISTORY_DIR", ""),
+    ):
+        if value := os.environ.get(name, default):
+            routes.append(Path(value))
+    for route in routes:
+        validate_evidence_route(route)
+    artifact = Path(os.environ.get("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"))
+    artifact = artifact if artifact.is_absolute() else ROOT / artifact
+    validate_evidence_route(artifact / "summary")
+    validate_regular_destination(artifact / "summary/security.log")
+    validate_fuzz_logs(directory)
+    for name, default in (
+        ("FUZZ_HISTORY_DIR", ""),
+        ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
+    ):
+        if value := os.environ.get(name, default):
+            path = Path(value)
+            path = path if path.is_absolute() else ROOT / path
+            validate_regular_destination(path / "fuzz_runs.jsonl")
+    if os.environ.get("CARGO_HOME"):
+        validate_evidence_route(Path(os.environ["CARGO_HOME"]))
+    cache = configured_cache(directory)
+    lexical_directory(Path(os.environ["CARGO_TARGET_DIR"]))
+    lexical_directory(cache)
+    effective_native_commands()
+    return cache
+
+
+def validate_native_configuration() -> dict[str, str]:
+    # Cargo merges configuration from the invocation directory, ancestors and
+    # Cargo home. Only the tracked repository config is modeled here.
+    extra = [FUZZ_DIR / ".cargo/config", FUZZ_DIR / ".cargo/config.toml", ROOT / ".cargo/config"]
+    for parent in ROOT.parents:
+        extra.extend(parent / ".cargo" / name for name in ("config", "config.toml"))
+    cargo_home = Path(os.environ.get("CARGO_HOME", str(Path.home() / ".cargo")))
+    cargo_home = cargo_home if cargo_home.is_absolute() else ROOT / cargo_home
+    extra.extend(cargo_home / name for name in ("config", "config.toml"))
+    if any(path.exists() or path.is_symlink() for path in extra):
+        invalid("unmodeled external or nested Cargo compiler configuration")
+    config_path = ROOT / ".cargo/config.toml"
+    config = tomllib.loads(required_source(config_path).read_text()) if config_path.exists() else {}
+    forced = {
+        "CC_x86_64_unknown_linux_gnu": "cc",
+        "CXX_x86_64_unknown_linux_gnu": "c++",
+        "AR_x86_64_unknown_linux_gnu": "ar",
+        "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER": "cc",
+        "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR": "ar",
+    }
+    if config.get("build") or any(
+        name not in forced or value != {"value": forced[name], "force": True}
+        for name, value in config.get("env", {}).items()
+    ):
+        invalid("unmodeled Cargo compiler configuration")
+    supported_target = {"linker": "cc", "rustflags": ["-Clink-self-contained=no"]}
+    if any(
+        name != "x86_64-unknown-linux-gnu" or value != supported_target
+        for name, value in config.get("target", {}).items()
+    ):
+        invalid("unmodeled Cargo target compiler configuration")
+    return forced
+
+
+def validate_native_overrides(expected: dict[str, str]) -> None:
+    for name, value in os.environ.items():
+        if (
+            name.startswith(
+                (
+                    "CC_",
+                    "CXX_",
+                    "AR_",
+                    "CARGO_TARGET_",
+                    "TARGET_CC",
+                    "TARGET_CXX",
+                    "TARGET_AR",
+                    "HOST_CC",
+                    "HOST_CXX",
+                    "HOST_AR",
+                )
+            )
+            and name not in expected
+            and name != "CARGO_TARGET_DIR"
+        ):
+            invalid("unmodeled native compiler environment override")
+        if name in expected:
+            actual = shutil.which(value) if value else None
+            selected = shutil.which(expected[name])
+            if (
+                actual is None
+                or selected is None
+                or Path(actual).resolve() != Path(selected).resolve()
+            ):
+                invalid("native compiler override differs from effective supported tool")
+
+
+def effective_native_commands(target: str | None = None) -> dict[str, str]:
+    machine = platform.machine()
+    expected_target = {
+        "x86_64": "x86_64-unknown-linux-gnu",
+        "aarch64": "aarch64-unknown-linux-gnu",
+    }.get(machine)
+    if sys.platform != "linux" or expected_target is None or target not in (None, expected_target):
+        invalid("unmodeled native fuzz compiler target")
+    forced = validate_native_configuration()
+    expected = {"CC": "cc", "CXX": "c++", "AR": "ar", **forced}
+    if expected_target == "aarch64-unknown-linux-gnu":
+        expected.update(
+            {
+                "CC_aarch64_unknown_linux_gnu": "cc",
+                "CXX_aarch64_unknown_linux_gnu": "c++",
+                "AR_aarch64_unknown_linux_gnu": "ar",
+                "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER": "cc",
+                "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_AR": "ar",
+            }
+        )
+    validate_native_overrides(expected)
+    return {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"}
+
+
+def prepared_source_inputs(cache: Path, selected: list[str]) -> dict[str, dict[str, Any]]:
+    # Include newly created cache ancestors in both full source snapshots.
+    cache.mkdir(parents=True, exist_ok=True)
+    return source_hashes(selected)
+
+
+def preparation_tools() -> tuple[dict, str]:
+    native = effective_native_commands()
+    tools = {
+        name: capture(argv)
+        for name, argv in {
+            "rustc": ["rustc", "-vV"],
+            "cargo": ["cargo", "--version"],
+            "cargo_fuzz": ["cargo-fuzz", "--version"],
+            "timeout": ["timeout", "--version"],
+            **{name: [command, "--version"] for name, command in native.items()},
+        }.items()
+    }
+    host = re.search(r"^host: (\S+)$", tools["rustc"]["output"], re.MULTILINE)
+    target = host[1] if host and tools["rustc"]["exit_code"] == 0 else "missing"
+    if target != "missing":
+        effective_native_commands(target)
+    return tools, target
+
+
 def prepare_run(directory: Path) -> None:
     validate_compiler_environment()
     validate_git_environment()
+    cache = validate_preflight(directory)
     selected = selected_targets()
-    inputs = source_hashes(selected)
     total = os.environ.get("FUZZ_TOTAL_TIMEOUT", "")
     maximum = os.environ.get("FUZZ_MAX_TOTAL", "30")
     watchdog = os.environ.get("FUZZ_TIMEOUT", "60s")
@@ -834,19 +1049,8 @@ def prepare_run(directory: Path) -> None:
     external = seconds(watchdog, "FUZZ_TIMEOUT") if watchdog else internal + WATCHDOG_GRACE_SECONDS
     if external < internal + WATCHDOG_GRACE_SECONDS:
         invalid("fuzz watchdog must allow at least 30 seconds of grace")
-    tools = {
-        name: capture(argv)
-        for name, argv in {
-            "rustc": ["rustc", "-vV"],
-            "cargo": ["cargo", "--version"],
-            "cargo_fuzz": ["cargo-fuzz", "--version"],
-            "timeout": ["timeout", "--version"],
-            "cc": [os.environ.get("CC") or "cc", "--version"],
-            "cxx": [os.environ.get("CXX") or "c++", "--version"],
-        }.items()
-    }
-    host = re.search(r"^host: (\S+)$", tools["rustc"]["output"], re.MULTILINE)
-    target = host[1] if host and tools["rustc"]["exit_code"] == 0 else "missing"
+    inputs = prepared_source_inputs(cache, selected)
+    tools, target = preparation_tools()
     data = {
         "schema_version": 1,
         "run_id": str(uuid.uuid4()),
@@ -860,7 +1064,7 @@ def prepare_run(directory: Path) -> None:
         "kill_grace_seconds": 10,
         "aggregate_internal_allocation": seconds(total, "FUZZ_TOTAL_TIMEOUT") if total else None,
         "target_triple": target,
-        "target_dir": str(configured_cache(directory)),
+        "target_dir": str(cache),
         "profile": "release with debug assertions",
         "sanitizer": "address",
         "source": {
@@ -897,6 +1101,12 @@ def load_execution(directory: Path) -> dict:
 
 def record_environment(directory: Path) -> None:
     data = load_execution(directory)
+    native = effective_native_commands(data["target_triple"])
+    for name, command in native.items():
+        current = capture([command, "--version"])
+        if current != data["tools"][name] or current.get("exit_code") != 0:
+            invalid("effective native compiler identity changed or unavailable")
+    data["effective_native_commands"] = native
     data["environment"] = {
         name: os.environ.get(name)
         for name in (
@@ -1099,8 +1309,10 @@ def owned_raw_root(name: str) -> Path:
 def validate_collection_roots() -> None:
     # Check all roots before collection can create directories or inspect raw input.
     # Nested symlinks are archive entries, never inputs to statistics or traversal.
-    for name in RECOVERY_RAW_NAMES:
+    for name in (*RECOVERY_RAW_NAMES, "corpus_meta"):
         owned_raw_root(name)
+    for name in ("history.jsonl", "latest_run.json"):
+        validate_regular_destination(META_DIR / name)
 
 
 def recovery_directory(directory: Path, run_id: str, *, create: bool = False) -> Path:
@@ -1306,11 +1518,117 @@ def cleanup_cache(directory: Path, run_id: str) -> Path:
     return cache
 
 
+UPLOAD_ROOTS = (
+    "artifacts/security/latest",
+    "artifacts/security/history",
+    "fuzz/artifacts",
+    "fuzz/corpus",
+    "fuzz/corpus_archive",
+    "fuzz/corpus_meta",
+    "artifacts/sbom",
+    "security-artifacts/security_status.jsonl",
+)
+
+
+def upload_inventory() -> dict:
+    # Validate every root before any nested content hash/read.
+    for name in UPLOAD_ROOTS:
+        source = ROOT / name
+        lexical_directory(source.parent)
+        if source.is_symlink():
+            invalid("upload evidence root cannot be a symlink")
+        if source.exists() and not (
+            source.is_dir()
+            or (source.is_file() and name == "security-artifacts/security_status.jsonl")
+        ):
+            invalid("upload evidence root has an unsupported type")
+    inventories = {}
+    for name in UPLOAD_ROOTS:
+        source = ROOT / name
+        if not source.exists():
+            inventories[name] = {"present": False}
+        elif source.is_dir():
+            inventories[name] = {
+                "present": True,
+                "type": "directory",
+                "entries": raw_inventory(source),
+            }
+        else:
+            inventories[name] = {"present": True, "type": "file", "sha256": digest(source)}
+    return inventories
+
+
+def add_upload_entry(tar: tarfile.TarFile, path: Path) -> None:
+    info = tar.gettarinfo(str(path), arcname=path.relative_to(ROOT).as_posix())
+    if info.isfile():
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as content:
+            if not stat.S_ISREG(os.fstat(content.fileno()).st_mode):
+                invalid("upload entry changed into a special file")
+            tar.addfile(info, content)
+    elif info.isdir() or info.issym() or info.islnk():
+        tar.addfile(info)
+    else:
+        invalid("upload encountered a special entry")
+
+
+def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
+    with tarfile.open(fileobj=stream, mode="w:gz", dereference=False) as tar:
+        for name, record in inventories.items():
+            if not record["present"]:
+                continue
+            source = ROOT / name
+            add_upload_entry(tar, source)
+            if record["type"] == "directory":
+                for entry in record["entries"]:
+                    add_upload_entry(tar, source / entry)
+
+
+def package_upload(directory: Path) -> None:
+    output = lexical_directory(directory)
+    if any(overlaps(output, ROOT / name) for name in UPLOAD_ROOTS):
+        invalid("upload output overlaps evidence source")
+    if not output.is_relative_to(ROOT / "artifacts") or output == ROOT / "artifacts":
+        invalid("upload output must be a dedicated repository artifacts directory")
+    if output.exists() and (output.stat().st_uid != os.geteuid() or any(output.iterdir())):
+        invalid("upload output must be empty and owned by the producer")
+    inventories = upload_inventory()
+    output.mkdir(parents=True, exist_ok=True)
+    archive = output / "security-evidence.tar.gz"
+    manifest = output / "manifest.json"
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".archive-", dir=output)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            write_upload_archive(stream, inventories)
+        if upload_inventory() != inventories:
+            invalid("upload evidence changed during packaging")
+        temporary.replace(archive)
+        write_json(
+            manifest,
+            {
+                "schema_version": 1,
+                "producer_uid": os.geteuid(),
+                "stage": os.environ.get("SECURITY_UPLOAD_STAGE", "unknown"),
+                "stage_outcome": os.environ.get("SECURITY_UPLOAD_OUTCOME", "unknown"),
+                "roots": inventories,
+                "archive": {"path": archive.name, "sha256": digest(archive)},
+            },
+        )
+        for path in (archive, manifest):
+            if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.geteuid():
+                invalid("upload output must be a producer-owned regular file")
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument("--validate-git-environment", action="store_true")
     actions.add_argument("--validate-cache", type=Path)
+    actions.add_argument("--validate-preflight", type=Path)
+    actions.add_argument("--package-upload", type=Path)
     actions.add_argument("--cleanup-cache", nargs=2, metavar=("DIR", "RUN_ID"))
     actions.add_argument("--execution-cache", type=Path)
     actions.add_argument("--prepare-run", type=Path)
@@ -1327,6 +1645,9 @@ def cleanup_action(args: argparse.Namespace) -> int | None:
     result = None
     if args.validate_git_environment:
         validate_git_environment()
+        result = 0
+    elif args.validate_preflight:
+        validate_preflight(args.validate_preflight)
         result = 0
     elif args.validate_cache:
         configured_cache(args.validate_cache)
@@ -1353,11 +1674,48 @@ def cleanup_action(args: argparse.Namespace) -> int | None:
     return result
 
 
+def validate_action_routes(args: argparse.Namespace) -> None:
+    for action in (
+        args.prepare_run,
+        args.record_environment,
+        args.execution_cache,
+        args.validate_cache,
+        args.validate_preflight,
+        args.backup_cleanup,
+    ):
+        if action is not None:
+            validate_evidence_route(action)
+            validate_collection_roots()
+    for action in (
+        args.cleanup_cache,
+        args.record_target,
+        args.finish_run,
+        args.cleanup_result,
+    ):
+        if action is not None:
+            validate_evidence_route(Path(action[0]))
+            validate_collection_roots()
+    if args.restore_cleanup is not None:
+        # Raw-root failures belong to restore_cleanup's recovery error handler.
+        validate_evidence_route(Path(args.restore_cleanup[0]))
+
+
+def record_target_action(action: list[str]) -> int:
+    directory, name, phase, code = action
+    if phase not in ("build", "run"):
+        invalid("unknown execution phase")
+    return 0 if record_target(Path(directory), name, phase, int(code)) else 1
+
+
 def main() -> int:
     args = parse_arguments()
     result = 0
     try:
+        if args.package_upload:
+            package_upload(args.package_upload)
+            return 0
         validate_compiler_environment()
+        validate_action_routes(args)
         recovery_result = cleanup_action(args)
         if recovery_result is not None:
             result = recovery_result
@@ -1366,10 +1724,7 @@ def main() -> int:
         elif args.record_environment:
             record_environment(args.record_environment)
         elif args.record_target:
-            directory, name, phase, code = args.record_target
-            if phase not in ("build", "run"):
-                invalid("unknown execution phase")
-            result = 0 if record_target(Path(directory), name, phase, int(code)) else 1
+            result = record_target_action(args.record_target)
         elif args.finish_run:
             directory, code = args.finish_run
             result = 0 if finish_run(Path(directory), int(code)) else 1

@@ -167,26 +167,29 @@ jobs:
             echo "- [Monitoring runbook](docs/operations/monitoring/README.md)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Package security upload
+        if: always()
+        env:
+          SECURITY_UPLOAD_STAGE: ${{ matrix.stage }}
+          SECURITY_UPLOAD_OUTCOME: ${{ steps.run_security_stage.outcome }}
+        run: python3 scripts/fuzz/manage_fuzz_corpus.py --package-upload artifacts/security-upload
+
       - name: Upload security metrics
         if: always() && matrix.stage != 'sbom'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
+          if-no-files-found: error
           path: |
-            artifacts/security/latest
-            artifacts/security/history
-            fuzz/artifacts
-            fuzz/corpus
-            fuzz/corpus_archive
-            fuzz/corpus_meta
-            security-artifacts/security_status.jsonl
+            artifacts/security-upload/security-evidence.tar.gz
+            artifacts/security-upload/manifest.json
 
       - name: Upload SBOM metrics
         if: always() && matrix.stage == 'sbom'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
+          if-no-files-found: error
           path: |
-            artifacts/security/latest
-            artifacts/sbom
-            security-artifacts/security_status.jsonl
+            artifacts/security-upload/security-evidence.tar.gz
+            artifacts/security-upload/manifest.json

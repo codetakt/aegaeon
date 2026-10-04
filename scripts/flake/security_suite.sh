@@ -31,7 +31,8 @@ if [[ ${#security_outer_stages[@]} -gt 0 ]]; then
 	done
 fi
 if [[ $security_fuzz_entry -eq 1 ]]; then
-	for security_compiler_override in RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_ENCODED_RUSTFLAGS; do
+	for security_compiler_override in RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_ENCODED_RUSTFLAGS \
+		CARGO_BUILD_RUSTC CARGO_BUILD_RUSTC_WRAPPER CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER; do
 		if [[ -v $security_compiler_override ]]; then
 			echo "[security] inherited compiler overrides are not supported for fuzz execution or cleanup" >&2
 			exit 1

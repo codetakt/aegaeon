@@ -93,7 +93,7 @@ class FuzzCorpusTests(unittest.TestCase):
         self.history.write_text("cannot be a destination directory")
         result = self.run_helper()
         self.assertNotEqual(result.returncode, 0)
-        self.assertTrue(list((self.root / "fuzz/corpus_archive").glob("*.tar.gz")))
+        self.assertFalse((self.root / "fuzz/corpus_archive").exists())
         self.assertTrue((corpus / "seed").exists())
 
     def test_archive_retention_cleanup_failure_is_an_error(self):
@@ -114,6 +114,48 @@ class FuzzCorpusTests(unittest.TestCase):
         result = self.run_helper()
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((self.root / "fuzz/corpus_meta/latest_run.json").is_file())
+
+    def test_direct_collection_rejects_evidence_alias_and_raw_overlap_before_changes(self):
+        external = self.root.parent / "external"
+        external.mkdir()
+        sentinel = external / "run_summary.json"
+        sentinel.write_bytes(b"external private receipt")
+        alias = self.root.parent / "alias"
+        alias.symlink_to(external, target_is_directory=True)
+        raw = self.root / "fuzz/corpus/owned"
+        raw.mkdir(parents=True)
+        (raw / "run_summary.json").write_bytes(b"raw private input")
+        for route in (alias / "nested", raw):
+            with self.subTest(route=route):
+                self.env["FUZZ_RUN_ARTIFACT_DIR"] = str(route)
+                result = self.run_helper()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(sentinel.read_bytes(), b"external private receipt")
+                self.assertEqual((raw / "run_summary.json").read_bytes(), b"raw private input")
+                self.assertFalse((self.root / "fuzz/corpus_meta").exists())
+                self.assertFalse((self.root / "fuzz/corpus_archive").exists())
+
+    def test_relative_optional_outputs_are_repository_anchored_with_newlines(self):
+        self.env["FUZZ_RUN_ARTIFACT_DIR"] = "collection-evidence\n"
+        self.env["FUZZ_HISTORY_DIR"] = "collection-history\n"
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / "collection-evidence\n/run_summary.json").is_file())
+        self.assertTrue((self.root / "collection-history\n/fuzz_runs.jsonl").is_file())
+        self.assertFalse((self.helper.parent / "collection-evidence\n").exists())
+        self.assertFalse((self.helper.parent / "collection-history\n").exists())
+
+    def test_relative_history_does_not_follow_an_unvalidated_caller_alias(self):
+        external = self.root.parent / "external-history"
+        external.mkdir()
+        sentinel = external / "fuzz_runs.jsonl"
+        sentinel.write_bytes(b"preserve external history\n")
+        (self.helper.parent / "relative-history").symlink_to(external)
+        self.env["FUZZ_HISTORY_DIR"] = "relative-history"
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sentinel.read_bytes(), b"preserve external history\n")
+        self.assertTrue((self.root / "relative-history/fuzz_runs.jsonl").is_file())
 
 
 if __name__ == "__main__":

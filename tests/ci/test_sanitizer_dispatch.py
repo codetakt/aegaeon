@@ -99,6 +99,25 @@ class SanitizerDispatchTests(unittest.TestCase):
         fixture = fuzz_fixture.SecurityFuzzTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
+        # Aggregate dispatch runs fuzz preflight with controlled fixture tools.
+        # Remove inherited native target overrides, retaining the fixture's
+        # explicit CC/CXX/AR and owned CARGO_TARGET_DIR from SecurityFuzzFixture.
+        for name in tuple(fixture.env):
+            if name != "CARGO_TARGET_DIR" and name.startswith(
+                (
+                    "CC_",
+                    "CXX_",
+                    "AR_",
+                    "CARGO_TARGET_",
+                    "TARGET_CC",
+                    "TARGET_CXX",
+                    "TARGET_AR",
+                    "HOST_CC",
+                    "HOST_CXX",
+                    "HOST_AR",
+                )
+            ):
+                fixture.env.pop(name)
         fixture.env.pop("SANITIZER_TARGET_DIR", None)
         fixture.env.pop("SANITIZER_UNSAFE_TARGET_TEST", None)
         fixture.install("nix", NIX)

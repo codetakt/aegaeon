@@ -111,6 +111,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             "python3",
             "cc",
             "c++",
+            "ar",
         ):
             command = shutil.which(name)
             if command:
@@ -152,7 +153,7 @@ class SecurityFuzzFixture(unittest.TestCase):
         (kani / "Cargo.toml").write_text('[package]\nname="fixture-kani"\nversion="0.0.0"\n')
         (kani / "kani").symlink_to("result/bin/cargo-kani")
         (self.root / ".cargo").mkdir()
-        (self.root / ".cargo/config.toml").write_text("# local build configuration\n")
+        shutil.copyfile(ROOT / ".cargo/config.toml", self.root / ".cargo/config.toml")
         (self.root / "fuzz/Cargo.toml").write_text(
             '[package]\nname = "fixture-fuzz"\nversion = "0.0.0"\n'
             '[dependencies]\nserver = { path = "../crates/server" }\n'
@@ -176,6 +177,11 @@ class SecurityFuzzFixture(unittest.TestCase):
             "SECURITY_HISTORY_DIR": str(Path(self.temporary) / "history"),
             "CARGO_TARGET_DIR": str(Path(self.temporary) / "target"),
             "CARGO_HOME": str(Path(self.temporary) / "cargo-home"),
+            # Explicit effective fixture tools, rather than inherited native
+            # compiler names that the real target configuration may override.
+            "CC": str(self.bin / "cc"),
+            "CXX": str(self.bin / "c++"),
+            "AR": str(self.bin / "ar"),
         }
         for name in (
             "FUZZ_TARGETS",
@@ -248,6 +254,16 @@ class SecurityFuzzFixture(unittest.TestCase):
             json.dumps({"status": "passed", "execution": execution})
         )
         return marker, raw
+
+    def saved_receipts(self):
+        return {
+            self.artifacts / "fuzz" / name: (self.artifacts / "fuzz" / name).read_bytes()
+            for name in ("collection.ok", "execution.json", "run_summary.json")
+        }
+
+    def assert_receipts_unchanged(self, receipts):
+        for path, content in receipts.items():
+            self.assertEqual(path.read_bytes(), content)
 
     def assert_no_current_results(self):
         for name in ("collection.ok", "execution.json", "run_summary.json"):
@@ -896,9 +912,10 @@ write_json = fail_evidence
         self.assertFalse((self.root.parent / "cleanup-called").exists())
         self.assertTrue((self.root / "fuzz/artifacts").is_symlink())
         self.assertEqual(marker.read_bytes(), b"external fixture")
+        self.assertFalse((self.artifacts / "summary/security.log").exists())
         self.assertIn(
             "owned raw directory roots",
-            (self.artifacts / "summary/security.log").read_text(),
+            result.stderr,
         )
 
     def test_restore_rejects_missing_empty_backup_and_symlinked_containers(self):
@@ -1051,13 +1068,14 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
             for aggregate in (False, True):
                 with self.subTest(target=target, aggregate=aggregate):
                     self.seed_stale_results()
+                    prior = self.saved_receipts()
                     link = alias_base / "fuzz"
                     link.symlink_to(target)
                     result = self.run_suite(aggregate=aggregate, CARGO_TARGET_DIR=str(alias_base))
                     link.unlink()
                     self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertIn("[security] fuzz evidence failed:", result.stderr)
-                    self.assert_no_current_results()
+                    self.assert_receipts_unchanged(prior)
                     self.assertFalse((self.root / "unsafe-removal-called").exists())
                     self.assertEqual((self.root / "Cargo.toml").read_bytes(), original)
                     self.assertEqual(self.calls(), [])
@@ -1076,11 +1094,12 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                     self.artifacts = base / "fuzz/evidence"
                     self.env["SECURITY_ARTIFACT_DIR"] = str(self.artifacts)
                 self.seed_stale_results()
+                prior = self.saved_receipts()
                 result = self.run_suite(CARGO_TARGET_DIR=str(base), FUZZ_TARGETS=TARGETS[0])
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("overlaps protected", result.stderr)
                 self.assertFalse((self.root / "unsafe-removal-called").exists())
-                self.assert_no_current_results()
+                self.assert_receipts_unchanged(prior)
                 self.assertEqual(self.calls(), [])
 
     def test_external_git_metadata_cache_aliases_are_rejected(self):  # noqa: PLR0915 - bounded metadata layouts
@@ -1105,6 +1124,7 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                 for aggregate in (False, True):
                     with self.subTest(relative=relative, target=target, aggregate=aggregate):
                         self.seed_stale_results()
+                        prior = self.saved_receipts()
                         link = configured / "fuzz"
                         link.symlink_to(target)
                         result = self.run_suite(
@@ -1113,7 +1133,7 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                         link.unlink()
                         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                         self.assertIn("overlaps protected", result.stderr)
-                        self.assert_no_current_results()
+                        self.assert_receipts_unchanged(prior)
                         self.assertFalse((self.root / "unsafe-removal-called").exists())
                         self.assertEqual(marker.read_bytes(), b"owned Git metadata fixture")
                         self.assertEqual(git_entry.read_text(), "gitdir: " + pointer + "\n")
@@ -1140,10 +1160,11 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                 git_entry.write_bytes(git_record)
                 (admin / "commondir").write_bytes(common_record)
                 self.seed_stale_results()
+                prior = self.saved_receipts()
                 result = self.run_suite(CARGO_TARGET_DIR=str(configured))
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("metadata pointer", result.stderr)
-                self.assert_no_current_results()
+                self.assert_receipts_unchanged(prior)
                 self.assertFalse((self.root / "unsafe-removal-called").exists())
                 self.assertEqual(marker.read_bytes(), b"owned Git metadata fixture")
                 self.assertEqual(metadata_file.read_bytes(), b"owned regular file")
@@ -1225,15 +1246,19 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                 "input=data).returncode)",
             )
 
-    def test_fuzz_results_invalidated_before_each_global_bootstrap_failure(self):
+    def test_fuzz_receipts_preserved_on_preflight_and_invalidated_on_bootstrap_failure(self):
         for failure in ("global-directory", "log-truncation", "global-log", "cargo-home"):
             for aggregate in (False, True):
                 with self.subTest(failure=failure, aggregate=aggregate):
                     _, raw = self.seed_stale_results()
+                    prior = self.saved_receipts()
                     self.bootstrap_failure(failure)
                     result = self.run_suite(aggregate=aggregate)
                     self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assert_no_current_results()
+                    if failure == "log-truncation":
+                        self.assert_receipts_unchanged(prior)
+                    else:
+                        self.assert_no_current_results()
                     for path, content in raw.items():
                         self.assertEqual(path.read_bytes(), content)
                     self.assertEqual(self.calls(), [])
@@ -1413,7 +1438,8 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
         for name in inputs:
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("original local build/source input\n")
+            if name != ".cargo/config.toml":
+                path.write_text("original local build/source input\n")
         (self.root / ".gitignore").write_text("new_ignored.rs\n")
         self.install(
             "git",
@@ -1785,6 +1811,9 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
             "RUSTC_WRAPPER",
             "RUSTC_WORKSPACE_WRAPPER",
             "CARGO_ENCODED_RUSTFLAGS",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
         ):
             for value in ("", str(tool)):
                 with self.subTest(override=name, present_empty=value == ""):
@@ -1821,6 +1850,292 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("override is not supported", result.stderr)
+
+    def test_preflight_raw_aliases_leave_receipts_and_external_inputs_unchanged(self):
+        marker, raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        for name in ("corpus", "artifacts", "corpus_archive"):
+            with self.subTest(root=name):
+                original = self.root / "fuzz" / name
+                saved = original.with_name(name + "-saved")
+                original.rename(saved)
+                external = Path(self.temporary) / (name + "-external")
+                external.mkdir()
+                sentinel = external / "owned-input"
+                sentinel.write_bytes(b"do not mutate external raw bytes")
+                original.symlink_to(external, target_is_directory=True)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("owned raw directory roots", result.stderr)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.artifacts / "summary/security.log").exists())
+                self.assertEqual(sentinel.read_bytes(), b"do not mutate external raw bytes")
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+                direct = self.helper_python(
+                    "import pathlib,runpy,sys\nh=runpy.run_path(sys.argv[1])\n"
+                    f"h['prepare_run'](pathlib.Path({str(marker.parent)!r}))"
+                )
+                self.assertNotEqual(direct.returncode, 0, direct.stderr)
+                self.assertEqual(self.calls(), [])
+                original.unlink()
+                saved.rename(original)
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_evidence_route_alias_and_raw_source_overlaps_reject_before_invalidation(self):
+        external = Path(self.temporary) / "external-evidence"
+        (external / "latest/fuzz").mkdir(parents=True)
+        sentinels = {}
+        for name in ("collection.ok", "execution.json", "run_summary.json"):
+            path = external / "latest/fuzz" / name
+            path.write_bytes(b"private external old receipt")
+            sentinels[path] = path.read_bytes()
+        alias = Path(self.temporary) / "alias"
+        alias.symlink_to(external, target_is_directory=True)
+        raw = self.root / "fuzz/corpus/owned"
+        raw.mkdir(parents=True)
+        for name in ("collection.ok", "execution.json", "run_summary.json"):
+            path = raw / "fuzz" / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"private raw input")
+            sentinels[path] = path.read_bytes()
+        for route in (alias / "latest", raw, self.root / "crates/server", self.root / ".git"):
+            with self.subTest(route=route):
+                result = self.run_suite(SECURITY_ARTIFACT_DIR=str(route))
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(), [])
+                for path, content in sentinels.items():
+                    self.assertEqual(path.read_bytes(), content)
+                self.assertFalse((route / "summary/security.log").exists())
+        marker, _unused_raw = self.seed_stale_results()
+        history_alias = alias / "history"
+        result = self.run_suite(SECURITY_HISTORY_DIR=str(history_alias))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(marker.exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_metadata_history_and_summary_log_aliases_reject_before_any_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        external = Path(self.temporary) / "external-log"
+        external.mkdir()
+        sentinel = external / "private"
+        sentinel.write_bytes(b"preserve external log and metadata bytes")
+        destinations = (
+            (self.root / "fuzz/corpus_meta", True),
+            (self.root / "fuzz/corpus_meta/history.jsonl", False),
+            (self.artifacts / "summary", True),
+            (self.artifacts / "summary/security.log", False),
+            (Path(self.env["SECURITY_HISTORY_DIR"]) / "fuzz_runs.jsonl", False),
+        )
+        for path, directory in destinations:
+            with self.subTest(path=path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.symlink_to(external if directory else sentinel, target_is_directory=directory)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls(), [])
+                self.assertEqual(sentinel.read_bytes(), b"preserve external log and metadata bytes")
+                for receipt, content in prior.items():
+                    self.assertEqual(receipt.read_bytes(), content)
+                path.unlink()
+
+    def test_fresh_nested_cache_ancestors_are_bound_before_tool_creation(self):
+        cache = self.root / "build/cache"
+        self.assertFalse(cache.parent.exists())
+        result = self.run_suite(CARGO_TARGET_DIR=str(cache), FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertIn("build", execution["source"]["files"])
+        self.assertEqual(execution["source"]["files"]["build"]["type"], "directory")
+        self.assertNotIn("build/cache", execution["source"]["files"])
+        self.assertEqual(execution["status"], "passed")
+        self.assertTrue(cache.is_dir())
+        self.assertFalse((cache / "fuzz").exists())
+
+    def test_effective_forced_native_tools_and_linker_match_actual_config(self):
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.summary()["execution"]
+        for name, command in (("cc", "cc"), ("cxx", "c++"), ("linker", "cc"), ("ar", "ar")):
+            tool = data["tools"][name]
+            self.assertEqual(tool["path"], str(self.bin / command))
+            self.assertEqual(
+                tool["sha256"], hashlib.sha256((self.bin / command).read_bytes()).hexdigest()
+            )
+            self.assertEqual(tool["exit_code"], 0)
+        self.assertEqual(
+            data["effective_native_commands"],
+            {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"},
+        )
+        self.assertIn(".cargo/config.toml", data["source"]["files"])
+
+    def test_preflight_rejects_hardlinked_log_history_and_metadata_destinations(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        history = Path(self.env["SECURITY_HISTORY_DIR"])
+        routes = (
+            self.artifacts / "summary/security.log",
+            history / "fuzz_runs.jsonl",
+            self.root / "fuzz/corpus_meta/history.jsonl",
+            self.root / "fuzz/corpus_meta/latest_run.json",
+        )
+        for index, route in enumerate(routes):
+            with self.subTest(route=route.relative_to(Path(self.temporary))):
+                route.parent.mkdir(parents=True, exist_ok=True)
+                external = Path(self.temporary) / f"external-hardlink-{index}"
+                external.write_bytes(b"external preserved hardlink bytes")
+                os.link(external, route)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(external.read_bytes(), b"external preserved hardlink bytes")
+                self.assertEqual(self.calls(), [])
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+                route.unlink()
+
+    def test_native_compiler_mismatch_and_unmodeled_config_reject_before_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
+        called = Path(self.temporary) / "native-called"
+        custom = Path(self.temporary) / "custom-cc"
+        custom.write_text(
+            f"#!{sys.executable}\nimport pathlib\npathlib.Path({str(called)!r}).touch()\n"
+        )
+        custom.chmod(0o755)
+        for name in (
+            "CC",
+            "CXX",
+            "AR",
+            "CC_x86_64_unknown_linux_gnu",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
+        ):
+            with self.subTest(override=name):
+                result = self.run_suite(**{name: str(custom)})
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse(called.exists())
+                self.assertEqual(self.calls(), [])
+                for path, content in prior.items():
+                    self.assertEqual(path.read_bytes(), content)
+        config = self.root / ".cargo/config.toml"
+        previous = config.read_bytes()
+        config.write_text('[build]\nrustc = "unmodeled-compiler"\n')
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [])
+        config.write_bytes(previous)
+        nested = self.root / "fuzz/.cargo/config.toml"
+        nested.parent.mkdir()
+        nested.write_text('[target.x86_64-unknown-linux-gnu]\nlinker="unmodeled-linker"\n')
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls(), [])
+        for path, content in prior.items():
+            self.assertEqual(path.read_bytes(), content)
+
+
+class SecurityFuzzPreflightConsistencyTests(SecurityFuzzFixture):
+    def test_all_selected_fuzz_log_aliases_reject_before_receipt_invalidation(self):
+        paths = (
+            "run.log",
+            "cargo-fuzz-help.log",
+            TARGETS[0] + "/build.log",
+            TARGETS[0] + "/run.log",
+        )
+        for relative in paths:
+            for kind in ("symlink", "hardlink", "directory"):
+                with self.subTest(path=relative, kind=kind):
+                    self.seed_stale_results()
+                    prior = self.saved_receipts()
+                    route = self.artifacts / "fuzz" / relative
+                    route.parent.mkdir(parents=True, exist_ok=True)
+                    route.unlink(missing_ok=True)
+                    external = self.root.parent / "external-log"
+                    external.write_bytes(b"preserve external log bytes")
+                    if kind == "symlink":
+                        route.symlink_to(external)
+                    elif kind == "hardlink":
+                        os.link(external, route)
+                    else:
+                        route.mkdir()
+                    try:
+                        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual(external.read_bytes(), b"preserve external log bytes")
+                        self.assert_receipts_unchanged(prior)
+                        self.assertEqual(self.calls(), [])
+                    finally:
+                        if route.is_dir():
+                            route.rmdir()
+                        else:
+                            route.unlink()
+
+    def test_selected_target_log_parent_alias_rejects_without_external_writes(self):
+        self.seed_stale_results()
+        prior = self.saved_receipts()
+        external = self.root.parent / "external-log-parent"
+        external.mkdir()
+        (external / "build.log").write_bytes(b"private build bytes")
+        (external / "run.log").write_bytes(b"private run bytes")
+        (self.artifacts / "fuzz" / TARGETS[0]).symlink_to(external)
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((external / "build.log").read_bytes(), b"private build bytes")
+        self.assertEqual((external / "run.log").read_bytes(), b"private run bytes")
+        self.assertEqual({path.name for path in external.iterdir()}, {"build.log", "run.log"})
+        self.assert_receipts_unchanged(prior)
+        self.assertEqual(self.calls(), [])
+
+    def test_invalid_stages_launch_no_tools_or_setup_and_preserve_receipts(self):
+        self.seed_stale_results()
+        prior = self.saved_receipts()
+        called = self.root.parent / "unexpected-tool"
+        for tool in ("git", "python3", "mkdir", "cargo"):
+            command = sys.executable if tool == "python3" else shutil.which(tool)
+            code = f"import os,pathlib,sys\npathlib.Path({str(called)!r}).write_text('called')\n"
+            if tool == "git":
+                code += (
+                    "print(os.environ['FIXTURE_ROOT']) if '--show-toplevel' in sys.argv else None\n"
+                )
+            elif tool != "cargo":
+                code += f"os.execv({command!r}, [{command!r}] + sys.argv[1:])\n"
+            self.install(tool, code)
+        for stages in (("unknown",), ("fuzz", "unknown")):
+            with self.subTest(stages=stages):
+                result = self.run_suite(stages=stages)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("unknown stage", result.stderr)
+                self.assert_receipts_unchanged(prior)
+                self.assertFalse(called.exists())
+                self.assertFalse((self.artifacts / "summary").exists())
+                self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+                called.unlink(missing_ok=True)
+
+    def test_relative_cargo_home_caller_alias_rejects_before_any_mutation(self):
+        self.caller = self.root.parent / "caller"
+        self.caller.mkdir()
+        external = self.root.parent / "external-home"
+        external.mkdir()
+        marker = external / "private-marker"
+        marker.write_bytes(b"preserve caller alias destination")
+        (self.caller / "relative-home").symlink_to(external)
+        self.install(
+            "git",
+            "import os,sys\n"
+            "if '--show-toplevel' in sys.argv: print(os.environ['FIXTURE_ROOT'])\n"
+            "else: raise SystemExit(1)",
+        )
+        self.seed_stale_results()
+        prior = self.saved_receipts()
+        result = self.run_suite(CARGO_HOME="relative-home", FUZZ_TARGETS=TARGETS[0])
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(marker.read_bytes(), b"preserve caller alias destination")
+        self.assertEqual(list(external.iterdir()), [marker])
+        self.assert_receipts_unchanged(prior)
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.root / "relative-home").exists())
 
 
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
@@ -1957,6 +2272,9 @@ class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
             "RUSTC_WRAPPER",
             "RUSTC_WORKSPACE_WRAPPER",
             "CARGO_ENCODED_RUSTFLAGS",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
         ):
             for value in ("", "unsupported-compiler-fixture"):
                 for arguments in ([], ["--stage", "fuzz"], ["--stage", "sbom", "--stage", "fuzz"]):
