@@ -184,7 +184,7 @@ prepare_sanitizer_attempt() {
 	sanitizer_initialize_evidence || return 1
 	SANITIZER_EVIDENCE_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_ARTIFACT_DIR") || return $?
 	# Retire stale success before rejecting flags, but never initialize target outputs.
-	if sanitizer_validate_cargo_flags "${SANITIZER_CARGO_FLAGS:-}"; then
+	if sanitizer_validate_cargo_flags "${SANITIZER_CARGO_FLAGS:-}" "${SANITIZER_BUILD_EXTRA_ARGS:-}"; then
 		:
 	else
 		local flag_status=$?

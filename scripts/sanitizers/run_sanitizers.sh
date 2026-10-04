@@ -41,7 +41,7 @@ preflight_exit() {
 }
 trap preflight_exit EXIT
 PREFLIGHT_PHASE=cargo-flags
-sanitizer_validate_cargo_flags "$EXTRA_CARGO_FLAGS" || exit 1
+sanitizer_validate_cargo_flags "$EXTRA_CARGO_FLAGS" "$SANITIZER_BUILD_EXTRA_ARGS" || exit 1
 preflight_route "$SANITIZER_TARGET_ROOT" || exit 1
 SANITIZER_TARGET_ROOT=$PREFLIGHT_ROUTE
 sanitizer_validate_output "$SANITIZER_TARGET_ROOT" "$workspace" || exit 1
@@ -511,8 +511,9 @@ try:
     build_seconds, run_seconds, kill_grace = map(duration, (build_limit_text, run_limit_text, grace_text))
     extra = shlex.split(extra_text)
     build_extra = shlex.split(build_extra_text)
-    forbidden = {"--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
-    require(not any(flag.split("=", 1)[0] in forbidden or (flag.startswith("-p") and flag != "--") for flag in extra), "Cargo flags cannot override required sanitizer selection or native target")
+    require(build_extra in ([], ["-Zbuild-std=std"], ["-Z", "build-std=std"]), "Only the supported build-std=std option is permitted")
+    forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
+    require(not any(flag.split("=", 1)[0] in forbidden or (flag.startswith("-p") and flag != "--") for flag in extra), "Cargo flags cannot override required sanitizer selection, configuration or native target")
     artifacts.mkdir(parents=True, exist_ok=True)
     summary.update({"sanitizers": sanitizers, "packages": packages, "build_deadline_seconds": build_seconds, "run_deadline_seconds": run_seconds, "kill_grace_seconds": kill_grace, "runtime_directory": runtime_text})
     metadata = parse_json(command([cargo, *build_extra, "metadata", "--format-version", "1", "--no-deps"], os.environ.copy(), build_seconds, "metadata"))

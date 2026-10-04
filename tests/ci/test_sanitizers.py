@@ -1357,3 +1357,136 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SanitizerCargoChannelTests(SanitizerLoggingTests):
+    """Owned argument channels fail before tools and preserve evidence history."""
+
+    def assert_channel_rejected(self, variable, value, route, case):
+        evidence = self.root / "evidence" if route == "standalone" else self.shared / "sanitizers"
+        evidence.mkdir(parents=True, exist_ok=True)
+        completed = b'{"status":"completed","commands":[],"units":[]}\n'
+        raw = b"prior controlled sanitizer bytes\n"
+        (evidence / "run-summary.json").write_bytes(completed)
+        (evidence / "001-metadata.stdout.log").write_bytes(raw)
+        protected = self.root / "crates/protected-input"
+        protected.parent.mkdir(exist_ok=True)
+        protected.write_bytes(b"protected source sentinel\n")
+        result = (self.run_wrapper if route == "standalone" else self.run_suite)(
+            **{variable: value}
+        )
+        (self.root / f"rejected-{case}-{route}.json").write_text(
+            json.dumps(
+                {
+                    "variable": variable,
+                    "value": value,
+                    "exit": result.returncode,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                },
+                sort_keys=True,
+            )
+        )
+        receipt = json.loads((evidence / "run-summary.json").read_text())
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+        self.assertEqual(receipt["status"], "failed")  # noqa: PT009
+        self.assertEqual(receipt["preflight_phase"], "cargo-flags")  # noqa: PT009
+        self.assertEqual(receipt["exit_code"], result.returncode)  # noqa: PT009
+        history = evidence / receipt["previous_attempt"]
+        self.assertEqual((history / "run-summary.json").read_bytes(), completed)  # noqa: PT009
+        self.assertEqual((history / "001-metadata.stdout.log").read_bytes(), raw)  # noqa: PT009
+        self.assertEqual((evidence / "001-metadata.stdout.log").read_bytes(), raw)  # noqa: PT009
+        self.assertEqual(protected.read_bytes(), b"protected source sentinel\n")  # noqa: PT009
+        for relative in (
+            "target",
+            "suite-target",
+            "producer-called",
+            "calls.jsonl",
+            "crates/protected-output",
+        ):
+            self.assertFalse((self.root / relative).exists(), relative)  # noqa: PT009
+
+    def test_config_split_and_equal_reject_both_channels_before_effects(self):
+        for variable in ("SANITIZER_CARGO_FLAGS", "SANITIZER_BUILD_EXTRA_ARGS"):
+            for value in (
+                "--config build.target-dir=crates/protected-output",
+                "--config=build.target-dir=crates/protected-output",
+                "--config build.rustflags=[]",
+                "--config=build.rustflags=[]",
+            ):
+                for route in ("standalone", "suite"):
+                    case = f"{variable}-{value.replace(' ', '_').replace('/', '_')}"
+                    with self.subTest(variable=variable, value=value, route=route):
+                        self.assert_channel_rejected(variable, value, route, case)
+
+    def test_build_global_alternate_selection_is_rejected_before_effects(self):
+        for index, value in enumerate(
+            (
+                "--manifest-path crates/Cargo.toml",
+                "--target other",
+                "-p other",
+                "-Zbuild-std=core",
+                "-Zbuild-std=std --config build.target-dir=crates/protected-output",
+                "--locked",
+                '"unterminated',
+            )
+        ):
+            for route in ("standalone", "suite"):
+                with self.subTest(value=value, route=route):
+                    self.assert_channel_rejected(
+                        "SANITIZER_BUILD_EXTRA_ARGS", value, route, str(index)
+                    )
+
+    def test_empty_and_fixed_build_std_keep_native_selection(self):
+        for value, prefix in (
+            ("", []),
+            ("-Zbuild-std=std", ["-Zbuild-std=std"]),
+            ("-Z build-std=std", ["-Z", "build-std=std"]),
+        ):
+            with self.subTest(value=value):
+                calls = self.root / "calls.jsonl"
+                if calls.exists():
+                    calls.unlink()
+                result = self.run_wrapper(SANITIZER_BUILD_EXTRA_ARGS=value)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+                receipt = self.summary()
+                self.assertEqual(receipt["status"], "completed")  # noqa: PT009
+                self.assertEqual(len(receipt["units"][0]["targets"]), len(TARGETS))  # noqa: PT009
+                self.assertIn(f"native={self.root / 'runtime'}", receipt["units"][0]["rustflags"])  # noqa: PT009
+                self.assertIn("-Z sanitizer=address", receipt["units"][0]["rustflags"])  # noqa: PT009
+                self.assertIn('curve25519_dalek_backend="serial"', receipt["units"][0]["rustflags"])  # noqa: PT009
+                cargo_calls = [
+                    json.loads(line)
+                    for line in calls.read_text().splitlines()
+                    if json.loads(line)["tool"] == "cargo"
+                ]
+                self.assertEqual(  # noqa: PT009 - active under Python -O
+                    cargo_calls[0]["args"],
+                    [*prefix, "metadata", "--format-version", "1", "--no-deps"],
+                )
+                build = next(call["args"] for call in cargo_calls if "test" in call["args"])
+                self.assertEqual(build[: len(prefix) + 1], [*prefix, "test"])  # noqa: PT009
+                self.assertIn("--lib", build)  # noqa: PT009
+                self.assertIn("--tests", build)  # noqa: PT009
+                self.assertEqual(build[-3:-1], ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009
+                result = self.run_suite(SANITIZER_BUILD_EXTRA_ARGS=value)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+                self.assertEqual(self.shared_receipt()["status"], "completed")  # noqa: PT009
+
+    def test_sanctioned_build_std_entrypoint_keeps_compiler_route(self):
+        result = subprocess.run(  # noqa: S603 - fixed script with inert compiler/Cargo fixtures only
+            [shutil.which("bash"), str(ROOT / "scripts/sanitizers/run_sanitizers_build_std.sh")],
+            cwd=self.root,
+            env={**self.environment, "ASAN_DIR": str(self.root / "runtime")},
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        self.assertEqual(self.summary()["status"], "completed")  # noqa: PT009
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        cargo_calls = [call["args"] for call in calls if call["tool"] == "cargo"]
+        self.assertTrue(all(args[0] == "-Zbuild-std=std" for args in cargo_calls))  # noqa: PT009
+        self.assertIn(f"native={self.root / 'runtime'}", self.summary()["units"][0]["rustflags"])  # noqa: PT009
+        self.assertIn("-Z sanitizer=address", self.summary()["units"][0]["rustflags"])  # noqa: PT009
