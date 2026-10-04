@@ -790,7 +790,7 @@ sanitizer_early_logging_failure() {
 }
 
 run_sanitizers_stage() {
-	local status=0 cleanup_status=0 evidence_status=0 logging_status=0
+	local status=0 cleanup_status=0 evidence_status=0 logging_status=0 initial_summary
 	prepare_sanitizer_attempt || return $?
 	if sanitizer_stage_log "[security] >>> sanitizer smoke"; then
 		:
@@ -799,11 +799,20 @@ run_sanitizers_stage() {
 		sanitizer_early_logging_failure initial-log "$logging_status"
 		return $?
 	fi
-	if sanitize >&"$sanitizer_log_fd" 2>&1; then
-		status=0
+	if initial_summary=$(sanitizer_target_binding summary-snapshot "$SANITIZER_EVIDENCE_BINDING"); then
+		if sanitize >&"$sanitizer_log_fd" 2>&1; then
+			status=0
+		else
+			status=$?
+			# Only our still-identical initialization receipt can describe a
+			# launcher failure. Detailed child receipts retain their own bytes.
+			sanitizer_target_binding launcher-failure "$SANITIZER_EVIDENCE_BINDING" \
+				"$initial_summary" "$status" >&"$sanitizer_log_fd" 2>&1 || evidence_status=1
+			sanitizer_stage_log "[security] <<< sanitizer smoke: failed (exit=$status)" || logging_status=$?
+		fi
 	else
 		status=$?
-		sanitizer_stage_log "[security] <<< sanitizer smoke: failed (exit=$status)" || logging_status=$?
+		evidence_status=1
 	fi
 	cleanup_sanitizer_outputs >&"$sanitizer_log_fd" 2>&1 || cleanup_status=$?
 	if [[ $cleanup_status -ne 0 ]]; then

@@ -44,9 +44,17 @@ plain+=b'\0'*(65535-len(plain))
 deflate_bytes=(gzip.compress(b'',mtime=0)[:10]+b'\0'
     +struct.pack('<HH',len(plain),len(plain)^65535)+plain+b'\x07'+b'\0'*8)
 if case=='unsupported':
-    try:state['verify_archive_stream'](io.BytesIO(deflate_bytes),output/'deflate-probe')
+    # Independently bind this fixture to a DEFLATE decoder error. TarFile may
+    # normalize that error to ReadError before the helper rejects the archive.
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(deflate_bytes)) as stream:stream.read()
     except zlib.error:pass
     else:raise RuntimeError('DEFLATE fixture did not reach the intended decoder error')
+    try:state['verify_archive_stream'](io.BytesIO(deflate_bytes),output/'deflate-probe')
+    except zlib.error:pass
+    except ValueError as error:
+        if str(error)!='archive construction did not produce a complete archive':raise
+    else:raise RuntimeError('archive verifier accepted the corrupt DEFLATE fixture')
     link=output/'19980101T000000000000Z.tar.gz';link.symlink_to(sentinel)
     unsupported[link.name]='symlink'
     directory=output/'19980102T000000000000Z.tar.gz';directory.mkdir()

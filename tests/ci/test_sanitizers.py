@@ -1611,6 +1611,217 @@ os.execv({real_bash!r}, [{real_bash!r}, *sys.argv[1:]])
         self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009 - active under Python -O
 
 
+class SanitizerLauncherReceiptTests(SanitizerLoggingFixture, unittest.TestCase):
+    """Actual wrapper launcher failures with isolated receipt fault controls."""
+
+    def setUp(self):
+        super().setUp()
+        self.make_tool(
+            "nix",
+            """
+import json
+import os
+from pathlib import Path
+root = Path(os.environ["SANITIZER_FIXTURE"])
+evidence = Path(os.environ["SANITIZER_ARTIFACT_DIR"])
+summary = evidence / "run-summary.json"
+initial = summary.read_bytes()
+(root / "initial-summary").write_bytes(initial)
+(root / "initial-identity").write_text(str(summary.stat().st_ino))
+(root / "producer-called").write_text("inert launcher control only")
+mode = os.environ.get("MODEL_RECEIPT_CHILD", "launcher-failure")
+if mode.startswith("detailed-"):
+    receipt = {"status": "failed" if mode == "detailed-failure" else "completed",
+               "stage": "runtime", "commands": [{"exit_code": 29}],
+               "units": [{"package": "ffi", "status": "observed"}],
+               "retained_detail": "exact child bytes"}
+    summary.write_bytes(json.dumps(receipt, indent=1).encode() + b"\\n\\n")
+elif mode == "replacement-identical":
+    summary.rename(root / "held-summary")
+    summary.write_bytes(initial)
+elif mode == "changed-initial":
+    summary.write_bytes(initial + b" ")
+elif mode == "malformed":
+    summary.write_bytes(b"{malformed child receipt\\n")
+elif mode in {"leaf-symlink", "leaf-hardlink", "leaf-directory"}:
+    summary.rename(root / "held-summary")
+    external = root / "external-summary"
+    external.write_bytes(b"external receipt remains exact\\n")
+    if mode == "leaf-symlink":
+        summary.symlink_to(external)
+    elif mode == "leaf-hardlink":
+        summary.hardlink_to(external)
+    else:
+        summary.mkdir()
+elif mode == "route-replacement":
+    evidence.rename(root / "held-evidence")
+    evidence.mkdir()
+    summary.write_bytes(b'{"status":"completed","retained":"replacement"}\\n')
+    (evidence / "sentinel").write_bytes(b"replacement namespace remains exact\\n")
+elif mode == "launcher-cleanup-swap":
+    target = Path(os.environ["SANITIZER_TARGET_DIR"])
+    target.rename(root / "held-target")
+    target.mkdir()
+    (target / "sentinel").write_bytes(b"replacement target remains exact\\n")
+if summary.is_file():
+    (root / "child-summary").write_bytes(summary.read_bytes())
+print("inert modeled launcher exits before acceptance")
+raise SystemExit(23)
+""",
+        )
+        (self.bin / "python3").unlink()
+        self.make_tool(
+            "python3",
+            """
+import os
+import sys
+from pathlib import Path
+fault = os.environ.get("MODEL_RECEIPT_FAULT", "")
+operation = sys.argv[3] if len(sys.argv) > 3 and sys.argv[1:3] == ["-I", "-"] else ""
+root = Path(os.environ["SANITIZER_FIXTURE"])
+if operation == "summary-snapshot" and fault == "malformed-snapshot":
+    summary = root / "shared/sanitizers/run-summary.json"
+    summary.write_bytes(b"{malformed snapshot receipt\\n")
+    (root / "fault-summary").write_bytes(summary.read_bytes())
+if operation == "launcher-failure" and fault:
+    code = sys.stdin.read()
+    if fault == "recording-failure":
+        prefix = ('import os\\n'
+                  'def reject_replace(*args, **kwargs):\\n'
+                  '    raise OSError("controlled receipt replace failure")\\n'
+                  'os.replace = reject_replace\\n')
+    elif fault == "wrong-owner":
+        prefix = f"import os\\nos.getuid = lambda: {os.getuid() + 1}\\n"
+    else:
+        prefix = ""
+    os.execv(sys.executable, [sys.executable, "-I", "-c", prefix + code, *sys.argv[3:]])
+os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+""",
+        )
+
+    def launcher_case(self, mode="launcher-failure", **overrides):
+        fixture = SanitizerLauncherReceiptTests()
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        return fixture, fixture.run_suite(MODEL_RECEIPT_CHILD=mode, **overrides)
+
+    def test_early_launcher_failure_records_exit_and_archives_stale_success(self):
+        evidence = self.shared / "sanitizers"
+        evidence.mkdir(parents=True)
+        stale = b'{"status":"completed","commands":["stale"],"units":[]}\n'
+        (evidence / "run-summary.json").write_bytes(stale)
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+        receipt = self.shared_receipt()
+        self.assertEqual(receipt["preflight_phase"], "launcher")  # noqa: PT009
+        self.assertEqual(receipt["exit_code"], 23)  # noqa: PT009
+        self.assertEqual(receipt["status"], "failed")  # noqa: PT009
+        self.assertEqual(receipt["commands"], [])  # noqa: PT009
+        self.assertEqual(receipt["units"], [])  # noqa: PT009
+        self.assertFalse((self.root / "suite-target").exists())  # noqa: PT009
+        preserved = [
+            path.read_bytes() for path in evidence.glob(".previous-attempt-*/run-summary.json")
+        ]
+        self.assertIn(stale, preserved)  # noqa: PT009
+
+    def test_child_failure_and_success_receipts_preserve_exact_bytes(self):
+        for mode in ("detailed-failure", "detailed-success"):
+            with self.subTest(mode=mode):
+                fixture, result = self.launcher_case(mode)
+                self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+                actual = fixture.shared / "sanitizers/run-summary.json"
+                self.assertEqual(actual.read_bytes(), (fixture.root / "child-summary").read_bytes())  # noqa: PT009
+                self.assertNotIn("preflight_phase", fixture.shared_receipt())  # noqa: PT009
+
+    def test_changed_content_and_replaced_identity_preserve_exact_receipts(self):
+        for mode in ("changed-initial", "replacement-identical"):
+            with self.subTest(mode=mode):
+                fixture, result = self.launcher_case(mode)
+                self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+                summary = fixture.shared / "sanitizers/run-summary.json"
+                self.assertEqual(  # noqa: PT009 - active under Python -O
+                    summary.read_bytes(), (fixture.root / "child-summary").read_bytes()
+                )
+                if mode == "replacement-identical":
+                    self.assertNotEqual(  # noqa: PT009 - active under Python -O
+                        summary.stat().st_ino, int((fixture.root / "initial-identity").read_text())
+                    )
+
+    def test_unsafe_summary_aliases_and_malformed_child_are_unchanged(self):
+        for mode in ("leaf-symlink", "leaf-hardlink", "leaf-directory", "malformed"):
+            with self.subTest(mode=mode):
+                fixture, result = self.launcher_case(mode)
+                self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+                summary = fixture.shared / "sanitizers/run-summary.json"
+                if mode == "leaf-directory":
+                    self.assertTrue(summary.is_dir())  # noqa: PT009
+                    self.assertEqual(list(summary.iterdir()), [])  # noqa: PT009
+                else:
+                    self.assertEqual(  # noqa: PT009 - active under Python -O
+                        summary.read_bytes(), (fixture.root / "child-summary").read_bytes()
+                    )
+                if mode.startswith("leaf-"):
+                    self.assertEqual(  # noqa: PT009 - active under Python -O
+                        (fixture.root / "external-summary").read_bytes(),
+                        b"external receipt remains exact\n",
+                    )
+
+    def test_replaced_route_retains_original_and_replacement_receipts(self):
+        fixture, result = self.launcher_case("route-replacement")
+        self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - active under Python -O
+            (fixture.root / "held-evidence/run-summary.json").read_bytes(),
+            (fixture.root / "initial-summary").read_bytes(),
+        )
+        summary = fixture.shared / "sanitizers/run-summary.json"
+        self.assertEqual(summary.read_bytes(), (fixture.root / "child-summary").read_bytes())  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - active under Python -O
+            (summary.parent / "sentinel").read_bytes(), b"replacement namespace remains exact\n"
+        )
+        self.assertIn("remaining output stages held", result.stdout)  # noqa: PT009
+
+    def test_recording_failure_and_wrong_owner_preserve_initial_and_primary_exit(self):
+        for fault in ("recording-failure", "wrong-owner"):
+            with self.subTest(fault=fault):
+                fixture, result = self.launcher_case(MODEL_RECEIPT_FAULT=fault)
+                self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+                evidence = fixture.shared / "sanitizers"
+                self.assertEqual(  # noqa: PT009 - active under Python -O
+                    (evidence / "run-summary.json").read_bytes(),
+                    (fixture.root / "initial-summary").read_bytes(),
+                )
+                self.assertEqual(list(evidence.glob(".launcher-summary-*")), [])  # noqa: PT009
+
+    def test_malformed_snapshot_rejects_before_launcher_without_replacement(self):
+        result = self.run_suite(MODEL_RECEIPT_FAULT="malformed-snapshot")
+        self.assertNotEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+        self.assertFalse((self.root / "producer-called").exists())  # noqa: PT009
+        self.assertEqual(  # noqa: PT009 - active under Python -O
+            (self.shared / "sanitizers/run-summary.json").read_bytes(),
+            (self.root / "fault-summary").read_bytes(),
+        )
+        self.assertFalse((self.root / "suite-target").exists())  # noqa: PT009
+
+    def test_launcher_with_cleanup_and_logging_failures_keeps_primary_status(self):
+        for mode, phase in (
+            ("launcher-failure", "child-failure"),
+            ("launcher-cleanup-swap", "cleanup-failure"),
+        ):
+            with self.subTest(mode=mode):
+                fixture, result = self.launcher_case(mode, MODEL_LOG_FAILURE=phase)
+                self.assertEqual(result.returncode, 23, result.stderr)  # noqa: PT009
+                receipt = fixture.shared_receipt()
+                self.assertEqual(receipt["status"], "failed")  # noqa: PT009
+                self.assertEqual(receipt["exit_code"], 23)  # noqa: PT009
+                self.assertEqual(receipt["logging_exit_code"], 47)  # noqa: PT009
+                if mode == "launcher-cleanup-swap":
+                    self.assertEqual(receipt["cleanup_exit_code"], 1)  # noqa: PT009
+                    self.assertEqual(  # noqa: PT009 - active under Python -O
+                        (fixture.root / "suite-target/sentinel").read_bytes(),
+                        b"replacement target remains exact\n",
+                    )
+
+
 class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
     """Owned argument channels fail before tools and preserve evidence history."""
 

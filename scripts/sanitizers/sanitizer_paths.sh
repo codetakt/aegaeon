@@ -375,11 +375,63 @@ sanitizer_initialize_evidence() {
 }
 
 sanitizer_target_binding() {
-	python3 -I - "$1" "$2" <<'SANITIZER_BINDING'
+	python3 -I - "$1" "$2" "${3:-}" "${4:-}" <<'SANITIZER_BINDING'
 import json
 import os
+import secrets
 import stat
 import sys
+
+def checked_summary(directory):
+    descriptor = os.open("run-summary.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    with os.fdopen(descriptor, "rb") as stream:
+        metadata = os.fstat(stream.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_uid != os.getuid():
+            raise ValueError("Unsafe sanitizer summary alias or ownership")
+        raw = stream.read()
+        current = os.stat("run-summary.json", dir_fd=directory, follow_symlinks=False)
+        if (current.st_dev, current.st_ino, current.st_nlink, current.st_uid) != (metadata.st_dev, metadata.st_ino, 1, os.getuid()):
+            raise ValueError("Sanitizer summary identity changed")
+    receipt = json.loads(raw)
+    if not isinstance(receipt, dict):
+        raise ValueError("Malformed sanitizer summary")
+    return metadata, raw, receipt
+
+def launcher_receipt(directory, operation, snapshot, status):
+    metadata, raw, receipt = checked_summary(directory)
+    identity = [metadata.st_dev, metadata.st_ino]
+    if operation == "summary-snapshot":
+        if (receipt.get("status") != "failed" or receipt.get("stage") != "preflight"
+                or receipt.get("commands") != [] or receipt.get("units") != []
+                or set(receipt) - {"status", "stage", "commands", "units", "previous_attempt"}):
+            raise ValueError("Sanitizer invocation initialization receipt changed")
+        print(json.dumps({"identity": identity, "content": raw.hex()}))
+        return
+    initial = json.loads(snapshot)
+    if identity != initial["identity"] or raw != bytes.fromhex(initial["content"]):
+        # A child receipt (including a replacement with identical bytes) owns
+        # its content. A launcher failure must not overwrite that evidence.
+        return
+    code = int(status)
+    if not 0 < code <= 255:
+        raise ValueError("Invalid sanitizer launcher status")
+    receipt.update(status="failed", stage="preflight", preflight_phase="launcher", exit_code=code)
+    name = ".launcher-summary-" + secrets.token_hex(16)
+    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(receipt, stream, indent=2)
+            stream.write("\n")
+        # Recheck the admitted leaf immediately before the fd-relative replace.
+        current, current_raw, _ = checked_summary(directory)
+        if [current.st_dev, current.st_ino] != identity or current_raw != raw:
+            raise ValueError("Sanitizer initialization receipt changed before recording")
+        os.replace(name, "run-summary.json", src_dir_fd=directory, dst_dir_fd=directory)
+    finally:
+        try:
+            os.unlink(name, dir_fd=directory)
+        except FileNotFoundError:
+            pass
 
 def remove_contents(directory):
     # Every traversal remains anchored to an open, no-follow directory handle.
@@ -401,8 +453,8 @@ def remove_contents(directory):
         else:
             os.unlink(entry.name, dir_fd=directory)
 
-operation, value = sys.argv[1:]
-if operation not in {"prepare", "validate", "cleanup"}:
+operation, value, snapshot, status = sys.argv[1:]
+if operation not in {"prepare", "validate", "cleanup", "summary-snapshot", "launcher-failure"}:
     raise ValueError("Unknown sanitizer path binding operation")
 flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 if operation == "prepare":
@@ -448,6 +500,8 @@ try:
         fd = child
     if operation == "prepare":
         print(json.dumps({"target": target, "identities": identities}))
+    elif operation in {"summary-snapshot", "launcher-failure"}:
+        launcher_receipt(fd, operation, snapshot, status)
 finally:
     os.close(fd)
 SANITIZER_BINDING
