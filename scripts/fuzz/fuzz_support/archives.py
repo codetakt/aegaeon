@@ -149,47 +149,57 @@ def validate_pruning_candidate(
 
 
 @contextmanager
+def open_pruning_candidate(
+    directory_fd: int, name: str, identity: tuple[int, ...], digest: bytes
+) -> Iterator[int]:
+    """Readmit a pinned archive for one operation, then release its descriptor."""
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+    try:
+        validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
 def archive_retention_plan(
     directory: Path, directory_fd: int, current: str, keep_archives: int | None
 ) -> Iterator[list]:
-    with ExitStack() as handles:
-        candidates = []
-        if keep_archives is not None:
-            if keep_archives < 1:
-                invalid("archive retention must keep the current archive")
-            names = os.listdir(directory_fd)
-            for name in sorted(names):
-                if name == current or not re.fullmatch(r"[0-9]{8}T[0-9]{12}Z\.tar\.gz", name):
-                    continue
-                before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-                if not (
-                    stat.S_ISREG(before.st_mode)
-                    and before.st_uid == os.geteuid()
-                    and before.st_nlink == 1
-                ):
-                    continue
-                with ExitStack() as candidate_handles:
-                    descriptor = os.open(
-                        name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
-                    )
-                    candidate_handles.callback(os.close, descriptor)
-                    identity = archive_snapshot(before)
-                    if archive_snapshot(os.fstat(descriptor)) != identity:
-                        invalid("archive retention candidate changed before opening")
-                    with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                        try:
-                            verify_archive_stream(stream, directory / name)
-                        except (ValueError, gzip.BadGzipFile, zlib.error):
-                            # Rejected bytes remain evidence; their descriptor closes here.
-                            continue
-                    digest = descriptor_content_digest(descriptor)
-                    validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
-                    candidates.append((name, descriptor, identity, digest))
-                    # Only admitted candidates stay pinned through reversible pruning.
-                    handles.enter_context(candidate_handles.pop_all())
-            candidates = candidates[: max(0, len(candidates) + 1 - keep_archives)]
-        with archive_pruning_backups(directory_fd, candidates) as plan:
-            yield plan
+    candidates = []
+    if keep_archives is not None:
+        if keep_archives < 1:
+            invalid("archive retention must keep the current archive")
+        names = os.listdir(directory_fd)
+        for name in sorted(names):
+            if name == current or not re.fullmatch(r"[0-9]{8}T[0-9]{12}Z\.tar\.gz", name):
+                continue
+            before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            if not (
+                stat.S_ISREG(before.st_mode)
+                and before.st_uid == os.geteuid()
+                and before.st_nlink == 1
+            ):
+                continue
+            with ExitStack() as candidate_handles:
+                descriptor = os.open(
+                    name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+                )
+                candidate_handles.callback(os.close, descriptor)
+                identity = archive_snapshot(before)
+                if archive_snapshot(os.fstat(descriptor)) != identity:
+                    invalid("archive retention candidate changed before opening")
+                with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                    try:
+                        verify_archive_stream(stream, directory / name)
+                    except (ValueError, gzip.BadGzipFile, zlib.error):
+                        # Rejected bytes remain evidence; their descriptor closes here.
+                        continue
+                digest = descriptor_content_digest(descriptor)
+                validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
+                candidates.append((name, identity, digest))
+        candidates = candidates[: max(0, len(candidates) + 1 - keep_archives)]
+    with archive_pruning_backups(directory_fd, candidates) as plan:
+        yield plan
 
 
 def copy_archive_descriptor(original: int, destination: int, size: int) -> None:
@@ -208,33 +218,38 @@ def copy_archive_descriptor(original: int, destination: int, size: int) -> None:
 
 
 def finish_pruning_backup(directory_fd: int, backup: tuple, *, complete: bool) -> None:
-    name, original, digest, temporary, descriptor = backup
-    valid = (
-        owned_archive_entry(directory_fd, temporary, descriptor)
-        and os.fstat(descriptor).st_nlink == 1
-        and descriptor_content_digest(descriptor) == digest
-    )
-    if complete and not valid:
-        invalid("archive retention backup changed before disposal")
-    restored = False
-    if not complete and valid:
-        try:
-            os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-        except FileNotFoundError:
-            with suppress(OSError):
-                os.link(
-                    temporary,
-                    name,
-                    src_dir_fd=directory_fd,
-                    dst_dir_fd=directory_fd,
-                    follow_symlinks=False,
-                )
-                restored = owned_archive_entry(directory_fd, name, descriptor)
-    original_unchanged = (
-        owned_archive_entry(directory_fd, name, original)
-        and descriptor_content_digest(original) == digest
-    )
-    if valid and (complete or restored or original_unchanged):
+    candidate, temporary, backup_identity = backup
+    name, original_identity, digest = candidate
+    with open_pruning_candidate(directory_fd, temporary, backup_identity, digest) as descriptor:
+        restored = False
+        original_unchanged = False
+        if not complete:
+            try:
+                os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                with suppress(OSError):
+                    os.link(
+                        temporary,
+                        name,
+                        src_dir_fd=directory_fd,
+                        dst_dir_fd=directory_fd,
+                        follow_symlinks=False,
+                    )
+                    restored = owned_archive_entry(directory_fd, name, descriptor)
+            if not restored:
+                with (
+                    suppress(OSError, ValueError),
+                    open_pruning_candidate(directory_fd, name, original_identity, digest),
+                ):
+                    original_unchanged = True
+        if not (complete or restored or original_unchanged):
+            return
+        if (
+            not owned_archive_entry(directory_fd, temporary, descriptor)
+            or os.fstat(descriptor).st_nlink != (2 if restored else 1)
+            or descriptor_content_digest(descriptor) != digest
+        ):
+            invalid("archive retention backup changed before disposal")
         if complete:
             os.unlink(temporary, dir_fd=directory_fd)
         else:
@@ -262,9 +277,10 @@ def archive_pruning_backups(directory_fd: int, candidates: list) -> Iterator[lis
     """Retain independent bytes until pruning and current-archive checks succeed."""
     backups = []
     complete = False
-    with ExitStack() as handles:
-        try:
-            for name, original, identity, digest in candidates:
+    try:
+        for candidate in candidates:
+            name, identity, digest = candidate
+            with open_pruning_candidate(directory_fd, name, identity, digest) as original:
                 temporary = ".retention-" + uuid.uuid4().hex + "-" + name + ".tmp"
                 descriptor = os.open(
                     temporary,
@@ -272,28 +288,29 @@ def archive_pruning_backups(directory_fd: int, candidates: list) -> Iterator[lis
                     0o600,
                     dir_fd=directory_fd,
                 )
-                handles.callback(os.close, descriptor)
-                backups.append((name, original, digest, temporary, descriptor))
-                if (
-                    not owned_archive_entry(directory_fd, temporary, descriptor)
-                    or os.fstat(descriptor).st_nlink != 1
-                ):
-                    invalid("archive retention backup is not exclusive before copying")
-                copy_archive_descriptor(original, descriptor, identity[6])
-                os.fchmod(descriptor, identity[2] & 0o777)
-                os.utime(descriptor, ns=(os.fstat(original).st_atime_ns, identity[-2]))
-                os.fsync(descriptor)
-                validate_pruning_candidate(directory_fd, name, original, identity, digest)
-                if (
-                    not owned_archive_entry(directory_fd, temporary, descriptor)
-                    or os.fstat(descriptor).st_nlink != 1
-                    or descriptor_content_digest(descriptor) != digest
-                ):
-                    invalid("archive retention backup differs from pinned original")
-            yield candidates
-            complete = True
-        finally:
-            finish_pruning_backups(directory_fd, backups, complete=complete)
+                try:
+                    backups.append((candidate, temporary, archive_snapshot(os.fstat(descriptor))))
+                    if (
+                        not owned_archive_entry(directory_fd, temporary, descriptor)
+                        or os.fstat(descriptor).st_nlink != 1
+                    ):
+                        invalid("archive retention backup is not exclusive before copying")
+                    copy_archive_descriptor(original, descriptor, identity[6])
+                    os.fchmod(descriptor, identity[2] & 0o777)
+                    os.utime(descriptor, ns=(os.fstat(original).st_atime_ns, identity[-2]))
+                    os.fsync(descriptor)
+                    backup_identity = archive_snapshot(os.fstat(descriptor))
+                    backups[-1] = (candidate, temporary, backup_identity)
+                    validate_pruning_candidate(directory_fd, name, original, identity, digest)
+                    validate_pruning_candidate(
+                        directory_fd, temporary, descriptor, backup_identity, digest
+                    )
+                finally:
+                    os.close(descriptor)
+        yield candidates
+        complete = True
+    finally:
+        finish_pruning_backups(directory_fd, backups, complete=complete)
 
 
 def write_exclusive_archive(  # noqa: C901, PLR0912, PLR0915 - owned archive publication boundary
@@ -361,8 +378,9 @@ def write_exclusive_archive(  # noqa: C901, PLR0912, PLR0915 - owned archive pub
             validate_archive_directory(directory, identities)
             with archive_retention_plan(directory, directory_fd, path.name, keep_archives) as plan:
                 # Validate the entire pruning set before accepting or deleting anything.
-                for name, old_descriptor, identity, digest in plan:
-                    validate_pruning_candidate(directory_fd, name, old_descriptor, identity, digest)
+                for name, identity, digest in plan:
+                    with open_pruning_candidate(directory_fd, name, identity, digest):
+                        pass
                 if descriptor_content_digest(descriptor) != constructed_digest:
                     invalid("archive content changed before completion")
                 validate_archive_directory(directory, identities)
@@ -372,10 +390,10 @@ def write_exclusive_archive(  # noqa: C901, PLR0912, PLR0915 - owned archive pub
                     or os.fstat(descriptor).st_nlink != published_link_count
                 ):
                     invalid("archive publication identity or alias count changed before completion")
-                for name, old_descriptor, identity, digest in plan:
+                for name, identity, digest in plan:
                     validate_archive_directory(directory, identities)
-                    validate_pruning_candidate(directory_fd, name, old_descriptor, identity, digest)
-                    os.unlink(name, dir_fd=directory_fd)
+                    with open_pruning_candidate(directory_fd, name, identity, digest):
+                        os.unlink(name, dir_fd=directory_fd)
                 # Retention is reversible until these final acceptance checks pass.
                 if descriptor_content_digest(descriptor) != constructed_digest:
                     invalid("archive content changed during retention")

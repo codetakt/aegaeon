@@ -16,8 +16,9 @@ root=h['ROOT'];case=sys.argv[2];source=root/'fuzz/corpus/owned'
 source.mkdir(parents=True);(source/'seed').write_bytes(b'raw input')
 output=root/'fuzz/corpus_archive';output.mkdir()
 prior={}
-for i in range(3):
-    p=output/f'1999010{i+1}T000000000000Z.tar.gz'
+many=case in ('valid-limit','valid-keep-limit','valid-limit-prune-error')
+for i in range(80 if many else 3):
+    p=output/f'19990101T{i:012d}Z.tar.gz'
     with tarfile.open(p,'w:gz') as archive:archive.add(source/'seed',arcname='seed')
     prior[p.name]=p.read_bytes()
 final=output/'20261004T123456123456Z.tar.gz'
@@ -28,8 +29,11 @@ if case=='malformed-limit':
     for i in range(80):
         path=output/f'19970101T{i:012d}Z.tar.gz'
         path.write_bytes(b'not an archive');unsupported[path.name]='malformed'
+if many or case=='malformed-limit':
     descriptor_limit=resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE,(min(64,descriptor_limit[0]),descriptor_limit[1]))
+keep_archives=100 if case=='valid-keep-limit' else 1
+if case=='valid-limit-prune-error':case='partial-prune-error'
 deflate_raw=io.BytesIO()
 with tarfile.open(fileobj=deflate_raw,mode='w') as archive:
     member=tarfile.TarInfo('seed');member.size=len(b'raw input')
@@ -108,10 +112,24 @@ if case in ('restore-collision','restore-error'):
             (output/destination).symlink_to(sentinel)
         return original_link(source,destination,*args,**kwargs)
     state['os'].link=link
-failed=False
-try:h['write_exclusive_archive'](final,[(source,'corpus')],1)
-except (OSError,ValueError,zlib.error):failed=True
+original_open=os.open;original_close=os.close;active_descriptors=set();peak_descriptors=0
+def tracked_open(*args,**kwargs):
+    global peak_descriptors
+    fd=original_open(*args,**kwargs);active_descriptors.add(fd)
+    peak_descriptors=max(peak_descriptors,len(active_descriptors));return fd
+def tracked_close(fd):
+    original_close(fd);active_descriptors.discard(fd)
+state['os'].open=tracked_open;state['os'].close=tracked_close
+failed=False;failure_reason=''
+try:h['write_exclusive_archive'](final,[(source,'corpus')],keep_archives)
+except (OSError,ValueError,zlib.error) as error:failed=True;failure_reason=str(error)
 finally:
+    unclosed_descriptors=[]
+    for fd in active_descriptors:
+        try:os.fstat(fd)
+        except OSError:pass
+        else:unclosed_descriptors.append(fd)
+    state['os'].open=original_open;state['os'].close=original_close
     if descriptor_limit is not None:
         resource.setrlimit(resource.RLIMIT_NOFILE,descriptor_limit)
     state['os'].link=original_link
@@ -143,6 +161,8 @@ for name,kind in unsupported.items():
     else:ok=p.read_bytes()==(b'not an archive' if kind=='malformed' else b'unmanaged evidence')
     preserved[name]=ok
 print(json.dumps({'case':case,'failed':failed,'published':published,'valid':valid,
+    'failure_reason':failure_reason,'peak_owned_descriptors':peak_descriptors,
+    'unclosed_owned_descriptors':sorted(unclosed_descriptors),
     'remaining':remaining,'unsupported':preserved,'recovery_backups':backup_rows,
     'restoration_links':restoration_links,
     'replacement_preserved':case!='pinned-replacement' or
@@ -180,6 +200,7 @@ class FuzzArchiveRetentionTests(SecurityFuzzFixture):
         self.assertTrue(record["raw_preserved"] and record["external_preserved"], record)
         self.assertEqual(record["temps"], [], record)
         self.assertTrue(all(record["recovery_backups"].values()), record)
+        self.assertEqual(record["unclosed_owned_descriptors"], [], record)
         return record
 
     def test_supported_retention_keeps_the_current_complete_archive(self):
@@ -209,6 +230,31 @@ class FuzzArchiveRetentionTests(SecurityFuzzFixture):
         self.assertEqual(len(record["unsupported"]), 80, record)
         self.assertTrue(all(record["unsupported"].values()), record)
         self.assertEqual(record["remaining"], {}, record)
+
+    def test_many_supported_archives_prune_with_bounded_descriptors(self):
+        record = self.control("valid-limit")
+        self.assertFalse(record["failed"], record)
+        self.assertTrue(record["valid"], record)
+        self.assertEqual(record["remaining"], {}, record)
+        self.assertLess(record["peak_owned_descriptors"], 32, record)
+
+    def test_many_retained_archives_do_not_hold_descriptors_outside_pruning(self):
+        record = self.control("valid-keep-limit")
+        self.assertFalse(record["failed"], record)
+        self.assertTrue(record["valid"], record)
+        self.assertEqual(len(record["remaining"]), 80, record)
+        self.assertTrue(all(record["remaining"].values()), record)
+        self.assertLess(record["peak_owned_descriptors"], 32, record)
+
+    def test_many_archives_restore_after_partial_pruning_with_bounded_descriptors(self):
+        record = self.control("valid-limit-prune-error")
+        self.assertTrue(record["failed"], record)
+        self.assertEqual(record["failure_reason"], "owned prune failure", record)
+        self.assertFalse(record["published"], record)
+        self.assertEqual(len(record["remaining"]), 80, record)
+        self.assertTrue(all(record["remaining"].values()), record)
+        self.assertEqual(record["recovery_backups"], {}, record)
+        self.assertLess(record["peak_owned_descriptors"], 32, record)
 
     def test_current_deflate_corruption_aborts_without_pruning(self):
         record = self.control("current-deflate-corruption")
