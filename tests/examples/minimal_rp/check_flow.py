@@ -140,6 +140,58 @@ class ApplicationSmoke(unittest.TestCase):
             timeout=10,
         )
         self.assertEqual(rp._client, CLIENT)
+        for attribute, payload in (
+            *(
+                (attribute, payload)
+                for attribute in ("_discovery", "_client")
+                for payload in (None, [], "secret-token-marker", False, 42)
+            ),
+            ("_client", {}),
+            *(("_client", {"client_id": value}) for value in (None, "", False, 1, [], {})),
+        ):
+            with self.subTest(attribute=attribute, payload=payload):
+                discovery, client = rp._discovery, rp._client
+                with (
+                    patch.object(
+                        rp.requests,
+                        "get",
+                        return_value=Response(payload if attribute == "_discovery" else DISCOVERY),
+                    ) as get,
+                    patch.object(
+                        rp.requests,
+                        "post",
+                        return_value=Response(payload if attribute == "_client" else CLIENT),
+                    ) as post,
+                    self.assertRaises(ValueError),
+                ):
+                    rp._bootstrap()
+                get.assert_called_once_with(
+                    "https://issuer.example/.well-known/openid-configuration", timeout=10
+                )
+                self.assertIs(rp._client, client)
+                if attribute == "_discovery":
+                    self.assertIs(rp._discovery, discovery)
+                    post.assert_not_called()
+                else:
+                    self.assertIs(rp._discovery, DISCOVERY)
+                    post.assert_called_once()
+        with (
+            patch.object(
+                rp.requests,
+                "get",
+                return_value=Response(
+                    {
+                        key: value
+                        for key, value in DISCOVERY.items()
+                        if key != "registration_endpoint"
+                    }
+                ),
+            ),
+            patch.object(rp.requests, "post") as post,
+            self.assertRaises(SystemExit),
+        ):
+            rp._bootstrap()
+        post.assert_not_called()
 
     def test_pkce_rfc7636_and_verifier(self):
         self.assertEqual(
@@ -376,6 +428,21 @@ class ApplicationSmoke(unittest.TestCase):
                         config[key] = invalid
                     with patch.object(rp, attribute, config):
                         result, post = self.callback(saved, claims=claims, response=response)
+                    self.assert_rejected(result, saved)
+                    post.assert_not_called()
+        for attribute, invalid in (
+            (attribute, invalid)
+            for attribute in ("_discovery", "_client")
+            for invalid in (None, [], "secret-token-marker", False, 42)
+        ):
+            with self.subTest(attribute=attribute, invalid=invalid):
+                saved = self.failure_begin()
+                claims = required_claims(saved["nonce"])
+                with patch.object(rp, attribute, invalid):
+                    result, post = self.callback(saved, claims=claims)
+                    self.assertEqual(
+                        result.data, b"<h1>Token Error</h1><p>Invalid token response</p>"
+                    )
                     self.assert_rejected(result, saved)
                     post.assert_not_called()
         with self.subTest(valid_numeric_dates=True):

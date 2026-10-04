@@ -56,7 +56,10 @@ def _bootstrap():
     print(f"[rp] Fetching discovery from {disco_url}")
     resp = requests.get(disco_url, timeout=10)
     resp.raise_for_status()
-    _discovery = resp.json()
+    discovery = resp.json()
+    if not isinstance(discovery, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    _discovery = discovery
     print(f"[rp] Discovery OK — issuer={_discovery.get('issuer')}")
 
     reg_endpoint = _discovery.get("registration_endpoint")
@@ -72,8 +75,14 @@ def _bootstrap():
     print(f"[rp] Registering client at {reg_endpoint}")
     resp = requests.post(reg_endpoint, json=reg_body, timeout=10)
     resp.raise_for_status()
-    _client = resp.json()
-    print(f"[rp] Registered client_id={_client['client_id']}")
+    client = resp.json()
+    if not isinstance(client, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    client_id = client.get("client_id")
+    if not isinstance(client_id, str) or not client_id:
+        raise ValueError
+    _client = client
+    print(f"[rp] Registered client_id={client_id}")
 
 
 # Routes
@@ -121,8 +130,10 @@ def login():
     return redirect(f"{authz_url}?{qs}")
 
 
-def _exchange_code(code, verifier):
+def _exchange_code(code, verifier):  # noqa: PLR0912 - explicit fail-closed response and claim validation
     """Return decoded claims without exposing token endpoint bodies on failure."""
+    if not isinstance(_discovery, dict) or not isinstance(_client, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
     issuer, client_id = _discovery.get("issuer"), _client.get("client_id")
     token_endpoint = _discovery.get("token_endpoint")
     if any(
