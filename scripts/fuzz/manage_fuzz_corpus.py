@@ -881,6 +881,12 @@ def validate_cargo_home_paths(
         invalid(f"{purpose} paths overlap Cargo home")
 
 
+def validate_restore_cargo_home(directory: Path) -> None:
+    validate_cargo_home_paths(
+        [FUZZ_DIR / name for name in RECOVERY_RAW_NAMES], "restoration", output=directory
+    )
+
+
 def validate_regular_destination(path: Path) -> None:
     lexical_directory(path.parent)
     if path.is_symlink() or (path.exists() and not path.is_file()):
@@ -1525,6 +1531,7 @@ def open_evidence_file(path: Path, expected: os.stat_result | None = None) -> It
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1
+            or opened.st_uid != os.geteuid()
             or evidence_state(opened) != evidence_state(before)
         ):
             invalid("evidence file must be a stable, unaliased regular file")
@@ -1727,6 +1734,7 @@ def restore_raw_copy(recovery: Path, manifest: dict) -> None:
 def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -> bool:
     if reason not in ("removal", "receipt"):
         invalid("unknown fuzz cleanup recovery reason")
+    validate_restore_cargo_home(directory)
     recovery, manifest, snapshots = load_cleanup_backup(directory, run_id)
     report = {
         "run_id": run_id,
@@ -1989,6 +1997,7 @@ def validate_action_routes(args: argparse.Namespace) -> None:
     if args.restore_cleanup is not None:
         # Raw-root failures belong to restore_cleanup's recovery error handler.
         args.restore_cleanup[0] = str(validate_evidence_route(Path(args.restore_cleanup[0])))
+        validate_restore_cargo_home(Path(args.restore_cleanup[0]))
 
 
 def record_target_action(action: list[str]) -> int:

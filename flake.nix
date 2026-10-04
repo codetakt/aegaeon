@@ -649,11 +649,18 @@
           };
 
         mkAppFromSpec =
-          _appId: spec:
-          mkShellApp {
-            name = spec.binName;
-            inherit (spec) description runtimeInputs script;
-          };
+          appId: spec:
+          if appId == "security-suite" then
+            mkApp (import ./nix/flake/security-launcher.nix {
+              inherit lib pkgs;
+              name = spec.binName;
+              inherit (spec) runtimeInputs script;
+            }) spec.description
+          else
+            mkShellApp {
+              name = spec.binName;
+              inherit (spec) description runtimeInputs script;
+            };
 
         appSpecs = import ./nix/flake/app-specs.nix {
           inherit
