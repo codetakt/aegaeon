@@ -225,7 +225,7 @@ class SecurityFuzzFunctionsTests(unittest.TestCase):
             "--record-target",
             "--finish-run",
             "--backup-cleanup",
-            "--cleanup-cache",
+            "--remove-cleanup",
             "--cleanup-result",
         }
         for outer in (False, True):

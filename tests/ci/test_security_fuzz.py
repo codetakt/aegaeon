@@ -3865,7 +3865,7 @@ class SecurityFuzzArtifactDestinationTests(SecurityFuzzFixture):
             "--record-target",
             "--finish-run",
             "--backup-cleanup",
-            "--cleanup-cache",
+            "--remove-cleanup",
             "--cleanup-result",
         )
         self.install_helper_hooks(

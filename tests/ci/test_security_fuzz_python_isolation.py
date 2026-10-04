@@ -40,7 +40,7 @@ class SecurityFuzzPythonIsolationTests(SecurityFuzzFixture):
             )
         (self.startup / "sitecustomize.py").write_text(code)
 
-    def record_python_calls(self, *, fail_cleanup_receipt=False):
+    def record_python_calls(self, *, fail_cleanup_receipt=False, fail_cleanup_removal=False):
         self.install(
             "python3",
             "import json, os, pathlib, sys\n"
@@ -49,6 +49,11 @@ class SecurityFuzzPythonIsolationTests(SecurityFuzzFixture):
             + (
                 "if '--cleanup-result' in sys.argv:\n raise SystemExit(29)\n"
                 if fail_cleanup_receipt
+                else ""
+            )
+            + (
+                "if '--remove-cleanup' in sys.argv:\n raise SystemExit(31)\n"
+                if fail_cleanup_removal
                 else ""
             )
             + f"os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n",
@@ -148,14 +153,10 @@ class SecurityFuzzPythonIsolationTests(SecurityFuzzFixture):
 
     def check_recovery_isolated(self, *, receipt_failure):
         self.startup_hook()
-        self.record_python_calls(fail_cleanup_receipt=receipt_failure)
+        self.record_python_calls(
+            fail_cleanup_receipt=receipt_failure, fail_cleanup_removal=not receipt_failure
+        )
         _, raw = self.seed_stale_collection()
-        if not receipt_failure:
-            self.install_cleanup_hook("raise SystemExit(31)")
-            wrapper = self.bin / "rm"
-            wrapper.write_text(
-                wrapper.read_text().replace(f"#!{sys.executable}\n", f"#!{sys.executable} -I\n", 1)
-            )
         result = self.run_suite(PYTHONPATH=str(self.startup), FUZZ_TARGETS=TARGETS[0])
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assert_restored(
