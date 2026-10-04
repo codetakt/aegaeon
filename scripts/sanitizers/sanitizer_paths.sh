@@ -424,6 +424,9 @@ try:
                 pass
         child = os.open(name, flags, dir_fd=fd)
         metadata = os.fstat(child)
+        if index == len(parts) - 1 and metadata.st_uid != os.getuid():
+            os.close(child)
+            raise ValueError("Sanitizer target directory must belong to the producer")
         identities.append([metadata.st_dev, metadata.st_ino])
         if expected is not None and identities != expected["identities"][:len(identities)]:
             os.close(child)

@@ -421,6 +421,37 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         with tarfile.open(output / "security-evidence.tar.gz") as tar:
             self.assertEqual(tar.getnames(), [])
 
+    def test_summary_ignores_inherited_startup_and_preserves_execution_receipts(self):
+        directory = self.root / "artifacts/security/latest/fuzz"
+        directory.mkdir(parents=True)
+        summary = directory / "run_summary.json"
+        summary.write_text(json.dumps({"status": "failed", "targets": [], "execution": {}}))
+        for name in ("execution.json", "collection.ok", "collection-summary.json"):
+            (directory / name).write_bytes(b"original failed-run evidence\n")
+        before = {path: path.read_bytes() for path in directory.iterdir()}
+        startup = self.root / "python-startup"
+        startup.mkdir()
+        marker = self.root / "startup-hook-called"
+        replacements = {
+            str(path): (
+                json.dumps({"status": "passed", "targets": [], "execution": {}}).encode()
+                if path == summary
+                else b"forged successful evidence\n"
+            )
+            for path in before
+        }
+        (startup / "sitecustomize.py").write_text(
+            "import pathlib\n"
+            f"pathlib.Path({str(marker)!r}).write_text('called')\n"
+            f"for name, raw in {replacements!r}.items(): pathlib.Path(name).write_bytes(raw)\n"
+        )
+        self.env["PYTHONPATH"] = str(startup)
+        process = self.execute("Generate job summary")
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual({path: path.read_bytes() for path in before}, before)
+        self.assertIn("Fuzz execution status: failed", (self.root / "summary.md").read_text())
+
     def test_summary_distinguishes_corpus_from_all_execution_results(self):
         summary = self.root / "artifacts/security/latest/fuzz/run_summary.json"
         summary.parent.mkdir(parents=True)
