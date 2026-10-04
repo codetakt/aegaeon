@@ -2264,6 +2264,7 @@ class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
             grace_text="1",
             extra_text="",
             build_extra_text="",
+            link_order="1",
         )
         for variable in (
             "RUSTC",
