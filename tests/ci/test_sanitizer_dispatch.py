@@ -432,6 +432,9 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(len(self.calls(fixture, "sanitizer")), 1)
                 self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 0)
                 self.assertFalse((fixture.root / "target/sanitizers").exists())
+                log = (fixture.artifacts / "summary/security.log").read_text()
+                self.assertEqual(log.count("<<< sanitizer smoke: ok"), 1)
+                self.assertNotIn("sanitizer cleanup: failed", log)
 
     def test_child_failure_code_survives_successful_or_failed_cleanup(self):
         for aggregate in (False, True):
@@ -448,6 +451,11 @@ class SanitizerDispatchTests(unittest.TestCase):
                     self.assertEqual(self.receipt(fixture)["exit_code"], 71)
                     self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], cleanup)
                     self.assertEqual((fixture.root / "target/sanitizers").exists(), cleanup != 0)
+                    log = (fixture.artifacts / "summary/security.log").read_text()
+                    self.assertNotIn("<<< sanitizer smoke: ok", log)
+                    self.assertIn("sanitizer smoke: failed (exit=71)", log)
+                    if cleanup:
+                        self.assertIn(f"sanitizer cleanup: failed (exit={cleanup})", log)
 
     def test_cleanup_failure_blocks_a_successful_child(self):
         for aggregate in (False, True):
@@ -458,6 +466,26 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(self.receipt(fixture)["exit_code"], 0)
                 self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 79)
                 self.assertTrue((fixture.root / "target/sanitizers/child-output").is_file())
+                log = (fixture.artifacts / "summary/security.log").read_text()
+                self.assertNotIn("<<< sanitizer smoke: ok", log)
+                self.assertIn("sanitizer cleanup: failed (exit=79)", log)
+
+    def test_failed_cleanup_diagnostic_write_preserves_cleanup_status(self):
+        for aggregate in (False, True):
+            with self.subTest(aggregate=aggregate):
+                fixture = self.fixture()
+                result = self.run_suite(
+                    fixture,
+                    aggregate=aggregate,
+                    SANITIZER_CLEANUP_EXIT="79",
+                    SANITIZER_LOG_FAILURE="<<< sanitizer cleanup: failed",
+                )
+                self.assertEqual(result.returncode, 79, result.stdout + result.stderr)
+                self.assertEqual(self.receipt(fixture)["exit_code"], 0)
+                self.assertEqual(self.calls(fixture, "cleanup")[0]["exit_code"], 79)
+                self.assertTrue((fixture.root / "target/sanitizers/child-output").is_file())
+                log = (fixture.artifacts / "summary/security.log").read_text()
+                self.assertNotIn("<<< sanitizer smoke: ok", log)
 
     def test_artifact_directory_failure_does_not_launch_the_child(self):
         for aggregate in (False, True):

@@ -630,16 +630,22 @@ run_sanitizers_stage() {
 	local status=0 cleanup_status=0
 	echo "[security] >>> sanitizer smoke" | tee -a "$LOG_FILE" || return $?
 	if sanitize >>"$LOG_FILE" 2>&1; then
-		echo "[security] <<< sanitizer smoke: ok" | tee -a "$LOG_FILE" || status=$?
+		status=0
 	else
 		status=$?
 		echo "[security] <<< sanitizer smoke: failed (exit=$status)" | tee -a "$LOG_FILE" || true
 	fi
 	cleanup_sanitizer_outputs >>"$LOG_FILE" 2>&1 || cleanup_status=$?
+	if [[ $cleanup_status -ne 0 ]]; then
+		echo "[security] <<< sanitizer cleanup: failed (exit=$cleanup_status)" | tee -a "$LOG_FILE" || true
+	fi
 	if [[ $status -ne 0 ]]; then
 		return "$status"
 	fi
-	return "$cleanup_status"
+	if [[ $cleanup_status -ne 0 ]]; then
+		return "$cleanup_status"
+	fi
+	echo "[security] <<< sanitizer smoke: ok" | tee -a "$LOG_FILE"
 }
 
 run_sbom_stage() {

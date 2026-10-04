@@ -14,7 +14,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "scripts/sanitizers/run_sanitizers.sh"
@@ -28,6 +28,223 @@ TARGETS = (
     "jose_header_runtime_test",
     "oidc_hash_runtime_test",
     "pkce_verifier_test",
+)
+
+PROTECTED_SOURCE_INPUTS = (
+    ".cargo",
+    ".flakehub",
+    ".github",
+    "assets",
+    "c",
+    "ci",
+    "crates",
+    "db",
+    "dev-tools",
+    "docs",
+    "examples",
+    "fstar",
+    "fuzz",
+    "generated",
+    "include",
+    "infra",
+    "nix",
+    "proofs",
+    "scripts",
+    "spec",
+    "supply-chain",
+    "tests",
+    "xtask",
+    ".git",
+    "artifacts/ct",
+    "artifacts/karamel",
+    ".actrc",
+    ".commitlint-baseline",
+    ".dockerignore",
+    ".editorconfig",
+    ".env.act.example",
+    ".gitignore",
+    ".markdownlint.json",
+    ".markdownlintignore",
+    ".typos.toml",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "Cargo.lock",
+    "Cargo.toml",
+    "Dockerfile",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "atlas.hcl",
+    "clippy.toml",
+    "commitlint.config.cjs",
+    "deny.toml",
+    "eslint.config.cjs",
+    "flake.lock",
+    "flake.nix",
+    "package-lock.json",
+    "package.json",
+    "pyproject.toml",
+    "rust-toolchain.toml",
+    "tsconfig.json",
+    "artifacts/.gitkeep",
+    "artifacts/README.md",
+    "artifacts/compliance/validate.log",
+    "artifacts/compliance/validate_20251017T074801.log",
+    "artifacts/compliance/validate_20251017T075131.log",
+    "artifacts/compliance/validate_20251017T080003.log",
+    "artifacts/compliance/validate_20251017T083441.log",
+    "artifacts/compliance/validate_20251017T093959.log",
+    "artifacts/compliance/validate_20251017T095748.log",
+    "artifacts/compliance/validate_20251017T131719.log",
+    "artifacts/compliance/validate_20251017T145742.log",
+    "artifacts/compliance/validate_20251018T172713.log",
+    "artifacts/compliance/validate_20251115T121250Z.log",
+    "artifacts/compliance/validate_20251115T121436Z.log",
+    "artifacts/compliance/validate_20251115T122037Z.log",
+    "artifacts/compliance/validate_20251206T001314Z.log",
+    "artifacts/compliance/validate_compliance_matrix.log",
+    "artifacts/conformance/.gitkeep",
+    "artifacts/conformance/bootstrap/.gitkeep",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/export.zip",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/plan.json",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/results.json",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/30ZKPD6BkXaFWg0.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/30ZKPD6BkXaFWg0.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/AG16L44c3QUNkKK.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/AG16L44c3QUNkKK.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/BuDrMYcqiJAMnuF.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/BuDrMYcqiJAMnuF.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/C54c43IdPiHlmrq.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/C54c43IdPiHlmrq.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/DTlsERDY5U47kjo.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/DTlsERDY5U47kjo.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/E0jHxBkZgsS5EV2.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/E0jHxBkZgsS5EV2.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/H4u5hXE3F2KXJav.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/H4u5hXE3F2KXJav.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/Hqc5XkwQXsLHbEx.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/Hqc5XkwQXsLHbEx.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/KaCDGB63sykT1v2.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/KaCDGB63sykT1v2.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/LAIfrrs0uGsyvje.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/LAIfrrs0uGsyvje.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/N9BOLTjkQO6Fs9S.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/N9BOLTjkQO6Fs9S.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/NJJe2svewJ7YSxE.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/NJJe2svewJ7YSxE.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ObvC7MbVeyHS7ab.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ObvC7MbVeyHS7ab.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QYnJx5CFtTVe32T.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QYnJx5CFtTVe32T.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QiOc9agkHY466Jc.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QiOc9agkHY466Jc.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/S6atThBFyRjLb70.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/S6atThBFyRjLb70.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ScmWl62UWWlj4Iq.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ScmWl62UWWlj4Iq.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/SuehZ9kajpIjpnW.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/SuehZ9kajpIjpnW.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/VX0z3tlN8OXi3sN.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/VX0z3tlN8OXi3sN.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/WdAMD58ev8gSU7Y.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/WdAMD58ev8gSU7Y.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/a5rdIdHr50lmWVC.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/a5rdIdHr50lmWVC.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aFabFKopgauiNBp.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aFabFKopgauiNBp.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aUmgkqTYE5ocauf.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aUmgkqTYE5ocauf.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/d3QV6TPNikCBbQq.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/d3QV6TPNikCBbQq.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/eB7yjz7BTcTwcdI.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/eB7yjz7BTcTwcdI.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/geAg6ss3Zveves3.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/geAg6ss3Zveves3.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/hyhnnMFuRC2hK2R.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/hyhnnMFuRC2hK2R.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/io4vv69oYbTBDln.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/io4vv69oYbTBDln.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/lXNt1cEacr4PTw4.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/lXNt1cEacr4PTw4.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/oFnzq1GFBf1RQHy.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/oFnzq1GFBf1RQHy.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vAOO5JgXwYcuxpq.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vAOO5JgXwYcuxpq.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vPm6XPOaGDOAWLE.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vPm6XPOaGDOAWLE.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/y1JntB67dMkhrea.html",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/y1JntB67dMkhrea.png",
+    "artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/suite_commit.txt",
+    "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/export.zip",
+    "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/plan.json",
+    "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/results.json",
+    "artifacts/conformance/oidcc-config-certification-test-plan/plan-export/suite_commit.txt",
+    "artifacts/ct/dudect/report.json",
+    "artifacts/kani/report.json",
+    "artifacts/kani/report.log",
+    "artifacts/kani/run_20260804T065437.log",
+    "artifacts/karamel/Bearer_validation.ml",
+    "artifacts/karamel/FStar_Pervasives_Native.ml",
+    "artifacts/karamel/JoseNatLemmas.c",
+    "artifacts/karamel/JoseNatLemmas.h",
+    "artifacts/karamel/Jose_Arith_Bounds.c",
+    "artifacts/karamel/Jose_Arith_Bounds.h",
+    "artifacts/karamel/Jose_Context.c",
+    "artifacts/karamel/Jose_Context.h",
+    "artifacts/karamel/Jose_LowStar_Json_Stack.c",
+    "artifacts/karamel/Jose_LowStar_Json_Stack.h",
+    "artifacts/karamel/Jose_Utf8Lemmas.c",
+    "artifacts/karamel/Jose_Utf8Lemmas.h",
+    "artifacts/karamel/Makefile.basic",
+    "artifacts/karamel/Makefile.include",
+    "artifacts/karamel/internal/FStar.h",
+    "artifacts/oidc/oidc_tests_20251215.log",
+    "artifacts/release/kms-hsm-classifications/aws-kms-ap-northeast-1-rs256-claim-preserving.json",
+    "artifacts/release/kms-hsm-classifications/aws-kms-localstack-rs256-claim-preserving.json",
+    "artifacts/release/kms-hsm-classifications/aws-kms-validation-ap-northeast-1-rs256-claim-preserving.json",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/metadata.txt",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/summary.json",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/test.log",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/metadata.txt",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/summary.json",
+    "artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/test.log",
+    "artifacts/release/kms-hsm-classifications/evidence/localstack-oidc-kms-summary.json",
+    "artifacts/release/kms-hsm-classifications/external-finished-jwt-gateway-compat-only.json",
+    "artifacts/security/.gitkeep",
+    "artifacts/security/history/.gitkeep",
+    "artifacts/tamarin/README.md",
+    "artifacts/tamarin/manual/authcode_authcode_session_integrity.log",
+    "artifacts/tamarin/manual/authcode_code_injection.log",
+    "artifacts/tamarin/manual/authcode_code_replay.log",
+    "artifacts/tamarin/manual/authcode_csrf_protection.log",
+    "artifacts/tamarin/manual/authcode_state_echo_integrity.log",
+    "artifacts/tamarin/manual/authorize_error_redirect_state.log",
+    "artifacts/tamarin/manual/authorize_success_redirect_code_state.log",
+    "artifacts/tamarin/manual/bearer_bearer_bcp.log",
+    "artifacts/tamarin/manual/bearer_cnf_single_key.log",
+    "artifacts/tamarin/manual/client_auth_client_authentication.log",
+    "artifacts/tamarin/manual/client_auth_private_key_jwt.log",
+    "artifacts/tamarin/manual/client_auth_token_endpoint_auth_required.log",
+    "artifacts/tamarin/manual/common.log",
+    "artifacts/tamarin/manual/common_common_model.log",
+    "artifacts/tamarin/manual/dpop_dpop_replay.log",
+    "artifacts/tamarin/manual/introspection_introspection_security.log",
+    "artifacts/tamarin/manual/jwt_bearer_jwt_bearer_security.log",
+    "artifacts/tamarin/manual/oidc_id_token_nonce.log",
+    "artifacts/tamarin/manual/oidc_iss_mixup.log",
+    "artifacts/tamarin/manual/oidc_logout_session_termination.log",
+    "artifacts/tamarin/manual/oidc_oidc_core.log",
+    "artifacts/tamarin/manual/par_jar_par_fixation.log",
+    "artifacts/tamarin/manual/par_par_redirect_integrity.log",
+    "artifacts/tamarin/manual/par_par_security.log",
+    "artifacts/tamarin/manual/pkce_pkce_security.log",
+    "artifacts/tamarin/manual/rar_rar_authorization_details.log",
+    "artifacts/tamarin/manual/resource_resource_indicators.log",
+    "artifacts/tamarin/manual/revocation_revocation_auth.log",
+    "artifacts/tamarin/manual/stepup_stepup_soundness.log",
+    "artifacts/tamarin/manual/token_exchange_token_exchange_security.log",
 )
 
 # One fixture dispatches by executable identity. It emits realistic Cargo and
@@ -79,6 +296,8 @@ def stall(closed=False):
 
 
 if tool == "rustc":
+    if mode == "rustc-version-failure" and "--version" in args:
+        sys.exit(23)
     if mode == "bad-host":
         print("rustc unknown")
     elif "-vV" in args:
@@ -237,7 +456,7 @@ class SanitizerTests(unittest.TestCase):
         self.fixture.chmod(0o755)
         for tool in ("rustc", "cargo", "clang", "nm", "readelf"):
             (self.bin / tool).symlink_to(self.fixture)
-        for tool in ("python3", "awk", "dirname", "find"):
+        for tool in ("python3", "awk", "dirname", "find", "mkdir", "mktemp", "mv"):
             (self.bin / tool).symlink_to(shutil.which(tool))
         targets = []
         for name in TARGETS:
@@ -547,20 +766,327 @@ class SanitizerTests(unittest.TestCase):
 
     def test_output_failure_cannot_report_success(self):
         (self.root / "blocked").write_text("not a directory")
-        assert (
-            self.run_wrapper(SANITIZER_ARTIFACT_DIR=str(self.root / "blocked/evidence")).returncode
-            != 0
-        )
+        result = self.run_wrapper(SANITIZER_ARTIFACT_DIR=str(self.root / "blocked/evidence"))
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
         evidence = self.root / "evidence"
         evidence.mkdir()
         (evidence / "002-build-address-ffi.stdout.log").mkdir()
         result = self.run_wrapper()
-        assert result.returncode != 0
-        assert self.summary()["status"] == "failed"
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+        self.assertFalse((evidence / "run-summary.json").exists())  # noqa: PT009 - early unsafe destination
         (evidence / "002-build-address-ffi.stdout.log").rmdir()
-        (evidence / "run-summary.json").unlink()
         (evidence / "run-summary.json").mkdir()
-        assert self.run_wrapper().returncode != 0
+        self.assertNotEqual(self.run_wrapper().returncode, 0)  # noqa: PT009 - active under Python -O
+
+    def seed_completed_preflight(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir(exist_ok=True)
+        raw = b'{"status":"completed","commands":[],"units":[]}\n'
+        (evidence / "run-summary.json").write_bytes(raw)
+        (evidence / "001-metadata.stdout.log").write_bytes(b"retained raw output\n")
+        (evidence / "unrelated-sentinel").write_bytes(b"untouched\n")
+        return evidence, raw
+
+    def assert_failed_preflight_preserved(self, result, evidence, raw):
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["stage"], "preflight")  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["exit_code"], result.returncode)  # noqa: PT009 - active under unittest and Python -O
+        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under unittest and Python -O
+        previous = evidence / self.summary()["previous_attempt"]
+        self.assertEqual((previous / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (previous / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+        self.assertEqual((evidence / "unrelated-sentinel").read_bytes(), b"untouched\n")  # noqa: PT009 - active under unittest and Python -O
+
+    def test_version_failure_invalidates_old_completed_receipt(self):
+        evidence, raw = self.seed_completed_preflight()
+        result = self.run_wrapper("rustc-version-failure")
+        self.assertEqual(result.returncode, 23)  # noqa: PT009 - active under unittest and Python -O
+        self.assert_failed_preflight_preserved(result, evidence, raw)
+        self.assertEqual(self.summary()["preflight_phase"], "rustc-version")  # noqa: PT009 - active under unittest and Python -O
+
+    def test_missing_preflight_tools_preserve_old_raw_evidence(self):
+        for tool in ("rustc", "cargo", "clang", "nm", "readelf"):
+            with self.subTest(tool=tool):
+                evidence, raw = self.seed_completed_preflight()
+                link = self.bin / tool
+                original = link.readlink()
+                link.unlink()
+                try:
+                    result = self.run_wrapper()
+                    self.assert_failed_preflight_preserved(result, evidence, raw)
+                finally:
+                    link.symlink_to(original)
+
+    def test_runtime_and_host_preflight_failures_replace_stale_success(self):
+        for mode, overrides in (
+            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "missing-runtime")}),
+            ("bad-host", {}),
+            ("success", {"SANITIZER_RUNTIME_DIR": str(self.root / "empty-runtime")}),
+        ):
+            with self.subTest(mode=mode, overrides=overrides):
+                (self.root / "empty-runtime").mkdir(exist_ok=True)
+                evidence, raw = self.seed_completed_preflight()
+                result = self.run_wrapper(mode, **overrides)
+                self.assert_failed_preflight_preserved(result, evidence, raw)
+
+    def test_missing_python_archives_summary_without_truncation(self):
+        evidence, raw = self.seed_completed_preflight()
+        (self.bin / "python3").unlink()
+        result = self.run_wrapper()
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
+        self.assertFalse((evidence / "run-summary.json").exists())  # noqa: PT009 - active under unittest and Python -O
+        previous = list(evidence.glob(".previous-summary-*"))
+        self.assertEqual(len(previous), 1)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(previous[0].read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+        self.assertIn("attempt failed", result.stderr)  # noqa: PT009 - active under unittest and Python -O
+
+    def test_missing_python_archive_tool_failure_has_explicit_failed_marker(self):
+        (self.bin / "python3").unlink()
+        for tool in ("mktemp", "mv"):
+            with self.subTest(tool=tool):
+                evidence, raw = self.seed_completed_preflight()
+                link = self.bin / tool
+                original = link.readlink()
+                link.unlink()
+                try:
+                    result = self.run_wrapper()
+                    self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under Python -O
+                    self.assertEqual((evidence / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - cannot rename without tool
+                    markers = list(evidence.glob("preflight-failed-*.json"))
+                    self.assertTrue(markers)  # noqa: PT009 - explicit failed attempt marker
+                    self.assertTrue(  # noqa: PT009 - active under Python -O
+                        all(json.loads(p.read_text())["status"] == "failed" for p in markers)
+                    )
+                    self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under Python -O
+                finally:
+                    link.symlink_to(original)
+
+    def test_preflight_aliases_and_overlaps_cannot_mutate_external_bytes(self):
+        external = self.root.parent / (self.root.name + "-external")
+        external.mkdir()
+        self.addCleanup(shutil.rmtree, external)
+        sentinel = external / "run-summary.json"
+        sentinel.write_bytes(b"external completed sentinel\n")
+        evidence, _raw = self.seed_completed_preflight()
+        for kind in (
+            "summary-symlink",
+            "summary-hardlink",
+            "directory-symlink",
+            "normalized-symlink",
+            "raw-log-symlink",
+            "raw-log-hardlink",
+            "overlap",
+        ):
+            with self.subTest(kind=kind):
+                setting = self.prepare_preflight_alias(kind, evidence, external, sentinel)
+                result = self.run_wrapper(SANITIZER_ARTIFACT_DIR=str(setting))
+                self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
+                self.assertEqual(sentinel.read_bytes(), b"external completed sentinel\n")  # noqa: PT009 - active under unittest and Python -O
+                self.assertEqual((evidence / "unrelated-sentinel").read_bytes(), b"untouched\n")  # noqa: PT009 - active under unittest and Python -O
+                self.restore_preflight_alias(evidence)
+
+    def prepare_preflight_alias(self, kind, evidence, external, sentinel):
+        if kind in {"directory-symlink", "normalized-symlink"}:
+            alias = self.root / kind
+            alias.symlink_to(external, target_is_directory=True)
+            return alias if kind == "directory-symlink" else alias / ".." / "evidence"
+        if kind == "overlap":
+            return self.root
+        path = evidence / (
+            "001-metadata.stdout.log" if kind.startswith("raw-log") else "run-summary.json"
+        )
+        path.unlink()
+        if kind.endswith("symlink"):
+            path.symlink_to(sentinel)
+        else:
+            os.link(sentinel, path)
+        return evidence
+
+    def restore_preflight_alias(self, evidence):
+        for name, raw in [
+            ("run-summary.json", b'{"status":"completed"}'),
+            ("001-metadata.stdout.log", b"retained raw output\n"),
+        ]:
+            path = evidence / name
+            if path.is_symlink() or path.stat().st_nlink > 1:
+                path.unlink()
+                path.write_bytes(raw)
+
+    def test_unwritable_output_fails_before_tools_and_keeps_prior_bytes(self):
+        evidence, raw = self.seed_completed_preflight()
+        evidence.chmod(0o500)
+        try:
+            result = self.run_wrapper()
+            self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
+            self.assertEqual((evidence / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
+            self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - active under unittest and Python -O
+            self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under unittest and Python -O
+        finally:
+            evidence.chmod(0o700)
+
+    def test_raw_history_copy_failure_keeps_current_receipt_failed(self):
+        evidence, raw = self.seed_completed_preflight()
+        body = WRAPPER.read_text().split("<<'PREFLIGHT'\n", 1)[1].split("\nPREFLIGHT", 1)[0]
+        with (
+            patch.object(sys, "argv", ["preflight", str(evidence), "initialize", "1"]),
+            patch("shutil.copy2", side_effect=OSError("controlled history copy failure")),
+            self.assertRaisesRegex(OSError, "controlled history copy"),  # noqa: PT027 - unittest direct control
+        ):
+            exec(compile(body, str(WRAPPER), "exec"), {})  # noqa: S102 - trusted exact embedded preflight
+        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under Python -O
+        previous = evidence / self.summary()["previous_attempt"]
+        self.assertEqual((previous / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - preserve original summary bytes
+        self.assertEqual(  # noqa: PT009 - preserve original raw bytes
+            (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+
+    def seed_completed_at(self, evidence):
+        evidence.mkdir(parents=True, exist_ok=True)
+        raw = b'{"status":"completed","commands":[],"units":[]}\n'
+        (evidence / "run-summary.json").write_bytes(raw)
+        (evidence / "001-metadata.stdout.log").write_bytes(b"previous raw bytes\n")
+        (evidence / "unrelated-sentinel").write_bytes(b"source sentinel\n")
+        return raw
+
+    def boundary_snapshot(self):
+        snapshot = {}
+        for folder, directories, files in os.walk(self.root, followlinks=False):
+            root = Path(folder)
+            for name in [*directories, *files]:
+                path = root / name
+                metadata = path.lstat()
+                content = (
+                    os.readlink(path).encode()  # noqa: PTH115 - preserve literal link bytes without Path normalization
+                    if path.is_symlink()
+                    else None
+                    if path.is_dir()
+                    else path.read_bytes()
+                )
+                snapshot[str(path.relative_to(self.root))] = (
+                    metadata.st_mode,
+                    metadata.st_uid,
+                    content,
+                )
+        return snapshot
+
+    def assert_source_boundary_rejected(self, route, variable):
+        self.seed_completed_at(route)
+        before = self.boundary_snapshot()
+        result = self.run_wrapper("rustc-version-failure", **{variable: str(route)})
+        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - remains active under Python -O
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - remains active under Python -O
+        self.assertIn("overlaps protected source inputs", result.stderr)  # noqa: PT009 - rejected before tools or output writes
+        self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime fixture launched
+        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - no success message
+
+    def test_source_child_completed_evidence_is_unchanged_before_tools(self):
+        for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
+            with self.subTest(variable=variable):
+                self.assert_source_boundary_rejected(self.root / "crates/server", variable)
+
+    def test_independent_source_inventory_rejects_equal_and_descendant_outputs(self):
+        for relative in PROTECTED_SOURCE_INPUTS:
+            for suffix in ("", "nested output\n"):
+                route = self.root / relative / suffix
+                for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
+                    with self.subTest(relative=relative, suffix=suffix, variable=variable):
+                        self.assert_source_boundary_rejected(route, variable)
+
+    def test_tracked_artifact_ancestors_are_rejected_before_writes(self):
+        for relative in (
+            "artifacts",
+            "artifacts/security",
+            "artifacts/conformance",
+            "artifacts/kani",
+            "artifacts/release/kms-hsm-classifications/evidence",
+            "artifacts/tamarin/manual",
+        ):
+            for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
+                with self.subTest(relative=relative, variable=variable):
+                    self.assert_source_boundary_rejected(self.root / relative, variable)
+
+    def test_source_boundary_guard_precedes_missing_python_marker(self):
+        (self.bin / "python3").unlink()
+        for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
+            with self.subTest(variable=variable):
+                self.assert_source_boundary_rejected(
+                    self.root / "generated/required-inputs", variable
+                )
+
+    def test_generated_sibling_default_external_and_normalized_outputs_remain_supported(self):
+        external = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        sources = [
+            self.root / relative
+            for relative in (
+                "Cargo.lock",
+                "crates/server/lib.rs",
+                "artifacts/README.md",
+                "artifacts/security/.gitkeep",
+                "artifacts/ct/required-input",
+                "artifacts/karamel/required-input",
+            )
+        ]
+        for source in sources:
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"unchanged independent source input\n")
+        routes = (
+            ("", "", self.root / "target/sanitizers/artifacts"),
+            (
+                "artifacts/security/latest",
+                "target/sanitizers",
+                self.root / "artifacts/security/latest",
+            ),
+            (
+                "artifacts/conformance/new-generated-output",
+                "target/generated-sibling",
+                self.root / "artifacts/conformance/new-generated-output",
+            ),
+            (str(external / "evidence"), str(external / "target"), external / "evidence"),
+            (
+                "artifacts/security/latest outputs\n/unused/../evidence\n",
+                "target/nested outputs\n/unused/../builds\n",
+                self.root / "artifacts/security/latest outputs\n/evidence\n",
+            ),
+        )
+        for artifact, target, evidence in routes:
+            with self.subTest(artifact=artifact, target=target):
+                raw = self.seed_completed_at(evidence)
+                result = self.run_wrapper(
+                    SANITIZER_ARTIFACT_DIR=artifact, SANITIZER_TARGET_DIR=target
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under Python -O
+                receipt = json.loads((evidence / "run-summary.json").read_text())
+                self.assertEqual(receipt["status"], "completed")  # noqa: PT009 - full controlled tool route completed
+                histories = list(evidence.glob(".previous-attempt-*"))
+                self.assertEqual(len(histories), 1)  # noqa: PT009 - original hidden history naming retained
+                self.assertEqual((histories[0] / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - preserves exact previous bytes
+                self.assertEqual(  # noqa: PT009 - raw history remains exact
+                    (histories[0] / "001-metadata.stdout.log").read_bytes(), b"previous raw bytes\n"
+                )
+                for source in sources:
+                    self.assertEqual(source.read_bytes(), b"unchanged independent source input\n")  # noqa: PT009 - sibling sources remain unchanged
+
+    def test_normalized_and_newline_routes_keep_success_and_history(self):
+        evidence, raw = self.seed_completed_preflight()
+        target = self.root / "nested outputs\n" / "unused" / ".." / "target"
+        result = self.run_wrapper(SANITIZER_TARGET_DIR=str(target))
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["status"], "completed")  # noqa: PT009 - active under unittest and Python -O
+        histories = list(evidence.glob(".previous-attempt-*"))
+        self.assertEqual(len(histories), 1)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual((histories[0] / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (histories[0] / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
 
 
 if __name__ == "__main__":

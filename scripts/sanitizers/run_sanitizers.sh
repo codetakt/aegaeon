@@ -20,11 +20,371 @@ SANITIZER_ADD_DYNAMIC_RT=${SANITIZER_ADD_DYNAMIC_RT:-1}
 SANITIZER_EXEC_LD_PRELOAD=${SANITIZER_EXEC_LD_PRELOAD:-}
 SANITIZER_ARTIFACT_DIR=${SANITIZER_ARTIFACT_DIR:-}
 
+# Resolve components without following aliases, including before Python is found.
+# Normal relative paths, dot segments and newline-containing names remain data.
+preflight_route() {
+	local remaining=$1 component route=/
+	[[ $remaining == /* ]] || remaining="$PWD/$remaining"
+	remaining=${remaining#/}
+	while [[ -n $remaining ]]; do
+		component=${remaining%%/*}
+		if [[ $remaining == */* ]]; then
+			remaining=${remaining#*/}
+		else
+			remaining=""
+		fi
+		case "$component" in
+		"" | .) continue ;;
+		..)
+			route=${route%/*}
+			[[ -n $route ]] || route=/
+			continue
+			;;
+		esac
+		route="${route%/}/$component"
+		if [[ -L $route || (-e $route && ! -d $route) ]]; then
+			fail "Unsafe sanitizer evidence/target route"
+			return 1
+		fi
+	done
+	PREFLIGHT_ROUTE=$route
+}
+
+preflight_route "${SANITIZER_ARTIFACT_DIR:-${SANITIZER_TARGET_ROOT}/artifacts}" || exit 1
+SANITIZER_ARTIFACT_DIR=$PREFLIGHT_ROUTE
+preflight_route "$SANITIZER_TARGET_ROOT" || exit 1
+SANITIZER_TARGET_ROOT=$PREFLIGHT_ROUTE
+workspace=$(pwd -P)
+if [[ $workspace == "$SANITIZER_ARTIFACT_DIR" || $workspace == "${SANITIZER_ARTIFACT_DIR%/}/"* ||
+	$workspace == "$SANITIZER_TARGET_ROOT" || $workspace == "${SANITIZER_TARGET_ROOT%/}/"* ||
+	$SANITIZER_TARGET_ROOT == "$SANITIZER_ARTIFACT_DIR" || $SANITIZER_TARGET_ROOT == "${SANITIZER_ARTIFACT_DIR%/}/"* ]]; then
+	fail "Sanitizer evidence/target routes overlap protected workspace or outputs"
+	exit 1
+fi
+# Independent accepted source inventory; output routes cannot select or reduce it.
+# Tracked artifact files are protected individually so generated siblings remain usable.
+protected_source_paths=(
+	.cargo
+	.flakehub
+	.github
+	assets
+	c
+	ci
+	crates
+	db
+	dev-tools
+	docs
+	examples
+	fstar
+	fuzz
+	generated
+	include
+	infra
+	nix
+	proofs
+	scripts
+	spec
+	supply-chain
+	tests
+	xtask
+	.git
+	artifacts/ct
+	artifacts/karamel
+	.actrc
+	.commitlint-baseline
+	.dockerignore
+	.editorconfig
+	.env.act.example
+	.gitignore
+	.markdownlint.json
+	.markdownlintignore
+	.typos.toml
+	AGENTS.md
+	CHANGELOG.md
+	CODE_OF_CONDUCT.md
+	CONTRIBUTING.md
+	Cargo.lock
+	Cargo.toml
+	Dockerfile
+	LICENSE
+	README.md
+	SECURITY.md
+	atlas.hcl
+	clippy.toml
+	commitlint.config.cjs
+	deny.toml
+	eslint.config.cjs
+	flake.lock
+	flake.nix
+	package-lock.json
+	package.json
+	pyproject.toml
+	rust-toolchain.toml
+	tsconfig.json
+	artifacts/.gitkeep
+	artifacts/README.md
+	artifacts/compliance/validate.log
+	artifacts/compliance/validate_20251017T074801.log
+	artifacts/compliance/validate_20251017T075131.log
+	artifacts/compliance/validate_20251017T080003.log
+	artifacts/compliance/validate_20251017T083441.log
+	artifacts/compliance/validate_20251017T093959.log
+	artifacts/compliance/validate_20251017T095748.log
+	artifacts/compliance/validate_20251017T131719.log
+	artifacts/compliance/validate_20251017T145742.log
+	artifacts/compliance/validate_20251018T172713.log
+	artifacts/compliance/validate_20251115T121250Z.log
+	artifacts/compliance/validate_20251115T121436Z.log
+	artifacts/compliance/validate_20251115T122037Z.log
+	artifacts/compliance/validate_20251206T001314Z.log
+	artifacts/compliance/validate_compliance_matrix.log
+	artifacts/conformance/.gitkeep
+	artifacts/conformance/bootstrap/.gitkeep
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/export.zip
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/plan.json
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/results.json
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/30ZKPD6BkXaFWg0.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/30ZKPD6BkXaFWg0.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/AG16L44c3QUNkKK.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/AG16L44c3QUNkKK.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/BuDrMYcqiJAMnuF.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/BuDrMYcqiJAMnuF.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/C54c43IdPiHlmrq.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/C54c43IdPiHlmrq.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/DTlsERDY5U47kjo.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/DTlsERDY5U47kjo.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/E0jHxBkZgsS5EV2.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/E0jHxBkZgsS5EV2.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/H4u5hXE3F2KXJav.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/H4u5hXE3F2KXJav.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/Hqc5XkwQXsLHbEx.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/Hqc5XkwQXsLHbEx.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/KaCDGB63sykT1v2.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/KaCDGB63sykT1v2.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/LAIfrrs0uGsyvje.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/LAIfrrs0uGsyvje.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/N9BOLTjkQO6Fs9S.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/N9BOLTjkQO6Fs9S.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/NJJe2svewJ7YSxE.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/NJJe2svewJ7YSxE.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ObvC7MbVeyHS7ab.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ObvC7MbVeyHS7ab.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QYnJx5CFtTVe32T.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QYnJx5CFtTVe32T.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QiOc9agkHY466Jc.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/QiOc9agkHY466Jc.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/S6atThBFyRjLb70.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/S6atThBFyRjLb70.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ScmWl62UWWlj4Iq.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/ScmWl62UWWlj4Iq.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/SuehZ9kajpIjpnW.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/SuehZ9kajpIjpnW.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/VX0z3tlN8OXi3sN.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/VX0z3tlN8OXi3sN.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/WdAMD58ev8gSU7Y.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/WdAMD58ev8gSU7Y.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/a5rdIdHr50lmWVC.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/a5rdIdHr50lmWVC.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aFabFKopgauiNBp.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aFabFKopgauiNBp.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aUmgkqTYE5ocauf.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/aUmgkqTYE5ocauf.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/d3QV6TPNikCBbQq.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/d3QV6TPNikCBbQq.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/eB7yjz7BTcTwcdI.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/eB7yjz7BTcTwcdI.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/geAg6ss3Zveves3.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/geAg6ss3Zveves3.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/hyhnnMFuRC2hK2R.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/hyhnnMFuRC2hK2R.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/io4vv69oYbTBDln.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/io4vv69oYbTBDln.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/lXNt1cEacr4PTw4.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/lXNt1cEacr4PTw4.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/oFnzq1GFBf1RQHy.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/oFnzq1GFBf1RQHy.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vAOO5JgXwYcuxpq.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vAOO5JgXwYcuxpq.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vPm6XPOaGDOAWLE.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/vPm6XPOaGDOAWLE.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/y1JntB67dMkhrea.html
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/screenshots_20260330T102147Z/y1JntB67dMkhrea.png
+	artifacts/conformance/oidcc-basic-certification-test-plan/plan-export/suite_commit.txt
+	artifacts/conformance/oidcc-config-certification-test-plan/plan-export/export.zip
+	artifacts/conformance/oidcc-config-certification-test-plan/plan-export/plan.json
+	artifacts/conformance/oidcc-config-certification-test-plan/plan-export/results.json
+	artifacts/conformance/oidcc-config-certification-test-plan/plan-export/suite_commit.txt
+	artifacts/ct/dudect/report.json
+	artifacts/kani/report.json
+	artifacts/kani/report.log
+	artifacts/kani/run_20260804T065437.log
+	artifacts/karamel/Bearer_validation.ml
+	artifacts/karamel/FStar_Pervasives_Native.ml
+	artifacts/karamel/JoseNatLemmas.c
+	artifacts/karamel/JoseNatLemmas.h
+	artifacts/karamel/Jose_Arith_Bounds.c
+	artifacts/karamel/Jose_Arith_Bounds.h
+	artifacts/karamel/Jose_Context.c
+	artifacts/karamel/Jose_Context.h
+	artifacts/karamel/Jose_LowStar_Json_Stack.c
+	artifacts/karamel/Jose_LowStar_Json_Stack.h
+	artifacts/karamel/Jose_Utf8Lemmas.c
+	artifacts/karamel/Jose_Utf8Lemmas.h
+	artifacts/karamel/Makefile.basic
+	artifacts/karamel/Makefile.include
+	artifacts/karamel/internal/FStar.h
+	artifacts/oidc/oidc_tests_20251215.log
+	artifacts/release/kms-hsm-classifications/aws-kms-ap-northeast-1-rs256-claim-preserving.json
+	artifacts/release/kms-hsm-classifications/aws-kms-localstack-rs256-claim-preserving.json
+	artifacts/release/kms-hsm-classifications/aws-kms-validation-ap-northeast-1-rs256-claim-preserving.json
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/metadata.txt
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/summary.json
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-ap-northeast-1-bb0a6c43/test.log
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/metadata.txt
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/summary.json
+	artifacts/release/kms-hsm-classifications/evidence/aws-kms-validation-8071664/test.log
+	artifacts/release/kms-hsm-classifications/evidence/localstack-oidc-kms-summary.json
+	artifacts/release/kms-hsm-classifications/external-finished-jwt-gateway-compat-only.json
+	artifacts/security/.gitkeep
+	artifacts/security/history/.gitkeep
+	artifacts/tamarin/README.md
+	artifacts/tamarin/manual/authcode_authcode_session_integrity.log
+	artifacts/tamarin/manual/authcode_code_injection.log
+	artifacts/tamarin/manual/authcode_code_replay.log
+	artifacts/tamarin/manual/authcode_csrf_protection.log
+	artifacts/tamarin/manual/authcode_state_echo_integrity.log
+	artifacts/tamarin/manual/authorize_error_redirect_state.log
+	artifacts/tamarin/manual/authorize_success_redirect_code_state.log
+	artifacts/tamarin/manual/bearer_bearer_bcp.log
+	artifacts/tamarin/manual/bearer_cnf_single_key.log
+	artifacts/tamarin/manual/client_auth_client_authentication.log
+	artifacts/tamarin/manual/client_auth_private_key_jwt.log
+	artifacts/tamarin/manual/client_auth_token_endpoint_auth_required.log
+	artifacts/tamarin/manual/common.log
+	artifacts/tamarin/manual/common_common_model.log
+	artifacts/tamarin/manual/dpop_dpop_replay.log
+	artifacts/tamarin/manual/introspection_introspection_security.log
+	artifacts/tamarin/manual/jwt_bearer_jwt_bearer_security.log
+	artifacts/tamarin/manual/oidc_id_token_nonce.log
+	artifacts/tamarin/manual/oidc_iss_mixup.log
+	artifacts/tamarin/manual/oidc_logout_session_termination.log
+	artifacts/tamarin/manual/oidc_oidc_core.log
+	artifacts/tamarin/manual/par_jar_par_fixation.log
+	artifacts/tamarin/manual/par_par_redirect_integrity.log
+	artifacts/tamarin/manual/par_par_security.log
+	artifacts/tamarin/manual/pkce_pkce_security.log
+	artifacts/tamarin/manual/rar_rar_authorization_details.log
+	artifacts/tamarin/manual/resource_resource_indicators.log
+	artifacts/tamarin/manual/revocation_revocation_auth.log
+	artifacts/tamarin/manual/stepup_stepup_soundness.log
+	artifacts/tamarin/manual/token_exchange_token_exchange_security.log
+)
+for source_path in "${protected_source_paths[@]}"; do
+	protected="$workspace/$source_path"
+	for output in "$SANITIZER_ARTIFACT_DIR" "$SANITIZER_TARGET_ROOT"; do
+		if [[ $output == "$protected" || $output == "$protected/"* || $protected == "${output%/}/"* ]]; then
+			fail "Sanitizer evidence/target route overlaps protected source inputs"
+			exit 1
+		fi
+	done
+done
+summary_path="$SANITIZER_ARTIFACT_DIR/run-summary.json"
+if [[ -L $summary_path || (-e $summary_path && ! -f $summary_path) ]]; then
+	fail "Unsafe sanitizer summary destination"
+	exit 1
+fi
+if [[ ! -d $SANITIZER_ARTIFACT_DIR ]]; then
+	mkdir -p -- "$SANITIZER_ARTIFACT_DIR" || exit 1
+fi
+if [[ ! -O $SANITIZER_ARTIFACT_DIR || (-f $summary_path && ! -O $summary_path) ]]; then
+	fail "Sanitizer evidence must belong to the producer"
+	exit 1
+fi
+
+# Missing Python cannot leave the validated old completed summary current.
+# Rename only that evidence file into a new private archive; never truncate it.
+if ! command -v python3 >/dev/null 2>&1; then
+	# A separate exclusive failed marker remains if an archive tool is also absent.
+	(
+		set -o noclobber
+		printf '%s\n' '{"status":"failed","stage":"preflight","error":"python3 evidence writer unavailable"}' >"$SANITIZER_ARTIFACT_DIR/preflight-failed-$BASHPID.json"
+	) || exit 1
+	if [[ -f $summary_path ]]; then
+		previous=$(mktemp "$SANITIZER_ARTIFACT_DIR/.previous-summary-XXXXXXXX") || exit 1
+		mv -T -- "$summary_path" "$previous" || exit 1
+	fi
+	fail "python3 not found; sanitizer attempt failed before preflight evidence writer"
+	exit 1
+fi
+
+preflight_receipt() {
+	python3 - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" <<'PREFLIGHT'
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import sys
+import tempfile
+
+root = Path(sys.argv[1])
+phase, status = sys.argv[2], int(sys.argv[3])
+summary = root / "run-summary.json"
+if root.stat().st_uid != os.getuid():
+    raise ValueError("Evidence directory must belong to the producer")
+owned = [summary] if summary.exists() else []
+owned.extend(path for path in root.iterdir() if re.fullmatch(
+    r"[0-9]{3,}-(?:metadata|(?:build|symbols|runtime|list|ignored|run)-[A-Za-z0-9_-]+)\.(?:stdout|stderr)\.log", path.name
+))
+for path in owned:
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or metadata.st_uid != os.getuid():
+        raise ValueError("Unsafe sanitizer evidence file alias or ownership")
+if phase == "initialize":
+    receipt = {"status": "failed", "stage": "preflight", "commands": [], "units": []}
+    if owned:
+        history = Path(tempfile.mkdtemp(prefix=".previous-attempt-", dir=root))
+        if summary in owned:
+            os.replace(summary, history / summary.name)
+        receipt["previous_attempt"] = history.name
+else:
+    receipt = json.loads(summary.read_text())
+    receipt.update(status="failed", stage="preflight", preflight_phase=phase, exit_code=status)
+fd, name = tempfile.mkstemp(prefix=".preflight-summary-", dir=root)
+try:
+    with os.fdopen(fd, "w") as stream:
+        json.dump(receipt, stream, indent=2)
+        stream.write("\n")
+    os.replace(name, summary)
+finally:
+    Path(name).unlink(missing_ok=True)
+# Initialize failure before preserving old raw logs: a copy failure cannot leave
+# an old completed summary current. Original raw files remain untouched.
+if phase == "initialize" and owned:
+    for path in owned:
+        if path != summary:
+            shutil.copy2(path, history / path.name)
+PREFLIGHT
+}
+preflight_receipt initialize 1 || exit 1
+PREFLIGHT_PHASE=rustc
+preflight_exit() {
+	local status=$?
+	trap - EXIT
+	if [[ $status -ne 0 ]]; then
+		preflight_receipt "$PREFLIGHT_PHASE" "$status" || fail "Failed to update sanitizer preflight evidence"
+	fi
+	exit "$status"
+}
+trap preflight_exit EXIT
+
 if ! command -v rustc >/dev/null 2>&1; then
 	fail "rustc not found; enter the devShell first"
 	exit 1
 fi
 
+PREFLIGHT_PHASE=cargo
 if ! command -v cargo >/dev/null 2>&1; then
 	fail "cargo not found; enter the devShell first"
 	exit 1
@@ -33,15 +393,19 @@ fi
 RUSTC_BIN=${RUSTC:-$(command -v rustc)}
 CARGO_BIN=${CARGO:-$(command -v cargo)}
 
+PREFLIGHT_PHASE=rustc-version
 rustc_version="$("${RUSTC_BIN}" --version)"
+PREFLIGHT_PHASE=rustc-host
 host_triple="$("${RUSTC_BIN}" -vV | awk '/^host:/{print $2}')"
 
+PREFLIGHT_PHASE=clang
 clang_path=$(command -v clang || true)
 if [[ -z ${clang_path} ]]; then
 	fail "clang not found; sanitizers require an LLVM toolchain"
 	exit 1
 fi
 
+PREFLIGHT_PHASE=runtime
 if [[ -n ${SANITIZER_RUNTIME_DIR:-} ]]; then
 	clang_resource_dir=""
 	clang_lib_dir="${SANITIZER_RUNTIME_DIR}"
@@ -54,6 +418,7 @@ if [[ ! -d ${clang_lib_dir} ]]; then
 	exit 1
 fi
 
+PREFLIGHT_PHASE=host
 if [[ -z ${host_triple} ]]; then
 	fail "Unable to determine host triple from rustc"
 	exit 1
@@ -180,6 +545,7 @@ curve_flags=(
 	"-C" "target-feature=-avx2,-avx512ifma,-avx512vl,-avx512f,-avx512bw,-avx512dq,-avx512cd"
 )
 
+PREFLIGHT_PHASE=tools
 for tool in python3 nm readelf; do
 	if ! command -v "$tool" >/dev/null 2>&1; then
 		fail "$tool not found; sanitizer execution and evidence require it"
