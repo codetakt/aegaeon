@@ -3353,6 +3353,128 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
                     self.assertEqual(path.read_bytes(), content)
                 route.unlink()
 
+    def test_configuration_sources_reject_before_preflight_or_receipt_mutation(self):
+        marker, _unused_raw = self.seed_stale_results()
+        external = Path(self.temporary) / "external-crate"
+        (external / "src").mkdir(parents=True)
+        (external / "Cargo.toml").write_text('[package]\nname="server"\nversion="0.0.0"\n')
+        (external / "src/lib.rs").write_bytes(b"// external replacement implementation\n")
+        included = Path(self.temporary) / "external-source-config.toml"
+        included.write_text('[patch.crates-io]\nserver={path="external-crate"}\n')
+        credentials = Path(self.env["CARGO_HOME"]) / "credentials.toml"
+        credentials.parent.mkdir()
+        credentials.write_bytes(b"dummy caller credentials only\n")
+        history = Path(self.env["SECURITY_HISTORY_DIR"])
+        history.mkdir()
+        (history / "previous.json").write_bytes(b"dummy previous history\n")
+        config = self.root / ".cargo/config.toml"
+        original = config.read_bytes()
+        overrides = (
+            'paths=["../external-crate"]\n',
+            '[patch.crates-io]\nserver={path="../external-crate"}\n',
+            (
+                '[patch."https://example.invalid/registry"]\n'
+                'server={git="https://example.invalid/crate"}\n'
+            ),
+            (
+                '[source.crates-io]\nreplace-with="replacement"\n'
+                '[source.replacement]\ndirectory="../external-crate"\n'
+            ),
+            '[source.replacement]\nlocal-registry="../external-registry"\n',
+            '[source.replacement]\nregistry="https://example.invalid/index"\n',
+            '[source.replacement]\ngit="https://example.invalid/crate"\nbranch="replacement"\n',
+            '[replace]\n"server:0.0.0"={path="../external-crate"}\n',
+            '[registry]\nindex="https://example.invalid/index"\n',
+            '[registries.replacement]\nindex="https://example.invalid/index"\n',
+            'include=["../../external-source-config.toml"]\n[unstable]\nconfig-include=true\n',
+            'include="../../external-source-config.toml"\n',
+            'include=[{path="../../external-source-config.toml",optional=true}]\n',
+            'paths=""\n',
+            "paths=false\n",
+            "paths=0\n",
+            "paths={}\n",
+            "patch=[]\n",
+            'patch=""\n',
+            "source=[]\n",
+            "replace=false\n",
+            "include={}\n",
+            'include=""\n',
+            "include=false\n",
+            "include=0\n",
+            "registry=[]\n",
+            "registries=[]\n",
+            "registries.replacement=false\n",
+            '[registry]\nindex=""\n',
+        )
+        for override in overrides:
+            with self.subTest(configuration=override):
+                config.write_bytes(override.encode() + original)
+                before = {
+                    path: path.read_bytes()
+                    for root in (self.root, self.artifacts, external, credentials.parent, history)
+                    for path in root.rglob("*")
+                    if path.is_file() and not path.is_symlink()
+                }
+                before[included] = included.read_bytes()
+                before_paths = {
+                    root: sorted(str(path.relative_to(root)) for path in root.rglob("*"))
+                    for root in (self.root, self.artifacts, external, credentials.parent, history)
+                }
+                for shared in (False, True):
+                    with self.subTest(shared=shared):
+                        result = (
+                            self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                            if shared
+                            else subprocess.run(  # noqa: S603 - actual owned helper preflight
+                                [
+                                    sys.executable,
+                                    str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                                    "--validate-preflight",
+                                    str(marker.parent),
+                                ],
+                                cwd=self.root,
+                                env=self.env,
+                                capture_output=True,
+                                text=True,
+                                timeout=30,
+                                check=False,
+                            )
+                        )
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertIn(
+                            "unmodeled Cargo dependency source configuration", result.stderr
+                        )
+                        self.assertEqual(self.calls(), [])
+                        for path, data in before.items():
+                            self.assertEqual(path.read_bytes(), data, str(path))
+                        for root, paths in before_paths.items():
+                            self.assertEqual(
+                                sorted(str(path.relative_to(root)) for path in root.rglob("*")),
+                                paths,
+                            )
+                        self.assertFalse(Path(self.env["CARGO_TARGET_DIR"]).exists())
+        config.write_bytes(original)
+
+    def test_empty_source_containers_and_non_source_settings_keep_native_execution(self):
+        config = self.root / ".cargo/config.toml"
+        config.write_text(
+            "paths=[]\npatch={}\nsource={}\nreplace={}\ninclude=[]\n"
+            "[http]\ntimeout=30\n"
+            "[net]\nretry=2\noffline=true\n"
+            '[term]\ncolor="never"\n'
+            '[registry]\ndefault="crates-io"\nglobal-credential-providers=["cargo:token"]\n'
+            '[registries.crates-io]\ncredential-provider="cargo:token"\n' + config.read_text()
+        )
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.summary()["execution"]
+        self.assertEqual(data["status"], "passed")
+        self.assertEqual(
+            data["effective_native_commands"],
+            {"cc": "cc", "cxx": "c++", "linker": "cc", "ar": "ar"},
+        )
+        self.assertIn(".cargo/config.toml", data["source"]["files"])
+
     def test_native_compiler_mismatch_and_unmodeled_config_reject_before_mutation(self):
         marker, _unused_raw = self.seed_stale_results()
         prior = {path: path.read_bytes() for path in marker.parent.iterdir() if path.is_file()}
@@ -3447,12 +3569,31 @@ class SecurityFuzzPreflightConsistencyTests(SecurityFuzzFixture):
         self.assertEqual(self.calls(), [])
 
     def test_invalid_stages_launch_no_tools_or_setup_and_preserve_receipts(self):
-        self.seed_stale_results()
+        _marker, raw = self.seed_stale_results()
         prior = self.saved_receipts()
         called = self.root.parent / "unexpected-tool"
+        bootstrap_calls = self.root.parent / "bootstrap-calls"
+        bootstrap = [
+            "-I",
+            "-c",
+            (
+                'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") '
+                'and key.endswith("%%") for key in os.environ))'
+            ),
+        ]
         for tool in ("git", "python3", "mkdir", "cargo"):
             command = sys.executable if tool == "python3" else shutil.which(tool)
-            code = f"import os,pathlib,sys\npathlib.Path({str(called)!r}).write_text('called')\n"
+            code = "import os,pathlib,sys\n"
+            if tool == "python3":
+                # Admit only the exact pre-command key scan; all later helpers
+                # still record an unexpected call before executing.
+                code += (
+                    f"if sys.argv[1:] == {bootstrap!r}:\n"
+                    f" with pathlib.Path({str(bootstrap_calls)!r}).open('a') as out:\n"
+                    "  out.write('bootstrap\\n')\n"
+                    f" os.execv({command!r}, [{command!r}] + sys.argv[1:])\n"
+                )
+            code += f"pathlib.Path({str(called)!r}).write_text('called')\n"
             if tool == "git":
                 code += (
                     "print(os.environ['FIXTURE_ROOT']) if '--show-toplevel' in sys.argv else None\n"
@@ -3460,12 +3601,17 @@ class SecurityFuzzPreflightConsistencyTests(SecurityFuzzFixture):
             elif tool != "cargo":
                 code += f"os.execv({command!r}, [{command!r}] + sys.argv[1:])\n"
             self.install(tool, code)
-        for stages in (("unknown",), ("fuzz", "unknown")):
+        for index, stages in enumerate((("unknown",), ("fuzz", "unknown"))):
             with self.subTest(stages=stages):
                 result = self.run_suite(stages=stages)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("unknown stage", result.stderr)
                 self.assert_receipts_unchanged(prior)
+                for path, content in raw.items():
+                    self.assertEqual(path.read_bytes(), content)
+                self.assertEqual(
+                    bootstrap_calls.read_text().splitlines(), ["bootstrap"] * (index + 1)
+                )
                 self.assertFalse(called.exists())
                 self.assertFalse((self.artifacts / "summary").exists())
                 self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
@@ -4402,6 +4548,150 @@ if after!=before: raise RuntimeError('rejected foreign recovery changed receipts
 """,
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class SecurityFuzzCliDirectoryCargoHomeTests(SecurityFuzzFixture):
+    ACTIONS = (
+        ("--prepare-run", "prepare_run", []),
+        ("--record-environment", "record_environment", []),
+        ("--execution-cache", "execution_cache", []),
+        ("--validate-cache", "configured_cache", []),
+        ("--validate-preflight", "validate_preflight", []),
+        ("--backup-cleanup", "backup_cleanup", []),
+        ("--cleanup-cache", "cleanup_cache", ["00000000-0000-0000-0000-000000000001"]),
+        ("--record-target", "record_target", [TARGETS[0], "run", "0"]),
+        ("--finish-run", "finish_run", ["0"]),
+        ("--cleanup-result", "cleanup_result", ["0"]),
+    )
+
+    def cli_environment(self, home):
+        environment = {**self.env, "CARGO_HOME": str(home)}
+        for name in (
+            "SECURITY_ARTIFACT_DIR",
+            "SECURITY_HISTORY_DIR",
+            "FUZZ_RUN_ARTIFACT_DIR",
+            "FUZZ_HISTORY_DIR",
+        ):
+            environment.pop(name, None)
+        return environment
+
+    def cli_action(self, code, action, directory, tail, home):
+        return subprocess.run(  # noqa: S603 - instrument actual CLI action dispatch in owned fixture
+            [
+                sys.executable,
+                *(["-O"] if sys.flags.optimize else []),
+                "-c",
+                code,
+                str(self.root / "scripts/fuzz/manage_fuzz_corpus.py"),
+                action,
+                str(directory),
+                *tail,
+            ],
+            cwd=self.root,
+            env=self.cli_environment(home),
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def test_cli_directory_actions_reject_cargo_home_before_source_receipt_or_dispatch(self):
+        self.seed_stale_results()
+        receipts = self.saved_receipts()
+        directory = self.root / "cli-action-evidence"
+        directory.mkdir()
+        for name in ("execution.json", "run_summary.json", "collection.ok"):
+            (directory / name).write_bytes(b"preserve previous CLI receipt\n")
+        callback = Path(self.temporary) / "forbidden-action-read"
+        consumers = [consumer for _, consumer, _ in self.ACTIONS]
+        guarded_callbacks = [
+            *consumers,
+            "validate_collection_roots",
+            "load_execution",
+            "evidence_text",
+            "source_hashes",
+        ]
+        code = (
+            "import pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['main'].__globals__\n"
+            "def forbidden(*args,**kwargs):\n"
+            f" pathlib.Path({str(callback)!r}).write_text('unexpected access')\n"
+            " raise RuntimeError('action guard did not precede access')\n"
+            f"for name in {guarded_callbacks!r}:\n"
+            " state[name]=forbidden\n"
+            "sys.argv=sys.argv[1:]\n"
+            "raise SystemExit(state['main']())\n"
+        )
+
+        def snapshot():
+            result = {}
+            for path in Path(self.temporary).rglob("*"):
+                result[str(path)] = (
+                    ("link", str(path.readlink()))
+                    if path.is_symlink()
+                    else ("directory", path.stat().st_mode)
+                    if path.is_dir()
+                    else ("file", path.stat().st_mode, path.read_bytes())
+                )
+            return result
+
+        for relation, home in (
+            ("same", directory),
+            ("Cargo-home-ancestor", directory.parent),
+            ("Cargo-home-descendant", directory / "cargo-home"),
+        ):
+            home.mkdir(parents=True, exist_ok=True)
+            credential = home / "credentials.toml"
+            credential.write_bytes(b"preserve nonsecret Cargo credential fixture\n")
+            before = snapshot()
+            for action, _consumer, tail in self.ACTIONS:
+                for route in (directory, directory.relative_to(self.root)):
+                    with self.subTest(action=action, relation=relation, route=str(route)):
+                        result = self.cli_action(code, action, route, tail, home)
+                        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                        self.assertIn("execution paths overlap Cargo home", result.stderr)
+                        self.assertFalse(callback.exists())
+                        self.assertEqual(snapshot(), before)
+                        self.assert_receipts_unchanged(receipts)
+                        self.assertEqual(self.calls(), [])
+
+    def test_cli_directory_actions_admit_disjoint_normalized_routes_without_receipt_env(self):
+        self.seed_stale_results()
+        receipts = self.saved_receipts()
+        directory = self.root / "cli-disjoint-evidence"
+        home = Path(self.temporary) / "disjoint-cargo-home"
+        home.mkdir()
+        credential = home / "credentials.toml"
+        credential.write_bytes(b"preserve disjoint nonsecret Cargo fixture\n")
+        observed = Path(self.temporary) / "admitted-action.json"
+        for action, consumer, tail in self.ACTIONS:
+            with self.subTest(action=action):
+                code = (
+                    "import json,pathlib,runpy,sys\n"
+                    "h=runpy.run_path(sys.argv[1]); state=h['main'].__globals__\n"
+                    "def consume(path,*args):\n"
+                    f" pathlib.Path({str(observed)!r}).write_text(json.dumps({{"
+                    "'path':str(path),'absolute':path.is_absolute(),"
+                    "'path_type':isinstance(path,pathlib.Path)}))\n"
+                    " return path\n"
+                    f"state[{consumer!r}]=consume\n"
+                    "def forbidden(*args): raise RuntimeError('disjoint dispatch read receipt')\n"
+                    "state['load_execution']=state['evidence_text']=forbidden\n"
+                    "sys.argv=sys.argv[1:]\n"
+                    "raise SystemExit(state['main']())\n"
+                )
+                result = self.cli_action(code, action, directory.relative_to(self.root), tail, home)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                record = json.loads(observed.read_text())
+                self.assertEqual(record["path"], str(directory))
+                self.assertTrue(record["absolute"])
+                self.assertTrue(record["path_type"])
+                self.assertFalse(directory.exists())
+                self.assertEqual(
+                    credential.read_bytes(), b"preserve disjoint nonsecret Cargo fixture\n"
+                )
+                self.assert_receipts_unchanged(receipts)
+                self.assertEqual(self.calls(), [])
 
 
 if __name__ == "__main__":

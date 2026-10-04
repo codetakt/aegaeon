@@ -995,6 +995,22 @@ def validate_native_configuration() -> dict[str, str]:
     config = (
         tomllib.loads(evidence_text(required_source(config_path))) if config_path.exists() else {}
     )
+    # Manifest inventory does not resolve dependency overrides or included config.
+    # Empty valid containers add no source input; malformed containers fail closed.
+    empty_source_settings = {"paths": [], "patch": {}, "source": {}, "replace": {}, "include": []}
+    registry = config.get("registry", {})
+    registries = config.get("registries", {})
+    if (
+        any(
+            name in config and config[name] != empty
+            for name, empty in empty_source_settings.items()
+        )
+        or not isinstance(registry, dict)
+        or not isinstance(registries, dict)
+        or "index" in registry
+        or any(not isinstance(value, dict) or "index" in value for value in registries.values())
+    ):
+        invalid("unmodeled Cargo dependency source configuration")
     if "fuzz" in config.get("alias", {}):
         invalid("Cargo fuzz alias is not supported for fuzz execution or cleanup")
     forced = {
@@ -1982,7 +1998,9 @@ def validate_action_routes(args: argparse.Namespace) -> None:
     ):
         action = getattr(args, name)
         if action is not None:
-            setattr(args, name, validate_evidence_route(action))
+            directory = validate_evidence_route(action)
+            validate_cargo_home_paths([directory], "execution")
+            setattr(args, name, directory)
             validate_collection_roots()
     for name in (
         "cleanup_cache",
@@ -1992,7 +2010,9 @@ def validate_action_routes(args: argparse.Namespace) -> None:
     ):
         action = getattr(args, name)
         if action is not None:
-            action[0] = str(validate_evidence_route(Path(action[0])))
+            directory = validate_evidence_route(Path(action[0]))
+            validate_cargo_home_paths([directory], "execution")
+            action[0] = str(directory)
             validate_collection_roots()
     if args.restore_cleanup is not None:
         # Raw-root failures belong to restore_cleanup's recovery error handler.
