@@ -761,6 +761,10 @@ if mode=="mutate-"+name:(root/"tracked.txt").write_text("mutated during stub bui
 target=pathlib.Path(os.environ.get("CARGO_TARGET_DIR",str(root/"target")))
 binary=target/"release"/name;binary.parent.mkdir(parents=True,exist_ok=True)
 binary.write_text(os.environ["FIXTURE_PROGRAM"]);binary.chmod(0o755)
+retention=os.environ.get("FIXTURE_BINARY_RETENTION")
+if retention:
+ retained=pathlib.Path(retention)/name;retained.parent.mkdir(parents=True,exist_ok=True)
+ retained.write_bytes(binary.read_bytes())
 print(json.dumps({"reason":"compiler-artifact","target":{"name":name,"kind":["bin"]},"executable":str(binary)}))
 print(json.dumps({"reason":"build-finished","success":True}))
 """)
@@ -1021,6 +1025,152 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             self.assertTrue(
                 pathlib.Path(binding["executable"]).is_relative_to(self.owner / "external-target")
             )
+
+    def test_binding_rejects_every_frozen_output_leaf_for_both_executable_roles(self) -> None:
+        leaves = [
+            "report.json",
+            "legacy-report.json",
+            "server.log",
+            "loadtest.log",
+            "server-build.jsonl",
+            "build.log",
+            "loadtest-build.jsonl",
+            "loadtest-build.log",
+            "db-migrate.log",
+        ]
+        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+            for leaf in leaves:
+                with self.subTest(name=name, leaf=leaf):
+                    directory = self.owner / name / leaf
+                    self.evidence = directory / "source"
+                    binary = directory / "release" / name
+                    destination = str(binary.parent) + "/./" + binary.name
+                    outputs = {
+                        item: destination if item == leaf else str(directory / item)
+                        for item in leaves
+                    }
+                    arguments = [
+                        value for output in outputs.values() for value in ["--output-file", output]
+                    ]
+                    result = self.invoke(
+                        "freeze",
+                        "--output-directory",
+                        str(directory),
+                        *arguments,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    frozen_outputs = json.loads((self.evidence / "OUTPUTS.json").read_bytes())
+                    self.assertEqual(len(frozen_outputs), len(leaves) + 1)
+                    binary.parent.mkdir(parents=True)
+                    raw = b"controlled selected executable bytes\n"
+                    binary.write_bytes(raw)
+                    binary.chmod(0o755)
+                    result = self.invoke(
+                        "bind",
+                        "--sha256",
+                        result.stdout.strip(),
+                        "--name",
+                        name,
+                        "--build-log",
+                        str(self.build_record(binary, name)),
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(binary.read_bytes(), raw)
+                    self.assertFalse((self.evidence / (name + ".json")).exists())
+
+    def test_executable_admission_rejects_reserved_evidence_and_status_leaves(self) -> None:
+        self.evidence = self.owner / "external-evidence" / "source"
+        self.freeze()
+        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+            reserved = [
+                self.evidence.parent / "source-status.json",
+                self.evidence / "SOURCE-MANIFEST.json",
+                self.evidence / "TRACKED-PATHS.json",
+                self.evidence / "OUTPUTS.json",
+                self.evidence / "ORIGIN.json",
+                self.evidence / "INVOCATION.json",
+                self.evidence / (name + ".json"),
+                self.root / "artifacts/load-test-report.json",
+                self.root / "artifacts/policy-mixed-report.json",
+            ]
+            for destination in reserved:
+                with (
+                    self.subTest(name=name, destination=destination.name),
+                    self.assertRaises(PRODUCER.SourceError),
+                ):
+                    PRODUCER.admitted_executable(self.root, self.evidence, str(destination))
+
+    def test_binary_readmission_rejects_output_alias_even_with_matching_artifact_hash(self) -> None:
+        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+            with self.subTest(name=name):
+                directory = self.owner / ("readmission-" + name)
+                self.evidence = directory / "source"
+                forbidden = directory / "release" / name
+                frozen = self.invoke("freeze", "--output-file", str(forbidden))
+                self.assertEqual(frozen.returncode, 0, frozen.stderr)
+                sha = frozen.stdout.strip()
+                selected = directory / "approved" / name
+                selected.parent.mkdir(parents=True)
+                raw = b"controlled selected executable bytes\n"
+                selected.write_bytes(raw)
+                selected.chmod(0o755)
+                self.assertEqual(
+                    self.invoke(
+                        "bind",
+                        "--sha256",
+                        sha,
+                        "--name",
+                        name,
+                        "--build-log",
+                        str(self.build_record(selected, name)),
+                    ).returncode,
+                    0,
+                )
+                forbidden.parent.mkdir(parents=True)
+                forbidden.write_bytes(raw)
+                forbidden.chmod(0o755)
+                binding_path = self.evidence / (name + ".json")
+                binding = json.loads(binding_path.read_bytes())
+                binding["executable"] = str(forbidden.parent) + "/./" + forbidden.name
+                binding_path.chmod(0o600)
+                binding_path.write_text(json.dumps(binding))
+                result = self.invoke("binary", "--sha256", sha, "--name", name)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(forbidden.read_bytes(), raw)
+                self.assertEqual(selected.read_bytes(), raw)
+
+    def test_wrapper_external_executable_aliases_preserve_compiled_bytes_before_launch(
+        self,
+    ) -> None:
+        for role in ["aegaeon-server", "aegaeon-loadtest"]:
+            for leaf in ["SERVER_LOG", "LOADTEST_LOG", "REPORT_PATH", "LEGACY_REPORT"]:
+                with self.subTest(role=role, leaf=leaf):
+                    label = role + "-" + leaf.lower()
+                    target = self.owner / ("target-" + label)
+                    selected = target / "release" / role
+                    retained = self.owner / ("retained-" + label)
+                    artifact = "artifacts/perf/executable-alias-" + label
+                    result = self.runner(
+                        managed=True,
+                        wrapper=True,
+                        artifact=artifact,
+                        overrides={
+                            "CARGO_TARGET_DIR": str(target),
+                            leaf: str(selected.parent) + "/./" + selected.name,
+                            "FIXTURE_BINARY_RETENTION": str(retained),
+                        },
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(selected.read_bytes(), (retained / role).read_bytes())
+                    self.assertTrue(selected.read_bytes().startswith(b"#!/usr/bin/env python3"))
+                    evidence = self.root / artifact / "source"
+                    self.assertFalse((evidence / (role + ".json")).exists())
+                    self.assertFalse((evidence / "INVOCATION.json").exists())
+                    status = json.loads((evidence.parent / "source-status.json").read_bytes())
+                    self.assertEqual(
+                        status["stage"],
+                        "server-build" if role == "aegaeon-server" else "loadtest-build",
+                    )
 
     def test_removing_mandatory_index_entry_rejected(self) -> None:
         self.git(self.root, "rm", "--force", "--quiet", "Cargo.lock")

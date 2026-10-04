@@ -575,6 +575,19 @@ def executable(path: pathlib.Path) -> str:
     return digest(raw)
 
 
+def admitted_executable(root: pathlib.Path, evidence: pathlib.Path, value: str) -> pathlib.Path:
+    path = output_path(root, value)
+    if path.is_relative_to(root) and not path.is_relative_to(root / "target"):
+        fail("build executable overlaps source")
+    _, outputs = load_json(evidence / "OUTPUTS.json")
+    leaves = {output_path(root, destination) for destination, directory in outputs if not directory}
+    leaves.update(output_path(root, name) for name in LEGACY)
+    leaves.add(evidence.parent / "source-status.json")
+    if path in leaves or path.is_relative_to(evidence):
+        fail("build executable overlaps an output or source evidence")
+    return path
+
+
 def bind(
     root: pathlib.Path, evidence: pathlib.Path, expected: str, build_log: pathlib.Path, name: str
 ) -> str:
@@ -595,9 +608,7 @@ def bind(
             matches.append(record["executable"])
     if len(matches) != 1 or finished != [True]:
         fail("build did not identify exactly one selected executable")
-    path = pathlib.Path(matches[0]).absolute()
-    if path.is_relative_to(root) and not path.is_relative_to(root / "target"):
-        fail("build executable overlaps source")
+    path = admitted_executable(root, evidence, matches[0])
     sha = executable(path)
     publish(
         evidence / (name + ".json"),
@@ -624,7 +635,7 @@ def verify_binary(root: pathlib.Path, evidence: pathlib.Path, expected: str, nam
     _, binding = load_json(evidence / (name + ".json"))
     if binding["source_manifest_sha256"] != expected:
         fail("executable source binding failed")
-    path = pathlib.Path(binding["executable"])
+    path = admitted_executable(root, evidence, binding["executable"])
     if executable(path) != binding["artifact_sha256"]:
         fail("built executable changed before launch")
     return str(path)

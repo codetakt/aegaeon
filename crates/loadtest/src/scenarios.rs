@@ -281,7 +281,7 @@ impl ScenarioExecutor {
                 url.as_str().trim_end_matches('/') == issuer,
                 "discovery issuer must be a canonical HTTPS URL"
             );
-            executor.discovery_expected_issuer = issuer.to_owned();
+            issuer.clone_into(&mut executor.discovery_expected_issuer);
         }
         Ok(executor)
     }

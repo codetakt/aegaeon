@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use aegaeon_loadtest::{
-    profile::{required_env, sha256},
+    profile::{issuer_url, required_env, sha256},
     scenarios::ScenarioExecutor,
     LoadTestConfig, LoadTestResults, ReportIdentity, TestScenario,
 };
@@ -185,6 +185,7 @@ fn write_report(file: &mut std::fs::File, value: &impl serde::Serialize) -> Resu
 }
 
 fn validate_config(config: &LoadTestConfig) -> Result<()> {
+    validate_report_urls(config)?;
     ensure!(
         config.workers > 0 && u32::try_from(config.workers).is_ok(),
         "worker count must be positive and representable"
@@ -209,11 +210,49 @@ fn validate_config(config: &LoadTestConfig) -> Result<()> {
     Ok(())
 }
 
+fn validate_report_urls(config: &LoadTestConfig) -> Result<()> {
+    for value in std::iter::once(config.target_url.as_str())
+        .chain(config.discovery_expected_issuer.as_deref())
+    {
+        ensure!(
+            !value.chars().any(|c| c.is_control() || c.is_whitespace()),
+            "URL inputs must not contain controls or whitespace"
+        );
+        ensure!(
+            !value.split_once("://").is_some_and(|(_, suffix)| suffix
+                .split(['/', '?', '#'])
+                .next()
+                .is_some_and(|authority| authority.contains('@'))),
+            "URL inputs must not contain credentials"
+        );
+    }
+    let target = reqwest::Url::parse(&config.target_url)
+        .map_err(|_| anyhow::anyhow!("invalid target URL"))?;
+    ensure!(
+        ["http", "https"].contains(&target.scheme())
+            && target.host_str().is_some()
+            && target.username().is_empty()
+            && target.password().is_none()
+            && target.query().is_none()
+            && target.fragment().is_none(),
+        "invalid target URL components"
+    );
+    if let Some(issuer) = config.discovery_expected_issuer.as_deref() {
+        let url = issuer_url(issuer)?;
+        ensure!(
+            url.as_str().trim_end_matches('/') == issuer,
+            "discovery issuer must be a canonical HTTPS URL"
+        );
+    }
+    Ok(())
+}
+
 fn report_identity(
     config: &LoadTestConfig,
     path: &str,
     report_id: Option<uuid::Uuid>,
 ) -> Result<ReportIdentity> {
+    validate_report_urls(config)?;
     let report_id = report_id.unwrap_or_else(uuid::Uuid::new_v4);
     ensure!(
         report_id.get_version_num() == 4,
@@ -509,6 +548,94 @@ fn parse_duration(value: &str) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rejected_report_urls() -> [&'static str; 8] {
+        [
+            "https://user:synthetic-secret@issuer.example.test",
+            "https://@issuer.example.test",
+            "https://issuer.example.test?synthetic-secret",
+            "https://issuer.example.test#synthetic-secret",
+            "https://issuer.example.test/\nsynthetic-secret",
+            "https://issuer.example.test/\0synthetic-secret",
+            "https://issuer.example.test/\u{007f}synthetic-secret",
+            "https://issuer.example.test/\u{0085}synthetic-secret",
+        ]
+    }
+
+    fn rejected_url_config(value: &str, issuer: bool) -> LoadTestConfig {
+        let mut config = LoadTestConfig::default();
+        if issuer {
+            config.discovery_expected_issuer = Some(value.into());
+        } else {
+            config.target_url = value.into();
+        }
+        config
+    }
+
+    #[test]
+    fn rejected_urls_cannot_reach_configuration_identity_serialization() {
+        for value in rejected_report_urls() {
+            for issuer in [false, true] {
+                let config = rejected_url_config(value, issuer);
+                assert!(validate_config(&config).is_err());
+                let error = report_identity(&config, "unused.json", None).unwrap_err();
+                assert!(!error.to_string().contains("synthetic-secret"));
+                assert!(!error.to_string().contains(value));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn rejected_urls_leave_failed_reports_without_configuration_witness() {
+        for value in rejected_report_urls() {
+            for issuer in [false, true] {
+                let config = rejected_url_config(value, issuer);
+                let path = std::env::temp_dir().join(format!(
+                    "aegaeon-rejected-url-report-{}.json",
+                    uuid::Uuid::new_v4()
+                ));
+                let results = run_load_test(config, path.to_str().unwrap(), None)
+                    .await
+                    .unwrap();
+                assert!(results.identity.is_none());
+                assert!(!results.completion_errors.is_empty());
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)
+                    .unwrap();
+                write_report(&mut file, &results).unwrap();
+                let raw = std::fs::read_to_string(&path).unwrap();
+                std::fs::remove_file(&path).unwrap();
+                assert!(!raw.contains("synthetic-secret"));
+                assert!(!raw.contains("config_json"));
+                assert!(!raw.contains("invalid issuer URL: "));
+            }
+        }
+    }
+
+    #[test]
+    fn safe_discovery_transport_and_exact_https_issuer_contract_are_preserved() {
+        for target in [
+            "http://127.0.0.1:18095",
+            "https://issuer.example.test/tenant/",
+        ] {
+            let config = LoadTestConfig {
+                target_url: target.into(),
+                discovery_expected_issuer: Some("https://issuer.example.test/tenant".into()),
+                ..LoadTestConfig::default()
+            };
+            assert!(validate_config(&config).is_ok());
+        }
+        for issuer in [
+            "http://issuer.example.test",
+            "https://issuer.example.test/",
+            "https://ISSUER.example.test",
+        ] {
+            assert!(validate_config(&rejected_url_config(issuer, true)).is_err());
+        }
+    }
+
     #[test]
     fn warmup_accepts_legacy_seconds_and_driver_duration_syntax() {
         for (input, seconds) in [
