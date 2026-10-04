@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
-import importlib.util
+import ast
 import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from validate_python_example import (
     EXPECTED_TESTS,
@@ -143,17 +142,21 @@ class ValidationControls(unittest.TestCase):
 
     def test_actual_expected_failure_and_unexpected_success_cannot_pass(self):
         root = Path(__file__).resolve().parents[2]
-        spec = importlib.util.spec_from_file_location(
-            "rp_outcome_control", root / "tests/examples/minimal_rp/check_flow.py"
+        source = root / "tests/examples/minimal_rp/check_flow.py"
+        # Exercise the actual pure producer definitions without importing its
+        # Flask/JWT application before the workflow installs those dependencies.
+        names = {"InventoryResult", "test_outcome"}
+        definitions = [
+            node
+            for node in ast.parse(source.read_text()).body
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in names
+        ]
+        self.assertEqual({node.name for node in definitions}, names)
+        self.assertEqual(len(definitions), len(names))
+        namespace = {"unittest": unittest}
+        exec(  # noqa: S102 - only two fixed definitions from the actual repository producer
+            compile(ast.Module(body=definitions, type_ignores=[]), str(source), "exec"), namespace
         )
-        flow = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = flow
-        with patch.object(
-            sys,
-            "argv",
-            [str(spec.origin), str(root / "examples/minimal-rp/app.py"), "unused-result.json"],
-        ):
-            spec.loader.exec_module(flow)
         for succeeds, counter in ((False, "expected_failures"), (True, "unexpected_successes")):
             with self.subTest(counter=counter):
 
@@ -163,9 +166,9 @@ class ValidationControls(unittest.TestCase):
                         self.assertTrue(succeeds)
 
                 result = unittest.TextTestRunner(
-                    stream=io.StringIO(), resultclass=flow.InventoryResult
+                    stream=io.StringIO(), resultclass=namespace["InventoryResult"]
                 ).run(unittest.TestSuite([ControlledOutcome("test_expected")]))
-                outcome = flow.test_outcome(result)
+                outcome = namespace["test_outcome"](result)
                 self.assertEqual(outcome["status"], "failed")
                 self.assertEqual(outcome[counter], 1)
                 self.assertIs(type(outcome[counter]), int)

@@ -359,7 +359,11 @@ class ApplicationSmoke(unittest.TestCase):
                 token = unsigned_token(required_claims(saved["nonce"]), algorithm)
                 result, _ = self.callback(saved, response=Response({"id_token": token}))
                 self.assert_rejected(result, saved)
-        for attribute, key in (("_discovery", "issuer"), ("_client", "client_id")):
+        for attribute, key in (
+            ("_discovery", "issuer"),
+            ("_discovery", "token_endpoint"),
+            ("_client", "client_id"),
+        ):
             for invalid in ("missing", None, "", False, 1, [], {}):
                 with self.subTest(expected=key, invalid=invalid):
                     saved = self.failure_begin()

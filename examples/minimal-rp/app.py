@@ -124,10 +124,13 @@ def login():
 def _exchange_code(code, verifier):
     """Return decoded claims without exposing token endpoint bodies on failure."""
     issuer, client_id = _discovery.get("issuer"), _client.get("client_id")
-    if not isinstance(issuer, str) or not issuer or not isinstance(client_id, str) or not client_id:
+    token_endpoint = _discovery.get("token_endpoint")
+    if any(
+        not isinstance(value, str) or not value for value in (issuer, client_id, token_endpoint)
+    ):
         raise ValueError
     resp = requests.post(
-        _discovery["token_endpoint"],
+        token_endpoint,
         data={
             "grant_type": "authorization_code",
             "code": code,
