@@ -301,6 +301,7 @@ def write_run_summary(
 
 def collect_corpus(execution: dict | None = None) -> None:
     validate_collection_roots()
+    validate_collection_history(RUN_ARTIFACT_DIR)
     for route in (RUN_ARTIFACT_DIR, HISTORY_OUT_DIR):
         if route is not None:
             validate_evidence_route(route)
@@ -906,10 +907,10 @@ def validate_fuzz_logs(directory: Path) -> None:
             validate_regular_destination(directory / target / name)
 
 
-def validate_collection_history(directory: Path) -> None:
-    collection_routes = [lexical_directory(directory)]
-    if RUN_ARTIFACT_DIR is not None:
-        collection_routes.append(lexical_directory(RUN_ARTIFACT_DIR))
+def validate_collection_history(directory: Path | None) -> None:
+    collection_routes = [
+        lexical_directory(route) for route in (directory, RUN_ARTIFACT_DIR) if route is not None
+    ]
     for name, default in (
         ("FUZZ_HISTORY_DIR", ""),
         ("SECURITY_HISTORY_DIR", "artifacts/security/history"),
@@ -944,7 +945,8 @@ def validate_preflight(directory: Path) -> Path:
     validate_evidence_route(artifact / "summary")
     validate_regular_destination(artifact / "summary/security.log")
     validate_fuzz_logs(directory)
-    validate_regular_destination(lexical_directory(directory) / "collection-summary.json")
+    for name in ("collection.ok", "execution.json", "run_summary.json", "collection-summary.json"):
+        validate_regular_destination(lexical_directory(directory) / name)
     for name, default in (
         ("FUZZ_HISTORY_DIR", ""),
         ("SECURITY_HISTORY_DIR", "artifacts/security/history"),

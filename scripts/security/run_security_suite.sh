@@ -381,8 +381,8 @@ run_fuzz_targets() (
 		fi
 	fi
 	python3 scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
-	local targets_text="${FUZZ_TARGETS//$'\n'/ }" targets=()
-	targets_text="${targets_text//$'\r'/ }"
+	local targets_text targets=()
+	targets_text="$(python3 -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
 	read -r -a targets <<<"$targets_text"
 	local target_dir
 	target_dir="$(python3 scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2

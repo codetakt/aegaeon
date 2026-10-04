@@ -3079,12 +3079,22 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
         directory = self.artifacts / "fuzz"
         directory.mkdir(parents=True)
         alias = directory / "collection-summary.json"
-        alias.symlink_to(outside)
         self.install_cleanup_hook("pass")
+        self.install_helper_hooks(
+            {
+                "--finish-run": "directory=Path(os.environ['FUZZ_RUN_ARTIFACT_DIR'])\n"
+                "(directory/'collection-summary.json').symlink_to(ROOT.parent/'external-summary')\n"
+                "(ROOT.parent/'late-summary-alias-hook').write_text('--finish-run')\n"
+            }
+        )
         for case in ("ok", "run-fail"):
             with self.subTest(case=case):
+                alias.unlink(missing_ok=True)
+                hook_marker = self.root.parent / "late-summary-alias-hook"
+                hook_marker.unlink(missing_ok=True)
                 result = self.run_suite(case, FAIL_TARGET=TARGETS[0])
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(hook_marker.read_text(), "--finish-run")
                 self.assertIn(
                     "receipt destination is not a regular file",
                     (self.artifacts / "summary/security.log").read_text(),
@@ -3097,6 +3107,28 @@ class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
                     self.summary()["status"], "awaiting-cleanup" if case == "ok" else "failed"
                 )
                 self.assertTrue(list((self.root / "fuzz/corpus").rglob("seed")))
+
+    def test_preexisting_collection_summary_alias_preserves_prior_evidence(self):
+        _, raw = self.seed_stale_results()
+        previous = self.saved_receipts()
+        outside = Path(self.temporary) / "external-preflight-summary"
+        outside.write_bytes(b"preserve external preflight summary")
+        alias = self.artifacts / "fuzz/collection-summary.json"
+        alias.symlink_to(outside)
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "owned output destination cannot be a symlink or special entry", result.stderr
+        )
+        self.assert_receipts_unchanged(previous)
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(outside.read_bytes(), b"preserve external preflight summary")
+        for path, content in raw.items():
+            self.assertEqual(path.read_bytes(), content)
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.artifacts / "summary").exists())
+        self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+        self.assertFalse((self.root.parent / "cleanup-called").exists())
 
     def test_collection_summary_mismatch_cannot_authorize_cleanup(self):
         self.install_helper_hooks(
@@ -3684,6 +3716,132 @@ class SecurityFuzzPreflightSourceHistoryTests(SecurityFuzzFixture):
         self.assertEqual(summary["status"], "passed")
         self.assertNotIn("crates/kani-harness/kani", summary["execution"]["source"]["files"])
         self.assertFalse((self.root / "crates/kani-harness/result").exists())
+
+
+class SecurityFuzzReceiptTokenizerTests(SecurityFuzzFixture):
+    def setUp(self):
+        super().setUp()
+        for tool in ("cc", "c++", "ar"):
+            self.install(tool, "print('nonsecret native-version fixture')")
+
+    def test_all_collection_receipt_destinations_reject_before_retirement(self):
+        _, raw = self.seed_stale_results()
+        collection = self.artifacts / "fuzz"
+        names = ("collection.ok", "execution.json", "run_summary.json", "collection-summary.json")
+        (collection / names[-1]).write_bytes(b"unchanged prior collection summary\n")
+        previous = {name: (collection / name).read_bytes() for name in names}
+        for name in names:
+            with self.subTest(name=name):
+                invalid = collection / name
+                invalid.unlink()
+                invalid.mkdir()
+                sentinel = invalid / "prior-evidence"
+                sentinel.write_bytes(b"unchanged invalid receipt directory\n")
+                try:
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("owned output destination", result.stderr)
+                    self.assertEqual(
+                        sentinel.read_bytes(), b"unchanged invalid receipt directory\n"
+                    )
+                    self.assertEqual(list(invalid.iterdir()), [sentinel])
+                    for other in names:
+                        if other != name:
+                            self.assertEqual((collection / other).read_bytes(), previous[other])
+                    for path, content in raw.items():
+                        self.assertEqual(path.read_bytes(), content)
+                    self.assertEqual(self.calls(), [])
+                    self.assertFalse((self.artifacts / "summary").exists())
+                    self.assertFalse(Path(self.env["CARGO_HOME"]).exists())
+                finally:
+                    sentinel.unlink()
+                    invalid.rmdir()
+                    invalid.write_bytes(previous[name])
+
+    def test_collect_only_overlaps_reject_before_any_collection_write(self):
+        def snapshot(directory):
+            return {
+                str(path.relative_to(directory)): None if path.is_dir() else path.read_bytes()
+                for path in directory.rglob("*")
+            }
+
+        crash = self.root / "fuzz/artifacts" / TARGETS[0] / "owned-crash"
+        for with_crash in (False, True):
+            if with_crash:
+                crash.parent.mkdir(parents=True)
+                crash.write_bytes(b"unchanged owned crash input\n")
+            for relation in ("equal", "history-child", "history-parent"):
+                with self.subTest(with_crash=with_crash, relation=relation):
+                    base = Path(self.temporary) / f"collect-overlap-{with_crash}-{relation}"
+                    artifact = base / "artifact"
+                    history = {
+                        "equal": artifact,
+                        "history-child": artifact / "history",
+                        "history-parent": base,
+                    }[relation]
+                    artifact.mkdir(parents=True)
+                    history.mkdir(parents=True, exist_ok=True)
+                    (artifact / "prior-artifact").write_bytes(b"unchanged prior artifact\n")
+                    (history / "prior-history").write_bytes(b"unchanged prior history\n")
+                    before = snapshot(base), snapshot(self.root / "fuzz")
+                    result = subprocess.run(  # noqa: S603 - actual helper with owned fixture routes
+                        [sys.executable, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
+                        cwd=self.root,
+                        env={
+                            **self.env,
+                            "FUZZ_RUN_ARTIFACT_DIR": str(artifact),
+                            "FUZZ_HISTORY_DIR": str(history),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("collection and history directories overlap", result.stderr)
+                    self.assertEqual((snapshot(base), snapshot(self.root / "fuzz")), before)
+                    self.assertEqual(self.calls(), [])
+
+    def test_unicode_whitespace_selection_executes_each_validated_target(self):
+        for separator in ("\v", "\u00a0"):
+            with self.subTest(separator=repr(separator)):
+                calls = self.root.parent / "calls.jsonl"
+                if calls.exists():
+                    calls.unlink()
+                result = self.run_suite(FUZZ_TARGETS=separator.join(TARGETS[:2]))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                execution = self.summary()["execution"]
+                self.assertEqual(execution["selected_targets"], list(TARGETS[:2]))
+                self.assertEqual(execution["status"], "passed")
+                self.assertEqual(execution["coverage"], "local-subset")
+                self.assertEqual([row["name"] for row in execution["targets"]], list(TARGETS[:2]))
+                self.assertTrue(
+                    all(row["run"]["completed_runs"] == 100 for row in execution["targets"])
+                )
+                self.assertEqual(
+                    [call[6] for call in self.calls() if call[:2] == ["fuzz", "run"]],
+                    list(TARGETS[:2]),
+                )
+
+    def test_unicode_whitespace_selection_preserves_required_ci_inventory(self):
+        self.seed_stale_results()
+        previous = self.saved_receipts()
+        for separator in ("\v", "\u00a0"):
+            with self.subTest(separator=repr(separator), selection="subset"):
+                result = self.run_suite(FUZZ_TARGETS=separator.join(TARGETS[:2]), CI="true")
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("full seven-target fuzz inventory", result.stderr)
+                self.assert_receipts_unchanged(previous)
+                self.assertEqual(self.calls(), [])
+        result = self.run_suite(FUZZ_TARGETS="\u00a0".join(TARGETS), CI="true")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        execution = self.summary()["execution"]
+        self.assertEqual(execution["selected_targets"], list(TARGETS))
+        self.assertEqual(execution["coverage"], "full")
+        self.assertEqual(execution["status"], "passed")
+        self.assertEqual(
+            [call[6] for call in self.calls() if call[:2] == ["fuzz", "run"]], list(TARGETS)
+        )
 
 
 class SecurityFuzzOuterAppTests(SecurityFuzzFixture):
