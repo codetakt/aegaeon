@@ -10,6 +10,7 @@ import re
 import stat
 import tarfile
 import uuid
+import zlib
 from contextlib import ExitStack, contextmanager, suppress
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -167,22 +168,25 @@ def archive_retention_plan(
                     and before.st_nlink == 1
                 ):
                     continue
-                descriptor = os.open(
-                    name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
-                )
-                handles.callback(os.close, descriptor)
-                identity = archive_snapshot(before)
-                if archive_snapshot(os.fstat(descriptor)) != identity:
-                    invalid("archive retention candidate changed before opening")
-                with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                    try:
-                        verify_archive_stream(stream, directory / name)
-                    except (ValueError, gzip.BadGzipFile):
-                        # Unsupported or incomplete older bytes remain raw evidence.
-                        continue
-                digest = descriptor_content_digest(descriptor)
-                validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
-                candidates.append((name, descriptor, identity, digest))
+                with ExitStack() as candidate_handles:
+                    descriptor = os.open(
+                        name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+                    )
+                    candidate_handles.callback(os.close, descriptor)
+                    identity = archive_snapshot(before)
+                    if archive_snapshot(os.fstat(descriptor)) != identity:
+                        invalid("archive retention candidate changed before opening")
+                    with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                        try:
+                            verify_archive_stream(stream, directory / name)
+                        except (ValueError, gzip.BadGzipFile, zlib.error):
+                            # Rejected bytes remain evidence; their descriptor closes here.
+                            continue
+                    digest = descriptor_content_digest(descriptor)
+                    validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
+                    candidates.append((name, descriptor, identity, digest))
+                    # Only admitted candidates stay pinned through reversible pruning.
+                    handles.enter_context(candidate_handles.pop_all())
             candidates = candidates[: max(0, len(candidates) + 1 - keep_archives)]
         with archive_pruning_backups(directory_fd, candidates) as plan:
             yield plan

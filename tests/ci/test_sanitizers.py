@@ -1335,7 +1335,7 @@ class SanitizerLoggingTests(SanitizerLoggingFixture, unittest.TestCase):
                 self.assertIn(f"suite finished. log: {log}", retained)  # noqa: PT009
                 self.assertEqual(self.shared_receipt()["status"], "completed")  # noqa: PT009
 
-    def test_safe_opener_truncates_once_after_inherited_admission(self):
+    def test_safe_opener_truncates_once_after_inherited_admission(self):  # noqa: PLR0912, PLR0915 - real bound/compatibility/replacement handoffs
         namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/open_security_log.py"))
         log = self.root / "owned-log"
         original = b"old bytes survive opener before resumed validation\n"
@@ -1357,6 +1357,104 @@ class SanitizerLoggingTests(SanitizerLoggingFixture, unittest.TestCase):
                     os.close(resumed)
             finally:
                 os.close(fd)
+
+        # Execute the real opener and resumed wrapper through a controlled Bash
+        # handoff. Replacement happens after evidence admission, before re-exec.
+        for operation in ("bound", "bound-replacement", "compatibility"):
+            with self.subTest(operation=operation):
+                fixture = SanitizerLoggingTests()
+                self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
+                fixture.environment.pop("SANITIZER_EVIDENCE_BINDING", None)
+                fixture.environment["MODEL_REEXEC"] = operation
+                real_bash = shutil.which("bash")
+                (fixture.bin / "bash").unlink()
+                fixture.make_tool(
+                    "bash",
+                    f"""
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+root = Path(os.environ["SANITIZER_FIXTURE"])
+evidence = root / "shared/sanitizers"
+def snapshot(directory):
+    return {{str(path.relative_to(directory)): {{
+        "mode": stat.S_IMODE(path.stat().st_mode),
+        "bytes": path.read_bytes().hex() if path.is_file() else None,
+    }} for path in [directory, *sorted(directory.rglob("*"))]}}
+record = {{"binding": os.environ.get("SANITIZER_EVIDENCE_BINDING"),
+           "argv": sys.argv[1:]}}
+if os.environ["MODEL_REEXEC"] == "bound-replacement":
+    record["original"] = snapshot(evidence)
+    evidence.rename(root / "held-evidence")
+    evidence.mkdir()
+    (evidence / "run-summary.json").write_bytes(b'{{"status":"completed"}}\\n')
+    (evidence / "retained.stdout.log").write_bytes(b"replacement raw bytes\\n")
+    (evidence / "sentinel").write_bytes(b"replacement sentinel\\n")
+    record["replacement"] = snapshot(evidence)
+(root / "reexec-record.json").write_text(json.dumps(record))
+os.execv({real_bash!r}, [{real_bash!r}, *sys.argv[1:]])
+""",
+                )
+                summary = fixture.shared / "summary"
+                summary.mkdir(parents=True)
+                log = summary / "security.log"
+                retained = b"retained shared log before re-exec\n"
+                log.write_bytes(retained)
+                if operation == "compatibility":
+                    result = subprocess.run(  # noqa: S603 - real fixed helper with controlled paths/tools
+                        [
+                            sys.executable,
+                            "-I",
+                            str(fixture.root / "scripts/sanitizers/open_security_log.py"),
+                            "open-exec",
+                            str(log),
+                            "--stage",
+                            "sanitizers",
+                        ],
+                        cwd=fixture.root,
+                        env=fixture.environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                else:
+                    result = fixture.run_suite()
+                record = json.loads((fixture.root / "reexec-record.json").read_text())
+                self.assertEqual(record["argv"], [str(fixture.suite), "--stage", "sanitizers"])  # noqa: PT009
+                if operation == "bound-replacement":
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                    self.assertFalse((fixture.root / "producer-called").exists())  # noqa: PT009
+                    self.assertEqual(log.read_bytes(), retained)  # noqa: PT009
+                    for name, directory in (
+                        ("original", fixture.root / "held-evidence"),
+                        ("replacement", fixture.shared / "sanitizers"),
+                    ):
+                        snapshot = {
+                            str(path.relative_to(directory)): {
+                                "mode": stat.S_IMODE(path.stat().st_mode),
+                                "bytes": path.read_bytes().hex() if path.is_file() else None,
+                            }
+                            for path in [directory, *sorted(directory.rglob("*"))]
+                        }
+                        self.assertEqual(snapshot, record[name])  # noqa: PT009 - no initialization/archive/output writes
+                else:
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                    self.assertEqual(fixture.shared_receipt()["status"], "completed")  # noqa: PT009
+                    self.assertTrue((fixture.root / "producer-called").exists())  # noqa: PT009
+                    self.assertIn("suite finished", log.read_text())  # noqa: PT009
+                    self.assertNotIn(retained.decode(), log.read_text())  # noqa: PT009
+                if operation == "compatibility":
+                    self.assertIsNone(record["binding"])  # noqa: PT009 - legacy environment remains unchanged
+                else:
+                    self.assertIsNotNone(record["binding"])  # noqa: PT009 - shell-local binding survives actual exec
+                    self.assertEqual(  # noqa: PT009 - active under Python -O
+                        json.loads(record["binding"])["target"],
+                        str(fixture.shared / "sanitizers"),
+                    )
 
     def test_inherited_descriptor_identity_aliases_reject_before_truncation(self):
         namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/open_security_log.py"))

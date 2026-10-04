@@ -10,7 +10,7 @@ import sys
 from test_security_fuzz import SecurityFuzzFixture
 
 CONTROL = r"""
-import contextlib,json,os,pathlib,runpy,sys,tarfile
+import contextlib,gzip,io,json,os,pathlib,resource,runpy,struct,sys,tarfile,zlib
 h=runpy.run_path(sys.argv[1]);state=h['write_exclusive_archive'].__globals__
 root=h['ROOT'];case=sys.argv[2];source=root/'fuzz/corpus/owned'
 source.mkdir(parents=True);(source/'seed').write_bytes(b'raw input')
@@ -23,7 +23,26 @@ for i in range(3):
 final=output/'20261004T123456123456Z.tar.gz'
 sentinel=root.parent/'sentinel';sentinel.write_bytes(b'outside preserved')
 unsupported={}
+descriptor_limit=None
+if case=='malformed-limit':
+    for i in range(80):
+        path=output/f'19970101T{i:012d}Z.tar.gz'
+        path.write_bytes(b'not an archive');unsupported[path.name]='malformed'
+    descriptor_limit=resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE,(min(64,descriptor_limit[0]),descriptor_limit[1]))
+deflate_raw=io.BytesIO()
+with tarfile.open(fileobj=deflate_raw,mode='w') as archive:
+    member=tarfile.TarInfo('seed');member.size=len(b'raw input')
+    archive.addfile(member,io.BytesIO(b'raw input'))
+plain=deflate_raw.getvalue()
+plain+=b'\0'*(65535-len(plain))
+# A valid non-final stored block allows tar parsing before the invalid block.
+deflate_bytes=(gzip.compress(b'',mtime=0)[:10]+b'\0'
+    +struct.pack('<HH',len(plain),len(plain)^65535)+plain+b'\x07'+b'\0'*8)
 if case=='unsupported':
+    try:state['verify_archive_stream'](io.BytesIO(deflate_bytes),output/'deflate-probe')
+    except zlib.error:pass
+    else:raise RuntimeError('DEFLATE fixture did not reach the intended decoder error')
     link=output/'19980101T000000000000Z.tar.gz';link.symlink_to(sentinel)
     unsupported[link.name]='symlink'
     directory=output/'19980102T000000000000Z.tar.gz';directory.mkdir()
@@ -37,8 +56,19 @@ if case=='unsupported':
     corrupt=output/'19980106T000000000000Z.tar.gz'
     corrupt_bytes=bytearray(next(iter(prior.values())));corrupt_bytes[-8]^=1
     corrupt.write_bytes(corrupt_bytes);unsupported[corrupt.name]='corrupt-gzip'
+    deflate=output/'19980107T000000000000Z.tar.gz'
+    deflate.write_bytes(deflate_bytes);unsupported[deflate.name]='corrupt-deflate'
     unmanaged=output/'unmanaged.tar.gz';unmanaged.write_bytes(b'unmanaged evidence')
     unsupported[unmanaged.name]='unmanaged'
+if case in ('historical-io-error','current-deflate-corruption'):
+    original_verify=state['verify_archive_stream']
+    def verify(stream,path):
+        if case=='historical-io-error' and path!=final:
+            raise OSError('owned historical archive read failure')
+        if case=='current-deflate-corruption' and path==final:
+            stream.seek(0);stream.write(deflate_bytes);stream.truncate();stream.flush()
+        return original_verify(stream,path)
+    state['verify_archive_stream']=verify
 if case=='scan-current-change':
     original=state['os'].listdir
     def scan(fd):
@@ -80,8 +110,10 @@ if case in ('restore-collision','restore-error'):
     state['os'].link=link
 failed=False
 try:h['write_exclusive_archive'](final,[(source,'corpus')],1)
-except (OSError,ValueError):failed=True
+except (OSError,ValueError,zlib.error):failed=True
 finally:
+    if descriptor_limit is not None:
+        resource.setrlimit(resource.RLIMIT_NOFILE,descriptor_limit)
     state['os'].link=original_link
     if case=='scan-current-change':state['os'].listdir=original
     if case in ('prune-error','partial-prune-error','prune-current-change',
@@ -107,6 +139,7 @@ for name,kind in unsupported.items():
     elif kind=='fifo':ok=__import__('stat').S_ISFIFO(p.lstat().st_mode)
     elif kind=='hardlink':ok=p.stat().st_ino==sentinel.stat().st_ino
     elif kind=='corrupt-gzip':ok=p.read_bytes()==corrupt_bytes
+    elif kind=='corrupt-deflate':ok=p.read_bytes()==deflate_bytes
     else:ok=p.read_bytes()==(b'not an archive' if kind=='malformed' else b'unmanaged evidence')
     preserved[name]=ok
 print(json.dumps({'case':case,'failed':failed,'published':published,'valid':valid,
@@ -161,6 +194,28 @@ class FuzzArchiveRetentionTests(SecurityFuzzFixture):
         self.assertTrue(record["valid"], record)
         self.assertTrue(all(record["unsupported"].values()), record)
         self.assertEqual(record["remaining"], {}, record)
+
+    def test_historical_filesystem_errors_abort_without_pruning(self):
+        record = self.control("historical-io-error")
+        self.assertTrue(record["failed"], record)
+        self.assertFalse(record["published"], record)
+        self.assertEqual(len(record["remaining"]), 3, record)
+        self.assertTrue(all(record["remaining"].values()), record)
+
+    def test_rejected_archives_do_not_exhaust_descriptors_during_retention(self):
+        record = self.control("malformed-limit")
+        self.assertFalse(record["failed"], record)
+        self.assertTrue(record["valid"], record)
+        self.assertEqual(len(record["unsupported"]), 80, record)
+        self.assertTrue(all(record["unsupported"].values()), record)
+        self.assertEqual(record["remaining"], {}, record)
+
+    def test_current_deflate_corruption_aborts_without_pruning(self):
+        record = self.control("current-deflate-corruption")
+        self.assertTrue(record["failed"], record)
+        self.assertFalse(record["published"], record)
+        self.assertEqual(len(record["remaining"]), 3, record)
+        self.assertTrue(all(record["remaining"].values()), record)
 
     def test_scan_content_change_rejects_before_any_prior_archive_is_deleted(self):
         record = self.control("scan-current-change")

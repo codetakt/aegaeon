@@ -124,7 +124,7 @@ def checked_log(path: str, inherited: int | None = None) -> int:  # noqa: PLR091
         os.close(parent)
 
 
-def main() -> int:  # noqa: PLR0912, PLR0915 - complete validate/open/exec/recovery boundary
+def main() -> int:  # noqa: C901, PLR0912, PLR0915 - complete validate/open/exec/recovery boundary
     fd = None
     bash = None
     context = None
@@ -153,6 +153,8 @@ def main() -> int:  # noqa: PLR0912, PLR0915 - complete validate/open/exec/recov
         os.set_inheritable(fd, True)  # noqa: FBT003 - positional-only OS descriptor API
         environment = dict(os.environ)
         environment["SANITIZER_SECURITY_LOG_FD"] = str(fd)
+        if context is not None:
+            environment["SANITIZER_EVIDENCE_BINDING"] = context[1]
         wrapper = Path(__file__).resolve().parents[2] / "scripts/security/run_security_suite.sh"
         os.execve(bash, [bash, str(wrapper), *arguments], environment)  # noqa: S606 - fixed wrapper, structured argv
     except (OSError, ValueError):
