@@ -93,14 +93,12 @@ jobs:
       - name: Cleanup transient outputs
         if: always()
         run: |
-          rm -rf target fuzz/target || true
-          if [ "${{ matrix.stage }}" != "fuzz" ] || {
-            [ "${{ steps.run_security_stage.outcome }}" = "success" ] &&
-            [ -f artifacts/security/latest/fuzz/collection.ok ]
-          }; then
+          # Fuzz cleanup belongs to the validated, receipt-bound wrapper.
+          if [ "${{ matrix.stage }}" != "fuzz" ]; then
+            rm -rf target fuzz/target || true
             rm -rf fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
+            rm -rf ~/.cache/trivy ~/.cache/grype || true
           fi
-          rm -rf ~/.cache/trivy ~/.cache/grype || true
 
       - name: Record security status
         if: always()

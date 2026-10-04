@@ -21,10 +21,14 @@ import sys
 import tarfile
 import tempfile
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, BinaryIO, NoReturn
+from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
@@ -200,7 +204,7 @@ def create_archive() -> Path | None:
 
     with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
         if CORPUS_ROOT.exists():
-            tar.add(CORPUS_ROOT, arcname="corpus")
+            archive_raw_tree(tar, CORPUS_ROOT, "corpus")
 
     archives = sorted(ARCHIVE_DIR.glob("*.tar.gz"))
     excess = len(archives) - keep_archives
@@ -260,7 +264,7 @@ def archive_crashes(stats: list[CrashStat], dest_dir: Path | None) -> Path | Non
     with tarfile.open(archive_path, "w:gz", dereference=False) as tar:
         for stat in stats:
             if stat.file_count > 0:
-                tar.add(CRASH_ROOT / stat.name, arcname=stat.name)
+                archive_raw_tree(tar, CRASH_ROOT / stat.name, stat.name)
     return archive_path
 
 
@@ -465,6 +469,7 @@ def validate_compiler_environment() -> None:
         "CARGO_BUILD_RUSTC",
         "CARGO_BUILD_RUSTC_WRAPPER",
         "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_ALIAS_FUZZ",
     ):
         if name in os.environ:
             invalid(f"inherited {name} override is not supported for fuzz execution or cleanup")
@@ -524,6 +529,17 @@ def source_exclusions() -> set[Path]:
         ):
             invalid("fuzz runtime output overlaps local source inputs")
         excluded.add(path)
+    if "CARGO_TARGET_DIR" in os.environ:
+        directory = (
+            RUN_ARTIFACT_DIR
+            or repository_path(
+                Path(os.environ.get("SECURITY_ARTIFACT_DIR") or "artifacts/security/latest")
+            )
+            / "fuzz"
+        )
+        # A supported cache alias may point elsewhere inside the checkout. Only
+        # the protected-path-validated canonical destination is an output.
+        excluded.add(configured_cache(directory))
     return excluded
 
 
@@ -640,16 +656,21 @@ def local_source_inventory(
             if path in excluded:
                 continue
             relative = path.relative_to(ROOT).as_posix()
-            if path.is_symlink():
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
                 if relative != KANI_OUTPUT_POINTER:
                     invalid(f"symlink or external local source input is not supported: {relative}")
                 inventory[relative] = pointer
                 continue
-            mode = stat.S_IMODE(path.stat().st_mode)
-            if path.is_dir():
+            mode = stat.S_IMODE(info.st_mode)
+            if stat.S_ISDIR(info.st_mode):
                 inventory[relative] = {"type": "directory", "mode": mode}
-            elif path.is_file():
-                inventory[relative] = {"type": "file", "mode": mode, "sha256": digest(path)}
+            elif stat.S_ISREG(info.st_mode):
+                inventory[relative] = {
+                    "type": "file",
+                    "mode": mode,
+                    "sha256": evidence_digest(path, info),
+                }
             else:
                 invalid(f"special local source input is not supported: {relative}")
     return inventory
@@ -821,7 +842,11 @@ def configured_cache(directory: Path) -> Path:
     # or any ancestor that can remove them, are never cleanup destinations.
     if any(root.is_relative_to(path) for root in (ROOT, FUZZ_DIR) for path in (base, cache)):
         invalid("fuzz cache cannot be a workspace root or ancestor")
-    if any(overlaps(cache, path) for path in cache_protected_paths(directory)):
+    if any(
+        overlaps(output, path)
+        for output in (base, cache)
+        for path in cache_protected_paths(directory)
+    ):
         invalid("fuzz cache overlaps protected source, raw, evidence or Cargo home paths")
     if cache.exists() and not cache.is_dir():
         invalid("fuzz cache is not a directory")
@@ -927,6 +952,8 @@ def validate_native_configuration() -> dict[str, str]:
         invalid("unmodeled external or nested Cargo compiler configuration")
     config_path = ROOT / ".cargo/config.toml"
     config = tomllib.loads(required_source(config_path).read_text()) if config_path.exists() else {}
+    if "fuzz" in config.get("alias", {}):
+        invalid("Cargo fuzz alias is not supported for fuzz execution or cleanup")
     forced = {
         "CC_x86_64_unknown_linux_gnu": "cc",
         "CXX_x86_64_unknown_linux_gnu": "c++",
@@ -1073,8 +1100,8 @@ def prepare_run(directory: Path) -> None:
         "profile": "release with debug assertions",
         "sanitizer": "address",
         "source": {
-            "commit": capture(["git", "rev-parse", "HEAD"]),
-            "tree": capture(["git", "rev-parse", "HEAD^{tree}"]),
+            "commit": capture(["git", "-C", str(ROOT), "rev-parse", "HEAD"]),
+            "tree": capture(["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"]),
             "files": inputs,
         },
         "tools": tools,
@@ -1338,19 +1365,77 @@ def recovery_directory(directory: Path, run_id: str, *, create: bool = False) ->
     return recovery
 
 
+@contextmanager
+def open_evidence_file(path: Path, expected: os.stat_result | None = None) -> Iterator[BinaryIO]:
+    before = path.lstat() if expected is None else expected
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as content:
+        opened = os.fstat(content.fileno())
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            invalid("evidence file must be a stable, unaliased regular file")
+        yield content
+        after = os.fstat(content.fileno())
+        current = path.lstat()
+        if (
+            after.st_nlink != 1
+            or (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            != (opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
+            or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            invalid("evidence file changed while being read")
+
+
+def evidence_digest(path: Path, expected: os.stat_result | None = None) -> str:
+    with open_evidence_file(path, expected) as content:
+        value = hashlib.sha256()
+        while block := content.read(1024 * 1024):
+            value.update(block)
+    return value.hexdigest()
+
+
+def copy_evidence_file(source: str, destination: str) -> str:
+    path, output = Path(source), Path(destination)
+    validate_regular_destination(output)
+    with open_evidence_file(path) as content:
+        descriptor = os.open(
+            output, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600
+        )
+        with os.fdopen(descriptor, "wb") as copied:
+            opened = os.fstat(copied.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                invalid("evidence copy destination must be an unaliased regular file")
+            os.ftruncate(copied.fileno(), 0)
+            shutil.copyfileobj(content, copied)
+    shutil.copystat(path, output, follow_symlinks=False)
+    return str(output)
+
+
 def raw_inventory(directory: Path) -> dict:
     inventory = {}
-    for path in sorted(directory.rglob("*")):
-        name = path.relative_to(directory).as_posix()
-        if path.is_symlink():
-            inventory[name] = {"type": "symlink", "target": str(path.readlink())}
-        elif path.is_file():
-            inventory[name] = {"type": "file", "sha256": digest(path)}
-        elif path.is_dir():
-            inventory[name] = {"type": "directory"}
-        else:
-            invalid("fuzz recovery encountered a special filesystem entry")
-    return inventory
+    if not stat.S_ISDIR(directory.lstat().st_mode):
+        invalid("fuzz evidence inventory requires a regular directory root")
+
+    def traversal_error(error: OSError) -> NoReturn:
+        raise error
+
+    for base, directories, files in os.walk(directory, followlinks=False, onerror=traversal_error):
+        for entry in sorted([*directories, *files]):
+            path = Path(base) / entry
+            name = path.relative_to(directory).as_posix()
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
+                inventory[name] = {"type": "symlink", "target": str(path.readlink())}
+            elif stat.S_ISREG(info.st_mode):
+                inventory[name] = {"type": "file", "sha256": evidence_digest(path, info)}
+            elif stat.S_ISDIR(info.st_mode):
+                inventory[name] = {"type": "directory"}
+            else:
+                invalid("fuzz recovery encountered a special filesystem entry")
+    return dict(sorted(inventory.items()))
 
 
 def copy_raw_backups(recovery: Path) -> dict:
@@ -1362,7 +1447,7 @@ def copy_raw_backups(recovery: Path) -> dict:
         present = source.exists()
         inventory = raw_inventory(source) if present else {}
         if present:
-            shutil.copytree(source, raw / name, symlinks=True)
+            shutil.copytree(source, raw / name, symlinks=True, copy_function=copy_evidence_file)
             if raw_inventory(raw / name) != inventory or raw_inventory(source) != inventory:
                 invalid("fuzz raw evidence changed during recovery copy")
         records[name] = {"present": present, "inventory": inventory}
@@ -1453,7 +1538,13 @@ def restore_raw_copy(recovery: Path, manifest: dict) -> None:
         if destination.exists() and any(path.is_symlink() for path in destination.rglob("*")):
             invalid("fuzz restoration refuses existing symlink traversal")
         if record["present"]:
-            shutil.copytree(recovery / "raw" / name, destination, symlinks=True, dirs_exist_ok=True)
+            shutil.copytree(
+                recovery / "raw" / name,
+                destination,
+                symlinks=True,
+                dirs_exist_ok=True,
+                copy_function=copy_evidence_file,
+            )
             if raw_inventory(destination) != record["inventory"]:
                 invalid("fuzz restored evidence differs from its recovery copy")
         elif destination.exists():
@@ -1486,6 +1577,8 @@ def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -
         for name in RECOVERY_EVIDENCE_NAMES:
             if (directory / name).is_symlink():
                 invalid("fuzz evidence restoration refuses existing symlink traversal")
+        for name in ("collection.ok", "collection-summary.json"):
+            validate_regular_destination(directory / name)
         for name in ("collection.ok", "collection-summary.json"):
             (directory / name).write_bytes(snapshots[name])
         write_json(directory / "execution.json", data)
@@ -1559,22 +1652,39 @@ def upload_inventory() -> dict:
                 "entries": raw_inventory(source),
             }
         else:
-            inventories[name] = {"present": True, "type": "file", "sha256": digest(source)}
+            inventories[name] = {"present": True, "type": "file", "sha256": evidence_digest(source)}
     return inventories
 
 
-def add_upload_entry(tar: tarfile.TarFile, path: Path) -> None:
-    info = tar.gettarinfo(str(path), arcname=path.relative_to(ROOT).as_posix())
-    if info.isfile():
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(descriptor, "rb") as content:
-            if not stat.S_ISREG(os.fstat(content.fileno()).st_mode):
-                invalid("upload entry changed into a special file")
+def add_evidence_entry(tar: tarfile.TarFile, path: Path, arcname: str) -> None:
+    before = path.lstat()
+    if stat.S_ISREG(before.st_mode):
+        with open_evidence_file(path, before) as content:
+            info = tar.gettarinfo(str(path), arcname=arcname)
+            if not info.isfile() or info.size != os.fstat(content.fileno()).st_size:
+                invalid("upload entry changed before archiving")
             tar.addfile(info, content)
-    elif info.isdir() or info.issym() or info.islnk():
-        tar.addfile(info)
     else:
-        invalid("upload encountered a special entry")
+        info = tar.gettarinfo(str(path), arcname=arcname)
+        if (stat.S_ISDIR(before.st_mode) and info.isdir()) or (
+            stat.S_ISLNK(before.st_mode) and info.issym()
+        ):
+            tar.addfile(info)
+        else:
+            invalid("upload encountered a changed or special entry")
+
+
+def archive_raw_tree(tar: tarfile.TarFile, source: Path, arcname: str) -> None:
+    inventory = raw_inventory(source)
+    add_evidence_entry(tar, source, arcname)
+    for entry in inventory:
+        add_evidence_entry(tar, source / entry, arcname + "/" + entry)
+    if raw_inventory(source) != inventory:
+        invalid("raw evidence changed during archiving")
+
+
+def add_upload_entry(tar: tarfile.TarFile, path: Path) -> None:
+    add_evidence_entry(tar, path, path.relative_to(ROOT).as_posix())
 
 
 def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
