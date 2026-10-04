@@ -1638,16 +1638,76 @@ class SanitizerCheckoutRootTests(SanitizerFixture, unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - external fixture still supported
                 self.assertEqual(self.summary()["status"], "completed")  # noqa: PT009 - actual controlled runner finished
                 (self.root / "calls.jsonl").unlink()
-        entry = self.root / "file-entrypoint"
-        entry.symlink_to(self.scripts / "run_sanitizers.sh")
         (self.root / "sanitizer_paths.sh").write_text(
             "printf 'unexpected helper sourcing' > helper-sourced\n"
         )
+        (self.root / "run_sanitizers.sh").write_text(
+            "#!/usr/bin/env bash\nprintf 'unexpected delegate' > delegate-called\n"
+        )
+        (self.root / "run_sanitizers.sh").chmod(0o755)
+        for name in ("run_sanitizers.sh", "run_sanitizers_build_std.sh"):
+            entry = self.root / f"file-{name}"
+            entry.symlink_to(self.scripts / name)
+            for route in (entry, Path(entry.name)):
+                with self.subTest(entry=route):
+                    before = self.boundary_snapshot()
+                    result = self.run_checkout(route, self.root)
+                    self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - file alias rejects before delegation
+                    self.assertIn("entrypoint must not be a file symlink", result.stderr)  # noqa: PT009 - explicit entrypoint policy
+                    self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - unrelated sibling, helper and evidence were not touched
+
+    def test_build_std_bare_entrypoint_reaches_native_workspace_check(self):
+        result = self.run_checkout("run_sanitizers_build_std.sh", self.scripts, mode="success")
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - caller cwd deliberately differs from fixture workspace
+        self.assertIn("Cargo metadata belongs to a different workspace", result.stderr)  # noqa: PT009 - no-slash route reaches the actual runner
+        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - existing workspace admission remains effective
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(  # noqa: PT009 - build-std selection reaches actual controlled Cargo
+            [call["args"] for call in calls if call["tool"] == "cargo"],
+            [["-Zbuild-std=std", "metadata", "--format-version", "1", "--no-deps"]],
+        )
+
+    def test_build_std_rejects_delegate_file_alias_before_execution(self):
+        runner = self.scripts / "run_sanitizers.sh"
+        runner.rename(self.scripts / "original-runner.sh")
+        attacker = self.root / "attacker-runner.sh"
+        attacker.write_text("#!/usr/bin/env bash\nprintf bypass > delegate-called\n")
+        attacker.chmod(0o755)
+        runner.symlink_to(attacker)
         before = self.boundary_snapshot()
-        result = self.run_checkout(entry, self.root)
-        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - file alias rejects before sourcing
-        self.assertIn("entrypoint must not be a file symlink", result.stderr)  # noqa: PT009 - explicit entrypoint policy
-        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - helper and evidence were not touched
+        result = self.run_checkout(self.scripts / "run_sanitizers_build_std.sh", self.root)
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - symlinked delegate never starts
+        self.assertIn("entrypoint must not be a file symlink", result.stderr)  # noqa: PT009 - shared entrypoint policy
+        self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - source/evidence/attacker marker remain untouched
+
+    def test_build_std_path_resolution_cannot_dispatch_inherited_functions(self):
+        for mode in ([], ["--posix"]):
+            for name in ("builtin", "cd", "pwd", "printf", "readonly", "exec", "exit", "a/b"):
+                with self.subTest(mode=mode, function=name):
+                    before = self.boundary_snapshot()
+                    result = subprocess.run(  # noqa: S603 - real copied entrypoint and manufactured environment
+                        [
+                            shutil.which("bash"),
+                            *mode,
+                            str(self.scripts / "run_sanitizers_build_std.sh"),
+                        ],
+                        cwd=self.root,
+                        env={
+                            **self.environment,
+                            f"BASH_FUNC_{name}%%": (
+                                '() { called=1 > "$SANITIZER_FIXTURE/function-called"; return 0; }'
+                            ),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - delegate admission remains effective
+                    self.assertRegex(  # noqa: PT009 - Bash may reject special-builtin functions during startup
+                        result.stderr, "no inherited shell functions|is a special builtin"
+                    )
+                    self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - no inherited function or producer side effects
 
 
 class SanitizerLoggingFixture(SanitizerFixture):
