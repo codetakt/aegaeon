@@ -733,6 +733,10 @@ def nonsecret_url(value: str, *, issuer: bool = False) -> None:
     ):
         fail("invocation URL has invalid or secret-bearing components")
     url = urlsplit(value)
+    try:
+        _ = url.port
+    except ValueError:
+        fail("invocation URL has invalid or secret-bearing components")
     if (
         url.scheme not in ({"https"} if issuer else {"http", "https"})
         or not url.hostname

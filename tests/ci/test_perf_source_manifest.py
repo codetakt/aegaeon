@@ -157,11 +157,12 @@ class PerfSourceManifestTests(unittest.TestCase):
     def test_index_new_and_staged_deletions_are_explicit_complete_candidate(self) -> None:
         self.write("new-source", b"new\n")
         self.git(self.root, "add", "new-source")
-        self.git(self.root, "rm", "--force", "--quiet", "tracked.txt")
+        self.git(self.root, "rm", "--force", "--quiet", "tracked.txt", "literal")
         self.freeze()
         files = json.loads((self.evidence / "SOURCE-MANIFEST.json").read_bytes())["files"]
         self.assertIn("new-source", files)
         self.assertNotIn("tracked.txt", files)
+        self.assertNotIn("literal", files)
 
     def test_unknown_ignored_unignored_and_special_additions_rejected(self) -> None:
         for name, special in [
@@ -561,12 +562,34 @@ class PerfSourceManifestTests(unittest.TestCase):
             "--discovery-expected-issuer=",
             "--discovery-expected-issuer=http://issuer.example.test",
             "--discovery-expected-issuer=https://issuer.example.test/",
+            "--url=https://issuer.example.test:not-a-port",
+            "--url=https://issuer.example.test:65536",
+            "--discovery-expected-issuer=https://issuer.example.test:not-a-port",
+            "--discovery-expected-issuer=https://issuer.example.test:65536",
         ):
             with self.subTest(option=option):
                 rejected = self.invoke("urls", option)
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertNotIn("fixture-secret", rejected.stdout + rejected.stderr)
                 self.assertFalse(self.evidence.exists())
+
+    def test_early_url_helper_admits_valid_port_forms_without_source_or_output_effects(
+        self,
+    ) -> None:
+        for value in (
+            "https://issuer.example.test:0",
+            "https://issuer.example.test:1",
+            "https://issuer.example.test:443",
+            "https://issuer.example.test:65535",
+            "https://issuer.example.test:",
+            "https://[::1]:65535",
+        ):
+            for flag in ("--url", "--discovery-expected-issuer"):
+                with self.subTest(flag=flag, value=value):
+                    result = self.invoke("urls", flag + "=" + value)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertFalse(self.evidence.exists())
 
     def test_internal_source_link_chains_freeze_and_target_mutation_blocks_verify(self) -> None:
         self.write("nested/target", b"frozen internal target")
@@ -662,21 +685,35 @@ class PerfSourceManifestTests(unittest.TestCase):
             "https:///fixture-secret",
         )
         cases = [
-            (flag, value) for flag in ("--url", "--discovery-expected-issuer") for value in values
+            (flag, value, False)
+            for flag in ("--url", "--discovery-expected-issuer")
+            for value in values
         ]
         cases.extend(
-            ("--discovery-expected-issuer", value)
+            ("--discovery-expected-issuer", value, False)
             for value in (
                 "http://issuer.example.test/fixture-secret",
                 "https://issuer.example.test/fixture-secret/",
             )
         )
-        for index, (flag, value) in enumerate(cases):
-            with self.subTest(flag=flag, value=value):
+        cases.extend(
+            (flag, value, managed)
+            for flag in ("--url", "--discovery-expected-issuer")
+            for value in (
+                "https://issuer.example.test:not-a-port",
+                "https://issuer.example.test:65536",
+            )
+            for managed in (False, True)
+        )
+        for index, (flag, value, managed) in enumerate(cases):
+            with self.subTest(flag=flag, value=value, managed=managed):
                 calls = self.owner / "tool-calls"
                 calls.unlink(missing_ok=True)
                 result = self.runner(
-                    artifact=f"artifacts/perf/rejected-{index}", arguments=(flag, value)
+                    artifact=f"artifacts/perf/rejected-{index}",
+                    arguments=(flag, value),
+                    managed=managed,
+                    overrides={"PERF_APPLY_DATABASE_MIGRATIONS": "1"},
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("fixture-secret", result.stdout + result.stderr)
