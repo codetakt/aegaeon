@@ -654,6 +654,141 @@ class SecurityFuzzTests(SecurityFuzzFixture):
 
 
 class SecurityFuzzRecoveryTests(SecurityFuzzFixture):
+    def test_cleanup_backup_rejects_receipt_hardlinks_at_initial_and_post_copy_reads(self):
+        for timing in ("initial", "post-copy"):
+            for name in (
+                "execution.json",
+                "run_summary.json",
+                "collection.ok",
+                "collection-summary.json",
+            ):
+                with self.subTest(timing=timing, receipt=name):
+                    shutil.rmtree(self.artifacts, ignore_errors=True)
+                    _, raw = self.seed_stale_collection()
+                    self.install_cleanup_hook("pass")
+                    self.install_helper_hooks(
+                        {
+                            "--backup-cleanup": f"""
+def alias_receipt():
+    directory = Path(os.environ['SECURITY_ARTIFACT_DIR']) / 'fuzz'
+    path = directory / {name!r}
+    external = ROOT.parent / 'aliased-receipt'
+    external.unlink(missing_ok=True)
+    os.link(path, external)
+if {timing!r} == 'initial':
+    original_collected = collected_execution
+    def collected_then_alias(directory):
+        data = original_collected(directory)
+        alias_receipt()
+        return data
+    collected_execution = collected_then_alias
+else:
+    original_copy = copy_raw_backups
+    def copy_then_alias(recovery):
+        records = original_copy(recovery)
+        alias_receipt()
+        return records
+    copy_raw_backups = copy_then_alias
+"""
+                        }
+                    )
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("stable, unaliased regular file", result.stderr)
+                    self.assertFalse((self.root.parent / "cleanup-called").exists())
+                    self.assertFalse(
+                        list(self.artifacts.glob("fuzz/cleanup-recovery/*/backup-ready.json"))
+                    )
+                    for path, content in raw.items():
+                        self.assertEqual(path.read_bytes(), content)
+                    external = self.root.parent / "aliased-receipt"
+                    self.assertEqual(
+                        external.read_bytes(), (self.artifacts / "fuzz" / name).read_bytes()
+                    )
+                    external.unlink()
+
+    def test_recovery_rejects_hardlinked_manifest_and_saved_receipts_before_restoration(self):
+        for name in (
+            "backup-ready.json",
+            "evidence/execution.json",
+            "evidence/run_summary.json",
+            "evidence/collection.ok",
+            "evidence/collection-summary.json",
+        ):
+            with self.subTest(recovery_receipt=name):
+                shutil.rmtree(self.artifacts, ignore_errors=True)
+                self.install_helper_hooks(
+                    {
+                        "--cleanup-result": "raise SystemExit(29)",
+                        "--restore-cleanup": f"""
+directory = Path(sys.argv[sys.argv.index('--restore-cleanup') + 1])
+run_id = sys.argv[sys.argv.index('--restore-cleanup') + 2]
+receipt = directory / 'cleanup-recovery' / run_id / {name!r}
+external = ROOT.parent / 'aliased-recovery-receipt'
+os.link(receipt, external)
+""",
+                    }
+                )
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("stable, unaliased regular file", result.stderr)
+                self.assertNotEqual(self.summary()["status"], "passed")
+                self.assertFalse((self.root / "fuzz/corpus").exists())
+                backup = next((self.artifacts / "fuzz/cleanup-recovery").iterdir())
+                external = self.root.parent / "aliased-recovery-receipt"
+                self.assertEqual(external.read_bytes(), (backup / name).read_bytes())
+                self.assertTrue((backup / "backup-ready.json").is_file())
+                self.assertFalse(list(backup.glob("recovery-result-*.json")))
+                external.unlink()
+
+    def test_recovery_hashes_and_restores_each_once_read_validated_snapshot(self):
+        self.install_helper_hooks(
+            {
+                "--cleanup-result": "raise SystemExit(29)",
+                "--restore-cleanup": """
+original_snapshot = evidence_snapshot
+reads = {}
+def mutate_after_validated_read(path, expected=None):
+    snapshot = original_snapshot(path, expected)
+    if path.parent.name == 'evidence' and path.name in RECOVERY_EVIDENCE_NAMES:
+        reads[path.name] = reads.get(path.name, 0) + 1
+        (ROOT.parent / ('validated-' + path.name)).write_bytes(snapshot)
+        path.write_bytes(b'changed after validated snapshot')
+        (ROOT.parent / 'recovery-read-counts.json').write_text(json.dumps(reads))
+    return snapshot
+evidence_snapshot = mutate_after_validated_read
+""",
+            }
+        )
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        counts = json.loads((self.root.parent / "recovery-read-counts.json").read_text())
+        self.assertEqual(
+            counts,
+            dict.fromkeys(
+                ("execution.json", "run_summary.json", "collection.ok", "collection-summary.json"),
+                1,
+            ),
+        )
+        directory = self.artifacts / "fuzz"
+        for name in ("collection.ok", "collection-summary.json"):
+            self.assertEqual(
+                (directory / name).read_bytes(),
+                (self.root.parent / ("validated-" + name)).read_bytes(),
+            )
+        summary = self.summary()
+        original = json.loads((self.root.parent / "validated-run_summary.json").read_text())
+        self.assertEqual(summary["targets"], original["targets"])
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["execution"]["cleanup_recovery"]["status"], "restored")
+        self.assertEqual((self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input")
+        backup = next((directory / "cleanup-recovery").iterdir())
+        for name in counts:
+            self.assertEqual(
+                (backup / "evidence" / name).read_bytes(), b"changed after validated snapshot"
+            )
+        self.assertTrue((backup / "backup-ready.json").is_file())
+
     def test_recovery_validates_both_collection_destinations_before_any_write(self):
         for name in ("collection.ok", "collection-summary.json"):
             with self.subTest(destination=name):
@@ -1736,6 +1871,411 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
             check=False,
         )
 
+    def test_evidence_reads_reject_aliases_and_specials_while_tool_symlinks_are_supported(self):  # noqa: PLR0912 - bounded reader/alias matrix
+        content = b"owned evidence snapshot"
+        external = self.root.parent / "external-read-control"
+        external.write_bytes(content)
+        for action in ("digest", "evidence_snapshot", "evidence_text"):
+            for kind in ("symlink", "hardlink", "fifo", "directory", "parent-symlink"):
+                with self.subTest(reader=action, alias=kind):
+                    folder = self.root.parent / (action + "-" + kind)
+                    if kind == "parent-symlink":
+                        folder.symlink_to(external.parent, target_is_directory=True)
+                        path = folder / external.name
+                    else:
+                        folder.mkdir()
+                        path = folder / "input"
+                        if kind == "symlink":
+                            path.symlink_to(external)
+                        elif kind == "hardlink":
+                            os.link(external, path)
+                        elif kind == "fifo":
+                            os.mkfifo(path)
+                        else:
+                            path.mkdir()
+                    result = self.helper_python(
+                        "import pathlib,runpy,sys\n"
+                        "h=runpy.run_path(sys.argv[1])\n"
+                        f"try: h[{action!r}](pathlib.Path({str(path)!r}))\n"
+                        "except (ValueError,OSError): pass\n"
+                        "else: raise RuntimeError('aliased evidence read succeeded')\n"
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(external.read_bytes(), content)
+                    if kind == "hardlink":
+                        path.unlink()
+        result = self.helper_python(
+            "import hashlib,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1])\n"
+            f"path=pathlib.Path({str(external)!r}); expected={content!r}\n"
+            "if h['digest'](path)!=hashlib.sha256(expected).hexdigest(): raise "
+            "RuntimeError('digest')\n"
+            "if h['evidence_snapshot'](path)!=expected: raise RuntimeError('snapshot')\n"
+            "if h['evidence_text'](path)!=expected.decode('utf-8'): raise RuntimeError('text')\n"
+            "link=path.parent/'intentional-tool-alias'; link.symlink_to(path)\n"
+            "if h['tool_digest'](link)!=hashlib.sha256(expected).hexdigest(): raise "
+            "RuntimeError('tool alias')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def compiled_control(self, body, label):
+        directory = self.root.parent / ("compiled-control-" + label)
+        directory.mkdir()
+        base = directory / "cargo-target"
+        code = (
+            "import hashlib,os,pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+            "h=runpy.run_path(sys.argv[1])\n"
+            f"directory=pathlib.Path({str(directory)!r})\n"
+            f"name={TARGETS[0]!r}; triple='x86_64-unknown-linux-gnu'\n"
+            "evidence=directory/'evidence/fuzz'; cache=directory/'cargo-target/fuzz'\n"
+            "binary=cache/triple/'release'/name; binary.parent.mkdir(parents=True)\n"
+            "original=b'owned compiled artifact bytes'; binary.write_bytes(original)\n"
+            "binary.chmod(0o755); deps=binary.parent/'deps'; deps.mkdir()\n"
+            "peer=deps/(name.replace('-','_')+'-0123456789abcdef')\n"
+            "data={'target_dir':str(cache),'target_triple':triple,'selected_targets':[name]}\n"
+        )
+        return self.helper_python(code + body, FUZZ_TARGETS=TARGETS[0], CARGO_TARGET_DIR=str(base))
+
+    def test_compiled_artifacts_admit_only_accounted_owned_cargo_peers(self):
+        for links in (1, 2):
+            with self.subTest(owned_links=links):
+                result = self.compiled_control(
+                    ("os.link(binary,peer)\n" if links == 2 else "")
+                    + "value=h['compiled_artifact_digest'](evidence,data,name,binary)\n"
+                    "if value!=hashlib.sha256(original).hexdigest(): "
+                    "raise RuntimeError('artifact digest')\n"
+                    + (
+                        "try: h['digest'](binary)\n"
+                        "except ValueError: pass\n"
+                        "else: raise RuntimeError('generic evidence accepted a Cargo hardlink')\n"
+                        if links == 2
+                        else "if h['digest'](binary)!=value: "
+                        "raise RuntimeError('singlelink digest')\n"
+                    ),
+                    "owned-" + str(links),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_compiled_artifacts_reject_foreign_graphs_and_tainted_record_paths(self):
+        cases = {
+            "external-extra": "os.link(binary,peer); os.link(binary,directory/'external')",
+            "wrong-name": "os.link(binary,deps/'other_target-0123456789abcdef')",
+            "wrong-hash": "os.link(binary,deps/(name+'-short-hash'))",
+            "missing-peer": "os.link(binary,directory/'unaccounted')",
+            "symlink-binary": (
+                "binary.rename(directory/'saved'); binary.symlink_to(directory/'saved')"
+            ),
+            "symlink-peer": (
+                "os.link(binary,directory/'saved-peer'); peer.symlink_to(directory/'saved-peer')"
+            ),
+            "parent-alias": (
+                "deps.rename(directory/'saved-deps'); deps.symlink_to(directory/'saved-deps')"
+            ),
+            "mode": "binary.chmod(0o644)",
+            "special": "binary.unlink(); os.mkfifo(binary)",
+            "cache-mismatch": "data['target_dir']=str(directory/'other-cache')",
+            "target-mismatch": "data['target_triple']='unmodeled-target'",
+            "unselected-name": "data['selected_targets']=[]",
+            "record-route": (
+                "other=directory/'other-executable'; other.write_bytes(original); "
+                "other.chmod(0o755); binary=other"
+            ),
+        }
+        for label, mutation in cases.items():
+            with self.subTest(rejected_graph=label):
+                result = self.compiled_control(
+                    mutation + "\ntry: h['compiled_artifact_digest'](evidence,data,name,binary)\n"
+                    "except (ValueError,OSError): pass\n"
+                    "else: raise RuntimeError('untrusted compiled artifact admitted')\n",
+                    label,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.compiled_control(
+            r"""
+original_lstat=pathlib.Path.lstat
+def foreign_owner(path,*args,**kwargs):
+    info=original_lstat(path,*args,**kwargs)
+    if path==binary:
+        fields=list(info); fields[4]=os.geteuid()+1
+        return os.stat_result(fields)
+    return info
+with patch.object(pathlib.Path,'lstat',new=foreign_owner):
+    try: h['compiled_artifact_digest'](evidence,data,name,binary)
+    except ValueError: pass
+    else: raise RuntimeError('foreign compiled artifact owner admitted')
+""",
+            "foreign-owner",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_compiled_artifact_descriptor_and_peer_mutations_reject_before_return(self):
+        for timing in ("open", "read"):
+            for mutation in (
+                "contents",
+                "mode",
+                "replacement",
+                "peer-replacement",
+                "peer-removal",
+                "extra-peer",
+                "parent-alias",
+            ):
+                with self.subTest(timing=timing, mutation=mutation):
+                    result = self.compiled_control(
+                        f"timing={timing!r}; mutation={mutation!r}\n"
+                        r"""
+os.link(binary,peer)
+changed=False
+def mutate():
+    global changed
+    if changed: return
+    changed=True
+    if mutation=='contents': binary.write_bytes(b'changed artifact contents')
+    elif mutation=='mode': binary.chmod(0o600)
+    elif mutation=='replacement':
+        other=directory/'replacement'; other.write_bytes(original); other.chmod(0o755)
+        other.replace(binary)
+    elif mutation=='peer-replacement':
+        peer.unlink(); peer.write_bytes(original); peer.chmod(0o755)
+    elif mutation=='peer-removal': peer.unlink()
+    elif mutation=='extra-peer': os.link(binary,directory/'external')
+    else:
+        deps.rename(directory/'saved-deps'); deps.symlink_to(directory/'saved-deps')
+original_open=os.open
+original_fdopen=os.fdopen
+identity=(binary.stat().st_dev,binary.stat().st_ino)
+def controlled_open(path,*args,**kwargs):
+    descriptor=original_open(path,*args,**kwargs)
+    if pathlib.Path(path)==binary and timing=='open': mutate()
+    return descriptor
+class Reader:
+    def __init__(self,stream): self.stream=stream
+    def __enter__(self): return self
+    def __exit__(self,*args): return self.stream.__exit__(*args)
+    def fileno(self): return self.stream.fileno()
+    def read(self,*args):
+        content=self.stream.read(*args)
+        if content and timing=='read': mutate()
+        return content
+def controlled_fdopen(fd,*args,**kwargs):
+    stream=original_fdopen(fd,*args,**kwargs)
+    info=os.fstat(fd)
+    return Reader(stream) if (info.st_dev,info.st_ino)==identity else stream
+with (
+    patch.object(os,'open',side_effect=controlled_open),
+    patch.object(os,'fdopen',side_effect=controlled_fdopen),
+):
+    try: h['compiled_artifact_digest'](evidence,data,name,binary)
+    except (ValueError,OSError): pass
+    else: raise RuntimeError('mutated artifact or peer returned a digest')
+""",
+                        timing + "-" + mutation,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_cargo_output_peers_are_recorded_and_readmitted_before_cleanup(self):
+        cargo = CARGO.replace(
+            "binary.chmod(0o755)",
+            "binary.chmod(0o755)\n"
+            "        peer=binary.parent/'deps'/(target.replace('-','_')+'-0123456789abcdef')\n"
+            "        peer.parent.mkdir(exist_ok=True)\n"
+            "        os.link(binary,peer)",
+        )
+        self.install("cargo", cargo)
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        row = self.summary()["execution"]["targets"][0]
+        self.assertEqual(row["build"]["executable_sha256"], row["run"]["executable_sha256"])
+        self.assertEqual(row["run"]["status"], "passed")
+        shutil.rmtree(self.artifacts)
+        self.install_helper_hooks(
+            {
+                "--finish-run": """
+directory=Path(sys.argv[sys.argv.index('--finish-run')+1])
+data=load_execution(directory)
+binary=Path(data['target_dir'])/data['target_triple']/'release'/data['selected_targets'][0]
+os.link(binary,ROOT.parent/'external-compiled-artifact')
+"""
+            }
+        )
+        result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "compiled artifact",
+            (self.artifacts / "summary/security.log").read_text(),
+        )
+        self.assertTrue((self.root / "fuzz/corpus" / TARGETS[0] / "seed").is_file())
+        self.assertFalse(list(self.artifacts.glob("fuzz/cleanup-recovery/*/backup-ready.json")))
+
+    def test_evidence_read_mutations_cannot_return_hash_or_snapshot(self):
+        for action in ("digest", "evidence_snapshot", "evidence_text"):
+            for mutation in ("overwrite", "replacement", "hardlink", "mode", "parent-alias"):
+                with self.subTest(reader=action, mutation=mutation):
+                    folder = self.root.parent / ("mutation-" + action + "-" + mutation)
+                    folder.mkdir()
+                    path = folder / "input"
+                    path.write_bytes(b"original stable bytes")
+                    result = self.helper_python(
+                        "import os,pathlib,runpy,sys\nfrom unittest.mock import patch\n"
+                        "h=runpy.run_path(sys.argv[1]); original_fdopen=os.fdopen\n"
+                        f"victim=pathlib.Path({str(path)!r}); mutation={mutation!r}\n"
+                        "class Reader:\n"
+                        " def __init__(self,stream): self.stream=stream; self.changed=False\n"
+                        " def __enter__(self): return self\n"
+                        " def __exit__(self,*args): return self.stream.__exit__(*args)\n"
+                        " def fileno(self): return self.stream.fileno()\n"
+                        " def read(self,*args):\n"
+                        "  content=self.stream.read(*args)\n"
+                        "  if not self.changed:\n"
+                        "   self.changed=True\n"
+                        "   if mutation=='overwrite': victim.write_bytes(b'changed contents')\n"
+                        "   elif mutation=='replacement':\n"
+                        "    other=victim.parent/'replacement'; "
+                        "other.write_bytes(b'original stable bytes'); "
+                        "other.replace(victim)\n"
+                        "   elif mutation=='hardlink': os.link(victim,victim.parent/'alias')\n"
+                        "   elif mutation=='mode': victim.chmod(0o600)\n"
+                        "   else:\n"
+                        "    parent=victim.parent; moved=parent.with_name(parent.name+'-moved')\n"
+                        "    parent.rename(moved); parent.symlink_to(moved,"
+                        "target_is_directory=True)\n"
+                        "  return content\n"
+                        "def fdopen(fd,*args,**kwargs): return Reader(original_fdopen(fd,"
+                        "*args,**kwargs))\n"
+                        "with patch.object(os,'fdopen',side_effect=fdopen):\n"
+                        f" try: h[{action!r}](victim)\n"
+                        " except ValueError: pass\n"
+                        " else: raise RuntimeError('unstable evidence returned a value')\n"
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_target_completion_and_log_digest_use_one_validated_snapshot(self):
+        result = self.helper_python(
+            "import hashlib,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['record_target'].__globals__\n"
+            "directory=h['ROOT'].parent/'record-control'; directory.mkdir()\n"
+            f"name={TARGETS[0]!r}; triple='x86_64-unknown-linux-gnu'\n"
+            "cache=directory/'cache'; binary=cache/triple/'release'/name\n"
+            "binary.parent.mkdir(parents=True); binary.write_bytes(b'owned executable'); "
+            "binary.chmod(0o755)\n"
+            "log=directory/name/'run.log'; log.parent.mkdir(); original=b'Done 100 runs "
+            "in 30 second(s)\\n'\n"
+            "log.write_bytes(original); "
+            "binary_hash=hashlib.sha256(binary.read_bytes()).hexdigest()\n"
+            "data={'target_dir':str(cache),'target_triple':triple,'watchdog_seconds':60,"
+            "'internal_seconds':30,\n"
+            " 'targets':[{'name':name,'build':{'status':'passed',"
+            "'executable_sha256':binary_hash}}]}\n"
+            "state['load_execution']=lambda directory:data\n"
+            "data['selected_targets']=[name]; state['configured_cache']=lambda directory:cache\n"
+            "actual=state['evidence_snapshot']; calls=[]\n"
+            "def read_then_mutate(path,expected=None):\n"
+            " snapshot=actual(path,expected)\n"
+            " if path==log: calls.append(str(path)); path.write_bytes(b'no completion in "
+            "later pathname')\n"
+            " return snapshot\n"
+            "state['evidence_snapshot']=read_then_mutate\n"
+            "if not h['record_target'](directory,name,'run',0): raise "
+            "RuntimeError('snapshot completion rejected')\n"
+            "record=data['targets'][0]['run']\n"
+            "if calls!=[str(log)]: raise RuntimeError('log was read more than once')\n"
+            "if record['log_sha256']!=hashlib.sha256(original).hexdigest(): raise "
+            "RuntimeError('different digest bytes')\n"
+            "if record['completed_runs']!=100 or record['reported_seconds']!=30: raise "
+            "RuntimeError('different completion bytes')\n"
+            "try: h['validate_phase'](directory,data['targets'][0],'run')\n"
+            "except ValueError: pass\n"
+            "else: raise RuntimeError('later changed log was admitted')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_direct_execution_and_collection_json_reads_reject_receipt_aliases(self):
+        for name in (
+            "execution.json",
+            "run_summary.json",
+            "collection.ok",
+            "collection-summary.json",
+        ):
+            for kind in ("symlink", "hardlink"):
+                with self.subTest(receipt=name, alias=kind):
+                    result = self.helper_python(
+                        "import json,os,pathlib,runpy,sys\n"
+                        "h=runpy.run_path(sys.argv[1]); state=h['load_execution'].__globals__\n"
+                        f"name={name!r}; kind={kind!r}\n"
+                        "directory=h['ROOT'].parent/(name+'-'+kind); directory.mkdir()\n"
+                        "data={'run_id':'fixture'}; summary={'execution':data}\n"
+                        "for receipt in ('run_summary.json','collection-summary.json',"
+                        "'collection.ok'):\n"
+                        " (directory/receipt).write_text(json.dumps(summary))\n"
+                        "external=directory/'external'; external.write_text(json.dumps(summary))\n"
+                        "path=directory/name; path.unlink(missing_ok=True)\n"
+                        "if kind=='symlink': path.symlink_to(external)\n"
+                        "else: os.link(external,path)\n"
+                        "state['validate_compiler_environment']=lambda:None\n"
+                        "if name!='execution.json': state['load_execution']=lambda directory:data\n"
+                        "try:\n"
+                        " if name=='execution.json': h['load_execution'](directory)\n"
+                        " else: h['collected_execution'](directory)\n"
+                        "except (ValueError,OSError): pass\n"
+                        "else: raise RuntimeError('receipt alias was admitted')\n"
+                        "if external.read_text()!=json.dumps(summary): raise "
+                        "RuntimeError('external receipt changed')\n"
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_direct_target_record_rejects_aliased_log_and_executable(self):
+        for selected in ("log", "executable"):
+            for kind in ("symlink", "hardlink"):
+                with self.subTest(evidence=selected, alias=kind):
+                    result = self.helper_python(
+                        "import os,pathlib,runpy,sys\n"
+                        "h=runpy.run_path(sys.argv[1]); state=h['record_target'].__globals__\n"
+                        f"selected={selected!r}; kind={kind!r}; name={TARGETS[0]!r}\n"
+                        "directory=h['ROOT'].parent/(selected+'-'+kind); directory.mkdir()\n"
+                        "cache=directory/'cache'; triple='x86_64-unknown-linux-gnu'\n"
+                        "binary=cache/triple/'release'/name; binary.parent.mkdir(parents=True)\n"
+                        "binary.write_bytes(b'owned executable'); binary.chmod(0o755)\n"
+                        "log=directory/name/'build.log'; log.parent.mkdir(); "
+                        "log.write_bytes(b'build complete')\n"
+                        "external=directory/'external'; external.write_bytes(b'external "
+                        "bytes remain private'); external.chmod(0o755)\n"
+                        "path=log if selected=='log' else binary; path.unlink()\n"
+                        "if kind=='symlink': path.symlink_to(external)\n"
+                        "else: os.link(external,path)\n"
+                        "data={'target_dir':str(cache),'target_triple':triple,"
+                        "'targets':[{'name':name}]}\n"
+                        "state['load_execution']=lambda directory:data\n"
+                        "data['selected_targets']=[name]\n"
+                        "state['configured_cache']=lambda directory:cache\n"
+                        "try: passed=h['record_target'](directory,name,'build',0)\n"
+                        "except (ValueError,OSError): passed=False\n"
+                        "if passed: raise RuntimeError('aliased target evidence passed')\n"
+                        "if external.read_bytes()!=b'external bytes remain private': "
+                        "raise RuntimeError('external bytes changed')\n"
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_upload_archive_digest_rejects_late_hardlink_before_manifest_publication(self):
+        result = self.helper_python(
+            "import os,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['package_upload'].__globals__\n"
+            "source=h['ROOT']/'artifacts/security/latest'; source.mkdir(parents=True)\n"
+            "(source/'input').write_bytes(b'owned upload evidence')\n"
+            "output=h['ROOT']/'artifacts/upload-control'; actual=state['digest']\n"
+            "def alias_before_digest(path):\n"
+            " if path.name=='security-evidence.tar.gz': os.link(path,"
+            "h['ROOT'].parent/'late-upload-alias')\n"
+            " return actual(path)\n"
+            "state['digest']=alias_before_digest\n"
+            "try: h['package_upload'](output)\n"
+            "except ValueError: pass\n"
+            "else: raise RuntimeError('hardlinked upload archive passed')\n"
+            "if (output/'manifest.json').exists(): raise RuntimeError('invalid upload "
+            "manifest published')\n"
+            "if not (output/'security-evidence.tar.gz').is_file(): raise "
+            "RuntimeError('failed archive not retained')\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_whole_cargo_target_sibling_overlaps_preserve_previous_evidence(self):
         base = Path(self.temporary) / "aggregate-target"
         for role in ("evidence", "history", "cargo-home", "git-metadata"):
@@ -2310,6 +2850,48 @@ class SecurityFuzzReceiptBoundaryTests(SecurityFuzzFixture):
 
 # This source is inserted into the existing fixture module; it is not a standalone test runner.
 class SecurityFuzzCollectionCompilerTests(SecurityFuzzFixture):
+    def test_build_tool_aliases_admit_same_tools_and_reject_empty_or_split_overrides(self):
+        selected = {
+            "CC_FOR_BUILD": self.bin / "cc",
+            "CXX_FOR_BUILD": self.bin / "c++",
+            "AR_FOR_BUILD": self.bin / "ar",
+        }
+        for route in ("same-path", "resolved-path", "symlink"):
+            with self.subTest(valid_route=route):
+                environment = {}
+                for name, path in selected.items():
+                    routed = path
+                    if route == "resolved-path":
+                        routed = path.resolve()
+                    elif route == "symlink":
+                        alias = self.bin / ("selected-" + name.lower())
+                        alias.symlink_to(path)
+                        routed = alias
+                    environment[name] = str(routed)
+                result = self.run_suite(FUZZ_TARGETS=TARGETS[0], **environment)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.summary()["status"], "passed")
+        self.seed_stale_results()
+        receipts = self.saved_receipts()
+        calls = self.calls()
+        called = self.root.parent / "unselected-build-tool-called"
+        alternate = self.bin / "alternate-build-tool"
+        alternate.write_text(
+            f"#!{sys.executable}\nimport pathlib\npathlib.Path({str(called)!r}).touch()\n"
+        )
+        alternate.chmod(0o755)
+        for name in selected:
+            for value in ("", str(alternate)):
+                with self.subTest(invalid_alias=name, empty=value == ""):
+                    environment = {key: str(path) for key, path in selected.items()}
+                    environment[name] = value
+                    result = self.run_suite(FUZZ_TARGETS=TARGETS[0], **environment)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("override differs from effective supported tool", result.stderr)
+                    self.assertFalse(called.exists())
+                    self.assertEqual(self.calls(), calls)
+                    self.assert_receipts_unchanged(receipts)
+
     def test_handled_wasi_compilers_clear_before_selected_and_default_preflight(self):
         marker, raw = self.seed_stale_results()
         previous = self.saved_receipts()

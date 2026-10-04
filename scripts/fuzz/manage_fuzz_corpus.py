@@ -21,7 +21,7 @@ import sys
 import tarfile
 import tempfile
 import uuid
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -125,7 +125,7 @@ def load_targets() -> list[str]:
         print("fuzz/Cargo.toml not found; run from repository root", file=sys.stderr)
         raise SystemExit(1)
 
-    data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
+    data = tomllib.loads(evidence_text(cargo_toml))
     bins = data.get("bin", [])
     names = [b["name"] for b in bins]
     if (
@@ -181,8 +181,7 @@ def append_history(stats: list[CorpusStat]) -> None:
     if limit > 0:
         lines: list[str] = []
         if HISTORY_FILE.exists():
-            with HISTORY_FILE.open("r", encoding="utf-8") as fh:
-                lines = fh.read().splitlines()
+            lines = evidence_text(HISTORY_FILE).splitlines()
         lines.append(json.dumps(record, ensure_ascii=False))
         lines = lines[-limit:]
         with HISTORY_FILE.open("w", encoding="utf-8") as fh:
@@ -247,7 +246,7 @@ def copy_into(path: Path, dest_dir: Path | None) -> Path | None:
     dest_path = dest_dir / path.name
     validate_regular_destination(dest_path)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(path, dest_path)
+    copy_evidence_file(str(path), str(dest_path))
     return dest_path
 
 
@@ -351,9 +350,13 @@ REQUIRED_TARGETS = (
 )
 
 
-def digest(path: Path) -> str:
+def tool_digest(path: Path) -> str:
     with path.open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def digest(path: Path) -> str:
+    return evidence_digest(path)
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -403,7 +406,7 @@ def capture(argv: list[str]) -> dict:
     result = {"argv": argv, "path": path, "exit_code": None, "output": ""}
     if path is None:
         return result
-    result["sha256"] = digest(Path(path))
+    result["sha256"] = tool_digest(Path(path))
     try:
         # Only the fixed version/identity commands and configured native compilers are used.
         process = subprocess.run(  # noqa: S603
@@ -422,7 +425,7 @@ def required_source(path: Path) -> Path:
 
 
 def selected_sources(selected: list[str]) -> list[Path]:
-    manifest = tomllib.loads((FUZZ_DIR / "Cargo.toml").read_text(encoding="utf-8"))
+    manifest = tomllib.loads(evidence_text(FUZZ_DIR / "Cargo.toml"))
     binaries = {entry["name"]: entry for entry in manifest["bin"]}
     paths = []
     for name in selected:
@@ -556,7 +559,7 @@ def local_fuzz_manifests(inventory: dict[str, dict[str, Any]], excluded: set[Pat
         if manifest in visited:
             continue
         visited.add(manifest)
-        document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        document = tomllib.loads(evidence_text(manifest))
         for route in cargo_path_values(document):
             check_local_cargo_path(manifest, route, inventory, excluded)
             target = (manifest.parent / route).resolve()
@@ -570,7 +573,7 @@ def local_fuzz_manifests(inventory: dict[str, dict[str, Any]], excluded: set[Pat
 def kani_output_pointer() -> dict[str, Any]:
     # One root-reviewed workspace-excluded tool launcher. Retain its literal
     # bytes/mode without resolving or traversing the dangling tool output.
-    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    manifest = tomllib.loads(evidence_text(ROOT / "Cargo.toml"))
     if "crates/kani-harness" not in manifest.get("workspace", {}).get("exclude", []):
         invalid("Kani output pointer is no longer workspace-excluded")
     path = ROOT / KANI_OUTPUT_POINTER
@@ -598,12 +601,12 @@ def validate_kani_output_relevance(
             continue
         candidate = ROOT / relative
         if candidate.is_relative_to(ROOT / ".cargo"):
-            if b"kani-harness" in candidate.read_bytes():
+            if b"kani-harness" in evidence_snapshot(candidate):
                 invalid("Cargo configuration references the Kani output pointer")
         elif (
             any(candidate.is_relative_to(package) for package in packages)
             and candidate.suffix in {".rs", ".toml", ".c", ".h", ".sh", ".py"}
-            and b"kani-harness" in candidate.read_bytes()
+            and b"kani-harness" in evidence_snapshot(candidate)
         ):
             invalid("local fuzz source/build input references the Kani output pointer")
     if any("kani-harness" in value for value in os.environ.values()):
@@ -682,7 +685,7 @@ def inherited_cargo_dependencies(document: dict[str, Any]) -> list[Any]:
         for name, dependency in document.get(table, {}).items():
             if not isinstance(dependency, dict) or dependency.get("workspace") is not True:
                 continue
-            workspace = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+            workspace = tomllib.loads(evidence_text(ROOT / "Cargo.toml"))
             inherited = workspace.get("workspace", {}).get("dependencies", {}).get(name)
             if inherited is None or (isinstance(inherited, dict) and inherited.get("workspace")):
                 invalid("unresolved inherited local Cargo dependency")
@@ -733,7 +736,7 @@ def validate_local_cargo_paths(inventory: dict[str, dict[str, Any]], excluded: s
         if record["type"] != "file" or Path(relative).name != "Cargo.toml":
             continue
         manifest = ROOT / relative
-        document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        document = tomllib.loads(evidence_text(manifest))
         for route in cargo_path_values(document):
             check_local_cargo_path(manifest, route, inventory, excluded)
 
@@ -785,7 +788,7 @@ def git_metadata_paths() -> list[Path]:  # noqa: PLR0912 - validate Git metadata
             invalid("fuzz cache cannot resolve Git metadata pointer")
         return []
     if git_entry.is_file():
-        record = git_entry.read_bytes().decode("utf-8").removesuffix("\n")
+        record = evidence_text(git_entry).removesuffix("\n")
         if (
             not record.startswith("gitdir: ")
             or not record[len("gitdir: ") :]
@@ -803,7 +806,7 @@ def git_metadata_paths() -> list[Path]:  # noqa: PLR0912 - validate Git metadata
     paths = [git_dir]
     common_file = git_dir / "commondir"
     if common_file.exists() or common_file.is_symlink():
-        record = common_file.read_bytes().decode("utf-8").removesuffix("\n")
+        record = evidence_text(common_file).removesuffix("\n")
         if not record or record.endswith("\r"):
             invalid("fuzz cache cannot resolve shared Git metadata pointer")
         common_dir = Path(record)
@@ -951,7 +954,9 @@ def validate_native_configuration() -> dict[str, str]:
     if any(path.exists() or path.is_symlink() for path in extra):
         invalid("unmodeled external or nested Cargo compiler configuration")
     config_path = ROOT / ".cargo/config.toml"
-    config = tomllib.loads(required_source(config_path).read_text()) if config_path.exists() else {}
+    config = (
+        tomllib.loads(evidence_text(required_source(config_path))) if config_path.exists() else {}
+    )
     if "fuzz" in config.get("alias", {}):
         invalid("Cargo fuzz alias is not supported for fuzz execution or cleanup")
     forced = {
@@ -1016,7 +1021,15 @@ def effective_native_commands(target: str | None = None) -> dict[str, str]:
     if sys.platform != "linux" or expected_target is None or target not in (None, expected_target):
         invalid("unmodeled native fuzz compiler target")
     forced = validate_native_configuration()
-    expected = {"CC": "cc", "CXX": "c++", "AR": "ar", **forced}
+    expected = {
+        "CC": "cc",
+        "CXX": "c++",
+        "AR": "ar",
+        "CC_FOR_BUILD": "cc",
+        "CXX_FOR_BUILD": "c++",
+        "AR_FOR_BUILD": "ar",
+        **forced,
+    }
     if expected_target == "aarch64-unknown-linux-gnu":
         expected.update(
             {
@@ -1116,7 +1129,7 @@ def prepare_run(directory: Path) -> None:
 
 def load_execution(directory: Path) -> dict:
     validate_compiler_environment()
-    data = json.loads((directory / "execution.json").read_text(encoding="utf-8"))
+    data = json.loads(evidence_text(directory / "execution.json"))
     if (
         data["schema_version"] != 1
         or data["selected_targets"] != selected_targets()
@@ -1187,12 +1200,13 @@ def record_target(directory: Path, name: str, phase: str, exit_code: int) -> boo
             "--",
             f"-max_total_time={data['internal_seconds']}",
         ]
+    log_snapshot = evidence_snapshot(log)
     record = {
         "status": "failed",
         "exit_code": exit_code,
         "argv": command,
         "log": str(log.resolve()),
-        "log_sha256": digest(log),
+        "log_sha256": hashlib.sha256(log_snapshot).hexdigest(),
     }
     binary = Path(data["target_dir"]) / data["target_triple"] / "release" / name
     if exit_code == 0:
@@ -1200,7 +1214,7 @@ def record_target(directory: Path, name: str, phase: str, exit_code: int) -> boo
             if not binary.is_file() or not os.access(binary, os.X_OK) or binary.stat().st_size == 0:
                 invalid("built fuzz executable is missing or empty")
             record["executable"] = str(binary)
-            record["executable_sha256"] = digest(binary)
+            record["executable_sha256"] = compiled_artifact_digest(directory, data, name, binary)
             if phase == "run":
                 if (
                     row["build"].get("status") != "passed"
@@ -1208,7 +1222,9 @@ def record_target(directory: Path, name: str, phase: str, exit_code: int) -> boo
                 ):
                     invalid("run executable differs from the successful build")
                 completion = re.search(
-                    r"^Done ([0-9]+) runs in ([0-9]+) second", log.read_text(), re.MULTILINE
+                    r"^Done ([0-9]+) runs in ([0-9]+) second",
+                    log_snapshot.decode("utf-8"),
+                    re.MULTILINE,
                 )
                 if (
                     not completion
@@ -1226,7 +1242,9 @@ def record_target(directory: Path, name: str, phase: str, exit_code: int) -> boo
     return record["status"] == "passed"
 
 
-def validate_phase(directory: Path, row: dict, phase: str) -> bool:
+def validate_phase(
+    directory: Path, row: dict, phase: str, data: dict[str, Any] | None = None
+) -> bool:
     record = row[phase]
     if record["status"] not in ("not-run", "passed", "failed"):
         invalid("malformed fuzz execution status")
@@ -1235,11 +1253,14 @@ def validate_phase(directory: Path, row: dict, phase: str) -> bool:
     log = directory / row["name"] / f"{phase}.log"
     if record["log"] != str(log.resolve()) or record["log_sha256"] != digest(log):
         invalid("fuzz execution log is missing or changed")
-    if record["status"] == "passed" and (
-        record["exit_code"] != 0
-        or digest(Path(record["executable"])) != record["executable_sha256"]
-    ):
-        invalid("fuzz executable or exit evidence is inconsistent")
+    if record["status"] == "passed":
+        current = load_execution(directory) if data is None else data
+        if (
+            record["exit_code"] != 0
+            or compiled_artifact_digest(directory, current, row["name"], Path(record["executable"]))
+            != record["executable_sha256"]
+        ):
+            invalid("fuzz executable or exit evidence is inconsistent")
     return record["status"] == "passed"
 
 
@@ -1250,7 +1271,7 @@ def finish_run(directory: Path, exit_code: int) -> bool:
     passed = exit_code == 0
     for row in data["targets"]:
         for phase in ("build", "run"):
-            if not validate_phase(directory, row, phase):
+            if not validate_phase(directory, row, phase, data):
                 passed = False
         if row["run"]["status"] == "passed" and (
             row["run"]["completed_runs"] <= 0
@@ -1267,18 +1288,19 @@ def finish_run(directory: Path, exit_code: int) -> bool:
     # This marker authorizes cleanup only after summary/history/archive writes succeeded.
     if exit_code != EVIDENCE_ERROR:
         collected_summary = directory / "collection-summary.json"
-        summary = json.loads((directory / "run_summary.json").read_text(encoding="utf-8"))
+        summary = json.loads(evidence_text(directory / "run_summary.json"))
         if summary["execution"] != data or summary["status"] != data["status"]:
             invalid("fuzz run summary differs from the verified execution")
         write_json(collected_summary, summary)
-        if json.loads(collected_summary.read_text(encoding="utf-8")) != summary:
+        collected_snapshot = evidence_snapshot(collected_summary)
+        if json.loads(collected_snapshot.decode("utf-8")) != summary:
             invalid("fuzz collection summary write did not preserve the verified execution")
         write_json(
             directory / "collection.ok",
             {
                 "run_id": data["run_id"],
                 "summary_file": "collection-summary.json",
-                "summary_sha256": digest(collected_summary),
+                "summary_sha256": hashlib.sha256(collected_snapshot).hexdigest(),
             },
         )
     return passed
@@ -1287,15 +1309,16 @@ def finish_run(directory: Path, exit_code: int) -> bool:
 def collected_execution(directory: Path) -> dict:
     data = load_execution(directory)
     summary_path = directory / "run_summary.json"
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    marker = json.loads((directory / "collection.ok").read_text(encoding="utf-8"))
+    summary = json.loads(evidence_text(summary_path))
+    marker = json.loads(evidence_text(directory / "collection.ok"))
     collected_summary = directory / "collection-summary.json"
+    collected_snapshot = evidence_snapshot(collected_summary)
     if (
         summary["execution"] != data
-        or summary != json.loads(collected_summary.read_text(encoding="utf-8"))
+        or summary != json.loads(collected_snapshot.decode("utf-8"))
         or marker["run_id"] != data["run_id"]
         or marker["summary_file"] != "collection-summary.json"
-        or marker["summary_sha256"] != digest(collected_summary)
+        or marker["summary_sha256"] != hashlib.sha256(collected_snapshot).hexdigest()
     ):
         invalid("fuzz collection receipt is missing or inconsistent")
     return data
@@ -1304,7 +1327,7 @@ def collected_execution(directory: Path) -> dict:
 def cleanup_result(directory: Path, exit_code: int) -> None:
     data = collected_execution(directory)
     summary_path = directory / "run_summary.json"
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary = json.loads(evidence_text(summary_path))
     data["cleanup_exit_code"] = exit_code
     # Stage success is recorded only after the required cleanup has a receipt.
     data["status"] = (
@@ -1313,10 +1336,7 @@ def cleanup_result(directory: Path, exit_code: int) -> None:
     summary.update(execution=data, status=data["status"])
     write_json(directory / "execution.json", data)
     write_json(summary_path, summary)
-    if (
-        load_execution(directory) != data
-        or json.loads(summary_path.read_text(encoding="utf-8")) != summary
-    ):
+    if load_execution(directory) != data or json.loads(evidence_text(summary_path)) != summary:
         invalid("fuzz cleanup receipt write did not preserve the final execution")
 
 
@@ -1365,8 +1385,96 @@ def recovery_directory(directory: Path, run_id: str, *, create: bool = False) ->
     return recovery
 
 
+def evidence_state(info: os.stat_result) -> tuple[int, ...]:
+    return (
+        info.st_mode,
+        info.st_dev,
+        info.st_ino,
+        info.st_uid,
+        info.st_nlink,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def validate_compiled_directories(path: Path) -> None:
+    release = path.parent
+    cache = release.parent.parent
+    deps = release / "deps"
+    for directory in (cache, release.parent, release, deps):
+        lexical_directory(directory)
+        if directory.exists() and directory.stat().st_uid != os.geteuid():
+            invalid("compiled artifact directories must be producer-owned")
+
+
+def compiled_artifact_graph(path: Path, info: os.stat_result) -> dict[Path, os.stat_result]:
+    validate_compiled_directories(path)
+    deps = path.parent / "deps"
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or info.st_nlink not in (1, 2)
+        or info.st_size == 0
+        or not info.st_mode & 0o111
+        or not os.access(path, os.X_OK)
+    ):
+        invalid("compiled artifact must be a stable owned executable")
+    graph = {path: info}
+    if deps.exists():
+        pattern = re.escape(path.name.replace("-", "_")) + r"-[0-9a-f]{16}"
+        for peer in deps.iterdir():
+            if not re.fullmatch(pattern, peer.name):
+                continue
+            peer_info = peer.lstat()
+            if not stat.S_ISREG(peer_info.st_mode):
+                invalid("compiled artifact peer must be a regular file")
+            if (peer_info.st_dev, peer_info.st_ino) == (info.st_dev, info.st_ino):
+                if evidence_state(peer_info) != evidence_state(info):
+                    invalid("compiled artifact peer metadata differs")
+                graph[peer] = peer_info
+    if len(graph) != info.st_nlink:
+        invalid("compiled artifact has an unaccounted or unsupported alias")
+    return graph
+
+
+def compiled_artifact_digest(directory: Path, data: dict[str, Any], name: str, path: Path) -> str:
+    cache = configured_cache(directory)
+    effective_native_commands(data["target_triple"])
+    if (
+        data["target_dir"] != str(cache)
+        or name not in REQUIRED_TARGETS
+        or name not in selected_targets()
+        or name not in data["selected_targets"]
+        or path != cache / data["target_triple"] / "release" / name
+    ):
+        invalid("compiled artifact path differs from the current selected output")
+    before = path.lstat()
+    graph = compiled_artifact_graph(path, before)
+    with ExitStack() as stack:
+        streams = {}
+        for route, expected in graph.items():
+            descriptor = os.open(route, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            content = stack.enter_context(os.fdopen(descriptor, "rb"))
+            if evidence_state(os.fstat(content.fileno())) != evidence_state(expected):
+                invalid("compiled artifact changed before reading")
+            streams[route] = content
+        value = hashlib.sha256()
+        while block := streams[path].read(1024 * 1024):
+            value.update(block)
+        current_graph = compiled_artifact_graph(path, path.lstat())
+        if current_graph.keys() != graph.keys() or any(
+            evidence_state(current_graph[route]) != evidence_state(expected)
+            or evidence_state(os.fstat(streams[route].fileno())) != evidence_state(expected)
+            for route, expected in graph.items()
+        ):
+            invalid("compiled artifact or its peer changed while reading")
+    return value.hexdigest()
+
+
 @contextmanager
 def open_evidence_file(path: Path, expected: os.stat_result | None = None) -> Iterator[BinaryIO]:
+    lexical_directory(path.parent)
     before = path.lstat() if expected is None else expected
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(descriptor, "rb") as content:
@@ -1374,19 +1482,26 @@ def open_evidence_file(path: Path, expected: os.stat_result | None = None) -> It
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1
-            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+            or evidence_state(opened) != evidence_state(before)
         ):
             invalid("evidence file must be a stable, unaliased regular file")
         yield content
         after = os.fstat(content.fileno())
+        lexical_directory(path.parent)
         current = path.lstat()
-        if (
-            after.st_nlink != 1
-            or (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
-            != (opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-            or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
-        ):
+        if evidence_state(after) != evidence_state(opened) or evidence_state(
+            current
+        ) != evidence_state(opened):
             invalid("evidence file changed while being read")
+
+
+def evidence_snapshot(path: Path, expected: os.stat_result | None = None) -> bytes:
+    with open_evidence_file(path, expected) as content:
+        return content.read()
+
+
+def evidence_text(path: Path) -> str:
+    return evidence_snapshot(path).decode("utf-8")
 
 
 def evidence_digest(path: Path, expected: os.stat_result | None = None) -> str:
@@ -1401,6 +1516,7 @@ def copy_evidence_file(source: str, destination: str) -> str:
     path, output = Path(source), Path(destination)
     validate_regular_destination(output)
     with open_evidence_file(path) as content:
+        source_info = os.fstat(content.fileno())
         descriptor = os.open(
             output, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600
         )
@@ -1408,9 +1524,24 @@ def copy_evidence_file(source: str, destination: str) -> str:
             opened = os.fstat(copied.fileno())
             if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
                 invalid("evidence copy destination must be an unaliased regular file")
+            if (opened.st_dev, opened.st_ino) == (source_info.st_dev, source_info.st_ino):
+                invalid("evidence copy source and destination are the same file")
+            current = output.lstat()
+            if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
+                invalid("evidence copy destination changed before writing")
             os.ftruncate(copied.fileno(), 0)
             shutil.copyfileobj(content, copied)
-    shutil.copystat(path, output, follow_symlinks=False)
+            copied.flush()
+            current = output.lstat()
+            after = os.fstat(copied.fileno())
+            if (
+                after.st_nlink != 1
+                or after.st_size != source_info.st_size
+                or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
+            ):
+                invalid("evidence copy destination changed while writing")
+            os.fchmod(copied.fileno(), stat.S_IMODE(source_info.st_mode))
+            os.utime(copied.fileno(), ns=(source_info.st_atime_ns, source_info.st_mtime_ns))
     return str(output)
 
 
@@ -1463,16 +1594,14 @@ def backup_cleanup(directory: Path) -> str:
     snapshots = {}
     for name in RECOVERY_EVIDENCE_NAMES:
         path = directory / name
-        if path.is_symlink() or not path.is_file():
-            invalid("fuzz collection evidence must be regular files")
-        snapshots[name] = path.read_bytes()
+        snapshots[name] = evidence_snapshot(path)
     recovery = recovery_directory(directory, data["run_id"], create=True)
     evidence = recovery / "evidence"
     evidence.mkdir()
     for name, content in snapshots.items():
         (evidence / name).write_bytes(content)
     records = copy_raw_backups(recovery)
-    if any((directory / name).read_bytes() != content for name, content in snapshots.items()):
+    if any(evidence_snapshot(directory / name) != content for name, content in snapshots.items()):
         invalid("fuzz collection evidence changed during recovery copy")
     if source_hashes(data["selected_targets"]) != data["source"]["files"]:
         invalid("fuzz source identity changed before cleanup")
@@ -1506,7 +1635,7 @@ def load_cleanup_backup(directory: Path, run_id: str) -> tuple[Path, dict, dict]
     manifest_path = recovery / "backup-ready.json"
     if manifest_path.is_symlink():
         invalid("fuzz recovery manifest cannot be a symlink")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(evidence_text(manifest_path))
     if manifest["run_id"] != run_id or set(manifest["raw"]) != set(RECOVERY_RAW_NAMES):
         invalid("fuzz recovery manifest does not bind the current run")
     for name in ("raw", "evidence"):
@@ -1516,9 +1645,10 @@ def load_cleanup_backup(directory: Path, run_id: str) -> tuple[Path, dict, dict]
     snapshots = {}
     for name in RECOVERY_EVIDENCE_NAMES:
         path = recovery / "evidence" / name
-        if path.is_symlink() or not path.is_file() or digest(path) != manifest["evidence"][name]:
+        snapshot = evidence_snapshot(path)
+        if hashlib.sha256(snapshot).hexdigest() != manifest["evidence"][name]:
             invalid("fuzz recovery evidence is missing or changed")
-        snapshots[name] = path.read_bytes()
+        snapshots[name] = snapshot
     data = json.loads(snapshots["execution.json"])
     marker = json.loads(snapshots["collection.ok"])
     if (
