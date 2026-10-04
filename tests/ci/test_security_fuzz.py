@@ -3664,6 +3664,169 @@ class SecurityFuzzArtifactDestinationTests(SecurityFuzzFixture):
                 (self.root / route / "existing").read_bytes(), b"unchanged inherited route input"
             )
 
+    def test_collect_only_cargo_home_overlaps_preserve_all_roots(self):
+        artifact = self.artifacts / "fuzz"
+        history = Path(self.temporary) / "history"
+        roots = [
+            self.root / "fuzz" / name
+            for name in ("corpus", "artifacts", "corpus_archive", "corpus_meta")
+        ]
+        roots.extend((artifact, history))
+        for root in roots:
+            root.mkdir(parents=True, exist_ok=True)
+            (root / "prior-owned-input").write_bytes(b"unchanged owned input\n")
+
+        def snapshot():
+            result = {}
+            for root in roots:
+                for path in [root, *root.rglob("*")]:
+                    result[str(path)] = None if path.is_dir() else path.read_bytes()
+            return result
+
+        for index, root in enumerate(roots):
+            for relation in ("equal", "child", "parent"):
+                with self.subTest(root=str(root), relation=relation):
+                    home = (
+                        root
+                        if relation == "equal"
+                        else root / "fuzz_par/cargo-home"
+                        if relation == "child"
+                        else root.parent
+                    )
+                    home.mkdir(parents=True, exist_ok=True)
+                    credential = home / "credentials.toml"
+                    credential.write_bytes(b"nonsecret collection credential fixture\n")
+                    before = snapshot()
+                    result = subprocess.run(  # noqa: S603 - real collect-only helper and dummy credentials
+                        [sys.executable, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
+                        cwd=self.root,
+                        env={
+                            **self.env,
+                            "CARGO_HOME": str(home),
+                            "FUZZ_RUN_ARTIFACT_DIR": str(artifact),
+                            "FUZZ_HISTORY_DIR": str(history),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    (Path(self.temporary) / f"cargo-overlap-{index}-{relation}.json").write_text(
+                        json.dumps(
+                            {
+                                "home": str(home),
+                                "root": str(root),
+                                "exit": result.returncode,
+                                "stdout": result.stdout,
+                                "stderr": result.stderr,
+                            }
+                        )
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("collection paths overlap Cargo home", result.stderr)
+                    self.assertEqual(snapshot(), before)
+                    self.assertEqual(
+                        credential.read_bytes(), b"nonsecret collection credential fixture\n"
+                    )
+                    self.assertEqual(self.calls(), [])
+
+    def test_collection_cargo_home_default_relative_and_alias_fail_before_reads(self):
+        result = SecurityFuzzReceiptBoundaryTests.helper_python(
+            self,
+            "import os,pathlib,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); state=h['collect_corpus'].__globals__; root=h['ROOT']\n"
+            "def forbidden_read(*args): raise RuntimeError('collection read reached')\n"
+            "state['load_targets']=forbidden_read\n"
+            "for mode in ('relative','default','alias'):\n"
+            " if mode=='relative': os.environ['CARGO_HOME']='fuzz/corpus/fuzz_par/cargo-home'\n"
+            " elif mode=='default':\n"
+            "  os.environ.pop('CARGO_HOME',None)\n"
+            "  pathlib.Path.home=classmethod(lambda cls: root/'fuzz/corpus/fuzz_par')\n"
+            " else:\n"
+            "  home=root.parent/'disjoint-cargo-home'; home.mkdir()\n"
+            "  credential=home/'credentials.toml'\n"
+            "  credential.write_bytes(b'nonsecret alias credential fixture')\n"
+            "  alias=root.parent/'cargo-home-alias'; alias.symlink_to(home)\n"
+            "  os.environ['CARGO_HOME']=str(alias)\n"
+            " try: h['collect_corpus']()\n"
+            " except ValueError as error:\n"
+            "  expected=('symlink components' if mode=='alias'\n"
+            "   else 'collection paths overlap Cargo home')\n"
+            "  if expected not in str(error): raise\n"
+            " else: raise RuntimeError('unsafe collection Cargo home admitted')\n"
+            "if (root/'fuzz/corpus_meta').exists():\n"
+            " raise RuntimeError('collection output created')\n"
+            "if credential.read_bytes()!=b'nonsecret alias credential fixture':\n"
+            " raise RuntimeError('credential changed')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_collection_entrypoints_and_preflight_reject_cargo_home_before_effects(self):
+        result = SecurityFuzzReceiptBoundaryTests.helper_python(
+            self,
+            "import os,runpy,sys\n"
+            "h=runpy.run_path(sys.argv[1]); root=h['ROOT']; state=h['collect_corpus'].__globals__\n"
+            "os.environ['CARGO_HOME']=str(root/'fuzz/corpus/fuzz_par/cargo-home')\n"
+            "entries=[lambda:h['collect_corpus'](),lambda:h['ensure_directories'](list(h['REQUIRED_TARGETS'])),\n"
+            " lambda:h['gather_stats'](list(h['REQUIRED_TARGETS'])),lambda:h['create_archive'](),\n"
+            " lambda:h['gather_crash_stats'](),lambda:h['archive_crashes']([],None)]\n"
+            "for action in entries:\n"
+            " try: action()\n"
+            " except ValueError as error:\n"
+            "  if str(error)!='collection paths overlap Cargo home': raise\n"
+            " else: raise RuntimeError('collection entrypoint admitted Cargo home')\n"
+            "output=root.parent/'preflight-output'\n"
+            "state['RUN_ARTIFACT_DIR']=None; state['HISTORY_OUT_DIR']=None\n"
+            "os.environ['CARGO_HOME']=str(output/'cargo-home')\n"
+            "try: h['validate_preflight'](output)\n"
+            "except ValueError as error:\n"
+            " if str(error)!='collection paths overlap Cargo home': raise\n"
+            "else: raise RuntimeError('preflight output Cargo home admitted')\n"
+            "if output.exists() or (root/'fuzz/corpus').exists():\n"
+            " raise RuntimeError('rejected output created')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_disjoint_collection_preserves_cargo_credentials_and_inert_links(self):
+        home = Path(self.temporary) / "disjoint-cargo-home"
+        home.mkdir()
+        credential = home / "credentials.toml"
+        credential.write_bytes(b"nonsecret disjoint credential fixture\n")
+        for name in ("corpus", "artifacts"):
+            raw = self.root / "fuzz" / name / TARGETS[0]
+            raw.mkdir(parents=True)
+            (raw / "owned").write_bytes(b"owned collection input\n")
+            (raw / "inert-cargo-link").symlink_to(home)
+        artifact = self.artifacts / "fuzz"
+        history = Path(self.temporary) / "history"
+        result = subprocess.run(  # noqa: S603 - real collect-only helper with disjoint dummy credential route
+            [sys.executable, str(self.root / "scripts/fuzz/manage_fuzz_corpus.py")],
+            cwd=self.root,
+            env={
+                **self.env,
+                "CARGO_HOME": str(home),
+                "FUZZ_RUN_ARTIFACT_DIR": str(artifact),
+                "FUZZ_HISTORY_DIR": str(history),
+            },
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary()
+        for directory in (artifact, history):
+            for kind in ("corpus_archive", "crash_archive"):
+                with tarfile.open(directory / summary[kind]) as archive:
+                    self.assertFalse(any("credentials.toml" in name for name in archive.getnames()))
+                    prefix = "corpus/" if kind == "corpus_archive" else ""
+                    link = archive.getmember(prefix + TARGETS[0] + "/inert-cargo-link")
+                    self.assertTrue(link.issym())
+                    self.assertEqual(link.linkname, str(home))
+        self.assertEqual(credential.read_bytes(), b"nonsecret disjoint credential fixture\n")
+        self.assertTrue((history / "fuzz_runs.jsonl").is_file())
+        self.assertEqual(self.calls(), [])
+
 
 class SecurityFuzzPreflightSourceHistoryTests(SecurityFuzzFixture):
     def setUp(self):

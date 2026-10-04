@@ -871,6 +871,16 @@ def lexical_directory(path: Path) -> Path:
     return path
 
 
+def validate_cargo_home_paths(
+    paths: list[Path], purpose: str, *, output: Path | None = None
+) -> None:
+    cargo_home = lexical_directory(effective_cargo_home())
+    if any(overlaps(cargo_home, path) for path in paths) or (
+        output is not None and overlaps(cargo_home, lexical_directory(output))
+    ):
+        invalid(f"{purpose} paths overlap Cargo home")
+
+
 def validate_regular_destination(path: Path) -> None:
     lexical_directory(path.parent)
     if path.is_symlink() or (path.exists() and not path.is_file()):
@@ -925,9 +935,6 @@ def validate_preflight(directory: Path) -> Path:
     validate_compiler_environment()
     validate_git_environment()
     validate_collection_roots()
-    for target in selected_targets():
-        for root in ("corpus", "artifacts"):
-            lexical_directory(FUZZ_DIR / root / target)
     routes = [directory]
     for name, default in (
         ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"),
@@ -937,6 +944,10 @@ def validate_preflight(directory: Path) -> Path:
     ):
         if value := os.environ.get(name, default):
             routes.append(Path(value))
+    validate_cargo_home_paths([lexical_directory(route) for route in routes], "collection")
+    for target in selected_targets():
+        for root in ("corpus", "artifacts"):
+            lexical_directory(FUZZ_DIR / root / target)
     for route in routes:
         validate_evidence_route(route)
     validate_collection_history(directory)
@@ -1382,6 +1393,17 @@ def owned_raw_root(name: str) -> Path:
 def validate_collection_roots() -> None:
     # Check all roots before collection can create directories or inspect raw input.
     # Nested symlinks are archive entries, never inputs to statistics or traversal.
+    validate_cargo_home_paths(
+        [
+            *(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta")),
+            *(
+                lexical_directory(route)
+                for route in (RUN_ARTIFACT_DIR, HISTORY_OUT_DIR)
+                if route is not None
+            ),
+        ],
+        "collection",
+    )
     for name in (*RECOVERY_RAW_NAMES, "corpus_meta"):
         owned_raw_root(name)
     for name in ("history.jsonl", "latest_run.json"):
@@ -1851,11 +1873,7 @@ def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
 
 
 def package_upload(directory: Path) -> None:
-    cargo_home = lexical_directory(effective_cargo_home())
-    if any(overlaps(cargo_home, ROOT / name) for name in UPLOAD_ROOTS) or overlaps(
-        cargo_home, lexical_directory(directory)
-    ):
-        invalid("upload paths overlap Cargo home")
+    validate_cargo_home_paths([ROOT / name for name in UPLOAD_ROOTS], "upload", output=directory)
     output = lexical_directory(directory)
     if any(overlaps(output, ROOT / name) for name in UPLOAD_ROOTS):
         invalid("upload output overlaps evidence source")
