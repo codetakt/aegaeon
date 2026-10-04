@@ -156,10 +156,12 @@ timestamp=FixedTime.now().strftime('%Y%m%dT%H%M%S%fZ')
 final=output/(('crashes_' if route=='crash' else '')+timestamp+'.tar.gz')
 outside=root.parent/'outside'; outside.mkdir()
 sentinel=outside/'external-input'; sentinel.write_bytes(b'preserve external bytes')
-prior=output/'19990101T000000000000Z.tar.gz'; prior.write_bytes(b'prior archive bytes')
+prior=output/'19990101T000000000000Z.tar.gz'
+with tarfile.open(prior,'w:gz') as old: old.add(sentinel,arcname='prior')
+prior_bytes=prior.read_bytes()
 if case=='supported':
     for number in range(2):
-        (output/f'1998010{number}T000000000000Z.tar.gz').write_bytes(b'old retained archive')
+        (output/f'1998010{number}T000000000000Z.tar.gz').write_bytes(prior_bytes)
 unrelated=output/'.archive-unrelated.tmp'; unrelated.symlink_to(sentinel)
 prior_external={}
 for number in range(5):
@@ -223,7 +225,7 @@ if h['raw_inventory'](source)!=before: raise RuntimeError('raw input was changed
 record={'route':route,'case':case,'rejected':rejected,'reason':reason,
         'attacks':attacks,'raw_preserved':True,'optimize':sys.flags.optimize,
         'external_preserved':sentinel.read_bytes()==b'preserve external bytes',
-        'prior_preserved':prior.exists() and prior.read_bytes()==b'prior archive bytes',
+        'prior_preserved':prior.exists() and prior.read_bytes()==prior_bytes,
         'unrelated_temp_preserved':unrelated.is_symlink() and os.readlink(unrelated)==str(sentinel),
         'external_prior_preserved':all((outside/name).exists() and (outside/name).read_bytes()==data
                                         for name,data in prior_external.items()),

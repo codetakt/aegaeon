@@ -161,7 +161,7 @@ class SanitizerPythonIsolationTests(unittest.TestCase):
         self.assertIn("suite finished", log)
         self.assertFalse((fixture.root / "suite-target").exists())
         calls = self.isolated_calls(fixture)
-        for operation in ("open-exec", "validate"):
+        for operation in ("open-exec-bound", "validate"):
             self.assertTrue(
                 any(
                     arguments[1].endswith("/open_security_log.py") and arguments[2] == operation

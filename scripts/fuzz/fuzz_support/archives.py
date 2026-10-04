@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
+import re
 import stat
 import tarfile
 import uuid
@@ -118,6 +120,178 @@ def verify_archive_stream(stream: BinaryIO, path: Path) -> None:
         invalid("archive construction did not produce a complete archive")
 
 
+def archive_snapshot(info: os.stat_result) -> tuple[int, ...]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_uid,
+        info.st_gid,
+        info.st_nlink,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def validate_pruning_candidate(
+    directory_fd: int, name: str, descriptor: int, identity: tuple[int, ...], digest: bytes
+) -> None:
+    if (
+        archive_snapshot(os.stat(name, dir_fd=directory_fd, follow_symlinks=False)) != identity
+        or archive_snapshot(os.fstat(descriptor)) != identity
+        or descriptor_content_digest(descriptor) != digest
+        or archive_snapshot(os.fstat(descriptor)) != identity
+        or archive_snapshot(os.stat(name, dir_fd=directory_fd, follow_symlinks=False)) != identity
+    ):
+        invalid("archive retention candidate changed")
+
+
+@contextmanager
+def archive_retention_plan(
+    directory: Path, directory_fd: int, current: str, keep_archives: int | None
+) -> Iterator[list]:
+    with ExitStack() as handles:
+        candidates = []
+        if keep_archives is not None:
+            if keep_archives < 1:
+                invalid("archive retention must keep the current archive")
+            names = os.listdir(directory_fd)
+            for name in sorted(names):
+                if name == current or not re.fullmatch(r"[0-9]{8}T[0-9]{12}Z\.tar\.gz", name):
+                    continue
+                before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                if not (
+                    stat.S_ISREG(before.st_mode)
+                    and before.st_uid == os.geteuid()
+                    and before.st_nlink == 1
+                ):
+                    continue
+                descriptor = os.open(
+                    name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+                )
+                handles.callback(os.close, descriptor)
+                identity = archive_snapshot(before)
+                if archive_snapshot(os.fstat(descriptor)) != identity:
+                    invalid("archive retention candidate changed before opening")
+                with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                    try:
+                        verify_archive_stream(stream, directory / name)
+                    except (ValueError, gzip.BadGzipFile):
+                        # Unsupported or incomplete older bytes remain raw evidence.
+                        continue
+                digest = descriptor_content_digest(descriptor)
+                validate_pruning_candidate(directory_fd, name, descriptor, identity, digest)
+                candidates.append((name, descriptor, identity, digest))
+            candidates = candidates[: max(0, len(candidates) + 1 - keep_archives)]
+        with archive_pruning_backups(directory_fd, candidates) as plan:
+            yield plan
+
+
+def copy_archive_descriptor(original: int, destination: int, size: int) -> None:
+    offset = 0
+    while offset < size:
+        block = os.pread(original, min(1024 * 1024, size - offset), offset)
+        if not block:
+            invalid("archive retention backup encountered a short read")
+        remaining = memoryview(block)
+        while remaining:
+            written = os.write(destination, remaining)
+            if written <= 0:
+                invalid("archive retention backup encountered a short write")
+            remaining = remaining[written:]
+        offset += len(block)
+
+
+def finish_pruning_backup(directory_fd: int, backup: tuple, *, complete: bool) -> None:
+    name, original, digest, temporary, descriptor = backup
+    valid = (
+        owned_archive_entry(directory_fd, temporary, descriptor)
+        and os.fstat(descriptor).st_nlink == 1
+        and descriptor_content_digest(descriptor) == digest
+    )
+    if complete and not valid:
+        invalid("archive retention backup changed before disposal")
+    restored = False
+    if not complete and valid:
+        try:
+            os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            with suppress(OSError):
+                os.link(
+                    temporary,
+                    name,
+                    src_dir_fd=directory_fd,
+                    dst_dir_fd=directory_fd,
+                    follow_symlinks=False,
+                )
+                restored = owned_archive_entry(directory_fd, name, descriptor)
+    original_unchanged = (
+        owned_archive_entry(directory_fd, name, original)
+        and descriptor_content_digest(original) == digest
+    )
+    if valid and (complete or restored or original_unchanged):
+        if complete:
+            os.unlink(temporary, dir_fd=directory_fd)
+        else:
+            # Failed restoration/disposal keeps independent bytes as raw evidence.
+            with suppress(OSError):
+                os.unlink(temporary, dir_fd=directory_fd)
+
+
+def finish_pruning_backups(directory_fd: int, backups: list, *, complete: bool) -> None:
+    failure = None
+    for backup in reversed(backups):
+        try:
+            finish_pruning_backup(directory_fd, backup, complete=complete)
+        except (OSError, ValueError) as error:
+            # Attempt every recovery. Preserve the original construction failure;
+            # successful construction still fails on any backup disposal error.
+            if complete and failure is None:
+                failure = error
+    if failure is not None:
+        raise failure
+
+
+@contextmanager
+def archive_pruning_backups(directory_fd: int, candidates: list) -> Iterator[list]:
+    """Retain independent bytes until pruning and current-archive checks succeed."""
+    backups = []
+    complete = False
+    with ExitStack() as handles:
+        try:
+            for name, original, identity, digest in candidates:
+                temporary = ".retention-" + uuid.uuid4().hex + "-" + name + ".tmp"
+                descriptor = os.open(
+                    temporary,
+                    os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                    dir_fd=directory_fd,
+                )
+                handles.callback(os.close, descriptor)
+                backups.append((name, original, digest, temporary, descriptor))
+                if (
+                    not owned_archive_entry(directory_fd, temporary, descriptor)
+                    or os.fstat(descriptor).st_nlink != 1
+                ):
+                    invalid("archive retention backup is not exclusive before copying")
+                copy_archive_descriptor(original, descriptor, identity[6])
+                os.fchmod(descriptor, identity[2] & 0o777)
+                os.utime(descriptor, ns=(os.fstat(original).st_atime_ns, identity[-2]))
+                os.fsync(descriptor)
+                validate_pruning_candidate(directory_fd, name, original, identity, digest)
+                if (
+                    not owned_archive_entry(directory_fd, temporary, descriptor)
+                    or os.fstat(descriptor).st_nlink != 1
+                    or descriptor_content_digest(descriptor) != digest
+                ):
+                    invalid("archive retention backup differs from pinned original")
+            yield candidates
+            complete = True
+        finally:
+            finish_pruning_backups(directory_fd, backups, complete=complete)
+
+
 def write_exclusive_archive(  # noqa: C901, PLR0912, PLR0915 - owned archive publication boundary
     path: Path, roots: list[tuple[Path, str]], keep_archives: int | None = None
 ) -> None:
@@ -181,22 +355,34 @@ def write_exclusive_archive(  # noqa: C901, PLR0912, PLR0915 - owned archive pub
             ):
                 invalid("archive publication identity or alias count changed")
             validate_archive_directory(directory, identities)
-            if keep_archives is not None:
-                names = os.listdir(directory_fd)  # noqa: PTH208 - bound directory fd, no Path equivalent
-                archives = sorted(name for name in names if name.endswith(".tar.gz"))
-                for name in archives[:-keep_archives]:
+            with archive_retention_plan(directory, directory_fd, path.name, keep_archives) as plan:
+                # Validate the entire pruning set before accepting or deleting anything.
+                for name, old_descriptor, identity, digest in plan:
+                    validate_pruning_candidate(directory_fd, name, old_descriptor, identity, digest)
+                if descriptor_content_digest(descriptor) != constructed_digest:
+                    invalid("archive content changed before completion")
+                validate_archive_directory(directory, identities)
+                if (
+                    not owned_archive_entry(directory_fd, temporary, descriptor)
+                    or not owned_archive_entry(directory_fd, path.name, descriptor)
+                    or os.fstat(descriptor).st_nlink != published_link_count
+                ):
+                    invalid("archive publication identity or alias count changed before completion")
+                for name, old_descriptor, identity, digest in plan:
                     validate_archive_directory(directory, identities)
+                    validate_pruning_candidate(directory_fd, name, old_descriptor, identity, digest)
                     os.unlink(name, dir_fd=directory_fd)
-            if descriptor_content_digest(descriptor) != constructed_digest:
-                invalid("archive content changed before completion")
-            validate_archive_directory(directory, identities)
-            if (
-                not owned_archive_entry(directory_fd, temporary, descriptor)
-                or not owned_archive_entry(directory_fd, path.name, descriptor)
-                or os.fstat(descriptor).st_nlink != published_link_count
-            ):
-                invalid("archive publication identity or alias count changed before completion")
-            complete = True
+                # Retention is reversible until these final acceptance checks pass.
+                if descriptor_content_digest(descriptor) != constructed_digest:
+                    invalid("archive content changed during retention")
+                validate_archive_directory(directory, identities)
+                if (
+                    not owned_archive_entry(directory_fd, temporary, descriptor)
+                    or not owned_archive_entry(directory_fd, path.name, descriptor)
+                    or os.fstat(descriptor).st_nlink != published_link_count
+                ):
+                    invalid("archive publication identity or alias count changed during retention")
+                complete = True
         finally:
             try:
                 if (

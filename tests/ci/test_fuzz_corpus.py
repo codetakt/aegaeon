@@ -218,7 +218,7 @@ class FuzzCorpusTests(unittest.TestCase):
         self.assertFalse((self.root / "fuzz/corpus_archive").exists())
         self.assertTrue((corpus / "seed").exists())
 
-    def test_archive_retention_cleanup_failure_is_an_error(self):
+    def test_archive_retention_preserves_unsupported_directory(self):
         corpus = self.root / "fuzz/corpus/fuzz_par"
         corpus.mkdir(parents=True)
         (corpus / "seed").write_text("input")
@@ -227,8 +227,9 @@ class FuzzCorpusTests(unittest.TestCase):
         (archives / "0000.tar.gz").mkdir()
         self.env["CORPUS_ARCHIVE_KEEP"] = "1"
         result = self.run_helper()
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((corpus / "seed").exists())
+        self.assertTrue((archives / "0000.tar.gz").is_dir())
 
     def test_unwritable_summary_is_an_error_even_after_archive_collection(self):
         self.artifacts.mkdir()

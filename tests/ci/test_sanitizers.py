@@ -450,7 +450,9 @@ else:
 """
 
 
-class SanitizerTests(unittest.TestCase):
+class SanitizerFixture:
+    """Shared sanitizer setup and helpers without discovered test methods."""
+
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.bin = self.root / "bin"
@@ -526,6 +528,143 @@ class SanitizerTests(unittest.TestCase):
     def summary(self):
         return json.loads((self.root / "evidence/run-summary.json").read_text())
 
+    def add_package(self, name):
+        metadata_path = self.root / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        source = self.root / f"{name}.rs"
+        source.write_text("// additional package source identity\n")
+        metadata["packages"].append(
+            {
+                "name": name,
+                "id": f"{name}-identity",
+                "targets": [{"name": name, "kind": ["lib"], "test": True, "src_path": str(source)}],
+            }
+        )
+        metadata_path.write_text(json.dumps(metadata))
+
+    def assert_child_stopped(self):
+        child = int((self.root / "child.pid").read_text())
+        stat = Path(f"/proc/{child}/stat")
+        assert not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
+
+    def seed_completed_preflight(self):
+        evidence = self.root / "evidence"
+        evidence.mkdir(exist_ok=True)
+        raw = b'{"status":"completed","commands":[],"units":[]}\n'
+        (evidence / "run-summary.json").write_bytes(raw)
+        (evidence / "001-metadata.stdout.log").write_bytes(b"retained raw output\n")
+        (evidence / "unrelated-sentinel").write_bytes(b"untouched\n")
+        return evidence, raw
+
+    def assert_failed_preflight_preserved(self, result, evidence, raw):
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["stage"], "preflight")  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(self.summary()["exit_code"], result.returncode)  # noqa: PT009 - active under unittest and Python -O
+        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under unittest and Python -O
+        previous = evidence / self.summary()["previous_attempt"]
+        self.assertEqual((previous / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (previous / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
+            (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
+        )
+        self.assertEqual((evidence / "unrelated-sentinel").read_bytes(), b"untouched\n")  # noqa: PT009 - active under unittest and Python -O
+
+    def prepare_preflight_alias(self, kind, evidence, external, sentinel):
+        if kind in {"directory-symlink", "normalized-symlink"}:
+            alias = self.root / kind
+            alias.symlink_to(external, target_is_directory=True)
+            return alias if kind == "directory-symlink" else alias / ".." / "evidence"
+        if kind == "overlap":
+            return self.root
+        path = evidence / (
+            "001-metadata.stdout.log" if kind.startswith("raw-log") else "run-summary.json"
+        )
+        path.unlink()
+        if kind.endswith("symlink"):
+            path.symlink_to(sentinel)
+        else:
+            os.link(sentinel, path)
+        return evidence
+
+    def restore_preflight_alias(self, evidence):
+        for name, raw in [
+            ("run-summary.json", b'{"status":"completed"}'),
+            ("001-metadata.stdout.log", b"retained raw output\n"),
+        ]:
+            path = evidence / name
+            if path.is_symlink() or path.stat().st_nlink > 1:
+                path.unlink()
+                path.write_bytes(raw)
+
+    def seed_completed_at(self, evidence):
+        evidence.mkdir(parents=True, exist_ok=True)
+        raw = b'{"status":"completed","commands":[],"units":[]}\n'
+        (evidence / "run-summary.json").write_bytes(raw)
+        (evidence / "001-metadata.stdout.log").write_bytes(b"previous raw bytes\n")
+        (evidence / "unrelated-sentinel").write_bytes(b"source sentinel\n")
+        return raw
+
+    def boundary_snapshot(self):
+        snapshot = {}
+        for folder, directories, files in os.walk(self.root, followlinks=False):
+            root = Path(folder)
+            for name in [*directories, *files]:
+                path = root / name
+                metadata = path.lstat()
+                content = (
+                    os.readlink(path).encode()  # noqa: PTH115 - preserve literal link bytes without Path normalization
+                    if path.is_symlink()
+                    else None
+                    if path.is_dir()
+                    else path.read_bytes()
+                )
+                snapshot[str(path.relative_to(self.root))] = (
+                    metadata.st_mode,
+                    metadata.st_uid,
+                    content,
+                )
+        return snapshot
+
+    def assert_source_boundary_rejected(self, route, variable):
+        self.seed_completed_at(route)
+        before = self.boundary_snapshot()
+        result = self.run_wrapper("rustc-version-failure", **{variable: str(route)})
+        after = self.boundary_snapshot()
+        if variable == "SANITIZER_TARGET_DIR":
+            before = {
+                key: value
+                for key, value in before.items()
+                if key != "evidence" and not key.startswith("evidence/")
+            }
+            after = {
+                key: value
+                for key, value in after.items()
+                if key != "evidence" and not key.startswith("evidence/")
+            }
+            if (self.bin / "python3").exists():
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - safe evidence fails first
+            else:
+                markers = list((self.root / "evidence").glob("preflight-failed-*.json"))
+                self.assertTrue(markers)  # noqa: PT009 - missing writer still leaves explicit failure
+                self.assertTrue(  # noqa: PT009 - active under -O
+                    all(json.loads(marker.read_text())["status"] == "failed" for marker in markers)
+                )
+        self.assertEqual(after, before)  # noqa: PT009 - source and unsafe evidence remain exact
+        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - remains active under Python -O
+        diagnostic = (
+            "attempt failed"
+            if variable == "SANITIZER_TARGET_DIR" and not (self.bin / "python3").exists()
+            else "overlaps protected source inputs"
+        )
+        self.assertIn(diagnostic, result.stderr)  # noqa: PT009 - safe marker first, source and tools untouched
+        self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime fixture launched
+        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - no success message
+
+
+class SanitizerTests(SanitizerFixture, unittest.TestCase):
     def test_nonstandard_names_and_cache_bound_to_all_required_targets(self):
         for mode in ("success", "fresh-cache", "ignored-policy"):
             with self.subTest(mode=mode):
@@ -553,20 +692,6 @@ class SanitizerTests(unittest.TestCase):
                 self.assertTrue(  # noqa: PT009 - active under Python -O
                     'curve25519_dalek_backend="serial"' in summary["units"][0]["rustflags"]
                 )
-
-    def add_package(self, name):
-        metadata_path = self.root / "metadata.json"
-        metadata = json.loads(metadata_path.read_text())
-        source = self.root / f"{name}.rs"
-        source.write_text("// additional package source identity\n")
-        metadata["packages"].append(
-            {
-                "name": name,
-                "id": f"{name}-identity",
-                "targets": [{"name": name, "kind": ["lib"], "test": True, "src_path": str(source)}],
-            }
-        )
-        metadata_path.write_text(json.dumps(metadata))
 
     def test_non_ffi_package_selection_rejects_before_cargo_inventory(self):
         self.add_package("additional")
@@ -731,11 +856,6 @@ class SanitizerTests(unittest.TestCase):
                 result = self.run_wrapper(mode)
                 assert result.returncode == expected, result.stderr
 
-    def assert_child_stopped(self):
-        child = int((self.root / "child.pid").read_text())
-        stat = Path(f"/proc/{child}/stat")
-        assert not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
-
     def test_build_run_watchdogs_and_closed_output_kill_descendants(self):
         for mode in ("build-timeout", "build-closed-timeout", "run-timeout", "run-closed-timeout"):
             with self.subTest(mode=mode):
@@ -832,31 +952,6 @@ class SanitizerTests(unittest.TestCase):
         (evidence / "run-summary.json").mkdir()
         self.assertNotEqual(self.run_wrapper().returncode, 0)  # noqa: PT009 - active under Python -O
 
-    def seed_completed_preflight(self):
-        evidence = self.root / "evidence"
-        evidence.mkdir(exist_ok=True)
-        raw = b'{"status":"completed","commands":[],"units":[]}\n'
-        (evidence / "run-summary.json").write_bytes(raw)
-        (evidence / "001-metadata.stdout.log").write_bytes(b"retained raw output\n")
-        (evidence / "unrelated-sentinel").write_bytes(b"untouched\n")
-        return evidence, raw
-
-    def assert_failed_preflight_preserved(self, result, evidence, raw):
-        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - active under unittest and Python -O
-        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under unittest and Python -O
-        self.assertEqual(self.summary()["stage"], "preflight")  # noqa: PT009 - active under unittest and Python -O
-        self.assertEqual(self.summary()["exit_code"], result.returncode)  # noqa: PT009 - active under unittest and Python -O
-        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under unittest and Python -O
-        previous = evidence / self.summary()["previous_attempt"]
-        self.assertEqual((previous / "run-summary.json").read_bytes(), raw)  # noqa: PT009 - active under unittest and Python -O
-        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
-            (previous / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
-        )
-        self.assertEqual(  # noqa: PT009 - active under unittest and Python -O
-            (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
-        )
-        self.assertEqual((evidence / "unrelated-sentinel").read_bytes(), b"untouched\n")  # noqa: PT009 - active under unittest and Python -O
-
     def test_version_failure_invalidates_old_completed_receipt(self):
         evidence, raw = self.seed_completed_preflight()
         result = self.run_wrapper("rustc-version-failure")
@@ -948,33 +1043,6 @@ class SanitizerTests(unittest.TestCase):
                 self.assertEqual((evidence / "unrelated-sentinel").read_bytes(), b"untouched\n")  # noqa: PT009 - active under unittest and Python -O
                 self.restore_preflight_alias(evidence)
 
-    def prepare_preflight_alias(self, kind, evidence, external, sentinel):
-        if kind in {"directory-symlink", "normalized-symlink"}:
-            alias = self.root / kind
-            alias.symlink_to(external, target_is_directory=True)
-            return alias if kind == "directory-symlink" else alias / ".." / "evidence"
-        if kind == "overlap":
-            return self.root
-        path = evidence / (
-            "001-metadata.stdout.log" if kind.startswith("raw-log") else "run-summary.json"
-        )
-        path.unlink()
-        if kind.endswith("symlink"):
-            path.symlink_to(sentinel)
-        else:
-            os.link(sentinel, path)
-        return evidence
-
-    def restore_preflight_alias(self, evidence):
-        for name, raw in [
-            ("run-summary.json", b'{"status":"completed"}'),
-            ("001-metadata.stdout.log", b"retained raw output\n"),
-        ]:
-            path = evidence / name
-            if path.is_symlink() or path.stat().st_nlink > 1:
-                path.unlink()
-                path.write_bytes(raw)
-
     def test_unwritable_output_fails_before_tools_and_keeps_prior_bytes(self):
         evidence, raw = self.seed_completed_preflight()
         evidence.chmod(0o500)
@@ -1002,70 +1070,6 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(  # noqa: PT009 - preserve original raw bytes
             (evidence / "001-metadata.stdout.log").read_bytes(), b"retained raw output\n"
         )
-
-    def seed_completed_at(self, evidence):
-        evidence.mkdir(parents=True, exist_ok=True)
-        raw = b'{"status":"completed","commands":[],"units":[]}\n'
-        (evidence / "run-summary.json").write_bytes(raw)
-        (evidence / "001-metadata.stdout.log").write_bytes(b"previous raw bytes\n")
-        (evidence / "unrelated-sentinel").write_bytes(b"source sentinel\n")
-        return raw
-
-    def boundary_snapshot(self):
-        snapshot = {}
-        for folder, directories, files in os.walk(self.root, followlinks=False):
-            root = Path(folder)
-            for name in [*directories, *files]:
-                path = root / name
-                metadata = path.lstat()
-                content = (
-                    os.readlink(path).encode()  # noqa: PTH115 - preserve literal link bytes without Path normalization
-                    if path.is_symlink()
-                    else None
-                    if path.is_dir()
-                    else path.read_bytes()
-                )
-                snapshot[str(path.relative_to(self.root))] = (
-                    metadata.st_mode,
-                    metadata.st_uid,
-                    content,
-                )
-        return snapshot
-
-    def assert_source_boundary_rejected(self, route, variable):
-        self.seed_completed_at(route)
-        before = self.boundary_snapshot()
-        result = self.run_wrapper("rustc-version-failure", **{variable: str(route)})
-        after = self.boundary_snapshot()
-        if variable == "SANITIZER_TARGET_DIR":
-            before = {
-                key: value
-                for key, value in before.items()
-                if key != "evidence" and not key.startswith("evidence/")
-            }
-            after = {
-                key: value
-                for key, value in after.items()
-                if key != "evidence" and not key.startswith("evidence/")
-            }
-            if (self.bin / "python3").exists():
-                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - safe evidence fails first
-            else:
-                markers = list((self.root / "evidence").glob("preflight-failed-*.json"))
-                self.assertTrue(markers)  # noqa: PT009 - missing writer still leaves explicit failure
-                self.assertTrue(  # noqa: PT009 - active under -O
-                    all(json.loads(marker.read_text())["status"] == "failed" for marker in markers)
-                )
-        self.assertEqual(after, before)  # noqa: PT009 - source and unsafe evidence remain exact
-        self.assertNotEqual(result.returncode, 0)  # noqa: PT009 - remains active under Python -O
-        diagnostic = (
-            "attempt failed"
-            if variable == "SANITIZER_TARGET_DIR" and not (self.bin / "python3").exists()
-            else "overlaps protected source inputs"
-        )
-        self.assertIn(diagnostic, result.stderr)  # noqa: PT009 - safe marker first, source and tools untouched
-        self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime fixture launched
-        self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - no success message
 
     def test_source_child_completed_evidence_is_unchanged_before_tools(self):
         for variable in ("SANITIZER_ARTIFACT_DIR", "SANITIZER_TARGET_DIR"):
@@ -1185,8 +1189,8 @@ class SanitizerTests(unittest.TestCase):
                 self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no compiler/runtime preflight
 
 
-class SanitizerLoggingTests(SanitizerTests):
-    """Actual shell/log boundaries with inert modeled Nix producer only."""
+class SanitizerLoggingFixture(SanitizerFixture):
+    """Shared shell/log setup without inheriting behavioral test methods."""
 
     def setUp(self):
         super().setUp()
@@ -1272,6 +1276,10 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
 
     def shared_receipt(self):
         return json.loads((self.shared / "sanitizers/run-summary.json").read_text())
+
+
+class SanitizerLoggingTests(SanitizerLoggingFixture, unittest.TestCase):
+    """Actual shell/log boundaries with inert modeled Nix producer only."""
 
     def test_default_and_normalized_artifact_routes_keep_absolute_log(self):
         for configured, relative in (
@@ -1505,7 +1513,7 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
         self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009 - active under Python -O
 
 
-class SanitizerCargoChannelTests(SanitizerLoggingTests):
+class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
     """Owned argument channels fail before tools and preserve evidence history."""
 
     def assert_channel_rejected(self, variable, value, route, case):
