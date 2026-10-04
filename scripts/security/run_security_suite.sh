@@ -155,8 +155,12 @@ if stage_enabled "sanitizers"; then
 	# Shared validators report through the wrapper's existing diagnostics.
 	fail() { echo "[security] $*" >&2; }
 	preflight_route "$ARTIFACT_BASE" || exit 1
-	sanitizer_validate_output "$PREFLIGHT_ROUTE" "$ROOT" || exit 1
+	ARTIFACT_BASE=$PREFLIGHT_ROUTE
+	sanitizer_validate_output "$ARTIFACT_BASE" "$ROOT" || exit 1
+	LOG_DIR="$ARTIFACT_BASE/summary"
 	preflight_route "$LOG_DIR" || exit 1
+	LOG_DIR=$PREFLIGHT_ROUTE
+	LOG_FILE="$LOG_DIR/security.log"
 fi
 SECURITY_LOG_PATH=$LOG_FILE
 
@@ -417,8 +421,8 @@ run_fuzz_targets() (
 		fi
 	fi
 	python3 scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
-	local targets_text="${FUZZ_TARGETS//$'\n'/ }" targets=()
-	targets_text="${targets_text//$'\r'/ }"
+	local targets_text targets=()
+	targets_text="$(python3 -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
 	read -r -a targets <<<"$targets_text"
 	local target_dir
 	target_dir="$(python3 scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2

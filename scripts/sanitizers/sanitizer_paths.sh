@@ -279,7 +279,7 @@ sanitizer_validate_cargo_flags() {
 import shlex
 import sys
 
-forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
+forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "-r", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
 try:
     extra = shlex.split(sys.argv[1])
     build_extra = shlex.split(sys.argv[2])

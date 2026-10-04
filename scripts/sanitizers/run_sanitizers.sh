@@ -512,7 +512,7 @@ try:
     extra = shlex.split(extra_text)
     build_extra = shlex.split(build_extra_text)
     require(build_extra in ([], ["-Zbuild-std=std"], ["-Z", "build-std=std"]), "Only the supported build-std=std option is permitted")
-    forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
+    forbidden = {"--config", "--target", "--target-dir", "--message-format", "--package", "-p", "--lib", "--tests", "--test", "--bin", "--bins", "--workspace", "--all", "--exclude", "--manifest-path", "--release", "-r", "--profile", "--all-targets", "--examples", "--example", "--benches", "--bench", "--"}
     require(not any(flag.split("=", 1)[0] in forbidden or (flag.startswith("-p") and flag != "--") for flag in extra), "Cargo flags cannot override required sanitizer selection, configuration or native target")
     artifacts.mkdir(parents=True, exist_ok=True)
     summary.update({"sanitizers": sanitizers, "packages": packages, "build_deadline_seconds": build_seconds, "run_deadline_seconds": run_seconds, "kill_grace_seconds": kill_grace, "runtime_directory": runtime_text})

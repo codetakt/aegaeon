@@ -1208,19 +1208,119 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
         path.write_text(f"#!{sys.executable}\n{source}\n")
         path.chmod(0o755)
 
-    def run_suite(self, **overrides):
+    def run_suite(self, pass_fds=(), **overrides):
         return subprocess.run(  # noqa: S603 - controlled real shell and inert tools
             [shutil.which("bash"), str(self.suite), "--stage", "sanitizers"],
             cwd=self.root,
             env={**self.environment, **overrides},
             capture_output=True,
             text=True,
+            pass_fds=pass_fds,
             timeout=20,
             check=False,
         )
 
     def shared_receipt(self):
         return json.loads((self.shared / "sanitizers/run-summary.json").read_text())
+
+    def test_default_and_normalized_artifact_routes_keep_absolute_log(self):
+        for configured, relative in (
+            ("", "artifacts/security/latest"),
+            ("artifacts/security/latest/unused/../.", "artifacts/security/latest"),
+            ("relative logs\n/unused/../security\n", "relative logs\n/security\n"),
+        ):
+            with self.subTest(configured=configured):
+                result = self.run_suite(SECURITY_ARTIFACT_DIR=configured)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009 - active under Python -O
+                artifact = self.root / relative
+                log = artifact / "summary/security.log"
+                self.assertIn(f"suite finished. log: {log}", log.read_text())  # noqa: PT009
+                receipt = json.loads((artifact / "sanitizers/run-summary.json").read_text())
+                self.assertEqual(receipt["status"], "completed")  # noqa: PT009
+
+    def test_inherited_descriptor_flags_reject_before_truncation(self):
+        summary = self.shared / "summary"
+        summary.mkdir(parents=True)
+        log = summary / "security.log"
+        original = b"unchanged inherited log bytes\n"
+        for flags in (os.O_RDONLY, os.O_RDONLY | os.O_APPEND, os.O_WRONLY, os.O_RDWR):
+            with self.subTest(flags=flags):
+                log.write_bytes(original)
+                fd = os.open(log, flags)
+                try:
+                    result = self.run_suite(pass_fds=(fd,), SANITIZER_SECURITY_LOG_FD=str(fd))
+                finally:
+                    os.close(fd)
+                self.assertNotEqual(result.returncode, 0)  # noqa: PT009
+                self.assertEqual(log.read_bytes(), original)  # noqa: PT009
+                self.assertFalse((self.root / "producer-called").exists())  # noqa: PT009
+                self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009
+
+    def test_inherited_append_descriptor_keeps_all_resumed_logging(self):
+        summary = self.shared / "summary"
+        summary.mkdir(parents=True)
+        log = summary / "security.log"
+        for access in (os.O_WRONLY, os.O_RDWR):
+            with self.subTest(access=access):
+                log.write_text("stale inherited bytes\n")
+                fd = os.open(log, access | os.O_APPEND)
+                try:
+                    result = self.run_suite(pass_fds=(fd,), SANITIZER_SECURITY_LOG_FD=str(fd))
+                finally:
+                    os.close(fd)
+                self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+                retained = log.read_text()
+                self.assertNotIn("stale inherited bytes", retained)  # noqa: PT009
+                self.assertIn("starting security suite", retained)  # noqa: PT009
+                self.assertIn("inert modeled sanitizer output", retained)  # noqa: PT009
+                self.assertIn("sanitizer smoke: ok", retained)  # noqa: PT009
+                self.assertIn(f"suite finished. log: {log}", retained)  # noqa: PT009
+                self.assertEqual(self.shared_receipt()["status"], "completed")  # noqa: PT009
+
+    def test_safe_opener_truncates_once_after_inherited_admission(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/open_security_log.py"))
+        log = self.root / "owned-log"
+        original = b"old bytes survive opener before resumed validation\n"
+        log.write_bytes(original)
+        with patch("os.ftruncate", wraps=os.ftruncate) as truncate:
+            fd = namespace["checked_log"](str(log))
+            try:
+                self.assertEqual(log.read_bytes(), original)  # noqa: PT009
+                self.assertEqual(truncate.call_count, 0)  # noqa: PT009
+                resumed = namespace["checked_log"](str(log), fd)
+                try:
+                    truncate.assert_called_once_with(resumed, 0)
+                    self.assertEqual(log.read_bytes(), b"")  # noqa: PT009
+                    os.write(fd, b"first log\n")
+                    os.lseek(resumed, 0, os.SEEK_SET)
+                    os.write(resumed, b"second log\n")
+                    self.assertEqual(log.read_bytes(), b"first log\nsecond log\n")  # noqa: PT009
+                finally:
+                    os.close(resumed)
+            finally:
+                os.close(fd)
+
+    def test_inherited_descriptor_identity_aliases_reject_before_truncation(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/open_security_log.py"))
+        log = self.root / "owned-log"
+        external = self.root / "external-log"
+        original = b"external original bytes\n"
+        external.write_bytes(original)
+        fd = os.open(external, os.O_WRONLY | os.O_APPEND)
+        try:
+            for kind in ("different-inode", "symlink", "hardlink"):
+                with self.subTest(kind=kind):
+                    if kind == "different-inode":
+                        log.write_bytes(b"independent log bytes\n")
+                    elif kind == "symlink":
+                        log.symlink_to(external)
+                    else:
+                        log.hardlink_to(external)
+                    self.assertRaises((OSError, ValueError), namespace["checked_log"], str(log), fd)  # noqa: PT027 - active under Python -O
+                    self.assertEqual(external.read_bytes(), original)  # noqa: PT009
+                    log.unlink()
+        finally:
+            os.close(fd)
 
     def test_target_dir_override_rejects_before_target_or_cargo(self):
         for flags in ("--target-dir elsewhere", "--target-dir=elsewhere"):
@@ -1355,10 +1455,6 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
         self.assertEqual(self.shared_receipt()["status"], "failed")  # noqa: PT009 - active under Python -O
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SanitizerCargoChannelTests(SanitizerLoggingTests):
     """Owned argument channels fail before tools and preserve evidence history."""
 
@@ -1418,6 +1514,42 @@ class SanitizerCargoChannelTests(SanitizerLoggingTests):
                     case = f"{variable}-{value.replace(' ', '_').replace('/', '_')}"
                     with self.subTest(variable=variable, value=value, route=route):
                         self.assert_channel_rejected(variable, value, route, case)
+
+    def test_release_alias_rejects_both_routes_before_effects(self):
+        for route in ("standalone", "suite"):
+            with self.subTest(route=route):
+                self.assert_channel_rejected("SANITIZER_CARGO_FLAGS", "-r", route, "release")
+
+    def test_runtime_release_alias_rejects_before_tools(self):
+        text = WRAPPER.read_text().split("<<'PYTHON'\n", 1)[1].rsplit("\nPYTHON", 1)[0]
+        parsed = ast.parse(text)
+        validation = next(item for item in parsed.body if isinstance(item, ast.Try))
+        forbidden = next(
+            item
+            for item in validation.body
+            if isinstance(item, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "forbidden" for target in item.targets
+            )
+        )
+        guard = next(
+            item
+            for item in validation.body
+            if isinstance(item, ast.Expr)
+            and any(
+                isinstance(node, ast.Name) and node.id == "forbidden" for node in ast.walk(item)
+            )
+        )
+        code = ast.fix_missing_locations(ast.Module(body=[forbidden, guard], type_ignores=[]))
+
+        def require(condition, message):
+            if not condition:
+                raise ValueError(message)
+
+        for flag in ("-r", "--release"):
+            with self.subTest(flag=flag):
+                namespace = {"extra": [flag], "require": require}
+                self.assertRaises(ValueError, exec, compile(code, str(WRAPPER), "exec"), namespace)  # noqa: PT027 - exact runtime admission code, active under Python -O
 
     def test_build_global_alternate_selection_is_rejected_before_effects(self):
         for index, value in enumerate(
@@ -1490,3 +1622,7 @@ class SanitizerCargoChannelTests(SanitizerLoggingTests):
         self.assertTrue(all(args[0] == "-Zbuild-std=std" for args in cargo_calls))  # noqa: PT009
         self.assertIn(f"native={self.root / 'runtime'}", self.summary()["units"][0]["rustflags"])  # noqa: PT009
         self.assertIn("-Z sanitizer=address", self.summary()["units"][0]["rustflags"])  # noqa: PT009
+
+
+if __name__ == "__main__":
+    unittest.main()

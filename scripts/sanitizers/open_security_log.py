@@ -2,11 +2,13 @@
 """Open a no-follow owned security log before truncating, then retain its fd.
 
 The resumed shell revalidates the inherited descriptor against the same lexical
-leaf. An environment marker alone never authorizes skipping the opener.
+leaf and truncates it once before logging. The initial opener preserves existing
+bytes until that admission. An environment marker never skips the opener.
 """
 
 from __future__ import annotations
 
+import fcntl
 import os
 import shutil
 import stat
@@ -50,7 +52,14 @@ def checked_log(path: str, inherited: int | None = None) -> int:  # noqa: PLR091
         ):
             message = "security log leaf ownership/type/identity differs"
             raise ValueError(message)
-        if inherited is None:
+        descriptor_flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        if (
+            descriptor_flags & os.O_ACCMODE not in (os.O_WRONLY, os.O_RDWR)
+            or not descriptor_flags & os.O_APPEND
+        ):
+            message = "security log descriptor must be writable and append-only"
+            raise ValueError(message)
+        if inherited is not None:
             os.ftruncate(fd, 0)
         result, fd = fd, None
         return result
