@@ -947,7 +947,12 @@ class CiPlanTransportTests(unittest.TestCase):
         for key in [True, "permissions", "concurrency"]:
             self.assertEqual(workflow[key], parent[key])
         for job in [*transport.LANES, "required"]:
-            self.assertEqual(workflow["jobs"][job], parent["jobs"][job])
+            expected = deepcopy(parent["jobs"][job])
+            if job == "docs":
+                # Full regression discovery has an explicitly increased budget.
+                self.assertEqual(expected["timeout-minutes"], 15)
+                expected["timeout-minutes"] = 30
+            self.assertEqual(workflow["jobs"][job], expected)
         outputs = workflow["jobs"]["plan"]["outputs"]
         self.assertEqual(outputs["plan_artifact_id"], "${{ steps.evidence.outputs.artifact-id }}")
         run = next(

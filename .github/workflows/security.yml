@@ -10,7 +10,7 @@ on:
 env:
   NIX_CONFIG: experimental-features = nix-command flakes
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CORPUS_ARCHIVE_KEEP: 0
+  CORPUS_ARCHIVE_KEEP: 1
   CORPUS_HISTORY_KEEP: 100
 
 jobs:
@@ -84,6 +84,7 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run security stage
+        id: run_security_stage
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
@@ -95,8 +96,12 @@ jobs:
       - name: Cleanup transient outputs
         if: always()
         run: |
-          rm -rf target fuzz/target fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
-          rm -rf ~/.cache/trivy ~/.cache/grype || true
+          # Fuzz cleanup belongs to the validated, receipt-bound wrapper.
+          if [ "${{ matrix.stage }}" != "fuzz" ]; then
+            rm -rf target fuzz/target || true
+            rm -rf fuzz/corpus fuzz/corpus_archive fuzz/artifacts || true
+            rm -rf ~/.cache/trivy ~/.cache/grype || true
+          fi
 
       - name: Record security status
         if: always()
@@ -125,14 +130,24 @@ jobs:
             echo "- Job status: \`${{ job.status }}\`"
             echo ""
             if [ -f artifacts/security/latest/fuzz/run_summary.json ]; then
-              python - <<'PY'
+              python -I - <<'PY'
           import json
           from pathlib import Path
 
           summary_path = Path("artifacts/security/latest/fuzz/run_summary.json")
           data = json.loads(summary_path.read_text())
           targets = data.get("targets", [])
-          print(f"- Fuzz targets recorded: {len(targets)}")
+          print(f"- Fuzz corpus targets recorded: {len(targets)}")
+          execution = data.get("execution", {})
+          print("- Fuzz execution status:", data.get("status") or "incomplete")
+          print("- Fuzz execution coverage:", execution.get("coverage") or "unknown")
+          print("- Internal seconds per target:", execution.get("internal_seconds", "unknown"))
+          print("- Watchdog seconds per target:", execution.get("watchdog_seconds", "unknown"))
+          for result in execution.get("targets", []):
+              build = result.get("build", {})
+              run = result.get("run", {})
+              print(f"- `{result.get('name')}` build={build.get('status', 'not-run')} "
+                    f"run={run.get('status', 'not-run')} exit={run.get('exit_code', 'n/a')}")
           print("- Corpus archive:", data.get("corpus_archive") or "n/a")
           print("- Crash archive :", data.get("crash_archive") or "n/a")
           if targets:
@@ -153,22 +168,30 @@ jobs:
             echo "- [Monitoring runbook](docs/operations/monitoring/README.md)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Package security upload
+        id: package_security_upload
+        if: always()
+        env:
+          SECURITY_UPLOAD_STAGE: ${{ matrix.stage }}
+          SECURITY_UPLOAD_OUTCOME: ${{ steps.run_security_stage.outcome }}
+        run: python3 -I scripts/fuzz/manage_fuzz_corpus.py --package-upload artifacts/security-upload
+
       - name: Upload security metrics
-        if: always() && matrix.stage != 'sbom'
+        if: always() && steps.package_security_upload.outcome == 'success' && matrix.stage != 'sbom'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
+          if-no-files-found: error
           path: |
-            artifacts/security/latest
-            artifacts/security/history
-            security-artifacts/security_status.jsonl
+            artifacts/security-upload/security-evidence.tar.gz
+            artifacts/security-upload/manifest.json
 
       - name: Upload SBOM metrics
-        if: always() && matrix.stage == 'sbom'
+        if: always() && steps.package_security_upload.outcome == 'success' && matrix.stage == 'sbom'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-${{ matrix.stage }}-${{ github.run_id }}
+          if-no-files-found: error
           path: |
-            artifacts/security/latest
-            artifacts/sbom
-            security-artifacts/security_status.jsonl
+            artifacts/security-upload/security-evidence.tar.gz
+            artifacts/security-upload/manifest.json
