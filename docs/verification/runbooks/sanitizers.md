@@ -114,7 +114,8 @@ example and benchmark target. The runner selects each explicitly with `--lib`,
 `--bin`, `--test`, `--example` or `--bench`; unsupported test-enabled kinds fail.
 Library crate kinds share the library selector. Disabled targets are not selected;
 an unexpected test executable still fails. Every selected target must produce
-named libtest JSON completion, including custom harnesses and benchmark targets.
+named libtest JSON completion from a standard harness. Selected custom harnesses
+(`harness = false`) are rejected during inventory admission, before any build.
 The nine baseline ffi targets remain a required minimum. A successful Cargo build
 must report an executable for every applicable target through compiler-artifact
 JSON. Binary basenames need not contain `ffi`. Valid Cargo cache reuse is
@@ -128,8 +129,12 @@ receive unique metadata-index log labels across all selected packages, and those
 raw logs retain the same attempt-history policy.
 
 For each binary the runner retains symbol and ELF inspection, lists all and
-ignored test identities, and validates normal libtest JSON completion against
-those names. Ignored tests retain their existing policy and are reported
+ignored test identities, accepting both `: test` and `: benchmark` listings.
+It explicitly runs libtest with `--test` and without `--bench`: standard
+`#[bench]` functions execute once as tests, including those in library or other
+target kinds. Named test JSON completion covers the full listed inventory;
+this is sanitizer smoke execution, not timed benchmark measurement.
+Ignored tests and benchmarks retain their existing policy and are reported
 separately. Every required binary needs runnable tests, including the native
 JOSE header integration test. When `lowstar_hash` is disabled,
 `oidc_hash_runtime_test` has no applicable tests: its binary must still build,

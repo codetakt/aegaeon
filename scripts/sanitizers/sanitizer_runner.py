@@ -625,7 +625,7 @@ class Supervisor:
             }
         )
         executed = self.command(
-            [str(binary), "-Z", "unstable-options", "--format", "json"],
+            [str(binary), "--test", "-Z", "unstable-options", "--format", "json"],
             run_env,
             run_seconds,
             f"run-{label}",
@@ -645,11 +645,12 @@ def listed(text: str) -> set[str]:
     for line in text.splitlines():
         if not line.strip():
             continue
+        name, separator, kind = line.rpartition(": ")
         require(
-            line.endswith(": test") and line[:-6] and line == line.strip(),
+            separator and name and kind in {"test", "benchmark"} and line == line.strip(),
             f"Malformed libtest listing: {line!r}",
         )
-        names.append(line[:-6])
+        names.append(name)
     require(len(names) == len(set(names)), "Duplicate libtest identity")
     return set(names)
 
@@ -711,6 +712,7 @@ def completed(text: str, names: set[str], ignored: set[str]) -> dict[str, list[s
         "passed": len(names - ignored),
         "ignored": len(ignored),
         "failed": 0,
+        "measured": 0,
         "filtered_out": 0,
     }
     require(

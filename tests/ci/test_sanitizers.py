@@ -433,10 +433,20 @@ else:
     package_name = Path(sys.argv[0]).parents[3].name.removeprefix("address-")
     packages = json.loads((root / "metadata.json").read_text())["packages"]
     targets = next(item["targets"] for item in packages if item["name"] == package_name)
-    name = targets[index]["name"]
+    target = targets[index]
+    name = target["name"]
     zero = name == "oidc_hash_runtime_test" or mode == "empty-tests"
     names = [] if zero else [name + "::required"]
-    ignored = [name + "::ignored"] if mode == "ignored-policy" and not zero else []
+    benchmark = target["kind"] == ["bench"] or mode.startswith("benchmark-")
+    benchmarks = set(names if benchmark else [])
+    if mode == "benchmark-mixed" and not zero:
+        names.append(name + "::benchmark")
+        benchmarks = {names[-1]}
+    ignored = (
+        [name + "::ignored"] if mode in {"ignored-policy", "benchmark-ignored"} and not zero else []
+    )
+    if benchmark:
+        benchmarks.update(ignored)
     if "--list" in args:
         if mode == "list-failure":
             sys.exit(8)
@@ -444,8 +454,14 @@ else:
             print("unrecognised list output")
         else:
             for item in ignored if "--ignored" in args else names + ignored:
-                print(item + ": test")
+                kind = "benchmark" if item in benchmarks else "test"
+                print(item + ": " + kind)
+            if mode == "benchmark-duplicate" and names:
+                print(names[0] + ": test")
         sys.exit(0)
+    if benchmark and ("--test" not in args or "--bench" in args):
+        print("benchmark smoke must explicitly use test mode", file=sys.stderr)
+        sys.exit(13)
     if index == 0 and mode in {
         "run-timeout",
         "run-closed-timeout",
@@ -466,8 +482,9 @@ else:
     for item in names:
         if mode != "run-no-start":
             print(json.dumps({"type": "test", "event": "started", "name": item}))
-        if mode != "run-missing-completion":
-            print(json.dumps({"type": "test", "event": "ok", "name": item}))
+        if mode not in {"run-missing-completion", "benchmark-missing-completion"}:
+            kind = "bench" if mode == "benchmark-event" else "test"
+            print(json.dumps({"type": kind, "event": "ok", "name": item}))
         if mode == "run-duplicate":
             print(json.dumps({"type": "test", "event": "ok", "name": item}))
     for item in ignored:
@@ -480,6 +497,7 @@ else:
                 "passed": len(names),
                 "ignored": len(ignored),
                 "failed": 0,
+                "measured": 1 if mode == "benchmark-measured" else 0,
                 "filtered_out": 0,
             }
         )
@@ -880,6 +898,92 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 "--message-format=json-render-diagnostics",
             ],
         )
+        for target in targets:
+            command = next(
+                row
+                for row in summary["commands"]
+                if row["phase"] == "run-" + target["evidence_label"]
+            )
+            self.assertEqual(  # noqa: PT009 - explicit one-pass mode, even for the benchmark target
+                command["args"][1:], ["--test", "-Z", "unstable-options", "--format", "json"]
+            )
+
+    def test_standard_benchmarks_run_as_tests_and_preserve_ignored_policy(self):
+        self.add_package("additional")
+        for kind in ("bin", "test", "example", "bench"):
+            self.add_target("additional", "benchmark_" + kind, kind)
+        for mode in ("benchmark-mixed", "benchmark-only", "benchmark-ignored"):
+            with self.subTest(mode=mode):
+                result = self.run_wrapper(mode, SANITIZER_TARGETS="ffi,additional")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                summary = self.summary()
+                self.assertEqual(summary["status"], "completed")  # noqa: PT009
+                for target in summary["units"][1]["targets"]:
+                    name = target["name"]
+                    expected = [name + "::required"]
+                    if mode == "benchmark-mixed":
+                        expected.append(name + "::benchmark")
+                    self.assertEqual(target["completed"], sorted(expected))  # noqa: PT009
+                    self.assertEqual(  # noqa: PT009
+                        target["ignored"],
+                        [name + "::ignored"] if mode == "benchmark-ignored" else [],
+                    )
+
+    def test_benchmark_duplicate_missing_and_non_test_completion_fail(self):
+        for mode in (
+            "benchmark-duplicate",
+            "benchmark-missing-completion",
+            "benchmark-event",
+            "benchmark-measured",
+        ):
+            with self.subTest(mode=mode):
+                result = self.run_wrapper(mode)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009
+
+    def test_completed_test_mode_requires_zero_measured_benchmarks(self):
+        runner = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        events = [
+            {"type": "suite", "event": "started", "test_count": 1},
+            {"type": "test", "event": "started", "name": "benchmark"},
+            {"type": "test", "event": "ok", "name": "benchmark"},
+            {
+                "type": "suite",
+                "event": "ok",
+                "passed": 1,
+                "ignored": 0,
+                "failed": 0,
+                "measured": 0,
+                "filtered_out": 0,
+            },
+        ]
+        raw = lambda: "\n".join(json.dumps(event) for event in events)  # noqa: E731 - mutable event fixture
+        completed = runner["completed"]
+        self.assertEqual(completed(raw(), {"benchmark"}, set())["completed"], ["benchmark"])  # noqa: PT009
+        for value in (1, -1, True, "0", None):
+            with self.subTest(value=value), self.assertRaises(runner["Failure"]):  # noqa: PT027 - active under -O
+                if value is None:
+                    events[-1].pop("measured")
+                else:
+                    events[-1]["measured"] = value
+                completed(raw(), {"benchmark"}, set())
+
+    def test_libtest_listing_accepts_both_kinds_without_duplicate_or_malformed_names(self):
+        runner = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        listed = runner["listed"]
+        self.assertEqual(  # noqa: PT009
+            listed("module::test: test\nmodule::benchmark: benchmark\n"),
+            {"module::test", "module::benchmark"},
+        )
+        for text in (
+            "same: test\nsame: benchmark\n",
+            "name: bench\n",
+            ": benchmark\n",
+            " name: benchmark\n",
+            "name: benchmark \n",
+        ):
+            with self.subTest(text=text), self.assertRaises(runner["Failure"]):  # noqa: PT027 - active under -O
+                listed(text)
 
     def test_same_named_targets_have_distinct_artifacts_and_safe_log_routes(self):
         self.add_package("additional")
