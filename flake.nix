@@ -23,7 +23,6 @@
 
   outputs =
     inputs@{
-      self,
       nixpkgs,
       verification-nixpkgs,
       flake-utils,
@@ -40,7 +39,7 @@
       let
         overlays = [
           (import rust-overlay)
-          (final: prev: {
+          (final: _: {
             cargo-audit = final.rustPlatform.buildRustPackage rec {
               pname = "cargo-audit";
               version = "0.22.0";
@@ -250,6 +249,7 @@
                 "^artifacts/kani/run_[0-9T]+\\.log$"
                 "^generated/openapi/aegaeon-management-api\\.v1\\.json$"
                 "^spec/compliance-matrix\\.yaml$"
+                "\\Aci/ci-expected-inventory\\.json\\Z"
                 # Shared finite-state fixtures and their generated proof cases.
                 "^tests/fixtures/authcode-redis-grant\\.json$"
                 "^tests/fstar/property/TestAuthCodeRedisGrant\\.fst$"
@@ -649,11 +649,18 @@
           };
 
         mkAppFromSpec =
-          _appId: spec:
-          mkShellApp {
-            name = spec.binName;
-            inherit (spec) description runtimeInputs script;
-          };
+          appId: spec:
+          if appId == "security-suite" then
+            mkApp (import ./nix/flake/security-launcher.nix {
+              inherit lib pkgs;
+              name = spec.binName;
+              inherit (spec) runtimeInputs script;
+            }) spec.description
+          else
+            mkShellApp {
+              name = spec.binName;
+              inherit (spec) description runtimeInputs script;
+            };
 
         appSpecs = import ./nix/flake/app-specs.nix {
           inherit
@@ -727,7 +734,7 @@
           pname = "aegaeon-cargo-artifacts";
           version = "0.0.0";
           src = buildSrc;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
           cargoHash = "sha256-hWQWYH4GbZD5aT+Dr592uzsYP8NdLuggu9EzToA9I3w=";
@@ -857,7 +864,7 @@
           pname = "verify-jose";
           version = "0.0.0";
           inherit src cargoArtifacts;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
           nativeBuildInputs = verificationRuntimeInputs;
@@ -888,7 +895,7 @@
               pname = "verify-kani";
               version = "0.0.0";
               inherit src cargoArtifacts;
-              stdenv = p: stdenv;
+              stdenv = _: stdenv;
               cargoToml = ./Cargo.toml;
               cargoLock = ./Cargo.lock;
               nativeBuildInputs = [
@@ -919,7 +926,7 @@
         aegaeon-workspace = craneLib.buildPackage {
           inherit cargoArtifacts;
           src = buildSrc;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           pname = "aegaeon-workspace";
           version = "0.0.0";
           cargoToml = ./Cargo.toml;

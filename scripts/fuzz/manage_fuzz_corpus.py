@@ -871,6 +871,22 @@ def lexical_directory(path: Path) -> Path:
     return path
 
 
+def validate_cargo_home_paths(
+    paths: list[Path], purpose: str, *, output: Path | None = None
+) -> None:
+    cargo_home = lexical_directory(effective_cargo_home())
+    if any(overlaps(cargo_home, path) for path in paths) or (
+        output is not None and overlaps(cargo_home, lexical_directory(output))
+    ):
+        invalid(f"{purpose} paths overlap Cargo home")
+
+
+def validate_restore_cargo_home(directory: Path) -> None:
+    validate_cargo_home_paths(
+        [FUZZ_DIR / name for name in RECOVERY_RAW_NAMES], "restoration", output=directory
+    )
+
+
 def validate_regular_destination(path: Path) -> None:
     lexical_directory(path.parent)
     if path.is_symlink() or (path.exists() and not path.is_file()):
@@ -925,9 +941,6 @@ def validate_preflight(directory: Path) -> Path:
     validate_compiler_environment()
     validate_git_environment()
     validate_collection_roots()
-    for target in selected_targets():
-        for root in ("corpus", "artifacts"):
-            lexical_directory(FUZZ_DIR / root / target)
     routes = [directory]
     for name, default in (
         ("SECURITY_ARTIFACT_DIR", "artifacts/security/latest"),
@@ -937,6 +950,10 @@ def validate_preflight(directory: Path) -> Path:
     ):
         if value := os.environ.get(name, default):
             routes.append(Path(value))
+    validate_cargo_home_paths([lexical_directory(route) for route in routes], "collection")
+    for target in selected_targets():
+        for root in ("corpus", "artifacts"):
+            lexical_directory(FUZZ_DIR / root / target)
     for route in routes:
         validate_evidence_route(route)
     validate_collection_history(directory)
@@ -978,6 +995,22 @@ def validate_native_configuration() -> dict[str, str]:
     config = (
         tomllib.loads(evidence_text(required_source(config_path))) if config_path.exists() else {}
     )
+    # Manifest inventory does not resolve dependency overrides or included config.
+    # Empty valid containers add no source input; malformed containers fail closed.
+    empty_source_settings = {"paths": [], "patch": {}, "source": {}, "replace": {}, "include": []}
+    registry = config.get("registry", {})
+    registries = config.get("registries", {})
+    if (
+        any(
+            name in config and config[name] != empty
+            for name, empty in empty_source_settings.items()
+        )
+        or not isinstance(registry, dict)
+        or not isinstance(registries, dict)
+        or "index" in registry
+        or any(not isinstance(value, dict) or "index" in value for value in registries.values())
+    ):
+        invalid("unmodeled Cargo dependency source configuration")
     if "fuzz" in config.get("alias", {}):
         invalid("Cargo fuzz alias is not supported for fuzz execution or cleanup")
     forced = {
@@ -1003,6 +1036,10 @@ def validate_native_configuration() -> dict[str, str]:
 
 def validate_native_overrides(expected: dict[str, str]) -> None:
     for name, value in os.environ.items():
+        if name == "CARGO_REGISTRY_INDEX" or (
+            name.startswith("CARGO_REGISTRIES_") and name.endswith("_INDEX")
+        ):
+            invalid("unmodeled Cargo dependency source environment override")
         if (
             name.startswith(
                 (
@@ -1382,6 +1419,17 @@ def owned_raw_root(name: str) -> Path:
 def validate_collection_roots() -> None:
     # Check all roots before collection can create directories or inspect raw input.
     # Nested symlinks are archive entries, never inputs to statistics or traversal.
+    validate_cargo_home_paths(
+        [
+            *(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta")),
+            *(
+                lexical_directory(route)
+                for route in (RUN_ARTIFACT_DIR, HISTORY_OUT_DIR)
+                if route is not None
+            ),
+        ],
+        "collection",
+    )
     for name in (*RECOVERY_RAW_NAMES, "corpus_meta"):
         owned_raw_root(name)
     for name in ("history.jsonl", "latest_run.json"):
@@ -1503,6 +1551,7 @@ def open_evidence_file(path: Path, expected: os.stat_result | None = None) -> It
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1
+            or opened.st_uid != os.geteuid()
             or evidence_state(opened) != evidence_state(before)
         ):
             invalid("evidence file must be a stable, unaliased regular file")
@@ -1705,6 +1754,7 @@ def restore_raw_copy(recovery: Path, manifest: dict) -> None:
 def restore_cleanup(directory: Path, run_id: str, exit_code: int, reason: str) -> bool:
     if reason not in ("removal", "receipt"):
         invalid("unknown fuzz cleanup recovery reason")
+    validate_restore_cargo_home(directory)
     recovery, manifest, snapshots = load_cleanup_backup(directory, run_id)
     report = {
         "run_id": run_id,
@@ -1807,35 +1857,54 @@ def upload_inventory() -> dict:
     return inventories
 
 
-def add_evidence_entry(tar: tarfile.TarFile, path: Path, arcname: str) -> None:
+class ArchiveEvidenceReader:
+    def __init__(self, content: BinaryIO) -> None:
+        self.content = content
+        self.sha256 = hashlib.sha256()
+        self.size = 0
+
+    def read(self, size: int) -> bytes:
+        block = self.content.read(size)
+        self.sha256.update(block)
+        self.size += len(block)
+        return block
+
+
+def add_evidence_entry(tar: tarfile.TarFile, path: Path, arcname: str, expected: dict) -> None:
     before = path.lstat()
-    if stat.S_ISREG(before.st_mode):
+    if expected["type"] == "file" and stat.S_ISREG(before.st_mode):
         with open_evidence_file(path, before) as content:
-            info = tar.gettarinfo(str(path), arcname=arcname)
+            info = tar.gettarinfo(str(path), arcname=arcname, fileobj=content)
             if not info.isfile() or info.size != os.fstat(content.fileno()).st_size:
                 invalid("upload entry changed before archiving")
-            tar.addfile(info, content)
+            archived = ArchiveEvidenceReader(content)
+            tar.addfile(info, archived)
+            if archived.size != info.size or archived.sha256.hexdigest() != expected["sha256"]:
+                invalid("archive entry content differs from expected inventory")
     else:
         info = tar.gettarinfo(str(path), arcname=arcname)
-        if (stat.S_ISDIR(before.st_mode) and info.isdir()) or (
-            stat.S_ISLNK(before.st_mode) and info.issym()
+        if (expected["type"] == "directory" and stat.S_ISDIR(before.st_mode) and info.isdir()) or (
+            expected["type"] == "symlink"
+            and stat.S_ISLNK(before.st_mode)
+            and info.issym()
+            and info.linkname == expected["target"]
         ):
             tar.addfile(info)
         else:
-            invalid("upload encountered a changed or special entry")
+            invalid("archive entry type or literal link differs from expected inventory")
 
 
 def archive_raw_tree(tar: tarfile.TarFile, source: Path, arcname: str) -> None:
     inventory = raw_inventory(source)
-    add_evidence_entry(tar, source, arcname)
-    for entry in inventory:
-        add_evidence_entry(tar, source / entry, arcname + "/" + entry)
+    add_evidence_entry(tar, source, arcname, {"type": "directory"})
+    for entry, expected in inventory.items():
+        add_evidence_entry(tar, source / entry, arcname + "/" + entry, expected)
     if raw_inventory(source) != inventory:
         invalid("raw evidence changed during archiving")
 
 
-def add_upload_entry(tar: tarfile.TarFile, path: Path) -> None:
-    add_evidence_entry(tar, path, path.relative_to(ROOT).as_posix())
+def add_upload_entry(tar: tarfile.TarFile, path: Path, expected: dict) -> None:
+    add_evidence_entry(tar, path, path.relative_to(ROOT).as_posix(), expected)
 
 
 def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
@@ -1844,18 +1913,14 @@ def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
             if not record["present"]:
                 continue
             source = ROOT / name
-            add_upload_entry(tar, source)
+            add_upload_entry(tar, source, record)
             if record["type"] == "directory":
-                for entry in record["entries"]:
-                    add_upload_entry(tar, source / entry)
+                for entry, expected in record["entries"].items():
+                    add_upload_entry(tar, source / entry, expected)
 
 
 def package_upload(directory: Path) -> None:
-    cargo_home = lexical_directory(effective_cargo_home())
-    if any(overlaps(cargo_home, ROOT / name) for name in UPLOAD_ROOTS) or overlaps(
-        cargo_home, lexical_directory(directory)
-    ):
-        invalid("upload paths overlap Cargo home")
+    validate_cargo_home_paths([ROOT / name for name in UPLOAD_ROOTS], "upload", output=directory)
     output = lexical_directory(directory)
     if any(overlaps(output, ROOT / name) for name in UPLOAD_ROOTS):
         invalid("upload output overlaps evidence source")
@@ -1956,7 +2021,9 @@ def validate_action_routes(args: argparse.Namespace) -> None:
     ):
         action = getattr(args, name)
         if action is not None:
-            setattr(args, name, validate_evidence_route(action))
+            directory = validate_evidence_route(action)
+            validate_cargo_home_paths([directory], "execution")
+            setattr(args, name, directory)
             validate_collection_roots()
     for name in (
         "cleanup_cache",
@@ -1966,11 +2033,14 @@ def validate_action_routes(args: argparse.Namespace) -> None:
     ):
         action = getattr(args, name)
         if action is not None:
-            action[0] = str(validate_evidence_route(Path(action[0])))
+            directory = validate_evidence_route(Path(action[0]))
+            validate_cargo_home_paths([directory], "execution")
+            action[0] = str(directory)
             validate_collection_roots()
     if args.restore_cleanup is not None:
         # Raw-root failures belong to restore_cleanup's recovery error handler.
         args.restore_cleanup[0] = str(validate_evidence_route(Path(args.restore_cleanup[0])))
+        validate_restore_cargo_home(Path(args.restore_cleanup[0]))
 
 
 def record_target_action(action: list[str]) -> int:

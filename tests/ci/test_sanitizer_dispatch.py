@@ -58,9 +58,12 @@ raise SystemExit(code)
 
 PYTHON = r"""
 import json, os, pathlib, sys
-if sys.argv[1:3] == ['-', 'cleanup']:
+arguments = sys.argv[1:]
+if arguments[:1] == ['-I']:
+    arguments = arguments[1:]
+if arguments[:2] == ['-', 'cleanup']:
     root = pathlib.Path(os.environ['FIXTURE_ROOT'])
-    target = json.loads(sys.argv[3])['target']
+    target = json.loads(arguments[2])['target']
     code = int(os.environ.get('SANITIZER_CLEANUP_EXIT', '0'))
     with (root / 'dispatch-calls.jsonl').open('a') as out:
         out.write(json.dumps({'kind': 'cleanup', 'args': ['fd-relative', '--', target],
@@ -450,7 +453,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                     fixture.install(
                         "python3",
                         "import sys\n"
-                        "if sys.argv[1:3] == ['-', 'cleanup']:\n"
+                        "if sys.argv[1:4] == ['-I', '-', 'cleanup']:\n"
                         "    raise SystemExit(81)\n" + PYTHON,
                     )
                     result = self.run_suite(

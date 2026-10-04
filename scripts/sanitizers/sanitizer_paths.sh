@@ -275,7 +275,7 @@ sanitizer_validate_pair() {
 }
 
 sanitizer_validate_cargo_flags() {
-	python3 - "$1" "${2:-}" <<'CARGO_FLAGS'
+	python3 -I - "$1" "${2:-}" <<'CARGO_FLAGS'
 import shlex
 import sys
 
@@ -294,7 +294,7 @@ CARGO_FLAGS
 }
 
 preflight_receipt() {
-	python3 - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" "${3:-}" <<'PREFLIGHT'
+	python3 -I - "$SANITIZER_ARTIFACT_DIR" "$1" "$2" "${3:-}" <<'PREFLIGHT'
 import json
 import os
 from pathlib import Path
@@ -373,7 +373,7 @@ sanitizer_initialize_evidence() {
 }
 
 sanitizer_target_binding() {
-	python3 - "$1" "$2" <<'SANITIZER_BINDING'
+	python3 -I - "$1" "$2" <<'SANITIZER_BINDING'
 import json
 import os
 import stat

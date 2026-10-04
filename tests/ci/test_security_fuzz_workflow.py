@@ -242,6 +242,59 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         shutil.copyfile(ROOT / "scripts/fuzz/manage_fuzz_corpus.py", destination)
         self.env.update(SECURITY_UPLOAD_STAGE="fuzz", SECURITY_UPLOAD_OUTCOME="failure")
 
+    def test_upload_packager_ignores_inherited_startup_before_collecting_evidence(self):
+        self.prepare_packager()
+        startup = self.root / "python-startup"
+        startup.mkdir()
+        marker = self.root / "startup-hook-called"
+        (startup / "sitecustomize.py").write_text(
+            "import os, pathlib\n"
+            f"pathlib.Path({str(marker)!r}).write_text('called')\n"
+            "os.environ['SECURITY_UPLOAD_OUTCOME'] = 'success'\n"
+        )
+        self.env["PYTHONPATH"] = str(startup)
+        raw = self.root / "fuzz/corpus/startup-control/seed"
+        raw.parent.mkdir(parents=True)
+        content = b"preserved owned workflow evidence\n"
+        raw.write_bytes(content)
+        result = self.execute("Package security upload")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(raw.read_bytes(), content)
+        output = self.root / "artifacts/security-upload"
+        manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(manifest["stage"], "fuzz")
+        self.assertEqual(manifest["stage_outcome"], "failure")
+        archive = output / "security-evidence.tar.gz"
+        self.assertEqual(
+            manifest["archive"]["sha256"], hashlib.sha256(archive.read_bytes()).hexdigest()
+        )
+        with tarfile.open(archive) as tar:
+            self.assertEqual(tar.extractfile(raw.relative_to(self.root).as_posix()).read(), content)
+
+    def test_upload_packager_ignores_inherited_startup_before_rejecting_unsafe_root(self):
+        self.prepare_packager()
+        startup = self.root / "python-startup"
+        startup.mkdir()
+        marker = self.root / "startup-hook-called"
+        (startup / "sitecustomize.py").write_text(
+            f"import pathlib\npathlib.Path({str(marker)!r}).write_text('called')\n"
+        )
+        self.env["PYTHONPATH"] = str(startup)
+        external = self.root / "external-owned-control"
+        external.mkdir()
+        sentinel = external / "sentinel"
+        sentinel.write_bytes(b"unchanged external control bytes\n")
+        source = self.root / "fuzz/corpus"
+        source.parent.mkdir()
+        source.symlink_to(external, target_is_directory=True)
+        result = self.execute("Package security upload")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertFalse((self.root / "artifacts/security-upload").exists())
+        self.assertTrue(source.is_symlink())
+        self.assertEqual(sentinel.read_bytes(), b"unchanged external control bytes\n")
+
     def test_upload_archives_complete_raw_recovery_history_sbom_and_literal_links(self):  # noqa: PLR0915 - complete evidence membership and link controls
         self.prepare_packager()
         sources = (

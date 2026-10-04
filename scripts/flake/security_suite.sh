@@ -1,4 +1,40 @@
 #!/usr/bin/env bash
+
+# Reject inherited functions before even `set`: they can shadow builtins or
+# promote an explicit nonfuzz selection into fuzz dispatch after admission.
+# Use only shell syntax until an explicit external interpreter path.
+security_function_path="${PATH-}"
+security_function_pending=1
+security_function_python=""
+while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
+	case "$security_function_path" in
+	*:*)
+		security_function_directory="${security_function_path%%:*}"
+		security_function_path="${security_function_path#*:}"
+		;;
+	*)
+		security_function_directory="$security_function_path"
+		security_function_pending=0
+		;;
+	esac
+	security_function_candidate="${security_function_directory:-.}/python3"
+	if [[ -f $security_function_candidate && -x $security_function_candidate ]]; then
+		security_function_python="$security_function_candidate"
+	fi
+done
+security_function_status=1
+if [[ -n $security_function_python ]]; then
+	# Bash cannot import slash-named functions. Inspect keys only, never bodies.
+	if "$security_function_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))'; then
+		security_function_status=0
+	fi
+fi
+if [[ $security_function_status -ne 0 ]]; then
+	security_function_error=""
+	# Expansion fails before dispatch even if exit, exec or : was imported.
+	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
+fi
+
 set -euo pipefail
 
 # The Nix app runs from the store, so reject inherited identity overrides here

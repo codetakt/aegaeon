@@ -88,6 +88,8 @@ jobs:
       - name: Run workflow inventory audit
         run: |
           nix develop .#ci --command node --experimental-strip-types \
+            scripts/check-workflow-inventory.ts
+          nix develop .#ci --command node --experimental-strip-types \
             tests/verified_core_wasm/workflow_inventory_policy_test.ts
 
       - name: Check release subjects against Cargo targets

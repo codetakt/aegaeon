@@ -1,5 +1,40 @@
 #!/usr/bin/env bash
 
+# Reject inherited functions before even `set`: they can shadow builtins or
+# promote an explicit nonfuzz selection into fuzz dispatch after admission.
+# Use only shell syntax until an explicit external interpreter path.
+security_function_path="${PATH-}"
+security_function_pending=1
+security_function_python=""
+while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
+	case "$security_function_path" in
+	*:*)
+		security_function_directory="${security_function_path%%:*}"
+		security_function_path="${security_function_path#*:}"
+		;;
+	*)
+		security_function_directory="$security_function_path"
+		security_function_pending=0
+		;;
+	esac
+	security_function_candidate="${security_function_directory:-.}/python3"
+	if [[ -f $security_function_candidate && -x $security_function_candidate ]]; then
+		security_function_python="$security_function_candidate"
+	fi
+done
+security_function_status=1
+if [[ -n $security_function_python ]]; then
+	# Bash cannot import slash-named functions. Inspect keys only, never bodies.
+	if "$security_function_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))'; then
+		security_function_status=0
+	fi
+fi
+if [[ $security_function_status -ne 0 ]]; then
+	security_function_error=""
+	# Expansion fails before dispatch even if exit, exec or : was imported.
+	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
+fi
+
 # Aggregated security checks (used by `nix run .#security-suite`).
 
 set -euo pipefail
@@ -99,7 +134,7 @@ if stage_enabled "fuzz"; then
 	# Resolve the physical script route before any override-influenced Git call
 	# or prior-receipt invalidation. Other stages retain their existing dispatch.
 	fuzz_guard_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
-	python3 "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
+	python3 -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
 fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -119,13 +154,13 @@ if stage_enabled "fuzz"; then
 	# Use the same suite-owned collection destinations for every helper action.
 	# An inherited helper-only route must not change the source exclusions midway.
 	export FUZZ_RUN_ARTIFACT_DIR="$fuzz_receipt_dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR"
-	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
+	python3 -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
 		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
 		exit 1
 	fi
-	python3 "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
+	python3 -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
 fi
 
 # Only create the already validated caller-owned Cargo home after invalidation.
@@ -175,7 +210,7 @@ reset_cargo_target_dir() {
 
 cleanup_fuzz_outputs() {
 	local cache
-	cache="$(python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
+	cache="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
 	# The terminal sentinel preserves even trailing newlines in a configured path.
 	[[ $cache == *$'\n.' ]] || return 1
 	cache="${cache%$'\n.'}"
@@ -381,7 +416,7 @@ run_fuzz_targets() (
 	# function in a conditional, which disables Bash's errexit inside functions.
 	local dir="$1" configuration internal watchdog host target rc record_result result=0
 	local fuzz_cmd=(cargo fuzz)
-	configuration="$(python3 scripts/fuzz/manage_fuzz_corpus.py --prepare-run "$dir")" || return 1
+	configuration="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --prepare-run "$dir")" || return 1
 	read -r internal watchdog host <<<"$configuration"
 	if ! command -v cargo >/dev/null 2>&1 ||
 		! command -v cargo-fuzz >/dev/null 2>&1 ||
@@ -420,12 +455,12 @@ run_fuzz_targets() (
 			fi
 		fi
 	fi
-	python3 scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
+	python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
 	local targets_text targets=()
-	targets_text="$(python3 -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
+	targets_text="$(python3 -I -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
 	read -r -a targets <<<"$targets_text"
 	local target_dir
-	target_dir="$(python3 scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2
+	target_dir="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2
 	[[ $target_dir == *$'\n.' ]] || return 2
 	target_dir="${target_dir%$'\n.'}"
 	for target in "${targets[@]}"; do
@@ -437,7 +472,7 @@ run_fuzz_targets() (
 		else
 			rc=$?
 		fi
-		if python3 scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" build "$rc"; then
+		if python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" build "$rc"; then
 			:
 		else
 			record_result=$?
@@ -453,7 +488,7 @@ run_fuzz_targets() (
 		else
 			rc=$?
 		fi
-		if python3 scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" run "$rc"; then
+		if python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" run "$rc"; then
 			:
 		else
 			record_result=$?
@@ -477,7 +512,7 @@ run_fuzz() {
 	cat "$dir/run.log" || result=1
 	# Collect corpus and crash archives even after setup, build or run failures.
 	# Collection writes its marker only after all evidence has been checked.
-	if ! python3 scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
+	if ! python3 -I scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
 		result=1
 	fi
 	return "$result"
@@ -633,7 +668,7 @@ run_fuzz_stage() {
 	fi
 	# A collected failure still needs its raw corpus and crashes for upload.
 	if [[ $result -eq 0 && -f "$dir/collection.ok" ]]; then
-		if recovery_run_id="$(python3 scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
+		if recovery_run_id="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
 			if cleanup_fuzz_outputs "$dir" "$recovery_run_id"; then
 				cleanup_result=0
 			else
@@ -641,13 +676,13 @@ run_fuzz_stage() {
 			fi
 			if [[ $cleanup_result -ne 0 ]]; then
 				result=1
-				python3 scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+				python3 -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
 					"$dir" "$recovery_run_id" "$cleanup_result" removal || result=1
-			elif python3 scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" 0; then
+			elif python3 -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" 0; then
 				: # Keep the bound recovery copies as execution evidence.
 			else
 				result=1
-				python3 scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+				python3 -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
 					"$dir" "$recovery_run_id" 0 receipt || result=1
 			fi
 		else
@@ -943,11 +978,11 @@ if stage_enabled "sanitizers"; then
 	prepare_sanitizer_attempt || exit $?
 	mkdir -p "$LOG_DIR" || exit $?
 	if [[ -n ${SANITIZER_SECURITY_LOG_FD:-} ]]; then
-		python3 "$ROOT/scripts/sanitizers/open_security_log.py" validate \
+		python3 -I "$ROOT/scripts/sanitizers/open_security_log.py" validate \
 			"$SECURITY_LOG_PATH" "$SANITIZER_SECURITY_LOG_FD" || exit $?
 		sanitizer_log_fd=$SANITIZER_SECURITY_LOG_FD
 	else
-		exec python3 "$ROOT/scripts/sanitizers/open_security_log.py" open-exec \
+		exec python3 -I "$ROOT/scripts/sanitizers/open_security_log.py" open-exec \
 			"$SECURITY_LOG_PATH" "${SECURITY_ENTRY_ARGS[@]}"
 	fi
 	SANITIZER_LOG_DESTINATION="/proc/self/fd/$sanitizer_log_fd"
