@@ -11,7 +11,7 @@
       "admission": "each scheduled module admitted against invocation digests and actual load/dependency records; full imported libraries/include order/checked files and solver identity retained; source module listing not proof of actual verifier closure"
     },
     "fuzz": {
-      "admission": "all seven exact targets nonempty build+actual libFuzzer run, budgets/toolchain/sanitizer/seed-corpus/crash/evidence binding; transitive local crate/build input omissions now held per 4174955567"
+      "admission": "all seven exact targets nonempty build+actual libFuzzer run, budgets/toolchain/sanitizer/seed-corpus/crash/evidence binding; complete transitive local Cargo dependencies, build scripts, native/generated inputs, headers, tools and configuration must be independently bound; omitted inputs hold admission"
     },
     "infrastructure_component": {
       "admission": "all required modules nonempty provider-schema, readonly lock init/validate, resource/runtime/template/support contracts; no cloud plan/apply or deployment claim"
