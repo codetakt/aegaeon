@@ -526,6 +526,10 @@ class PerfSourceManifestTests(unittest.TestCase):
             "https://issuer.example.test#fixture-secret",
             "https://issuer.example.test#",
             "https://issuer.example.test/\nfixture-secret",
+            "https://issuer.example.test/\u0085fixture-secret",
+            "https://issuer.example.test/\u009ffixture-secret",
+            "https://issuer.example.test/\u00a0fixture-secret",
+            "https://issuer.example.test/\u2028fixture-secret",
             "not-a-url",
         ]:
             for flag in ["--url", "--discovery-expected-issuer"]:
@@ -539,6 +543,8 @@ class PerfSourceManifestTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("fixture-secret", result.stdout + result.stderr)
                     self.assertFalse((self.evidence / "INVOCATION.json").exists())
+        for issuer in [False, True]:
+            PRODUCER.nonsecret_url("https://issuer.example.test/caf\u00e9", issuer=issuer)
 
     def test_report_all_config_fields_reject_mutation_even_with_recomputed_hash(self) -> None:
         sha, report, baseline = self.bound_invocation_report()
@@ -1134,6 +1140,13 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 binding["executable"] = str(forbidden.parent) + "/./" + forbidden.name
                 binding_path.chmod(0o600)
                 binding_path.write_text(json.dumps(binding))
+                binding_path.chmod(0o444)
+                self.assertEqual(PRODUCER.load_json(binding_path)[1], binding)
+                with self.assertRaisesRegex(
+                    PRODUCER.SourceError,
+                    "build executable overlaps an output or source evidence",
+                ):
+                    PRODUCER.verify_binary(self.root, self.evidence, sha, name)
                 result = self.invoke("binary", "--sha256", sha, "--name", name)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(forbidden.read_bytes(), raw)
