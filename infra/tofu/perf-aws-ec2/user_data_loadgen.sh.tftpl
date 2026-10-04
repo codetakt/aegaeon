@@ -3,14 +3,12 @@
 set -euo pipefail
 
 exec > >(tee /var/log/aegaeon-user-data.log | logger -t aegaeon-user-data -s 2>/dev/console) 2>&1
-set -x
 
 echo "[aegaeon-user-data] starting loadgen bootstrap at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-mkdir -p /etc/aegaeon
+install -d -m 0700 /etc/aegaeon
 mkdir -p /opt/aegaeon/results
-chown 1000:1000 /opt/aegaeon/results || true
-chmod 0755 /opt/aegaeon/results || true
+chmod 0700 /opt/aegaeon/results
 
 dnf_install() {
   local -a packages=("$@")
@@ -32,7 +30,11 @@ if ! command -v curl >/dev/null 2>&1; then
   dnf_install curl || dnf_install curl-minimal
 fi
 
-if ! command -v aws >/dev/null 2>&1; then
+if [[ ! -x /usr/bin/python3 ]]; then
+  dnf_install python3
+fi
+
+if [[ ! -x /usr/bin/aws ]]; then
   dnf_install awscli
 fi
 
@@ -47,17 +49,63 @@ if systemctl cat docker.service >/dev/null 2>&1; then
   systemctl enable --now docker.service
 fi
 
-cat >/etc/aegaeon/loadtest.env <<EOF
-SERVER_URL=${server_url}
-SERVER_IMAGE=${server_image}
-ARTIFACT_BUCKET=${artifact_bucket}
-ARTIFACT_PREFIX=${artifact_prefix}
-WORKERS=${workers}
-RPS=${rps}
-RUN_TIME=${run_time}
-WARMUP=${warmup}
-SCENARIO=${scenario}
+cat >/etc/aegaeon/loadtest.json <<'EOF'
+${jsonencode({SERVER_URL = server_url, SERVER_IMAGE = server_image, ARTIFACT_BUCKET = artifact_bucket, ARTIFACT_PREFIX = artifact_prefix, WORKERS = tostring(workers), RPS = tostring(rps), RUN_TIME = run_time, WARMUP = tostring(warmup), SCENARIO = scenario, LOADTEST_BIN = loadgen_entrypoint, artifact = {receipt_path = loadgen_artifact_receipt_path, receipt_sha256 = loadgen_artifact_receipt_sha256, source_manifest_path = loadgen_source_manifest_path, source_manifest_sha256 = loadgen_source_manifest_sha256, executable_sha256 = loadgen_executable_sha256}})}
 EOF
+chmod 0600 /etc/aegaeon/loadtest.json
+
+cat >/etc/aegaeon/delivery.json <<'EOF'
+${jsonencode({region = aws_region, issuer_url = issuer_url, client_secret_arn = client_secret_arn, client_secret_version = client_secret_version, metrics_secret_arn = metrics_secret_arn, metrics_secret_version = metrics_secret_version})}
+EOF
+chmod 0600 /etc/aegaeon/delivery.json
+
+install -d -m 0700 /usr/local/lib/aegaeon/runtime_delivery
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/__init__.py <<'PYTHON'
+${delivery_init~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/__init__.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/common.py <<'PYTHON'
+${delivery_common~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/common.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/credentials.py <<'PYTHON'
+${delivery_credentials~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/credentials.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/filesystem.py <<'PYTHON'
+${delivery_filesystem~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/filesystem.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/artifacts.py <<'PYTHON'
+${delivery_artifacts~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/artifacts.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/reports.py <<'PYTHON'
+${delivery_reports~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/reports.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/metrics.py <<'PYTHON'
+${delivery_metrics~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/metrics.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/orchestration.py <<'PYTHON'
+${delivery_orchestration~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/orchestration.py
+
+cat >/usr/local/bin/aegaeon-deliver-supplies <<'PYTHON'
+${delivery_helper~}
+PYTHON
+chmod 0755 /usr/local/bin/aegaeon-deliver-supplies
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies preflight-aws
 
 cat >/etc/aegaeon/registry.env <<EOF
 AWS_REGION=${aws_region}
@@ -170,41 +218,78 @@ cat >/usr/local/bin/aegaeon-run-loadtest <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -a
-source /etc/aegaeon/loadtest.env
-set +a
+umask 077
+CONFIG_FILE=/etc/aegaeon/loadtest.json
+if [[ "$#" -ne 0 ]]; then
+  if [[ "$#" -ne 2 || "$1" != "--config-file" ]]; then
+    echo "[perf] expected --config-file absolute-path" >&2
+    exit 2
+  fi
+  CONFIG_FILE="$2"
+fi
 
-export DOCKER_CONFIG="/run/aegaeon-loadtest-docker"
-mkdir -p "$${DOCKER_CONFIG}"
-chmod 0700 "$${DOCKER_CONFIG}"
+# One invocation owns configuration, supplies, mounts, collection and cleanup.
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies prepare-driver
+exec 9>/run/aegaeon-supplies/driver.lock
+flock -x 9
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(cat /proc/sys/kernel/random/uuid)"
 OUT_DIR="/opt/aegaeon/results/$${RUN_ID}"
-mkdir -p "$${OUT_DIR}"
-chown 1000:1000 "$${OUT_DIR}" || true
+mkdir -m 0700 "$${OUT_DIR}"
+SUPPLY_PARENT="/run/aegaeon-supplies/$${RUN_ID}"
+mkdir -m 0700 "$${SUPPLY_PARENT}"
+SUPPLY_DIR="$${SUPPLY_PARENT}/inputs"
+trap 'rm -rf -- "$${SUPPLY_PARENT}"' EXIT
+export DOCKER_CONFIG="$${SUPPLY_PARENT}/docker"
+mkdir -m 0700 "$${DOCKER_CONFIG}"
+
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies run-config "$CONFIG_FILE" "$OUT_DIR"
+while IFS='=' read -r name value; do
+  case "$name" in
+    SERVER_URL|SERVER_IMAGE|ARTIFACT_BUCKET|ARTIFACT_PREFIX|WORKERS|RPS|RUN_TIME|WARMUP|SCENARIO|LOADTEST_BIN|SOURCE_SHA256|EXECUTABLE_SHA256)
+      printf -v "$name" '%s' "$value"
+      ;;
+    *) echo "[perf] invalid validated configuration output" >&2; exit 1 ;;
+  esac
+done <"$${OUT_DIR}/validated-config.env"
+if [[ -e "$${OUT_DIR}/report.json" || -L "$${OUT_DIR}/report.json" ]]; then
+  echo "[perf] report path already exists" >&2
+  exit 1
+fi
 
 echo "[perf] waiting for server health at $${SERVER_URL%/}/health..."
+HEALTH_READY=0
 for _ in $(seq 1 120); do
   if curl -fsS "$${SERVER_URL%/}/health" >/dev/null 2>&1; then
+    HEALTH_READY=1
     break
   fi
   sleep 1
 done
+if [[ "$HEALTH_READY" != "1" ]]; then
+  echo "[perf] server health did not become ready" >&2
+  exit 1
+fi
 
 echo "[perf] pulling image $${SERVER_IMAGE}..."
 /usr/local/bin/aegaeon-docker-login "$${SERVER_IMAGE}"
 docker pull "$${SERVER_IMAGE}"
 
-SERVER_ENTRYPOINT="$(docker inspect "$${SERVER_IMAGE}" --format '{{ index .Config.Entrypoint 0 }}')"
-WORKSPACE_BIN_DIR="$(dirname "$${SERVER_ENTRYPOINT}")"
-LOADTEST_BIN="$${WORKSPACE_BIN_DIR}/aegaeon-loadtest"
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies client "$SUPPLY_DIR" "$SOURCE_SHA256"
 
 echo "[perf] running load test (scenario=$${SCENARIO}, workers=$${WORKERS}, rps=$${RPS}, run_time=$${RUN_TIME})..."
 set +e
 docker run --rm \
   --network host \
+  --user 0:0 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --env-file "$${SUPPLY_DIR}/client.env" \
   --entrypoint "$${LOADTEST_BIN}" \
   -v "$${OUT_DIR}:/results" \
+  --mount "type=bind,src=$${SUPPLY_DIR}/profile.json,dst=/run/aegaeon-inputs/profile.json,readonly" \
+  --mount "type=bind,src=$${SUPPLY_DIR}/session.txt,dst=/run/aegaeon-inputs/session.txt,readonly" \
+  --mount "type=bind,src=$${SUPPLY_DIR}/session-provenance.json,dst=/run/aegaeon-inputs/session-provenance.json,readonly" \
   "$${SERVER_IMAGE}" \
   --url "$${SERVER_URL}" \
   --workers "$${WORKERS}" \
@@ -217,36 +302,67 @@ docker run --rm \
 LOADTEST_EXIT_CODE="$?"
 set -e
 
-echo "$${LOADTEST_EXIT_CODE}" >"$${OUT_DIR}/exit_code.txt"
-
+COLLECTION_FAILED=0
+if ! printf '%s\n' "$${LOADTEST_EXIT_CODE}" >"$${OUT_DIR}/exit_code.txt"; then
+  COLLECTION_FAILED=1
+fi
 if [[ ! -f "$${OUT_DIR}/report.json" ]]; then
   echo "[perf] load test failed before producing report.json (exit_code=$${LOADTEST_EXIT_CODE})" >&2
-  if [[ -f "$${OUT_DIR}/loadtest.stderr.log" ]]; then
-    echo "[perf] loadtest.stderr.log (tail):" >&2
-    tail -n 200 "$${OUT_DIR}/loadtest.stderr.log" >&2 || true
-  fi
-  exit "$${LOADTEST_EXIT_CODE}"
+  COLLECTION_FAILED=1
 fi
+
+if ! /usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies verify-report "$OUT_DIR" "$SUPPLY_DIR" "$RUN_ID"; then
+  echo "[perf] report identity/configuration binding failed; preserving available outputs" >&2
+  COLLECTION_FAILED=1
+fi
+if [[ -f "$${SUPPLY_DIR}/client.version.json" ]]; then
+  cp "$${SUPPLY_DIR}/client.version.json" "$${OUT_DIR}/client.version.json" || COLLECTION_FAILED=1
+fi
+
+if ! /usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies metrics "$${OUT_DIR}"; then
+  echo "[perf] metrics collection failed; preserving available outputs" >&2
+  COLLECTION_FAILED=1
+fi
+
+for artifact in report.json loadtest.stdout.log loadtest.stderr.log exit_code.txt metrics-status.json run-receipt.json client.version.json driver-config.json artifact-receipt.json SOURCE-MANIFEST.json; do
+  if [[ ! -f "$${OUT_DIR}/$${artifact}" ]]; then
+    echo "[perf] required output missing: $${artifact}" >&2
+    COLLECTION_FAILED=1
+  fi
+done
 
 if [[ -n "$${ARTIFACT_BUCKET}" ]]; then
   DEST_PREFIX="s3://$${ARTIFACT_BUCKET}/$${ARTIFACT_PREFIX}$${RUN_ID}/"
   echo "[perf] uploading artifacts to $${DEST_PREFIX}..."
-  aws s3 cp "$${OUT_DIR}/report.json" "$${DEST_PREFIX}report.json"
-  aws s3 cp "$${OUT_DIR}/loadtest.stdout.log" "$${DEST_PREFIX}loadtest.stdout.log" || true
-  aws s3 cp "$${OUT_DIR}/loadtest.stderr.log" "$${DEST_PREFIX}loadtest.stderr.log" || true
-  aws s3 cp "$${OUT_DIR}/exit_code.txt" "$${DEST_PREFIX}exit_code.txt" || true
-
-  curl -fsS "$${SERVER_URL%/}/metrics" >"$${OUT_DIR}/server.metrics.prom" || true
+  for artifact in report.json loadtest.stdout.log loadtest.stderr.log exit_code.txt metrics-status.json run-receipt.json client.version.json driver-config.json artifact-receipt.json SOURCE-MANIFEST.json; do
+    if [[ -f "$${OUT_DIR}/$${artifact}" ]]; then
+      if ! aws s3 cp "$${OUT_DIR}/$${artifact}" "$${DEST_PREFIX}$${artifact}"; then
+        COLLECTION_FAILED=1
+      fi
+    fi
+  done
   if [[ -f "$${OUT_DIR}/server.metrics.prom" ]]; then
-    aws s3 cp "$${OUT_DIR}/server.metrics.prom" "$${DEST_PREFIX}server.metrics.prom" || true
+    if ! aws s3 cp "$${OUT_DIR}/server.metrics.prom" "$${DEST_PREFIX}server.metrics.prom"; then
+      COLLECTION_FAILED=1
+    fi
   fi
 fi
 
+echo "RUN_ID=$${RUN_ID}"
+echo "EXIT_CODE=$${LOADTEST_EXIT_CODE}"
+echo "OUT_DIR=$${OUT_DIR}"
+
 if [[ "$${LOADTEST_EXIT_CODE}" -ne 0 ]]; then
-  echo "[perf] NOTE: load test returned non-zero (exit_code=$${LOADTEST_EXIT_CODE}); report.json was produced and uploaded." >&2
+  echo "[perf] load test returned non-zero (exit_code=$${LOADTEST_EXIT_CODE}); available outputs were preserved" >&2
+  exit "$${LOADTEST_EXIT_CODE}"
+fi
+if [[ "$${COLLECTION_FAILED}" -ne 0 ]]; then
+  echo "[perf] required output collection incomplete; available outputs were preserved" >&2
+  exit 1
 fi
 
 echo "[perf] done; local results at $${OUT_DIR}"
+exit 0
 EOF
 
 chmod +x /usr/local/bin/aegaeon-run-loadtest

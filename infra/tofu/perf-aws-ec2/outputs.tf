@@ -34,7 +34,7 @@ output "artifact_prefix" {
 }
 
 output "server_url" {
-  description = "Server URL used by the load generator (private IP)."
+  description = "Canonical HTTPS issuer target used by the load generator."
   value       = local.loadtest_server_url
 }
 
@@ -56,4 +56,24 @@ output "ssm_server_session" {
 output "ssm_loadgen_session" {
   description = "Convenience command to open an SSM session to the load generator."
   value       = "aws ssm start-session --target ${aws_instance.loadgen.id}"
+}
+
+output "loadgen_image" {
+  description = "Pinned artifact used by the deployed load generator."
+  value       = var.loadgen_image
+}
+output "loadgen_entrypoint" {
+  description = "Explicit executable in the pinned load-generator artifact."
+  value       = var.loadgen_entrypoint
+}
+
+output "loadgen_artifact" {
+  description = "Nonsecret protected host build receipt/complete source manifest locations and independently adopted digests; externally supplied, never retrieved by Terraform."
+  value = {
+    receipt_path           = var.loadgen_artifact_receipt_path
+    receipt_sha256         = var.loadgen_artifact_receipt_sha256
+    source_manifest_path   = var.loadgen_source_manifest_path
+    source_manifest_sha256 = var.loadgen_source_manifest_sha256
+    executable_sha256      = var.loadgen_executable_sha256
+  }
 }

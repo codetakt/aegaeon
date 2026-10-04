@@ -71,19 +71,11 @@ variable "server_port" {
 
 variable "server_trusted_proxies" {
   type        = string
-  description = "Optional comma-separated CIDRs/IPs for AEGAEON_TRUSTED_PROXIES. When unset, defaults to the selected subnet CIDR + loopback so loadgen traffic is accepted when trusted-proxy enforcement is enabled."
-  default     = null
-
+  description = "Explicit trusted TLS terminator CIDRs; no automatic subnet trust."
   validation {
-    condition     = var.server_trusted_proxies == null ? true : length(trimspace(var.server_trusted_proxies)) > 0
-    error_message = "server_trusted_proxies must be null or a non-empty comma-separated list."
+    condition     = length(trimspace(var.server_trusted_proxies)) > 0 && alltrue([for cidr in split(",", var.server_trusted_proxies) : can(cidrhost(trimspace(cidr), 0))])
+    error_message = "Supply explicit comma-separated proxy CIDRs."
   }
-}
-
-variable "server_image" {
-  type        = string
-  description = "Container image reference used for both server and load test binaries."
-  default     = "ghcr.io/cariandrum22/aegaeon/aegaeon-server:latest"
 }
 
 variable "ghcr_username" {
@@ -145,12 +137,6 @@ variable "ghcr_auth_enabled" {
   default     = true
 }
 
-variable "expose_metrics_on_main" {
-  type        = bool
-  description = "Expose /metrics on the main server port (sets AEGAEON_EXPOSE_METRICS_ON_MAIN=1)."
-  default     = true
-}
-
 variable "artifact_bucket_name" {
   type        = string
   description = "Existing S3 bucket name for load test reports. If unset, a dedicated bucket is created."
@@ -193,7 +179,7 @@ variable "loadtest_workers" {
 
 variable "loadtest_rps" {
   type        = number
-  description = "Target requests per second."
+  description = "Target scenario invocations per second; HTTP attempts are accounted separately."
   default     = 200
 }
 
@@ -211,6 +197,200 @@ variable "loadtest_warmup" {
 
 variable "loadtest_scenario" {
   type        = string
-  description = "Scenario name for aegaeon-loadtest (mixed, auth-code, par, dpop, introspection, revocation, key-rotation)."
+  description = "Selection: smoke, auth-code, introspection, revocation, dpop, userinfo, discovery, jwks, par, mixed, policy-mixed or key-rotation (explicitly unsupported)."
   default     = "mixed"
+}
+
+variable "server_image" {
+  type        = string
+  description = "Exact externally tested OCI artifact digest."
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}$", var.server_image))
+    error_message = "A digest-pinned OCI reference is required."
+  }
+}
+
+variable "loadgen_image" {
+  type        = string
+  description = "Exact externally tested OCI artifact digest."
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}$", var.loadgen_image))
+    error_message = "A digest-pinned OCI reference is required."
+  }
+}
+
+variable "server_entrypoint" {
+  type        = string
+  description = "Explicit externally verified container executable path."
+  validation {
+    condition     = can(regex("^/[A-Za-z0-9._/-]+$", var.server_entrypoint)) && !contains(split("/", var.server_entrypoint), "..") && !contains(split("/", var.server_entrypoint), ".")
+    error_message = "An absolute executable path without traversal is required."
+  }
+}
+
+variable "loadgen_entrypoint" {
+  type        = string
+  description = "Explicit externally verified container executable path."
+  validation {
+    condition     = can(regex("^/[A-Za-z0-9._/-]+$", var.loadgen_entrypoint)) && !contains(split("/", var.loadgen_entrypoint), "..") && !contains(split("/", var.loadgen_entrypoint), ".")
+    error_message = "An absolute executable path without traversal is required."
+  }
+}
+
+variable "issuer_host" {
+  type        = string
+  description = "Canonical active management environment selector."
+  validation {
+    condition     = length(var.issuer_host) <= 253 && alltrue([for label in split(".", var.issuer_host) : can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", label))])
+    error_message = "A canonical DNS issuer host is required."
+  }
+}
+
+variable "issuer_url" {
+  type        = string
+  description = "Actual HTTPS issuer target through supplied TLS routing."
+  validation {
+    condition     = var.issuer_url == "https://${var.issuer_host}"
+    error_message = "The target must match the canonical HTTPS issuer origin."
+  }
+}
+
+variable "server_secret_arn" {
+  type        = string
+  description = "External Secrets Manager bundle ARN; values never managed by OpenTofu."
+  validation {
+    condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$", var.server_secret_arn))
+    error_message = "A full Secrets Manager ARN is required."
+  }
+}
+
+variable "server_secret_version" {
+  type        = string
+  description = "Exact supplier version ID for the bundle."
+  validation {
+    condition     = can(regex("^[A-Za-z0-9-]{32,64}$", var.server_secret_version))
+    error_message = "A pinned version ID is required; absent metrics must have no version."
+  }
+}
+
+variable "server_secret_kms_key_arns" {
+  type        = list(string)
+  description = "Actual customer-managed encryption key ARNs, if used."
+  default     = []
+  validation {
+    condition     = alltrue([for arn in var.server_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    error_message = "Supply actual KMS key ARNs."
+  }
+}
+
+variable "client_secret_arn" {
+  type        = string
+  description = "External Secrets Manager bundle ARN; values never managed by OpenTofu."
+  validation {
+    condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$", var.client_secret_arn))
+    error_message = "A full Secrets Manager ARN is required."
+  }
+}
+
+variable "client_secret_version" {
+  type        = string
+  description = "Exact supplier version ID for the bundle."
+  validation {
+    condition     = can(regex("^[A-Za-z0-9-]{32,64}$", var.client_secret_version))
+    error_message = "A pinned version ID is required; absent metrics must have no version."
+  }
+}
+
+variable "client_secret_kms_key_arns" {
+  type        = list(string)
+  description = "Actual customer-managed encryption key ARNs, if used."
+  default     = []
+  validation {
+    condition     = alltrue([for arn in var.client_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    error_message = "Supply actual KMS key ARNs."
+  }
+}
+
+variable "metrics_secret_arn" {
+  type        = string
+  description = "External Secrets Manager bundle ARN; values never managed by OpenTofu."
+  default     = ""
+  validation {
+    condition     = can(regex("^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$", var.metrics_secret_arn)) || var.metrics_secret_arn == ""
+    error_message = "A full Secrets Manager ARN is required."
+  }
+}
+
+variable "metrics_secret_version" {
+  type        = string
+  description = "Exact supplier version ID for the bundle."
+  default     = ""
+  validation {
+    condition     = (var.metrics_secret_arn != "" && can(regex("^[A-Za-z0-9-]{32,64}$", var.metrics_secret_version))) || (var.metrics_secret_version == "" && var.metrics_secret_arn == "")
+    error_message = "A pinned version ID is required; absent metrics must have no version."
+  }
+}
+
+variable "metrics_secret_kms_key_arns" {
+  type        = list(string)
+  description = "Actual customer-managed encryption key ARNs, if used."
+  default     = []
+  validation {
+    condition     = alltrue([for arn in var.metrics_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    error_message = "Supply actual KMS key ARNs."
+  }
+}
+
+variable "runtime_kms_key_arns" {
+  type        = list(string)
+  description = "Actual active runtime signing key ARNs; bootstrap identity stays external."
+  validation {
+    condition     = length(var.runtime_kms_key_arns) > 0 && alltrue([for arn in var.runtime_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    error_message = "Supply active runtime KMS key ARNs."
+  }
+}
+
+variable "loadgen_artifact_receipt_path" {
+  description = "Externally supplied trusted build artifact protected absolute host path; no Terraform retrieval or artifact creation."
+  type        = string
+  validation {
+    condition     = can(regex("^/[^[:cntrl:]]+$", var.loadgen_artifact_receipt_path))
+    error_message = "loadgen_artifact_receipt_path must be an absolute protected host path."
+  }
+}
+
+variable "loadgen_source_manifest_path" {
+  description = "Externally supplied trusted build artifact protected absolute host path; no Terraform retrieval or artifact creation."
+  type        = string
+  validation {
+    condition     = can(regex("^/[^[:cntrl:]]+$", var.loadgen_source_manifest_path))
+    error_message = "loadgen_source_manifest_path must be an absolute protected host path."
+  }
+}
+
+variable "loadgen_artifact_receipt_sha256" {
+  description = "Externally supplied trusted build artifact independently adopted raw SHA256 pin; no Terraform retrieval or artifact creation."
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.loadgen_artifact_receipt_sha256))
+    error_message = "loadgen_artifact_receipt_sha256 must be 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "loadgen_source_manifest_sha256" {
+  description = "Externally supplied trusted build artifact independently adopted raw SHA256 pin; no Terraform retrieval or artifact creation."
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.loadgen_source_manifest_sha256))
+    error_message = "loadgen_source_manifest_sha256 must be 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "loadgen_executable_sha256" {
+  description = "Externally supplied trusted build artifact independently adopted raw SHA256 pin; no Terraform retrieval or artifact creation."
+  type        = string
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.loadgen_executable_sha256))
+    error_message = "loadgen_executable_sha256 must be 64 lowercase hexadecimal characters."
+  }
 }

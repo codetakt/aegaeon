@@ -11,10 +11,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
 import validate_infrastructure as infra
+from infrastructure_support import common, delivery, orchestration, provider, runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -158,6 +160,11 @@ class InfrastructureTests(unittest.TestCase):
         with pytest.raises(ValueError, match="environment assignments"):
             infra.runtime_contract(self.module(), ROOT)
 
+    def test_untouched_staging_runtime_contract_passes(self):
+        report = infra.runtime_contract(self.module(), self.root)
+        self.assertEqual(report["status"], "passed")  # noqa: PT009 - active under -O
+        self.assertEqual(report["violations"], [])  # noqa: PT009 - active under -O
+
     def valid_staging(self):
         path = self.module() / "locals.tf"
         text = path.read_text()
@@ -201,29 +208,14 @@ class InfrastructureTests(unittest.TestCase):
             v["reason"] == "removed startup variable" for v in staging.value.report["violations"]
         )
         path = self.module("perf-aws-ec2") / "user_data_server.sh.tftpl"
-        legacy = (
-            "cat >/etc/aegaeon/server.env <<EOF\n"
-            "BASE_URL=http://server.example:8080\n"
-            "AEGAEON_EXPOSE_METRICS_ON_MAIN=1\n"
-            "AEGAEON_TRUSTED_PROXIES=127.0.0.1/32\nEOF"
+        path.write_text(
+            path.read_text()
+            + "\ncat >/etc/aegaeon/server.env <<EOF\nBASE_URL=http://server.example:8080\nEOF\n"
         )
-        template, replacements = re.subn(
-            r"(?m)^cat >/etc/aegaeon/server\.env <<EOF\n.*?\nEOF$",
-            lambda _: legacy,
-            path.read_text(),
-            flags=re.DOTALL,
-        )
-        assert replacements == 1
-        path.write_text(template)
-        with pytest.raises(infra.RuntimeContractError) as perf:
-            infra.runtime_contract(self.module("perf-aws-ec2"), self.root)
-        violations = perf.value.report["violations"]
-        assert len(violations) == 21
-        assert {v["name"] for v in violations if v["reason"] == "removed startup variable"} == {
-            "BASE_URL",
-            "AEGAEON_EXPOSE_METRICS_ON_MAIN",
-        }
-        assert all(set(v) == {"process", "name", "reason"} for v in violations)
+        report = infra.runtime_contract_report(self.module("perf-aws-ec2"), self.root)
+        assert report["status"] == "failed"
+        assert report["violations"][0]["process"] == "input parser"
+        assert all(set(v) == {"process", "name", "reason"} for v in report["violations"])
 
     def test_corrected_staging_and_separate_parity_profiles_bind_sources(self):
         self.valid_staging()
@@ -305,7 +297,7 @@ class InfrastructureTests(unittest.TestCase):
         path = module / "user_data_server.sh.tftpl"
         original = path.read_text()
         infra.perf_server_environment_wiring(original)
-        marker = "--env-file /etc/aegaeon/server.env "
+        marker = "--env-file /run/aegaeon-supplies/server.env "
         for replacement in [
             "",
             "--env-file /etc/aegaeon/unused.env ",
@@ -404,9 +396,9 @@ class InfrastructureTests(unittest.TestCase):
                 "sys.argv",
                 ["validate_infrastructure.py", "--root", str(self.root), "--output", str(output)],
             ),
-            patch.object(infra, "toolchain_provenance", side_effect=provenance),
-            patch.object(infra.shutil, "which", return_value=sys.executable),
-            patch.object(infra.subprocess, "run", side_effect=failure),
+            patch.object(orchestration, "toolchain_provenance", side_effect=provenance),
+            patch.object(shutil, "which", return_value=sys.executable),
+            patch.object(subprocess, "run", side_effect=failure),
         ):
             assert infra.main() == 1
         summary = json.loads((output / "summary.json").read_text())
@@ -449,15 +441,45 @@ class InfrastructureTests(unittest.TestCase):
             infra.check_templates(module, infra.Commands(self.root, {}), "tofu", "bash", self.root)
 
     def fixture_rendered_template(self, role, enabled=True, registry_enabled=True):
-        text = (self.module("perf-aws-ec2") / f"user_data_{role}.sh.tftpl").read_text()
+        text = infra.source_template(self.module("perf-aws-ec2"), role)
         # Bounded substitution fixture; no OpenTofu execution is implied.
         text = text.replace("$${", "@@SHELL_DOLLAR@@")
         values = infra.template_values()
         values.update(
-            expose_metrics_on_main=enabled,
             auto_run_loadtest=enabled,
             ghcr_auth_enabled=registry_enabled,
         )
+
+        sections, _ = infra.template_sections(text)
+        if "/etc/aegaeon/loadtest.json" in sections:
+            loadtest = {
+                "SERVER_URL": str(values["server_url"]),
+                "SERVER_IMAGE": str(values["server_image"]),
+                "ARTIFACT_BUCKET": str(values["artifact_bucket"]),
+                "ARTIFACT_PREFIX": str(values["artifact_prefix"]),
+                "WORKERS": str(values["workers"]),
+                "RPS": str(values["rps"]),
+                "RUN_TIME": str(values["run_time"]),
+                "WARMUP": str(values["warmup"]),
+                "SCENARIO": str(values["scenario"]),
+                "LOADTEST_BIN": str(values["loadgen_entrypoint"]),
+                "artifact": {
+                    "receipt_path": values["loadgen_artifact_receipt_path"],
+                    "receipt_sha256": values["loadgen_artifact_receipt_sha256"],
+                    "source_manifest_path": values["loadgen_source_manifest_path"],
+                    "source_manifest_sha256": values["loadgen_source_manifest_sha256"],
+                    "executable_sha256": values["loadgen_executable_sha256"],
+                },
+            }
+            text = text.replace(
+                sections["/etc/aegaeon/loadtest.json"].strip(), json.dumps(loadtest)
+            )
+
+        def json_config(match):
+            fields = dict(re.findall(r"(\w+)\s*=\s*(\w+)", match[1]))
+            return json.dumps({key: values[value] for key, value in fields.items()})
+
+        text = re.sub(r"\$\{jsonencode\(\{([^{}]+)\}\)\}", json_config, text)
         for name, value in values.items():
             text = text.replace("${" + name + "}", str(value))
             text = text.replace("${" + name + ' ? "1" : "0"}', "1" if value else "0")
@@ -606,19 +628,22 @@ class InfrastructureTests(unittest.TestCase):
         module = self.module("perf-aws-ec2")
         path = module / "user_data_loadgen.sh.tftpl"
         original = path.read_text()
-        assert "loadgen" in infra.process_inputs(module)
+        self.assertIn("loadgen", infra.process_inputs(module, self.root))  # noqa: PT009 - active under -O
         changes = [
-            ("source /etc/aegaeon/loadtest.env", "source /etc/aegaeon/unused.env"),
-            ("source /etc/aegaeon/loadtest.env", "# source /etc/aegaeon/loadtest.env"),
+            ('--env-file "$${SUPPLY_DIR}/client.env"', "--env-file /tmp/unused.env"),
+            ('--env-file "$${SUPPLY_DIR}/client.env"', '# --env-file "$${SUPPLY_DIR}/client.env"'),
             (
-                "source /etc/aegaeon/loadtest.env",
-                "source /etc/aegaeon/loadtest.env\nsource /etc/aegaeon/override.env",
+                '--env-file "$${SUPPLY_DIR}/client.env"',
+                '--env-file "$${SUPPLY_DIR}/client.env" --env-file /tmp/override.env',
             ),
             (
-                "source /etc/aegaeon/loadtest.env\nset +a",
-                "source /etc/aegaeon/loadtest.env\nset +a\nSERVER_URL=http://unused.example",
+                'done <"$${OUT_DIR}/validated-config.env"',
+                'done <"$${OUT_DIR}/validated-config.env"\nSERVER_URL=http://unused.example',
             ),
-            ("set -a\nsource /etc/aegaeon/loadtest.env", "source /etc/aegaeon/loadtest.env"),
+            (
+                '/usr/local/bin/aegaeon-deliver-supplies run-config "$CONFIG_FILE" "$OUT_DIR"',
+                '# /usr/local/bin/aegaeon-deliver-supplies run-config "$CONFIG_FILE" "$OUT_DIR"',
+            ),
             ('--url "$${SERVER_URL}"', '--url "$${OTHER_URL}"'),
             ("ExecStart=/usr/local/bin/aegaeon-run-loadtest", "ExecStart=/usr/local/bin/unused"),
             (
@@ -634,8 +659,8 @@ class InfrastructureTests(unittest.TestCase):
                 '/usr/local/bin/unused "$${SERVER_IMAGE}"',
             ),
             (
-                "source /etc/aegaeon/loadtest.env\nset +a",
-                "source /etc/aegaeon/loadtest.env\nset +a\nunset SERVER_URL",
+                'done <"$${OUT_DIR}/validated-config.env"',
+                'done <"$${OUT_DIR}/validated-config.env"\nunset SERVER_URL',
             ),
             (
                 "cat >/usr/local/bin/aegaeon-run-loadtest <<'EOF'",
@@ -649,12 +674,228 @@ class InfrastructureTests(unittest.TestCase):
                 self.subTest(change=new),
                 pytest.raises(ValueError, match=r"wiring|shape|scaffold"),
             ):
-                infra.process_inputs(module)
+                infra.process_inputs(module, self.root)
         path.write_text(original)
         report = infra.runtime_contract_report(module, self.root)
-        assert report["status"] == "failed"
-        assert len(report["violations"]) == 21
-        assert sum(v["reason"] == "missing required assignment" for v in report["violations"]) == 19
+        assert report["status"] == "passed"
+        assert report["violations"] == []
+        assert "live connectivity" in report["external_conditions"]
+
+    def test_performance_external_interface_passes_without_local_consumer_sources(self):
+        module = self.module("perf-aws-ec2")
+        self.assertFalse((self.root / "crates/loadtest").exists())  # noqa: PT009 - active under -O
+        report = infra.runtime_contract(module, self.root)
+        self.assertEqual(report["status"], "passed")  # noqa: PT009 - active under -O
+        interface = report["external_consumer"]
+        self.assertEqual(interface["static_delivery_wiring"], "passed")  # noqa: PT009 - active under -O
+        self.assertEqual(  # noqa: PT009 - active under -O
+            interface["external_artifact_interface_runtime"]["status"], "required_not_observed"
+        )
+        self.assertEqual(interface["artifact_receipt_version"], 1)  # noqa: PT009 - active under -O
+        self.assertEqual(interface["report"]["schema_version"], 2)  # noqa: PT009 - active under -O
+        self.assertEqual(  # noqa: PT009 - active under -O
+            interface["report"]["request_unit"], "scenario_invocations"
+        )
+        self.assertEqual(  # noqa: PT009 - active under -O
+            interface["report"]["memory_subject"], "load_generator_process"
+        )
+        self.assertEqual(  # noqa: PT009 - active under -O
+            interface["report"]["discovery_expected_issuer"], "required null for this driver"
+        )
+        self.assertEqual(  # noqa: PT009 - active under -O
+            set(interface["report"]["config_fields"]),
+            {
+                "target_url",
+                "discovery_expected_issuer",
+                "workers",
+                "duration",
+                "target_rps",
+                "warmup_duration",
+                "scenario",
+                "debug",
+            },
+        )
+        self.assertIn(  # noqa: PT009 - active under -O
+            "crates/loadtest/src/accounting.rs", interface["source_manifest"]["required_paths"]
+        )
+        for name in (
+            "README.md",
+            "user_data_server.sh.tftpl",
+            "user_data_loadgen.sh.tftpl",
+            "delivery_helper.py",
+            *("runtime_delivery/" + name for name in infra.DELIVERY_PACKAGE_SHA256),
+        ):
+            path = "infra/tofu/perf-aws-ec2/" + name
+            self.assertEqual(  # noqa: PT009 - active under -O
+                interface["interface_sources"][path], infra.digest(module / name)
+            )
+            self.assertEqual(  # noqa: PT009 - active under -O
+                report["runtime_sources"][path], interface["interface_sources"][path]
+            )
+
+    def test_performance_external_interface_rejects_missing_or_unknown_process_input(self):
+        template = infra.source_template(self.module("perf-aws-ec2"), "loadgen")
+        original = infra.PERFORMANCE_CLIENT_NAMES
+        changes = [tuple(name for name in original if name != missing) for missing in original]
+        changes.append((*original, "AEG_LOADTEST_EXTRA256"))
+        for names in changes:
+            with (
+                self.subTest(names=names),
+                patch.object(delivery, "PERFORMANCE_CLIENT_NAMES", names),
+                self.assertRaisesRegex(ValueError, "exact five process inputs"),  # noqa: PT027 - active under -O
+            ):
+                infra.performance_delivery_inputs(template, "client", root=self.root)
+
+    def test_performance_external_interface_rejects_changed_config_descriptor(self):
+        template = infra.source_template(self.module("perf-aws-ec2"), "loadgen")
+        original = infra.PERFORMANCE_CONFIG_NAMES
+        for names in (original[1:], (*original, "unknown256")):
+            with (
+                self.subTest(names=names),
+                patch.object(delivery, "PERFORMANCE_CONFIG_NAMES", names),
+                self.assertRaisesRegex(ValueError, "exact eight producer config fields"),  # noqa: PT027 - active under -O
+            ):
+                infra.performance_consumer_interface(template)
+
+    def test_performance_external_interface_rejects_altered_pinned_helper(self):
+        template = infra.source_template(self.module("perf-aws-ec2"), "loadgen")
+        changes = (
+            ('receipt["schema_version"] != 1', 'receipt["schema_version"] != 2'),
+            ("REPORT_SCHEMA_VERSION = 2", "REPORT_SCHEMA_VERSION = 1"),
+            ('"scenario_invocations"', '"HTTP_requests"'),
+            ('"load_generator_process"', '"server_process"'),
+            (
+                'parsed["discovery_expected_issuer"] is not None',
+                'parsed.get("discovery_expected_issuer") is not None',
+            ),
+            (
+                '"AEG_LOADTEST_SOURCE_SHA256": source_sha256',
+                '"AEG_LOADTEST_EXTRA256": source_sha256',
+            ),
+            ('"crates/loadtest/src/accounting.rs",', ""),
+            (
+                'hashlib.sha256(source_raw).hexdigest() != artifact["source_manifest_sha256"]',
+                "False",
+            ),
+        )
+        for before, after in changes:
+            self.assertIn(before, template)  # noqa: PT009 - active under -O
+            with (
+                self.subTest(change=after),
+                self.assertRaisesRegex(ValueError, "Changed installed delivery source"),  # noqa: PT027 - active under -O
+            ):
+                infra.performance_delivery_inputs(
+                    template.replace(before, after, 1), "client", root=self.root
+                )
+
+    def test_performance_copied_module_uses_explicit_root_and_rejects_wrong_redis_authority(self):
+        temporary = self.enterContext(tempfile.TemporaryDirectory())
+        scratch = Path(temporary)
+        copied = scratch / "perf-aws-ec2"
+        shutil.copytree(self.module("perf-aws-ec2"), copied)
+        self.assertEqual(  # noqa: PT009 - active under -O
+            infra.runtime_contract(copied, self.root)["status"], "passed"
+        )
+        wrong_root = scratch / "wrong-root"
+        shutil.copytree(self.root, wrong_root)
+        inventory = (
+            wrong_root / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
+        )
+        inventory.write_text(
+            inventory.read_text().replace(infra.PERFORMANCE_REDIS_NAMES[0], "UNUSED_REDIS_URL")
+        )
+        with self.assertRaisesRegex(ValueError, "Runtime supply Redis authority changed"):  # noqa: PT027 - active under -O
+            infra.process_inputs(copied, wrong_root)
+        report = infra.runtime_contract_report(copied, wrong_root)
+        self.assertEqual(report["status"], "failed")  # noqa: PT009 - active under -O
+        self.assertIn(  # noqa: PT009 - active under -O
+            "Changed bootstrap/shared-store inventory requires review",
+            report["violations"][0]["reason"],
+        )
+
+    def test_performance_validate_module_scratch_copy_preserves_actual_root(self):
+        output = self.root / "perf-validation"
+        with (
+            patch.object(infra.Commands, "run", return_value="{}"),
+            patch.object(
+                orchestration, "initialize_providers", return_value={"providers": {"aws": "6.66.0"}}
+            ),
+            patch.object(orchestration, "validate_schema", return_value={"valid": True}),
+            patch.object(orchestration, "check_templates", return_value=[]),
+            patch.object(orchestration, "check_support", return_value={}),
+        ):
+            report = infra.validate_module(
+                self.module("perf-aws-ec2"),
+                self.root,
+                output,
+                {"tofu": "fixture-tofu", "bash": "fixture-bash"},
+            )
+        self.assertEqual(report["status"], "passed")  # noqa: PT009 - active under -O
+        self.assertEqual(report["runtime_contract"]["status"], "passed")  # noqa: PT009 - active under -O
+
+    def test_loadgen_process_maps_exact_client_environment_and_validated_driver(self):
+        expected = {
+            "AEG_LOADTEST_CLIENT_SECRET",
+            "AEG_LOADTEST_PROFILE_MANIFEST",
+            "AEG_LOADTEST_SESSION_FILE",
+            "AEG_LOADTEST_SESSION_PROVENANCE",
+            "AEG_LOADTEST_SOURCE_SHA256",
+        }
+        module = self.module("perf-aws-ec2")
+        inputs = infra.process_inputs(module, self.root)
+        self.assertEqual(set(inputs["loadgen"]), expected)  # noqa: PT009 - active under -O
+        permitted, mandatory = infra.process_profiles(self.root)["loadgen"]
+        self.assertEqual(permitted, expected)  # noqa: PT009 - active under -O
+        self.assertEqual(mandatory, expected)  # noqa: PT009 - active under -O
+        report = infra.runtime_contract(module, self.root)
+        self.assertEqual(report["status"], "passed")  # noqa: PT009 - active under -O
+        self.assertEqual(set(report["processes"]["loadgen"]), expected)  # noqa: PT009 - active under -O
+
+    def test_loadgen_process_missing_each_client_input_is_rejected(self):
+        module = self.module("perf-aws-ec2")
+        baseline = infra.process_inputs(module, self.root)
+        for name in (
+            "AEG_LOADTEST_CLIENT_SECRET",
+            "AEG_LOADTEST_PROFILE_MANIFEST",
+            "AEG_LOADTEST_SESSION_FILE",
+            "AEG_LOADTEST_SESSION_PROVENANCE",
+            "AEG_LOADTEST_SOURCE_SHA256",
+        ):
+            with self.subTest(missing=name):
+                inputs = {process: dict(values) for process, values in baseline.items()}
+                inputs["loadgen"].pop(name)
+                with (
+                    mock.patch.object(runtime, "process_inputs", return_value=inputs),
+                    self.assertRaises(infra.RuntimeContractError) as failure,  # noqa: PT027 - active under -O
+                ):
+                    infra.runtime_contract(module, self.root)
+                self.assertEqual(  # noqa: PT009 - active under -O
+                    failure.exception.report["violations"],
+                    [{"process": "loadgen", "name": name, "reason": "missing required assignment"}],
+                )
+
+    def test_loadgen_process_rejects_extra_client_and_driver_environment_names(self):
+        module = self.module("perf-aws-ec2")
+        baseline = infra.process_inputs(module, self.root)
+        for name in ("SERVER_URL", "AEG_LOADTEST_EXTRA256"):
+            with self.subTest(extra=name):
+                inputs = {process: dict(values) for process, values in baseline.items()}
+                inputs["loadgen"][name] = "owned fixture value"
+                with (
+                    mock.patch.object(runtime, "process_inputs", return_value=inputs),
+                    self.assertRaises(infra.RuntimeContractError) as failure,  # noqa: PT027 - active under -O
+                ):
+                    infra.runtime_contract(module, self.root)
+                self.assertEqual(  # noqa: PT009 - active under -O
+                    failure.exception.report["violations"],
+                    [
+                        {
+                            "process": "loadgen",
+                            "name": name,
+                            "reason": "unknown or forbidden variable for this process",
+                        }
+                    ],
+                )
 
     def test_source_and_rendered_dollar_escapes_remain_distinct(self):
         for role in ("server", "loadgen"):
@@ -688,7 +929,7 @@ class InfrastructureTests(unittest.TestCase):
                 self.subTest(source_role=role),
                 pytest.raises(ValueError, match="reviewed active process/service shape"),
             ):
-                infra.process_inputs(module)
+                infra.process_inputs(module, self.root)
             path.write_text(original)
 
     def test_active_registry_pipelines_and_rendered_inputs_are_bound(self):
@@ -754,7 +995,10 @@ class InfrastructureTests(unittest.TestCase):
                 "    extra = var.loadtest_warmup\n    warmup = var.loadtest_warmup",
             ),
             ("user_data_server.sh.tftpl", "user_data_loadgen.sh.tftpl"),
-            ("  user_data = templatefile", "  user_data_base64 = templatefile"),
+            (
+                "  user_data_base64 = base64gzip(templatefile",
+                "  user_data = base64gzip(templatefile",
+            ),
             ('ghcr_username == null ? ""', 'ghcr_username == null ? " "'),
         ):
             assert before in original
@@ -798,36 +1042,65 @@ class InfrastructureTests(unittest.TestCase):
 
     def test_all_rendered_loadtest_inputs_are_bound(self):
         rendered = self.fixture_rendered_template("loadgen")
-        expected = infra.heredoc_environment(rendered, "loadtest")
+        raw = infra.template_sections(rendered)[0]["/etc/aegaeon/loadtest.json"].strip()
+        expected = json.loads(raw)
         infra.rendered_contract(rendered, "loadgen", enabled=True)
-        for name, value in expected.items():
-            for replacement in (
-                f"{name}=unreviewed",
-                f"# {name}={value}",
-                f"{name}={value}\nEXTRA=1",
-            ):
-                with self.subTest(name=name, replacement=replacement):
-                    changed = rendered.replace(f"{name}={value}\n", replacement + "\n", 1)
+        for name in expected:
+            for change in ("replace", "remove", "extra"):
+                with self.subTest(name=name, change=change):
+                    changed = json.loads(raw)
+                    if change == "remove":
+                        del changed[name]
+                    elif change == "extra":
+                        changed["EXTRA"] = "unreviewed"
+                    else:
+                        changed[name] = "unreviewed"
                     with pytest.raises(ValueError, match="bound input"):
-                        infra.rendered_contract(changed, "loadgen", enabled=True)
-        swapped = rendered.replace("WORKERS=2\nRPS=10\n", "WORKERS=10\nRPS=2\n")
+                        infra.rendered_contract(
+                            rendered.replace(raw, json.dumps(changed)), "loadgen", enabled=True
+                        )
+        for name in expected["artifact"]:
+            changed = json.loads(raw)
+            changed["artifact"][name] = "unreviewed"
+            with self.subTest(artifact=name), pytest.raises(ValueError, match="bound input"):
+                infra.rendered_contract(
+                    rendered.replace(raw, json.dumps(changed)), "loadgen", enabled=True
+                )
+        changed = json.loads(raw)
+        changed["WORKERS"], changed["RPS"] = changed["RPS"], changed["WORKERS"]
         with pytest.raises(ValueError, match="bound input"):
-            infra.rendered_contract(swapped, "loadgen", enabled=True)
+            infra.rendered_contract(
+                rendered.replace(raw, json.dumps(changed)), "loadgen", enabled=True
+            )
+        duplicate = raw[:-1] + ',"WORKERS":"2"}'
+        with pytest.raises(ValueError, match="bound input"):
+            infra.rendered_contract(rendered.replace(raw, duplicate), "loadgen", enabled=True)
 
-    def test_rendered_server_environment_matches_metrics_state(self):
+    def test_rendered_server_delivery_environment_complete_equality(self):
         for enabled in (False, True):
             rendered = self.fixture_rendered_template("server", enabled=enabled)
+            raw = infra.template_sections(rendered)[0]["/etc/aegaeon/delivery.json"].strip()
+            expected = json.loads(raw)
             infra.rendered_contract(rendered, "server", enabled=enabled)
-            original = "AEGAEON_EXPOSE_METRICS_ON_MAIN=" + ("1" if enabled else "0")
-            for replacement in (
-                "AEGAEON_EXPOSE_METRICS_ON_MAIN=" + ("0" if enabled else "1"),
-                "# " + original,
-                original + "\nEXTRA=1",
-            ):
-                with self.subTest(enabled=enabled, replacement=replacement):
-                    changed = rendered.replace(original + "\n", replacement + "\n", 1)
-                    with pytest.raises(ValueError, match="bound input"):
-                        infra.rendered_contract(changed, "server", enabled=enabled)
+            for name in expected:
+                for change in ("replace", "remove", "extra"):
+                    with self.subTest(enabled=enabled, name=name, change=change):
+                        changed = dict(expected)
+                        if change == "remove":
+                            del changed[name]
+                        elif change == "extra":
+                            changed["BASE_URL"] = "http://unreviewed.invalid"
+                        else:
+                            changed[name] = "unreviewed"
+                        with pytest.raises(ValueError, match=r"delivery inputs|bound input"):
+                            infra.rendered_contract(
+                                rendered.replace(raw, json.dumps(changed)),
+                                "server",
+                                enabled=enabled,
+                            )
+            duplicate = raw[:-1] + ',"trusted_proxies":"127.0.0.1/32"}'
+            with pytest.raises(ValueError, match="bound input"):
+                infra.rendered_contract(rendered.replace(raw, duplicate), "server", enabled=enabled)
 
     def test_rendered_contract_missing_secret_reference_fails(self):
         rendered = self.fixture_rendered_template("server")
@@ -926,8 +1199,10 @@ class InfrastructureTests(unittest.TestCase):
                     ],
                 ),
                 patch.object(shutil, "which", return_value=sys.executable),
-                patch.object(infra, "toolchain_provenance", return_value={"toolchain_sources": {}}),
-                patch.object(infra, "installed_providers", return_value={"fixture": "hash"}),
+                patch.object(
+                    orchestration, "toolchain_provenance", return_value={"toolchain_sources": {}}
+                ),
+                patch.object(provider, "installed_providers", return_value={"fixture": "hash"}),
                 patch.object(infra.Commands, "run", side_effect=fake_run),
             ):
                 assert infra.main() == 1
@@ -948,6 +1223,156 @@ class InfrastructureTests(unittest.TestCase):
             assert infra.main() == 1
         result = json.loads((output / "summary.json").read_text())
         assert "tools unavailable" in result["error"]
+
+    def test_fixed_support_closure_selects_all_modules_and_rejects_unknown_package_paths(self):
+        expected = [self.module(name) for name in sorted(infra.MODULES)]
+        for name in common.VALIDATOR_SUPPORT_PATHS:
+            self.assertEqual(infra.select_modules(self.root, [name]), expected)  # noqa: PT009
+        for name in (
+            "scripts/ci/infrastructure_support/unknown.py",
+            "scripts/ci/infrastructure_support/nested/common.py",
+        ):
+            with self.assertRaises(ValueError):  # noqa: PT027
+                infra.select_modules(self.root, [name])
+        self.assertEqual(  # noqa: PT009
+            infra.select_modules(self.root, ["infra/tofu/perf-aws-ec2/delivery_helper.py"]),
+            [self.module("perf-aws-ec2")],
+        )
+
+    def test_shared_helper_is_the_only_admitted_python_module_input(self):
+        module = self.module("perf-aws-ec2")
+        helper = module / "delivery_helper.py"
+        self.assertIn(helper, infra.module_inputs(module))  # noqa: PT009
+        (module / "other.py").write_text("pass\n")
+        with self.assertRaisesRegex(ValueError, "Unexpected input"):  # noqa: PT027
+            infra.module_inputs(module)
+        (module / "other.py").unlink()
+        staging_helper = self.module() / "delivery_helper.py"
+        staging_helper.write_bytes(helper.read_bytes())
+        with self.assertRaisesRegex(ValueError, "Unexpected input"):  # noqa: PT027
+            infra.module_inputs(self.module())
+
+    def test_shared_helper_and_both_template_sources_are_bound_exactly(self):
+        module = self.module("perf-aws-ec2")
+        helper = module / "delivery_helper.py"
+        original = helper.read_bytes()
+        self.assertEqual(infra.digest(helper), infra.DELIVERY_BODY_SHA256)  # noqa: PT009
+        for role in ("server", "loadgen"):
+            sections, _ = infra.template_sections(infra.source_template(module, role))
+            self.assertEqual(  # noqa: PT009
+                sections["/usr/local/bin/aegaeon-deliver-supplies"].encode(), original
+            )
+        helper.write_bytes(original.replace(b"package_sources", b"package_sourcex", 1))
+        for role in ("server", "loadgen"):
+            with self.assertRaisesRegex(ValueError, "Changed strict runtime supply executable"):  # noqa: PT027
+                infra.source_template(module, role)
+        helper.unlink()
+        helper.symlink_to(ROOT / "infra/tofu/perf-aws-ec2/delivery_helper.py")
+        with self.assertRaisesRegex(ValueError, "Missing shared delivery helper"):  # noqa: PT027
+            infra.source_template(module, "server")
+        with self.assertRaisesRegex(ValueError, "Symlink"):  # noqa: PT027
+            infra.module_inputs(module)
+
+    def test_shared_helper_interpolation_and_fixed_file_map_reject_drift(self):
+        module = self.module("perf-aws-ec2")
+        for role in ("server", "loadgen"):
+            template = module / f"user_data_{role}.sh.tftpl"
+            original = template.read_text()
+            for replacement in (
+                "${delivery_helper}",
+                "${other_helper~}",
+                "${delivery_helper~}extra",
+            ):
+                template.write_text(original.replace("${delivery_helper~}", replacement, 1))
+                with self.assertRaisesRegex(ValueError, "template binding"):  # noqa: PT027
+                    infra.source_template(module, role)
+            template.write_text(original + "\n# ${delivery_helper}\n")
+            with self.assertRaisesRegex(ValueError, "Duplicate guest source interpolation"):  # noqa: PT027
+                infra.source_template(module, role)
+            template.write_text(original)
+        instances = module / "instances.tf"
+        original = instances.read_text()
+        for replacement in ('file("${path.module}/other.py")', "var.delivery_helper"):
+            instances.write_text(
+                original.replace('file("${path.module}/delivery_helper.py")', replacement, 1)
+            )
+            with self.assertRaisesRegex(ValueError, "templatefile argument source or inventory"):  # noqa: PT027
+                infra.perf_template_bindings(module)
+        instances.write_text(original)
+
+    def test_all_fixed_validator_sources_are_reported_and_drift_fails(self):
+        sources = common.validator_sources(self.root)
+        self.assertEqual(  # noqa: PT009
+            set(sources), {"scripts/ci/validate_infrastructure.py", *common.VALIDATOR_SUPPORT_PATHS}
+        )
+        module = self.module("perf-aws-ec2")
+        report = infra.runtime_contract(module, self.root)
+        for name, digest in sources.items():
+            self.assertEqual(report["runtime_sources"][name], digest)  # noqa: PT009
+            self.assertEqual(report["external_consumer"]["interface_sources"][name], digest)  # noqa: PT009
+        changed = self.root / common.VALIDATOR_SUPPORT_PATHS[-1]
+        changed.write_bytes(changed.read_bytes() + b"# changed\n")
+        with self.assertRaisesRegex(ValueError, "differs from executing code"):  # noqa: PT027
+            common.validator_sources(self.root)
+        self.assertEqual(infra.runtime_contract_report(module, self.root)["status"], "failed")  # noqa: PT009
+
+    def test_main_default_root_and_runner_digest_remain_public_cli(self):
+        output = self.root / "fixed-cli"
+        paths = {}
+
+        def selection(root, selected):
+            paths["root"] = root
+            return []
+
+        with (
+            patch("sys.argv", ["validate_infrastructure.py", "--output", str(output)]),
+            patch.object(shutil, "which", return_value=sys.executable),
+            patch.object(orchestration, "select_modules", side_effect=selection),
+            patch.object(
+                orchestration, "toolchain_provenance", return_value={"toolchain_sources": {}}
+            ),
+        ):
+            self.assertEqual(infra.main(), 0)  # noqa: PT009
+        summary = json.loads((output / "summary.json").read_text())
+        self.assertEqual(paths["root"], ROOT)  # noqa: PT009
+        self.assertEqual(  # noqa: PT009
+            summary["runner_sha256"], infra.digest(ROOT / "scripts/ci/validate_infrastructure.py")
+        )
+
+    def test_toolchain_provenance_includes_complete_fixed_validator_closure(self):
+        output = self.root / "toolchain-closure"
+        output.mkdir()
+        with patch.object(infra.Commands, "run", return_value="[]"):
+            report = infra.toolchain_provenance(ROOT, output, {"nix": sys.executable})
+        for name, expected in common.validator_sources(ROOT).items():
+            self.assertEqual(report["toolchain_sources"][name], expected)  # noqa: PT009
+
+    def test_physical_sibling_loader_ignores_hostile_cwd_and_pythonpath(self):
+        shadow = self.root / "infrastructure_support"
+        shadow.mkdir()
+        (shadow / "__init__.py").write_text('raise RuntimeError("ambient package loaded")\n')
+        argv = [sys.executable, str(ROOT / "scripts/ci/validate_infrastructure.py"), "--help"]
+        for isolated in (False, True):
+            result = subprocess.run(  # noqa: S603 - fixed local CLI help, no native validation
+                [argv[0], *(["-I"] if isolated else []), *argv[1:]],
+                cwd=self.root,
+                env={**os.environ, "PYTHONPATH": str(self.root), "PYTHONDONTWRITEBYTECODE": "1"},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
+            self.assertIn("--paths-json", result.stdout)  # noqa: PT009
+
+    def test_shared_helper_rejects_raw_newline_drift(self):
+        module = self.module("perf-aws-ec2")
+        helper = module / "delivery_helper.py"
+        original = helper.read_bytes()
+        for changed in (original.replace(b"\n", b"\r\n"), original.rstrip(b"\n")):
+            helper.write_bytes(changed)
+            for role in ("server", "loadgen"):
+                with self.assertRaisesRegex(ValueError, "Changed strict runtime supply executable"):  # noqa: PT027
+                    infra.source_template(module, role)
 
 
 if __name__ == "__main__":

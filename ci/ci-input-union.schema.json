@@ -1,0 +1,375 @@
+{
+  "$id": "urn:aegaeon:ci-input-union:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Protected transport structure; exact source, Git-object, context, inventory and digest relations must also pass the protected verifier.",
+  "properties": {
+    "base": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "000000",
+                  "100644",
+                  "100755",
+                  "120000",
+                  "160000"
+                ]
+              },
+              "object_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "present": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "symlink_target_base64": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tree": {
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "absent",
+                  "regular",
+                  "symlink",
+                  "gitlink"
+                ]
+              }
+            },
+            "required": [
+              "present",
+              "tree",
+              "mode",
+              "type",
+              "object_id",
+              "sha256",
+              "symlink_target_base64"
+            ],
+            "type": "object"
+          },
+          "decoded_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "000000",
+                  "100644",
+                  "100755",
+                  "120000",
+                  "160000"
+                ]
+              },
+              "object_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "present": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "symlink_target_base64": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tree": {
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "absent",
+                  "regular",
+                  "symlink",
+                  "gitlink"
+                ]
+              }
+            },
+            "required": [
+              "present",
+              "tree",
+              "mode",
+              "type",
+              "object_id",
+              "sha256",
+              "symlink_target_base64"
+            ],
+            "type": "object"
+          },
+          "protected_expected_ids": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "protected_producers": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "raw_path_base64": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "tested": {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "000000",
+                  "100644",
+                  "100755",
+                  "120000",
+                  "160000"
+                ]
+              },
+              "object_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "present": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "symlink_target_base64": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tree": {
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "absent",
+                  "regular",
+                  "symlink",
+                  "gitlink"
+                ]
+              }
+            },
+            "required": [
+              "present",
+              "tree",
+              "mode",
+              "type",
+              "object_id",
+              "sha256",
+              "symlink_target_base64"
+            ],
+            "type": "object"
+          },
+          "unresolved": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "raw_path_base64",
+          "decoded_path",
+          "base",
+          "head",
+          "tested",
+          "protected_producers",
+          "protected_expected_ids",
+          "unresolved"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "expected_inventory_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "external_inputs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source_authority_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "unresolved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "source_authority_sha256",
+          "artifact_sha256",
+          "scope",
+          "unresolved"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "fallback": {
+      "type": "string"
+    },
+    "protected_graph_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "raw_diff": {
+      "additionalProperties": false,
+      "properties": {
+        "merge_base": {
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "type": "string"
+        },
+        "raw_base64": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "merge_base",
+        "raw_base64",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "source_head": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "test_sha": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "test_tree": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "version",
+    "base",
+    "source_head",
+    "test_sha",
+    "test_tree",
+    "protected_graph_sha256",
+    "expected_inventory_sha256",
+    "entries",
+    "external_inputs",
+    "fallback",
+    "raw_diff"
+  ],
+  "title": "protected input union v1",
+  "type": "object"
+}

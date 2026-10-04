@@ -33,7 +33,6 @@ if [[ -z $AWS_REGION ]]; then
 fi
 
 TOFU_DIR="${TOFU_DIR:-infra/tofu/perf-aws-ec2}"
-SERVER_IMAGE="${SERVER_IMAGE:-ghcr.io/cariandrum22/aegaeon/aegaeon-server:latest}"
 WORKERS="${WORKERS:-50}"
 RUN_TIME="${RUN_TIME:-60s}"
 WARMUP="${WARMUP:-10}"
@@ -47,6 +46,9 @@ mkdir -p "$OUT_ROOT"
 tofu_out_json="$(AWS_PROFILE=$AWS_PROFILE tofu -chdir="$TOFU_DIR" output -json)"
 server_instance_id="$(jq -r '.server_instance_id.value' <<<"$tofu_out_json")"
 loadgen_instance_id="$(jq -r '.loadgen_instance_id.value' <<<"$tofu_out_json")"
+SERVER_IMAGE="$(jq -r '.loadgen_image.value' <<<"$tofu_out_json")"
+LOADTEST_BIN="$(jq -r '.loadgen_entrypoint.value' <<<"$tofu_out_json")"
+artifact_config="$(jq -c '.loadgen_artifact.value' <<<"$tofu_out_json")"
 server_url="$(jq -r '.server_url.value' <<<"$tofu_out_json")"
 artifact_bucket="$(jq -r '.artifact_bucket_name.value' <<<"$tofu_out_json")"
 artifact_prefix="$(jq -r '.artifact_prefix.value' <<<"$tofu_out_json")"
@@ -63,7 +65,8 @@ tofu_dir=${TOFU_DIR}
 server_instance_id=${server_instance_id}
 loadgen_instance_id=${loadgen_instance_id}
 server_url=${server_url}
-server_image=${SERVER_IMAGE}
+loadgen_image=${SERVER_IMAGE}
+loadgen_entrypoint=${LOADTEST_BIN}
 artifact_bucket=${artifact_bucket}
 artifact_prefix=${artifact_prefix}
 workers=${WORKERS}
@@ -80,7 +83,7 @@ AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ec2 describe-instances \
 
 SUMMARY_CSV="$OUT_ROOT/summary.csv"
 cat >"$SUMMARY_CSV" <<'CSV'
-rps_target,workers,run_time,warmup,scenario,run_id,exit_code,total_requests,successful_requests,failed_requests,throughput,attempted_throughput,error_rate,p99_latency_ms,max_latency_ms,peak_memory_mb,server_cpu_ns,server_cpu_s,server_mem_current_bytes,server_mem_peak_bytes,token_post_count,authorize_get_count,introspect_post_count,revoke_post_count,par_post_count
+rps_target,workers,run_time,warmup,scenario,run_id,exit_code,total_requests,successful_requests,failed_requests,throughput,attempted_throughput,error_rate,p99_latency_ms,max_latency_ms,peak_memory_mb,server_cpu_ns,server_cpu_s,server_mem_current_bytes,server_mem_peak_bytes,token_post_count,authorize_get_count,introspect_post_count,revoke_post_count,par_post_count,metrics_status
 CSV
 
 ssm_run() {
@@ -134,40 +137,26 @@ for rps in "${rps_values[@]}"; do
 
 	ssm_run "$server_instance_id" "aegaeon: restart server for sweep rps=${rps}" "$restart_server_script" >/dev/null
 
+	# JSON/base64 carries values as data; no remote shell interpolation of user values.
+	config_payload="$(
+		python3 - "$server_url" "$SERVER_IMAGE" "$artifact_bucket" "$artifact_prefix" "$WORKERS" "$rps" "$RUN_TIME" "$WARMUP" "$SCENARIO" "$LOADTEST_BIN" "$artifact_config" <<'PY'
+import base64
+import json
+import sys
+names = ["SERVER_URL", "SERVER_IMAGE", "ARTIFACT_BUCKET", "ARTIFACT_PREFIX", "WORKERS", "RPS", "RUN_TIME", "WARMUP", "SCENARIO", "LOADTEST_BIN"]
+config = dict(zip(names, sys.argv[1:11], strict=True))
+config["artifact"] = json.loads(sys.argv[11])
+print(base64.b64encode(json.dumps(config).encode()).decode())
+PY
+	)"
 	loadgen_script=$(
 		cat <<SCRIPT
 set -euo pipefail
-cat >/etc/aegaeon/loadtest.env <<EOF
-SERVER_IMAGE=${SERVER_IMAGE}
-SERVER_URL=${server_url}
-ARTIFACT_BUCKET=${artifact_bucket}
-ARTIFACT_PREFIX=${artifact_prefix}
-WORKERS=${WORKERS}
-RPS=${rps}
-RUN_TIME=${RUN_TIME}
-WARMUP=${WARMUP}
-SCENARIO=${SCENARIO}
-EOF
-
-/usr/local/bin/aegaeon-run-loadtest
-LATEST="\$(ls -1dt /opt/aegaeon/results/* | head -1)"
-RUN_ID="\$(basename "\$LATEST")"
-EXIT_CODE=""
-if [[ -f "\$LATEST/exit_code.txt" ]]; then
-  EXIT_CODE="\$(cat "\$LATEST/exit_code.txt" | tr -d '\n' || true)"
-fi
-
-echo "RUN_ID=\$RUN_ID"
-echo "EXIT_CODE=\$EXIT_CODE"
-echo "OUT_DIR=\$LATEST"
-
-if [[ -f "\$LATEST/report.json" ]]; then
-  curl -fsS "${server_url%/}/metrics" >"\$LATEST/server.metrics.prom" || true
-  if [[ -n "${artifact_bucket}" ]]; then
-    DEST_PREFIX="s3://${artifact_bucket}/${artifact_prefix}\$RUN_ID/"
-    aws s3 cp "\$LATEST/server.metrics.prom" "\$DEST_PREFIX""server.metrics.prom" || true
-  fi
-fi
+umask 077
+CONFIG_FILE="\$(mktemp /etc/aegaeon/.loadtest-invocation-XXXXXXXX.json)"
+trap 'rm -f -- "\$CONFIG_FILE"' EXIT
+printf '%s' '${config_payload}' | base64 --decode >"\$CONFIG_FILE"
+/usr/local/bin/aegaeon-run-loadtest --config-file "\$CONFIG_FILE"
 SCRIPT
 	)
 
@@ -220,6 +209,10 @@ SCRIPT
 			"s3://${artifact_bucket}/${artifact_prefix}${run_id}//server.metrics.prom" \
 			"$run_dir/server.metrics.prom" || true
 
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/metrics-status.json" \
+		"$run_dir/metrics-status.json"
+
 	export PERF_RPS_TARGET="$rps"
 	export PERF_WORKERS="$WORKERS"
 	export PERF_RUN_TIME="$RUN_TIME"
@@ -236,14 +229,24 @@ SCRIPT
 
 	python3 - <<'PY' >>"$SUMMARY_CSV"
 import json
+import math
 import os
 import re
 from pathlib import Path
 
-rps_target = int(os.environ["PERF_RPS_TARGET"])
+rps_target = os.environ["PERF_RPS_TARGET"]
+if not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e[+-]?(?:0|[1-9][0-9]*))?", rps_target):
+    raise ValueError("canonical positive decimal RPS required")
+rps_value = float(rps_target)
+if not math.isfinite(rps_value) or rps_value <= 0:
+    raise ValueError("finite positive f64 RPS required")
 workers = int(os.environ["PERF_WORKERS"])
 run_time = os.environ["PERF_RUN_TIME"]
-warmup = int(os.environ["PERF_WARMUP"])
+warmup_raw = os.environ["PERF_WARMUP"]
+match = re.fullmatch(r"(0|[1-9][0-9]*)([smh]?)", warmup_raw)
+if match is None:
+    raise ValueError("invalid warmup duration")
+warmup = int(match[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[match[2]]
 scenario = os.environ["PERF_SCENARIO"]
 run_id = os.environ["PERF_RUN_ID"]
 exit_code = os.environ.get("PERF_EXIT_CODE", "")
@@ -274,7 +277,12 @@ counts = {
 }
 
 metrics_path = Path(os.environ.get("PERF_METRICS_PATH", ""))
-if metrics_path.exists():
+metrics_status = json.loads(metrics_path.with_name("metrics-status.json").read_text())["status"]
+if metrics_status not in {"absent", "complete"}:
+    raise ValueError("metrics collection incomplete")
+if metrics_status == "complete" and not metrics_path.is_file():
+    raise ValueError("complete metrics artifact missing")
+if metrics_status == "complete":
     for line in metrics_path.read_text().splitlines():
         if not line.startswith("oauth_request_latency_seconds_count"):
             continue
@@ -310,11 +318,12 @@ row = [
     f"{server_cpu_s:.6f}",
     server_mem_cur,
     server_mem_peak,
-    counts[("/token", "POST")],
-    counts[("/authorize", "GET")],
-    counts[("/introspect", "POST")],
-    counts[("/revoke", "POST")],
-    counts[("/par", "POST")],
+    counts[("/token", "POST")] if metrics_status == "complete" else "",
+    counts[("/authorize", "GET")] if metrics_status == "complete" else "",
+    counts[("/introspect", "POST")] if metrics_status == "complete" else "",
+    counts[("/revoke", "POST")] if metrics_status == "complete" else "",
+    counts[("/par", "POST")] if metrics_status == "complete" else "",
+    metrics_status,
 ]
 
 print(",".join(str(v) for v in row))

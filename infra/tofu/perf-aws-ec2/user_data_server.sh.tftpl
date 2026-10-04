@@ -3,11 +3,10 @@
 set -euo pipefail
 
 exec > >(tee /var/log/aegaeon-user-data.log | logger -t aegaeon-user-data -s 2>/dev/console) 2>&1
-set -x
 
 echo "[aegaeon-user-data] starting server bootstrap at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-mkdir -p /etc/aegaeon
+install -d -m 0700 /etc/aegaeon
 
 dnf_install() {
   local -a packages=("$@")
@@ -29,7 +28,11 @@ if ! command -v curl >/dev/null 2>&1; then
   dnf_install curl || dnf_install curl-minimal
 fi
 
-if ! command -v aws >/dev/null 2>&1; then
+if [[ ! -x /usr/bin/python3 ]]; then
+  dnf_install python3
+fi
+
+if [[ ! -x /usr/bin/aws ]]; then
   dnf_install awscli
 fi
 
@@ -44,14 +47,58 @@ if systemctl cat docker.service >/dev/null 2>&1; then
   systemctl enable --now docker.service
 fi
 
-TOKEN="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
-LOCAL_IPV4="$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/local-ipv4")"
-
-cat >/etc/aegaeon/server.env <<EOF
-BASE_URL=http://$${LOCAL_IPV4}:${server_port}
-AEGAEON_EXPOSE_METRICS_ON_MAIN=${expose_metrics_on_main ? "1" : "0"}
-AEGAEON_TRUSTED_PROXIES=${trusted_proxies}
+cat >/etc/aegaeon/delivery.json <<'EOF'
+${jsonencode({region = aws_region, issuer_host = issuer_host, issuer_url = issuer_url, trusted_proxies = trusted_proxies, server_secret_arn = server_secret_arn, server_secret_version = server_secret_version})}
 EOF
+chmod 0600 /etc/aegaeon/delivery.json
+
+install -d -m 0700 /usr/local/lib/aegaeon/runtime_delivery
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/__init__.py <<'PYTHON'
+${delivery_init~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/__init__.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/common.py <<'PYTHON'
+${delivery_common~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/common.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/credentials.py <<'PYTHON'
+${delivery_credentials~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/credentials.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/filesystem.py <<'PYTHON'
+${delivery_filesystem~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/filesystem.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/artifacts.py <<'PYTHON'
+${delivery_artifacts~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/artifacts.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/reports.py <<'PYTHON'
+${delivery_reports~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/reports.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/metrics.py <<'PYTHON'
+${delivery_metrics~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/metrics.py
+
+cat >/usr/local/lib/aegaeon/runtime_delivery/orchestration.py <<'PYTHON'
+${delivery_orchestration~}
+PYTHON
+chmod 0400 /usr/local/lib/aegaeon/runtime_delivery/orchestration.py
+
+cat >/usr/local/bin/aegaeon-deliver-supplies <<'PYTHON'
+${delivery_helper~}
+PYTHON
+chmod 0755 /usr/local/bin/aegaeon-deliver-supplies
+/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies preflight-aws
 
 cat >/etc/aegaeon/registry.env <<EOF
 AWS_REGION=${aws_region}
@@ -182,7 +229,8 @@ ExecStartPre=/usr/bin/bash -lc 'if systemctl cat docker.service >/dev/null 2>&1;
 ExecStartPre=-/usr/bin/docker rm -f aegaeon-server
 ExecStartPre=/usr/local/bin/aegaeon-docker-login ${server_image}
 ExecStartPre=/usr/bin/docker pull ${server_image}
-ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host --env-file /etc/aegaeon/server.env ${server_image} --host 0.0.0.0 --port ${server_port}
+ExecStartPre=/usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies server
+ExecStart=/usr/bin/docker run --rm --name aegaeon-server --network host --env-file /run/aegaeon-supplies/server.env --entrypoint ${server_entrypoint} ${server_image} --host 0.0.0.0 --port ${server_port}
 ExecStop=-/usr/bin/docker stop aegaeon-server
 
 [Install]
@@ -190,4 +238,4 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now aegaeon-server.service || true
+systemctl enable --now aegaeon-server.service

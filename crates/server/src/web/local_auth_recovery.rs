@@ -1,6 +1,7 @@
 mod presentation;
 mod submission;
 
+use super::browser_continuation;
 use super::local_auth_audit::{
     load_local_auth_audit_environment, local_auth_audit_failure_response, write_local_auth_audit,
     LocalAuthAuditEvent,
@@ -16,9 +17,8 @@ use super::{
     AuthSessionTimes, LocalPasswordForm, QueryCredentialPolicy,
 };
 use crate::local_credentials::{self, RecoveryTokenPurpose};
-use crate::util;
 use axum::extract::{OriginalUri, Query, State};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use http::{header, HeaderMap, HeaderValue, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
@@ -168,14 +168,13 @@ async fn local_recovery_success_response(
     };
     let cookie = build_session_set_cookie(&sid, state.browser_auth.auth_sessions.cookie_ttl_secs());
     if let Some(return_to) = submission.return_to.as_deref() {
-        let mut response = StatusCode::SEE_OTHER.into_response();
-        if let Ok(value) = HeaderValue::from_str(return_to) {
-            response.headers_mut().insert(header::LOCATION, value);
-        }
+        let mut response = match browser_continuation::local_response(return_to) {
+            Ok(response) => response,
+            Err(response) => return response,
+        };
         if let Ok(value) = HeaderValue::from_str(&cookie) {
             response.headers_mut().insert(header::SET_COOKIE, value);
         }
-        util::apply_no_cache_headers(&mut response);
         response
     } else {
         let mut response = local_auth_response(
