@@ -31,7 +31,7 @@ linker flags. The default ffi features and serial curve backend are retained.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SANITIZERS` | `address` | The configured runtime supports AddressSanitizer. Other selections fail. |
-| `SANITIZER_TARGETS` | `ffi` | Comma-separated Cargo packages. |
+| `SANITIZER_TARGETS` | `ffi` | Comma-separated Cargo packages; must include `ffi`. Additional packages extend the required inventory. |
 | `SANITIZER_CARGO_FLAGS` | empty | Additional feature flags, for example `--features lowstar_hash`. Required target and profile selection cannot be overridden. |
 | `SANITIZER_TARGET_DIR` | `target/sanitizers` | Cargo outputs, separated by sanitizer, package and host target. |
 | `SANITIZER_ARTIFACT_DIR` | `$SANITIZER_TARGET_DIR/artifacts` | Raw command output and `run-summary.json`. |

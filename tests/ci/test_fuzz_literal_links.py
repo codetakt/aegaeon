@@ -30,19 +30,27 @@ class FuzzLiteralLinkTests(unittest.TestCase):
         self.state = self.helper["raw_inventory"].__globals__
         fuzz = self.root / "fuzz"
         fuzz.mkdir()
-        self.enterContext(
-            mock.patch.dict(
-                self.state,
-                ROOT=self.root,
-                FUZZ_DIR=fuzz,
-                CORPUS_ROOT=fuzz / "corpus",
-                CRASH_ROOT=fuzz / "artifacts",
-                ARCHIVE_DIR=fuzz / "corpus_archive",
-                META_DIR=fuzz / "corpus_meta",
-                RUN_ARTIFACT_DIR=None,
-                HISTORY_OUT_DIR=None,
+        self.owners = {
+            id(value.__globals__): value.__globals__
+            for value in self.helper.values()
+            if hasattr(value, "__globals__")
+        }.values()
+        bindings = {
+            "ROOT": self.root,
+            "FUZZ_DIR": fuzz,
+            "CORPUS_ROOT": fuzz / "corpus",
+            "CRASH_ROOT": fuzz / "artifacts",
+            "ARCHIVE_DIR": fuzz / "corpus_archive",
+            "META_DIR": fuzz / "corpus_meta",
+            "RUN_ARTIFACT_DIR": None,
+            "HISTORY_OUT_DIR": None,
+        }
+        for owner in self.owners:
+            self.enterContext(
+                mock.patch.dict(
+                    owner, {key: value for key, value in bindings.items() if key in owner}
+                )
             )
-        )
         self.enterContext(
             mock.patch.dict(os.environ, CARGO_HOME=str(Path(temporary) / "cargo-home"))
         )
@@ -54,7 +62,9 @@ class FuzzLiteralLinkTests(unittest.TestCase):
             self.assertFalse(path.resolve().is_relative_to(self.outside), "external target read")
             return actual_open(path, *args, **kwargs)
 
-        self.enterContext(mock.patch.dict(self.state, open_evidence_file=guarded_open))
+        for owner in self.owners:
+            if "open_evidence_file" in owner:
+                self.enterContext(mock.patch.dict(owner, open_evidence_file=guarded_open))
 
     def seed_links(self, raw_name):
         directory = self.root / "fuzz" / raw_name / "fuzz_par"
@@ -132,7 +142,20 @@ class FuzzLiteralLinkTests(unittest.TestCase):
         recovery = self.root / "artifacts/recovery"
         recovery.mkdir(parents=True)
         records = self.helper["copy_raw_backups"](recovery)
-        manifest = json.loads(json.dumps({"raw": records}))
+        paths = {name: self.root / "fuzz" / name for name in records}
+        bindings = {name: self.helper["cleanup_root_binding"](path) for name, path in paths.items()}
+        snapshot = self.helper["restore_raw_copy"].__globals__["cleanup_tree_snapshot"]
+        manifest = json.loads(
+            json.dumps(
+                {
+                    "raw": records,
+                    "cleanup_roots": bindings,
+                    "cleanup_entries": {
+                        name: snapshot(path, bindings[name]) for name, path in paths.items()
+                    },
+                }
+            )
+        )
         self.helper["validate_raw_backups"](recovery, manifest)
         for raw_name, targets in (("corpus", corpus_targets), ("artifacts", crash_targets)):
             for name, target in targets.items():

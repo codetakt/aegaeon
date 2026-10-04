@@ -340,14 +340,16 @@ elif tool == "cargo":
         os.kill(os.getpid(), signal.SIGTERM)
     target_dir = Path(os.environ["CARGO_TARGET_DIR"]) / "x86_64-unknown-linux-gnu/debug/deps"
     target_dir.mkdir(parents=True, exist_ok=True)
-    targets = metadata["packages"][0]["targets"]
+    package_name = args[args.index("-p") + 1]
+    package = next(item for item in metadata["packages"] if item["name"] == package_name)
+    targets = package["targets"]
     for index, target in enumerate(targets):
         binary = target_dir / f"nonstandard-name-{index}"
         binary.write_text((root / "fixture").read_text())
         binary.chmod(0o755)
         record = {
             "reason": "compiler-artifact",
-            "package_id": "ffi-identity",
+            "package_id": package["id"],
             "target": target,
             "profile": {"test": True},
             "fresh": mode == "fresh-cache",
@@ -391,7 +393,9 @@ elif tool == "cargo":
         print(json.dumps({"reason": "build-finished", "success": mode != "false-build-finished"}))
 else:
     index = int(tool.rsplit("-", 1)[1])
-    targets = json.loads((root / "metadata.json").read_text())["packages"][0]["targets"]
+    package_name = Path(sys.argv[0]).parents[3].name.removeprefix("address-")
+    packages = json.loads((root / "metadata.json").read_text())["packages"]
+    targets = next(item["targets"] for item in packages if item["name"] == package_name)
     name = targets[index]["name"]
     zero = name == "oidc_hash_runtime_test" or mode == "empty-tests"
     names = [] if zero else [name + "::required"]
@@ -526,27 +530,73 @@ class SanitizerTests(unittest.TestCase):
         for mode in ("success", "fresh-cache", "ignored-policy"):
             with self.subTest(mode=mode):
                 result = self.run_wrapper(mode)
-                assert result.returncode == 0, result.stderr
+                self.assertTrue(result.returncode == 0, result.stderr)  # noqa: PT009 - active under Python -O
                 summary = self.summary()
-                assert summary["status"] == "completed"
+                self.assertTrue(summary["status"] == "completed")  # noqa: PT009 - active under Python -O
                 targets = summary["units"][0]["targets"]
-                assert {target["name"] for target in targets} == set(TARGETS)
-                assert all(target["status"] == "completed" for target in targets)
-                assert sum(len(target["completed"]) for target in targets) == 8
+                self.assertTrue({target["name"] for target in targets} == set(TARGETS))  # noqa: PT009 - active under Python -O
+                self.assertTrue(all(target["status"] == "completed" for target in targets))  # noqa: PT009 - active under Python -O
+                self.assertTrue(sum(len(target["completed"]) for target in targets) == 8)  # noqa: PT009 - active under Python -O
                 oidc = next(
                     target for target in targets if target["name"] == "oidc_hash_runtime_test"
                 )
-                assert oidc["completed"] == []
-                assert oidc["applicability"] == "lowstar_hash feature disabled"
+                self.assertTrue(oidc["completed"] == [])  # noqa: PT009 - active under Python -O
+                self.assertTrue(oidc["applicability"] == "lowstar_hash feature disabled")  # noqa: PT009 - active under Python -O
                 build = next(
                     command
                     for command in summary["commands"]
                     if command["phase"].startswith("build-")
                 )
-                assert build["args"][-3:-1] == ["--target", "x86_64-unknown-linux-gnu"]
-                assert "--lib" in build["args"]
-                assert "--tests" in build["args"]
-                assert 'curve25519_dalek_backend="serial"' in summary["units"][0]["rustflags"]
+                self.assertTrue(build["args"][-3:-1] == ["--target", "x86_64-unknown-linux-gnu"])  # noqa: PT009 - active under Python -O
+                self.assertTrue("--lib" in build["args"])  # noqa: PT009 - active under Python -O
+                self.assertTrue("--tests" in build["args"])  # noqa: PT009 - active under Python -O
+                self.assertTrue(  # noqa: PT009 - active under Python -O
+                    'curve25519_dalek_backend="serial"' in summary["units"][0]["rustflags"]
+                )
+
+    def add_package(self, name):
+        metadata_path = self.root / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        source = self.root / f"{name}.rs"
+        source.write_text("// additional package source identity\n")
+        metadata["packages"].append(
+            {
+                "name": name,
+                "id": f"{name}-identity",
+                "targets": [{"name": name, "kind": ["lib"], "test": True, "src_path": str(source)}],
+            }
+        )
+        metadata_path.write_text(json.dumps(metadata))
+
+    def test_non_ffi_package_selection_rejects_before_cargo_inventory(self):
+        self.add_package("additional")
+        result = self.run_wrapper(SANITIZER_TARGETS="additional")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009 - active under Python -O
+        self.assertIn("must include the required ffi package", result.stderr)  # noqa: PT009 - active under Python -O
+        summary = self.summary()
+        self.assertEqual(summary["status"], "failed")  # noqa: PT009 - active under Python -O
+        self.assertEqual(summary["units"], [])  # noqa: PT009 - active under Python -O
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        self.assertFalse(  # noqa: PT009 - active under Python -O
+            any(
+                call["tool"] == "cargo" and ("metadata" in call["args"] or "test" in call["args"])
+                for call in calls
+            )
+        )
+
+    def test_ffi_and_additional_package_both_complete_required_inventory(self):
+        self.add_package("additional")
+        result = self.run_wrapper(SANITIZER_TARGETS="ffi,additional")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009 - active under Python -O
+        summary = self.summary()
+        self.assertEqual(summary["status"], "completed")  # noqa: PT009 - active under Python -O
+        self.assertEqual([unit["package"] for unit in summary["units"]], ["ffi", "additional"])  # noqa: PT009 - active under Python -O
+        ffi, additional = summary["units"]
+        self.assertEqual({target["name"] for target in ffi["targets"]}, set(TARGETS))  # noqa: PT009 - active under Python -O
+        self.assertTrue(all(target["status"] == "completed" for target in ffi["targets"]))  # noqa: PT009 - active under Python -O
+        self.assertEqual(additional["targets"][0]["name"], "additional")  # noqa: PT009 - active under Python -O
+        self.assertEqual(additional["targets"][0]["completed"], ["additional::required"])  # noqa: PT009 - active under Python -O
+        self.assertEqual(additional["targets"][0]["status"], "completed")  # noqa: PT009 - active under Python -O
 
     def test_metadata_additions_are_required_and_flags_are_owned(self):
         metadata_path = self.root / "metadata.json"
@@ -563,13 +613,13 @@ class SanitizerTests(unittest.TestCase):
         )
         metadata_path.write_text(json.dumps(metadata))
         result = self.run_wrapper(CARGO_ENCODED_RUSTFLAGS="-Copt-level=3")
-        assert result.returncode == 0, result.stderr
+        self.assertTrue(result.returncode == 0, result.stderr)  # noqa: PT009 - active under Python -O
         targets = self.summary()["units"][0]["targets"]
-        assert len(targets) == 10
-        assert targets[-1]["completed"] == ["additional_test::required"]
+        self.assertTrue(len(targets) == 10)  # noqa: PT009 - active under Python -O
+        self.assertTrue(targets[-1]["completed"] == ["additional_test::required"])  # noqa: PT009 - active under Python -O
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         builds = [call for call in calls if call["tool"] == "cargo" and "test" in call["args"]]
-        assert builds[0]["encoded_flags"] is None
+        self.assertTrue(builds[0]["encoded_flags"] is None)  # noqa: PT009 - active under Python -O
 
     def test_artifact_inventory_and_record_failures(self):
         modes = (
@@ -751,7 +801,7 @@ class SanitizerTests(unittest.TestCase):
             ("SANITIZER_CARGO_FLAGS", "--release"),
         ):
             with self.subTest(key=key, value=value):
-                assert self.run_wrapper(**{key: value}).returncode != 0
+                self.assertTrue(self.run_wrapper(**{key: value}).returncode != 0)  # noqa: PT009 - active under Python -O
 
     def test_missing_required_tools_runtime_and_host_fail(self):
         for tool in ("rustc", "cargo", "clang", "python3", "nm", "readelf"):

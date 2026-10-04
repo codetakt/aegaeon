@@ -270,12 +270,7 @@ reset_cargo_target_dir() {
 }
 
 cleanup_fuzz_outputs() {
-	local cache
-	cache="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
-	# The terminal sentinel preserves even trailing newlines in a configured path.
-	[[ $cache == *$'\n.' ]] || return 1
-	cache="${cache%$'\n.'}"
-	rm -rf -- "$cache" fuzz/artifacts fuzz/corpus fuzz/corpus_archive
+	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --remove-cleanup "$1" "$2"
 }
 
 prepare_sanitizer_attempt() {
@@ -816,7 +811,7 @@ run_sanitizers_stage() {
 	fi
 	if sanitizer_target_binding validate "$SANITIZER_EVIDENCE_BINDING" >&"$sanitizer_log_fd" 2>&1; then
 		if [[ $cleanup_status -ne 0 ]]; then
-			preflight_receipt cleanup "$((status != 0 ? status : cleanup_status))" >&"$sanitizer_log_fd" 2>&1 || evidence_status=1
+			preflight_receipt cleanup "$((status != 0 ? status : cleanup_status))" "" "$cleanup_status" >&"$sanitizer_log_fd" 2>&1 || evidence_status=1
 		fi
 	else
 		evidence_status=1

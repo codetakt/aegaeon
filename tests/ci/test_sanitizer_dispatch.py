@@ -31,7 +31,10 @@ if sanitizer:
     directory = pathlib.Path(os.environ['SANITIZER_ARTIFACT_DIR'])
     (directory / 'child-receipt.json').write_text(json.dumps({'exit_code': code}))
     (directory / 'run-summary.json').write_text(json.dumps({
-        'status': 'completed' if code == 0 else 'failed', 'commands': [], 'units': []}))
+        'status': 'completed' if code == 0 else 'failed', 'exit_code': code,
+        'commands': [{'phase': 'run', 'exit_code': code}],
+        'units': [{'package': 'ffi', 'targets': [{'name': 'ffi', 'status':
+                   'completed' if code == 0 else 'failed'}]}]}))
     if not os.environ.get('SANITIZER_UNSAFE_TARGET_TEST'):
         scratch = (root / (os.environ.get('SANITIZER_TARGET_DIR') or 'target/sanitizers')).resolve()
         scratch.mkdir(parents=True, exist_ok=True)
@@ -549,8 +552,23 @@ class SanitizerDispatchTests(unittest.TestCase):
                     log = (fixture.artifacts / "summary/security.log").read_text()
                     self.assertNotIn("<<< sanitizer smoke: ok", log)
                     self.assertIn("sanitizer smoke: failed (exit=71)", log)
+                    summary = json.loads(
+                        (fixture.artifacts / "sanitizers/run-summary.json").read_text()
+                    )
+                    self.assertEqual(summary["exit_code"], 71)
+                    self.assertEqual(summary["commands"], [{"phase": "run", "exit_code": 71}])
+                    self.assertEqual(
+                        summary["units"],
+                        [{"package": "ffi", "targets": [{"name": "ffi", "status": "failed"}]}],
+                    )
+                    self.assertNotIn("logging_exit_code", summary)
                     if cleanup:
                         self.assertIn(f"sanitizer cleanup: failed (exit={cleanup})", log)
+                        self.assertEqual(summary["preflight_phase"], "cleanup")
+                        self.assertEqual(summary["cleanup_exit_code"], cleanup)
+                    else:
+                        self.assertNotIn("preflight_phase", summary)
+                        self.assertNotIn("cleanup_exit_code", summary)
 
     def test_cleanup_failure_blocks_a_successful_child(self):
         for aggregate in (False, True):
@@ -566,6 +584,13 @@ class SanitizerDispatchTests(unittest.TestCase):
                 )
                 self.assertEqual(summary["status"], "failed")
                 self.assertEqual(summary["exit_code"], 79)
+                self.assertEqual(summary["cleanup_exit_code"], 79)
+                self.assertEqual(summary["commands"], [{"phase": "run", "exit_code": 0}])
+                self.assertEqual(
+                    summary["units"],
+                    [{"package": "ffi", "targets": [{"name": "ffi", "status": "completed"}]}],
+                )
+                self.assertNotIn("logging_exit_code", summary)
                 log = (fixture.artifacts / "summary/security.log").read_text()
                 self.assertNotIn("<<< sanitizer smoke: ok", log)
                 self.assertIn("sanitizer cleanup: failed (exit=79)", log)

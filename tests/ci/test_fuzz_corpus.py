@@ -24,6 +24,7 @@ class FuzzCorpusTests(unittest.TestCase):
         self.helper = self.root / "scripts/fuzz/manage_fuzz_corpus.py"
         self.helper.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / "scripts/fuzz/manage_fuzz_corpus.py", self.helper)
+        shutil.copytree(ROOT / "scripts/fuzz/fuzz_support", self.helper.parent / "fuzz_support")
         fuzz = self.root / "fuzz"
         fuzz.mkdir()
         shutil.copyfile(ROOT / "fuzz/Cargo.toml", fuzz / "Cargo.toml")

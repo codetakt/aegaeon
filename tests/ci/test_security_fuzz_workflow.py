@@ -240,6 +240,7 @@ class SecurityFuzzWorkflowTests(unittest.TestCase):
         destination = self.root / "scripts/fuzz/manage_fuzz_corpus.py"
         destination.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / "scripts/fuzz/manage_fuzz_corpus.py", destination)
+        shutil.copytree(ROOT / "scripts/fuzz/fuzz_support", destination.parent / "fuzz_support")
         self.env.update(SECURITY_UPLOAD_STAGE="fuzz", SECURITY_UPLOAD_OUTCOME="failure")
 
     def test_upload_packager_ignores_inherited_startup_before_collecting_evidence(self):

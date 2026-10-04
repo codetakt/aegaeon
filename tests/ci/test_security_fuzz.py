@@ -89,7 +89,7 @@ raise SystemExit(subprocess.run(sys.argv[3:], check=False).returncode)
 
 
 class SecurityFuzzFixture(unittest.TestCase):
-    def setUp(self):
+    def setUp(self):  # noqa: PLR0915 - complete isolated source and tool fixture
         self.temporary = self.enterContext(
             tempfile.TemporaryDirectory(prefix="security-fuzz-test-")
         )
@@ -141,6 +141,7 @@ class SecurityFuzzFixture(unittest.TestCase):
             destination = self.root / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, destination)
+        shutil.copytree(ROOT / "scripts/fuzz/fuzz_support", self.root / "scripts/fuzz/fuzz_support")
         (self.root / "Cargo.toml").write_text(
             '[workspace]\nmembers = ["crates/server", "crates/ffi"]\n'
             'exclude = ["crates/kani-harness"]\n'
@@ -272,6 +273,13 @@ class SecurityFuzzFixture(unittest.TestCase):
             self.assertFalse((self.artifacts / "fuzz" / name).exists(), name)
 
     def install_helper_hooks(self, hooks):
+        self.helper_hooks = dict(hooks)
+        if hasattr(self, "cleanup_hook"):
+            hooks = {
+                **hooks,
+                "--remove-cleanup": hooks.get("--remove-cleanup", "") + "\nroot = ROOT\n"
+                "(root.parent / 'cleanup-called').write_text('called')\n" + self.cleanup_hook,
+            }
         self.install(
             "python3",
             "import os,runpy,sys\n"
@@ -282,8 +290,16 @@ class SecurityFuzzFixture(unittest.TestCase):
             " if action in arguments:\n"
             "  sys.argv=[sys.argv[0], *arguments]\n"
             "  namespace=runpy.run_path(arguments[0], run_name='fuzz_test_hook')\n"
-            "  state=namespace['main'].__globals__\n"
+            "  owners=[value.__globals__ for value in namespace.values()\n"
+            "          if hasattr(value,'__globals__')]\n"
+            "  state=dict(namespace)\n"
+            "  for owner in owners: state.update(owner)\n"
+            "  before=dict(state)\n"
             "  exec(code, state)\n"
+            "  for key, old in before.items():\n"
+            "   if state.get(key) is not old:\n"
+            "    for owner in owners:\n"
+            "     if owner.get(key) is old: owner[key]=state[key]\n"
             "  sys.argv=arguments\n"
             "  raise SystemExit(state['main']())\n"
             f"os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])",
@@ -341,17 +357,8 @@ class SecurityFuzzFixture(unittest.TestCase):
         self.assertEqual((self.root / "fuzz/corpus" / TARGETS[0] / "seed").read_bytes(), b"input")
 
     def install_cleanup_hook(self, code):
-        actual_rm = shutil.which("rm")
-        self.install(
-            "rm",
-            "import os,pathlib,shutil,sys\n"
-            "if 'fuzz/corpus' in sys.argv[1:]:\n"
-            " root=pathlib.Path(os.environ['FIXTURE_ROOT'])\n"
-            " (root.parent / 'cleanup-called').write_text('called')\n"
-            + "\n".join(" " + line for line in code.splitlines())
-            + "\n"
-            + f"os.execv({actual_rm!r}, [{actual_rm!r}] + sys.argv[1:])",
-        )
+        self.cleanup_hook = code
+        self.install_helper_hooks(getattr(self, "helper_hooks", {}))
 
 
 class SecurityFuzzTests(SecurityFuzzFixture):
@@ -612,7 +619,12 @@ class SecurityFuzzTests(SecurityFuzzFixture):
         self.assertTrue((self.root / "fuzz/artifacts" / TARGETS[0] / "crash-input").exists())
 
     def test_missing_required_lock_or_source_fails_before_build(self):
-        for name in ("fuzz/Cargo.lock", "Cargo.lock", "fuzz/fuzz_targets/fuzz_par.rs"):
+        for name in (
+            "fuzz/Cargo.lock",
+            "Cargo.lock",
+            "fuzz/fuzz_targets/fuzz_par.rs",
+            "scripts/fuzz/fuzz_support/directories.py",
+        ):
             with self.subTest(name=name):
                 path = self.root / name
                 original = path.read_bytes()
@@ -642,16 +654,7 @@ class SecurityFuzzTests(SecurityFuzzFixture):
                 self.assert_restored(raw, "receipt", 0)
 
     def test_cleanup_failure_is_blocking_and_recorded(self):
-        actual_rm = shutil.which("rm")
-        (self.bin / "rm").unlink()
-        self.install(
-            "rm",
-            "import os,sys\nif 'fuzz/corpus' in sys.argv:\n raise SystemExit(31)\nos.execv("
-            + repr(actual_rm)
-            + ", ["
-            + repr(actual_rm)
-            + "] + sys.argv[1:])",
-        )
+        self.install_cleanup_hook("raise SystemExit(31)")
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.summary()["execution"]["cleanup_exit_code"], 31)
@@ -1380,26 +1383,24 @@ class SecurityFuzzCacheStartupTests(SecurityFuzzFixture):
                     if missing
                     else "os.environ['CARGO_TARGET_DIR'] = str(ROOT / 'different-cache')"
                 )
-                self.install_helper_hooks({"--cleanup-cache": code})
-                self.install_cleanup_hook("pass")
+                self.install_helper_hooks({"--remove-cleanup": code})
                 result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn("missing" if missing else "differs", result.stderr)
                 self.assertFalse((self.root.parent / "cleanup-called").exists())
-                self.assert_restored(raw, "removal", 1)
+                self.assert_restored(raw, "removal", 2)
 
     def test_missing_cleanup_command_blocks_and_keeps_raw_recovery(self):
         for helper in (False, True):
             with self.subTest(helper=helper):
                 _, raw = self.seed_stale_collection()
                 if helper:
-                    self.install_helper_hooks({"--cleanup-cache": "raise SystemExit(127)"})
-                    self.install_cleanup_hook("pass")
+                    self.install_helper_hooks({"--remove-cleanup": "raise SystemExit(127)"})
                 else:
                     self.install_cleanup_hook("raise SystemExit(127)")
                 result = self.run_suite(FUZZ_TARGETS=TARGETS[0])
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assert_restored(raw, "removal", 1 if helper else 127)
+                self.assert_restored(raw, "removal", 127)
 
     def bootstrap_failure(self, failure):
         if failure == "log-truncation":
@@ -1691,6 +1692,7 @@ class SecurityFuzzPathDispatchTests(SecurityFuzzFixture):
             ("--validate-preflight", "validate_preflight", []),
             ("--backup-cleanup", "backup_cleanup", []),
             ("--cleanup-cache", "cleanup_cache", ["00000000-0000-0000-0000-000000000001"]),
+            ("--remove-cleanup", "remove_cleanup", ["00000000-0000-0000-0000-000000000001"]),
             ("--record-target", "record_target", [TARGETS[0], "run", "0"]),
             ("--finish-run", "finish_run", ["0"]),
             ("--cleanup-result", "cleanup_result", ["0"]),
@@ -2261,19 +2263,24 @@ os.link(binary,ROOT.parent/'external-compiled-artifact')
             "h=runpy.run_path(sys.argv[1]); state=h['package_upload'].__globals__\n"
             "source=h['ROOT']/'artifacts/security/latest'; source.mkdir(parents=True)\n"
             "(source/'input').write_bytes(b'owned upload evidence')\n"
-            "output=h['ROOT']/'artifacts/upload-control'; actual=state['digest']\n"
-            "def alias_before_digest(path):\n"
-            " if path.name=='security-evidence.tar.gz': os.link(path,"
-            "h['ROOT'].parent/'late-upload-alias')\n"
-            " return actual(path)\n"
-            "state['digest']=alias_before_digest\n"
+            "output=h['ROOT']/'artifacts/upload-control'; actual=state['upload_inventory']\n"
+            "calls=0; alias=h['ROOT'].parent/'late-upload-alias'\n"
+            "def alias_before_publication():\n"
+            " global calls\n"
+            " calls+=1; inventory=actual()\n"
+            " if calls==2:\n"
+            "  temporary=next(output.glob('.archive-*')); os.link(temporary,alias)\n"
+            " return inventory\n"
+            "state['upload_inventory']=alias_before_publication\n"
             "try: h['package_upload'](output)\n"
             "except ValueError: pass\n"
             "else: raise RuntimeError('hardlinked upload archive passed')\n"
             "if (output/'manifest.json').exists(): raise RuntimeError('invalid upload "
             "manifest published')\n"
-            "if not (output/'security-evidence.tar.gz').is_file(): raise "
-            "RuntimeError('failed archive not retained')\n"
+            "if (output/'security-evidence.tar.gz').exists(): raise "
+            "RuntimeError('aliased archive published')\n"
+            "if not alias.is_file() or alias.stat().st_nlink!=1: raise "
+            "RuntimeError('held alias was removed or own temporary leaked')\n"
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -4647,6 +4654,7 @@ class SecurityFuzzCliDirectoryCargoHomeTests(SecurityFuzzFixture):
         ("--validate-preflight", "validate_preflight", []),
         ("--backup-cleanup", "backup_cleanup", []),
         ("--cleanup-cache", "cleanup_cache", ["00000000-0000-0000-0000-000000000001"]),
+        ("--remove-cleanup", "remove_cleanup", ["00000000-0000-0000-0000-000000000001"]),
         ("--record-target", "record_target", [TARGETS[0], "run", "0"]),
         ("--finish-run", "finish_run", ["0"]),
         ("--cleanup-result", "cleanup_result", ["0"]),

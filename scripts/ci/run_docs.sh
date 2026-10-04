@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest discover -s tests/ci -p 'test_*.py'
+PYTHONUNBUFFERED=1 PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest discover -s tests/ci -p 'test_*.py' -v
 python3 scripts/validation/check_docs_structure.py
 bash scripts/lint/lint_markdown.sh
 python3 scripts/ci/check_doc_links.py --base "$PR_BASE_SHA" --head HEAD

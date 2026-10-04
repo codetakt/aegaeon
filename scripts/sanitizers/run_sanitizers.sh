@@ -507,6 +507,7 @@ exit_status = 0
 try:
     sanitizers = selection(sanitizer_text, "sanitizer")
     packages = selection(package_text, "package")
+    require("ffi" in packages, "Package selection must include the required ffi package")
     require(sanitizers == ["address"], "Only the configured address sanitizer is supported")
     build_seconds, run_seconds, kill_grace = map(duration, (build_limit_text, run_limit_text, grace_text))
     extra = shlex.split(extra_text)
