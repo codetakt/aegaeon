@@ -41,6 +41,12 @@ def plan(*changes):
     return result
 
 
+def legacy_policy_bytes():
+    policy = json.loads((ROOT / "ci/pr-policy.json").read_bytes())
+    policy.pop("plan_envelope_version", None)
+    return json.dumps(policy).encode()
+
+
 class ComponentPlanTests(unittest.TestCase):
     def setUp(self):
         self.directory = Path(self.enterContext(TemporaryDirectory()))
@@ -198,7 +204,12 @@ class ComponentPlanTests(unittest.TestCase):
             with self.subTest(field=field, value=value):
                 policy = deepcopy(POLICY)
                 policy[field] = value
-                with self.assertRaisesRegex(ValueError, "component"):
+                diagnostic = (
+                    "^invalid protected full plan envelope version$"
+                    if field == "component_plan_version" and value == 2
+                    else "component"
+                )
+                with self.assertRaisesRegex(ValueError, diagnostic):
                     validate_policy(policy)
                 with self.assertRaisesRegex(ValueError, "component"):
                     validate_component_plan(plan(), policy)
@@ -325,7 +336,7 @@ class ComponentPlanTests(unittest.TestCase):
 
     def test_protected_classifier_ignores_candidate_policy_and_binds_source(self):
         source = (ROOT / "scripts/ci/pr_plan.py").read_bytes()
-        policy = (ROOT / "ci/pr-policy.json").read_bytes()
+        policy = legacy_policy_bytes()
         (self.directory / "scripts/ci").mkdir(parents=True)
         (self.directory / "ci").mkdir()
         (self.directory / "scripts/ci/pr_plan.py").write_text(
@@ -350,9 +361,9 @@ class ComponentPlanTests(unittest.TestCase):
 
         def protected_execution(argv, **kwargs):
             self.assertNotIn("GITHUB_OUTPUT", kwargs["env"])
-            script = Path(argv[1])
+            script = Path(argv[2])
             trusted_policy = Path(argv[argv.index("--policy") + 1])
-            self.assertEqual(script.read_bytes(), source)
+            self.assertEqual((argv[1], script.read_bytes()), ("-I", source))
             self.assertEqual(trusted_policy.read_bytes(), policy)
             protected = runpy.run_path(str(script))
             result = protected["classify"](

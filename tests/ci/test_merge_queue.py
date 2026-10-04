@@ -201,6 +201,7 @@ class PolicyTests(unittest.TestCase):
     def test_classifier_loaded_from_protected_main_not_speculative_parent(self):
         legacy_policy = json.loads((ROOT / "ci/pr-policy.json").read_text())
         for key in (
+            "plan_envelope_version",
             "component_plan_version",
             "components",
             "infrastructure_modules",
@@ -231,7 +232,7 @@ class PolicyTests(unittest.TestCase):
             def execute(argv, **kwargs):
                 assert argv[argv.index("--base") + 1] == BASE
                 assert argv[argv.index("--head") + 1] == HEAD
-                assert Path(argv[1]).read_bytes() == classifier
+                self.assertEqual((argv[1], Path(argv[2]).read_bytes()), ("-I", classifier))  # noqa: PT009 - active under -O
                 assert Path(argv[argv.index("--policy") + 1]).read_bytes() == policy
                 assert "GITHUB_OUTPUT" not in kwargs["env"]
                 output.write_text(json.dumps(expected))
