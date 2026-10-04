@@ -1,5 +1,59 @@
 #!/usr/bin/env bash
 
+# Reject active inherited functions before an interpreter wrapper can import
+# them. Until builtin is proven unshadowed, use syntax and POSIX special builtins.
+sanitizer_function_posix_present="${POSIXLY_CORRECT+x}"
+sanitizer_function_posix_value="${POSIXLY_CORRECT-}"
+case ":${SHELLOPTS}:" in
+*:posix:*) sanitizer_function_posix=1 ;;
+*) sanitizer_function_posix=0 ;;
+esac
+# POSIX special builtins precede functions. Probe builtin without dispatching
+# an imported readonly/builtin, then use the proven builtin for name enumeration.
+POSIXLY_CORRECT=1
+# A missing function returns nonzero inside this condition, including with -e.
+# A successful probe marks only a rejected function readonly; accepted runs do
+# not acquire readonly attributes or lose function/environment entries.
+if readonly -f builtin 2>/dev/null; then
+	sanitizer_function_error=""
+	"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+fi
+sanitizer_function_names="$(builtin declare -F)"
+if [[ -n $sanitizer_function_names ]]; then
+	sanitizer_function_error=""
+	"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+fi
+# Restore the parent's original mode/value/presence; assignments keep any
+# existing export attribute, and an originally absent variable is removed.
+if [[ -n $sanitizer_function_posix_present ]]; then
+	POSIXLY_CORRECT="$sanitizer_function_posix_value"
+else
+	builtin unset POSIXLY_CORRECT
+fi
+if [[ $sanitizer_function_posix -eq 0 ]]; then
+	builtin set +o posix
+else
+	builtin set -o posix
+fi
+
+# Standalone keeps its startup directory and PATH throughout preflight. Check
+# raw function keys too, including names Bash did not import into this shell.
+# Missing Python retains the existing failed-evidence fallback below.
+sanitizer_python=$(builtin type -P python3 || true)
+if [[ -n $sanitizer_python ]]; then
+	sanitizer_function_command=("$sanitizer_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))')
+	sanitizer_function_status=0
+	if [[ $sanitizer_function_posix -eq 1 ]]; then
+		POSIXLY_CORRECT=1 "${sanitizer_function_command[@]}" || sanitizer_function_status=$?
+	else
+		"${sanitizer_function_command[@]}" || sanitizer_function_status=$?
+	fi
+	if [[ $sanitizer_function_status -ne 0 ]]; then
+		sanitizer_function_error=""
+		"${sanitizer_function_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
+	fi
+fi
+
 set -euo pipefail
 
 info() { printf '[INFO] %s\n' "$*"; }

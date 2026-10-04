@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # Extra options may change features, scheduling or reporting. Package, native
 # target, profile, compiler configuration and unstable options remain fixed.
@@ -75,11 +80,26 @@ def cargo_flags(extra_text: str, build_text: str) -> tuple[list[str], list[str]]
     return extra, build
 
 
+COMPILER_ENVIRONMENT_ERROR = "Inherited Rust compiler overrides are not supported for sanitizers"
+
+
+def validate_compiler_environment(environment: Mapping[str, str]) -> None:
+    # Presence, even with an empty value, can select an unrecorded compiler.
+    # Build rustflags are replaced by the runner; compiler wrappers are not.
+    if any(
+        name in {"RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER"}
+        or name.startswith("CARGO_BUILD_RUSTC")
+        for name in environment
+    ):
+        raise ValueError(COMPILER_ENVIRONMENT_ERROR)
+
+
 def main() -> int:
     try:
+        validate_compiler_environment(os.environ)
         cargo_flags(*sys.argv[1:])
-    except (ValueError, TypeError):
-        print(f"[FAIL] {ERROR}", file=sys.stderr)
+    except (ValueError, TypeError) as error:
+        print(f"[FAIL] {error}", file=sys.stderr)
         return 1
     return 0
 

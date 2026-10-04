@@ -1892,6 +1892,38 @@ os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
 class SanitizerCargoChannelTests(SanitizerLoggingFixture, unittest.TestCase):
     """Owned argument channels fail before tools and preserve evidence history."""
 
+    def test_runner_rejects_compiler_overrides_without_shell_preflight(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        settings = SimpleNamespace(
+            sanitizer_text="address",
+            package_text="ffi",
+            build_limit_text="10",
+            run_limit_text="10",
+            grace_text="1",
+            extra_text="",
+            build_extra_text="",
+        )
+        for variable in (
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC_UNMODELED",
+        ):
+            for value in ("", "/unrecorded/compiler-override-secret"):
+                with self.subTest(variable=variable, empty=not value):
+                    summary = {"commands": []}
+                    supervisor = namespace["Supervisor"](self.root / "no-output", summary)
+                    with (
+                        patch.dict(os.environ, {variable: value}, clear=True),
+                        self.assertRaisesRegex(ValueError, "Inherited Rust compiler overrides"),  # noqa: PT027 - unittest control remains active under -O
+                    ):
+                        supervisor.execute(settings, self.root)
+                    self.assertEqual(summary["commands"], [])  # noqa: PT009 - active under -O
+                    self.assertFalse(supervisor.artifacts.exists())  # noqa: PT009
+
     def assert_channel_rejected(self, variable, value, route, case):
         evidence = self.root / "evidence" if route == "standalone" else self.shared / "sanitizers"
         evidence.mkdir(parents=True, exist_ok=True)

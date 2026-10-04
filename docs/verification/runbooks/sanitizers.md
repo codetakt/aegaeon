@@ -51,6 +51,17 @@ and unstable `-Z` options cannot pass through this channel.
 `SANITIZER_BUILD_EXTRA_ARGS` separately accepts only `-Zbuild-std=std` or
 `-Z build-std=std`; an empty value uses the ordinary configured build.
 
+Both entry routes reject inherited Bash functions before helper calls. They
+leave prior evidence untouched when startup admission is refused; the nonzero
+exit cannot be accepted as a completed current attempt. They
+also reject `RUSTC`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER` and any
+`CARGO_BUILD_RUSTC*` environment override, including empty values, before Cargo
+metadata or builds. Use the supported shell's compiler on `PATH`; inherited
+encoded Rust flags are replaced by the runner's fixed sanitizer flags.
+The build-std convenience entry delegates to the same admission and preflight
+before any tool invocation; it selects `-Zbuild-std=std` and its default output
+directory without a separate compiler/runtime setup.
+
 Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
 accepted. A timeout fails the run. The supervisor terminates remaining processes
 in each command's process group on timeout, interruption or capture failure.

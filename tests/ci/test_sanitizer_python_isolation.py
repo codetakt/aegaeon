@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import unittest
+from unittest.mock import patch
 
 import test_sanitizers as sanitizer_fixture
 
@@ -118,6 +120,88 @@ class SanitizerPythonIsolationTests(unittest.TestCase):
                         for arguments in calls
                     )
                 )
+
+    def assert_function_refused(self, result, *, posix, name):
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        if posix and name in {"readonly", "set", "unset", "exit", "exec", "source"}:
+            # Bash rejects special-builtin imports before the script starts.
+            self.assertIn("is a special builtin", result.stderr)
+        else:
+            self.assertIn("no inherited shell functions", result.stderr)
+        self.assertNotIn("function-body-secret", result.stdout)
+        if name == "then":
+            # Bash prints a malformed keyword definition during startup.
+            self.assertIn("error importing function definition", result.stderr)
+        else:
+            self.assertNotIn("function-body-secret", result.stderr)
+
+    def test_standalone_rejects_inherited_functions_before_helpers_or_effects(self):
+        for posix, entry in (
+            (False, "ordinary"),
+            (True, "ordinary"),
+            (False, "build-std"),
+            (True, "build-std"),
+        ):
+            for name in (
+                "python3",
+                "builtin",
+                "readonly",
+                "declare",
+                "set",
+                "unset",
+                "exit",
+                "exec",
+                "source",
+                ".",
+                "pwd",
+                "fail",
+                "1invalid",
+                "then",
+            ):
+                with self.subTest(posix=posix, entry=entry, function=name):
+                    fixture = sanitizer_fixture.SanitizerTests()
+                    self.addCleanup(fixture.doCleanups)
+                    fixture.setUp()
+                    (fixture.bin / "bash").symlink_to(shutil.which("bash"))
+                    evidence, raw = self.seed_completed_receipt(fixture)
+                    marker = fixture.root / "inherited-function-called"
+                    function = f'() {{ printf function-body-secret > "{marker}"; return 0; }}'
+                    environment = {f"BASH_FUNC_{name}%%": function}
+                    if posix:
+                        environment["POSIXLY_CORRECT"] = "1"
+                    else:
+                        fixture.environment.pop("POSIXLY_CORRECT", None)
+                    wrapper = (
+                        sanitizer_fixture.ROOT / "scripts/sanitizers/run_sanitizers_build_std.sh"
+                        if entry == "build-std"
+                        else sanitizer_fixture.WRAPPER
+                    )
+                    with patch.object(sanitizer_fixture, "WRAPPER", wrapper):
+                        result = fixture.run_wrapper(**environment)
+                    self.assert_function_refused(result, posix=posix, name=name)
+                    self.assertFalse(marker.exists())
+                    self.assertEqual((evidence / "run-summary.json").read_bytes(), raw)
+                    self.assertEqual(list(evidence.iterdir()), [evidence / "run-summary.json"])
+                    self.assertFalse((fixture.root / "calls.jsonl").exists())
+                    self.assertFalse((fixture.root / "target").exists())
+
+    def test_compiler_overrides_fail_both_routes_before_metadata_or_build(self):
+        for variable in (
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC_UNMODELED",
+        ):
+            for value in ("", "/unrecorded/compiler-override-secret"):
+                for route in ("standalone", "suite"):
+                    with self.subTest(variable=variable, empty=not value, route=route):
+                        fixture = sanitizer_fixture.SanitizerCargoChannelTests()
+                        self.addCleanup(fixture.doCleanups)
+                        fixture.setUp()
+                        fixture.assert_channel_rejected(variable, value, route, "compiler")
 
     def test_failed_preflight_receipt_ignores_inherited_status_mutation(self):
         fixture = self.fixture(mutation="receipt")

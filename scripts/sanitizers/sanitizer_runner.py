@@ -320,6 +320,7 @@ class Supervisor:
         options = runpy.run_path(
             str(Path(__file__).with_name("sanitizer_options.py")), run_name="sanitizer_options"
         )
+        options["validate_compiler_environment"](os.environ)
         extra, build_extra = options["cargo_flags"](settings.extra_text, settings.build_extra_text)
         self.kill_grace = kill_grace
         self.artifacts.mkdir(parents=True, exist_ok=True)
