@@ -61,8 +61,8 @@ class PerfSourceManifestTests(unittest.TestCase):
             0o755,
         )
         self.restore_runner_mode()
-        # Literal dangling links are source identities, not target contents.
-        (self.root / "literal").symlink_to("missing-target")
+        # Internal links resolve to bytes in the complete tracked source domain.
+        (self.root / "literal").symlink_to("tracked.txt")
         self.git(self.root, "add", "--all")
         self.evidence = self.root / "artifacts/perf/control/source"
         self.original_index = (self.root / ".git/index").read_bytes()
@@ -132,7 +132,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         entry = manifest["files"]["tracked.txt"]
         self.assertEqual(entry["sha256"], hashlib.sha256(b"actual dirty bytes\n").hexdigest())
         self.assertEqual(entry["filesystem_mode"], 33188)
-        self.assertEqual(manifest["files"]["literal"]["symlink"], "missing-target")
+        self.assertEqual(manifest["files"]["literal"]["symlink"], "tracked.txt")
         self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
         preimages = list(self.private.glob("aegaeon-perf-source-*"))
@@ -229,7 +229,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         link.symlink_to("another-target")
         self.assertNotEqual(self.invoke("verify", "--sha256", sha).returncode, 0)
         link.unlink()
-        link.symlink_to("missing-target")
+        link.symlink_to("tracked.txt")
         path.unlink()
         path.symlink_to("literal")
         self.assertNotEqual(self.invoke("verify", "--sha256", sha).returncode, 0)
@@ -545,6 +545,191 @@ class PerfSourceManifestTests(unittest.TestCase):
                     self.assertFalse((self.evidence / "INVOCATION.json").exists())
         for issuer in [False, True]:
             PRODUCER.nonsecret_url("https://issuer.example.test/caf\u00e9", issuer=issuer)
+
+    def test_early_url_helper_admits_safe_urls_without_source_or_output_effects(self) -> None:
+        result = self.invoke(
+            "urls",
+            "--url=https://issuer.example.test/caf\u00e9",
+            "--discovery-expected-issuer=https://issuer.example.test",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertFalse(self.evidence.exists())
+        for option in (
+            "--url=",
+            "--url=https://[invalid.fixture-secret",
+            "--discovery-expected-issuer=",
+            "--discovery-expected-issuer=http://issuer.example.test",
+            "--discovery-expected-issuer=https://issuer.example.test/",
+        ):
+            with self.subTest(option=option):
+                rejected = self.invoke("urls", option)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertNotIn("fixture-secret", rejected.stdout + rejected.stderr)
+                self.assertFalse(self.evidence.exists())
+
+    def test_internal_source_link_chains_freeze_and_target_mutation_blocks_verify(self) -> None:
+        self.write("nested/target", b"frozen internal target")
+        (self.root / "nested/chain").symlink_to("../literal")
+        self.git(self.root, "add", "nested")
+        sha = self.freeze()
+        manifest = json.loads((self.evidence / "SOURCE-MANIFEST.json").read_bytes())
+        self.assertEqual(manifest["files"]["nested/chain"]["symlink"], "../literal")
+        self.assertEqual(self.invoke("verify", "--sha256", sha).returncode, 0)
+        (self.root / "tracked.txt").write_bytes(b"changed internal target bytes")
+        self.assertNotEqual(self.invoke("verify", "--sha256", sha).returncode, 0)
+
+    def test_source_links_reject_escape_untracked_output_cycles_and_dangling(self) -> None:
+        link = self.root / "literal"
+        outside = self.owner / "outside-target"
+        outside.write_bytes(b"owned nonsecret external target")
+        for target in (
+            str(outside),
+            "../outside-target",
+            "missing-target",
+            "ignored-target",
+            "target/release/unknown",
+            "artifacts/perf/old/result",
+            "literal",
+            "crates/unknown/../tracked.txt",
+            "tracked.txt/../Cargo.toml",
+            "tracked.txt/",
+            "tracked.txt/.",
+            "crates/loadtest",
+        ):
+            with self.subTest(target=target):
+                link.unlink()
+                link.symlink_to(target)
+                with self.assertRaises(PRODUCER.SourceError):
+                    PRODUCER.read_source(self.root, PRODUCER.git_domain(self.root))
+        self.assertEqual(outside.read_bytes(), b"owned nonsecret external target")
+
+    def test_external_source_link_rejects_same_literal_before_and_after_target_mutation(
+        self,
+    ) -> None:
+        outside = self.owner / "outside-mutation-target"
+        outside.write_bytes(b"owned nonsecret external target before mutation")
+        link = self.root / "literal"
+        link.unlink()
+        link.symlink_to(outside)
+        domain = PRODUCER.git_domain(self.root)
+        literal = os.readlink(link)  # noqa: PTH115 - preserve literal link spelling
+        link_stamp = PRODUCER.stamp(link.lstat())
+        for raw in (
+            b"owned nonsecret external target before mutation",
+            b"owned nonsecret external target after mutation",
+        ):
+            with self.subTest(raw=raw):
+                outside.write_bytes(raw)
+                self.assertEqual(os.readlink(link), literal)  # noqa: PTH115 - compare literal spelling
+                self.assertEqual(PRODUCER.stamp(link.lstat()), link_stamp)
+                self.assertEqual(PRODUCER.git_domain(self.root), domain)
+                with self.assertRaises(PRODUCER.SourceError):
+                    PRODUCER.read_source(self.root, domain)
+
+    def test_source_link_cycles_and_aliased_ancestors_reject_before_target_reads(self) -> None:
+        link = self.root / "literal"
+        (self.root / "cycle-peer").symlink_to("literal")
+        self.git(self.root, "add", "cycle-peer")
+        link.unlink()
+        link.symlink_to("cycle-peer")
+        with self.assertRaises(PRODUCER.SourceError):
+            PRODUCER.read_source(self.root, PRODUCER.git_domain(self.root))
+        (self.root / "cycle-peer").unlink()
+        self.git(self.root, "update-index", "--force-remove", "cycle-peer")
+        owned = self.owner / "alias-input"
+        owned.mkdir()
+        (owned / "leaf").write_bytes(b"owned nonsecret alias target")
+        (self.root / "alias").symlink_to(owned)
+        self.git(self.root, "add", "alias")
+        link.unlink()
+        link.symlink_to("alias/leaf")
+        with self.assertRaises(PRODUCER.SourceError):
+            PRODUCER.read_source(self.root, PRODUCER.git_domain(self.root))
+        self.assertEqual((owned / "leaf").read_bytes(), b"owned nonsecret alias target")
+
+    def test_runner_invalid_urls_reject_before_output_or_any_probe(self) -> None:
+        values = (
+            "https://user:fixture-secret@issuer.example.test",
+            "https://user%3Afixture-secret@issuer.example.test",
+            "https://issuer.example.test?fixture-secret",
+            "https://issuer.example.test#fixture-secret",
+            "https://issuer.example.test/\nfixture-secret",
+            "https://issuer.example.test/\u009ffixture-secret",
+            "https://issuer.example.test/\u00a0fixture-secret",
+            "https://issuer.example.test/\u2028fixture-secret",
+            "ftp://issuer.example.test/fixture-secret",
+            "https:///fixture-secret",
+        )
+        cases = [
+            (flag, value) for flag in ("--url", "--discovery-expected-issuer") for value in values
+        ]
+        cases.extend(
+            ("--discovery-expected-issuer", value)
+            for value in (
+                "http://issuer.example.test/fixture-secret",
+                "https://issuer.example.test/fixture-secret/",
+            )
+        )
+        for index, (flag, value) in enumerate(cases):
+            with self.subTest(flag=flag, value=value):
+                calls = self.owner / "tool-calls"
+                calls.unlink(missing_ok=True)
+                result = self.runner(
+                    artifact=f"artifacts/perf/rejected-{index}", arguments=(flag, value)
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("fixture-secret", result.stdout + result.stderr)
+                self.assertNotIn(value, result.stdout + result.stderr)
+                self.assertFalse(calls.exists())
+                self.assertFalse((self.root / f"artifacts/perf/rejected-{index}").exists())
+
+    def test_runner_environment_urls_reject_before_managed_or_external_effects(self) -> None:
+        for managed in (False, True):
+            for key in ("PERF_BASE_URL", "PERF_DISCOVERY_EXPECTED_ISSUER"):
+                with self.subTest(managed=managed, key=key):
+                    calls = self.owner / "tool-calls"
+                    calls.unlink(missing_ok=True)
+                    result = self.runner(
+                        managed=managed,
+                        artifact=f"artifacts/perf/rejected-{managed}-{key}",
+                        overrides={
+                            key: "https://user:fixture-secret@issuer.example.test",
+                            "PERF_APPLY_DATABASE_MIGRATIONS": "1",
+                        },
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn("fixture-secret", result.stdout + result.stderr)
+                    self.assertFalse(calls.exists())
+                    self.assertFalse(
+                        (self.root / f"artifacts/perf/rejected-{managed}-{key}").exists()
+                    )
+
+    def test_runner_generated_url_rejects_before_port_selection_or_managed_effects(self) -> None:
+        tools = self.owner / "tools"
+        tools.mkdir()
+        wrapper = tools / "python3"
+        wrapper.write_text(
+            f"#!{sys.executable}\nimport os,pathlib,sys\n"
+            "if len(sys.argv)>1 and sys.argv[1]=='-':\n"
+            " pathlib.Path(os.environ['FIXTURE_CALLS']).open('a').write('port-selection\\n')\n"
+            " print('18095');sys.exit(0)\n"
+            "os.execv(sys.executable,[sys.executable,*sys.argv[1:]])\n"
+        )
+        wrapper.chmod(0o755)
+        result = self.runner(
+            managed=True,
+            overrides={
+                "PERF_BASE_URL": "",
+                "PERF_SERVER_PORT": "",
+                "PERF_SERVER_HOST": "user:fixture-secret@127.0.0.1",
+                "PERF_APPLY_DATABASE_MIGRATIONS": "1",
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("fixture-secret", result.stdout + result.stderr)
+        self.assertFalse((self.owner / "tool-calls").exists())
+        self.assertFalse((self.root / "artifacts/perf/runner").exists())
 
     def test_report_all_config_fields_reject_mutation_even_with_recomputed_hash(self) -> None:
         sha, report, baseline = self.bound_invocation_report()

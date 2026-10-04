@@ -375,7 +375,48 @@ def read_source(
             "symlink": link,
         }
         contents[name] = raw
+    validate_source_links(files)
     return files, contents
+
+
+def source_link_target(name: str, target: str, files: dict[str, Any]) -> str:
+    if target.endswith(("/", "/.")):
+        fail("source link target requires a directory")
+    link = pathlib.PurePosixPath(target)
+    if link.is_absolute():
+        fail("source link target is outside frozen tracked source")
+    directories = {""} | {
+        str(parent) for path in files for parent in pathlib.PurePosixPath(path).parents
+    }
+    parts = list(pathlib.PurePosixPath(name).parent.parts)
+    for index, part in enumerate(link.parts):
+        if part == "..":
+            if not parts:
+                fail("source link target is outside frozen tracked source")
+            parts.pop()
+        else:
+            parts.append(part)
+        if index + 1 < len(link.parts) and "/".join(parts) not in directories:
+            fail("source link ancestor is not a frozen tracked directory")
+    resolved = "/".join(parts)
+    if resolved not in files:
+        fail("source link target is not a frozen tracked file")
+    return resolved
+
+
+def validate_source_links(files: dict[str, Any]) -> None:
+    for original in files:
+        name = original
+        entry = files[name]
+        seen: set[str] = set()
+        while entry["symlink"] is not None:
+            if name in seen:
+                fail("source link cycle is not admitted")
+            seen.add(name)
+            name = source_link_target(name, entry["symlink"], files)
+            entry = files[name]
+        if entry["git_mode"] not in {"100644", "100755"}:
+            fail("source link terminal is not a frozen tracked regular file")
 
 
 def publish(path: pathlib.Path, raw: bytes) -> None:
@@ -1085,11 +1126,21 @@ def require_fresh_outputs(root: pathlib.Path, paths: list[str]) -> None:
             fail("run output already exists")
 
 
-def main() -> int:
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=["paths", "freeze", "verify", "bind", "binary", "invocation", "report", "status"],
+        choices=[
+            "urls",
+            "paths",
+            "freeze",
+            "verify",
+            "bind",
+            "binary",
+            "invocation",
+            "report",
+            "status",
+        ],
     )
     parser.add_argument("--root", required=True)
     parser.add_argument("--evidence", required=True)
@@ -1105,6 +1156,8 @@ def main() -> int:
     parser.add_argument("--build-log")
     parser.add_argument("--name", choices=["aegaeon-server", "aegaeon-loadtest"])
     parser.add_argument("--report")
+    parser.add_argument("--url")
+    parser.add_argument("--discovery-expected-issuer")
     producer_args = sys.argv[1:]
     child_args: list[str] = []
     if "--" in producer_args:
@@ -1115,8 +1168,23 @@ def main() -> int:
     args.child_args = child_args
     if child_args and args.action != "invocation":
         parser.error("child arguments are only accepted by invocation")
+    return args
+
+
+def validate_requested_urls(args: argparse.Namespace) -> None:
+    if args.url is not None:
+        nonsecret_url(required(args.url))
+    if args.discovery_expected_issuer is not None:
+        nonsecret_url(required(args.discovery_expected_issuer), issuer=True)
+
+
+def main() -> int:
+    args = parse_arguments()
     try:
-        dispatch(args)
+        if args.action == "urls":
+            validate_requested_urls(args)
+        else:
+            dispatch(args)
     except (OSError, ValueError, KeyError, TypeError, OverflowError, UnicodeError, SourceError):
         print("[perf] source or executable evidence validation failed", file=sys.stderr)
         return 1

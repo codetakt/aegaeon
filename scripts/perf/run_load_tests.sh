@@ -137,6 +137,20 @@ if [ "$(realpath "${BASH_SOURCE[0]}")" != "$REPO_ROOT/scripts/perf/run_load_test
 	echo "[perf] runner must be the tracked repository entrypoint" >&2
 	exit 2
 fi
+# Admit explicit URLs before output setup or probes. Check a managed host before
+# port selection, then admit the final generated URL as soon as it is available.
+PRECHECK_URL="$BASE_URL"
+if [ -z "$PRECHECK_URL" ] && [ "$MANAGE_SERVER" = "1" ]; then
+	PRECHECK_URL="http://${SERVER_HOST}:${SERVER_PORT:-8080}"
+fi
+URL_ARGS=()
+if [ -n "$PRECHECK_URL" ]; then
+	URL_ARGS+=(--url="$PRECHECK_URL")
+fi
+if [ -n "$DISCOVERY_EXPECTED_ISSUER" ]; then
+	URL_ARGS+=(--discovery-expected-issuer="$DISCOVERY_EXPECTED_ISSUER")
+fi
+python3 "$SOURCE_PRODUCER" urls --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" "${URL_ARGS[@]}"
 SOURCE_STATUS="paths"
 OUTPUT_ARGS=(--output-directory "$ARTIFACT_DIR" --artifact-directory "$ARTIFACT_DIR"
 	--report-file "$REPORT_PATH" --legacy-report-file "$LEGACY_REPORT")
@@ -205,6 +219,8 @@ else
 		exit 2
 	fi
 fi
+
+python3 "$SOURCE_PRODUCER" urls --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" --url="$BASE_URL"
 
 if [ "$MANAGE_SERVER" = "1" ]; then
 	if [ -z "${AEGAEON_DATABASE_URL:-}" ]; then

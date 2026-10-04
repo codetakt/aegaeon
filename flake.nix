@@ -263,7 +263,6 @@
             };
             check-symlinks = {
               enable = true;
-              excludes = [ "^crates/kani-harness/kani$" ];
             };
             check-vcs-permalinks.enable = true;
             forbid-new-submodules.enable = true;
