@@ -814,25 +814,32 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         ):
             with self.subTest(child=child):
                 artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
-                terminate = Mock(side_effect=[False, OSError("controlled final cleanup failure")])
-                supervisor = supervisor_type(artifacts, {"commands": []}, 1)
-                with (
-                    patch.dict(
-                        supervisor_type.command.__globals__,
-                        terminate=terminate,
-                        group_alive=lambda _pid: False,
-                    ),
-                    patch.object(supervisor, "save"),
-                    self.assertRaisesRegex(  # noqa: PT027 - unittest discovery without pytest
-                        namespace["Failure"], "controlled final cleanup"
-                    ) as caught,
+                for error in (
+                    OSError("controlled final cleanup failure"),
+                    namespace["Failure"]("controlled final cleanup failure"),
                 ):
-                    supervisor.command([sys.executable, "-c", child], os.environ.copy(), 5, "probe")
-                self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
-                self.assertEqual(terminate.call_count, 2)  # noqa: PT009 - active under Python -O
-                self.assertEqual(supervisor.summary["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
-                self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
-                self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
+                    with self.subTest(error=type(error).__name__):
+                        terminate = Mock(side_effect=[False, error])
+                        supervisor = supervisor_type(artifacts, {"commands": []}, 1)
+                        with (
+                            patch.dict(
+                                supervisor_type.command.__globals__,
+                                terminate=terminate,
+                                group_alive=lambda _pid: False,
+                            ),
+                            patch.object(supervisor, "save"),
+                            self.assertRaisesRegex(  # noqa: PT027 - unittest discovery without pytest
+                                namespace["Failure"], "controlled final cleanup"
+                            ) as caught,
+                        ):
+                            supervisor.command(
+                                [sys.executable, "-c", child], os.environ.copy(), 5, "probe"
+                            )
+                        self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
+                        self.assertEqual(terminate.call_count, 2)  # noqa: PT009 - active under Python -O
+                        self.assertEqual(supervisor.summary["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
+                        self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
+                        self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
 
     def test_original_exits_and_crash_signals_propagate(self):
         for mode, expected in (("build-signal", 143), ("run-failure", 9), ("run-signal", 134)):
@@ -872,26 +879,34 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                 self.assert_child_stopped()
 
     def test_wrapper_interrupt_cleans_descendants(self):
-        process = subprocess.Popen(  # noqa: S603
-            [shutil.which("bash"), str(WRAPPER)],
-            cwd=self.root,
-            env={**self.environment, "SANITIZER_FIXTURE_MODE": "build-timeout"},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        try:
-            deadline = time.monotonic() + 5
-            while not (self.root / "child.pid").exists() and time.monotonic() < deadline:
-                time.sleep(0.01)
-            self.assertTrue((self.root / "child.pid").exists())  # noqa: PT009 - active under Python -O
-            process.send_signal(signal.SIGTERM)
-            _, stderr = process.communicate(timeout=10)
-            self.assertTrue(process.returncode == 143, stderr)  # noqa: PT009 - active under Python -O
-            self.assert_child_stopped()
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.communicate()
+        for mode in ("build-timeout", "run-timeout"):
+            for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                with self.subTest(mode=mode, signal=signum):
+                    (self.root / "child.pid").unlink(missing_ok=True)
+                    process = subprocess.Popen(  # noqa: S603
+                        [shutil.which("bash"), str(WRAPPER)],
+                        cwd=self.root,
+                        env={**self.environment, "SANITIZER_FIXTURE_MODE": mode},
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    try:
+                        deadline = time.monotonic() + 5
+                        while (
+                            not (self.root / "child.pid").exists() and time.monotonic() < deadline
+                        ):
+                            time.sleep(0.01)
+                        self.assertTrue((self.root / "child.pid").exists())  # noqa: PT009 - active under Python -O
+                        process.send_signal(signum)
+                        _, stderr = process.communicate(timeout=10)
+                        self.assertEqual(process.returncode, 128 + signum, stderr)  # noqa: PT009 - active under Python -O
+                        self.assertIn(f"interrupted by signal {signum}", self.summary()["error"])  # noqa: PT009 - active under Python -O
+                        self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under Python -O
+                        self.assert_child_stopped()
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.communicate()
 
     def test_invalid_selections_deadlines_and_cargo_overrides_fail(self):
         for key, value in (

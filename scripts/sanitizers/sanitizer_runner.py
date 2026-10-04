@@ -40,6 +40,13 @@ class Failure(Exception):  # noqa: N818 - retained failure/status interface
         self.status = status if status > 0 else 128 - status
 
 
+class Interrupted(Failure):
+    """Keep the supervisor's signal separate from child cleanup failures."""
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"Sanitizer supervisor interrupted by signal {signum}", 128 + signum)
+
+
 def failure(message: str, status: int = 1) -> NoReturn:
     raise Failure(message, status)
 
@@ -119,7 +126,7 @@ def terminate(process: subprocess.Popen[bytes], grace: float) -> bool:
 
 
 def interrupted(signum: int, _frame: object) -> None:
-    failure(f"Sanitizer supervisor interrupted by signal {signum}", 128 + signum)
+    raise Interrupted(signum)
 
 
 @dataclass(frozen=True)
@@ -218,9 +225,15 @@ class Supervisor:
         record["status"] = (
             "failed" if error or timed_out or lingering or status != 0 else "completed"
         )
-        failure_status = (
-            (original_status or getattr(error, "status", 1)) if error else (status or 1)
-        )
+        # Child termination during cleanup must not replace the signal that
+        # interrupted supervision. Other cleanup errors preserve an observed
+        # child failure, including errors raised by our own cleanup checks.
+        if isinstance(error, Interrupted):
+            failure_status = error.status
+        elif error:
+            failure_status = original_status or getattr(error, "status", 1)
+        else:
+            failure_status = status or 1
         if timed_out:
             failure_status = 124
         try:
