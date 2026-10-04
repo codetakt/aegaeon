@@ -10,7 +10,7 @@ import sys
 from test_security_fuzz import SecurityFuzzFixture
 
 CONTROL = r"""
-import contextlib,gzip,io,json,os,pathlib,runpy,struct,sys,tarfile,zlib
+import contextlib,gzip,io,json,os,pathlib,resource,runpy,struct,sys,tarfile,zlib
 h=runpy.run_path(sys.argv[1]);state=h['write_exclusive_archive'].__globals__
 root=h['ROOT'];case=sys.argv[2];source=root/'fuzz/corpus/owned'
 source.mkdir(parents=True);(source/'seed').write_bytes(b'raw input')
@@ -23,6 +23,13 @@ for i in range(3):
 final=output/'20261004T123456123456Z.tar.gz'
 sentinel=root.parent/'sentinel';sentinel.write_bytes(b'outside preserved')
 unsupported={}
+descriptor_limit=None
+if case=='malformed-limit':
+    for i in range(80):
+        path=output/f'19970101T{i:012d}Z.tar.gz'
+        path.write_bytes(b'not an archive');unsupported[path.name]='malformed'
+    descriptor_limit=resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE,(min(64,descriptor_limit[0]),descriptor_limit[1]))
 deflate_raw=io.BytesIO()
 with tarfile.open(fileobj=deflate_raw,mode='w') as archive:
     member=tarfile.TarInfo('seed');member.size=len(b'raw input')
@@ -105,6 +112,8 @@ failed=False
 try:h['write_exclusive_archive'](final,[(source,'corpus')],1)
 except (OSError,ValueError,zlib.error):failed=True
 finally:
+    if descriptor_limit is not None:
+        resource.setrlimit(resource.RLIMIT_NOFILE,descriptor_limit)
     state['os'].link=original_link
     if case=='scan-current-change':state['os'].listdir=original
     if case in ('prune-error','partial-prune-error','prune-current-change',
@@ -192,6 +201,14 @@ class FuzzArchiveRetentionTests(SecurityFuzzFixture):
         self.assertFalse(record["published"], record)
         self.assertEqual(len(record["remaining"]), 3, record)
         self.assertTrue(all(record["remaining"].values()), record)
+
+    def test_rejected_archives_do_not_exhaust_descriptors_during_retention(self):
+        record = self.control("malformed-limit")
+        self.assertFalse(record["failed"], record)
+        self.assertTrue(record["valid"], record)
+        self.assertEqual(len(record["unsupported"]), 80, record)
+        self.assertTrue(all(record["unsupported"].values()), record)
+        self.assertEqual(record["remaining"], {}, record)
 
     def test_current_deflate_corruption_aborts_without_pruning(self):
         record = self.control("current-deflate-corruption")

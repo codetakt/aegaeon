@@ -2653,6 +2653,43 @@ os.link(binary,ROOT.parent/'external-compiled-artifact')
                 self.assertNotEqual(direct.returncode, 0)
                 self.assertIn("inherited Git identity overrides", direct.stderr)
 
+    def test_workflow_reports_are_excluded_while_adjacent_sources_remain_bound(self):
+        result = self.helper_python(
+            "import pathlib,runpy,sys\n"
+            "helper=runpy.run_path(sys.argv[1]);root=helper['ROOT']\n"
+            "outputs=('artifacts/security-upload','artifacts/sbom')\n"
+            "for route in outputs:\n"
+            " path=root/route;path.mkdir(parents=True);(path/'report').write_bytes(b'old')\n"
+            "status=root/'security-artifacts/security_status.jsonl'\n"
+            "status.parent.mkdir();status.write_bytes(b'old status')\n"
+            "sources=('artifacts/ct/input','artifacts/karamel/input',"
+            "'artifacts/unclassified/input','security-artifacts/source-input')\n"
+            "for route in sources:\n"
+            " path=root/route;path.parent.mkdir(parents=True,exist_ok=True)\n"
+            " path.write_bytes(b'source')\n"
+            "state=helper['source_hashes'].__globals__;digest=state['evidence_digest']\n"
+            "def guarded_digest(path,*args):\n"
+            " if path==status or any(path.is_relative_to(root/route) for route in outputs):\n"
+            "  raise RuntimeError('workflow output read as source')\n"
+            " return digest(path,*args)\n"
+            "state['evidence_digest']=guarded_digest\n"
+            "before=helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n"
+            "for route in outputs:\n"
+            " (root/route/'report').write_bytes(b'new report')\n"
+            " (root/route/'new-report').write_bytes(b'new')\n"
+            "status.write_bytes(b'new status')\n"
+            "after=helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n"
+            "if before!=after: raise RuntimeError('workflow output changed source identity')\n"
+            "if any(route not in before for route in sources):\n"
+            " raise RuntimeError('adjacent source excluded')\n"
+            "for route in sources:\n"
+            " (root/route).write_bytes(b'changed source')\n"
+            " changed=helper['source_hashes'](list(helper['REQUIRED_TARGETS']))\n"
+            " if changed==after: raise RuntimeError('adjacent source change missed')\n"
+            " after=changed\n"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_dirty_and_ignored_transitive_inputs_and_inventory_changes_are_bound(self):
         inputs = (
             "crates/server/src/web/par_endpoint.rs",

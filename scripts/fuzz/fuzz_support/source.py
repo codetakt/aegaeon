@@ -132,6 +132,9 @@ def source_exclusions() -> set[Path]:
         FUZZ_DIR / "target",
         *(FUZZ_DIR / name for name in (*RECOVERY_RAW_NAMES, "corpus_meta")),
         ROOT / "artifacts/security",
+        ROOT / "artifacts/security-upload",
+        ROOT / "artifacts/sbom",
+        ROOT / "security-artifacts/security_status.jsonl",
         ROOT / "result",
         ROOT / "result-server",
     }
