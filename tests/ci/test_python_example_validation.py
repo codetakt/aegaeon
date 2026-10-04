@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import importlib.util
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from validate_python_example import (
     EXPECTED_TESTS,
@@ -84,6 +87,8 @@ class ValidationControls(unittest.TestCase):
             "failures": 0,
             "errors": 0,
             "skipped": 0,
+            "expected_failures": 0,
+            "unexpected_successes": 0,
         }
         require_tests(result, 0)
         for changed in [
@@ -93,6 +98,8 @@ class ValidationControls(unittest.TestCase):
             {"skipped": 1},
             {"failures": 1},
             {"errors": 1},
+            {"expected_failures": 1},
+            {"unexpected_successes": 1},
             {"status": "failed"},
             {"test_ids": identifiers[:-1]},
             {"test_ids": [identifiers[0]] * len(identifiers)},
@@ -114,8 +121,17 @@ class ValidationControls(unittest.TestCase):
             "failures": 0,
             "errors": 0,
             "skipped": 0,
+            "expected_failures": 0,
+            "unexpected_successes": 0,
         }
-        for key in ("tests_run", "failures", "errors", "skipped"):
+        for key in (
+            "tests_run",
+            "failures",
+            "errors",
+            "skipped",
+            "expected_failures",
+            "unexpected_successes",
+        ):
             for counter in (False, True, 0.0, float(len(EXPECTED_TESTS)), "0", None, -1):
                 with self.subTest(key=key, counter=counter), self.assertRaises(ValueError):
                     require_tests({**valid, key: counter}, 0)
@@ -124,3 +140,43 @@ class ValidationControls(unittest.TestCase):
             with self.subTest(key=key, missing=True), self.assertRaises(ValueError):
                 require_tests(missing, 0)
         require_tests(valid, 0)
+
+    def test_actual_expected_failure_and_unexpected_success_cannot_pass(self):
+        root = Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "rp_outcome_control", root / "tests/examples/minimal_rp/check_flow.py"
+        )
+        flow = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = flow
+        with patch.object(
+            sys,
+            "argv",
+            [str(spec.origin), str(root / "examples/minimal-rp/app.py"), "unused-result.json"],
+        ):
+            spec.loader.exec_module(flow)
+        for succeeds, counter in ((False, "expected_failures"), (True, "unexpected_successes")):
+            with self.subTest(counter=counter):
+
+                class ControlledOutcome(unittest.TestCase):
+                    @unittest.expectedFailure
+                    def test_expected(self, succeeds=succeeds):
+                        self.assertTrue(succeeds)
+
+                result = unittest.TextTestRunner(
+                    stream=io.StringIO(), resultclass=flow.InventoryResult
+                ).run(unittest.TestSuite([ControlledOutcome("test_expected")]))
+                outcome = flow.test_outcome(result)
+                self.assertEqual(outcome["status"], "failed")
+                self.assertEqual(outcome[counter], 1)
+                self.assertIs(type(outcome[counter]), int)
+                # Keep the expected inventory/status valid to isolate the nonzero outcome.
+                with self.assertRaises(ValueError):
+                    require_tests(
+                        {
+                            **outcome,
+                            "status": "passed",
+                            "tests_run": len(EXPECTED_TESTS),
+                            "test_ids": sorted(EXPECTED_TESTS),
+                        },
+                        0,
+                    )

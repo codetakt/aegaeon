@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -53,11 +54,24 @@ class Response:
             raise rp.requests.HTTPError(str(self.status_code))
 
 
-def unsigned_token(claims):
+def unsigned_token(claims, algorithm="RS256"):
     def segment(value):
         return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
 
-    return segment({"alg": "RS256", "typ": "JWT"}) + "." + segment(claims) + ".AA"
+    return segment({"alg": algorithm, "typ": "JWT"}) + "." + segment(claims) + ".AA"
+
+
+def required_claims(nonce, **overrides):
+    now = time.time()
+    return {
+        "iss": rp._discovery["issuer"],
+        "sub": "subject-1",
+        "aud": rp._client["client_id"],
+        "exp": now + 300,
+        "iat": now - 1,
+        "nonce": nonce,
+        **overrides,
+    }
 
 
 class ApplicationSmoke(unittest.TestCase):
@@ -74,7 +88,7 @@ class ApplicationSmoke(unittest.TestCase):
         return query, saved
 
     def callback(self, saved, claims=None, response=None):
-        claims = claims if claims is not None else {"sub": "subject-1", "nonce": saved["nonce"]}
+        claims = claims if claims is not None else required_claims(saved["nonce"])
         response = response or Response(
             {"id_token": unsigned_token(claims), "access_token": "not-stored"}
         )
@@ -174,6 +188,26 @@ class ApplicationSmoke(unittest.TestCase):
             )
         self.assertEqual(replay.status_code, 400)
         replay_post.assert_not_called()
+        for algorithm, additional in (
+            ("ES256", {"aud": [CLIENT["client_id"]]}),
+            (
+                "RS256",
+                {
+                    "aud": [CLIENT["client_id"], "other-client"],
+                    "azp": CLIENT["client_id"],
+                    "nbf": time.time() - 1,
+                },
+            ),
+        ):
+            with self.subTest(algorithm=algorithm, claims=additional):
+                _, saved = self.begin()
+                claims = required_claims(saved["nonce"], **additional)
+                result, _ = self.callback(
+                    saved, response=Response({"id_token": unsigned_token(claims, algorithm)})
+                )
+                self.assertEqual(result.status_code, 302)
+                with self.client.session_transaction() as session:
+                    self.assertEqual(session["id_token_claims"], claims)
 
     def test_missing_code_and_wrong_state(self):
         for query in ({}, {"code": "code-1", "state": "wrong"}):
@@ -227,15 +261,17 @@ class ApplicationSmoke(unittest.TestCase):
                 post.assert_not_called()
 
     def test_nonce_mismatch_and_missing_claim(self):
-        for claim in (
-            {"sub": "subject-1", "nonce": "wrong"},
-            {"sub": "subject-1"},
-            {"nonce": None},
-        ):
-            with self.subTest(claim=claim):
+        for nonce in ("wrong", None, "missing"):
+            with self.subTest(nonce=nonce):
                 saved = self.failure_begin()
+                claim = required_claims(nonce)
+                if nonce == "missing":
+                    del claim["nonce"]
                 result, _ = self.callback(saved, claims=claim)
-                self.assertIn(b"Nonce mismatch", result.data)
+                if nonce == "wrong":
+                    self.assertIn(b"Nonce mismatch", result.data)
+                else:
+                    self.assertIn(b"Invalid token response", result.data)
                 self.assert_rejected(result, saved)
 
     def test_protocol_error_does_not_echo_provider_details(self):
@@ -265,7 +301,7 @@ class ApplicationSmoke(unittest.TestCase):
         self.assertNotIn(b"a" * 501, result.data)
         self.assert_rejected(result, saved)
 
-    def test_malformed_token_payload_rejected(self):
+    def test_malformed_token_payload_rejected(self):  # noqa: PLR0912, PLR0915 - finite claim/type/config rejection subtests preserve the admitted method ID
         for payload in (
             None,
             [],
@@ -278,6 +314,71 @@ class ApplicationSmoke(unittest.TestCase):
                 saved = self.failure_begin()
                 result, _ = self.callback(saved, response=Response(payload))
                 self.assert_rejected(result, saved)
+        for missing in ("iss", "sub", "aud", "exp", "iat", "nonce"):
+            with self.subTest(missing=missing):
+                saved = self.failure_begin()
+                claims = required_claims(saved["nonce"])
+                del claims[missing]
+                result, _ = self.callback(saved, claims=claims)
+                self.assert_rejected(result, saved)
+        changes = [
+            {"iss": "https://wrong-issuer.example"},
+            {"aud": "wrong-client"},
+            {"aud": ["wrong-client"]},
+            {"aud": []},
+            {"exp": time.time() - 60},
+            {"iat": time.time() + 60},
+            {"nbf": time.time() + 60},
+            {"aud": [CLIENT["client_id"], "other-client"]},
+            *({"sub": value} for value in ("", None, False, 1, [], {})),
+            *({"azp": value} for value in ("wrong-client", "", None, False, 1, [], {})),
+        ]
+        for name in ("exp", "iat", "nbf"):
+            changes.extend(
+                {name: value}
+                for value in (
+                    False,
+                    True,
+                    None,
+                    "0" if name != "exp" else str(int(time.time()) + 300),
+                    [],
+                    {},
+                    float("nan"),
+                    float("inf"),
+                    float("-inf"),
+                )
+            )
+        for changed in changes:
+            with self.subTest(claims=changed):
+                saved = self.failure_begin()
+                result, _ = self.callback(saved, claims=required_claims(saved["nonce"], **changed))
+                self.assert_rejected(result, saved)
+        for algorithm in ("none", "HS256", "RS512", "", None, False, []):
+            with self.subTest(algorithm=algorithm):
+                saved = self.failure_begin()
+                token = unsigned_token(required_claims(saved["nonce"]), algorithm)
+                result, _ = self.callback(saved, response=Response({"id_token": token}))
+                self.assert_rejected(result, saved)
+        for attribute, key in (("_discovery", "issuer"), ("_client", "client_id")):
+            for invalid in ("missing", None, "", False, 1, [], {}):
+                with self.subTest(expected=key, invalid=invalid):
+                    saved = self.failure_begin()
+                    claims = required_claims(saved["nonce"])
+                    response = Response({"id_token": unsigned_token(claims)})
+                    config = getattr(rp, attribute).copy()
+                    if invalid == "missing":
+                        del config[key]
+                    else:
+                        config[key] = invalid
+                    with patch.object(rp, attribute, config):
+                        result, post = self.callback(saved, claims=claims, response=response)
+                    self.assert_rejected(result, saved)
+                    post.assert_not_called()
+        with self.subTest(valid_numeric_dates=True):
+            _, saved = self.begin()
+            claims = required_claims(saved["nonce"], nbf=time.time() - 1)
+            result, _ = self.callback(saved, claims=claims)
+            self.assertEqual(result.status_code, 302)
 
     def test_token_transport_failure_rejected(self):
         for failure in (rp.requests.Timeout, rp.requests.ConnectionError, rp.requests.HTTPError):
@@ -292,7 +393,7 @@ class ApplicationSmoke(unittest.TestCase):
     def test_claims_escaping_and_logout(self):
         _, saved = self.begin()
         result, _ = self.callback(
-            saved, claims={"sub": "<script>x</script>", "nonce": saved["nonce"]}
+            saved, claims=required_claims(saved["nonce"], sub="<script>x</script>")
         )
         self.assertEqual(result.status_code, 302)
         page = self.client.get("/")
@@ -379,7 +480,7 @@ class HttpProviderContract(unittest.TestCase):
                 self.assertEqual(login.status_code, 302)
                 with client.session_transaction() as session:
                     saved = dict(session)
-                claims.update(sub="http-subject", nonce=saved["nonce"])
+                claims.update(required_claims(saved["nonce"], sub="http-subject"))
                 result = client.get(
                     "/callback", query_string={"code": "http-code", "state": saved["oauth_state"]}
                 )
@@ -452,24 +553,31 @@ class InventoryResult(unittest.TextTestResult):
         super().startTest(test)
 
 
+def test_outcome(result):
+    passed = (
+        result.wasSuccessful()
+        and result.testsRun > 0
+        and not result.skipped
+        and not result.expectedFailures
+        and not result.unexpectedSuccesses
+    )
+    return {
+        "status": "passed" if passed else "failed",
+        "tests_run": result.testsRun,
+        "test_ids": result.test_ids,
+        "failures": len(result.failures),
+        "errors": len(result.errors),
+        "skipped": len(result.skipped),
+        "expected_failures": len(result.expectedFailures),
+        "unexpected_successes": len(result.unexpectedSuccesses),
+        "scope": "sample routes/session/decoding; separate JWT library integration",
+        "sample_signature_verification": False,
+    }
+
+
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2, resultclass=InventoryResult).run(suite)
-    passed = result.wasSuccessful() and result.testsRun > 0 and not result.skipped
-    RESULT_PATH.write_text(
-        json.dumps(
-            {
-                "status": "passed" if passed else "failed",
-                "tests_run": result.testsRun,
-                "test_ids": result.test_ids,
-                "failures": len(result.failures),
-                "errors": len(result.errors),
-                "skipped": len(result.skipped),
-                "scope": "sample routes/session/decoding; separate JWT library integration",
-                "sample_signature_verification": False,
-            },
-            indent=2,
-        )
-        + "\n"
-    )
-    raise SystemExit(0 if passed else 1)
+    outcome = test_outcome(result)
+    RESULT_PATH.write_text(json.dumps(outcome, indent=2) + "\n")
+    raise SystemExit(0 if outcome["status"] == "passed" else 1)

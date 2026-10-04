@@ -13,6 +13,7 @@ import base64
 import hashlib
 import html
 import json
+import math
 import os
 import secrets
 import sys
@@ -122,13 +123,16 @@ def login():
 
 def _exchange_code(code, verifier):
     """Return decoded claims without exposing token endpoint bodies on failure."""
+    issuer, client_id = _discovery.get("issuer"), _client.get("client_id")
+    if not isinstance(issuer, str) or not issuer or not isinstance(client_id, str) or not client_id:
+        raise ValueError
     resp = requests.post(
         _discovery["token_endpoint"],
         data={
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": RP_REDIRECT_URI,
-            "client_id": _client["client_id"],
+            "client_id": client_id,
             "client_secret": _client.get("client_secret", ""),
             "code_verifier": verifier,
         },
@@ -146,11 +150,37 @@ def _exchange_code(code, verifier):
     # WARNING: This demo skips ID token signature verification for simplicity.
     # Production RPs MUST fetch the provider's JWKS and verify the signature.
     # See: https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
-    return jwt.decode(
+    if jwt.get_unverified_header(id_token_raw).get("alg") not in ("RS256", "ES256"):
+        raise ValueError
+    claims = jwt.decode(
         id_token_raw,
-        options={"verify_signature": False},
+        issuer=issuer,
+        audience=client_id,
+        options={
+            "verify_signature": False,
+            "verify_iss": True,
+            "verify_aud": True,
+            "verify_sub": True,
+            "verify_exp": True,
+            "verify_iat": True,
+            "verify_nbf": True,
+            "require": ["iss", "sub", "aud", "exp", "iat", "nonce"],
+        },
         algorithms=["RS256", "ES256"],
     )
+    if not isinstance(claims["sub"], str) or not claims["sub"]:
+        raise ValueError
+    if any(
+        name in claims
+        and (type(claims[name]) not in (int, float) or not math.isfinite(claims[name]))
+        for name in ("exp", "iat", "nbf")
+    ):
+        raise ValueError
+    if ("azp" in claims and claims["azp"] != client_id) or (
+        isinstance(claims["aud"], list) and len(claims["aud"]) > 1 and "azp" not in claims
+    ):
+        raise ValueError
+    return claims
 
 
 @app.route("/callback")
@@ -180,7 +210,7 @@ def callback():
 
     try:
         claims = _exchange_code(code, verifier)
-    except (requests.RequestException, ValueError, jwt.PyJWTError):
+    except (requests.RequestException, ValueError, TypeError, OverflowError, jwt.PyJWTError):
         # Do not echo response bodies, token strings or transport exception details.
         return "<h1>Token Error</h1><p>Invalid token response</p>", 400
     if not isinstance(claims, dict) or claims.get("nonce") != expected_nonce:

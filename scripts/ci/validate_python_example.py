@@ -98,7 +98,8 @@ def audit_verdict(value: Any, graph: dict[str, str], exit_code: int) -> dict[str
 def require_tests(value: Any, exit_code: int) -> None:  # noqa: ANN401 - validate report
     if not isinstance(value, dict):
         raise ValueError("sample tests omitted their result inventory")  # noqa: TRY004
-    for key in ("tests_run", "failures", "errors", "skipped"):
+    outcomes = ("failures", "errors", "skipped", "expected_failures", "unexpected_successes")
+    for key in ("tests_run", *outcomes):
         counter = value.get(key)
         if type(counter) is not int or counter < 0:
             raise ValueError("sample test counters must be nonnegative integers")
@@ -110,7 +111,7 @@ def require_tests(value: Any, exit_code: int) -> None:  # noqa: ANN401 - validat
         or any(not isinstance(item, str) for item in identifiers)
         or len(identifiers) != len(EXPECTED_TESTS)
         or set(identifiers) != EXPECTED_TESTS
-        or any(value.get(key) != 0 for key in ["failures", "errors", "skipped"])
+        or any(value.get(key) != 0 for key in outcomes)
         or exit_code != 0
     ):
         raise ValueError("sample tests failed, skipped, or differ from the expected inventory")
