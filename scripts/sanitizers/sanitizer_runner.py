@@ -240,7 +240,12 @@ class Supervisor:
             self.save()
         except Exception as save_error:
             message = f"{phase} evidence write failed: {save_error}"
-            raise Failure(message, failure_status) from save_error
+            raise Failure(
+                message,
+                getattr(save_error, "status", 1)
+                if record["status"] == "completed"
+                else failure_status,
+            ) from save_error
         if timed_out:
             failure(f"{phase} exceeded its deadline", 124)
         if error:
@@ -732,7 +737,7 @@ def main() -> int:
                 supervisor.save()
         except Exception as error:  # noqa: BLE001 - final evidence failure cannot succeed
             print(f"[FAIL] Sanitizer evidence write failed: {error}", file=sys.stderr)
-            exit_status = exit_status or 1
+            exit_status = exit_status or getattr(error, "status", 1)
     if exit_status == 0:
         print(
             f"[INFO] Sanitizer-backed tests completed; evidence: {artifacts / 'run-summary.json'}"

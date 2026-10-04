@@ -841,6 +841,57 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                         self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
                         self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
 
+    def test_evidence_write_interruptions_preserve_signal_and_prior_failure(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        for child_status in (0, 9, 143):
+            for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                with self.subTest(child_status=child_status, signum=signum):
+                    supervisor = supervisor_type(self.root, {"commands": []})
+                    record = {
+                        "phase": "run",
+                        "exit_code": child_status,
+                        "timed_out": False,
+                        "lingering_descendants": False,
+                    }
+                    with (
+                        patch.object(
+                            supervisor, "save", side_effect=namespace["Interrupted"](signum)
+                        ),
+                        self.assertRaises(namespace["Failure"]) as caught,  # noqa: PT027 - unittest discovery
+                    ):
+                        supervisor.finish_command(record, None, None)
+                    self.assertEqual(caught.exception.status, child_status or 128 + signum)  # noqa: PT009
+
+    def test_final_evidence_failure_preserves_signal_and_prior_failure(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        settings = [""] * len(namespace["Settings"].__dataclass_fields__)
+        settings[3] = str(self.root)
+        for prior_status in (0, 9, 143):
+            for failure in (
+                OSError("controlled evidence write failure"),
+                *(
+                    namespace["Interrupted"](sig)
+                    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+                ),
+            ):
+                with self.subTest(prior_status=prior_status, failure=str(failure)):
+                    with (
+                        patch.object(
+                            supervisor_type,
+                            "execute",
+                            side_effect=namespace["Failure"]("earlier child failure", prior_status)
+                            if prior_status
+                            else None,
+                        ),
+                        patch.object(supervisor_type, "save", side_effect=failure),
+                        patch.object(signal, "signal"),
+                        patch.object(sys, "argv", ["sanitizer_runner.py", *settings]),
+                    ):
+                        status = namespace["main"]()
+                    self.assertEqual(status, prior_status or getattr(failure, "status", 1))  # noqa: PT009
+
     def test_original_exits_and_crash_signals_propagate(self):
         for mode, expected in (("build-signal", 143), ("run-failure", 9), ("run-signal", 134)):
             with self.subTest(mode=mode):
@@ -1345,6 +1396,88 @@ raise SystemExit(subprocess.run([{self.real_tee!r}, *sys.argv[1:]],
 
 class SanitizerLoggingTests(SanitizerLoggingFixture, unittest.TestCase):
     """Actual shell/log boundaries with inert modeled Nix producer only."""
+
+    def test_bound_recovery_protects_history_and_accepts_a_prefix_sibling(self):
+        for relation in ("equal", "ancestor", "descendant", "relative", "sibling"):
+            with self.subTest(relation=relation):
+                evidence = self.shared / "sanitizers"
+                evidence.mkdir(parents=True, exist_ok=True)
+                summary = evidence / "run-summary.json"
+                summary.write_bytes(
+                    b'{"status":"failed","stage":"preflight","commands":[],"units":[]}\n'
+                )
+                target = self.root / f"cleanup-{relation}"
+                history = {
+                    "equal": target,
+                    "ancestor": target / "history",
+                    "descendant": target.parent,
+                    "relative": target,
+                    "sibling": target.with_name(target.name + "-history"),
+                }[relation]
+                target.mkdir()
+                history.mkdir(exist_ok=True)
+                retained = history / f"retained-{relation}.json"
+                retained.write_bytes(b"retained history\n")
+                binding = subprocess.run(  # noqa: S603 - real helper, isolated owned fixture
+                    [
+                        shutil.which("bash"),
+                        "-p",
+                        "-c",
+                        (
+                            'source "$1"; binding=$(sanitizer_target_binding prepare "$2"); '
+                            'printf "%s\\n" "$binding"; sanitizer_target_binding prepare "$3"; '
+                            'sanitizer_target_binding summary-snapshot "$binding"'
+                        ),
+                        "recovery-history",
+                        str(self.root / "scripts/sanitizers/sanitizer_paths.sh"),
+                        str(evidence),
+                        str(target),
+                    ],
+                    cwd=self.root,
+                    env=self.environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(binding.returncode, 0, binding.stderr)  # noqa: PT009
+                evidence_binding, cleanup_binding, initial = map(
+                    json.loads, binding.stdout.splitlines()
+                )
+                evidence_binding["initial_summary"] = initial
+                before = summary.read_bytes()
+                result = subprocess.run(  # noqa: S603 - actual fixed bound recovery entry
+                    [
+                        sys.executable,
+                        "-I",
+                        str(self.root / "scripts/sanitizers/open_security_log.py"),
+                        "recover-bound",
+                        str(evidence),
+                        json.dumps(evidence_binding),
+                        str(target),
+                        json.dumps(cleanup_binding),
+                        "67",
+                    ],
+                    cwd=self.root,
+                    env={
+                        **self.environment,
+                        "SECURITY_HISTORY_DIR": os.path.relpath(history, self.root)
+                        if relation == "relative"
+                        else str(history),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(result.returncode, 0 if relation == "sibling" else 1)  # noqa: PT009
+                self.assertEqual(retained.read_bytes(), b"retained history\n")  # noqa: PT009
+                if relation == "sibling":
+                    self.assertFalse(target.exists())  # noqa: PT009
+                    self.assertEqual(json.loads(summary.read_bytes())["exit_code"], 67)  # noqa: PT009
+                else:
+                    self.assertTrue(target.is_dir())  # noqa: PT009
+                    self.assertEqual(summary.read_bytes(), before)  # noqa: PT009
 
     def test_default_and_normalized_artifact_routes_keep_absolute_log(self):
         for configured, relative in (

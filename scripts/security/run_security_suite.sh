@@ -189,6 +189,20 @@ sanitizer_preparation_failure() {
 	return "$primary_status"
 }
 
+sanitizer_suite_exit() {
+	local primary_status=$?
+	trap - EXIT
+	if [[ -n ${SANITIZER_CLEANUP_BINDING:-} ]]; then
+		# An outstanding attempt cannot become successful without stage execution.
+		[[ $primary_status -ne 0 ]] || primary_status=1
+		sanitizer_preparation_failure "$primary_status" || true
+	fi
+	exit "$primary_status"
+}
+if stage_enabled "sanitizers"; then
+	trap sanitizer_suite_exit EXIT
+fi
+
 # Clear only the inherited WASI compiler values handled by the native fallback.
 # Preflight must validate the same effective inputs that native builds will use.
 if [[ ${CC:-} == *"wasm32-unknown-wasi"* ]]; then

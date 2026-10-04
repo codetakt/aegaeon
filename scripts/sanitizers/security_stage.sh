@@ -17,15 +17,6 @@ sanitizer_check_cargo_flags() {
 	fi
 }
 
-sanitizer_validate_cleanup_routes() {
-	local retained_route
-	# Keep this policy identical for initial preparation and bound re-entry.
-	for retained_route in "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR"; do
-		preflight_route "$retained_route" || return 1
-		sanitizer_validate_pair "$SANITIZER_VALIDATED_TARGET" "$PREFLIGHT_ROUTE" cleanup || return 1
-	done
-}
-
 prepare_sanitizer_attempt() {
 	local initial_summary
 	if [[ -n ${SANITIZER_EVIDENCE_BINDING:-} ]]; then
@@ -44,7 +35,7 @@ prepare_sanitizer_attempt() {
 			sanitizer_check_cargo_flags || return $?
 			preflight_route "${SANITIZER_TARGET_DIR:-target/sanitizers}" || return 1
 			[[ ${SANITIZER_VALIDATED_TARGET:-} == "$PREFLIGHT_ROUTE" ]] || return 1
-			sanitizer_validate_cleanup_routes || return 1
+			sanitizer_validate_cleanup_routes "$SANITIZER_VALIDATED_TARGET" "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR" || return 1
 			"$security_function_python" -I "$ROOT/scripts/sanitizers/open_security_log.py" validate-bound \
 				"$SANITIZER_ARTIFACT_DIR" "$SANITIZER_EVIDENCE_BINDING" \
 				"$SANITIZER_VALIDATED_TARGET" "$SANITIZER_CLEANUP_BINDING" || return 1
@@ -69,13 +60,16 @@ prepare_sanitizer_attempt() {
 	SANITIZER_VALIDATED_TARGET=$PREFLIGHT_ROUTE
 	sanitizer_validate_output "$SANITIZER_VALIDATED_TARGET" "$ROOT" || return 1
 	# Cleanup must stay disjoint from current artifacts and retained history.
-	sanitizer_validate_cleanup_routes || return 1
+	sanitizer_validate_cleanup_routes "$SANITIZER_VALIDATED_TARGET" "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR" || return 1
 	SANITIZER_CLEANUP_BINDING=$(sanitizer_target_binding prepare "$SANITIZER_VALIDATED_TARGET") || return $?
 }
 
 cleanup_sanitizer_outputs() {
 	[[ -n $SANITIZER_CLEANUP_BINDING ]] || return 1
-	sanitizer_target_binding cleanup "$SANITIZER_CLEANUP_BINDING"
+	local binding=$SANITIZER_CLEANUP_BINDING
+	# Consume the outstanding attempt once, including a recorded cleanup failure.
+	SANITIZER_CLEANUP_BINDING=""
+	sanitizer_target_binding cleanup "$binding"
 }
 
 sanitize() {

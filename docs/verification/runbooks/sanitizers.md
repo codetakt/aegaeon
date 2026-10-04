@@ -66,6 +66,8 @@ Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
 accepted. A timeout fails the run. The supervisor terminates remaining processes
 in each command's process group on timeout, interruption or capture failure.
 A normally exiting leader with running descendants also fails after cleanup.
+Interrupted evidence writes retain the signal-derived exit status; an earlier
+failure keeps its original status if the final receipt cannot be written.
 The existing security job's outer timeout still bounds the whole stage.
 
 The security-suite dispatcher resolves `SANITIZER_TARGET_DIR` before removing
@@ -73,10 +75,13 @@ transient outputs after the sanitizer stage. Cleanup rejects the workspace
 itself and every workspace ancestor, including `/`, even through symlinks or
 `..` aliases. It also rejects targets equal to, inside, or containing the
 resolved current artifact or retained history directory (`SECURITY_ARTIFACT_DIR`
-or `SECURITY_HISTORY_DIR`). The same check applies during bound wrapper re-entry;
+or `SECURITY_HISTORY_DIR`). The same check applies during bound wrapper re-entry and recovery;
 history paths are normalized before logging or stage execution. The suite writes
-sanitizer evidence to its current artifact `sanitizers` subdirectory. A rejected cleanup fails a
-successful stage; an earlier child failure retains its original exit code.
+sanitizer evidence to its current artifact `sanitizers` subdirectory. A rejected
+cleanup fails a successful stage; an earlier child failure retains its original
+exit code. An exit before the sanitizer stage cleans an outstanding prepared
+target and records the earlier stage failure without replacing detailed child
+evidence. Each admitted cleanup attempt is consumed once.
 Custom output directories must resolve outside these protected locations.
 
 The runner sets these execution options explicitly:

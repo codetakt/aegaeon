@@ -274,6 +274,16 @@ sanitizer_validate_pair() {
 	fi
 }
 
+sanitizer_validate_cleanup_routes() {
+	local target=$1 artifacts=$2 history=$3
+	# The bound artifact route stays lexical so a replaced evidence namespace
+	# cannot prevent cleanup of an independently admitted, unchanged target.
+	sanitizer_validate_pair "$target" "$artifacts" cleanup || return 1
+	[[ $history == /* ]] || history="$ROOT/$history"
+	preflight_route "$history" || return 1
+	sanitizer_validate_pair "$target" "$PREFLIGHT_ROUTE" cleanup
+}
+
 sanitizer_validate_cargo_flags() {
 	python3 -I "${BASH_SOURCE[0]%/*}/sanitizer_options.py" "$1" "${2:-}"
 }

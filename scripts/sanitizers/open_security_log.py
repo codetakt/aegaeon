@@ -46,7 +46,8 @@ sanitizer_validate_output "${SANITIZER_ARTIFACT_DIR%/*}" "$ROOT"
 preflight_route "$target"
 [[ $PREFLIGHT_ROUTE == "$target" ]]
 sanitizer_validate_output "$target" "$ROOT"
-sanitizer_validate_pair "$target" "${SANITIZER_ARTIFACT_DIR%/*}" cleanup
+sanitizer_validate_cleanup_routes "$target" "${SANITIZER_ARTIFACT_DIR%/*}" \
+    "${SECURITY_HISTORY_DIR:-$ROOT/artifacts/security/history}"
 if [[ $operation == validate-bound ]]; then
     sanitizer_target_binding validate "$evidence_binding"
     sanitizer_target_binding validate "$cleanup_binding"
