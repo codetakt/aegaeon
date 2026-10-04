@@ -2047,10 +2047,11 @@ def write_upload_archive(stream: BinaryIO, inventories: dict) -> None:
                     add_upload_entry(tar, source / entry, expected)
 
 
-def package_upload(directory: Path) -> None:
+def package_upload(directory: Path) -> None:  # noqa: C901, PLR0912, PLR0915 - owned upload publication boundary
     validate_cargo_home_paths([ROOT / name for name in UPLOAD_ROOTS], "upload", output=directory)
     output = lexical_directory(directory)
-    if any(overlaps(output, ROOT / name) for name in UPLOAD_ROOTS):
+    protected = (*UPLOAD_ROOTS, "artifacts/ct", "artifacts/karamel")
+    if any(overlaps(output, ROOT / name) for name in protected):
         invalid("upload output overlaps evidence source")
     if not output.is_relative_to(ROOT / "artifacts") or output == ROOT / "artifacts":
         invalid("upload output must be a dedicated repository artifacts directory")
@@ -2058,32 +2059,155 @@ def package_upload(directory: Path) -> None:
         invalid("upload output must be empty and owned by the producer")
     inventories = upload_inventory()
     output.mkdir(parents=True, exist_ok=True)
-    archive = output / "security-evidence.tar.gz"
-    manifest = output / "manifest.json"
-    descriptor, temporary_name = tempfile.mkstemp(prefix=".archive-", dir=output)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            write_upload_archive(stream, inventories)
-        if upload_inventory() != inventories:
-            invalid("upload evidence changed during packaging")
-        temporary.replace(archive)
-        write_json(
-            manifest,
-            {
-                "schema_version": 1,
-                "producer_uid": os.geteuid(),
-                "stage": os.environ.get("SECURITY_UPLOAD_STAGE", "unknown"),
-                "stage_outcome": os.environ.get("SECURITY_UPLOAD_OUTCOME", "unknown"),
-                "roots": inventories,
-                "archive": {"path": archive.name, "sha256": digest(archive)},
-            },
+    with archive_directory(output) as (directory_fd, identities):
+        if os.listdir(directory_fd):  # noqa: PTH208 - bound directory fd, no Path equivalent
+            invalid("upload output must be empty and owned by the producer")
+        temporary = ".archive-" + uuid.uuid4().hex + ".tmp"
+        descriptor = os.open(
+            temporary,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
         )
-        for path in (archive, manifest):
-            if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.geteuid():
-                invalid("upload output must be a producer-owned regular file")
-    finally:
-        temporary.unlink(missing_ok=True)
+        entries = [(temporary, "security-evidence.tar.gz", descriptor)]
+        published = set()
+        complete = False
+        published_link_count = 2
+        try:
+            opened = os.fstat(descriptor)
+            if (
+                not owned_archive_entry(directory_fd, temporary, descriptor)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_uid != os.geteuid()
+                or opened.st_nlink != 1
+            ):
+                invalid("upload temporary must be exclusive and producer-owned before writing")
+            with os.fdopen(descriptor, "w+b", closefd=False) as stream:
+                write_upload_archive(stream, inventories)
+                stream.flush()
+                stream.seek(0)
+                constructed = hashlib.sha256()
+                while block := stream.read(1024 * 1024):
+                    constructed.update(block)
+                if upload_inventory() != inventories:
+                    invalid("upload evidence changed during packaging")
+                verify_archive_stream(stream, output / "security-evidence.tar.gz")
+                stream.seek(0)
+                readback = hashlib.sha256()
+                while block := stream.read(1024 * 1024):
+                    readback.update(block)
+                if readback.digest() != constructed.digest():
+                    invalid("upload archive content changed after construction")
+            validate_archive_directory(output, identities)
+            if (
+                not owned_archive_entry(directory_fd, temporary, descriptor)
+                or os.fstat(descriptor).st_nlink != 1
+            ):
+                invalid("upload temporary identity or ownership changed")
+            # As with write_exclusive_archive, this is no-clobber publication,
+            # not a systemwide namespace transaction against same-UID interleavings.
+            os.link(
+                temporary,
+                "security-evidence.tar.gz",
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            published.add("security-evidence.tar.gz")
+            validate_archive_directory(output, identities)
+            if (
+                not owned_archive_entry(directory_fd, "security-evidence.tar.gz", descriptor)
+                or os.fstat(descriptor).st_nlink != published_link_count
+            ):
+                invalid("upload archive publication identity or alias count changed")
+            manifest_temporary = ".manifest-" + uuid.uuid4().hex + ".tmp"
+            manifest_descriptor = os.open(
+                manifest_temporary,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=directory_fd,
+            )
+            entries.append((manifest_temporary, "manifest.json", manifest_descriptor))
+            manifest_payload = (
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "producer_uid": os.geteuid(),
+                        "stage": os.environ.get("SECURITY_UPLOAD_STAGE", "unknown"),
+                        "stage_outcome": os.environ.get("SECURITY_UPLOAD_OUTCOME", "unknown"),
+                        "roots": inventories,
+                        "archive": {
+                            "path": "security-evidence.tar.gz",
+                            "sha256": constructed.hexdigest(),
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n"
+            ).encode("utf-8")
+            with os.fdopen(manifest_descriptor, "w+b", closefd=False) as stream:
+                stream.write(manifest_payload)
+                stream.flush()
+            validate_archive_directory(output, identities)
+            for temporary_name, final_name, opened_descriptor in entries:
+                info = os.fstat(opened_descriptor)
+                if (
+                    not owned_archive_entry(directory_fd, temporary_name, opened_descriptor)
+                    or not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or info.st_nlink != (published_link_count if final_name in published else 1)
+                    or (
+                        final_name in published
+                        and not owned_archive_entry(directory_fd, final_name, opened_descriptor)
+                    )
+                ):
+                    invalid("upload publication identity or ownership changed")
+            os.link(
+                manifest_temporary,
+                "manifest.json",
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            published.add("manifest.json")
+            with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                stream.seek(0)
+                final_archive = hashlib.sha256()
+                while block := stream.read(1024 * 1024):
+                    final_archive.update(block)
+                if final_archive.digest() != constructed.digest():
+                    invalid("upload archive content changed during manifest publication")
+            with os.fdopen(manifest_descriptor, "rb", closefd=False) as stream:
+                stream.seek(0)
+                final_manifest = hashlib.sha256()
+                while block := stream.read(1024 * 1024):
+                    final_manifest.update(block)
+                if final_manifest.digest() != hashlib.sha256(manifest_payload).digest():
+                    invalid("upload manifest content differs from constructed payload")
+            validate_archive_directory(output, identities)
+            for temporary_name, final_name, opened_descriptor in entries:
+                if (
+                    not owned_archive_entry(directory_fd, temporary_name, opened_descriptor)
+                    or not owned_archive_entry(directory_fd, final_name, opened_descriptor)
+                    or os.fstat(opened_descriptor).st_nlink != published_link_count
+                ):
+                    invalid("upload publication identity or alias count changed")
+            complete = True
+        finally:
+            for temporary_name, final_name, opened_descriptor in reversed(entries):
+                try:
+                    if (
+                        not complete
+                        and final_name in published
+                        and owned_archive_entry(directory_fd, final_name, opened_descriptor)
+                    ):
+                        with suppress(FileNotFoundError):
+                            os.unlink(final_name, dir_fd=directory_fd)
+                    if owned_archive_entry(directory_fd, temporary_name, opened_descriptor):
+                        with suppress(FileNotFoundError):
+                            os.unlink(temporary_name, dir_fd=directory_fd)
+                finally:
+                    os.close(opened_descriptor)
 
 
 def parse_arguments() -> argparse.Namespace:
