@@ -371,6 +371,45 @@ class SanitizerDispatchTests(unittest.TestCase):
     def receipt(self, fixture):
         return json.loads((fixture.artifacts / "sanitizers/child-receipt.json").read_text())
 
+    def assert_completed_sanitizer_model_receipt(self, summary):
+        """Retain every modeled command and target after an outer failure."""
+
+        expected_targets = fuzz_fixture.sanitizer_fixture.TARGETS
+        expected_phases = ["metadata", "build-address-ffi"] + [
+            f"{phase}-{name}"
+            for name in expected_targets
+            for phase in ("symbols", "runtime", "list", "ignored", "run")
+        ]
+        self.assertEqual([command["phase"] for command in summary["commands"]], expected_phases)
+        for command in summary["commands"]:
+            with self.subTest(phase=command["phase"]):
+                self.assertEqual(command["status"], "completed")
+                self.assertEqual(command["exit_code"], 0)
+                self.assertIs(command["timed_out"], False)
+                self.assertIs(command["lingering_descendants"], False)
+        self.assertEqual(len(summary["units"]), 1)
+        unit = summary["units"][0]
+        self.assertEqual(unit["package"], "ffi")
+        self.assertEqual(unit["package_id"], "ffi-identity")
+        self.assertEqual(unit["sanitizer"], "address")
+        self.assertEqual(unit["status"], "completed")
+        self.assertEqual([target["name"] for target in unit["targets"]], list(expected_targets))
+        for target in unit["targets"]:
+            with self.subTest(target=target["name"]):
+                inactive = target["name"] == "oidc_hash_runtime_test"
+                expected_tests = [] if inactive else [target["name"] + "::required"]
+                self.assertEqual(target["kind"], ["lib" if target["name"] == "ffi" else "test"])
+                self.assertEqual(target["status"], "completed")
+                self.assertEqual(target["expected_tests"], expected_tests)
+                self.assertEqual(target["started"], expected_tests)
+                self.assertEqual(target["completed"], expected_tests)
+                self.assertEqual(target["ignored_tests"], [])
+                self.assertEqual(target["ignored"], [])
+                self.assertEqual(
+                    target["applicability"],
+                    "lowstar_hash feature disabled" if inactive else "required",
+                )
+
     def target_directory(self, fixture, setting):
         if setting == "absolute":
             return str(Path(fixture.temporary) / "custom sanitizer outputs")
@@ -1011,11 +1050,7 @@ class SanitizerDispatchTests(unittest.TestCase):
                 self.assertEqual(summary["status"], "failed")
                 self.assertEqual(summary["exit_code"], 79)
                 self.assertEqual(summary["cleanup_exit_code"], 79)
-                self.assertEqual(summary["commands"], [{"phase": "run", "exit_code": 0}])
-                self.assertEqual(
-                    summary["units"],
-                    [{"package": "ffi", "targets": [{"name": "ffi", "status": "completed"}]}],
-                )
+                self.assert_completed_sanitizer_model_receipt(summary)
                 self.assertNotIn("logging_exit_code", summary)
                 log = (fixture.artifacts / "summary/security.log").read_text()
                 self.assertNotIn("<<< sanitizer smoke: ok", log)
@@ -1384,8 +1419,10 @@ class SanitizerDispatchTests(unittest.TestCase):
                 histories = list(
                     (fixture.artifacts / "sanitizers").glob(".previous-attempt-*/run-summary.json")
                 )
-                self.assertEqual(len(histories), 1)
-                self.assertEqual(histories[0].read_text(), retained["sanitizers/run-summary.json"])
+                self.assertCountEqual(
+                    [path.read_bytes() for path in histories],
+                    [retained["sanitizers/run-summary.json"].encode(), handoff["summary"].encode()],
+                )
 
     def test_unrelated_stage_ignores_inherited_sanitizer_marker_and_cleanup(self):
         for marker in ("1", "1+0", "unset_sanitizer_marker"):

@@ -1455,6 +1455,7 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                         env={**self.environment, "SANITIZER_FIXTURE_MODE": mode},
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
+                        start_new_session=True,
                     )
                     try:
                         deadline = time.monotonic() + 5
@@ -1470,9 +1471,15 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                         self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - active under Python -O
                         self.assert_child_stopped()
                     finally:
-                        if process.poll() is None:
-                            process.kill()
-                            process.communicate()
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(process.pid, signal.SIGKILL)
+                        try:
+                            process.communicate(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            for pipe in (process.stdout, process.stderr):
+                                if pipe is not None:
+                                    pipe.close()
+                            process.wait(timeout=2)
 
     def test_invalid_selections_deadlines_and_cargo_overrides_fail(self):
         for key, value in (
@@ -1775,12 +1782,18 @@ while IFS= read -r -d '' case_id; do
         *) exit 2 ;;
     esac
     diagnostic=""
-    if preflight_route "$route" && sanitizer_validate_output "$PREFLIGHT_ROUTE" "$workspace"; then
-        status=0
+    stage=route-type
+    if preflight_route "$route"; then
+        stage=source-overlap
+        if sanitizer_validate_output "$PREFLIGHT_ROUTE" "$workspace"; then
+            status=0
+        else
+            status=$?
+        fi
     else
         status=$?
     fi
-    printf '%s\0%s\0%s\0' "$case_id" "$status" "$diagnostic"
+    printf '%s\0%s\0%s\0%s\0' "$case_id" "$status" "$stage" "$diagnostic"
 done
 """,
                 "source-boundary-fixture",
@@ -1799,13 +1812,22 @@ done
         self.assertEqual(self.boundary_snapshot(), before)  # noqa: PT009 - all source bytes unchanged
         fields = result.stdout.split(b"\0")
         self.assertEqual(fields.pop(), b"")  # noqa: PT009 - reject missing final frame
-        self.assertEqual(len(fields), 3 * len(cases))  # noqa: PT009 - exact complete inventory
+        self.assertEqual(len(fields), 4 * len(cases))  # noqa: PT009 - exact complete inventory
         for index, (relative, suffix, variable) in enumerate(cases):
             with self.subTest(relative=relative, suffix=suffix, variable=variable):
-                case_id, status, diagnostic = fields[3 * index : 3 * index + 3]
+                case_id, status, stage, diagnostic = fields[4 * index : 4 * index + 4]
                 self.assertEqual(case_id, str(index).encode())  # noqa: PT009 - reject duplicate/reordered IDs
                 self.assertEqual(status, b"1")  # noqa: PT009 - exact rejection status
-                self.assertIn(b"overlaps protected source inputs", diagnostic)  # noqa: PT009 - exact guard
+                # Cargo.toml is an existing regular file in this fixture; both
+                # equal and descendant outputs must fail before the overlap guard.
+                file_route = relative == "Cargo.toml"
+                self.assertEqual(stage, b"route-type" if file_route else b"source-overlap")  # noqa: PT009 - exact guard stage
+                self.assertEqual(  # noqa: PT009 - exact diagnostic for the reached guard
+                    diagnostic,
+                    b"Unsafe sanitizer evidence/target route"
+                    if file_route
+                    else b"Sanitizer evidence/target route overlaps protected source inputs",
+                )
 
     def test_tracked_artifact_ancestors_are_rejected_before_writes(self):
         for relative in (

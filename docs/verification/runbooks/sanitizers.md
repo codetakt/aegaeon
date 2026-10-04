@@ -75,6 +75,9 @@ directory without a separate compiler/runtime setup.
 Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
 accepted. A timeout fails the run. The supervisor terminates remaining processes
 in each command's process group on timeout, interruption or capture failure.
+On timeout, captured output is retained and the parent pipes are closed after
+cleanup; a pipe holder outside the owned group cannot prolong capture by
+withholding EOF. Process-group cleanup does not stop escaped sessions.
 A normally exiting leader with running descendants also fails after cleanup.
 If process inspection fails, cleanup still kills the owned group and reaps its
 leader, then reports the inspection failure.

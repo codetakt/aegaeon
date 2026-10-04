@@ -89,13 +89,13 @@ class CommandSupervisor:
                 os.set_blocking(pipe.fileno(), False)
                 selector.register(pipe, selectors.EVENT_READ, label)
             while selector.get_map() or process.poll() is None:
-                if (
-                    not record["timed_out"]
-                    and time.monotonic() - started >= record["deadline_seconds"]
-                ):
+                if time.monotonic() - started >= record["deadline_seconds"]:
                     record["timed_out"] = True
                     terminate(process, self.kill_grace)
-                elif process.poll() is not None and group_alive(process.pid):
+                    # Failure keeps the captured prefix. An escaped pipe holder
+                    # cannot extend the command deadline by withholding EOF.
+                    break
+                if process.poll() is not None and group_alive(process.pid):
                     record["lingering_descendants"] = terminate(process, self.kill_grace)
                 for key, _ in selector.select(0.02):
                     data = os.read(key.fileobj.fileno(), 65536)
