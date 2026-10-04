@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import runpy
@@ -272,6 +273,7 @@ with (root / "calls.jsonl").open("a") as output:
                 "args": args,
                 "flags": os.environ.get("RUSTFLAGS"),
                 "encoded_flags": os.environ.get("CARGO_ENCODED_RUSTFLAGS"),
+                "asan_options": os.environ.get("ASAN_OPTIONS"),
             }
         )
         + "\n"
@@ -509,6 +511,7 @@ class SanitizerFixture:
             "SANITIZER_TARGETS",
             "SANITIZER_BUILD_TIMEOUT",
             "SANITIZER_RUN_TIMEOUT",
+            "ASAN_VERIFY_LINK_ORDER",
         ):
             self.environment.pop(variable, None)
 
@@ -543,9 +546,26 @@ class SanitizerFixture:
     def assert_child_stopped(self):
         child = int((self.root / "child.pid").read_text())
         stat = Path(f"/proc/{child}/stat")
-        self.assertTrue(  # noqa: PT009 - active under Python -O
-            not stat.exists() or stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
-        )
+
+        def stopped():
+            try:
+                return stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
+            except FileNotFoundError:
+                return True
+
+        deadline = time.monotonic() + 5
+        while not stopped() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(stopped())  # noqa: PT009 - active under Python -O
+
+    def wait_for_child_pid(self):
+        child_pid = self.root / "child.pid"
+        deadline = time.monotonic() + 5
+        while (
+            not child_pid.exists() or child_pid.stat().st_size == 0
+        ) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(child_pid.exists() and child_pid.stat().st_size > 0)  # noqa: PT009 - active under Python -O
 
     def seed_completed_preflight(self):
         evidence = self.root / "evidence"
@@ -841,6 +861,120 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                         self.assertTrue((artifacts / "001-probe.stdout.log").is_file())  # noqa: PT009 - active under Python -O
                         self.assertTrue((artifacts / "001-probe.stderr.log").is_file())  # noqa: PT009 - active under Python -O
 
+    def test_proc_inspection_failure_still_kills_group_and_reaps_leader(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        terminate, group_alive = namespace["terminate"], namespace["group_alive"]
+        for phase in ("first", "grace", "final"):
+            with self.subTest(phase=phase):
+                (self.root / "child.pid").unlink(missing_ok=True)
+                process = subprocess.Popen(  # noqa: S603 - controlled real process group
+                    [str(self.bin / "cargo"), "test", "-p", "ffi"],
+                    env={**self.environment, "SANITIZER_FIXTURE_MODE": "build-timeout"},
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                error = PermissionError(f"controlled {phase} proc inspection failure")
+                inspections = 0
+
+                def inspect(pgid, *, phase=phase, process=process, error=error):
+                    nonlocal inspections
+                    inspections += 1
+                    if (
+                        (phase == "first" and inspections == 1)
+                        or (phase == "grace" and inspections == 2)
+                        or (phase == "final" and process.returncode is not None)
+                    ):
+                        raise error
+                    return group_alive(pgid)
+
+                try:
+                    self.wait_for_child_pid()
+                    self.assertTrue(group_alive(process.pid))  # noqa: PT009 - active under Python -O
+                    with (
+                        patch.dict(terminate.__globals__, group_alive=inspect),
+                        self.assertRaises(PermissionError) as caught,  # noqa: PT027 - unittest discovery
+                    ):
+                        terminate(process, 0.05)
+                    self.assertIs(caught.exception, error)  # noqa: PT009 - retain original inspection error
+                    self.assertIsNotNone(process.returncode)  # noqa: PT009 - leader was reaped by terminate
+                    self.assertLess(process.returncode, 0)  # noqa: PT009 - active under Python -O
+                    self.assert_child_stopped()
+                    self.assertFalse(group_alive(process.pid))  # noqa: PT009 - actual process-group state
+                finally:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGKILL)
+                    process.wait(timeout=5)
+
+    def test_command_proc_inspection_failure_preserves_observed_child_exit(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        for child, child_exit, expected in (
+            ("import sys;sys.exit(9)", 9, 9),
+            ("import os,signal;os.kill(os.getpid(),signal.SIGTERM)", -signal.SIGTERM, 143),
+            ("import sys;sys.exit(0)", 0, 1),
+        ):
+            with self.subTest(child=child):
+                artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                supervisor = supervisor_type(artifacts, {"commands": []}, 0.05)
+                with (
+                    patch.dict(
+                        supervisor_type.command.__globals__,
+                        group_alive=Mock(side_effect=PermissionError("controlled proc denial")),
+                    ),
+                    self.assertRaisesRegex(  # noqa: PT027 - unittest discovery
+                        namespace["Failure"], "controlled proc denial"
+                    ) as caught,
+                ):
+                    supervisor.command([sys.executable, "-c", child], os.environ.copy(), 5, "probe")
+                self.assertEqual(caught.exception.status, expected)  # noqa: PT009 - active under Python -O
+                saved = json.loads((artifacts / "run-summary.json").read_text())
+                self.assertEqual(saved["commands"][0]["exit_code"], child_exit)  # noqa: PT009 - original exit retained
+                self.assertEqual(saved["commands"][0]["status"], "failed")  # noqa: PT009 - no false completed receipt
+
+    def test_command_proc_inspection_failure_preserves_supervisor_signal(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        supervisor_type = namespace["Supervisor"]
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            with self.subTest(signum=signum):
+                (self.root / "child.pid").unlink(missing_ok=True)
+                artifacts = Path(self.enterContext(tempfile.TemporaryDirectory()))
+                supervisor = supervisor_type(artifacts, {"commands": []}, 0.05)
+                processes = []
+
+                def interrupt_capture(
+                    process, *_args, _signum=signum, _processes=processes, **_kwargs
+                ):
+                    _processes.append(process)
+                    self.wait_for_child_pid()
+                    raise namespace["Interrupted"](_signum)
+
+                try:
+                    with (
+                        patch.object(supervisor, "capture", side_effect=interrupt_capture),
+                        patch.dict(
+                            supervisor_type.command.__globals__,
+                            group_alive=Mock(side_effect=PermissionError("controlled proc denial")),
+                        ),
+                        self.assertRaises(namespace["Failure"]) as caught,  # noqa: PT027 - unittest discovery
+                    ):
+                        supervisor.command(
+                            [str(self.bin / "cargo"), "test", "-p", "ffi"],
+                            {**self.environment, "SANITIZER_FIXTURE_MODE": "build-timeout"},
+                            5,
+                            "probe",
+                        )
+                    self.assertEqual(caught.exception.status, 128 + signum)  # noqa: PT009 - retain supervisor interruption
+                    saved = json.loads((artifacts / "run-summary.json").read_text())
+                    self.assertEqual(saved["commands"][0]["exit_code"], -signal.SIGKILL)  # noqa: PT009 - cleanup killed and reaped leader
+                    self.assertEqual(saved["commands"][0]["status"], "failed")  # noqa: PT009 - active under Python -O
+                    self.assert_child_stopped()
+                finally:
+                    for process in processes:
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=5)
+
     def test_evidence_write_interruptions_preserve_signal_and_prior_failure(self):
         namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
         supervisor_type = namespace["Supervisor"]
@@ -975,6 +1109,99 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
         ):
             with self.subTest(key=key, value=value):
                 self.assertTrue(self.run_wrapper(**{key: value}).returncode != 0)  # noqa: PT009 - active under Python -O
+
+    def test_invalid_link_order_rejects_before_cargo_with_failed_receipt(self):
+        for value in ("2", "true", "0 1", "0,1", "0:detect_stack_use_after_return=0"):
+            with self.subTest(value=value):
+                (self.root / "calls.jsonl").unlink(missing_ok=True)
+                result = self.run_wrapper(ASAN_VERIFY_LINK_ORDER=value)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009 - active under Python -O
+                self.assertIn("ASan link-order setting must be 0 or 1", result.stderr)  # noqa: PT009 - actual admission failure
+                summary = self.summary()
+                self.assertEqual(summary["status"], "failed")  # noqa: PT009 - current receipt
+                self.assertEqual(summary["commands"], [])  # noqa: PT009 - no metadata or build child
+                self.assertEqual(summary["units"], [])  # noqa: PT009 - active under Python -O
+                self.assertNotIn("Sanitizer-backed tests completed", result.stdout)  # noqa: PT009 - active under Python -O
+                calls = [
+                    json.loads(line)
+                    for line in (self.root / "calls.jsonl").read_text().splitlines()
+                ]
+                self.assertFalse(  # noqa: PT009 - version probes may run, inventory/build may not
+                    any(
+                        call["tool"] == "cargo"
+                        and ("metadata" in call["args"] or "test" in call["args"])
+                        for call in calls
+                    )
+                )
+
+    def test_direct_runner_invalid_link_order_never_launches_cargo(self):
+        for value in ("", "2", "true", "0 1", "0,1", "0:detect_stack_use_after_return=0"):
+            with self.subTest(value=value):
+                evidence = self.root / "evidence"
+                evidence.mkdir(exist_ok=True)
+                (self.root / "calls.jsonl").unlink(missing_ok=True)
+                settings = [
+                    "address",
+                    "ffi",
+                    str(self.root / "target"),
+                    str(evidence),
+                    "cargo",
+                    "x86_64-unknown-linux-gnu",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "10",
+                    "10",
+                    "0.05",
+                    str(self.root / "runtime"),
+                    value,
+                    "",
+                ]
+                result = subprocess.run(  # noqa: S603 - actual direct runner entry
+                    [
+                        sys.executable,
+                        "-I",
+                        str(ROOT / "scripts/sanitizers/sanitizer_runner.py"),
+                        *settings,
+                    ],
+                    cwd=self.root,
+                    env=self.environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009 - active under Python -O
+                self.assertIn("ASan link-order setting must be 0 or 1", result.stderr)  # noqa: PT009 - active under Python -O
+                self.assertFalse((self.root / "calls.jsonl").exists())  # noqa: PT009 - no Cargo child
+                self.assertEqual(self.summary()["status"], "failed")  # noqa: PT009 - failed current receipt
+                self.assertEqual(self.summary()["commands"], [])  # noqa: PT009 - active under Python -O
+                self.assertEqual(self.summary()["units"], [])  # noqa: PT009 - active under Python -O
+
+    def test_link_order_one_and_empty_default_keep_fixed_asan_policy(self):
+        for value, expected in (("1", "1"), ("", "0")):
+            with self.subTest(value=value):
+                calls_path = self.root / "calls.jsonl"
+                calls_path.unlink(missing_ok=True)
+                result = self.run_wrapper(ASAN_VERIFY_LINK_ORDER=value)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)  # noqa: PT009 - supported settings
+                self.assertEqual(self.summary()["status"], "completed")  # noqa: PT009 - active under Python -O
+                calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
+                runtime_calls = [
+                    call for call in calls if call["tool"].startswith("nonstandard-name-")
+                ]
+                self.assertTrue(runtime_calls)  # noqa: PT009 - actual runtime children observed
+                self.assertTrue(  # noqa: PT009 - fixed options retained, only boolean propagated
+                    all(
+                        call["asan_options"]
+                        == (
+                            "abort_on_error=1:detect_stack_use_after_return=1:detect_leaks=0:"
+                            f"verify_asan_link_order={expected}:verbosity=0"
+                        )
+                        for call in runtime_calls
+                    )
+                )
 
     def test_missing_required_tools_runtime_and_host_fail(self):
         for tool in ("rustc", "cargo", "clang", "python3", "nm", "readelf"):

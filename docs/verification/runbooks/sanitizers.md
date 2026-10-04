@@ -39,7 +39,7 @@ linker flags. The default ffi features and serial curve backend are retained.
 | `SANITIZER_BUILD_TIMEOUT` | `$SANITIZER_TIMEOUT` | Metadata/build command deadline. |
 | `SANITIZER_RUN_TIMEOUT` | `$SANITIZER_TIMEOUT` | Deadline for each binary listing, inspection and execution. |
 | `SANITIZER_TIMEOUT_KILL` | `130` | Grace after termination before killing a remaining process group. |
-| `ASAN_VERIFY_LINK_ORDER` | `0` | ASan runtime link-order check. |
+| `ASAN_VERIFY_LINK_ORDER` | `0` | ASan runtime link-order check; accepts `0` or `1`. |
 
 The shared Cargo parser accepts `--features`/`-F`, `--all-features`,
 `--no-default-features`, `--jobs`/`-j`, `--color`, `--quiet`/`-q`,
@@ -66,6 +66,8 @@ Deadlines must be positive and finite; the `s`, `m`, `h` and `d` suffixes are
 accepted. A timeout fails the run. The supervisor terminates remaining processes
 in each command's process group on timeout, interruption or capture failure.
 A normally exiting leader with running descendants also fails after cleanup.
+If process inspection fails, cleanup still kills the owned group and reaps its
+leader, then reports the inspection failure.
 Interrupted evidence writes retain the signal-derived exit status; an earlier
 failure keeps its original status if the final receipt cannot be written.
 The existing security job's outer timeout still bounds the whole stage.
@@ -92,7 +94,8 @@ LSAN_OPTIONS=abort_on_error=1:detect_leaks=0
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 ```
 
-`ASAN_VERIFY_LINK_ORDER` changes the corresponding ASan option. Leak detection
+`ASAN_VERIFY_LINK_ORDER` accepts only `0` or `1`; other values fail before Cargo
+metadata or build execution. It changes only that ASan option. Leak detection
 is disabled in this suite. `SANITIZER_EXEC_LD_PRELOAD` or
 `SANITIZER_EXEC_FORCE_PRELOAD=1` enables the existing execution preload route.
 

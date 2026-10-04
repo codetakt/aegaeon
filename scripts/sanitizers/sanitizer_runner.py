@@ -107,21 +107,28 @@ def group_alive(pgid: int) -> bool:
 
 
 def terminate(process: subprocess.Popen[bytes], grace: float) -> bool:
-    active = group_alive(process.pid)
-    if active:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGTERM)
-        deadline = time.monotonic() + grace
-        while group_alive(process.pid) and time.monotonic() < deadline:
-            time.sleep(0.01)
-        if group_alive(process.pid):
+    try:
+        active = group_alive(process.pid)
+        if active:
             with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-        deadline = time.monotonic() + 5
-        while group_alive(process.pid) and time.monotonic() < deadline:
-            time.sleep(0.01)
-    process.wait(timeout=5)
-    require(not group_alive(process.pid), "Sanitizer descendants survived cleanup")
+                os.killpg(process.pid, signal.SIGTERM)
+            deadline = time.monotonic() + grace
+            while group_alive(process.pid) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            if group_alive(process.pid):
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+            deadline = time.monotonic() + 5
+            while group_alive(process.pid) and time.monotonic() < deadline:
+                time.sleep(0.01)
+        process.wait(timeout=5)
+        require(not group_alive(process.pid), "Sanitizer descendants survived cleanup")
+    except Exception:
+        # Failed /proc inspection cannot skip stopping our owned process group.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=5)
+        raise
     return active
 
 
@@ -319,6 +326,7 @@ class Supervisor:
         packages = selection(settings.package_text, "package")
         require("ffi" in packages, "Package selection must include the required ffi package")
         require(sanitizers == ["address"], "Only the configured address sanitizer is supported")
+        require(settings.link_order in {"0", "1"}, "ASan link-order setting must be 0 or 1")
         build_seconds, run_seconds, kill_grace = map(
             duration, (settings.build_limit_text, settings.run_limit_text, settings.grace_text)
         )
