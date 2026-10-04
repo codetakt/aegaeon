@@ -194,5 +194,56 @@ class SecurityAppLauncherTests(unittest.TestCase):
         )
 
 
+class SecurityAppLauncherProgramTests(unittest.TestCase):
+    def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
+        nix = shutil.which("nix")
+        if nix is None:
+            self.fail("The supported test environment requires Nix")
+        expression = (
+            "let flake = builtins.getFlake "
+            + json.dumps(str(ROOT))
+            + "; app = flake.apps.${builtins.currentSystem}.security-suite; "
+            "in { program = app.program; context = builtins.getContext app.program; }"
+        )
+        evaluation = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command flakes",
+                "eval",
+                "--offline",
+                "--impure",
+                "--json",
+                "--expr",
+                expression,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        app = json.loads(evaluation.stdout)
+        self.assertEqual(len(app["context"]), 1)
+        derivation_path = next(iter(app["context"]))
+        result = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command",
+                "derivation",
+                "show",
+                derivation_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        document = json.loads(result.stdout)
+        derivation = next(iter(document.get("derivations", document).values()))
+        # Nix v2 reports paths relative to its store; older JSON used absolute paths.
+        output = str(Path(derivation_path).parent / derivation["outputs"]["out"]["path"])
+        self.assertEqual(output, derivation["env"]["out"])
+        self.assertEqual(app["program"], output + derivation["env"]["destination"])
+
+
 if __name__ == "__main__":
     unittest.main()

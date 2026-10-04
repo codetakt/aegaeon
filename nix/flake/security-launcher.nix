@@ -17,7 +17,7 @@ let
   };
 in
 pkgs.writeTextFile {
-  name = "${name}-entry";
+  inherit name;
   destination = "/bin/${name}";
   executable = true;
   meta.mainProgram = name;
