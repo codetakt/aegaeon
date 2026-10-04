@@ -1,8 +1,41 @@
 #!/usr/bin/env bash
 
-# Reject inherited functions before even `set`: they can shadow builtins or
-# promote an explicit nonfuzz selection into fuzz dispatch after admission.
-# Use only shell syntax until an explicit external interpreter path.
+# Reject active inherited functions before an interpreter wrapper can import
+# them. Until builtin is proven unshadowed, use syntax and POSIX special builtins.
+security_function_posix_present="${POSIXLY_CORRECT+x}"
+security_function_posix_value="${POSIXLY_CORRECT-}"
+case ":${SHELLOPTS}:" in
+*:posix:*) security_function_posix=1 ;;
+*) security_function_posix=0 ;;
+esac
+# POSIX special builtins precede functions. Probe builtin without dispatching
+# an imported readonly/builtin, then use the proven builtin for name enumeration.
+POSIXLY_CORRECT=1
+# A missing function returns nonzero inside this condition, including with -e.
+# A successful probe marks only a rejected function readonly; accepted runs do
+# not acquire readonly attributes or lose function/environment entries.
+if readonly -f builtin 2>/dev/null; then
+	security_function_error=""
+	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
+fi
+security_function_names="$(builtin declare -F)"
+if [[ -n $security_function_names ]]; then
+	security_function_error=""
+	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
+fi
+# Restore the parent's original mode/value/presence; assignments keep any
+# existing export attribute, and an originally absent variable is removed.
+if [[ -n $security_function_posix_present ]]; then
+	POSIXLY_CORRECT="$security_function_posix_value"
+else
+	builtin unset POSIXLY_CORRECT
+fi
+if [[ $security_function_posix -eq 0 ]]; then
+	builtin set +o posix
+else
+	builtin set -o posix
+fi
+
 security_function_path="${PATH-}"
 security_function_pending=1
 security_function_python=""
@@ -24,9 +57,18 @@ while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
 done
 security_function_status=1
 if [[ -n $security_function_python ]]; then
-	# Bash cannot import slash-named functions. Inspect keys only, never bodies.
-	if "$security_function_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))'; then
-		security_function_status=0
+	# Keep the raw-key scan: malformed/keyword/nonidentifier keys may not have
+	# imported into this shell. Bind a POSIX parent's bootstrap child to the same
+	# import mode, including when the parent's POSIXLY_CORRECT is not exported.
+	security_function_command=("$security_function_python" -I -c 'import os, sys; sys.exit(any(key.startswith("BASH_FUNC_") and key.endswith("%%") for key in os.environ))')
+	if [[ $security_function_posix -eq 1 ]]; then
+		if POSIXLY_CORRECT=1 "${security_function_command[@]}"; then
+			security_function_status=0
+		fi
+	else
+		if "${security_function_command[@]}"; then
+			security_function_status=0
+		fi
 	fi
 fi
 if [[ $security_function_status -ne 0 ]]; then

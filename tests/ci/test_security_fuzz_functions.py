@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,9 @@ FUNCTIONS = (
     "type",
     "builtin",
     "declare",
+    "read",
+    "readonly",
+    "unset",
     "exec",
     "set",
     "exit",
@@ -210,3 +214,135 @@ class SecurityFuzzFunctionsTests(unittest.TestCase):
                 self.assertFalse(marker.exists())
                 self.assertFalse(fixture.artifacts.exists())
                 self.assertFalse((Path(fixture.temporary) / "calls.jsonl").exists())
+
+    def shell_python(self, fixture, command="exec"):
+        wrapper = fixture.bin / "python3"
+        wrapper.unlink()
+        if command != "exec":
+            (fixture.bin / command).symlink_to(sys.executable)
+        marker = Path(fixture.temporary) / "python-wrapper-started"
+        wrapper.write_text(
+            f"#!{(fixture.bin / 'bash').resolve()}\n"
+            f"wrapper_started=1 > {str(marker)!r}\n"
+            f'{command} {sys.executable if command == "exec" else ""} "$@"\n'
+        )
+        wrapper.chmod(0o755)
+        return marker
+
+    def test_shell_backed_python_rejects_exec_before_wrapper_or_effects(self):
+        for outer in (False, True):
+            for arguments in (("--stage", "fuzz"), (), ("--stage", "geiger")):
+                with self.subTest(outer=outer, arguments=arguments):
+                    fixture = self.fixture()
+                    receipts = fixture.artifacts / "fuzz"
+                    receipts.mkdir(parents=True)
+                    before = {
+                        name: b"previous " + name.encode()
+                        for name in ("collection.ok", "execution.json", "run_summary.json")
+                    }
+                    for name, raw in before.items():
+                        (receipts / name).write_bytes(raw)
+                    wrapper_marker = self.shell_python(fixture)
+                    result = self.run_entry(
+                        fixture,
+                        outer=outer,
+                        arguments=arguments,
+                        overrides={
+                            "BASH_FUNC_exec%%": (
+                                '() { function_called=1 > "$FIXTURE_ROOT/../function-call";'
+                                " return 0; }"
+                            )
+                        },
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("no inherited shell functions", result.stderr)
+                    self.assertFalse(wrapper_marker.exists())
+                    self.assertFalse((Path(fixture.temporary) / "function-call").exists())
+                    self.assertFalse((Path(fixture.temporary) / "calls.jsonl").exists())
+                    self.assertEqual({p.name: p.read_bytes() for p in receipts.iterdir()}, before)
+                    self.assertEqual(list(fixture.artifacts.iterdir()), [receipts])
+
+    def test_posix_skipped_raw_keys_cannot_execute_in_shell_python(self):
+        for outer in (False, True):
+            for name in ("exec", "readonly", "builtin", "python-route", "if", "a/b", "malformed"):
+                with self.subTest(outer=outer, name=name):
+                    fixture = self.fixture()
+                    self.shell_python(fixture, "python-route")
+                    script = fixture.root / (
+                        "scripts/flake/security_suite.sh"
+                        if outer
+                        else "scripts/security/run_security_suite.sh"
+                    )
+                    body = (
+                        '() { function_called=1 > "$FIXTURE_ROOT/../function-call"; return 0; }'
+                        if name != "malformed"
+                        else "not a function"
+                    )
+                    result = subprocess.run(  # noqa: S603 - owned fixture and manufactured environment
+                        [str(fixture.bin / "bash"), "--posix", str(script), "--stage", "geiger"],
+                        cwd=fixture.root,
+                        env={**fixture.env, f"BASH_FUNC_{name}%%": body},
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=30,
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertFalse((Path(fixture.temporary) / "function-call").exists())
+                    self.assertFalse((Path(fixture.temporary) / "calls.jsonl").exists())
+                    self.assertFalse(fixture.artifacts.exists())
+
+    def test_bootstrap_restores_parent_posix_value_presence_export_and_option(self):
+        for outer in (False, True):
+            for mode in ([], ["--posix"], ["+o", "posix"]):
+                for value in (None, "", "caller-value"):
+                    with self.subTest(outer=outer, mode=mode, value=value):
+                        fixture = self.fixture()
+                        self.shell_python(fixture)
+                        script = fixture.root / (
+                            "scripts/flake/security_suite.sh"
+                            if outer
+                            else "scripts/security/run_security_suite.sh"
+                        )
+                        bootstrap = script.read_text().split("\nset -euo pipefail\n", 1)[0]
+                        observation = (
+                            'builtin printf "%s\\n" "$SHELLOPTS"\n'
+                            "if [[ -v POSIXLY_CORRECT ]]; then\n"
+                            " builtin declare -p POSIXLY_CORRECT\n"
+                            'else builtin printf "%s\\n" absent; fi\n'
+                            f"{sys.executable} -I -c 'import os; "
+                            'print(repr(os.environ.get("POSIXLY_CORRECT")))\'\n'
+                        )
+                        baseline = fixture.root.parent / "baseline.sh"
+                        candidate = fixture.root.parent / "bootstrap.sh"
+                        baseline.write_text(observation)
+                        candidate.write_text(bootstrap + "\n" + observation)
+                        environment = dict(fixture.env)
+                        environment.pop("POSIXLY_CORRECT", None)
+                        if value is not None:
+                            environment["POSIXLY_CORRECT"] = value
+                        results = [
+                            subprocess.run(  # noqa: S603 - owned fixture scripts
+                                [str(fixture.bin / "bash"), *mode, str(path)],
+                                cwd=fixture.root,
+                                env=environment,
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                                timeout=30,
+                            )
+                            for path in (baseline, candidate)
+                        ]
+                        self.assertEqual(results[0].returncode, 0, results[0].stderr)
+                        self.assertEqual(results[1].returncode, 0, results[1].stderr)
+                        self.assertEqual(results[0].stdout, results[1].stdout)
+
+    def test_shell_backed_python_preserves_ordinary_nonfuzz_execution(self):
+        for outer in (False, True):
+            with self.subTest(outer=outer):
+                fixture = self.fixture()
+                marker = self.shell_python(fixture)
+                result = self.run_entry(fixture, outer=outer, arguments=("--stage", "geiger"))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(marker.exists())
+                self.assertFalse((fixture.artifacts / "fuzz").exists())
