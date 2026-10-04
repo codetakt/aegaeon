@@ -163,6 +163,193 @@ class SecurityFuzzFunctionsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(fixture.summary()["execution"]["selected_targets"], list(fixtures.TARGETS))
 
+    def subdirectory_python(self, fixture, entry):
+        # Fixtures have no commit objects: model only the root discovery needed
+        # to reproduce the caller-to-root directory change without a commit.
+        fixture.install(
+            "git",
+            "import os,sys\n"
+            "if sys.argv[1:] == ['rev-parse', '--show-toplevel']:\n"
+            "    print(os.environ['FIXTURE_ROOT'])\n"
+            "else:\n"
+            "    raise SystemExit(128)\n",
+        )
+        caller = fixture.root / "caller"
+        caller.mkdir()
+        directory = caller if entry == "" else caller / entry
+        directory.mkdir(exist_ok=True)
+        shadow_directory = fixture.root if entry == "" else fixture.root / entry
+        shadow_directory.mkdir(exist_ok=True)
+        log = Path(fixture.temporary) / "selected-python.jsonl"
+        shadow = Path(fixture.temporary) / "shadow-python-called"
+        bash = (fixture.bin / "bash").resolve()
+        logger = (
+            "import json,sys; from pathlib import Path; "
+            "p=Path(sys.argv[1]); "
+            "p.open('a').write(json.dumps(sys.argv[2:])+'\\n')"
+        )
+        selected = directory / "python3"
+        selected.write_text(
+            f"#!{bash}\n"
+            f'{sys.executable} -I -c {logger!r} {str(log)!r} "$@"\n'
+            f'exec {sys.executable} "$@"\n'
+        )
+        selected.chmod(0o755)
+        candidate = shadow_directory / "python3"
+        candidate.write_text(f"#!{bash}\nshadow=1 > {str(shadow)!r}\nexit 87\n")
+        candidate.chmod(0o755)
+        return caller, f"{entry}:{fixture.bin}", log, shadow
+
+    def run_subdirectory(self, fixture, caller, path, *, outer, arguments, **environment):
+        script = fixture.root / (
+            "scripts/flake/security_suite.sh" if outer else "scripts/security/run_security_suite.sh"
+        )
+        return subprocess.run(  # noqa: S603 - owned fixture and explicit manufactured environment
+            [str(fixture.bin / "bash"), str(script), *arguments],
+            cwd=caller,
+            env={**fixture.env, "CASE": "ok", "PATH": path, **environment},
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+    def test_subdirectory_relative_and_empty_path_pin_python_through_helpers_and_handoff(self):
+        required = {
+            "--validate-git-environment",
+            "--validate-preflight",
+            "--validate-cache",
+            "--prepare-run",
+            "--record-environment",
+            "--execution-cache",
+            "--record-target",
+            "--finish-run",
+            "--backup-cleanup",
+            "--cleanup-cache",
+            "--cleanup-result",
+        }
+        for outer in (False, True):
+            for entry in ("bin", ""):
+                for arguments in (("--stage", "fuzz"), ()):
+                    with self.subTest(outer=outer, entry=entry, arguments=arguments):
+                        fixture = self.fixture()
+                        caller, path, log, shadow = self.subdirectory_python(fixture, entry)
+                        result = self.run_subdirectory(
+                            fixture, caller, path, outer=outer, arguments=arguments
+                        )
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertFalse(shadow.exists())
+                        calls = [json.loads(line) for line in log.read_text().splitlines()]
+                        self.assertTrue(all(call[0] == "-I" for call in calls))
+                        bootstrap = [
+                            call for call in calls if call[1] == "-c" and "BASH_FUNC_" in call[2]
+                        ]
+                        self.assertEqual(len(bootstrap), 2 if outer else 1)
+                        operations = {arg for call in calls for arg in call if arg.startswith("--")}
+                        self.assertTrue(required <= operations, required - operations)
+                        self.assertEqual(
+                            fixture.summary()["execution"]["selected_targets"],
+                            list(fixtures.TARGETS),
+                        )
+                        self.assertTrue((fixture.artifacts / "fuzz/collection.ok").is_file())
+
+    def test_colon_startup_directory_rejects_only_relative_or_empty_path(self):
+        for outer in (False, True):
+            for entry in ("bin", "", "absolute"):
+                with self.subTest(outer=outer, entry=entry):
+                    fixture = self.fixture()
+                    caller, path, log, shadow = self.subdirectory_python(fixture, "bin")
+                    renamed = caller.with_name("caller:part")
+                    caller.rename(renamed)
+                    caller = renamed
+                    if entry == "":
+                        (caller / "python3").symlink_to("bin/python3")
+                        path = f":{fixture.bin}"
+                    elif entry == "absolute":
+                        path = str(fixture.bin)
+                    receipts = fixture.artifacts / "fuzz"
+                    receipts.mkdir(parents=True)
+                    before = {
+                        name: b"preserved " + name.encode()
+                        for name in ("collection.ok", "execution.json", "run_summary.json")
+                    }
+                    for name, raw in before.items():
+                        (receipts / name).write_bytes(raw)
+                    result = self.run_subdirectory(
+                        fixture,
+                        caller,
+                        path,
+                        outer=outer,
+                        arguments=("--stage", "fuzz"),
+                    )
+                    self.assertFalse(shadow.exists())
+                    self.assertFalse(log.exists())
+                    if entry == "absolute":
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual(
+                            fixture.summary()["execution"]["selected_targets"],
+                            list(fixtures.TARGETS),
+                        )
+                        self.assertTrue((receipts / "collection.ok").is_file())
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn("requires absolute PATH entries", result.stderr)
+                        self.assertFalse((Path(fixture.temporary) / "calls.jsonl").exists())
+                        self.assertEqual(
+                            {p.name: p.read_bytes() for p in receipts.iterdir()}, before
+                        )
+
+    def test_subdirectory_python_preflight_rejection_preserves_receipts(self):
+        for outer in (False, True):
+            for entry in ("bin", ""):
+                with self.subTest(outer=outer, entry=entry):
+                    fixture = self.fixture()
+                    caller, path, log, shadow = self.subdirectory_python(fixture, entry)
+                    receipts = fixture.artifacts / "fuzz"
+                    receipts.mkdir(parents=True)
+                    before = {
+                        name: b"preserved " + name.encode()
+                        for name in ("collection.ok", "execution.json", "run_summary.json")
+                    }
+                    for name, raw in before.items():
+                        (receipts / name).write_bytes(raw)
+                    result = self.run_subdirectory(
+                        fixture,
+                        caller,
+                        path,
+                        outer=outer,
+                        arguments=("--stage", "fuzz"),
+                        CARGO_REGISTRIES_CRATES_IO_INDEX="",
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(shadow.exists())
+                    self.assertTrue(log.exists())
+                    self.assertFalse((Path(fixture.temporary) / "calls.jsonl").exists())
+                    self.assertEqual({p.name: p.read_bytes() for p in receipts.iterdir()}, before)
+
+    def test_subdirectory_python_build_failure_retains_failed_evidence(self):
+        for outer in (False, True):
+            for entry in ("bin", ""):
+                with self.subTest(outer=outer, entry=entry):
+                    fixture = self.fixture()
+                    caller, path, log, shadow = self.subdirectory_python(fixture, entry)
+                    result = self.run_subdirectory(
+                        fixture,
+                        caller,
+                        path,
+                        outer=outer,
+                        arguments=("--stage", "fuzz"),
+                        CASE="build-fail",
+                        FAIL_TARGET=fixtures.TARGETS[0],
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse(shadow.exists())
+                    self.assertEqual(fixture.summary()["status"], "failed")
+                    calls = [json.loads(line) for line in log.read_text().splitlines()]
+                    self.assertTrue(any("--finish-run" in call for call in calls))
+                    self.assertFalse(any("--backup-cleanup" in call for call in calls))
+                    self.assertTrue((fixture.artifacts / "fuzz/collection.ok").is_file())
+
     def test_imported_cd_or_export_cannot_promote_nonfuzz_into_fuzz(self):
         for outer in (False, True):
             for name in ("cd", "export"):

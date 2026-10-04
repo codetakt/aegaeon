@@ -36,10 +36,19 @@ else
 	builtin set -o posix
 fi
 
+# Resolve relative and empty entries in the startup directory once. Retain the
+# selected route and PATH order across later directory changes and the handoff.
+if security_function_cwd="$(builtin pwd -P && builtin printf .)"; then
+	security_function_cwd="${security_function_cwd%$'\n.'}"
+else
+	security_function_error=""
+	"${security_function_error:?[security] security suite cannot resolve startup directory}"
+fi
 security_function_path="${PATH-}"
+security_function_anchored_path=""
 security_function_pending=1
 security_function_python=""
-while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
+while [[ $security_function_pending -eq 1 ]]; do
 	case "$security_function_path" in
 	*:*)
 		security_function_directory="${security_function_path%%:*}"
@@ -50,8 +59,16 @@ while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
 		security_function_pending=0
 		;;
 	esac
-	security_function_candidate="${security_function_directory:-.}/python3"
-	if [[ -f $security_function_candidate && -x $security_function_candidate ]]; then
+	if [[ $security_function_directory != /* ]]; then
+		if [[ $security_function_cwd == *:* ]]; then
+			security_function_error=""
+			"${security_function_error:?[security] security suite requires absolute PATH entries when startup directory contains a colon}"
+		fi
+		security_function_directory="$security_function_cwd/${security_function_directory:-.}"
+	fi
+	security_function_anchored_path+="$security_function_directory:"
+	security_function_candidate="$security_function_directory/python3"
+	if [[ -z $security_function_python && -f $security_function_candidate && -x $security_function_candidate ]]; then
 		security_function_python="$security_function_candidate"
 	fi
 done
@@ -76,6 +93,8 @@ if [[ $security_function_status -ne 0 ]]; then
 	# Expansion fails before dispatch even if exit, exec or : was imported.
 	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
 fi
+# Only a successfully admitted interpreter permits the anchored handoff PATH.
+export PATH="${security_function_anchored_path%:}"
 
 # Aggregated security checks (used by `nix run .#security-suite`).
 
@@ -174,7 +193,7 @@ if stage_enabled "fuzz"; then
 	# Resolve the physical script route before any override-influenced Git call
 	# or prior-receipt invalidation. Other stages retain their existing dispatch.
 	fuzz_guard_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
-	python3 -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
+	"$security_function_python" -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
 fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -194,13 +213,13 @@ if stage_enabled "fuzz"; then
 	# Use the same suite-owned collection destinations for every helper action.
 	# An inherited helper-only route must not change the source exclusions midway.
 	export FUZZ_RUN_ARTIFACT_DIR="$fuzz_receipt_dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR"
-	python3 -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
 		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
 		exit 1
 	fi
-	python3 -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
 fi
 
 # Only create the already validated caller-owned Cargo home after invalidation.
@@ -239,7 +258,7 @@ reset_cargo_target_dir() {
 
 cleanup_fuzz_outputs() {
 	local cache
-	cache="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
+	cache="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-cache "$1" "$2")" || return 1
 	# The terminal sentinel preserves even trailing newlines in a configured path.
 	[[ $cache == *$'\n.' ]] || return 1
 	cache="${cache%$'\n.'}"
@@ -418,7 +437,7 @@ run_fuzz_targets() (
 	# function in a conditional, which disables Bash's errexit inside functions.
 	local dir="$1" configuration internal watchdog host target rc record_result result=0
 	local fuzz_cmd=(cargo fuzz)
-	configuration="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --prepare-run "$dir")" || return 1
+	configuration="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --prepare-run "$dir")" || return 1
 	read -r internal watchdog host <<<"$configuration"
 	if ! command -v cargo >/dev/null 2>&1 ||
 		! command -v cargo-fuzz >/dev/null 2>&1 ||
@@ -457,12 +476,12 @@ run_fuzz_targets() (
 			fi
 		fi
 	fi
-	python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
+	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --record-environment "$dir" || return 2
 	local targets_text targets=()
-	targets_text="$(python3 -I -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
+	targets_text="$("$security_function_python" -I -c 'import os; print(" ".join(os.environ["FUZZ_TARGETS"].split()))')" || return 2
 	read -r -a targets <<<"$targets_text"
 	local target_dir
-	target_dir="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2
+	target_dir="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --execution-cache "$dir")" || return 2
 	[[ $target_dir == *$'\n.' ]] || return 2
 	target_dir="${target_dir%$'\n.'}"
 	for target in "${targets[@]}"; do
@@ -474,7 +493,7 @@ run_fuzz_targets() (
 		else
 			rc=$?
 		fi
-		if python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" build "$rc"; then
+		if "$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" build "$rc"; then
 			:
 		else
 			record_result=$?
@@ -490,7 +509,7 @@ run_fuzz_targets() (
 		else
 			rc=$?
 		fi
-		if python3 -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" run "$rc"; then
+		if "$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --record-target "$dir" "$target" run "$rc"; then
 			:
 		else
 			record_result=$?
@@ -514,7 +533,7 @@ run_fuzz() {
 	cat "$dir/run.log" || result=1
 	# Collect corpus and crash archives even after setup, build or run failures.
 	# Collection writes its marker only after all evidence has been checked.
-	if ! python3 -I scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
+	if ! "$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --finish-run "$dir" "$result"; then
 		result=1
 	fi
 	return "$result"
@@ -670,7 +689,7 @@ run_fuzz_stage() {
 	fi
 	# A collected failure still needs its raw corpus and crashes for upload.
 	if [[ $result -eq 0 && -f "$dir/collection.ok" ]]; then
-		if recovery_run_id="$(python3 -I scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
+		if recovery_run_id="$("$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --backup-cleanup "$dir")"; then
 			if cleanup_fuzz_outputs "$dir" "$recovery_run_id"; then
 				cleanup_result=0
 			else
@@ -678,13 +697,13 @@ run_fuzz_stage() {
 			fi
 			if [[ $cleanup_result -ne 0 ]]; then
 				result=1
-				python3 -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+				"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
 					"$dir" "$recovery_run_id" "$cleanup_result" removal || result=1
-			elif python3 -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" 0; then
+			elif "$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --cleanup-result "$dir" 0; then
 				: # Keep the bound recovery copies as execution evidence.
 			else
 				result=1
-				python3 -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
+				"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --restore-cleanup \
 					"$dir" "$recovery_run_id" 0 receipt || result=1
 			fi
 		else

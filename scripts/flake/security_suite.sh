@@ -36,10 +36,19 @@ else
 	builtin set -o posix
 fi
 
+# Resolve relative and empty entries in the startup directory once. Retain the
+# selected route and PATH order across later directory changes and the handoff.
+if security_function_cwd="$(builtin pwd -P && builtin printf .)"; then
+	security_function_cwd="${security_function_cwd%$'\n.'}"
+else
+	security_function_error=""
+	"${security_function_error:?[security] security suite cannot resolve startup directory}"
+fi
 security_function_path="${PATH-}"
+security_function_anchored_path=""
 security_function_pending=1
 security_function_python=""
-while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
+while [[ $security_function_pending -eq 1 ]]; do
 	case "$security_function_path" in
 	*:*)
 		security_function_directory="${security_function_path%%:*}"
@@ -50,8 +59,16 @@ while [[ $security_function_pending -eq 1 && -z $security_function_python ]]; do
 		security_function_pending=0
 		;;
 	esac
-	security_function_candidate="${security_function_directory:-.}/python3"
-	if [[ -f $security_function_candidate && -x $security_function_candidate ]]; then
+	if [[ $security_function_directory != /* ]]; then
+		if [[ $security_function_cwd == *:* ]]; then
+			security_function_error=""
+			"${security_function_error:?[security] security suite requires absolute PATH entries when startup directory contains a colon}"
+		fi
+		security_function_directory="$security_function_cwd/${security_function_directory:-.}"
+	fi
+	security_function_anchored_path+="$security_function_directory:"
+	security_function_candidate="$security_function_directory/python3"
+	if [[ -z $security_function_python && -f $security_function_candidate && -x $security_function_candidate ]]; then
 		security_function_python="$security_function_candidate"
 	fi
 done
@@ -76,6 +93,8 @@ if [[ $security_function_status -ne 0 ]]; then
 	# Expansion fails before dispatch even if exit, exec or : was imported.
 	"${security_function_error:?[security] security suite requires external Python and no inherited shell functions}"
 fi
+# Only a successfully admitted interpreter permits the anchored handoff PATH.
+export PATH="${security_function_anchored_path%:}"
 
 set -euo pipefail
 
