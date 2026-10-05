@@ -252,6 +252,9 @@ jobs:
         run: |
           nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py
           nix develop .#integrity --command mypy scripts/validation scripts/ci ci/validate_slos.py
+      - name: Check component package-source admission
+        run: |
+          nix develop .#integrity --command python3 -m unittest discover -s tests/ci -p test_component_bootstrap_origin.py -v
 
   core:
     needs: plan
