@@ -787,3 +787,41 @@ class WiringTests(unittest.TestCase):
             assert "workflow_call" in events
             assert "pull_request" not in events
             assert "draft" not in str(child)
+
+    def test_documentation_parallel_workers_keep_complete_gate(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        jobs = workflow["jobs"]
+        assert jobs["docs"]["needs"] == "plan"
+        assert "if" not in jobs["docs"]
+        assert jobs["docs"]["uses"] == "./.github/workflows/documentation.yml"
+        assert jobs["docs"]["with"] == {
+            "base": "${{ needs.plan.outputs.base }}",
+            "source-head": "${{ needs.plan.outputs.source_head }}",
+            "test-sha": "${{ needs.plan.outputs.test_sha }}",
+            "pr-title": "${{ github.event.pull_request.title || '' }}",
+        }
+        docs = yaml.safe_load((ROOT / jobs["docs"]["uses"]).read_text())
+        assert set(docs["jobs"]) == {"metadata", "helpers", "complete"}
+        assert set(docs.get("on", docs.get(True))) == {"workflow_call"}
+        assert docs["permissions"] == {"contents": "read"}
+        assert docs["jobs"]["helpers"]["strategy"]["matrix"]["group"] == [
+            "sanitizer",
+            "security-fuzz",
+            "other",
+        ]
+        assert docs["jobs"]["helpers"]["strategy"]["fail-fast"] is False
+        assert docs["jobs"]["helpers"]["strategy"]["max-parallel"] == 3
+        for job in ("helpers", "complete"):
+            command = next(step["run"] for step in docs["jobs"][job]["steps"] if "run" in step)
+            assert command.index("nix develop .#docs --command bash -c") < command.index(
+                "PYTHONPATH="
+            )
+        assert "if" not in docs["jobs"]["metadata"]
+        assert "if" not in docs["jobs"]["helpers"]
+        assert "always()" in docs["jobs"]["complete"]["if"]
+        assert set(docs["jobs"]["complete"]["needs"]) == {"metadata", "helpers"}
+        for job in docs["jobs"].values():
+            assert job["timeout-minutes"] == 30
+            checkout = job["steps"][0]["with"]
+            assert checkout["persist-credentials"] is False
+            assert checkout["ref"] == "${{ inputs.test-sha }}"

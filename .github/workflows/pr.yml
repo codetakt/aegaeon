@@ -222,20 +222,12 @@ jobs:
   docs:
     name: Documentation
     needs: plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-nix-ci
-      - name: Check documentation and PR metadata
-        env:
-          PR_BASE_SHA: ${{ needs.plan.outputs.base }}
-          PR_HEAD_SHA: ${{ needs.plan.outputs.source_head }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: nix develop .#docs --command bash scripts/ci/run_docs.sh
+    uses: ./.github/workflows/documentation.yml
+    with:
+      base: ${{ needs.plan.outputs.base }}
+      source-head: ${{ needs.plan.outputs.source_head }}
+      test-sha: ${{ needs.plan.outputs.test_sha }}
+      pr-title: ${{ github.event.pull_request.title || '' }}
 
   integrity:
     name: Assurance integrity
