@@ -1409,7 +1409,7 @@ CREATE TABLE aegaeon.runtime_keys (
     activated_at timestamp with time zone,
     revoked_at timestamp with time zone,
     retiring_expires_at timestamp with time zone,
-    CONSTRAINT runtime_keys_algorithm_matches_usage CHECK ((((usage = 'OIDC_ID_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'RS256'::text)) OR ((usage = 'OIDC_REQUEST_OBJECT_DECRYPTION'::aegaeon.runtime_key_usage) AND (algorithm = 'RSA-OAEP+A256GCM'::text)) OR ((usage = 'JWT_ACCESS_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'EdDSA'::text)) OR ((usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text]))))),
+    CONSTRAINT runtime_keys_algorithm_matches_usage CHECK ((((usage = 'OIDC_ID_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = 'RS256'::text)) OR ((usage = 'OIDC_REQUEST_OBJECT_DECRYPTION'::aegaeon.runtime_key_usage) AND (algorithm = 'RSA-OAEP+A256GCM'::text)) OR ((usage = 'JWT_ACCESS_TOKEN_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text]))) OR ((usage = 'JWT_INTROSPECTION_SIGNING'::aegaeon.runtime_key_usage) AND (algorithm = ANY (ARRAY['RS256'::text, 'EdDSA'::text]))))),
     CONSTRAINT runtime_keys_algorithm_non_empty CHECK ((btrim(algorithm) <> ''::text)),
     CONSTRAINT runtime_keys_key_handle_non_empty CHECK ((btrim(key_handle) <> ''::text)),
     CONSTRAINT runtime_keys_kid_non_empty CHECK ((btrim(kid) <> ''::text)),

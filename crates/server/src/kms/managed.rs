@@ -54,8 +54,18 @@ impl ManagedJwtKeyManager {
         runtime_keys: &RuntimeKeySet,
         usage: RuntimeKeyUsage,
     ) -> Result<Self, KeyManagerError> {
-        // Preserve the existing HTTP selection until the recipient profile is implemented.
-        Self::try_from_runtime_keys_for_algorithm(runtime_keys, usage, RuntimeKeyAlgorithm::EdDsa)
+        let algorithm = match usage {
+            RuntimeKeyUsage::JwtAccessTokenSigning => {
+                runtime_keys
+                    .active_key(usage)
+                    .ok_or(KeyManagerError::KeyNotFound)?
+                    .algorithm
+            }
+            // Preserve HTTP introspection selection until its recipient profile is implemented.
+            RuntimeKeyUsage::JwtIntrospectionSigning => RuntimeKeyAlgorithm::EdDsa,
+            _ => return Err(KeyManagerError::OperationFailed),
+        };
+        Self::try_from_runtime_keys_for_algorithm(runtime_keys, usage, algorithm)
     }
 
     /// Build a purpose-isolated signer for exactly the requested ACTIVE algorithm slot.
@@ -72,7 +82,7 @@ impl ManagedJwtKeyManager {
             (usage, algorithm),
             (
                 RuntimeKeyUsage::JwtAccessTokenSigning,
-                RuntimeKeyAlgorithm::EdDsa
+                RuntimeKeyAlgorithm::EdDsa | RuntimeKeyAlgorithm::Rs256
             ) | (
                 RuntimeKeyUsage::JwtIntrospectionSigning,
                 RuntimeKeyAlgorithm::EdDsa | RuntimeKeyAlgorithm::Rs256

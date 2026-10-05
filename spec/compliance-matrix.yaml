@@ -3859,8 +3859,27 @@ rfc_9068:
   - as
   notes:
   - "Default remains opaque tokens + introspection (safe default)."
-  - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata includes access_token_signing_alg_values_supported: [EdDSA]."
+  - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata advertises that key's actual signing algorithm (RS256 or EdDSA)."
   - "Opaque-vs-JWT switching verified in jwt_access_token_test.rs."
+
+- id: 9068-006
+  section: '2.1'
+  requirement: MUST
+  description: Support RS256 for managed JWT access-token signing and purpose-isolated verification while preserving EdDSA compatibility.
+  module: crates/server/src/kms/managed.rs
+  proof: []
+  tests:
+  - crates/server/src/kms/managed_access_tests.rs
+  - crates/server/src/main/tests/key_managers.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/runtime_keys/runtime_key_pg/access_algorithms.rs
+  status: implemented
+  runtime_link: crates/server/src/main/runtime_key_managers.rs
+  applies_to:
+  - as
+  notes:
+  - The managed databaseEncrypted path supports explicit RS256 PKCS8 imports (2048..4096 bits) and EdDSA. Omitted creation algorithm remains EdDSA; the sole ACTIVE access-token key selects actual issuance. Introspection and OIDC signing purposes remain isolated.
+  - Access tokens retain one ACTIVE and one NEXT slot across algorithms. Cross-algorithm rotation preserves live old public verifiers and the existing combined four-live-RETIRING cap under the environment transaction lock.
+  - Focused native and PostgreSQL checks exercise management mutations, restart requests, persisted-key reload, actual JWT issuance and validation, metadata, independent RSA signatures and refusal controls. These finite checks do not establish process recovery, cloud providers, complete release compatibility or product assurance. Stored-token verification after JWT issuance is disabled remains separate work.
 
 draft_oauth_browser_based_apps:
 - id: browser-apps-001

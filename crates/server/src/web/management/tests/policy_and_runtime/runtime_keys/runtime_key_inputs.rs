@@ -92,6 +92,33 @@ fn prepare_runtime_key_create_input_accepts_jwt_access_signing_eddsa() -> TestRe
 }
 
 #[test]
+fn prepare_runtime_key_create_input_accepts_jwt_access_signing_rs256() -> TestResult {
+    let _guard = crate::util::KEY_ENCRYPTION_KEY_ENV_GUARD
+        .lock()
+        .map_err(|_| "key encryption key env guard")?;
+    let kek = [0x52u8; 32];
+    let _env = EnvVarGuard::set(KEY_ENCRYPTION_KEY_ENV, URL_SAFE_NO_PAD.encode(kek));
+    let mut req = runtime_key_create_request("JWT_ACCESS_TOKEN_SIGNING");
+    req.algorithm = Some("RS256".into());
+    let input =
+        prepare_runtime_key_create_input(&req, runtime_key_input_environment_id(), "req-rsa")
+            .map_err(|_| "RSA access runtime key request should validate")?;
+    assert_eq!(input.usage, RuntimeKeyUsageInput::JwtAccessTokenSigning);
+    assert_eq!(input.algorithm, "RS256");
+    assert_eq!(input.public_jwk["alg"], "RS256");
+    assert_eq!(input.public_jwk["kty"], "RSA");
+    assert_eq!(
+        decrypt_key_handle(
+            &input.encrypted_key_handle,
+            &kek,
+            runtime_key_input_context(&input)
+        )?,
+        URL_SAFE_NO_PAD.encode(pem::parse(TEST_RSA_PRIVATE_KEY_PEM)?.contents())
+    );
+    Ok(())
+}
+
+#[test]
 fn prepare_runtime_key_create_input_rejects_jwt_introspection_signing_es256() -> TestResult {
     let mut req = runtime_key_create_request("JWT_INTROSPECTION_SIGNING");
     req.algorithm = Some("ES256".to_string());

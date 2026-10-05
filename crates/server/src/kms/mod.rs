@@ -160,3 +160,6 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) mod managed_slot_tests;
+
+#[cfg(test)]
+mod managed_access_tests;
