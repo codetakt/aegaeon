@@ -16,7 +16,6 @@ import re
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Never, Protocol, cast
-from urllib.parse import quote
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -303,14 +302,14 @@ class _OriginalGate:
             "original regular source path/mode differs",
         )
         entry = cast("JsonObject", entry)
-        reply = self.read("contents/" + quote(path, safe="/") + "?ref=" + commit)
+        # The signed tree fixes path, mode and blob identity. Reading that exact
+        # Git object supports large sources without the Contents API's 1 MiB limit.
+        reply = self.read("git/blobs/" + entry["sha"])
         require(
-            reply.get("type") == "file"
-            and reply.get("path") == path
-            and reply.get("sha") == entry["sha"]
+            reply.get("sha") == entry["sha"]
             and reply.get("encoding") == "base64"
             and type(reply.get("content")) is str,
-            "original contents/blob association differs",
+            "original signed-tree/blob association differs",
         )
         try:
             raw = base64.b64decode(reply["content"].replace("\n", ""), validate=True)

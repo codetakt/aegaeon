@@ -111,13 +111,13 @@ def encoded(value: JsonObject) -> bytes:
 class PrivateOriginalFixture:
     """Synthetic replies and rechecks; never a production original-read adapter."""
 
-    def __init__(self) -> None:
+    def __init__(self, probe_bytes: bytes = PROBE_BYTES) -> None:
         self.reads: list[str] = []
         self.rechecks = 0
         self.documents: dict[str, JsonObject] = {}
         self.reply_change: Callable[[OriginalReply], OriginalReply] = lambda reply: reply
         self.rows: list[JsonObject] = []
-        for ordinal, (path, raw) in enumerate([(PROBE, PROBE_BYTES), (SIBLING, SIBLING_BYTES)]):
+        for ordinal, (path, raw) in enumerate([(PROBE, probe_bytes), (SIBLING, SIBLING_BYTES)]):
             self.rows.append(
                 {
                     "registry_id": "fixture-" + str(ordinal),
@@ -131,7 +131,7 @@ class PrivateOriginalFixture:
                 }
             )
         self.rebind_descriptor()
-        self._commit(SOURCE, SOURCE_TREE, {PROBE: PROBE_BYTES, SIBLING: SIBLING_BYTES})
+        self._commit(SOURCE, SOURCE_TREE, {PROBE: probe_bytes, SIBLING: SIBLING_BYTES})
         self.premises = BootstrapPremises(
             actual_base=BASE,
             source_inventory=tuple(sorted([PROBE, SIBLING])),
@@ -167,9 +167,7 @@ class PrivateOriginalFixture:
         for path, raw in sources.items():
             oid = git_blob(raw, "0" * 40)
             entries.append({"path": path, "type": "blob", "mode": "100644", "sha": oid})
-            self.documents["contents/" + path + "?ref=" + commit] = {
-                "type": "file",
-                "path": path,
+            self.documents["git/blobs/" + oid] = {
                 "sha": oid,
                 "encoding": "base64",
                 "size": len(raw),
@@ -218,25 +216,35 @@ class BootstrapOriginTests(unittest.TestCase):
 
     @isolated_test
     def test_positive_originals_project_and_load_only_fixed_verified_bytes(self) -> None:
-        fixture = PrivateOriginalFixture()
-        with tempfile.TemporaryDirectory() as temporary:
-            projection = authenticate_and_project(
-                fixture, fixture.premises, fixture.policy, Path(temporary)
-            )
-            try:
-                projection.recheck()
-                self.assertEqual(projection.source_bytes(PROBE), PROBE_BYTES)
-                with load_admitted_entry(projection) as module:
-                    self.assertEqual(module.installed_value(), 17)
-                    self.assertIn("origin_sibling", sys.modules)
-                self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 1)
-                self.assertNotIn("origin_probe", sys.modules)
-                with self.assertRaises(OriginRejectedError):
-                    module.installed_value()
-                self.assertGreater(fixture.rechecks, len(fixture.reads) * 2)
-                self.assertTrue(all(url.startswith(API_ROOT) for url in fixture.reads))
-            finally:
-                projection.close()
+        large_probe = PROBE_BYTES + b"#" + b"x" * (3 * 1024 * 1024 // 2) + b"\n"
+        self.assertGreater(len(large_probe), 1024 * 1024)
+        for probe_bytes in (PROBE_BYTES, large_probe):
+            with (
+                self.subTest(source_bytes=len(probe_bytes)),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                vars(builtins)["_aegaeon_origin_probe"] = 0
+                fixture = PrivateOriginalFixture(probe_bytes)
+                projection = authenticate_and_project(
+                    fixture, fixture.premises, fixture.policy, Path(temporary)
+                )
+                try:
+                    projection.recheck()
+                    self.assertEqual(projection.source_bytes(PROBE), probe_bytes)
+                    with load_admitted_entry(projection) as module:
+                        self.assertEqual(module.installed_value(), 17)
+                        self.assertIn("origin_sibling", sys.modules)
+                    self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 1)
+                    self.assertNotIn("origin_probe", sys.modules)
+                    with self.assertRaises(OriginRejectedError):
+                        module.installed_value()
+                    self.assertGreater(fixture.rechecks, len(fixture.reads) * 2)
+                    self.assertTrue(all(url.startswith(API_ROOT) for url in fixture.reads))
+                    self.assertFalse(any("/contents/" in url for url in fixture.reads))
+                    blob_url = API_ROOT + "git/blobs/" + git_blob(probe_bytes, "0" * 40)
+                    self.assertIn(blob_url, fixture.reads)
+                finally:
+                    projection.close()
 
     @isolated_test
     def test_all_origin_failures_stop_before_projection_or_candidate_import(self) -> None:  # noqa: C901, PLR0915 - directed original-input matrix
@@ -285,6 +293,12 @@ class BootstrapOriginTests(unittest.TestCase):
             raw = b"{}" + b" " * (len(fixture.descriptor) - 2)
             fixture._commit(BASE, BASE_TREE, {POLICY_PATH: fixture.policy, DESCRIPTOR_PATH: raw})
 
+        def blob_change(field: str, value: object) -> Callable[[PrivateOriginalFixture], None]:
+            def apply(fixture: PrivateOriginalFixture) -> None:
+                fixture.documents["git/blobs/" + git_blob(PROBE_BYTES, "0" * 40)][field] = value
+
+            return apply
+
         cases: dict[str, Callable[[PrivateOriginalFixture], None]] = {
             "changed-sha": change_bytes,
             **{
@@ -314,15 +328,24 @@ class BootstrapOriginTests(unittest.TestCase):
                     fixture.documents["git/trees/" + SOURCE_TREE + "?recursive=1"]["tree"][0]
                 )
             ),
-            "contents-oid": lambda fixture: fixture.documents[
-                "contents/" + PROBE + "?ref=" + SOURCE
-            ].update(sha="0" * 40),
-            "actual-git-blob": lambda fixture: fixture.documents[
-                "contents/" + PROBE + "?ref=" + SOURCE
-            ].update(content=base64.b64encode(b"X" * len(PROBE_BYTES)).decode()),
-            "contents-origin": lambda fixture: fixture.documents[
-                "contents/" + PROBE + "?ref=" + SOURCE
-            ].update(path=SIBLING),
+            "blob-oid": blob_change("sha", "0" * 40),
+            "actual-git-blob": blob_change(
+                "content", base64.b64encode(b"X" * len(PROBE_BYTES)).decode()
+            ),
+            "blob-size": blob_change("size", len(PROBE_BYTES) + 1),
+            "blob-size-bool": blob_change("size", True),
+            "blob-encoding": blob_change("encoding", "none"),
+            "blob-base64": blob_change("content", "not!base64"),
+            "blob-content-type": blob_change("content", 17),
+            "tree-source-path": lambda fixture: fixture.documents[
+                "git/trees/" + SOURCE_TREE + "?recursive=1"
+            ]["tree"][0].update(path="scripts/ci/unadopted.py"),
+            "tree-blob-association": lambda fixture: fixture.documents[
+                "git/trees/" + SOURCE_TREE + "?recursive=1"
+            ]["tree"][0].update(sha=git_blob(SIBLING_BYTES, "0" * 40)),
+            "tree-source-mode": lambda fixture: fixture.documents[
+                "git/trees/" + SOURCE_TREE + "?recursive=1"
+            ]["tree"][0].update(mode="100755"),
             "descriptor-digest": original_descriptor_changed,
             "protected-policy-origin": lambda fixture: setattr(
                 fixture, "policy", fixture.policy + b" "
