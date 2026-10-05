@@ -949,10 +949,44 @@ class CiPlanTransportTests(unittest.TestCase):
         for job in [*transport.LANES, "required"]:
             expected = deepcopy(parent["jobs"][job])
             if job == "docs":
-                # Full regression discovery has an explicitly increased budget.
-                self.assertEqual(expected["timeout-minutes"], 15)
-                expected["timeout-minutes"] = 40
+                # Documentation retains its unconditional planner dependency
+                # through a reusable gate that executes all helper groups.
+                self.assertNotIn("if", expected)
+                expected = {
+                    "name": expected["name"],
+                    "needs": expected["needs"],
+                    "uses": "./.github/workflows/documentation.yml",
+                    "with": {
+                        "base": "${{ needs.plan.outputs.base }}",
+                        "source-head": "${{ needs.plan.outputs.source_head }}",
+                        "test-sha": "${{ needs.plan.outputs.test_sha }}",
+                        "pr-title": "${{ github.event.pull_request.title || '' }}",
+                    },
+                }
             self.assertEqual(workflow["jobs"][job], expected)
+        documentation = yaml.safe_load((ROOT / ".github/workflows/documentation.yml").read_text())
+        self.assertEqual(set(documentation["jobs"]), {"metadata", "helpers", "complete"})
+        for job in documentation["jobs"].values():
+            self.assertEqual(job["timeout-minutes"], 30)
+        for name in ("metadata", "helpers"):
+            self.assertNotIn("if", documentation["jobs"][name])
+        self.assertEqual(
+            documentation["jobs"]["helpers"]["strategy"],
+            {
+                "fail-fast": False,
+                "max-parallel": 3,
+                "matrix": {"group": ["sanitizer", "security-fuzz", "other"]},
+            },
+        )
+        complete = documentation["jobs"]["complete"]
+        self.assertEqual(complete["needs"], ["metadata", "helpers"])
+        self.assertEqual(complete["if"], "${{ always() }}")
+        aggregate = next(
+            step
+            for step in complete["steps"]
+            if "run_ci_helpers.py aggregate" in step.get("run", "")
+        )
+        self.assertEqual(aggregate["env"]["CI_HELPER_NEEDS"], "${{ toJSON(needs) }}")
         outputs = workflow["jobs"]["plan"]["outputs"]
         self.assertEqual(outputs["plan_artifact_id"], "${{ steps.evidence.outputs.artifact-id }}")
         run = next(

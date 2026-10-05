@@ -62,6 +62,7 @@ jobs:
       - name: Run every helper in the module group
         env:
           HELPER_GROUP: ${{ matrix.group }}
+          PR_BASE_SHA: ${{ inputs.base }}
         run: |
           # Expand variables inside the Nix shell.
           # shellcheck disable=SC2016

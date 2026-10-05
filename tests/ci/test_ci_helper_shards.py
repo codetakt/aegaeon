@@ -505,3 +505,17 @@ class Cases(unittest.TestCase):
         ):
             helpers.main()
         self.assertEqual(json.loads(destination.read_bytes()), receipt)
+
+    def test_direct_fixture_exception_callback_cannot_forge_coverage(self):
+        case = unittest.FunctionTestCase(lambda: None)
+        result = helpers.RecordingResult(
+            unittest.runner._WritelnDecorator(io.StringIO()), True, 0, [case], [0]
+        )
+        suite = helpers.ObservedSuite(unittest.TestSuite([case]))
+        with self.assertRaisesRegex(ValueError, "unbound fixture exception"):
+            suite._createClassOrModuleLevelException(
+                result, unittest.SkipTest("forged"), "setUpClass", "forged.Owner"
+            )
+        self.assertEqual((result.testsRun, len(result.skipped)), (0, 0))
+        self.assertEqual(result.fixture_skipped_slots, [])
+        self.assertEqual(result.fixture_events, [])

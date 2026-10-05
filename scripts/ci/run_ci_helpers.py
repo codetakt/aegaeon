@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import inspect
 import json
 import os
 import re
@@ -13,7 +12,9 @@ import sys
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
+from unittest.suite import _ErrorHolder  # type: ignore[attr-defined]
+from unittest.util import strclass
 
 from pr_plan import unique_json_object
 
@@ -74,7 +75,7 @@ def partition(  # noqa: C901, PLR0915 - preserve full fixture/discovery fallback
     leaves = suite_leaves(suite)
     require(leaves, "complete helper discovery is empty")
     classes: dict[type[unittest.TestCase], int] = {}
-    full = []
+    full: list[dict[str, Any]] = []
     for slot, case in enumerate(leaves):
         classes.setdefault(type(case), len(classes))
         full.append(
@@ -82,7 +83,7 @@ def partition(  # noqa: C901, PLR0915 - preserve full fixture/discovery fallback
                 "slot": slot,
                 "id": case.id(),
                 "module": type(case).__module__,
-                "class": unittest.util.strclass(type(case)),
+                "class": strclass(type(case)),
                 "class_slot": classes[type(case)],
             }
         )
@@ -161,6 +162,9 @@ def context() -> dict[str, str]:
 
 
 class RecordingResult(ResultBase):
+    # Initialized by the original TestSuite module-fixture handler before use.
+    _moduleSetUpFailed: bool  # noqa: N815 - original unittest fixture state
+
     def __init__(
         self,
         stream: object,
@@ -197,7 +201,7 @@ class RecordingResult(ResultBase):
         require(
             (
                 self.pending_fixture is not None
-                and type(test) is unittest.suite._ErrorHolder  # noqa: SLF001 - bind stdlib fixture holder
+                and type(test) is _ErrorHolder
                 and test.id() == self.pending_fixture
             )
             or (test is self.active and self.active is not None)
@@ -226,6 +230,23 @@ class RecordingResult(ResultBase):
         return covered
 
 
+class _FixtureSuite(Protocol):
+    """Typed view of CPython fixtures; typeshed also omits the exact _ErrorHolder type."""
+
+    _cleanup: bool
+
+    def _handleClassSetUp(self, test: unittest.TestCase, result: RecordingResult) -> None: ...  # noqa: N802
+    def _handleModuleFixture(self, test: unittest.TestCase, result: RecordingResult) -> None: ...  # noqa: N802
+    def _createClassOrModuleLevelException(  # noqa: N802
+        self,
+        result: RecordingResult,
+        exc: BaseException,
+        method_name: str,
+        parent: str,
+        info: object = None,
+    ) -> None: ...
+
+
 class ObservedSuite(unittest.TestSuite):
     """Observe original stdlib fixture callbacks without replacing its run loop."""
 
@@ -234,16 +255,16 @@ class ObservedSuite(unittest.TestSuite):
             ObservedSuite(child) if isinstance(child, unittest.TestSuite) else child
             for child in original
         )
-        self._cleanup = original._cleanup  # noqa: SLF001 - preserve standard suite setting
+        self._cleanup = cast("_FixtureSuite", original)._cleanup  # noqa: SLF001 - preserve standard suite setting
         self.phase: tuple[str, unittest.TestCase, str] | None = None
         self.reported = False
 
     def _handleClassSetUp(self, test: unittest.TestCase, result: RecordingResult) -> None:  # noqa: N802
         previous = self.phase, self.reported
-        self.phase = ("setUpClass", test, unittest.util.strclass(type(test)))
+        self.phase = ("setUpClass", test, strclass(type(test)))
         self.reported = False
         try:
-            super()._handleClassSetUp(test, result)
+            cast("_FixtureSuite", super())._handleClassSetUp(test, result)  # noqa: SLF001 - original handler
         finally:
             self.phase, self.reported = previous
 
@@ -252,7 +273,7 @@ class ObservedSuite(unittest.TestSuite):
         self.phase = ("setUpModule", test, type(test).__module__)
         self.reported = False
         try:
-            super()._handleModuleFixture(test, result)
+            cast("_FixtureSuite", super())._handleModuleFixture(test, result)  # noqa: SLF001 - original handler
         finally:
             self.phase, self.reported = previous
 
@@ -264,7 +285,7 @@ class ObservedSuite(unittest.TestSuite):
         parent: str,
         info: object = None,
     ) -> None:
-        caller = inspect.currentframe().f_back.f_code
+        caller = sys._getframe(1).f_code  # noqa: SLF001 - bind the actual CPython caller frame
         require(caller in FIXTURE_CALLERS, "unbound fixture exception callback")
         covered: list[int] = []
         phase = self.phase
@@ -284,7 +305,9 @@ class ObservedSuite(unittest.TestSuite):
             )
             result.pending_fixture = f"{method_name} ({parent})"
         try:
-            super()._createClassOrModuleLevelException(result, exc, method_name, parent, info)
+            cast("_FixtureSuite", super())._createClassOrModuleLevelException(  # noqa: SLF001 - original helper
+                result, exc, method_name, parent, info
+            )
         finally:
             result.pending_fixture = None
 
