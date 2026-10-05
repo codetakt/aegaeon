@@ -6,6 +6,7 @@ import base64
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -573,3 +574,198 @@ def test_actual_stop_tombstone_serializes_a_delayed_dispatch(tmp_path):
     assert (control / "cancelled").is_file()
     assert not (control / "config.json").exists()
     assert not (control / "unexpected-launch").exists()
+
+
+def extracted_restart_script(port=8080):
+    source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
+    start = source.index("restart_server_script=")
+    end = source.index("\nserver_stats_script=", start)
+    result = subprocess.run(  # noqa: S603 -- evaluate only the actual fixed script assignment
+        [
+            shutil.which("bash"),
+            "-c",
+            "server_port="
+            + shlex.quote(str(port))
+            + "\n"
+            + source[start:end]
+            + '\nprintf %s "$restart_server_script"',
+        ],
+        capture_output=True,
+        check=False,
+        timeout=2,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.decode()
+
+
+def run_restart_fixture(tmp_path, settings):
+    # Unsetting SECONDS removes its clock behavior; only the owned sleep/curl stubs advance it.
+    stub = r"""unset SECONDS
+SECONDS=0
+calls=FIXTURE_CALLS
+counter=FIXTURE_COUNTER
+clock=FIXTURE_CLOCK
+printf '0' >"$counter"
+trap 'printf "%s" "$SECONDS" >"$clock"' EXIT
+states=(FIXTURE_STATES)
+sudo() { "$@"; }
+timeout() {
+  printf 'timeout %s\n' "$*" >>"$calls"
+  [[ "$1" == --kill-after=1 ]] || return 99
+  shift
+  limit="$1"
+  shift
+  if [[ "$1" == sudo && "$2" == systemctl && "$3" == restart ]]; then
+    [[ "$limit" == 30 ]] || return 99
+    SECONDS=$((SECONDS + FIXTURE_RESTART_ELAPSED))
+    return FIXTURE_RESTART_EXIT
+  fi
+  if [[ "$1" == sudo && "$2" == systemctl && "$3" == status ]]; then
+    [[ "$limit" == 5 ]] || return 99
+    SECONDS=$((SECONDS + 6))
+  else
+    [[ "$limit" == 1 || "$limit" == 2 ]] || return 99
+  fi
+  "$@"
+}
+systemctl() {
+  printf 'systemctl %s\n' "$*" >>"$calls"
+  [[ "$1" != status ]] || return 0
+  if [[ "$*" == *--value* ]]; then
+    printf '%s\n' FIXTURE_PREVIOUS
+    return 0
+  fi
+  [[ "$*" == *--all* ]] || return 99
+  [[ FIXTURE_PROBE_EXIT == 0 ]] || return FIXTURE_PROBE_EXIT
+  count=$(<"$counter")
+  printf '%s' "$((count + 1))" >"$counter"
+  ((count < ${#states[@]})) || count=$((${#states[@]} - 1))
+  case "${states[$count]}" in
+    pending) printf 'Job=42\nActiveState=active\nInvocationID=%s\n' FIXTURE_OLD ;;
+    old) printf 'Job=\nActiveState=active\nInvocationID=%s\n' FIXTURE_OLD ;;
+    ready) printf 'Job=\nActiveState=active\nInvocationID=%s\n' FIXTURE_NEW ;;
+    missing) printf 'ActiveState=active\nInvocationID=%s\n' FIXTURE_NEW ;;
+    duplicate) printf 'Job=\nJob=\nActiveState=active\nInvocationID=%s\n' FIXTURE_NEW ;;
+    malformed) printf 'Job=invalid\nActiveState=active\nInvocationID=%s\n' FIXTURE_NEW ;;
+    invalid-id) printf 'Job=\nActiveState=active\nInvocationID=invalid\n' ;;
+    *) return 99 ;;
+  esac
+}
+curl() {
+  printf 'curl %s\n' "$*" >>"$calls"
+  [[ "$*" == *'--noproxy * --connect-timeout 2 --max-time '* &&
+     "$*" == *'http://127.0.0.1:FIXTURE_PORT/health'* ]] || return 99
+  SECONDS=$((SECONDS + FIXTURE_CURL_ELAPSED))
+  return FIXTURE_CURL_EXIT
+}
+sleep() { SECONDS=$((SECONDS + $1)); }
+"""
+    replacements = {
+        "FIXTURE_CALLS": shlex.quote(str(tmp_path / "calls")),
+        "FIXTURE_COUNTER": shlex.quote(str(tmp_path / "counter")),
+        "FIXTURE_CLOCK": shlex.quote(str(tmp_path / "clock")),
+        "FIXTURE_STATES": " ".join(shlex.quote(value) for value in settings["states"]),
+        "FIXTURE_RESTART_ELAPSED": "31" if settings.get("restart") == 124 else "0",
+        "FIXTURE_RESTART_EXIT": str(settings.get("restart", 0)),
+        "FIXTURE_PREVIOUS": shlex.quote(settings.get("previous", "a" * 32)),
+        "FIXTURE_OLD": shlex.quote("a" * 32),
+        "FIXTURE_NEW": shlex.quote("b" * 32),
+        "FIXTURE_PROBE_EXIT": str(settings.get("probe_exit", 0)),
+        "FIXTURE_CURL_EXIT": str(settings.get("curl_exit", 0)),
+        "FIXTURE_CURL_ELAPSED": str(settings.get("curl_elapsed", 0)),
+        "FIXTURE_PORT": str(settings.get("port", 8080)),
+    }
+    for marker, value in replacements.items():
+        stub = stub.replace(marker, value)
+    result = subprocess.run(  # noqa: S603 -- production-extracted script, owned virtual clock/tools
+        [shutil.which("bash"), "-c", stub + extracted_restart_script(settings.get("port", 8080))],
+        capture_output=True,
+        check=False,
+        timeout=2,
+    )
+    return (
+        result,
+        (tmp_path / "calls").read_text().splitlines(),
+        int((tmp_path / "clock").read_text()),
+    )
+
+
+@pytest.mark.parametrize(
+    ("settings", "expected", "curl_calls"),
+    [
+        pytest.param({"states": ["ready"]}, 0, 1, id="completed-new-invocation"),
+        pytest.param({"states": ["ready"], "port": 18080}, 0, 1, id="configured-port"),
+        pytest.param(
+            {"restart": 124, "states": ["pending", "ready"]}, 0, 1, id="timeout-then-ready"
+        ),
+        pytest.param({"restart": 7, "states": ["ready"]}, 7, 0, id="restart-error"),
+        pytest.param({"restart": 137, "states": ["ready"]}, 137, 0, id="restart-forced-kill"),
+        pytest.param({"restart": 124, "states": ["pending"]}, 1, 0, id="stale-health-pending-job"),
+        pytest.param({"restart": 124, "states": ["old"]}, 1, 0, id="old-invocation-no-job"),
+        pytest.param({"states": ["ready"], "curl_exit": 7}, 1, None, id="health-exhausted"),
+        pytest.param({"states": ["ready"], "curl_elapsed": 75}, 1, 1, id="late-health"),
+        pytest.param({"states": ["missing"]}, 1, 0, id="missing-job-field"),
+        pytest.param({"states": ["duplicate"]}, 1, 0, id="duplicate-job-field"),
+        pytest.param({"states": ["malformed"]}, 1, 0, id="malformed-job-field"),
+        pytest.param({"states": ["invalid-id"]}, 1, 0, id="invalid-invocation"),
+        pytest.param({"states": ["ready"], "probe_exit": 9}, 9, 0, id="probe-error"),
+        pytest.param({"states": ["ready"], "previous": ""}, 0, 1, id="initially-inactive"),
+    ],
+)
+def test_restart_waits_for_completed_new_invocation(tmp_path, settings, expected, curl_calls):
+    result, calls, clock = run_restart_fixture(tmp_path, settings)
+    assert result.returncode == expected, result.stderr
+    assert clock <= 115
+    observed_curl = sum(line.startswith("curl ") for line in calls)
+    if curl_calls is None:
+        assert observed_curl > 1
+    else:
+        assert observed_curl == curl_calls
+    assert "SERVER_HEALTH=OK" in result.stdout.decode() if expected == 0 else not result.stdout
+    if expected == 1 and settings["states"] in (["pending"], ["old"], ["ready"]):
+        assert b"SERVER_HEALTH=FAIL" in result.stderr
+        assert any("timeout --kill-after=1 5 sudo systemctl status" in line for line in calls)
+    if settings.get("restart") in (7, 137):
+        assert not any("--all" in line for line in calls)
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ({"server_port": {"value": 8080}}, "8080"),
+        ({"server_port": {"value": 18080}}, "18080"),
+        ({"server_port": {"value": 1}}, "1"),
+        ({"server_port": {"value": 65535}}, "65535"),
+        ({}, None),
+        ({"server_port": {}}, None),
+        ({"server_port": {"value": None}}, None),
+        ({"server_port": {"value": "8080"}}, None),
+        ({"server_port": {"value": True}}, None),
+        ({"server_port": {"value": 1.5}}, None),
+        ({"server_port": {"value": 0}}, None),
+        ({"server_port": {"value": 65536}}, None),
+    ],
+)
+def test_deployed_server_port_is_validated_before_dispatch(tmp_path, output, expected):
+    source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
+    start = source.index('server_port="$(')
+    end = source.index("server_instance_id=", start)
+    marker = tmp_path / "dispatch-reached"
+    script = "set -euo pipefail\n" + source[start:end]
+    script += '\nprintf %s "$server_port"\nprintf done >' + shlex.quote(str(marker))
+    result = subprocess.run(  # noqa: S603 -- actual deployed-output gate only; no dispatch/services
+        [shutil.which("bash"), "-c", script],
+        env={**os.environ, "tofu_out_json": json.dumps(output)},
+        capture_output=True,
+        check=False,
+        timeout=2,
+    )
+    if expected is None:
+        assert result.returncode == 2
+        assert b"server_port output must be an integer" in result.stderr
+        assert not marker.exists()
+        assert not result.stdout
+    else:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.decode() == expected
+        assert marker.read_text() == "done"

@@ -45,6 +45,10 @@ OUT_ROOT="${OUT_ROOT:-artifacts/perf/aws-sweep/${TS}}"
 mkdir -p "$OUT_ROOT"
 
 tofu_out_json="$(AWS_PROFILE=$AWS_PROFILE tofu -chdir="$TOFU_DIR" output -json)"
+server_port="$(jq -er '.server_port.value | select(type == "number" and floor == . and . >= 1 and . <= 65535)' <<<"$tofu_out_json")" || {
+	echo "[perf/aws] server_port output must be an integer from 1 to 65535" >&2
+	exit 2
+}
 server_instance_id="$(jq -r '.server_instance_id.value' <<<"$tofu_out_json")"
 loadgen_instance_id="$(jq -r '.loadgen_instance_id.value' <<<"$tofu_out_json")"
 SERVER_IMAGE="$(jq -r '.loadgen_image.value' <<<"$tofu_out_json")"
@@ -66,6 +70,7 @@ tofu_dir=${TOFU_DIR}
 server_instance_id=${server_instance_id}
 loadgen_instance_id=${loadgen_instance_id}
 server_url=${server_url}
+server_port=${server_port}
 loadgen_image=${SERVER_IMAGE}
 loadgen_entrypoint=${LOADTEST_BIN}
 artifact_bucket=${artifact_bucket}
@@ -92,7 +97,59 @@ ssm_run() {
 	python3 "$REPO_ROOT/scripts/perf/ssm_sweep.py" command "$instance_id" "$comment" "$evidence" <<<"$script"
 }
 
-restart_server_script=$'set -euo pipefail\ntimeout 30 sudo systemctl restart aegaeon-server\ndeadline=$((SECONDS + 75))\nwhile ((SECONDS < deadline)); do\n  if curl --connect-timeout 2 --max-time 3 -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then\n    echo "SERVER_HEALTH=OK"\n    exit 0\n  fi\n  sleep 1\ndone\necho "SERVER_HEALTH=FAIL" >&2\ntimeout 5 sudo systemctl status aegaeon-server --no-pager -l || true\nexit 1\n'
+restart_server_script="$(
+	cat <<'AEGAEON_RESTART'
+set -euo pipefail
+overall_deadline=$((SECONDS + 115))
+previous_invocation="$(timeout --kill-after=1 2 sudo systemctl show aegaeon-server -p InvocationID --value)"
+[[ -z "$previous_invocation" || "$previous_invocation" =~ ^[0-9a-f]{32}$ ]] || exit 1
+restart_exit=0
+timeout --kill-after=1 30 sudo systemctl restart aegaeon-server || restart_exit=$?
+if [[ "$restart_exit" -ne 0 && "$restart_exit" -ne 124 ]]; then
+  exit "$restart_exit"
+fi
+deadline=$((SECONDS + 75))
+if ((deadline > overall_deadline - 6)); then
+  deadline=$((overall_deadline - 6))
+fi
+while ((SECONDS < deadline)); do
+  remaining=$((deadline - SECONDS))
+  ((remaining > 1)) || break
+  probe_timeout=$((remaining > 3 ? 2 : remaining - 1))
+  snapshot="$(timeout --kill-after=1 "$probe_timeout" sudo systemctl show aegaeon-server --all -p Job -p ActiveState -p InvocationID)"
+  declare -A properties=()
+  while IFS='=' read -r name value; do
+    case "$name" in
+      Job|ActiveState|InvocationID) ;;
+      *) exit 1 ;;
+    esac
+    [[ ! -v "properties[$name]" ]] || exit 1
+    properties["$name"]="$value"
+  done <<<"$snapshot"
+  [[ "${#properties[@]}" -eq 3 ]] || exit 1
+  [[ -z "${properties[Job]}" || "${properties[Job]}" =~ ^[1-9][0-9]*$ ]] || exit 1
+  [[ "${properties[ActiveState]}" =~ ^[a-z-]+$ ]] || exit 1
+  invocation="${properties[InvocationID]}"
+  [[ -z "$invocation" || "$invocation" =~ ^[0-9a-f]{32}$ ]] || exit 1
+  if [[ -z "${properties[Job]}" && "${properties[ActiveState]}" == active &&
+        -n "$invocation" && "$invocation" != "$previous_invocation" ]]; then
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    curl_timeout=$((remaining > 3 ? 3 : remaining))
+    if curl --noproxy '*' --connect-timeout 2 --max-time "$curl_timeout" -fsS "http://127.0.0.1:${server_port}/health" >/dev/null 2>&1 &&
+       ((SECONDS < deadline)); then
+      echo "SERVER_HEALTH=OK"
+      exit 0
+    fi
+  fi
+  ((SECONDS < deadline)) && sleep 1
+done
+echo "SERVER_HEALTH=FAIL" >&2
+timeout --kill-after=1 5 sudo systemctl status aegaeon-server --no-pager -l || true
+exit 1
+AEGAEON_RESTART
+)"
+printf -v restart_server_script 'readonly server_port=%s\n%s' "$server_port" "$restart_server_script"
 
 server_stats_script=$'set -euo pipefail\nsudo systemctl show aegaeon-server \\\n  -p CPUUsageNSec \\\n  -p MemoryCurrent \\\n  -p MemoryPeak \\\n  -p TasksCurrent \\\n  -p NRestarts \\\n  --no-pager\n'
 

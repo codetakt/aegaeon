@@ -33,6 +33,11 @@ output "artifact_prefix" {
   value       = var.artifact_prefix
 }
 
+output "server_port" {
+  description = "Deployed backend listen port for local readiness checks."
+  value       = var.server_port
+}
+
 output "server_url" {
   description = "Canonical HTTPS issuer target used by the load generator."
   value       = local.loadtest_server_url

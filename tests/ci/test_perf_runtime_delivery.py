@@ -2328,6 +2328,7 @@ def test_sweep_collects_failed_driver_outputs_and_preserves_failure(  # noqa: PL
         "loadgen_entrypoint": "/bin/aegaeon-loadtest",
         "loadgen_artifact": {},
         "server_url": "https://issuer.example.com",
+        "server_port": 8080,
         "artifact_bucket_name": "controlled-bucket",
         "artifact_prefix": "ci/",
     }
@@ -2638,3 +2639,48 @@ def test_artifact_bucket_general_purpose_syntax(helper, tmp_path, name, accepted
     else:
         with pytest.raises(ValueError, match="artifact destination"):
             helper.validate_run_config(json.dumps(cfg), cfg["SERVER_URL"])
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "server_secret_kms_key_arns",
+        "client_secret_kms_key_arns",
+        "metrics_secret_kms_key_arns",
+        "runtime_kms_key_arns",
+    ],
+)
+@pytest.mark.parametrize(
+    ("arn", "accepted"),
+    [
+        ("arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab", True),
+        ("arn:aws:kms:us-west-2:111122223333:key/mrk-1234abcd12ab34cd56ef1234567890ab", True),
+        ("arn:aws:kms:ap-northeast-1:012345678910:key/mrk-" + "a" * 32, True),
+        ("arn:aws:kms:us-west-2:111122223333:key/mrk-" + "a" * 31, False),
+        ("arn:aws:kms:us-west-2:111122223333:key/mrk-" + "a" * 33, False),
+        ("arn:aws:kms:us-west-2:111122223333:key/mrk-" + "a" * 31 + "g", False),
+        ("arn:aws:kms:us-west-2:111122223333:key/MRK-" + "a" * 32, False),
+        ("arn:aws:kms:us-west-2:111122223333:key/" + "a" * 32, False),
+        ("arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890a", False),
+        ("arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890abc", False),
+        ("arn:aws:kms:us-west-2:111122223333:key/1234abcd12ab-34cd-56ef-1234567890ab", False),
+        ("arn:aws:kms:us-west-2:111122223333:key/abc", False),
+        ("arn:aws:kms:us-west-2:111122223333:key/---", False),
+        ("arn:aws:kms:us-west-2:111122223333:alias/example", False),
+        ("arn:aws-cn:kms:cn-north-1:111122223333:key/mrk-" + "a" * 32, False),
+        ("arn:aws-us-gov:kms:us-gov-west-1:111122223333:key/mrk-" + "a" * 32, False),
+        ("arn:aws:kms:us-west-2:11112222333:key/mrk-" + "a" * 32, False),
+        ("arn:aws:kms:us-west-2:1111222233333:key/mrk-" + "a" * 32, False),
+        ("arn:aws:kms:US-WEST-2:111122223333:key/mrk-" + "a" * 32, False),
+        ("arn:aws:kms:us-west-2:111122223333:key/mrk-" + "a" * 32 + "\n", False),
+    ],
+)
+def test_plan_kms_arns_accept_documented_ids_and_reject_malformed_resources(
+    variable, arn, accepted
+):
+    text = (MODULE / "variables.tf").read_text()
+    block = infra.block(text, 'variable "' + variable + '"')
+    # Actual native OpenTofu plans supplement this source-regex cross-check.
+    patterns = re.findall(r'can\(regex\("([^"\n]+)"', block)
+    assert len(patterns) == 1
+    assert (re.fullmatch(patterns[0], arn) is not None) == accepted

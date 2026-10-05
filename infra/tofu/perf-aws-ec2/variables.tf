@@ -67,6 +67,10 @@ variable "server_port" {
   type        = number
   description = "Server listen port."
   default     = 8080
+  validation {
+    condition     = try(var.server_port >= 1 && var.server_port <= 65535 && var.server_port == floor(var.server_port), false)
+    error_message = "server_port must be an integer from 1 through 65535."
+  }
 }
 
 variable "server_trusted_proxies" {
@@ -339,7 +343,7 @@ variable "server_secret_kms_key_arns" {
   description = "Actual customer-managed encryption key ARNs, if used."
   default     = []
   validation {
-    condition     = alltrue([for arn in var.server_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    condition     = alltrue([for arn in var.server_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|mrk-[a-f0-9]{32})$", arn))])
     error_message = "Supply actual KMS key ARNs."
   }
 }
@@ -367,7 +371,7 @@ variable "client_secret_kms_key_arns" {
   description = "Actual customer-managed encryption key ARNs, if used."
   default     = []
   validation {
-    condition     = alltrue([for arn in var.client_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    condition     = alltrue([for arn in var.client_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|mrk-[a-f0-9]{32})$", arn))])
     error_message = "Supply actual KMS key ARNs."
   }
 }
@@ -397,7 +401,7 @@ variable "metrics_secret_kms_key_arns" {
   description = "Actual customer-managed encryption key ARNs, if used."
   default     = []
   validation {
-    condition     = alltrue([for arn in var.metrics_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    condition     = alltrue([for arn in var.metrics_secret_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|mrk-[a-f0-9]{32})$", arn))])
     error_message = "Supply actual KMS key ARNs."
   }
 }
@@ -406,7 +410,7 @@ variable "runtime_kms_key_arns" {
   type        = list(string)
   description = "Actual active runtime signing key ARNs; bootstrap identity stays external."
   validation {
-    condition     = length(var.runtime_kms_key_arns) > 0 && alltrue([for arn in var.runtime_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", arn))])
+    condition     = length(var.runtime_kms_key_arns) > 0 && alltrue([for arn in var.runtime_kms_key_arns : can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|mrk-[a-f0-9]{32})$", arn))])
     error_message = "Supply active runtime KMS key ARNs."
   }
 }
