@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "scope": "reader_compatibility",
+  "relations": [
+    {
+      "name": "authorization_subject_bindings",
+      "columns": [
+        {"name": "issuer", "capability": "exact_bound_text"},
+        {"name": "subject", "capability": "exact_bound_text"},
+        {"name": "user_id", "capability": "user_join_key"}
+      ]
+    },
+    {
+      "name": "organizations",
+      "columns": [
+        {"name": "id", "capability": "organization_join_key"},
+        {"name": "public_id", "capability": "canonical_uuid_text"},
+        {"name": "deleted_at", "capability": "null_deletion_marker"}
+      ]
+    },
+    {
+      "name": "organization_users",
+      "columns": [
+        {"name": "user_id", "capability": "user_join_key"},
+        {"name": "organization_id", "capability": "organization_join_key"},
+        {"name": "role", "capability": "role_text"},
+        {"name": "status", "capability": "active_status_comparison"}
+      ]
+    }
+  ],
+  "joins": [
+    ["authorization_subject_bindings.user_id", "organization_users.user_id"],
+    ["organization_users.organization_id", "organizations.id"]
+  ],
+  "predicates": {
+    "active_status": "active",
+    "role_labels": ["ORGANIZATION_ADMIN", "ORGANIZATION_STAFF"],
+    "organization_identifier_prefix": "organization_"
+  },
+  "semantics": [
+    "relations_resolve_in_trusted_reader_search_path",
+    "issuer_and_subject_compare_to_exact_bound_values",
+    "join_keys_require_compatible_equality",
+    "public_id_text_is_canonical_lowercase_hyphenated_uuid",
+    "null_comparison_and_join_inputs_do_not_match",
+    "null_public_id_or_status_does_not_match",
+    "null_selected_role_is_lookup_error",
+    "null_deleted_at_means_not_deleted",
+    "all_matching_bindings_supply_union"
+  ]
+}

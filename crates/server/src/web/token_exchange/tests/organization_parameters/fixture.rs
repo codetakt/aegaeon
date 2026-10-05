@@ -1,30 +1,43 @@
+use super::reader_contract::ReaderContract;
 use super::*;
 use crate::application_authorization::{inorii::Grant, store::capture, Authority};
 
 pub(super) struct Membership {
     pub pool: PgPool,
     pub schema: String,
+    reader: ReaderContract,
 }
 
 impl Membership {
     pub async fn create(admin: &PgPool) -> TestResult<Self> {
+        let reader = ReaderContract::load()?;
+        let ddl = reader.fixture_ddl()?;
         let schema = format!("token_selector_{}", uuid::Uuid::new_v4().simple());
         sqlx::raw_sql(&format!("CREATE SCHEMA {schema}"))
             .execute(admin)
             .await?;
         let result = async {
             let search_path = format!("{schema},pg_catalog");
-            let pool = sqlx::postgres::PgPoolOptions::new().max_connections(2)
-                .connect_with(admin.connect_options().as_ref().clone().options([("search_path", search_path)]))
+            let pool = sqlx::postgres::PgPoolOptions::new()
+                .max_connections(2)
+                .connect_with(
+                    admin
+                        .connect_options()
+                        .as_ref()
+                        .clone()
+                        .options([("search_path", search_path)]),
+                )
                 .await?;
-            sqlx::raw_sql("CREATE TABLE authorization_subject_bindings (issuer text, subject text, user_id bigint);
-                CREATE TABLE organizations (id bigint, public_id uuid, deleted_at timestamptz);
-                CREATE TABLE organization_users (user_id bigint, organization_id bigint, role text, status text)")
-                .execute(&pool).await?;
+            sqlx::raw_sql(&ddl).execute(&pool).await?;
             Ok(pool)
-        }.await;
+        }
+        .await;
         match result {
-            Ok(pool) => Ok(Self { pool, schema }),
+            Ok(pool) => Ok(Self {
+                pool,
+                schema,
+                reader,
+            }),
             Err(error) => {
                 let cleanup = sqlx::raw_sql(&format!("DROP SCHEMA {schema} CASCADE"))
                     .execute(admin)
@@ -37,13 +50,27 @@ impl Membership {
 
     pub async fn restore(&self, issuer: &str) -> TestResult {
         sqlx::raw_sql("TRUNCATE authorization_subject_bindings, organization_users, organizations;
-            INSERT INTO organizations VALUES (1,'00000000-0000-4000-8000-000000000001',NULL), (2,'00000000-0000-4000-8000-000000000002',NULL);
-            INSERT INTO organization_users VALUES (7,1,'ORGANIZATION_ADMIN','active'), (7,2,'ORGANIZATION_STAFF','active')")
+            INSERT INTO organizations (id,public_id,deleted_at) VALUES (1,'00000000-0000-4000-8000-000000000001',NULL), (2,'00000000-0000-4000-8000-000000000002',NULL)")
             .execute(&self.pool).await?;
-        sqlx::query("INSERT INTO authorization_subject_bindings VALUES ($1,'exchange-user',7)")
+        let [admin_role, staff_role] = self.reader.role_labels()?;
+        sqlx::query("INSERT INTO organization_users (user_id,organization_id,role,status) VALUES (7,1,$1,$3),(7,2,$2,$3)")
+            .bind(admin_role).bind(staff_role).bind(self.reader.active_status())
+            .execute(&self.pool).await?;
+        sqlx::query("INSERT INTO authorization_subject_bindings (issuer,subject,user_id) VALUES ($1,'exchange-user',7)")
             .bind(issuer)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn restore_complementary_bindings(&self, issuer: &str) -> TestResult {
+        self.restore(issuer).await?;
+        let [admin_role, staff_role] = self.reader.role_labels()?;
+        sqlx::query("INSERT INTO organization_users (user_id,organization_id,role,status) VALUES (8,1,$1,$3),(8,2,$2,$3)")
+            .bind(staff_role).bind(admin_role).bind(self.reader.active_status())
+            .execute(&self.pool).await?;
+        sqlx::query("INSERT INTO authorization_subject_bindings (issuer,subject,user_id) VALUES ($1,'exchange-user',8)")
+            .bind(issuer).execute(&self.pool).await?;
         Ok(())
     }
 
@@ -65,15 +92,24 @@ pub(super) async fn state_with_projection(
     membership: &Membership,
     organizations: bool,
 ) -> TestResult<(AppState, Grant)> {
+    let claims = json!({"roles":["USER","SUPER_ADMIN"],"organization_roles":if organizations {
+        json!([{"organization_id":ORG_A,"roles":["ORGANIZATION_ADMIN"]},{"organization_id":ORG_B,"roles":["ORGANIZATION_STAFF"]}])
+    } else { json!([]) }});
+    state_with_projection_claims(pool, env, membership, claims).await
+}
+
+pub(super) async fn state_with_projection_claims(
+    pool: &PgPool,
+    env: &TestEnvironment,
+    membership: &Membership,
+    claims: Value,
+) -> TestResult<(AppState, Grant)> {
     let mut state = fixture(pool, env).await?;
     state.application_authority = Some(Authority {
         projections: pool.clone(),
         memberships: Some(membership.pool.clone()),
     });
     membership.restore(&env.issuer_url).await?;
-    let claims = json!({"roles":["USER","SUPER_ADMIN"],"organization_roles":if organizations {
-        json!([{"organization_id":ORG_A,"roles":["ORGANIZATION_ADMIN"]},{"organization_id":ORG_B,"roles":["ORGANIZATION_STAFF"]}])
-    } else { json!([]) }});
     seed_test_projection(
         pool,
         env,
