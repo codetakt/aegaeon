@@ -6,7 +6,7 @@ use reqwest::{
     header::{HeaderMap, WWW_AUTHENTICATE},
     RequestBuilder, StatusCode,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::Instant;
 
 const MAX_BODY_BYTES: usize = 1024 * 1024;
@@ -53,6 +53,11 @@ pub(super) struct WireResponse {
     pub(super) status: StatusCode,
     pub(super) headers: HeaderMap,
     pub(super) body: Vec<u8>,
+}
+
+/// Response values must never become report errors, including formatted error chains.
+pub(super) fn response_json<T: DeserializeOwned>(body: &[u8], message: &'static str) -> Result<T> {
+    serde_json::from_slice(body).map_err(|_| anyhow::anyhow!(message))
 }
 
 pub(super) fn elapsed(start: Instant) -> u64 {

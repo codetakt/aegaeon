@@ -1,7 +1,7 @@
 //! Issued-token validation, OIDC verification and per-worker cache lifetimes.
 use super::{
     authorization::authorization_code,
-    wire::{apply_auth, elapsed, nonce_challenge, TokenResponse},
+    wire::{apply_auth, elapsed, nonce_challenge, response_json, TokenResponse},
     ScenarioExecutor,
 };
 use crate::{
@@ -65,10 +65,10 @@ impl ScenarioExecutor {
                 response.status == StatusCode::OK,
                 "token exchange requires HTTP 200"
             );
-            token = Some(
-                serde_json::from_slice::<TokenResponse>(&response.body)
-                    .context("invalid token response")?,
-            );
+            token = Some(response_json::<TokenResponse>(
+                &response.body,
+                "invalid token response",
+            )?);
             break;
         }
         let token = token.context("token exchange did not complete")?;
@@ -185,7 +185,8 @@ impl ScenarioExecutor {
                 &expected_nonce,
                 &token.access_token,
                 &code,
-            )?;
+            )
+            .map_err(|_| anyhow::anyhow!("invalid ID Token or issuer JWKS"))?;
             Some(subject)
         } else {
             ensure!(

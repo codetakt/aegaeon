@@ -1,6 +1,6 @@
 //! PKCE transactions, strict authorization callbacks and PAR setup.
 use super::{
-    wire::{apply_auth, one_header, ParSuccess},
+    wire::{apply_auth, one_header, response_json, ParSuccess},
     ScenarioExecutor,
 };
 use crate::{
@@ -173,8 +173,7 @@ impl ScenarioExecutor {
                 response.status == StatusCode::CREATED,
                 "PAR must return HTTP 201"
             );
-            let par: ParSuccess =
-                serde_json::from_slice(&response.body).context("invalid PAR response")?;
+            let par: ParSuccess = response_json(&response.body, "invalid PAR response")?;
             ensure!(
                 !par.request_uri.trim().is_empty() && par.expires_in > 0,
                 "empty or expired PAR response"

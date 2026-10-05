@@ -75,6 +75,9 @@ jobs:
         env:
           PERF_MANAGE_SERVER: "1"
           PERF_SCENARIO: smoke
+          # Public-only loopback fixture uses the documented direct HTTP development policy.
+          AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY: "0"
+          AEGAEON_REQUIRE_TLS_PROXY: "0"
           PERF_WORKERS: "25"
           PERF_RPS: "100"
           PERF_RUN_TIME: 30s

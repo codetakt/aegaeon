@@ -1,8 +1,8 @@
 //! Introspection, revocation, UserInfo and their rejection legs.
 use super::{
     wire::{
-        apply_auth, elapsed, nonce_challenge, one_header, IntrospectionResponse, OAuthError,
-        Userinfo,
+        apply_auth, elapsed, nonce_challenge, one_header, response_json, IntrospectionResponse,
+        OAuthError, Userinfo,
     },
     ScenarioExecutor,
 };
@@ -32,7 +32,7 @@ impl ScenarioExecutor {
             "introspection requires HTTP 200"
         );
         let value: IntrospectionResponse =
-            serde_json::from_slice(&response.body).context("invalid introspection response")?;
+            response_json(&response.body, "invalid introspection response")?;
         ensure!(
             value.active
                 && value.client_id.as_deref() == Some(&profile.supply.client_id)
@@ -108,10 +108,12 @@ impl ScenarioExecutor {
         .form(&params);
         let response = self.send("POST", "/introspect", request).await?;
         ensure!(
-            response.status == StatusCode::OK
-                && !serde_json::from_slice::<IntrospectionResponse>(&response.body)?.active,
-            "revoked token remains active"
+            response.status == StatusCode::OK,
+            "introspection requires HTTP 200"
         );
+        let value: IntrospectionResponse =
+            response_json(&response.body, "invalid introspection response")?;
+        ensure!(!value.active, "revoked token remains active");
         Ok((true, elapsed(start)))
     }
 
@@ -168,8 +170,7 @@ impl ScenarioExecutor {
                 response.status == StatusCode::OK,
                 "UserInfo requires HTTP 200"
             );
-            let value: Userinfo =
-                serde_json::from_slice(&response.body).context("invalid UserInfo response")?;
+            let value: Userinfo = response_json(&response.body, "invalid UserInfo response")?;
             ensure!(
                 value.sub == subject,
                 "UserInfo subject differs from verified ID Token"
@@ -200,7 +201,8 @@ impl ScenarioExecutor {
         );
         if endpoint == "/introspect" {
             ensure!(
-                serde_json::from_slice::<OAuthError>(&response.body)?.error == "invalid_client",
+                response_json::<OAuthError>(&response.body, "invalid OAuth error response")?.error
+                    == "invalid_client",
                 "missing invalid_client response"
             );
         }

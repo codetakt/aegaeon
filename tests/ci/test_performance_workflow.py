@@ -12,6 +12,26 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class PerformanceWorkflowTests(unittest.TestCase):
+    def test_direct_http_policy_is_scoped_to_public_smoke(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
+        flags = {"AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY", "AEGAEON_REQUIRE_TLS_PROXY"}
+        self.assertTrue(flags.isdisjoint(workflow.get("env", {})))
+        for job in workflow["jobs"].values():
+            self.assertTrue(flags.isdisjoint(job.get("env", {})))
+            for step in job["steps"]:
+                environment = step.get("env", {})
+                if step.get("name") == "Run public smoke load test":
+                    for flag in flags:
+                        self.assertEqual(environment[flag], "0")
+                    self.assertEqual(environment["PERF_SCENARIO"], "smoke")
+                    self.assertEqual(environment["PERF_MANAGE_SERVER"], "1")
+                    self.assertEqual(environment["AEGAEON_RUNTIME_ISSUER_HOST"], "127.0.0.1:18095")
+                else:
+                    self.assertTrue(flags.isdisjoint(environment))
+        consumer = (ROOT / "crates/loadtest/src/scenarios/mod.rs").read_text()
+        self.assertNotIn("X-Forwarded-Proto", consumer)
+        self.assertNotIn('header("Forwarded"', consumer)
+
     def test_policy_mixed_execution_and_acceptance_share_pending_prerequisite(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
         job = workflow["jobs"]["load-test"]

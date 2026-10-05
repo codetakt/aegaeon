@@ -73,7 +73,10 @@ def output_roles(
     runtime: Dependencies,
 ) -> None:
     destinations = [(output_path(root, value), directory) for value, directory in outputs]
-    status = status or evidence.parent / "source-status.json"
+    evidence = output_path(root, str(evidence))
+    status = output_path(root, str(status or evidence.parent / "source-status.json"))
+    if evidence.is_relative_to(status) or status.is_relative_to(evidence):
+        fail("source evidence and status roles overlap")
     reject_supplier_overlap(
         root, [evidence, status, *(path for path, _ in destinations)], runtime=runtime
     )

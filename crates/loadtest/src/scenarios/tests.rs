@@ -1,3 +1,7 @@
+mod protocol_fixture;
+mod response_redaction;
+mod userinfo;
+
 use super::*;
 use super::{
     authorization::authorization_code,

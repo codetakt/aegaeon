@@ -1,5 +1,8 @@
 //! Bare-server smoke, discovery and JWKS scenarios.
-use super::{wire::elapsed, ScenarioExecutor};
+use super::{
+    wire::{elapsed, response_json},
+    ScenarioExecutor,
+};
 use crate::{profile::sha256, TestScenario};
 use anyhow::{bail, ensure, Result};
 use reqwest::StatusCode;
@@ -40,7 +43,8 @@ impl ScenarioExecutor {
             response.status == StatusCode::OK,
             "Discovery requires HTTP 200"
         );
-        let metadata: serde_json::Value = serde_json::from_slice(&response.body)?;
+        let metadata: serde_json::Value =
+            response_json(&response.body, "invalid discovery response")?;
         ensure!(
             metadata["issuer"].as_str() == Some(&self.discovery_expected_issuer)
                 && metadata["token_endpoint"].as_str()
@@ -63,7 +67,7 @@ impl ScenarioExecutor {
             .await?;
         self.jwks_sha256 = Some(sha256(&response.body));
         ensure!(response.status == StatusCode::OK, "JWKS requires HTTP 200");
-        let _: jsonwebtoken::jwk::JwkSet = serde_json::from_slice(&response.body)?;
+        let _: jsonwebtoken::jwk::JwkSet = response_json(&response.body, "invalid JWKS response")?;
         Ok((true, elapsed(start)))
     }
     pub fn key_rotation_flow(&mut self) -> Result<(bool, u64)> {

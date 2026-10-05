@@ -1190,10 +1190,6 @@ target=pathlib.Path(explicit_target or os.environ.get("CARGO_TARGET_DIR") or
 pathlib.Path(os.environ["FIXTURE_CARGO_TARGET_RECORD"]).write_text(json.dumps({"argv":sys.argv[1:],"target":str(target)}))
 binary=target/"release"/name;binary.parent.mkdir(parents=True,exist_ok=True)
 binary.write_text(os.environ["FIXTURE_PROGRAM"]);binary.chmod(0o755)
-retention=os.environ.get("FIXTURE_BINARY_RETENTION")
-if retention:
- retained=pathlib.Path(retention)/name;retained.parent.mkdir(parents=True,exist_ok=True)
- retained.write_bytes(binary.read_bytes())
 print(json.dumps({"reason":"compiler-artifact","target":{"name":name,"kind":["bin"]},"executable":str(binary)}))
 print(json.dumps({"reason":"build-finished","success":True}))
 """)
@@ -1606,17 +1602,22 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertEqual(forbidden.read_bytes(), raw)
                 self.assertEqual(selected.read_bytes(), raw)
 
-    def test_wrapper_external_executable_aliases_preserve_compiled_bytes_before_launch(
-        self,
-    ) -> None:
-        for role in ["aegaeon-server"]:
-            for leaf in ["SERVER_LOG", "LOADTEST_LOG", "REPORT_PATH", "LEGACY_REPORT"]:
-                with self.subTest(role=role, leaf=leaf):
-                    label = role + "-" + leaf.lower()
+    def test_wrapper_external_executable_aliases_reject_before_setup_or_build(self) -> None:
+        for leaf in ["SERVER_LOG", "LOADTEST_LOG", "REPORT_PATH", "LEGACY_REPORT"]:
+            for present in [False, True]:
+                with self.subTest(leaf=leaf, present=present):
+                    label = leaf.lower() + ("-existing" if present else "-absent")
                     target = self.owner / ("target-" + label)
-                    selected = target / "release" / role
-                    retained = self.owner / ("retained-" + label)
+                    selected = target / "release/aegaeon-server"
+                    if present:
+                        selected.parent.mkdir(parents=True)
+                        selected.write_bytes(b"previous executable fixture")
+                        selected.chmod(0o755)
+                    before = self.output_path_snapshot(selected)
                     artifact = "artifacts/perf/executable-alias-" + label
+                    status = self.write(artifact + "/source-status.json", b"prior complete")
+                    status_before = self.output_path_snapshot(status)
+                    retained = set(self.private.iterdir())
                     result = self.runner(
                         managed=True,
                         wrapper=True,
@@ -1624,20 +1625,17 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                         overrides={
                             "CARGO_TARGET_DIR": str(target),
                             leaf: str(selected.parent) + "/./" + selected.name,
-                            "FIXTURE_BINARY_RETENTION": str(retained),
                         },
                     )
                     self.assertNotEqual(result.returncode, 0)
-                    self.assertEqual(selected.read_bytes(), (retained / role).read_bytes())
-                    self.assertTrue(selected.read_bytes().startswith(b"#!/usr/bin/env python3"))
-                    evidence = self.root / artifact / "source"
-                    self.assertFalse((evidence / (role + ".json")).exists())
-                    self.assertFalse((evidence / "INVOCATION.json").exists())
-                    status = json.loads((evidence.parent / "source-status.json").read_bytes())
-                    self.assertEqual(
-                        status["stage"],
-                        "server-build" if role == "aegaeon-server" else "loadtest-build",
-                    )
+                    self.assertEqual(self.output_path_snapshot(selected), before)
+                    self.assertEqual(self.output_path_snapshot(status), status_before)
+                    self.assertEqual(set(self.private.iterdir()), retained)
+                    self.assertFalse((status.parent / "source").exists())
+                    self.assertFalse((self.owner / "tool-calls").exists())
+                    if not present:
+                        self.assertFalse(target.exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
 
     def test_removing_mandatory_index_entry_rejected(self) -> None:
         self.git(self.root, "rm", "--force", "--quiet", "Cargo.lock")
@@ -1883,6 +1881,61 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertEqual(set(self.private.iterdir()), retained)
                 self.assertFalse((artifact / "source").exists())
         self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def prepare_overlap_status(self, status: pathlib.Path, prior: str) -> None:
+        if prior == "raw":
+            status.write_bytes(b"prior complete")
+        elif prior == "link":
+            status.symlink_to(self.root / "tracked.txt")
+        elif prior == "hardlink":
+            os.link(self.root / "tracked.txt", status)
+
+    @staticmethod
+    def output_path_snapshot(status: pathlib.Path):
+        if not (status.exists() or status.is_symlink()):
+            return None
+        content = status.readlink() if status.is_symlink() else status.read_bytes()
+        return PRODUCER.stamp(status.lstat()), content
+
+    def test_evidence_status_overlap_rejects_before_any_retention_or_write(self) -> None:
+        retained = set(self.private.iterdir())
+        for number, (action, relation, prior) in enumerate(
+            (action, relation, prior)
+            for action in ["paths", "initialize"]
+            for relation in ["equal", "evidence-parent", "evidence-child"]
+            for prior in ["absent", "raw", "link", "hardlink"]
+        ):
+            with self.subTest(action=action, relation=relation, prior=prior):
+                artifact = self.owner / f"role-overlap-{number}"
+                artifact.mkdir()
+                status = artifact / "source-status.json"
+                self.prepare_overlap_status(status, prior)
+                evidence = {
+                    "equal": status,
+                    "evidence-parent": artifact,
+                    "evidence-child": status / "source",
+                }[relation]
+                before = self.output_path_snapshot(status)
+                leaves = set(artifact.iterdir())
+                if action == "paths":
+                    result = self.invoke(
+                        "paths", "--evidence", str(evidence), "--artifact-directory", str(artifact)
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                else:
+                    with (
+                        mock.patch.dict(os.environ, self.environment),
+                        self.assertRaises(PRODUCER.SourceError),
+                    ):
+                        PRODUCER.initialize_status(self.root, str(artifact), [], evidence)
+                self.assertEqual(set(artifact.iterdir()), leaves)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertEqual(self.output_path_snapshot(status), before)
+                if prior != "absent":
+                    status.unlink()
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
+        self.assertEqual((self.root / "tracked.txt").read_bytes(), b"source bytes\n")
 
     def test_prior_complete_status_preserved_on_caller_rejection_and_replaced_on_success(
         self,
