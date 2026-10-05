@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-21 AS build
+FROM maven:3-eclipse-temurin-24 AS build
 
 ARG SUITE_REPO=https://github.com/openid-certification/conformance-suite.git
 ARG SUITE_REF=master
