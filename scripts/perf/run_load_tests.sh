@@ -254,6 +254,7 @@ if [ "$MANAGE_SERVER" = "1" ]; then
 	verify_source
 	echo "[perf] building release server binary..."
 	cargo build --release --locked --bin aegaeon-server --message-format=json-render-diagnostics \
+		--target-dir "${CARGO_TARGET_DIR:-$REPO_ROOT/target}" \
 		>"$ARTIFACT_DIR/server-build.jsonl" 2>"$ARTIFACT_DIR/build.log"
 	SERVER_BIN="$("$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" bind --root "$REPO_ROOT" \
 		--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256" \

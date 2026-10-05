@@ -136,6 +136,18 @@ def invocation_config(argv: list[str], *, runtime: Dependencies) -> tuple[dict[s
     return config, report_id, required(options["--report-file"])
 
 
+def _invocation_rate(value: str) -> float:
+    if re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", value) is None:
+        fail("invalid invocation rate spelling")
+    return float(value)
+
+
+def _duration_text(value: str) -> str:
+    if any(separator in value for separator in "\x1c\x1d\x1e\x1f"):
+        fail("invalid invocation duration control separator")
+    return value
+
+
 def _parse_config(
     argv: list[str], *, report: bool, runtime: Dependencies
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -165,7 +177,7 @@ def _parse_config(
         fail("child invocation lacks required options")
 
     def duration(value: str) -> dict[str, int]:
-        match = re.fullmatch("([0-9]+)([smh]?)", value.strip())
+        match = re.fullmatch("([0-9]+)([smh]?)", _duration_text(value).strip())
         if match is None:
             fail("invalid invocation duration")
         seconds = int(match[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[match[2]]
@@ -179,7 +191,7 @@ def _parse_config(
             "discovery_expected_issuer": options.get("--discovery-expected-issuer"),
             "workers": int(options["--workers"]),
             "duration": duration(options["--run-time"]),
-            "target_rps": float(options["--rps"]),
+            "target_rps": _invocation_rate(options["--rps"]),
             "warmup_duration": duration(options["--warmup"]),
             "scenario": SCENARIOS[options["--scenario"]],
             "debug": debug,

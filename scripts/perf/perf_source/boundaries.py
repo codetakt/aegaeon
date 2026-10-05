@@ -191,20 +191,18 @@ def reject_source_overlap(
 
 
 def cargo_outputs(root: pathlib.Path, *, runtime: Dependencies) -> list[pathlib.Path]:
-    target = os.environ.get("CARGO_TARGET_DIR")
-    if target:
-        path = output_path(root, target)
-        reject_supplier_overlap(root, [path], runtime=runtime)
-        if path.exists() and (
-            not stat.S_ISDIR(path.lstat().st_mode) or path.lstat().st_uid != os.geteuid()
-        ):
-            fail("Cargo output is not an owned regular directory")
-        if path.is_symlink() or (path.is_relative_to(root) and path != root / "target"):
-            fail("custom Cargo output must be outside source")
-        if path == root or root.is_relative_to(path):
-            fail("Cargo output overlaps source")
-        return [path]
-    return []
+    target = os.environ.get("CARGO_TARGET_DIR") or str(root / "target")
+    path = output_path(root, target)
+    reject_supplier_overlap(root, [path], runtime=runtime)
+    if path.exists() and (
+        not stat.S_ISDIR(path.lstat().st_mode) or path.lstat().st_uid != os.geteuid()
+    ):
+        fail("Cargo output is not an owned regular directory")
+    if path.is_symlink() or (path.is_relative_to(root) and path != root / "target"):
+        fail("Cargo output must use the default tree or be outside source")
+    if path == root or root.is_relative_to(path):
+        fail("Cargo output overlaps source")
+    return [path]
 
 
 def require_fresh_outputs(root: pathlib.Path, paths: list[str]) -> None:

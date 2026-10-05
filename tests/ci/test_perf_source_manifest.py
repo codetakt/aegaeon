@@ -1169,16 +1169,25 @@ class PerfSourceManifestTests(unittest.TestCase):
         tools.mkdir(exist_ok=True)
         cargo = tools / "cargo"
         cargo.write_text("""#!/usr/bin/env python3
-import json,os,pathlib,sys
+import json,os,pathlib,sys,tomllib
 pathlib.Path(os.environ["FIXTURE_CALLS"]).open("a").write("cargo\\n")
 root=pathlib.Path.cwd();name=sys.argv[sys.argv.index("--bin")+1]
 expected=(["build","--release","--locked","--bin",name] if name=="aegaeon-server" else
  ["build","--release","-p","aegaeon-loadtest","--bin",name])+["--message-format=json-render-diagnostics"]
-if sys.argv[1:]!=expected:raise SystemExit(23)
+arguments=sys.argv[1:];explicit_target=None
+if "--target-dir" in arguments:
+ position=arguments.index("--target-dir");explicit_target=arguments[position+1]
+ del arguments[position:position+2]
+if arguments!=expected:raise SystemExit(23)
 mode=os.environ["FIXTURE_MODE"]
 if mode=="build-failure":raise SystemExit(19)
 if mode=="mutate-"+name:(root/"tracked.txt").write_text("mutated during stub build")
-target=pathlib.Path(os.environ.get("CARGO_TARGET_DIR",str(root/"target")))
+config_path=root/".cargo/config.toml"
+config=tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+target=pathlib.Path(explicit_target or os.environ.get("CARGO_TARGET_DIR") or
+ os.environ.get("CARGO_BUILD_TARGET_DIR") or
+ config.get("build",{}).get("target-dir") or str(root/"target"))
+pathlib.Path(os.environ["FIXTURE_CARGO_TARGET_RECORD"]).write_text(json.dumps({"argv":sys.argv[1:],"target":str(target)}))
 binary=target/"release"/name;binary.parent.mkdir(parents=True,exist_ok=True)
 binary.write_text(os.environ["FIXTURE_PROGRAM"]);binary.chmod(0o755)
 retention=os.environ.get("FIXTURE_BINARY_RETENTION")
@@ -1243,6 +1252,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "FIXTURE_MODE": mode,
             "FIXTURE_CALLS": str(self.owner / "tool-calls"),
             "FIXTURE_PROGRAM": program,
+            "FIXTURE_CARGO_TARGET_RECORD": str(self.owner / "cargo-target.json"),
             "ARTIFACT_DIR": artifact,
             "REPORT_PATH": artifact + "/report.json",
             "LOADTEST_LOG": artifact + "/loadtest.log",
@@ -2399,8 +2409,24 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
 
     def test_runner_effective_invalid_config_precedes_all_managed_and_external_effects(self):
         cases = {
-            "PERF_WORKERS": ("0",),
-            "PERF_RPS": ("inf", "1e308", "1e12"),
+            "PERF_WORKERS": ("0", "1_0", " 1", "\uff11"),
+            "PERF_RPS": (
+                "inf",
+                "1e308",
+                "1e12",
+                "1_0",
+                " 1",
+                "1 ",
+                "1\t",
+                "\u0661",
+                "\uff11",
+                "1e1_0",
+                "nan",
+                "NaN",
+                "Infinity",
+                "-inf",
+                "0x1p0",
+            ),
             "PERF_RUN_TIME": ("0s", "86401s", "fixture-secret"),
             "PERF_WARMUP": ("invalid", "86401s"),
             "PERF_SCENARIO": ("fixture-secret",),
@@ -2425,6 +2451,160 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                         self.assertEqual(
                             (self.root / ".git/index").read_bytes(), self.original_index
                         )
+
+    def test_runner_duration_control_separators_reject_before_any_effects(self) -> None:
+        for managed in (False, True):
+            for key in ("PERF_RUN_TIME", "PERF_WARMUP"):
+                for separator in "\x1c\x1d\x1e\x1f":
+                    for value in (separator + "1s", "1s" + separator):
+                        with self.subTest(managed=managed, key=key, value=value):
+                            result = self.runner(
+                                managed=managed,
+                                overrides={
+                                    key: value,
+                                    "PERF_SERVER_PORT": "",
+                                    "PERF_APPLY_DATABASE_MIGRATIONS": "1",
+                                },
+                            )
+                            self.assertNotEqual(result.returncode, 0)
+                            self.assertFalse((self.owner / "tool-calls").exists())
+                            self.assertFalse((self.root / "artifacts").exists())
+                            self.assertFalse(list(self.private.iterdir()))
+                            self.assertEqual(
+                                (self.root / ".git/index").read_bytes(), self.original_index
+                            )
+
+    def test_duration_admission_preserves_standard_unicode_whitespace(self) -> None:
+        whitespace = " \t\n\r\v\f\u0085\u00a0\u1680\u2028\u2029\u202f\u205f\u3000"
+        whitespace += "".join(chr(value) for value in range(0x2000, 0x200B))
+        for separator in whitespace:
+            with self.subTest(separator=separator):
+                result = self.invoke(
+                    "config",
+                    "--",
+                    "--url",
+                    "https://example.invalid",
+                    "--workers",
+                    "1",
+                    "--run-time",
+                    separator + "1s" + separator,
+                    "--warmup",
+                    separator + "0" + separator,
+                    "--rps",
+                    "1",
+                    "--scenario",
+                    "smoke",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((self.root / "artifacts").exists())
+                self.assertFalse(list(self.private.iterdir()))
+                self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_runner_explicit_cargo_target_overrides_build_environment_and_config(self) -> None:
+        attempted = self.owner / "unadmitted-build-target"
+        config = self.write(
+            ".cargo/config.toml",
+            ("[build]\ntarget-dir = " + json.dumps(str(attempted)) + "\n").encode(),
+        )
+        self.git(self.root, "add", str(config))
+        for configured in (False, True):
+            for setting in ("environment", "config"):
+                with self.subTest(configured=configured, setting=setting):
+                    suffix = f"{configured}-{setting}"
+                    selected = (
+                        self.owner / ("selected-" + suffix) if configured else self.root / "target"
+                    )
+                    overrides = {
+                        "CARGO_TARGET_DIR": str(selected) if configured else None,
+                        "CARGO_BUILD_TARGET_DIR": str(attempted)
+                        if setting == "environment"
+                        else None,
+                    }
+                    calls = self.owner / "tool-calls"
+                    previous_builds = (
+                        calls.read_text().splitlines().count("cargo") if calls.exists() else 0
+                    )
+                    result = self.runner(
+                        managed=True,
+                        artifact="artifacts/perf/target-" + suffix,
+                        overrides=overrides,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    observed = json.loads((self.owner / "cargo-target.json").read_bytes())
+                    self.assertEqual(observed["target"], str(selected))
+                    arguments = observed["argv"]
+                    self.assertEqual(arguments.count("--target-dir"), 1)
+                    self.assertEqual(arguments[arguments.index("--target-dir") + 1], str(selected))
+                    self.assertTrue((selected / "release/aegaeon-server").is_file())
+                    self.assertFalse(attempted.exists())
+                    self.assertEqual(
+                        calls.read_text().splitlines().count("cargo"), previous_builds + 1
+                    )
+
+    def test_default_cargo_target_links_and_files_reject_early(self) -> None:
+        target = self.root / "target"
+        outside = self.owner / "outside-target"
+        outside.mkdir()
+        marker = outside / "preserved"
+        marker.write_bytes(b"preserved outside Cargo output")
+        for kind in ("symlink", "file"):
+            with self.subTest(kind=kind):
+                if kind == "symlink":
+                    target.symlink_to(outside)
+                else:
+                    target.write_bytes(b"preserved default Cargo file")
+                artifact = self.owner / ("prior-" + kind)
+                artifact.mkdir()
+                status = artifact / "source-status.json"
+                status.write_bytes(b"prior complete")
+                result = self.runner(managed=True, artifact=str(artifact))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse(list(self.private.iterdir()))
+                self.assertFalse((artifact / "source").exists())
+                self.assertEqual(marker.read_bytes(), b"preserved outside Cargo output")
+                if kind == "symlink":
+                    self.assertTrue(target.is_symlink())
+                    self.assertEqual(target.readlink(), outside)
+                else:
+                    self.assertEqual(target.read_bytes(), b"preserved default Cargo file")
+                self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+                target.unlink()
+
+    def test_default_cargo_target_nonowned_directory_is_preserved(self) -> None:
+        target = self.root / "target"
+        target.mkdir()
+        with (
+            mock.patch.dict(os.environ, {"CARGO_TARGET_DIR": ""}),
+            mock.patch.object(os, "geteuid", return_value=target.stat().st_uid + 1),
+            self.assertRaisesRegex(PRODUCER.SourceError, "Cargo output is not an owned"),
+        ):
+            PRODUCER.cargo_outputs(self.root)
+        self.assertTrue(target.is_dir())
+
+    def test_effective_config_accepts_ascii_decimal_and_exponent_rates(self) -> None:
+        for rate in ("1", "+1", "1.", ".5", "1e2", "1E+2", "1e-2"):
+            with self.subTest(rate=rate):
+                result = self.invoke(
+                    "config",
+                    "--",
+                    "--url",
+                    "https://example.invalid",
+                    "--workers",
+                    "1",
+                    "--run-time",
+                    " 1s ",
+                    "--warmup",
+                    "0",
+                    "--rps",
+                    rate,
+                    "--scenario",
+                    "smoke",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((self.root / "artifacts").exists())
+                self.assertFalse(list(self.private.iterdir()))
 
     def test_cargo_target_roles_protect_complete_trees_and_allow_nested_artifacts(self):
         runtime = PRODUCER.select()

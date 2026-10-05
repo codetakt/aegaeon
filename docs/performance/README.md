@@ -107,9 +107,10 @@ including an empty one. Invoke it in a source-only Git worktree with canonical
 Unknown untracked or ignored files are rejected. Keep protected runtime inputs
 outside the checkout. Only the conventional `target/`, reserved `artifacts/perf/`
 outputs and the two legacy report files are excluded; no tracked path is excluded.
-Custom build/evidence outputs can be outside the source. The driver retains the
-manifest and observations on failure, checks source again before each build and
-launch, and binds the report to the actual supplied executable selected by
+Custom build/evidence outputs can be outside the source. The driver passes the
+selected Cargo output directory with an explicit `--target-dir`, overriding
+Cargo build settings. The driver retains the manifest and observations on
+failure, checks source again before each build and launch, and binds the report to the actual supplied executable selected by
 Cargo and reread after installation. The workload binding uses schema version
 2 and retains the independent supplier binding plus its actual build/graph
 observations; the managed server retains its separate build binding. No local
