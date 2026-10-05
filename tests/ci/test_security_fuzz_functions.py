@@ -244,7 +244,24 @@ class SecurityFuzzFunctionsTests(unittest.TestCase):
                         bootstrap = [
                             call for call in calls if call[1] == "-c" and "BASH_FUNC_" in call[2]
                         ]
-                        self.assertEqual(len(bootstrap), 2 if outer else 1)
+                        # Aggregate execution re-enters the wrapper with the owned
+                        # sanitizer log descriptor and the same selected Python.
+                        aggregate = not arguments
+                        self.assertEqual(len(bootstrap), (2 if outer else 1) + aggregate)
+                        handoff = [
+                            call[2]
+                            for call in calls
+                            if call[1].endswith("/open_security_log.py")
+                            and call[2] in {"open-exec-bound", "validate-bound"}
+                        ]
+                        # Re-entry initialization and stage execution each validate
+                        # the original bindings before using the inherited log.
+                        self.assertEqual(
+                            handoff,
+                            ["open-exec-bound", "validate-bound", "validate-bound"]
+                            if aggregate
+                            else [],
+                        )
                         operations = {arg for call in calls for arg in call if arg.startswith("--")}
                         self.assertTrue(required <= operations, required - operations)
                         self.assertEqual(

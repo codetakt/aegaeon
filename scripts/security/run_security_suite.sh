@@ -100,6 +100,8 @@ export PATH="${security_function_anchored_path%:}"
 
 set -euo pipefail
 
+SECURITY_ENTRY_ARGS=("$@")
+
 FUZZ_LONG=0
 SECURITY_STAGES=()
 while [[ $# -gt 0 ]]; do
@@ -171,6 +173,36 @@ stage_enabled() {
 	return 1
 }
 
+# A resumed invocation already owns a target before any aggregate preflight or
+# shared-log route validation. Recover it through the fixed original helper.
+if stage_enabled "sanitizers"; then
+	sanitizer_recovery_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
+fi
+sanitizer_preparation_failure() {
+	local primary_status=$1
+	if stage_enabled "sanitizers" && [[ -n ${SANITIZER_EVIDENCE_BINDING:-} && -n ${SANITIZER_CLEANUP_BINDING:-} ]]; then
+		"$security_function_python" -I "$sanitizer_recovery_root/scripts/sanitizers/open_security_log.py" recover-bound \
+			"${SANITIZER_ARTIFACT_DIR:-}" "$SANITIZER_EVIDENCE_BINDING" \
+			"${SANITIZER_VALIDATED_TARGET:-}" "$SANITIZER_CLEANUP_BINDING" "$primary_status" || true
+	fi
+	SANITIZER_CLEANUP_BINDING=""
+	return "$primary_status"
+}
+
+sanitizer_suite_exit() {
+	local primary_status=$?
+	trap - EXIT
+	if [[ -n ${SANITIZER_CLEANUP_BINDING:-} ]]; then
+		# An outstanding attempt cannot become successful without stage execution.
+		[[ $primary_status -ne 0 ]] || primary_status=1
+		sanitizer_preparation_failure "$primary_status" || true
+	fi
+	exit "$primary_status"
+}
+if stage_enabled "sanitizers"; then
+	trap sanitizer_suite_exit EXIT
+fi
+
 # Clear only the inherited WASI compiler values handled by the native fallback.
 # Preflight must validate the same effective inputs that native builds will use.
 if [[ ${CC:-} == *"wasm32-unknown-wasi"* ]]; then
@@ -193,7 +225,7 @@ if stage_enabled "fuzz"; then
 	# Resolve the physical script route before any override-influenced Git call
 	# or prior-receipt invalidation. Other stages retain their existing dispatch.
 	fuzz_guard_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)" || exit 1
-	"$security_function_python" -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || exit 1
+	"$security_function_python" -I "$fuzz_guard_root/scripts/fuzz/manage_fuzz_corpus.py" --validate-git-environment || { sanitizer_preparation_failure 1 || exit $?; }
 fi
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -213,20 +245,20 @@ if stage_enabled "fuzz"; then
 	# Use the same suite-owned collection destinations for every helper action.
 	# An inherited helper-only route must not change the source exclusions midway.
 	export FUZZ_RUN_ARTIFACT_DIR="$fuzz_receipt_dir" FUZZ_HISTORY_DIR="$SECURITY_HISTORY_DIR"
-	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-preflight "$fuzz_receipt_dir" || { sanitizer_preparation_failure 1 || exit $?; }
 	if ! rm -f -- "$fuzz_receipt_dir/collection.ok" "$fuzz_receipt_dir/execution.json" \
 		"$fuzz_receipt_dir/run_summary.json"; then
 		echo "[security] cannot invalidate previous fuzz results; retaining transient outputs" >&2
-		exit 1
+		sanitizer_preparation_failure 1 || exit $?
 	fi
-	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || exit 1
+	"$security_function_python" -I "$ROOT/scripts/fuzz/manage_fuzz_corpus.py" --validate-cache "$fuzz_receipt_dir" || { sanitizer_preparation_failure 1 || exit $?; }
 fi
 
 # Only create the already validated caller-owned Cargo home after invalidation.
 if [[ -n ${CARGO_HOME:-} ]]; then
-	mkdir -p "$CARGO_HOME"
+	mkdir -p "$CARGO_HOME" || { sanitizer_preparation_failure $? || exit $?; }
 fi
-cd "$ROOT"
+cd "$ROOT" || { sanitizer_preparation_failure $? || exit $?; }
 
 # The handled WASI values were cleared before preflight. Complete the existing
 # native-tool fallback only after validation and receipt invalidation.
@@ -242,10 +274,15 @@ fi
 ARTIFACT_BASE="$SECURITY_ARTIFACT_DIR"
 LOG_DIR="$ARTIFACT_BASE/summary"
 LOG_FILE="$LOG_DIR/security.log"
-mkdir -p "$LOG_DIR"
-: >"$LOG_FILE"
-
-echo "[security] starting security suite…" | tee -a "$LOG_FILE"
+if stage_enabled "sanitizers"; then
+	# Validate sanitizer-owned evidence before shared logging can create outputs.
+	# shellcheck source=scripts/sanitizers/sanitizer_paths.sh
+	source "$ROOT/scripts/sanitizers/sanitizer_paths.sh"
+	# shellcheck source=scripts/sanitizers/security_stage.sh
+	source "$ROOT/scripts/sanitizers/security_stage.sh"
+	initialize_sanitizer_routes
+fi
+SECURITY_LOG_PATH=$LOG_FILE
 
 reset_cargo_target_dir() {
 	local dir="${CARGO_TARGET_DIR:-}"
@@ -258,10 +295,6 @@ reset_cargo_target_dir() {
 
 cleanup_fuzz_outputs() {
 	"$security_function_python" -I scripts/fuzz/manage_fuzz_corpus.py --remove-cleanup "$1" "$2"
-}
-
-cleanup_sanitizer_outputs() {
-	rm -rf target/sanitizers || true
 }
 
 discover_devtools_manifests() {
@@ -397,13 +430,6 @@ warn_step() {
 	fi
 	echo "[security] <<< $name: reported findings (non-blocking)" | tee -a "$LOG_FILE"
 	return 0
-}
-
-sanitize() {
-	local dir="$ARTIFACT_BASE/sanitizers"
-	mkdir -p "$dir"
-	SANITIZER_ARTIFACT_DIR="$dir" \
-		nix develop .#asan --command scripts/sanitizers/run_sanitizers.sh
 }
 
 DEFAULT_FUZZ_TARGETS=(
@@ -712,11 +738,6 @@ run_fuzz_stage() {
 	return "$result"
 }
 
-run_sanitizers_stage() {
-	warn_step "sanitizer smoke" sanitize
-	cleanup_sanitizer_outputs
-}
-
 run_sbom_stage() {
 	warn_step "SBOM scan" nix develop . --command scripts/security/run_sbom_scan.sh
 }
@@ -931,6 +952,24 @@ run_context_boundary() {
 	)
 }
 
+# Bind the shared log once, before truncation or initial logging. The helper
+# re-execs this fixed wrapper with an inherited fd; a caller marker is insufficient.
+if stage_enabled "sanitizers"; then
+	initialize_sanitizer_log
+else
+	mkdir -p "$LOG_DIR"
+	: >"$LOG_FILE"
+fi
+if echo "[security] starting security suite…" | tee -a "$LOG_FILE"; then
+	:
+else
+	log_status=$?
+	if stage_enabled "sanitizers"; then
+		sanitizer_early_logging_failure shared-initial-log "$log_status" || true
+	fi
+	exit "$log_status"
+fi
+
 stage_enabled "supply-chain" && run_supply_chain_stage
 stage_enabled "runtime-tests" && run_runtime_tests_stage
 stage_enabled "jose-boundaries" && run_jose_boundaries_stage
@@ -943,11 +982,33 @@ if stage_enabled "fuzz"; then
 		suite_result=$?
 	fi
 fi
-stage_enabled "sanitizers" && run_sanitizers_stage
+if stage_enabled "sanitizers"; then
+	if run_sanitizers_stage; then
+		:
+	else
+		sanitizer_result=$?
+		if [[ $suite_result -eq 0 ]]; then
+			suite_result=$sanitizer_result
+		fi
+	fi
+fi
+if stage_enabled "sanitizers"; then
+	sanitizer_hold_unsafe_outputs "$suite_result"
+fi
 stage_enabled "sbom" && run_sbom_stage
 stage_enabled "geiger" && run_geiger_stage
 stage_enabled "udeps" && run_udeps_stage
 
-echo "[security] suite finished. log: $LOG_FILE" | tee -a "$LOG_FILE"
+if echo "[security] suite finished. log: $SECURITY_LOG_PATH" | tee -a "$LOG_FILE"; then
+	:
+else
+	log_status=$?
+	if stage_enabled "sanitizers"; then
+		sanitizer_logging_failure shared-final-log "$log_status" "$((suite_result != 0 ? suite_result : log_status))" || true
+	fi
+	if [[ $suite_result -eq 0 ]]; then
+		suite_result=$log_status
+	fi
+fi
 mkdir -p "$ARTIFACT_BASE" "$SECURITY_HISTORY_DIR"
 exit "$suite_result"

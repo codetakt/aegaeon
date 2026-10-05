@@ -14,6 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import test_sanitizers as sanitizer_fixture
+
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = (
     "fuzz_bearer_token",
@@ -121,12 +123,28 @@ class SecurityFuzzFixture(unittest.TestCase):
             ("timeout", TIMEOUT),
             ("rustc", "print('rustc fixture\\nhost: x86_64-unknown-linux-gnu')"),
             ("cargo-fuzz", "print('cargo-fuzz fixture')"),
-            ("nix", "raise SystemExit(0)"),
+            (
+                "nix",
+                """
+import json, os, subprocess, sys
+from pathlib import Path
+expected = ['develop', '.#asan', '--command', 'bash', 'scripts/sanitizers/run_sanitizers.sh']
+if sys.argv[1:] != expected:
+    raise SystemExit(0)
+config = json.loads(Path(os.environ["SANITIZER_MODEL_CONFIG"]).read_text())
+result = subprocess.run(config["argv"], env={**os.environ, **config["environment"]}, check=False)
+raise SystemExit(result.returncode)
+""",
+            ),
             ("cargo-udeps", "raise SystemExit(0)"),
         ):
             self.install(name, code)
         for path in (
             "scripts/security/run_security_suite.sh",
+            "scripts/sanitizers/sanitizer_paths.sh",
+            "scripts/sanitizers/open_security_log.py",
+            "scripts/sanitizers/sanitizer_options.py",
+            "scripts/sanitizers/security_stage.sh",
             "scripts/fuzz/manage_fuzz_corpus.py",
             "Cargo.toml",
             "Cargo.lock",
@@ -140,6 +158,14 @@ class SecurityFuzzFixture(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, destination)
         shutil.copytree(ROOT / "scripts/fuzz/fuzz_support", self.root / "scripts/fuzz/fuzz_support")
+        shutil.copy2(
+            ROOT / "scripts/sanitizers/sanitizer_binding.py",
+            self.root / "scripts/sanitizers/sanitizer_binding.py",
+        )
+        shutil.copytree(
+            ROOT / "scripts/sanitizers/sanitizer_support",
+            self.root / "scripts/sanitizers/sanitizer_support",
+        )
         (self.root / "Cargo.toml").write_text(
             '[workspace]\nmembers = ["crates/server", "crates/ffi"]\n'
             'exclude = ["crates/kani-harness"]\n'
@@ -200,6 +226,8 @@ class SecurityFuzzFixture(unittest.TestCase):
             "GIT_WORK_TREE",
         ):
             self.env.pop(name, None)
+
+        sanitizer_fixture.install_sanitizer_model(self, self.root, self.env)
 
     def install(self, name, code):
         destination = self.bin / name
