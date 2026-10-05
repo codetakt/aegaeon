@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import shlex
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from infrastructure_support.common import DELIVERY_PACKAGE_FIELDS, require
 from infrastructure_support.fixtures import (
@@ -180,7 +180,7 @@ def registry_configuration(template: str, *, rendered: bool = False) -> dict[str
             and all(type(value) is str for value in values.values()),
             "Invalid bound registry input/secret reference",
         )
-        return values
+        return cast("dict[str, str]", values)
     expected = (
         "${jsonencode({"
         + ", ".join(name + " = " + value for name, value in REGISTRY_CONFIG_FIELDS.items())
