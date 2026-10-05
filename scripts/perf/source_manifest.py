@@ -213,9 +213,13 @@ def status_geometry(
 
 
 def status_boundary(
-    root: pathlib.Path, artifact: str, *, runtime: Dependencies | None = None
+    root: pathlib.Path,
+    artifact: str,
+    *,
+    evidence: pathlib.Path | None = None,
+    runtime: Dependencies | None = None,
 ) -> pathlib.Path:
-    return _status.status_boundary(root, artifact, runtime=runtime or select())
+    return _status.status_boundary(root, artifact, evidence=evidence, runtime=runtime or select())
 
 
 def initialize_status(
@@ -499,7 +503,9 @@ def dispatch(args: argparse.Namespace, *, runtime: Dependencies | None = None) -
         require_fresh_outputs(root, args.fresh_output_file)
     elif args.action == "status":
         write_status(
-            status_boundary(root, required(args.artifact_directory), runtime=runtime),
+            status_boundary(
+                root, required(args.artifact_directory), evidence=evidence, runtime=runtime
+            ),
             required(args.stage),
             args.exit_status,
         )

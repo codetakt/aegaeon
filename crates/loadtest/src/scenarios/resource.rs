@@ -82,6 +82,8 @@ impl ScenarioExecutor {
     pub async fn revocation_flow(&mut self) -> Result<(bool, u64)> {
         let start = Instant::now();
         let token = self.ensure_token(false).await?;
+        // The server may revoke the token even if the response cannot be consumed.
+        self.cached_access_token = None;
         let profile = self.profile()?.clone();
         let mut params = vec![
             ("token".into(), token.access_token.clone()),
@@ -98,7 +100,6 @@ impl ScenarioExecutor {
             response.status == StatusCode::OK && response.body.is_empty(),
             "revocation must return empty HTTP 200"
         );
-        self.cached_access_token = None;
         let mut params = vec![("token".into(), token.access_token)];
         let request = apply_auth(
             &profile,

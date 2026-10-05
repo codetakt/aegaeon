@@ -27,12 +27,18 @@ if TYPE_CHECKING:
     from .dependencies import Dependencies
 
 
-def status_boundary(root: pathlib.Path, artifact: str, *, runtime: Dependencies) -> pathlib.Path:
+def status_boundary(
+    root: pathlib.Path,
+    artifact: str,
+    *,
+    evidence: pathlib.Path | None = None,
+    runtime: Dependencies,
+) -> pathlib.Path:
     directory = checked_output(root, artifact, directory=True)
     reject_supplier_overlap(root, [directory, directory / "source-status.json"], runtime=runtime)
     output_roles(
         root,
-        directory / "source",
+        evidence if evidence is not None else directory / "source",
         [(str(directory), True)],
         directory / "source-status.json",
         runtime=runtime,
@@ -134,7 +140,7 @@ def initialize_status(
     *,
     runtime: Dependencies,
 ) -> None:
-    path = status_boundary(root, artifact, runtime=runtime)
+    path = status_boundary(root, artifact, evidence=evidence, runtime=runtime)
     output_roles(root, evidence, outputs, path, runtime=runtime)
     status_geometry(root, outputs, evidence, runtime=runtime)
     retain_status(root, path, outputs, evidence, runtime=runtime)

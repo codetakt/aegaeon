@@ -1,5 +1,6 @@
 mod protocol_fixture;
 mod response_redaction;
+mod revocation_cache;
 mod userinfo;
 
 use super::*;
@@ -314,10 +315,18 @@ fn nonce_challenge_distinguishes_as400_and_rs401_and_requires_header() {
     assert!(nonce_challenge(&response, true).is_err());
 }
 
+#[derive(Clone, Copy, Debug)]
+enum FixtureDelivery {
+    Complete,
+    Disconnect,
+    Truncated,
+}
+
 struct FixtureReply {
     status: u16,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+    delivery: FixtureDelivery,
 }
 
 fn fixture_reply(status: u16, body: Vec<u8>) -> FixtureReply {
@@ -325,6 +334,7 @@ fn fixture_reply(status: u16, body: Vec<u8>) -> FixtureReply {
         status,
         headers: Vec::new(),
         body,
+        delivery: FixtureDelivery::Complete,
     }
 }
 
@@ -429,10 +439,14 @@ fn wire_fixture(
                 }
             }
             let reply = handler(step, std::str::from_utf8(&request).unwrap(), &server_base);
+            let advertised_length = match reply.delivery {
+                FixtureDelivery::Disconnect => continue,
+                FixtureDelivery::Complete => reply.body.len(),
+                FixtureDelivery::Truncated => reply.body.len().checked_add(1).unwrap(),
+            };
             let mut headers = format!(
                 "HTTP/1.1 {} Fixture\r\nContent-Length: {}\r\nConnection: close\r\n",
-                reply.status,
-                reply.body.len()
+                reply.status, advertised_length
             );
             for (name, value) in reply.headers {
                 use std::fmt::Write as _;

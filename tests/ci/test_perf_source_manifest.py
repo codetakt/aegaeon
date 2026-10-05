@@ -1937,6 +1937,73 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
         self.assertEqual((self.root / "tracked.txt").read_bytes(), b"source bytes\n")
 
+    def test_direct_status_uses_actual_evidence_before_replacing_prior_status(self) -> None:
+        retained = set(self.private.iterdir())
+        for number, (action, relation, prior) in enumerate(
+            (action, relation, prior)
+            for action in ["status", "boundary"]
+            for relation in ["equal", "evidence-parent", "evidence-child"]
+            for prior in ["absent", "raw", "link", "hardlink"]
+        ):
+            with self.subTest(action=action, relation=relation, prior=prior):
+                artifact = self.owner / f"direct-role-overlap-{number}" / "nested-status"
+                artifact.mkdir(parents=True)
+                status = artifact / "source-status.json"
+                self.prepare_overlap_status(status, prior)
+                evidence = {
+                    "equal": status,
+                    "evidence-parent": artifact.parent,
+                    "evidence-child": status / "source",
+                }[relation]
+                before = self.output_path_snapshot(status)
+                leaves = set(artifact.iterdir())
+                if action == "status":
+                    result = self.invoke(
+                        "status",
+                        "--evidence",
+                        str(evidence),
+                        "--artifact-directory",
+                        str(artifact),
+                        "--stage",
+                        "control",
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                else:
+                    with (
+                        mock.patch.dict(os.environ, self.environment),
+                        self.assertRaises(PRODUCER.SourceError),
+                    ):
+                        PRODUCER.status_boundary(self.root, str(artifact), evidence=evidence)
+                self.assertEqual(self.output_path_snapshot(status), before)
+                self.assertEqual(set(artifact.iterdir()), leaves)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                if prior != "absent":
+                    status.unlink()
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_direct_status_accepts_sibling_evidence_and_status(self) -> None:
+        retained = set(self.private.iterdir())
+        artifact = self.owner / "direct-status-siblings"
+        evidence = artifact / "source"
+        result = self.invoke(
+            "status",
+            "--evidence",
+            str(evidence),
+            "--artifact-directory",
+            str(artifact),
+            "--stage",
+            "complete",
+            "--exit-status",
+            "0",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads((artifact / "source-status.json").read_bytes()),
+            {"stage": "complete", "exit_status": 0},
+        )
+        self.assertFalse(evidence.exists())
+        self.assertEqual(set(self.private.iterdir()), retained)
+
     def test_prior_complete_status_preserved_on_caller_rejection_and_replaced_on_success(
         self,
     ) -> None:

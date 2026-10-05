@@ -184,10 +184,10 @@ async fn oidc_malformed_issuer_key_never_exposes_verification_error_chain_or_cal
 }
 
 fn assert_typed_json_redaction<T: DeserializeOwned>(
-    value: serde_json::Value,
+    value: &serde_json::Value,
     message: &'static str,
 ) {
-    let body = serde_json::to_vec(&value).unwrap();
+    let body = serde_json::to_vec(value).unwrap();
     assert!(String::from_utf8_lossy(&body).contains(SENSITIVE_MARKER));
     let error = response_json::<T>(&body, message).err().unwrap();
     assert_eq!(error.to_string(), message);
@@ -200,25 +200,25 @@ fn assert_typed_json_redaction<T: DeserializeOwned>(
 fn response_json_consumers_drop_untrusted_values_and_serde_sources() {
     let mut token = fixture_token(false, 300);
     token["expires_in"] = SENSITIVE_MARKER.into();
-    assert_typed_json_redaction::<TokenResponse>(token, "invalid token response");
+    assert_typed_json_redaction::<TokenResponse>(&token, "invalid token response");
     assert_typed_json_redaction::<IntrospectionResponse>(
-        serde_json::json!({"active":SENSITIVE_MARKER}),
+        &serde_json::json!({"active":SENSITIVE_MARKER}),
         "invalid introspection response",
     );
     assert_typed_json_redaction::<ParSuccess>(
-        serde_json::json!({"request_uri":"urn:ietf:params:oauth:request_uri:test","expires_in":SENSITIVE_MARKER}),
+        &serde_json::json!({"request_uri":"urn:ietf:params:oauth:request_uri:test","expires_in":SENSITIVE_MARKER}),
         "invalid PAR response",
     );
     assert_typed_json_redaction::<OAuthError>(
-        serde_json::json!({"error":[SENSITIVE_MARKER]}),
+        &serde_json::json!({"error":[SENSITIVE_MARKER]}),
         "invalid OAuth error response",
     );
     assert_typed_json_redaction::<Userinfo>(
-        serde_json::json!({"sub":[SENSITIVE_MARKER]}),
+        &serde_json::json!({"sub":[SENSITIVE_MARKER]}),
         "invalid UserInfo response",
     );
     assert_typed_json_redaction::<jsonwebtoken::jwk::JwkSet>(
-        serde_json::from_slice(&malformed_jwks()).unwrap(),
+        &serde_json::from_slice(&malformed_jwks()).unwrap(),
         "invalid JWKS response",
     );
     let malformed = format!("{{\"issuer\":\"{SENSITIVE_MARKER}\",\"token_endpoint\":");
