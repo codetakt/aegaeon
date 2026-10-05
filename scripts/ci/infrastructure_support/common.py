@@ -78,7 +78,7 @@ DELIVERY_PACKAGE_SHA256 = {
     "credentials.py": "46e960c505598bb2d0ad68dfb2cf6719d449822199a7ca62d630e81c35c59de1",
     "filesystem.py": "2c5cc6c6f2d3c7e71f0e69810d5bd7796c09a10153554caf08d298beb4462901",
     "artifacts.py": "495c96705a96d58935f4004f93c9a3d8dfaca190e7bb665afd792f8c1a1ecdaa",
-    "reports.py": "eb6b3a991ae59dbf622d7e9adacd029476ad0227f80b2ab6179c70cf2129a4dd",
+    "reports.py": "a4a8d14c4ab14d88b5e2d8f802e7b61c5bfb3126c9bce8b3c4f3f49386fe75b3",
     "metrics.py": "30efa2e1a66585e2dc85c1147b25244d96249062d3d6e5ccf58ef5c01d53fe1f",
     "orchestration.py": "42d11b1b90d5fe428c564829b6a8e17aee96034ceb9fa6523d71a1e2bda3f0b7",
 }

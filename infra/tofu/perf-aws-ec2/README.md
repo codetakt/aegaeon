@@ -30,6 +30,14 @@ Supply these required OpenTofu inputs through your normal private configuration:
   `metrics_secret_kms_key_arns`. Confirm resource policies and actual container
   instance-role credentials independently.
 
+Image references use lowercase registry labels and repository components, with
+an optional numeric registry port and an exact `@sha256:` digest of 64 lowercase
+hexadecimal characters. Repository components allow alphanumeric runs separated
+by a single dot, one or two underscores, or one or more hyphens. The repository
+path is limited to 255 characters, excluding the registry and digest. Tags,
+empty path components and uppercase names are rejected; update invalid image
+inputs before regenerating node userdata.
+
 Existing network, node sizing, registry-token identifier and report-bucket
 inputs remain available. The two roles share registry access only when enabled;
 server supply/signing permissions and load-generator client/metrics/report

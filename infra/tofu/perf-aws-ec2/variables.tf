@@ -205,8 +205,11 @@ variable "server_image" {
   type        = string
   description = "Exact externally tested OCI artifact digest."
   validation {
-    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", var.server_image))
-    error_message = "A digest-pinned OCI reference is required."
+    condition = (
+      can(regex("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:[.][a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::[0-9]+)?/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*@sha256:[0-9a-f]{64}$", var.server_image)) &&
+      can(regex("^[^/]+/[^@]{1,255}@sha256:[0-9a-f]{64}$", var.server_image))
+    )
+    error_message = "A lowercase Docker repository reference with a path of at most 255 characters and a pinned SHA256 digest is required."
   }
 }
 
@@ -214,8 +217,11 @@ variable "loadgen_image" {
   type        = string
   description = "Exact externally tested OCI artifact digest."
   validation {
-    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", var.loadgen_image))
-    error_message = "A digest-pinned OCI reference is required."
+    condition = (
+      can(regex("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:[.][a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::[0-9]+)?/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*@sha256:[0-9a-f]{64}$", var.loadgen_image)) &&
+      can(regex("^[^/]+/[^@]{1,255}@sha256:[0-9a-f]{64}$", var.loadgen_image))
+    )
+    error_message = "A lowercase Docker repository reference with a path of at most 255 characters and a pinned SHA256 digest is required."
   }
 }
 

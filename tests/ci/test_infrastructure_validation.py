@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 import validate_infrastructure as infra
+import yaml
 from infrastructure_support import common, delivery, orchestration, provider, runtime
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +34,41 @@ class InfrastructureTests(unittest.TestCase):
 
     def module(self, name="aegaeon-aws-staging"):
         return self.root / "infra/tofu" / name
+
+    def test_infrastructure_workflow_automatically_runs_full_static_contract(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/infrastructure-validation.yml").read_text()
+        )
+        events = workflow.get("on", workflow.get(True))  # YAML 1.1 treats "on" as Boolean.
+        assert events["pull_request"] == {
+            "types": ["opened", "synchronize", "reopened", "ready_for_review"]
+        }
+        assert events["merge_group"] == {"types": ["checks_requested"]}
+        assert set(events) == {"pull_request", "merge_group", "workflow_call", "workflow_dispatch"}
+        assert events["workflow_call"]["inputs"]["paths-json"]["default"] == ""
+        assert workflow["permissions"] == {"contents": "read"}
+        steps = workflow["jobs"]["infrastructure"]["steps"]
+        regression = next(
+            step for step in steps if step["name"] == "Check infrastructure runner regressions"
+        )
+        assert "test_infrastructure_validation.py" in regression["run"]
+        assert (
+            "tests/ci/test_perf_delivery_package.py tests/ci/test_perf_runtime_delivery.py"
+            in regression["run"]
+        )
+        validation = next(
+            step for step in steps if step["name"] == "Validate infrastructure inputs"
+        )
+        assert validation["env"] == {"INFRASTRUCTURE_PATHS_JSON": "${{ inputs.paths-json }}"}
+        assert 'if [[ -n "$INFRASTRUCTURE_PATHS_JSON" ]]; then' in validation["run"]
+        assert 'python3 scripts/ci/validate_infrastructure.py "${args[@]}"' in validation["run"]
+        assert len(infra.select_modules(self.root, None)) == 3
+        diagnostics = next(
+            step for step in steps if step["name"] == "Preserve infrastructure diagnostics"
+        )
+        assert diagnostics["if"] == "always()"
+        assert diagnostics["with"]["path"] == "artifacts/infrastructure-validation"
+        assert diagnostics["with"]["if-no-files-found"] == "error"
 
     def test_selects_only_affected_modules(self):
         paths = ["infra/tofu/perf-aws-ec2/versions.tf", "infra/tofu/perf-aws-ec2/deleted.tf"]

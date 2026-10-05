@@ -1930,15 +1930,103 @@ path.write_text(content.get(name,"controlled preserved output"))
         assert len((output / "summary.csv").read_text().splitlines()) == (2 if expected == 0 else 1)
 
 
+IMAGE_REFERENCE_CASES = (
+    ("simple", "registry.example/aegaeon@sha256:" + "a" * 64, True),
+    ("numeric-port", "registry.example:5000/path/aegaeon@sha256:" + "a" * 64, True),
+    ("ipv4", "127.0.0.1:5000/aegaeon@sha256:" + "a" * 64, True),
+    ("single-registry-label", "localhost/aegaeon@sha256:" + "a" * 64, True),
+    ("single-character-labels", "a.b/0@sha256:" + "a" * 64, True),
+    ("registry-hyphens", "r--1.example/aegaeon@sha256:" + "a" * 64, True),
+    ("zero-port", "registry.example:0/aegaeon@sha256:" + "a" * 64, True),
+    ("leading-zero-port", "registry.example:05000/aegaeon@sha256:" + "a" * 64, True),
+    ("single-dot", "registry.example/a.b@sha256:" + "a" * 64, True),
+    ("single-underscore", "registry.example/a_b@sha256:" + "a" * 64, True),
+    ("double-underscore", "registry.example/a__b@sha256:" + "a" * 64, True),
+    ("single-hyphen", "registry.example/a-b@sha256:" + "a" * 64, True),
+    ("repeated-hyphen", "registry.example/a---b@sha256:" + "a" * 64, True),
+    ("mixed-separators", "registry.example/a.b_c__d---e/f.0@sha256:" + "a" * 64, True),
+    ("digest-zero", "registry.example/aegaeon@sha256:" + "0" * 64, True),
+    ("uppercase-registry", "REGISTRY.example/aegaeon@sha256:" + "a" * 64, False),
+    ("uppercase-repository", "registry.example/Aegaeon@sha256:" + "a" * 64, False),
+    ("uppercase-nested-component", "registry.example/path/Aegaeon@sha256:" + "a" * 64, False),
+    ("unicode-registry", "ré.example/aegaeon@sha256:" + "a" * 64, False),
+    ("unicode-repository", "registry.example/aegæon@sha256:" + "a" * 64, False),
+    ("empty-registry", "/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-leading-dot", ".registry.example/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-trailing-dot", "registry.example./aegaeon@sha256:" + "a" * 64, False),
+    ("registry-empty-label", "registry..example/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-leading-hyphen", "-registry.example/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-trailing-hyphen", "registry-.example/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-nested-leading-hyphen", "registry.-example/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-nested-trailing-hyphen", "registry.example-/aegaeon@sha256:" + "a" * 64, False),
+    ("registry-underscore", "registry_example/aegaeon@sha256:" + "a" * 64, False),
+    ("empty-port", "registry.example:/aegaeon@sha256:" + "a" * 64, False),
+    ("nonnumeric-port", "registry.example:port/aegaeon@sha256:" + "a" * 64, False),
+    ("negative-port", "registry.example:-1/aegaeon@sha256:" + "a" * 64, False),
+    ("ipv6", "[::1]:5000/aegaeon@sha256:" + "a" * 64, False),
+    ("scheme", "https://registry.example/aegaeon@sha256:" + "a" * 64, False),
+    ("no-registry", "aegaeon@sha256:" + "a" * 64, False),
+    ("empty-path", "registry.example/@sha256:" + "a" * 64, False),
+    ("leading-slash", "registry.example//aegaeon@sha256:" + "a" * 64, False),
+    ("empty-component", "registry.example/path//aegaeon@sha256:" + "a" * 64, False),
+    ("trailing-slash", "registry.example/path/@sha256:" + "a" * 64, False),
+    ("leading-dot", "registry.example/.aegaeon@sha256:" + "a" * 64, False),
+    ("trailing-dot", "registry.example/aegaeon.@sha256:" + "a" * 64, False),
+    ("leading-underscore", "registry.example/_aegaeon@sha256:" + "a" * 64, False),
+    ("trailing-underscore", "registry.example/aegaeon_@sha256:" + "a" * 64, False),
+    ("leading-hyphen", "registry.example/-aegaeon@sha256:" + "a" * 64, False),
+    ("trailing-hyphen", "registry.example/aegaeon-@sha256:" + "a" * 64, False),
+    ("repeated-dot", "registry.example/a..b@sha256:" + "a" * 64, False),
+    ("triple-underscore", "registry.example/a___b@sha256:" + "a" * 64, False),
+    ("adjacent-separators", "registry.example/a._b@sha256:" + "a" * 64, False),
+    ("dot-component", "registry.example/./aegaeon@sha256:" + "a" * 64, False),
+    ("dotdot-component", "registry.example/path/../aegaeon@sha256:" + "a" * 64, False),
+    ("tag-and-digest", "registry.example/aegaeon:tag@sha256:" + "a" * 64, False),
+    ("tag-only", "registry.example/aegaeon:tag", False),
+    ("no-digest", "registry.example/aegaeon", False),
+    ("wrong-algorithm", "registry.example/aegaeon@sha512:" + "a" * 64, False),
+    ("uppercase-algorithm", "registry.example/aegaeon@SHA256:" + "a" * 64, False),
+    ("uppercase-digest", "registry.example/aegaeon@sha256:" + "A" * 64, False),
+    ("short-digest", "registry.example/aegaeon@sha256:" + "a" * 63, False),
+    ("long-digest", "registry.example/aegaeon@sha256:" + "a" * 65, False),
+    ("nonhex-digest", "registry.example/aegaeon@sha256:" + "g" * 64, False),
+    ("digest-suffix", "registry.example/aegaeon@sha256:" + "a" * 64 + ":tag", False),
+    ("wildcard", "registry.example/*@sha256:" + "a" * 64, False),
+    ("path-254", "registry.example/" + "a" * 254 + "@sha256:" + "a" * 64, True),
+    ("path-255", "registry.example/" + "a" * 255 + "@sha256:" + "a" * 64, True),
+    ("path-256", "registry.example/" + "a" * 256 + "@sha256:" + "a" * 64, False),
+    (
+        "nested-path-254",
+        "registry.example/" + "a" * 126 + "/" + "b" * 127 + "@sha256:" + "a" * 64,
+        True,
+    ),
+    (
+        "nested-path-255",
+        "registry.example/" + "a" * 126 + "/" + "b" * 128 + "@sha256:" + "a" * 64,
+        True,
+    ),
+    (
+        "nested-path-256",
+        "registry.example/" + "a" * 126 + "/" + "b" * 129 + "@sha256:" + "a" * 64,
+        False,
+    ),
+    (
+        "long-registry-path-255",
+        ("r" * 63 + ".") * 4 + "example/" + "a" * 255 + "@sha256:" + "a" * 64,
+        True,
+    ),
+    (
+        "long-registry-path-256",
+        ("r" * 63 + ".") * 4 + "example/" + "a" * 256 + "@sha256:" + "a" * 64,
+        False,
+    ),
+)
+
+
 @pytest.mark.parametrize(
     ("image", "accepted"),
-    [
-        ("registry.example/aegaeon@sha256:" + "a" * 64, True),
-        ("registry.example:5000/path/aegaeon@sha256:" + "a" * 64, True),
-        ("REGISTRY.example/aegaeon@sha256:" + "a" * 64, False),
-        ("registry.example/aegaeon:tag@sha256:" + "a" * 64, False),
-        ("aegaeon@sha256:" + "a" * 64, False),
-    ],
+    [(image, accepted) for _, image, accepted in IMAGE_REFERENCE_CASES],
+    ids=[name for name, _, _ in IMAGE_REFERENCE_CASES],
 )
 def test_plan_image_grammar_matches_runtime_admission(helper, tmp_path, image, accepted):
     text = (MODULE / "variables.tf").read_text()
@@ -1946,10 +2034,10 @@ def test_plan_image_grammar_matches_runtime_admission(helper, tmp_path, image, a
     cfg["SERVER_IMAGE"] = image
     for variable in ("server_image", "loadgen_image"):
         block = infra.block(text, 'variable "' + variable + '"')
-        pattern = re.search(r'can\(regex\("([^"\n]+)"', block)[1]
-        assert (
-            re.fullmatch(pattern.removeprefix("^").removesuffix("$"), image) is not None
-        ) == accepted
+        # This source-regex cross-check is supplemented by actual OpenTofu plans.
+        patterns = re.findall(r'can\(regex\("([^"\n]+)"', block)
+        assert len(patterns) == 2
+        assert all(re.fullmatch(pattern, image) is not None for pattern in patterns) == accepted
     if accepted:
         assert helper.validate_run_config(json.dumps(cfg), config()["issuer_url"]) == cfg
     else:

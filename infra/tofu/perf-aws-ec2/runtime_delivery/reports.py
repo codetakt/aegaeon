@@ -57,6 +57,16 @@ REPORT_SCHEMA_VERSION = 2
 REPORT_UUID_VERSION = 4
 
 
+IMAGE_REGISTRY_LABEL = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+IMAGE_PATH_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+IMAGE_REFERENCE = re.compile(
+    rf"{IMAGE_REGISTRY_LABEL}(?:[.]{IMAGE_REGISTRY_LABEL})*(?::[0-9]+)?/"
+    rf"(?P<repository>{IMAGE_PATH_COMPONENT}(?:/{IMAGE_PATH_COMPONENT})*)"
+    r"@sha256:[0-9a-f]{64}"
+)
+MAX_IMAGE_REPOSITORY_LENGTH = 255
+
+
 def validate_run_config(raw: str | bytes | bytearray, issuer: str) -> dict[str, Any]:
     config = json_object(raw)
     if set(config) != set(LOADTEST_NAMES) | {"artifact"} or not all(
@@ -65,9 +75,8 @@ def validate_run_config(raw: str | bytes | bytearray, issuer: str) -> dict[str, 
         fail("exact loadtest config required")
     if config["SERVER_URL"] != issuer or https_origin(config["SERVER_URL"]) != issuer:
         fail("loadtest issuer mismatch")
-    if not re.fullmatch(
-        "[a-z0-9.-]+(?::[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}", config["SERVER_IMAGE"]
-    ):
+    image = IMAGE_REFERENCE.fullmatch(config["SERVER_IMAGE"])
+    if image is None or len(image["repository"]) > MAX_IMAGE_REPOSITORY_LENGTH:
         fail("immutable loadgen image required")
     absolute_path(config["LOADTEST_BIN"])
     if not re.fullmatch("[1-9][0-9]*", config["WORKERS"]):
