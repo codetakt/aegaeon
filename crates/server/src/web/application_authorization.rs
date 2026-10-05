@@ -206,23 +206,12 @@ pub(super) async fn exchange_grant(
             )
         }
     })?;
-    let selectors: Vec<_> = ctx
-        .params
-        .iter()
-        .filter(|(name, _)| matches!(name.as_str(), "organization_id" | "organizationId"))
-        .collect();
-    if selectors.len() > 1
-        || selectors
-            .first()
-            .is_some_and(|(name, value)| name != "organization_id" || value.is_empty())
-    {
-        return Err(token_error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            Some("organization_id must be a single nonempty application selector"),
-        ));
-    }
-    let selector = selectors.first().map(|(_, value)| value.as_str());
+    let selector = super::token_form::optional_token_param(
+        &ctx.params,
+        "organization_id",
+        state.issuer.as_str(),
+    )?;
+    let selector = selector.as_deref();
     let invalid = || {
         token_error_response(
             StatusCode::BAD_REQUEST,

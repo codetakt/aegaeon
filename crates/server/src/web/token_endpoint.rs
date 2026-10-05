@@ -91,6 +91,7 @@ pub(super) async fn build_token_context(
     issuer_base: &str,
     request_id: String,
 ) -> Result<(TokenEndpointContext, AppState), Response> {
+    let params = super::token_form::effective_oauth_form(params);
     let form = token_form_from_params(&params, issuer_base)?;
     let grant_type = form.grant_type.trim().to_ascii_lowercase();
     // RFC 8693 permits repeated audience/resource selectors. Its resolver sees all of them.
