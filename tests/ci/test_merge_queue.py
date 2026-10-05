@@ -453,6 +453,9 @@ class WorkflowTests(unittest.TestCase):
                         assert step["with"]["persist-credentials"] is False
 
     def test_group_docs_lints_range_without_fabricating_title(self):
-        script = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        script = (ROOT / "scripts/ci/run_docs_metadata.sh").read_text()
+        full = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        assert "python3 -m unittest discover -s tests/ci -p 'test_*.py' -v" in full
+        assert "bash scripts/ci/run_docs_metadata.sh" in full
         assert 'scripts/commitlint-range.sh --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA"' in script
         assert "if [[ $GITHUB_EVENT_NAME == pull_request ]]; then" in script

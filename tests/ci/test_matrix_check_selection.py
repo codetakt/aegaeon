@@ -415,13 +415,41 @@ class MatrixCheckSelectionTests(unittest.TestCase):
 
     def test_hosted_base_transport_is_from_protected_planner(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
-        step = next(
+        docs = workflow["jobs"]["docs"]
+        self.assertEqual(docs["needs"], "plan")
+        self.assertEqual(docs["uses"], "./.github/workflows/documentation.yml")
+        self.assertEqual(docs["with"]["base"], "${{ needs.plan.outputs.base }}")
+        self.assertEqual(docs["with"]["source-head"], "${{ needs.plan.outputs.source_head }}")
+        self.assertEqual(docs["with"]["test-sha"], "${{ needs.plan.outputs.test_sha }}")
+        reusable = yaml.safe_load((ROOT / ".github/workflows/documentation.yml").read_text())
+        for name in ("base", "source-head", "test-sha"):
+            self.assertEqual(
+                reusable[True]["workflow_call"]["inputs"][name],
+                {"required": True, "type": "string"},
+            )
+        helper = next(
             step
-            for step in workflow["jobs"]["docs"]["steps"]
+            for step in reusable["jobs"]["helpers"]["steps"]
+            if "run_ci_helpers.py run" in step.get("run", "")
+        )
+        self.assertEqual(helper["env"]["PR_BASE_SHA"], "${{ inputs.base }}")
+        metadata = next(
+            step
+            for step in reusable["jobs"]["metadata"]["steps"]
             if "PR_BASE_SHA" in step.get("env", {})
         )
-        self.assertEqual(step["env"]["PR_BASE_SHA"], "${{ needs.plan.outputs.base }}")
-        self.assertEqual(workflow["jobs"]["docs"]["needs"], "plan")
+        self.assertEqual(metadata["env"]["PR_BASE_SHA"], "${{ inputs.base }}")
+        self.assertEqual(metadata["env"]["PR_HEAD_SHA"], "${{ inputs.source-head }}")
+        for job in reusable["jobs"].values():
+            checkout = next(
+                step
+                for step in job["steps"]
+                if step.get("uses", "").startswith("actions/checkout@")
+            )
+            self.assertEqual(
+                checkout["with"],
+                {"ref": "${{ inputs.test-sha }}", "fetch-depth": 0, "persist-credentials": False},
+            )
         source = (ROOT / "scripts/ci/validate_change.py").read_text()
         self.assertIn('git("merge-base", "--is-ancestor", ancestor, test_sha)', source)
         self.assertNotIn("import yaml", (ROOT / "scripts/ci/pr_plan.py").read_text())

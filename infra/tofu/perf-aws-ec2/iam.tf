@@ -16,12 +16,14 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role" "perf_instance" {
-  name               = "${var.name_prefix}-instance"
+  for_each           = toset(["server", "loadgen"])
+  name               = "${var.name_prefix}-${each.key}"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
 }
 
 resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role       = aws_iam_role.perf_instance.name
+  for_each   = aws_iam_role.perf_instance
+  role       = each.value.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
@@ -114,9 +116,8 @@ resource "aws_iam_policy" "ghcr_token_read" {
 }
 
 resource "aws_iam_role_policy_attachment" "ghcr_token_read" {
-  count = local.enable_ghcr_auth ? 1 : 0
-
-  role       = aws_iam_role.perf_instance.name
+  for_each   = local.enable_ghcr_auth ? aws_iam_role.perf_instance : {}
+  role       = each.value.name
   policy_arn = aws_iam_policy.ghcr_token_read[0].arn
 }
 
@@ -148,11 +149,47 @@ resource "aws_iam_policy" "artifact_write" {
 }
 
 resource "aws_iam_role_policy_attachment" "artifact_write" {
-  role       = aws_iam_role.perf_instance.name
+  role       = aws_iam_role.perf_instance["loadgen"].name
   policy_arn = aws_iam_policy.artifact_write.arn
 }
 
 resource "aws_iam_instance_profile" "perf_instance" {
-  name = "${var.name_prefix}-instance"
-  role = aws_iam_role.perf_instance.name
+  for_each = aws_iam_role.perf_instance
+  name     = "${var.name_prefix}-${each.key}"
+  role     = each.value.name
+}
+
+data "aws_iam_policy_document" "runtime_supply" {
+  for_each = local.node_secret_arns
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = each.value
+  }
+  dynamic "statement" {
+    for_each = length(local.node_secret_kms_key_arns[each.key]) > 0 ? [local.node_secret_kms_key_arns[each.key]] : []
+    content {
+      actions   = ["kms:Decrypt"]
+      resources = statement.value
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "runtime_supply" {
+  for_each = aws_iam_role.perf_instance
+  name     = "${var.name_prefix}-${each.key}-supplies"
+  role     = each.value.id
+  policy   = data.aws_iam_policy_document.runtime_supply[each.key].json
+}
+
+data "aws_iam_policy_document" "runtime_signing" {
+  statement {
+    actions   = ["kms:Sign", "kms:GetPublicKey"]
+    resources = var.runtime_kms_key_arns
+  }
+}
+
+resource "aws_iam_role_policy" "runtime_signing" {
+  name   = "${var.name_prefix}-runtime-signing"
+  role   = aws_iam_role.perf_instance["server"].id
+  policy = data.aws_iam_policy_document.runtime_signing.json
 }
