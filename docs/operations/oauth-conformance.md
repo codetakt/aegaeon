@@ -200,6 +200,15 @@ claims are omitted, so later projection changes still invalidate online use.
 UserInfo and ordinary resource responses do not copy application projection claims.
 
 Organization memberships also require a configured, live membership authority.
+The [machine-readable reader contract](../../spec/application-membership-reader-contract.json)
+records the three required relations and columns, compatible join operations,
+exact issuer/subject matching, role/status values and NULL behavior. It specifies
+the existing read interface, not an external production schema or migration.
+The PostgreSQL token-route fixture consumes it to construct an owned schema;
+its bigint, UUID and timestamp types are finite test witnesses, not mandated
+external storage types. Reader relations resolve through the dedicated connection's
+trusted search path. Matching binding rows contribute their union; the reader
+does not detect ambiguous mappings or enforce external uniqueness constraints.
 Configure `AEGAEON_INORII_AUTHORITY_DATABASE_URL` with separate SELECT-only credentials
 for `authorization_subject_bindings`, `organization_users` and `organizations`.
 The adapter requires an exact HTTPS issuer/subject mapping to the authority's
