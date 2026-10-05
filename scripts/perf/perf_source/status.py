@@ -33,6 +33,13 @@ if TYPE_CHECKING:
 def status_boundary(root: pathlib.Path, artifact: str, *, runtime: Dependencies) -> pathlib.Path:
     directory = checked_output(root, artifact, directory=True)
     reject_supplier_overlap(root, [directory, directory / "source-status.json"], runtime=runtime)
+    output_roles(
+        root,
+        directory / "source",
+        [(str(directory), True)],
+        directory / "source-status.json",
+        runtime=runtime,
+    )
     parent = directory.parent
     while not parent.exists():
         parent = parent.parent

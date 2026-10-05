@@ -112,7 +112,7 @@ class PerfSourceManifestTests(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         supplier_action = (
             immutable
-            or action in {"urls", "invocation", "report"}
+            or action in {"urls", "config", "invocation", "report"}
             or (action in {"bind", "binary"} and "aegaeon-loadtest" in args)
         )
         entrypoint = self.root / "scripts/perf/source_manifest.py"
@@ -2397,7 +2397,104 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertFalse(list(self.private.iterdir()))
                 self.git(self.root, "add", name)
 
-    def test_pacing_rejects_nonfinite_interval_and_keeps_positive_tiny_domain(self) -> None:
+    def test_runner_effective_invalid_config_precedes_all_managed_and_external_effects(self):
+        cases = {
+            "PERF_WORKERS": ("0",),
+            "PERF_RPS": ("inf", "1e308", "1e12"),
+            "PERF_RUN_TIME": ("0s", "86401s", "fixture-secret"),
+            "PERF_WARMUP": ("invalid", "86401s"),
+            "PERF_SCENARIO": ("fixture-secret",),
+        }
+        for managed in (False, True):
+            for key, values in cases.items():
+                for value in values:
+                    with self.subTest(managed=managed, key=key, value=value):
+                        result = self.runner(
+                            managed=managed,
+                            overrides={
+                                key: value,
+                                "PERF_SERVER_PORT": "",
+                                "PERF_APPLY_DATABASE_MIGRATIONS": "1",
+                            },
+                        )
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertNotIn("fixture-secret", result.stdout + result.stderr)
+                        self.assertFalse((self.owner / "tool-calls").exists())
+                        self.assertFalse((self.root / "artifacts").exists())
+                        self.assertFalse(list(self.private.iterdir()))
+                        self.assertEqual(
+                            (self.root / ".git/index").read_bytes(), self.original_index
+                        )
+
+    def test_cargo_target_roles_protect_complete_trees_and_allow_nested_artifacts(self):
+        runtime = PRODUCER.select()
+        for configured in (False, True):
+            for leaf in ("target", "cache", "report", "evidence", "status", "program.d"):
+                target = self.owner / "cargo" / leaf if configured else self.root / "target"
+                env = {"CARGO_TARGET_DIR": str(target)} if configured else {}
+                with mock.patch.dict(os.environ, env):
+                    for role in ("file", "directory", "evidence", "status"):
+                        for path in (target, target / "nested", target.parent):
+                            with self.subTest(
+                                configured=configured, leaf=leaf, role=role, path=path
+                            ):
+                                evidence = path if role == "evidence" else self.evidence
+                                status = path if role == "status" else None
+                                outputs = (
+                                    [(str(path), role == "directory")]
+                                    if role in {"file", "directory"}
+                                    else []
+                                )
+                                with self.assertRaises(PRODUCER.SourceError):
+                                    PRODUCER.output_roles(
+                                        self.root, evidence, outputs, status, runtime=runtime
+                                    )
+                    PRODUCER.output_roles(
+                        self.root,
+                        self.evidence,
+                        [
+                            (str(self.evidence.parent), True),
+                            (str(self.evidence.parent / "report.json"), False),
+                        ],
+                        runtime=runtime,
+                    )
+        self.assertFalse(self.evidence.exists())
+        self.assertFalse(list(self.private.iterdir()))
+
+    def test_runner_and_direct_status_cargo_overlap_preserve_prior_bytes(self):
+        for role in ("REPORT_PATH", "SERVER_LOG", "LOADTEST_LOG", "artifact", "evidence", "status"):
+            with self.subTest(role=role):
+                artifact = self.owner / ("external-" + role)
+                artifact.mkdir()
+                status = artifact / "source-status.json"
+                status.write_bytes(b"prior complete")
+                target = artifact / {
+                    "artifact": "cargo",
+                    "evidence": "source",
+                    "status": "source-status.json",
+                }.get(role, "cache/program.d")
+                overrides = {"CARGO_TARGET_DIR": str(target)}
+                if role in {"REPORT_PATH", "SERVER_LOG", "LOADTEST_LOG"}:
+                    overrides[role] = str(target / "nested")
+                result = self.runner(artifact=str(artifact), overrides=overrides)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse(list(self.private.iterdir()))
+                self.assertFalse((artifact / "source").exists())
+                result = self.invoke(
+                    "status",
+                    "--artifact-directory",
+                    str(artifact),
+                    "--stage",
+                    "complete",
+                    env=self.environment | {"CARGO_TARGET_DIR": str(target)},
+                    immutable=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+
+    def test_config_pacing_uses_supplier_representability_without_local_approximation(self) -> None:
         workload = self.write("target/release/aegaeon-loadtest", b"inert workload\n", 0o755)
         prepare_supplier(
             SOURCE, self.root, self.owner, PRODUCER, workload, runtime_path=self.environment["PATH"]
@@ -2417,15 +2514,15 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "discovery_expected_issuer": None,
             "workers": 1,
             "duration": {"secs": 1, "nanos": 0},
-            "target_rps": 1e308,
+            "target_rps": 1e9,
             "warmup_duration": {"secs": 0, "nanos": 0},
             "scenario": "Smoke",
             "debug": False,
         }
         # Exact Duration representability remains the selected Rust executable's decision.
         self.assertEqual(PRODUCER.validate_config(config, runtime=runtime), config)
-        for target_rps in (5e-324, 1e-5):
-            with self.subTest(target_rps=target_rps), self.assertRaises(PRODUCER.SourceError):
+        for target_rps in (1e308, 1e12, 5e-324, 1e-5):
+            with self.subTest(target_rps=target_rps), self.assertRaises(ValueError):
                 PRODUCER.validate_config({**config, "target_rps": target_rps}, runtime=runtime)
         self.assertFalse(self.evidence.exists())
         self.assertFalse(list(self.private.iterdir()))

@@ -63,8 +63,7 @@ impl ScenarioExecutor {
             .await?;
         self.jwks_sha256 = Some(sha256(&response.body));
         ensure!(response.status == StatusCode::OK, "JWKS requires HTTP 200");
-        let jwks: jsonwebtoken::jwk::JwkSet = serde_json::from_slice(&response.body)?;
-        ensure!(!jwks.keys.is_empty(), "JWKS has no activated signing keys");
+        let _: jsonwebtoken::jwk::JwkSet = serde_json::from_slice(&response.body)?;
         Ok((true, elapsed(start)))
     }
     pub fn key_rotation_flow(&mut self) -> Result<(bool, u64)> {

@@ -50,6 +50,91 @@ class PerfSupplierTests(unittest.TestCase):
         )
         return supplier, context, controller
 
+    def test_supplier_config_uses_canonical_stdin_and_rejects_nonsilent_utility(self):
+        _supplier, context, _controller = self.fixture_context()
+        config = {
+            "target_url": "https://issuer.example.test",
+            "discovery_expected_issuer": None,
+            "workers": 1,
+            "duration": {"secs": 1, "nanos": 0},
+            "target_rps": 2.0,
+            "warmup_duration": {"secs": 0, "nanos": 0},
+            "scenario": "Smoke",
+            "debug": False,
+        }
+        for code, stdout, stderr in [
+            (0, b"", b""),
+            (2, b"", b""),
+            (0, b"noise", b""),
+            (0, b"", b"noise"),
+        ]:
+            with self.subTest(code=code, stdout=stdout, stderr=stderr):
+                result = subprocess.CompletedProcess([], code, stdout, stderr)
+                with patch.object(subprocess, "run", return_value=result) as run:
+                    if code or stdout or stderr:
+                        with self.assertRaises(ValueError):
+                            context.validate_config(config)
+                    else:
+                        context.validate_config(config)
+                    self.assertEqual(
+                        run.call_args.args[0],
+                        [
+                            str(self.owner / "supplier/package/bin/aegaeon-loadtest-url-check"),
+                            "--config-stdin",
+                        ],
+                    )
+                    self.assertEqual(
+                        run.call_args.kwargs["input"],
+                        (
+                            json.dumps(
+                                config, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                            )
+                            + "\n"
+                        ).encode(),
+                    )
+                    self.assertEqual(run.call_args.kwargs["env"], {})
+        self.assertFalse(self.evidence.exists())
+        self.assertFalse(list(self.private.iterdir()))
+
+    def test_config_preflight_checks_immutable_helpers_without_creating_outputs(self):
+        self.fixture_context()
+        arguments = (
+            "--",
+            "--url",
+            "https://issuer.example.test",
+            "--workers",
+            "1",
+            "--run-time",
+            "1s",
+            "--warmup",
+            "0",
+            "--rps",
+            "1",
+            "--scenario",
+            "smoke",
+        )
+        admitted = self.invoke("config", *arguments)
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
+        for name in (
+            "scripts/perf/source_manifest.py",
+            "scripts/perf/perf_source/dependencies.py",
+            "scripts/perf/loadtest_supplier.py",
+        ):
+            path = self.root / name
+            original = path.read_bytes()
+            for mutation in ("missing", "bytes"):
+                with self.subTest(name=name, mutation=mutation):
+                    if mutation == "missing":
+                        path.unlink()
+                    else:
+                        path.write_bytes(original + b"\n# caller mutation\n")
+                    rejected = self.invoke("config", *arguments)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    path.write_bytes(original)
+        self.assertFalse(self.evidence.parent.exists())
+        self.assertFalse(list(self.private.iterdir()))
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
     def test_supplier_pair_requires_real_selected_observations_and_exact_installation(self):
         supplier = module(SOURCE)
         original = self.owner / "original"
@@ -357,7 +442,7 @@ class PerfSupplierTests(unittest.TestCase):
         port_start = source.index("pick_server_port() {")
         port_end = source.index('\nif [ "$MANAGE_SERVER" = "1" ]; then', port_start)
         function = source[port_start:port_end]
-        mode_end = source.index('\n"$SOURCE_PYTHON"', port_end)
+        mode_end = source.index('\nSOURCE_STATUS="paths"', port_end)
         mode = source[port_end:mode_end]
         observed = self.owner / "probe.json"
         python = self.owner / "controlled-python"
@@ -378,7 +463,7 @@ class PerfSupplierTests(unittest.TestCase):
             "set -euo pipefail\n"
             + parser
             + function
-            + f"\nSOURCE_PYTHON={str(python)!r}\n"
+            + f"\nSOURCE_PYTHON={str(python)!r}\nvalidate_effective_config() {{ :; }}\n"
             + mode
             + '\nprintf "%s\\n" "$BASE_URL"\n'
         )

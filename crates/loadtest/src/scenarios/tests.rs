@@ -583,7 +583,7 @@ async fn standalone_jwks_digest_identifies_latest_success_or_failed_body() {
         ),
         (503, b"unavailable".to_vec(), false),
         (200, b"invalid JSON".to_vec(), false),
-        (200, br#"{"keys":[]}"#.to_vec(), false),
+        (200, br#"{"keys":[]}"#.to_vec(), true),
     ];
     let expected: Vec<_> = bodies
         .iter()

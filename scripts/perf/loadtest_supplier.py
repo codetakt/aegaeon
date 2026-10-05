@@ -433,6 +433,22 @@ class SupplierContext:
         if result.returncode != 0 or result.stdout or result.stderr:
             invalid("URL validation failed")
 
+    def validate_config(self, config: dict[str, Any]) -> None:
+        """Use the exact paired Rust configuration validator before orchestration."""
+        _, binding, _ = self.validate()
+        utility = binding["executables"]["aegaeon-loadtest-url-check"]["path"]
+        raw = (
+            json.dumps(
+                config, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+            )
+            + "\n"
+        ).encode("utf-8")
+        result = subprocess.run(  # noqa: S603 - immutable admitted utility, no shell
+            [utility, "--config-stdin"], input=raw, env={}, capture_output=True, check=False
+        )
+        if result.returncode != 0 or result.stdout or result.stderr:
+            invalid("configuration validation failed")
+
     def bind_workload(self, evidence: pathlib.Path, source_sha256: str) -> str:
         raw, producer, _ = self.validate()
         selected = producer["executables"]["aegaeon-loadtest"]

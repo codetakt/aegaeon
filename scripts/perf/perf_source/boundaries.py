@@ -77,6 +77,12 @@ def output_roles(
     reject_supplier_overlap(
         root, [evidence, status, *(path for path, _ in destinations)], runtime=runtime
     )
+    # Cargo can write throughout either tree, including dependency sidecars and caches.
+    # Output directories may contain other report roles, but may never contain Cargo.
+    targets = [root / "target", *cargo_outputs(root, runtime=runtime)]
+    for path in [evidence, status, *(path for path, _ in destinations)]:
+        if any(path.is_relative_to(target) or target.is_relative_to(path) for target in targets):
+            fail("output overlaps Cargo target tree")
     for position, (path, directory) in enumerate(destinations):
         if (
             path == evidence

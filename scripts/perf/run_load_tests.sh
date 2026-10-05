@@ -151,40 +151,23 @@ PRECHECK_URL="$BASE_URL"
 if [ -z "$PRECHECK_URL" ] && [ "$MANAGE_SERVER" = "1" ]; then
 	PRECHECK_URL="http://${SERVER_HOST}:${SERVER_PORT:-8080}"
 fi
-URL_ARGS=(--url="$PRECHECK_URL")
+# Build common effective options once; early and bound invocations share this array.
+COMMON_ARGS=(--workers "$WORKERS" --run-time "$RUN_TIME" --warmup "$WARMUP"
+	--rps "$RPS" --scenario "$SCENARIO")
 if [ -n "$DISCOVERY_EXPECTED_ISSUER" ]; then
-	URL_ARGS+=(--discovery-expected-issuer="$DISCOVERY_EXPECTED_ISSUER")
+	COMMON_ARGS+=(--discovery-expected-issuer "$DISCOVERY_EXPECTED_ISSUER")
 fi
-"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" urls --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" "${URL_ARGS[@]}"
-SOURCE_STATUS="paths"
-OUTPUT_ARGS=(--output-directory "$ARTIFACT_DIR" --artifact-directory "$ARTIFACT_DIR"
-	--report-file "$REPORT_PATH" --legacy-report-file "$LEGACY_REPORT")
-OUTPUT_ARGS+=(--fresh-output-file "$REPORT_PATH")
-for destination in "$SERVER_LOG" "$LOADTEST_LOG" \
-	"$ARTIFACT_DIR/server-build.jsonl" "$ARTIFACT_DIR/build.log" \
-	"$ARTIFACT_DIR/loadtest-build.jsonl" "$ARTIFACT_DIR/loadtest-build.log" \
-	"$ARTIFACT_DIR/db-migrate.log"; do
-	OUTPUT_ARGS+=(--output-file "$destination" --fresh-output-file "$destination")
-done
-"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" paths --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" \
-	"${OUTPUT_ARGS[@]}"
-ARTIFACT_DIR_VALIDATED=1
-if [ "${AEG_LOADTEST_SOURCE_SHA256+x}" = x ]; then
-	echo "[perf] caller source digest is not accepted" >&2
-	exit 2
+if [ "$DEBUG" = 1 ]; then
+	COMMON_ARGS+=(--debug)
 fi
-mkdir -p "$ARTIFACT_DIR"
-SOURCE_STATUS="freeze"
-AEG_LOADTEST_SOURCE_SHA256="$("$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" freeze \
-	--root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" \
-	"${OUTPUT_ARGS[@]}")"
-export AEG_LOADTEST_SOURCE_SHA256
-verify_source() {
-	"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" verify --root "$REPO_ROOT" \
-		--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256"
+validate_effective_config() {
+	"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" config --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" \
+		-- --url "$1" "${COMMON_ARGS[@]}"
 }
-SOURCE_STATUS="setup"
-
+validate_effective_config "$PRECHECK_URL"
+if [ "$MANAGE_SERVER" = "1" ] && [ -n "$BASE_URL" ]; then
+	validate_effective_config "http://${SERVER_HOST}:${SERVER_PORT:-8080}"
+fi
 pick_server_port() {
 	if [ -n "$SERVER_PORT" ]; then
 		echo "$SERVER_PORT"
@@ -218,9 +201,37 @@ PY
 if [ "$MANAGE_SERVER" = "1" ]; then
 	SERVER_PORT="$(pick_server_port)"
 	BASE_URL="${BASE_URL:-http://${SERVER_HOST}:${SERVER_PORT}}"
+	validate_effective_config "$BASE_URL"
 fi
 
-"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" urls --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" --url="$BASE_URL"
+SOURCE_STATUS="paths"
+OUTPUT_ARGS=(--output-directory "$ARTIFACT_DIR" --artifact-directory "$ARTIFACT_DIR"
+	--report-file "$REPORT_PATH" --legacy-report-file "$LEGACY_REPORT")
+OUTPUT_ARGS+=(--fresh-output-file "$REPORT_PATH")
+for destination in "$SERVER_LOG" "$LOADTEST_LOG" \
+	"$ARTIFACT_DIR/server-build.jsonl" "$ARTIFACT_DIR/build.log" \
+	"$ARTIFACT_DIR/loadtest-build.jsonl" "$ARTIFACT_DIR/loadtest-build.log" \
+	"$ARTIFACT_DIR/db-migrate.log"; do
+	OUTPUT_ARGS+=(--output-file "$destination" --fresh-output-file "$destination")
+done
+"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" paths --root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" \
+	"${OUTPUT_ARGS[@]}"
+ARTIFACT_DIR_VALIDATED=1
+if [ "${AEG_LOADTEST_SOURCE_SHA256+x}" = x ]; then
+	echo "[perf] caller source digest is not accepted" >&2
+	exit 2
+fi
+mkdir -p "$ARTIFACT_DIR"
+SOURCE_STATUS="freeze"
+AEG_LOADTEST_SOURCE_SHA256="$("$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" freeze \
+	--root "$REPO_ROOT" --evidence "$SOURCE_EVIDENCE" \
+	"${OUTPUT_ARGS[@]}")"
+export AEG_LOADTEST_SOURCE_SHA256
+verify_source() {
+	"$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" verify --root "$REPO_ROOT" \
+		--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256"
+}
+SOURCE_STATUS="setup"
 
 if [ "$MANAGE_SERVER" = "1" ]; then
 	if [ -z "${AEGAEON_DATABASE_URL:-}" ]; then
@@ -287,15 +298,8 @@ SOURCE_STATUS="loadtest-launch"
 	--name aegaeon-loadtest >/dev/null
 # Freeze the effective command before launch; expectations never come from the child.
 REPORT_ID="$("$SOURCE_PYTHON" -I -B -c 'import uuid; print(uuid.uuid4())')"
-LOADTEST_ARGS=(--url "$BASE_URL" --workers "$WORKERS" --run-time "$RUN_TIME"
-	--warmup "$WARMUP" --rps "$RPS" --scenario "$SCENARIO"
+LOADTEST_ARGS=(--url "$BASE_URL" "${COMMON_ARGS[@]}"
 	--report-file "$REPORT_PATH" --report-id "$REPORT_ID")
-if [ -n "$DISCOVERY_EXPECTED_ISSUER" ]; then
-	LOADTEST_ARGS+=(--discovery-expected-issuer "$DISCOVERY_EXPECTED_ISSUER")
-fi
-if [ "$DEBUG" = 1 ]; then
-	LOADTEST_ARGS+=(--debug)
-fi
 SOURCE_STATUS="invocation"
 "$SOURCE_PYTHON" -I -B "$SOURCE_PRODUCER" invocation --root "$REPO_ROOT" \
 	--evidence "$SOURCE_EVIDENCE" --sha256 "$AEG_LOADTEST_SOURCE_SHA256" \

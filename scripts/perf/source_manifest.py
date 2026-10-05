@@ -192,6 +192,10 @@ def validate_url_pair(
     _invocation.validate_url_pair(target, issuer, runtime=runtime or select())
 
 
+def effective_config(argv: list[str], *, runtime: Dependencies | None = None) -> dict[str, Any]:
+    return _invocation.effective_config(argv, runtime=runtime or select())
+
+
 def invocation_config(
     argv: list[str], *, runtime: Dependencies | None = None
 ) -> tuple[dict[str, Any], str, str]:
@@ -542,6 +546,7 @@ def parse_arguments() -> argparse.Namespace:
         "action",
         choices=[
             "urls",
+            "config",
             "paths",
             "freeze",
             "verify",
@@ -576,8 +581,8 @@ def parse_arguments() -> argparse.Namespace:
         producer_args = producer_args[:position]
     args = parser.parse_args(producer_args)
     args.child_args = child_args
-    if child_args and args.action != "invocation":
-        parser.error("child arguments are only accepted by invocation")
+    if child_args and args.action not in {"invocation", "config"}:
+        parser.error("child arguments are only accepted by invocation or config")
     return args
 
 
@@ -597,6 +602,11 @@ def main(supplier_context: Supplier | None = None) -> int:
         runtime = select(supplier=supplier_context)
         if args.action == "urls":
             validate_requested_urls(args, runtime=runtime)
+        elif args.action == "config":
+            if runtime.supplier is None:
+                fail("immutable configuration supplier is required")
+            runtime.supplier.admit(root_path(args.root, runtime=runtime))
+            effective_config(args.child_args, runtime=runtime)
         else:
             dispatch(args, runtime=runtime)
     except (OSError, ValueError, KeyError, TypeError, OverflowError, UnicodeError, SourceError):

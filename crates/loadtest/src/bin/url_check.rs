@@ -1,7 +1,20 @@
 #![forbid(unsafe_code)]
 
-use aegaeon_loadtest::url_validation::validate_report_urls;
-use std::ffi::OsString;
+use aegaeon_loadtest::{url_validation::validate_report_urls, LoadTestConfig};
+use std::{ffi::OsString, io::Read};
+
+fn validate_stdin_config() -> bool {
+    // A configuration is small; bound malformed input without echoing it.
+    const MAX_CONFIG_BYTES: u64 = 65_536;
+    let mut raw = Vec::new();
+    std::io::stdin()
+        .take(MAX_CONFIG_BYTES + 1)
+        .read_to_end(&mut raw)
+        .is_ok()
+        && raw.len() as u64 <= MAX_CONFIG_BYTES
+        && serde_json::from_slice::<LoadTestConfig>(&raw)
+            .is_ok_and(|config| config.validate().is_ok())
+}
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Option<(String, Option<String>)> {
     let mut args = args.into_iter();
@@ -23,10 +36,21 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Option<(String, Optio
 }
 
 fn main() {
-    let valid = parse_args(std::env::args_os().skip(1))
-        .is_some_and(|(target, issuer)| validate_report_urls(&target, issuer.as_deref()).is_ok());
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    let config_mode = arguments.first().is_some_and(|arg| arg == "--config-stdin");
+    let valid = if config_mode {
+        arguments.len() == 1 && validate_stdin_config()
+    } else {
+        parse_args(arguments).is_some_and(|(target, issuer)| {
+            validate_report_urls(&target, issuer.as_deref()).is_ok()
+        })
+    };
     if !valid {
-        eprintln!("[perf] URL validation failed");
+        if config_mode {
+            eprintln!("[perf] configuration validation failed");
+        } else {
+            eprintln!("[perf] URL validation failed");
+        }
         std::process::exit(2);
     }
 }

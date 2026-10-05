@@ -1,6 +1,12 @@
-//! URL-only process controls; no server, services, builds inside the utility or workload.
+//! Admission-only process controls; no server, services or workload execution.
 
-use std::{ffi::OsStr, fs, path::PathBuf, process::Command};
+use std::{
+    ffi::OsStr,
+    fs,
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 struct Fixture {
     root: PathBuf,
@@ -18,23 +24,105 @@ impl Fixture {
         Ok(fixture)
     }
 
-    fn run(&self, arguments: &[impl AsRef<OsStr>]) -> std::io::Result<std::process::Output> {
-        let result = Command::new(env!("CARGO_BIN_EXE_aegaeon-loadtest-url-check"))
-            .args(arguments)
+    fn command(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_aegaeon-loadtest-url-check"));
+        command
             .env_clear()
             .env("AEGAEON_DATABASE_URL", "synthetic-unusable")
             .env("AEG_LOADTEST_PROFILE_MANIFEST", "absent-profile.json")
             .env("AEG_LOADTEST_SESSION_FILE", "absent-session.json")
             .env("AEG_LOADTEST_SESSION_PROVENANCE", "absent-provenance.json")
-            .current_dir(&self.root)
-            .output()?;
+            .current_dir(&self.root);
+        command
+    }
+
+    fn unchanged(&self) -> std::io::Result<()> {
         assert_eq!(
             fs::read(self.root.join("source-status.json"))?,
             b"preserved status\n"
         );
         assert_eq!(fs::read_dir(&self.root)?.count(), 1);
+        Ok(())
+    }
+
+    fn run(&self, arguments: &[impl AsRef<OsStr>]) -> std::io::Result<std::process::Output> {
+        let result = self.command().args(arguments).output()?;
+        self.unchanged()?;
         Ok(result)
     }
+
+    fn config(&self, raw: &[u8]) -> std::io::Result<std::process::Output> {
+        let mut child = self
+            .command()
+            .arg("--config-stdin")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| std::io::Error::other("configuration stdin missing"))?
+            .write_all(raw)?;
+        let result = child.wait_with_output()?;
+        self.unchanged()?;
+        Ok(result)
+    }
+}
+
+#[test]
+fn configuration_preflight_uses_execution_invariants_without_effects() -> anyhow::Result<()> {
+    let fixture = Fixture::new()?;
+    let valid = serde_json::to_value(aegaeon_loadtest::LoadTestConfig::default())?;
+    let positive = fixture.config(&serde_json::to_vec(&valid)?)?;
+    assert!(positive.status.success());
+    assert!(positive.stdout.is_empty() && positive.stderr.is_empty());
+    for (field, value) in [
+        ("workers", serde_json::json!(0)),
+        ("workers", serde_json::json!(4_294_967_296_u64)),
+        ("target_rps", serde_json::json!(0)),
+        ("target_rps", serde_json::json!(1e20)),
+        ("target_rps", serde_json::json!(1e-300)),
+        ("duration", serde_json::json!({"secs":0,"nanos":0})),
+        (
+            "warmup_duration",
+            serde_json::json!({"secs":86_401,"nanos":0}),
+        ),
+        ("scenario", serde_json::json!("Unknown")),
+        (
+            "target_url",
+            serde_json::json!("https://user:synthetic-secret@issuer.example.test"),
+        ),
+    ] {
+        let mut invalid = valid.clone();
+        invalid[field] = value;
+        let result = fixture.config(&serde_json::to_vec(&invalid)?)?;
+        assert_eq!(result.status.code(), Some(2), "{field}");
+        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr, b"[perf] configuration validation failed\n");
+    }
+    let mut boundary = valid.clone();
+    boundary["workers"] = serde_json::json!(1);
+    boundary["target_rps"] = serde_json::json!(1e9);
+    assert!(fixture
+        .config(&serde_json::to_vec(&boundary)?)?
+        .status
+        .success());
+    for raw in [
+        b"invalid synthetic-secret".to_vec(),
+        b"{}".to_vec(),
+        serde_json::to_vec(&serde_json::json!({"unknown":"synthetic-secret"}))?,
+        vec![b' '; 65_537],
+    ] {
+        let result = fixture.config(&raw)?;
+        assert_eq!(result.status.code(), Some(2));
+        assert!(result.stdout.is_empty());
+        assert_eq!(result.stderr, b"[perf] configuration validation failed\n");
+    }
+    let extra = fixture.run(&["--config-stdin", "--url=http://localhost:8080"])?;
+    assert_eq!(extra.status.code(), Some(2));
+    assert_eq!(extra.stderr, b"[perf] configuration validation failed\n");
+    Ok(())
 }
 
 impl Drop for Fixture {

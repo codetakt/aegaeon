@@ -113,8 +113,8 @@ launch, and binds the report to the actual supplied executable selected by
 Cargo and reread after installation. The workload binding uses schema version
 2 and retains the independent supplier binding plus its actual build/graph
 observations; the managed server retains its separate build binding. No local
-workload rebuild substitutes a different parser. The same shared Rust URL
-validator governs early admission, invocation configuration and report
+workload rebuild substitutes a different parser. The same paired Rust
+configuration validator governs early admission, invocation configuration and report
 configuration: valid HTTP(S) transport spelling can normalize, while the
 discovery issuer must already equal its canonical HTTPS spelling. Before
 launching the consumer, it freezes `source/INVOCATION.json` containing the exact
@@ -132,23 +132,26 @@ frozen source digest and source-to-artifact producer evidence.
 
 For a managed server, the already parsed and validated host is passed directly
 to port selection and used in the final target URL. The final URL is checked
-again after port selection, before server construction, migrations or launch;
-this later check may follow a socket probe and accepted output/source setup.
+again after port selection, before output/source setup, server construction,
+migrations or launch; this later check may follow a socket probe.
 The report records the digest of the actual running executable,
 configuration, profile and session provenance, observed JWKS digests, and a
 unique report identifier. `AEG_LOADTEST_CA_CERT` may supply an additional trusted
 PEM CA; the shared runner uses the same CA for readiness and retains certificate
 and hostname verification. Report, log, build and evidence destinations must be
 disjoint. Only the declared report and legacy-report roles may share a normalized
-leaf; private retention paths reject traversal and stay outside upload roots.
+leaf. Every report, log, evidence and status destination must also remain outside
+both the default and configured Cargo target trees, including their parents.
+Private retention paths reject traversal and stay outside upload roots.
 Legacy credential and proof-origin overrides are rejected; there are no
 default OAuth credentials, management-owner substitution, or forged forwarding
 headers. See the [environment reference](../configurations/environment/federation-observability-and-test.md#load-testing).
 
 `--warmup` accepts numeric seconds and the same `s`, `m`, or `h` duration syntax as
 `--run-time` (for example `--warmup 10s`); invalid direct-binary values preserve a
-failed report. The managed runner rejects invalid configuration before consumer
-launch and retains its source/build observations. Managed arguments use the
+failed report. The runner rejects invalid effective configuration before creating
+outputs, freezing source, migrations, builds, launch or readiness probes.
+Managed arguments use the
 documented long options and existing long aliases before `--`; arguments after
 `--` support only one `--debug`. Other trailing options, including aliases and
 report/configuration overrides, are rejected. `--debug` and

@@ -107,9 +107,17 @@ def prepare(  # noqa: PLR0913, PLR0915 - one owned inert closure and its source/
         selected.chmod(0o755)
     utility = package / "bin/aegaeon-loadtest-url-check"
     utility.write_text(
-        f"#!{sys.executable}\nimport sys\n"
-        "values=dict(value.split('=',1) for value in sys.argv[1:])\n"
+        f"#!{sys.executable}\nimport json,sys\n"
         f"rejected={REJECTED_URLS!r}\nissuers={REJECTED_ISSUERS!r}\n"
+        'if sys.argv[1:]==["--config-stdin"]:\n'
+        " config=json.load(sys.stdin)\n"
+        " # Scripted control cases only; this inert utility is not Rust equivalence.\n"
+        ' bad=config["target_rps"] in (1e308,1e12,5e-324,1e-5)\n'
+        ' bad=bad or config["target_url"] in rejected\n'
+        ' issuer=config["discovery_expected_issuer"]\n'
+        " bad=bad or issuer in rejected or issuer in issuers\n"
+        " raise SystemExit(2 if bad else 0)\n"
+        "values=dict(value.split('=',1) for value in sys.argv[1:])\n"
         "bad=values.get('--url') in rejected or values.get('--url') is None\n"
         "issuer=values.get('--discovery-expected-issuer')\n"
         "bad=bad or issuer in rejected or issuer in issuers\n"

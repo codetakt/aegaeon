@@ -103,7 +103,6 @@ def validate_config(value: object, *, runtime: Dependencies) -> dict[str, Any]:
         or (value["scenario"] not in SCENARIOS.values())
     ):
         fail("invalid typed configuration field")
-    validate_url_pair(value["target_url"], value["discovery_expected_issuer"], runtime=runtime)
     for name in ("duration", "warmup_duration"):
         duration = value[name]
         if (
@@ -116,26 +115,36 @@ def validate_config(value: object, *, runtime: Dependencies) -> dict[str, Any]:
             or (name == "duration" and duration == {"secs": 0, "nanos": 0})
         ):
             fail("invalid typed configuration duration")
-    interval = value["workers"] / value["target_rps"]
-    if not math.isfinite(interval) or interval <= 0 or interval > MAX_RUN_SECONDS:
-        fail("worker pacing exceeds bound")
+    if runtime.supplier is None:
+        fail("immutable configuration supplier is required")
+    runtime.supplier.validate_config(value)
     return value
 
 
+def effective_config(argv: list[str], *, runtime: Dependencies) -> dict[str, Any]:
+    """Validate common effective options without executable or report bindings."""
+    config, _ = _parse_config(argv, report=False, runtime=runtime)
+    return config
+
+
 def invocation_config(argv: list[str], *, runtime: Dependencies) -> tuple[dict[str, Any], str, str]:
+    config, options = _parse_config(argv[1:], report=True, runtime=runtime)
+    report_id = options["--report-id"]
+    parsed_id = uuid.UUID(report_id)
+    if parsed_id.version != UUID_VERSION or str(parsed_id) != report_id:
+        fail("invocation requires canonical UUIDv4")
+    return config, report_id, required(options["--report-file"])
+
+
+def _parse_config(
+    argv: list[str], *, report: bool, runtime: Dependencies
+) -> tuple[dict[str, Any], dict[str, str]]:
     options: dict[str, str] = {}
     debug = False
-    position = 1
-    required_options = {
-        "--url",
-        "--workers",
-        "--run-time",
-        "--warmup",
-        "--rps",
-        "--scenario",
-        "--report-file",
-        "--report-id",
-    }
+    position = 0
+    required_options = {"--url", "--workers", "--run-time", "--warmup", "--rps", "--scenario"}
+    if report:
+        required_options |= {"--report-file", "--report-id"}
     while position < len(argv):
         name = argv[position]
         if name == "--debug":
@@ -162,10 +171,6 @@ def invocation_config(argv: list[str], *, runtime: Dependencies) -> tuple[dict[s
         seconds = int(match[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[match[2]]
         return {"secs": seconds, "nanos": 0}
 
-    report_id = options["--report-id"]
-    parsed_id = uuid.UUID(report_id)
-    if parsed_id.version != UUID_VERSION or str(parsed_id) != report_id:
-        fail("invocation requires canonical UUIDv4")
     if re.fullmatch("[0-9]+", options["--workers"]) is None:
         fail("invalid worker count")
     config = validate_config(
@@ -181,7 +186,7 @@ def invocation_config(argv: list[str], *, runtime: Dependencies) -> tuple[dict[s
         },
         runtime=runtime,
     )
-    return (config, report_id, required(options["--report-file"]))
+    return config, options
 
 
 def freeze_invocation(
