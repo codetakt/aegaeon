@@ -17,8 +17,10 @@ import sys
 import tarfile
 import tempfile
 import uuid
-from typing import Any, Never
-from urllib.parse import urlsplit
+from typing import TYPE_CHECKING, Any, Never
+
+if TYPE_CHECKING:
+    from loadtest_supplier import SupplierContext
 
 MODES = {
     "100644": stat.S_IFREG | 0o644,
@@ -38,15 +40,9 @@ SHA256_LENGTH = 64
 MAX_RUN_SECONDS = 86_400
 NANOS_PER_SECOND = 1_000_000_000
 UUID_VERSION = 4
-ASCII_SPACE = 0x20
-ASCII_DEL = 0x7F
-C1_CONTROL_END = 0x9F
-# Unicode White_Space beyond ASCII, matching Rust char::is_whitespace.
-UNICODE_WHITESPACE = (
-    "\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
-    "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
-)
 LEGACY = {"artifacts/load-test-report.json", "artifacts/policy-mixed-report.json"}
+# Only the immutable generated launcher supplies this process-local context.
+SUPPLIER_CONTEXT: SupplierContext | None = None
 
 
 class SourceError(RuntimeError):
@@ -92,7 +88,7 @@ def environment() -> dict[str, str]:
 def command(
     root: pathlib.Path, *args: str, env: dict[str, str] | None = None, data: bytes | None = None
 ) -> bytes:
-    git = shutil.which("git")
+    git = SUPPLIER_CONTEXT.git if SUPPLIER_CONTEXT is not None else shutil.which("git")
     if git is None:
         fail("Git executable is unavailable")
     result = subprocess.run(  # noqa: S603 - fixed Git plumbing, no shell execution
@@ -548,6 +544,8 @@ def freeze(root: pathlib.Path, evidence: pathlib.Path, outputs: list[tuple[str, 
     evidence.mkdir(parents=True, exist_ok=False)
     unexpected_paths(root, domain)
     files, contents = read_source(root, domain)
+    if SUPPLIER_CONTEXT is not None:
+        SUPPLIER_CONTEXT.check_files(files)
     forbidden = [evidence.parent] + [
         checked_output(root, path, directory=True) for path, is_dir in outputs if is_dir
     ]
@@ -605,6 +603,8 @@ def verify(root: pathlib.Path, evidence: pathlib.Path, expected: str) -> dict[st
     output_boundaries(root, domain, evidence, outputs)
     unexpected_paths(root, domain)
     files, _ = read_source(root, domain)
+    if SUPPLIER_CONTEXT is not None:
+        SUPPLIER_CONTEXT.check_files(files)
     if files != manifest["files"] or set(files) != set(domain["index"]):
         fail("complete source bytes, modes or links changed")
     return manifest
@@ -636,9 +636,19 @@ def admitted_executable(root: pathlib.Path, evidence: pathlib.Path, value: str) 
 
 
 def bind(
-    root: pathlib.Path, evidence: pathlib.Path, expected: str, build_log: pathlib.Path, name: str
+    root: pathlib.Path,
+    evidence: pathlib.Path,
+    expected: str,
+    build_log: pathlib.Path | None,
+    name: str,
 ) -> str:
     verify(root, evidence, expected)
+    if name == "aegaeon-loadtest":
+        if SUPPLIER_CONTEXT is None:
+            fail("immutable loadtest supplier is required")
+        return SUPPLIER_CONTEXT.bind_workload(evidence, expected)
+    if build_log is None:
+        fail("actual server build log is required")
     matches: list[str] = []
     finished = []
     for line in build_log.read_text().splitlines():
@@ -682,7 +692,12 @@ def verify_binary(root: pathlib.Path, evidence: pathlib.Path, expected: str, nam
     _, binding = load_json(evidence / (name + ".json"))
     if binding["source_manifest_sha256"] != expected:
         fail("executable source binding failed")
-    path = admitted_executable(root, evidence, binding["executable"])
+    if name == "aegaeon-loadtest":
+        if SUPPLIER_CONTEXT is None:
+            fail("immutable loadtest supplier is required")
+        path = SUPPLIER_CONTEXT.verify_workload(evidence, expected, binding)
+    else:
+        path = admitted_executable(root, evidence, binding["executable"])
     if executable(path) != binding["artifact_sha256"]:
         fail("built executable changed before launch")
     return str(path)
@@ -724,29 +739,10 @@ IDENTITY_FIELDS = {
 }
 
 
-def nonsecret_url(value: str, *, issuer: bool = False) -> None:
-    if any(
-        ord(char) <= ASCII_SPACE
-        or ASCII_DEL <= ord(char) <= C1_CONTROL_END
-        or char in UNICODE_WHITESPACE
-        for char in value
-    ):
-        fail("invocation URL has invalid or secret-bearing components")
-    url = urlsplit(value)
-    try:
-        _ = url.port
-    except ValueError:
-        fail("invocation URL has invalid or secret-bearing components")
-    if (
-        url.scheme not in ({"https"} if issuer else {"http", "https"})
-        or not url.hostname
-        or url.username is not None
-        or url.password is not None
-        or "?" in value
-        or "#" in value
-        or (issuer and value.endswith("/"))
-    ):
-        fail("invocation URL has invalid or secret-bearing components")
+def validate_url_pair(target: str, issuer: str | None) -> None:
+    if SUPPLIER_CONTEXT is None:
+        fail("immutable URL supplier is required")
+    SUPPLIER_CONTEXT.validate_urls(target, issuer)
 
 
 def validate_config(value: object) -> dict[str, Any]:
@@ -772,9 +768,7 @@ def validate_config(value: object) -> dict[str, Any]:
         or value["scenario"] not in SCENARIOS.values()
     ):
         fail("invalid typed configuration field")
-    nonsecret_url(value["target_url"])
-    if value["discovery_expected_issuer"] is not None:
-        nonsecret_url(value["discovery_expected_issuer"], issuer=True)
+    validate_url_pair(value["target_url"], value["discovery_expected_issuer"])
     for name in ("duration", "warmup_duration"):
         duration = value[name]
         if (
@@ -882,6 +876,7 @@ def freeze_invocation(
 def verify_report(
     root: pathlib.Path, evidence: pathlib.Path, expected: str, report: pathlib.Path
 ) -> None:
+    verify_binary(root, evidence, expected, "aegaeon-loadtest")
     _, binding = load_json(evidence / "aegaeon-loadtest.json")
     _, invocation = load_json(evidence / "INVOCATION.json")
     if (
@@ -1064,10 +1059,19 @@ def initialize_status(
     write_status(path, "paths", 1)
 
 
+def admit_helper(root: pathlib.Path, action: str) -> None:
+    if SUPPLIER_CONTEXT is not None:
+        if action == "status":
+            SUPPLIER_CONTEXT.validate()
+        else:
+            SUPPLIER_CONTEXT.admit(root)
+    elif pathlib.Path(__file__).resolve() != root / "scripts/perf/source_manifest.py":
+        fail("producer must be the tracked repository entrypoint")
+
+
 def dispatch(args: argparse.Namespace) -> None:
     root = root_path(args.root)
-    if pathlib.Path(__file__).resolve() != root / "scripts/perf/source_manifest.py":
-        fail("producer must be the tracked repository entrypoint")
+    admit_helper(root, args.action)
     evidence = checked_output(root, args.evidence, directory=True)
     if args.action == "paths":
         outputs = declared_outputs(root, args)
@@ -1099,7 +1103,7 @@ def dispatch(args: argparse.Namespace) -> None:
                     root,
                     evidence,
                     expected,
-                    pathlib.Path(required(args.build_log)),
+                    pathlib.Path(args.build_log) if args.build_log is not None else None,
                     required(args.name),
                 )
             ),
@@ -1176,13 +1180,15 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def validate_requested_urls(args: argparse.Namespace) -> None:
-    if args.url is not None:
-        nonsecret_url(required(args.url))
-    if args.discovery_expected_issuer is not None:
-        nonsecret_url(required(args.discovery_expected_issuer), issuer=True)
+    if SUPPLIER_CONTEXT is None:
+        fail("immutable URL supplier is required")
+    SUPPLIER_CONTEXT.admit(root_path(args.root))
+    validate_url_pair(required(args.url), args.discovery_expected_issuer)
 
 
-def main() -> int:
+def main(supplier_context: SupplierContext | None = None) -> int:
+    global SUPPLIER_CONTEXT  # noqa: PLW0603 - fixed launcher installs one process-local context
+    SUPPLIER_CONTEXT = supplier_context
     args = parse_arguments()
     try:
         if args.action == "urls":

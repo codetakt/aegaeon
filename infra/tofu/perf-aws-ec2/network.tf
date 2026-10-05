@@ -40,11 +40,11 @@ resource "aws_security_group" "server" {
   vpc_id      = local.vpc_id
 
   ingress {
-    from_port       = var.server_port
-    to_port         = var.server_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.loadgen.id]
-    description     = "Load generator to server"
+    from_port   = var.server_port
+    to_port     = var.server_port
+    protocol    = "tcp"
+    cidr_blocks = local.server_trusted_proxy_cidrs
+    description = "Trusted TLS proxies to server"
   }
 
   egress {

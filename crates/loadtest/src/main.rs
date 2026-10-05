@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use aegaeon_loadtest::{
-    profile::{issuer_url, required_env, sha256},
+    profile::{required_env, sha256},
     scenarios::ScenarioExecutor,
     LoadTestConfig, LoadTestResults, ReportIdentity, TestScenario,
 };
@@ -211,40 +211,10 @@ fn validate_config(config: &LoadTestConfig) -> Result<()> {
 }
 
 fn validate_report_urls(config: &LoadTestConfig) -> Result<()> {
-    for value in std::iter::once(config.target_url.as_str())
-        .chain(config.discovery_expected_issuer.as_deref())
-    {
-        ensure!(
-            !value.chars().any(|c| c.is_control() || c.is_whitespace()),
-            "URL inputs must not contain controls or whitespace"
-        );
-        ensure!(
-            !value.split_once("://").is_some_and(|(_, suffix)| suffix
-                .split(['/', '?', '#'])
-                .next()
-                .is_some_and(|authority| authority.contains('@'))),
-            "URL inputs must not contain credentials"
-        );
-    }
-    let target = reqwest::Url::parse(&config.target_url)
-        .map_err(|_| anyhow::anyhow!("invalid target URL"))?;
-    ensure!(
-        ["http", "https"].contains(&target.scheme())
-            && target.host_str().is_some()
-            && target.username().is_empty()
-            && target.password().is_none()
-            && target.query().is_none()
-            && target.fragment().is_none(),
-        "invalid target URL components"
-    );
-    if let Some(issuer) = config.discovery_expected_issuer.as_deref() {
-        let url = issuer_url(issuer)?;
-        ensure!(
-            url.as_str().trim_end_matches('/') == issuer,
-            "discovery issuer must be a canonical HTTPS URL"
-        );
-    }
-    Ok(())
+    aegaeon_loadtest::url_validation::validate_report_urls(
+        &config.target_url,
+        config.discovery_expected_issuer.as_deref(),
+    )
 }
 
 fn report_identity(

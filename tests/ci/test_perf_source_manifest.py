@@ -15,6 +15,9 @@ import sys
 import tempfile
 import unittest
 import uuid
+from unittest import mock
+
+from perf_supplier_fixture import prepare as prepare_supplier
 
 SOURCE = pathlib.Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -47,7 +50,10 @@ class PerfSourceManifestTests(unittest.TestCase):
         self.git(self.root, "init", "--quiet")
         (self.root / ".git/objects/info/alternates").write_text(objects + "\n")
         self.git(self.root, "update-ref", "HEAD", baseline)
-        for name in PRODUCER.MANDATORY:
+        for name in PRODUCER.MANDATORY | {
+            "scripts/perf/loadtest_supplier.py",
+            "nix/build-source.nix",
+        }:
             original = SOURCE / name
             self.write(name, original.read_bytes())
         self.write("tracked.txt", b"source bytes\n")
@@ -85,7 +91,11 @@ class PerfSourceManifestTests(unittest.TestCase):
         return result.stdout
 
     def write(self, name: str, raw: bytes, mode: int = 0o644) -> pathlib.Path:
-        path = self.root / name
+        path = (
+            self.owner / "supplier/package/bin/aegaeon-loadtest"
+            if name == "target/release/aegaeon-loadtest"
+            else self.root / name
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
         path.chmod(mode)
@@ -94,10 +104,32 @@ class PerfSourceManifestTests(unittest.TestCase):
     def invoke(
         self, action: str, *args: str, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
+        supplier_action = action in {"urls", "invocation", "report"} or (
+            action in {"bind", "binary"} and "aegaeon-loadtest" in args
+        )
+        entrypoint = self.root / "scripts/perf/source_manifest.py"
+        if supplier_action:
+            workload = self.owner / "supplier/package/bin/aegaeon-loadtest"
+            if not workload.exists():
+                workload.parent.mkdir(parents=True)
+                workload.write_bytes(b"inert supplier executable\n")
+                workload.chmod(0o755)
+            prepare_supplier(
+                SOURCE,
+                self.root,
+                self.owner,
+                PRODUCER,
+                workload,
+                runtime_path=self.environment["PATH"],
+            )
+            entrypoint = self.owner / "supplier/controller/source-helper"
         return subprocess.run(  # noqa: S603 - owned local fixture commands
             [
                 sys.executable,
-                str(self.root / "scripts/perf/source_manifest.py"),
+                "-I",
+                "-B",
+                *(["-O"] if sys.flags.optimize else []),
+                str(entrypoint),
                 action,
                 "--root",
                 str(self.root),
@@ -544,8 +576,9 @@ class PerfSourceManifestTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertNotIn("fixture-secret", result.stdout + result.stderr)
                     self.assertFalse((self.evidence / "INVOCATION.json").exists())
-        for issuer in [False, True]:
-            PRODUCER.nonsecret_url("https://issuer.example.test/caf\u00e9", issuer=issuer)
+        # URL semantics belong to the shared Rust supplier, not a Python parser.
+        with self.assertRaises(PRODUCER.SourceError):
+            PRODUCER.validate_url_pair("https://issuer.example.test/caf\u00e9", None)
 
     def test_early_url_helper_admits_safe_urls_without_source_or_output_effects(self) -> None:
         result = self.invoke(
@@ -586,8 +619,15 @@ class PerfSourceManifestTests(unittest.TestCase):
         ):
             for flag in ("--url", "--discovery-expected-issuer"):
                 with self.subTest(flag=flag, value=value):
-                    result = self.invoke("urls", flag + "=" + value)
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    arguments = [flag + "=" + value]
+                    if flag == "--discovery-expected-issuer":
+                        arguments.insert(0, "--url=http://127.0.0.1:18095")
+                    result = self.invoke("urls", *arguments)
+                    noncanonical = flag == "--discovery-expected-issuer" and value in {
+                        "https://issuer.example.test:443",
+                        "https://issuer.example.test:",
+                    }
+                    self.assertEqual(result.returncode, 1 if noncanonical else 0, result.stderr)
                     self.assertEqual(result.stdout, "")
                     self.assertFalse(self.evidence.exists())
 
@@ -721,6 +761,161 @@ class PerfSourceManifestTests(unittest.TestCase):
                 self.assertFalse(calls.exists())
                 self.assertFalse((self.root / f"artifacts/perf/rejected-{index}").exists())
 
+    def test_runner_missing_unmanaged_target_rejects_before_output_or_source_changes(
+        self,
+    ) -> None:
+        for existing in (False, True):
+            for spelling in ("omitted", "empty-environment", "empty-option"):
+                with self.subTest(existing=existing, spelling=spelling):
+                    artifact = f"artifacts/perf/missing-{existing}-{spelling}"
+                    directory = self.root / artifact
+                    sentinel = b"preserved existing status bytes\n"
+                    if existing:
+                        directory.mkdir(parents=True)
+                        (directory / "source-status.json").write_bytes(sentinel)
+                    calls = self.owner / "tool-calls"
+                    calls.unlink(missing_ok=True)
+                    result = self.runner(
+                        "build-failure",
+                        artifact=artifact,
+                        arguments=("--url", "") if spelling == "empty-option" else (),
+                        overrides={
+                            "PERF_BASE_URL": "" if spelling == "empty-environment" else None,
+                            "PERF_APPLY_DATABASE_MIGRATIONS": "1",
+                        },
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(
+                        result.stderr,
+                        "[perf] PERF_BASE_URL or --url is required when PERF_MANAGE_SERVER=0\n",
+                    )
+                    self.assertFalse(calls.exists())
+                    self.assertFalse((directory / "source").exists())
+                    self.assertFalse((self.root / "target").exists())
+                    if existing:
+                        self.assertEqual((directory / "source-status.json").read_bytes(), sentinel)
+                        self.assertEqual(
+                            list(directory.iterdir()), [directory / "source-status.json"]
+                        )
+                    else:
+                        self.assertFalse(directory.exists())
+                    self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+                    self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
+                    self.assertEqual(list(self.private.iterdir()), [])
+
+    def test_runner_missing_target_rejects_before_unavailable_source_helper(self) -> None:
+        original_prepare = prepare_supplier
+
+        def without_helper(*args, **kwargs):
+            controller = original_prepare(*args, **kwargs)
+            (controller.parent / "source-helper").unlink()
+            return controller
+
+        with mock.patch(f"{__name__}.prepare_supplier", side_effect=without_helper):
+            result = self.runner(overrides={"PERF_BASE_URL": None})
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(
+            result.stderr,
+            "[perf] PERF_BASE_URL or --url is required when PERF_MANAGE_SERVER=0\n",
+        )
+        self.assertFalse((self.owner / "tool-calls").exists())
+        self.assertFalse((self.root / "artifacts").exists())
+        self.assertEqual(list(self.private.iterdir()), [])
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
+
+    def test_runner_noncanonical_issuers_reject_before_setup_and_status_writes(self) -> None:
+        values = (
+            "HTTPS://issuer.example.test",
+            "https://ISSUER.example.test",
+            "https://issuer.example.test:443",
+            "https://issuer.example.test:",
+            "https://issuer.example.test/",
+            "https://issuer.example.test/caf\u00e9",
+        )
+        sentinel = b"preserved existing status bytes\n"
+        for managed in (False, True):
+            for existing in (False, True):
+                for number, value in enumerate(values):
+                    with self.subTest(managed=managed, existing=existing, issuer=value):
+                        artifact = f"artifacts/perf/issuer-{managed}-{existing}-{number}"
+                        directory = self.root / artifact
+                        if existing:
+                            directory.mkdir(parents=True)
+                            (directory / "source-status.json").write_bytes(sentinel)
+                        calls = self.owner / "tool-calls"
+                        calls.unlink(missing_ok=True)
+                        result = self.runner(
+                            artifact=artifact,
+                            managed=managed,
+                            arguments=("--discovery-expected-issuer", value),
+                            overrides={"PERF_APPLY_DATABASE_MIGRATIONS": "1"},
+                        )
+                        self.assertEqual(result.returncode, 1)
+                        self.assertEqual(result.stdout, "")
+                        self.assertEqual(
+                            result.stderr,
+                            "[perf] source or executable evidence validation failed\n",
+                        )
+                        self.assertFalse(calls.exists())
+                        self.assertFalse((directory / "source").exists())
+                        self.assertFalse((self.root / "target").exists())
+                        self.assertEqual(list(self.private.iterdir()), [])
+                        if existing:
+                            self.assertEqual(
+                                (directory / "source-status.json").read_bytes(), sentinel
+                            )
+                            self.assertEqual(
+                                list(directory.iterdir()), [directory / "source-status.json"]
+                            )
+                        else:
+                            self.assertFalse(directory.exists())
+                        self.assertEqual(
+                            (self.root / ".git/index").read_bytes(), self.original_index
+                        )
+                        self.assertEqual(
+                            self.git(self.root, "rev-parse", "HEAD"), self.original_head
+                        )
+
+    def test_runner_url_precheck_preserves_valid_transport_normalization(self) -> None:
+        for number, value in enumerate(
+            (
+                "HTTPS://issuer.example.test",
+                "https://ISSUER.example.test",
+                "https://issuer.example.test:443",
+                "https://issuer.example.test/caf\u00e9",
+            )
+        ):
+            with self.subTest(target=value):
+                calls = self.owner / "tool-calls"
+                calls.unlink(missing_ok=True)
+                result = self.runner(
+                    artifact=f"artifacts/perf/normalized-target-{number}",
+                    arguments=("--url", value),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(calls.read_text().splitlines(), ["curl"])
+
+    def test_runner_target_precheck_preserves_managed_default_and_valid_external_target(
+        self,
+    ) -> None:
+        for managed in (False, True):
+            with self.subTest(managed=managed):
+                calls = self.owner / "tool-calls"
+                calls.unlink(missing_ok=True)
+                artifact = f"artifacts/perf/valid-target-{managed}"
+                result = self.runner(
+                    "build-failure" if managed else "success",
+                    managed=managed,
+                    artifact=artifact,
+                    overrides={"PERF_BASE_URL": ""} if managed else {},
+                )
+                self.assertEqual(result.returncode, 19 if managed else 0, result.stderr)
+                self.assertEqual(calls.read_text().splitlines(), ["cargo"] if managed else ["curl"])
+                self.assertTrue((self.root / artifact / "source/SOURCE-MANIFEST.json").exists())
+
     def test_runner_environment_urls_reject_before_managed_or_external_effects(self) -> None:
         for managed in (False, True):
             for key in ("PERF_BASE_URL", "PERF_DISCOVERY_EXPECTED_ISSUER"):
@@ -743,17 +938,6 @@ class PerfSourceManifestTests(unittest.TestCase):
                     )
 
     def test_runner_generated_url_rejects_before_port_selection_or_managed_effects(self) -> None:
-        tools = self.owner / "tools"
-        tools.mkdir()
-        wrapper = tools / "python3"
-        wrapper.write_text(
-            f"#!{sys.executable}\nimport os,pathlib,sys\n"
-            "if len(sys.argv)>1 and sys.argv[1]=='-':\n"
-            " pathlib.Path(os.environ['FIXTURE_CALLS']).open('a').write('port-selection\\n')\n"
-            " print('18095');sys.exit(0)\n"
-            "os.execv(sys.executable,[sys.executable,*sys.argv[1:]])\n"
-        )
-        wrapper.chmod(0o755)
         result = self.runner(
             managed=True,
             overrides={
@@ -938,8 +1122,8 @@ class PerfSourceManifestTests(unittest.TestCase):
 
     def test_build_missing_duplicate_failed_or_symlink_executables_rejected(self) -> None:
         sha = self.freeze()
-        binary = self.write("target/release/aegaeon-loadtest", b"inert", 0o755)
-        log = self.build_record(binary)
+        binary = self.write("target/release/aegaeon-server", b"inert", 0o755)
+        log = self.build_record(binary, "aegaeon-server")
         original = log.read_text()
         for value in [
             "",
@@ -949,7 +1133,7 @@ class PerfSourceManifestTests(unittest.TestCase):
             log.write_text(value)
             self.assertNotEqual(
                 self.invoke(
-                    "bind", "--sha256", sha, "--name", "aegaeon-loadtest", "--build-log", str(log)
+                    "bind", "--sha256", sha, "--name", "aegaeon-server", "--build-log", str(log)
                 ).returncode,
                 0,
             )
@@ -958,7 +1142,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         binary.symlink_to(self.root / "tracked.txt")
         self.assertNotEqual(
             self.invoke(
-                "bind", "--sha256", sha, "--name", "aegaeon-loadtest", "--build-log", str(log)
+                "bind", "--sha256", sha, "--name", "aegaeon-server", "--build-log", str(log)
             ).returncode,
             0,
         )
@@ -970,7 +1154,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         managed: bool = False,
         wrapper: bool = False,
         artifact: str = "artifacts/perf/runner",
-        overrides: dict[str, str] | None = None,
+        overrides: dict[str, str | None] | None = None,
         arguments: tuple[str, ...] = (),
     ) -> subprocess.CompletedProcess[str]:
         tools = self.owner / "tools"
@@ -1062,12 +1246,36 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "AEGAEON_DATABASE_URL": "fixture-only",
             "AEGAEON_RUNTIME_ISSUER_HOST": "example.invalid",
         }
-        env.update(overrides or {})
-        script = self.root / (
-            "scripts/flake/perf_load.sh" if wrapper else "scripts/perf/run_load_tests.sh"
+        for key, value in (overrides or {}).items():
+            if value is None:
+                env.pop(key, None)
+            else:
+                env[key] = value
+        workload = self.owner / "supplier/package/bin/aegaeon-loadtest"
+        workload.parent.mkdir(parents=True, exist_ok=True)
+        workload.write_text(program)
+        workload.chmod(0o755)
+        controller = prepare_supplier(
+            SOURCE,
+            self.root,
+            self.owner,
+            PRODUCER,
+            workload,
+            runtime_path=env["PATH"],
         )
+        if wrapper:
+            nix = tools / "nix"
+            nix.write_text(
+                f"#!{sys.executable}\nimport os,sys\n"
+                f"os.execv({str(controller)!r},[{str(controller)!r},*sys.argv[4:]])\n"
+            )
+            nix.chmod(0o755)
+            command = [str(shutil.which("bash")), str(self.root / "scripts/flake/perf_load.sh")]
+        else:
+            command = [str(controller)]
+        self.last_runner_environment = env.copy()
         return subprocess.run(  # noqa: S603 - owned local fixture commands
-            [str(shutil.which("bash")), str(script), *arguments],
+            [*command, *arguments],
             cwd=self.root,
             env=env,
             capture_output=True,
@@ -1176,12 +1384,14 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                     (self.root / "artifacts/perf/runner/source/INVOCATION.json").exists()
                 )
 
-    def test_runner_source_mutation_during_build_prevents_launch(self) -> None:
-        result = self.runner("mutate-aegaeon-loadtest")
-        self.assertNotEqual(result.returncode, 0)
+    def test_runner_uses_supplier_without_local_workload_build(self) -> None:
+        result = self.runner()
+        self.assertEqual(result.returncode, 0, result.stderr)
         directory = self.root / "artifacts/perf/runner"
         self.assertTrue((directory / "source/SOURCE-MANIFEST.json").is_file())
-        self.assertFalse((directory / "report.json").exists())
+        self.assertTrue((directory / "source/LOADTEST-SUPPLIER-BUILD.jsonl").is_file())
+        calls = (self.owner / "tool-calls").read_text().splitlines()
+        self.assertNotIn("cargo", calls)
 
     def test_managed_server_source_mutation_blocks_server_launch(self) -> None:
         result = self.runner("mutate-aegaeon-server", managed=True)
@@ -1191,7 +1401,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         self.assertTrue((directory / "source/SOURCE-MANIFEST.json").is_file())
 
     def test_runner_build_failure_preserves_manifest_and_original_exit(self) -> None:
-        result = self.runner("build-failure")
+        result = self.runner("build-failure", managed=True)
         self.assertEqual(result.returncode, 19)
         directory = self.root / "artifacts/perf/runner"
         self.assertTrue((directory / "source/SOURCE-MANIFEST.json").exists())
@@ -1243,18 +1453,22 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         self.assertNotEqual(self.invoke("freeze").returncode, 0)
         self.assertEqual(list(self.evidence.parent.glob("aegaeon-perf-source-*")), [])
 
-    def test_external_cargo_target_is_selected_for_managed_server_and_loadtest(self) -> None:
+    def test_external_cargo_target_selects_server_while_workload_keeps_supplier(self) -> None:
         self.environment["CARGO_TARGET_DIR"] = str(self.owner / "external-target")
         result = self.runner(managed=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = self.root / "artifacts/perf/runner/source"
-        for name in ["aegaeon-server", "aegaeon-loadtest"]:
-            binding = json.loads((evidence / (name + ".json")).read_bytes())
-            self.assertTrue(
-                pathlib.Path(binding["executable"]).is_relative_to(self.owner / "external-target")
-            )
+        server = json.loads((evidence / "aegaeon-server.json").read_bytes())
+        self.assertTrue(
+            pathlib.Path(server["executable"]).is_relative_to(self.owner / "external-target")
+        )
+        workload = json.loads((evidence / "aegaeon-loadtest.json").read_bytes())
+        self.assertEqual(workload["schema_version"], 2)
+        self.assertTrue(
+            pathlib.Path(workload["executable"]).is_relative_to(self.owner / "supplier/package")
+        )
 
-    def test_binding_rejects_every_frozen_output_leaf_for_both_executable_roles(self) -> None:
+    def test_server_binding_rejects_every_frozen_output_leaf(self) -> None:
         leaves = [
             "report.json",
             "legacy-report.json",
@@ -1266,7 +1480,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
             "loadtest-build.log",
             "db-migrate.log",
         ]
-        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+        for name in ["aegaeon-server"]:
             for leaf in leaves:
                 with self.subTest(name=name, leaf=leaf):
                     directory = self.owner / name / leaf
@@ -1309,7 +1523,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
     def test_executable_admission_rejects_reserved_evidence_and_status_leaves(self) -> None:
         self.evidence = self.owner / "external-evidence" / "source"
         self.freeze()
-        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+        for name in ["aegaeon-server"]:
             reserved = [
                 self.evidence.parent / "source-status.json",
                 self.evidence / "SOURCE-MANIFEST.json",
@@ -1329,7 +1543,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                     PRODUCER.admitted_executable(self.root, self.evidence, str(destination))
 
     def test_binary_readmission_rejects_output_alias_even_with_matching_artifact_hash(self) -> None:
-        for name in ["aegaeon-server", "aegaeon-loadtest"]:
+        for name in ["aegaeon-server"]:
             with self.subTest(name=name):
                 directory = self.owner / ("readmission-" + name)
                 self.evidence = directory / "source"
@@ -1377,7 +1591,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
     def test_wrapper_external_executable_aliases_preserve_compiled_bytes_before_launch(
         self,
     ) -> None:
-        for role in ["aegaeon-server", "aegaeon-loadtest"]:
+        for role in ["aegaeon-server"]:
             for leaf in ["SERVER_LOG", "LOADTEST_LOG", "REPORT_PATH", "LEGACY_REPORT"]:
                 with self.subTest(role=role, leaf=leaf):
                     label = role + "-" + leaf.lower()

@@ -5,6 +5,7 @@ pub mod metrics;
 pub mod oidc;
 pub mod profile;
 pub mod scenarios;
+pub mod url_validation;
 
 use anyhow::{anyhow, Result};
 use hdrhistogram::Histogram;

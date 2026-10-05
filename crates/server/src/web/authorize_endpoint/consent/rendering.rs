@@ -1,7 +1,10 @@
 use crate::web::{
     authorize_context::AuthorizeRequestContext, local_auth_support::local_auth_response,
 };
-use axum::{http::StatusCode, response::Response};
+use axum::{
+    http::{header::REFERRER_POLICY, HeaderValue, StatusCode},
+    response::Response,
+};
 
 fn escape(value: &str) -> String {
     value
@@ -26,7 +29,7 @@ pub(super) fn form(ctx: &AuthorizeRequestContext, transaction: &str, issuer: &st
     } else {
         ""
     };
-    local_auth_response(
+    let mut response = local_auth_response(
         StatusCode::OK,
         format!(
             r#"<!doctype html>
@@ -44,5 +47,11 @@ pub(super) fn form(ctx: &AuthorizeRequestContext, transaction: &str, issuer: &st
             scope = escape(scope),
             transaction = escape(transaction)
         ),
-    )
+    );
+    // Chromium otherwise sends Origin: null for this same-origin form POST.
+    // Keep cross-origin referrers suppressed and the exact issuer Origin gate.
+    response
+        .headers_mut()
+        .insert(REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+    response
 }

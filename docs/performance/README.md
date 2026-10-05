@@ -36,6 +36,23 @@ stable summary.
 - Load tests (manual Layer 2 smoke/regression): `nix run .#perf-load`
 - Coverage (llvm-cov HTML): `nix run .#perf-coverage`
 
+`perf-load` prepares one pinned Nix build containing the workload and its
+synchronous URL-only validator. The generated application executes immutable
+runner/helper code and fixes the supplier identities; it does not select a
+validator from the caller's environment, `PATH`, or mutable `target/`. The
+tracked shell entrypoints forward to `nix run .#perf-load`.
+
+Preparation may fetch dependencies or write Nix store, cache and build outputs
+before the application rejects an input. Once prepared, explicit URL/issuer
+rejection creates no runner output, status, retained source, server setup or
+port probe. The application first compares every tracked worktree member with
+the complete supplier snapshot, including prose, modes and literal links,
+using two read-only rounds. Index membership defines the domain; current
+worktree bytes are checked independently of staged blob IDs. Untracked inputs,
+conflicts and snapshot mismatches fail closed. Dirty and staged changes are
+usable only when that exact content and mode were captured by the Git flake.
+Preparation and observed admission are separate from runtime acceptance.
+
 When `PERF_MANAGE_SERVER=1`, `perf-load` starts `aegaeon-server` itself and
 therefore requires PostgreSQL runtime authority:
 
@@ -84,7 +101,7 @@ Set these inputs privately before selecting `auth-code`, `dpop`, `introspection`
 
 Every run requires `AEG_LOADTEST_SOURCE_SHA256`, the SHA256 of its frozen source
 manifest, and a new `--report-file` path. `perf-load` produces that digest from
-its complete tracked source before compilation and rejects any inherited value,
+its complete tracked source before managed setup or workload launch and rejects any inherited value,
 including an empty one. Invoke it in a source-only Git worktree with canonical
 0644/0755 regular-file modes; tracked dirty bytes and literal symlinks are recorded.
 Unknown untracked or ignored files are rejected. Keep protected runtime inputs
@@ -92,7 +109,14 @@ outside the checkout. Only the conventional `target/`, reserved `artifacts/perf/
 outputs and the two legacy report files are excluded; no tracked path is excluded.
 Custom build/evidence outputs can be outside the source. The driver retains the
 manifest and observations on failure, checks source again before each build and
-launch, and binds the report to the actual Cargo-selected executable. Before
+launch, and binds the report to the actual supplied executable selected by
+Cargo and reread after installation. The workload binding uses schema version
+2 and retains the independent supplier binding plus its actual build/graph
+observations; the managed server retains its separate build binding. No local
+workload rebuild substitutes a different parser. The same shared Rust URL
+validator governs early admission, invocation configuration and report
+configuration: valid HTTP(S) transport spelling can normalize, while the
+discovery issuer must already equal its canonical HTTPS spelling. Before
 launching the consumer, it freezes `source/INVOCATION.json` containing the exact
 selected command, source and executable hashes, full normalized configuration,
 an independently generated UUIDv4 passed as `--report-id`, and the exact new
@@ -105,6 +129,11 @@ preimages and dirty patches remain private outside upload roots. These checks
 establish observed source identity; native/OCI/supplier and performance acceptance
 remain separate. Direct binary invocations still require a real independently
 frozen source digest and source-to-artifact producer evidence.
+
+For a managed server, the already parsed and validated host is passed directly
+to port selection and used in the final target URL. The final URL is checked
+again after port selection, before server construction, migrations or launch;
+this later check may follow a socket probe and accepted output/source setup.
 The report records the digest of the actual running executable,
 configuration, profile and session provenance, observed JWKS digests, and a
 unique report identifier. `AEG_LOADTEST_CA_CERT` may supply an additional trusted

@@ -4,10 +4,6 @@
     "docs": [
       "docs"
     ],
-    "integrity": [
-      "docs",
-      "integrity"
-    ],
     "full": [
       "docs",
       "integrity",
@@ -18,6 +14,10 @@
       "compliance",
       "kms",
       "container"
+    ],
+    "integrity": [
+      "docs",
+      "integrity"
     ]
   },
   "supplemental_lanes": {
@@ -73,5 +73,18 @@
     "docs/performance/enterprise-slo-baselines.md",
     "docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md",
     "docs/releases/runbooks/phase1-evidence-acquisition.md"
-  ]
+  ],
+  "component_plan_version": 1,
+  "components": [
+    "conformance",
+    "development-tools",
+    "infrastructure",
+    "python-example"
+  ],
+  "infrastructure_modules": [
+    "aegaeon-aws-staging",
+    "oidc-aws-kms-parity",
+    "perf-aws-ec2"
+  ],
+  "plan_envelope_version": 2
 }
