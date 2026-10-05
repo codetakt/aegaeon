@@ -16,6 +16,7 @@ OWNED_ROOT = Path("/")
 AWS_REQUIRED_PATH = Path("/usr/bin/aws")
 
 MAX_SYMLINKS = 40
+MAX_REPORT_BYTES = 16_777_216
 
 
 def protected_path(path: Path, *, regular: bool = False) -> Path:
@@ -60,6 +61,39 @@ def atomic_write(path: Path, data: bytes) -> None:
         Path(temporary).replace(path)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+def capture_report(output: Path) -> None:
+    """Retain untrusted workload bytes outside its mount before identity checks."""
+    protected_path(output)
+    destination = output / "report.json"
+    if destination.exists() or destination.is_symlink():
+        fail("report destination already exists")
+    directory = os.open(output / "workload", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fd = os.open("report.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        with os.fdopen(fd, "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                fail("regular unaliased workload report required")
+            if metadata.st_size > MAX_REPORT_BYTES:
+                fail("workload report exceeds 16 MiB")
+            raw = stream.read(MAX_REPORT_BYTES + 1)
+            current = os.stat("report.json", dir_fd=directory, follow_symlinks=False)
+            after = os.fstat(stream.fileno())
+            if (
+                len(raw) != metadata.st_size
+                or len(raw) > MAX_REPORT_BYTES
+                or (current.st_dev, current.st_ino) != (metadata.st_dev, metadata.st_ino)
+                or any(
+                    getattr(after, field) != getattr(metadata, field)
+                    for field in ("st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+                )
+            ):
+                fail("workload report changed during capture")
+    finally:
+        os.close(directory)
+    atomic_write(destination, raw)
 
 
 def prepare_driver() -> None:

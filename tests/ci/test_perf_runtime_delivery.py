@@ -36,6 +36,51 @@ GUEST_MODULES = (
 )
 
 
+ENTRYPOINT_CASES = (
+    ("/bin/aegaeon-server", True),
+    ("/A_9.-/load.test", True),
+    ("/usr/local/bin/loadtest", True),
+    ("/", False),
+    ("//bin/server", False),
+    ("/bin//server", False),
+    ("/bin/server/", False),
+    ("/bin/./server", False),
+    ("/bin/../server", False),
+    ("bin/server", False),
+    ("/bin/server\n", False),
+)
+
+
+@pytest.mark.parametrize(("entrypoint", "accepted"), ENTRYPOINT_CASES)
+def test_plan_entrypoint_components_match_canonical_runtime_paths(
+    helper, tmp_path, entrypoint, accepted
+):
+    text = (MODULE / "variables.tf").read_text()
+    for variable in ("server_entrypoint", "loadgen_entrypoint"):
+        block = infra.block(text, 'variable "' + variable + '"')
+        pattern = re.findall(r'can\(regex\("([^"\n]+)"', block)
+        assert len(pattern) == 1
+        components = entrypoint.split("/")
+        admitted = (
+            re.fullmatch(pattern[0], entrypoint) is not None
+            and "." not in components
+            and ".." not in components
+        )
+        assert admitted == accepted
+    cfg, _, _ = artifact_fixture(helper, tmp_path)
+    cfg["LOADTEST_BIN"] = entrypoint
+    if accepted:
+        assert str(helper.executable_path(entrypoint)) == entrypoint
+        assert helper.validate_run_config(json.dumps(cfg), cfg["SERVER_URL"]) == cfg
+    else:
+        with pytest.raises(ValueError, match="canonical executable path"):
+            helper.executable_path(entrypoint)
+        with pytest.raises(
+            ValueError, match=r"canonical executable path|exact loadtest config required"
+        ):
+            helper.validate_run_config(json.dumps(cfg), cfg["SERVER_URL"])
+
+
 @pytest.fixture
 def helper(tmp_path):
     """Load the fixed trusted repository package; this is a synthetic mechanics fixture."""
@@ -601,13 +646,17 @@ print('synthetic workload stdout')
 print('synthetic workload stderr', file=sys.stderr)
 if os.environ['FIXTURE_REPORT'] == 'present':
     (out / 'report.json').write_text(json.dumps({'synthetic': True}))
+# These collection-fault controls use a host process, not container capabilities.
 if os.environ['FIXTURE_LOG'] == 'missing':
-    (out / 'loadtest.stdout.log').unlink()
+    (out.parent / 'loadtest.stdout.log').unlink()
 if os.environ['FIXTURE_EXIT_FILE'] == 'directory':
-    (out / 'exit_code.txt').mkdir()
+    (out.parent / 'exit_code.txt').mkdir()
+if os.environ['FIXTURE_OVERWRITE_EVIDENCE'] == '1':
+    for name in ('driver-config.json', 'artifact-receipt.json', 'SOURCE-MANIFEST.json'):
+        (out / name).write_text('untrusted workload replacement')
 raise SystemExit(int(os.environ['FIXTURE_EXIT']))
 """,
-        "deliver-supplies": """import json, os, sys
+        "deliver-supplies": """import json, os, shutil, sys
 from pathlib import Path
 command = sys.argv[1]
 with Path(os.environ['FIXTURE_DELIVERY_CALLS']).open('a') as log:
@@ -635,8 +684,9 @@ if command == 'client':
     raise SystemExit(0)
 out = Path(sys.argv[2])
 if command == 'verify-report':
-    if not (out / 'report.json').is_file():
+    if not (out / 'workload/report.json').is_file():
         raise SystemExit(6)
+    shutil.copyfile(out / 'workload/report.json', out / 'report.json')
     (out / 'run-receipt.json').write_text(json.dumps({'synthetic': True}))
     raise SystemExit(0)
 status = os.environ['FIXTURE_METRICS']
@@ -689,6 +739,7 @@ raise SystemExit(0 if os.environ['FIXTURE_HEALTH'] == 'ready' else 7)
         "FIXTURE_REPORT": settings.get("report", "present"),
         "FIXTURE_EXIT": str(settings.get("exit_code", 0)),
         "FIXTURE_EXIT_FILE": settings.get("exit_file", "file"),
+        "FIXTURE_OVERWRITE_EVIDENCE": "1" if settings.get("overwrite_evidence") else "0",
         "FIXTURE_LOG": settings.get("log", "present"),
         "FIXTURE_METRICS": settings.get("metrics", "complete"),
         "FIXTURE_UPLOAD_FAIL": settings.get("upload_fail", ""),
@@ -1552,12 +1603,192 @@ def test_driver_serializes_two_invocations_and_limits_workload_mounts(tmp_path):
                 process.communicate(timeout=5)
 
 
+def test_driver_keeps_pre_run_evidence_outside_workload_mount(tmp_path):
+    result, output, uploaded, _ = run_driver_fixture(tmp_path, overwrite_evidence=True)
+    assert result.returncode == 0, result.stderr
+    assert_restricted_workload_mounts(tmp_path / "docker.argv")
+    for name in ("driver-config.json", "artifact-receipt.json", "SOURCE-MANIFEST.json"):
+        original = json.dumps({"synthetic": True}).encode()
+        assert (output / name).read_bytes() == original
+        assert (uploaded / name).read_bytes() == original
+        assert (output / "workload" / name).read_text() == "untrusted workload replacement"
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_report_capture_preserves_raw_bytes_before_identity_verification(helper, tmp_path, valid):
+    output, generation, _ = report_fixture(helper, tmp_path, "mixed")
+    workload = output / "workload"
+    workload.mkdir(mode=0o700)
+    source = workload / "report.json"
+    (output / "report.json").rename(source)
+    if not valid:
+        source.write_bytes(b"not JSON\n")
+    raw = source.read_bytes()
+    before = (output / "driver-config.json").read_bytes()
+    # The workload can change its mount's permissions; only its parent is trusted.
+    workload.chmod(0o777)
+    with patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path):
+        helper.capture_report(output)
+        if valid:
+            helper.verify_report(output, generation, "synthetic-run")
+        else:
+            with pytest.raises(ValueError, match=r"."):
+                helper.verify_report(output, generation, "synthetic-run")
+    assert (output / "report.json").read_bytes() == source.read_bytes() == raw
+    assert (output / "driver-config.json").read_bytes() == before
+    assert (output / "report.json").stat().st_mode & 0o777 == 0o600
+    assert (output / "run-receipt.json").exists() == valid
+
+
+@pytest.mark.parametrize(
+    "change", ["symlink", "hardlink", "fifo", "directory", "missing", "parent"]
+)
+def test_report_capture_rejects_aliases_and_nonregular_workload_outputs(helper, tmp_path, change):
+    output = tmp_path / "results"
+    output.mkdir(mode=0o700)
+    workload = output / "workload"
+    workload.mkdir(mode=0o700)
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    secret = private / "report.json"
+    secret.write_bytes(b"private supplier input")
+    source = workload / "report.json"
+    if change == "symlink":
+        source.symlink_to(secret)
+    elif change == "hardlink":
+        source.hardlink_to(secret)
+    elif change == "fifo":
+        os.mkfifo(source)
+    elif change == "directory":
+        source.mkdir()
+    elif change == "parent":
+        workload.rmdir()
+        workload.symlink_to(private, target_is_directory=True)
+    with (
+        patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path),
+        pytest.raises((ValueError, OSError)),
+    ):
+        helper.capture_report(output)
+    assert not (output / "report.json").exists()
+    assert not (output / "run-receipt.json").exists()
+    assert secret.read_bytes() == b"private supplier input"
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_report_capture_enforces_exact_size_limit(helper, tmp_path, extra):
+    output = tmp_path / "results"
+    output.mkdir(mode=0o700)
+    workload = output / "workload"
+    workload.mkdir(mode=0o700)
+    source = workload / "report.json"
+    with source.open("wb") as stream:
+        stream.truncate(helper.MAX_REPORT_BYTES + extra)
+    with patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path):
+        if extra:
+            with pytest.raises(ValueError, match="exceeds 16 MiB"):
+                helper.capture_report(output)
+        else:
+            helper.capture_report(output)
+            assert (output / "report.json").stat().st_size == helper.MAX_REPORT_BYTES
+    assert (output / "report.json").exists() == (extra == 0)
+    assert source.stat().st_size == helper.MAX_REPORT_BYTES + extra
+
+
+def test_report_capture_preserves_existing_protected_destination(helper, tmp_path):
+    output = tmp_path / "results"
+    output.mkdir(mode=0o700)
+    (output / "report.json").write_bytes(b"previous protected evidence")
+    with (
+        patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path),
+        pytest.raises(ValueError, match="already exists"),
+    ):
+        helper.capture_report(output)
+    assert (output / "report.json").read_bytes() == b"previous protected evidence"
+
+
+@pytest.mark.parametrize("change", ["replacement", "growth"])
+def test_report_capture_rejects_source_changes_during_read(helper, tmp_path, change):
+    output = tmp_path / "results"
+    output.mkdir(mode=0o700)
+    workload = output / "workload"
+    workload.mkdir(mode=0o700)
+    source = workload / "report.json"
+    source.write_bytes(b"original workload report")
+    real_fdopen = os.fdopen
+
+    class ChangingStream:
+        def __init__(self, fd, mode):
+            self.stream = real_fdopen(fd, mode)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.stream.close()
+
+        def fileno(self):
+            return self.stream.fileno()
+
+        def read(self, limit):
+            raw = self.stream.read(limit)
+            if change == "replacement":
+                source.rename(workload / "original.json")
+                source.write_bytes(b"different workload report")
+            else:
+                with source.open("ab") as stream:
+                    stream.write(b" changed")
+            return raw
+
+    with (
+        patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path),
+        patch.object(os, "fdopen", ChangingStream),
+        pytest.raises(ValueError, match="changed during capture"),
+    ):
+        helper.capture_report(output)
+    assert not (output / "report.json").exists()
+    assert not (output / "run-receipt.json").exists()
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_verify_report_dispatch_captures_before_binding(helper, tmp_path, valid):
+    output, generation, _ = report_fixture(helper, tmp_path, "mixed")
+    workload = output / "workload"
+    workload.mkdir(mode=0o700)
+    source = workload / "report.json"
+    (output / "report.json").rename(source)
+    if not valid:
+        source.write_bytes(b"invalid workload report")
+    delivery = tmp_path / "delivery.json"
+    delivery.write_text(json.dumps(config()))
+    actual_protected_path = helper.protected_path
+
+    def delivery_path(path, *, regular=False):
+        if path == Path("/etc/aegaeon/delivery.json"):
+            path = delivery
+        return actual_protected_path(path, regular=regular)
+
+    with (
+        patch.dict(helper.protected_path.__globals__, OWNER_UID=os.getuid(), OWNED_ROOT=tmp_path),
+        patch.dict(helper.dispatch.__globals__, protected_path=delivery_path),
+        patch.object(
+            sys, "argv", ["guest", "verify-report", str(output), str(generation), "fixture"]
+        ),
+    ):
+        assert helper.main() == (0 if valid else 1)
+    assert (output / "report.json").read_bytes() == source.read_bytes()
+    assert (output / "run-receipt.json").exists() == valid
+
+
 def assert_restricted_workload_mounts(path):
     for raw in path.read_text().splitlines():
         argv = json.loads(raw)
         assert argv[argv.index("--user") + 1] == "0:0"
         assert argv[argv.index("--cap-drop") + 1] == "ALL"
         assert argv[argv.index("--security-opt") + 1] == "no-new-privileges"
+        report_mount = argv[argv.index("-v") + 1]
+        host, destination = report_mount.split(":", 1)
+        assert Path(host).name == "workload"
+        assert destination == "/results"
         mounts = [argv[index + 1] for index, value in enumerate(argv) if value == "--mount"]
         assert len(mounts) == 3
         assert all(value.endswith(",readonly") for value in mounts)

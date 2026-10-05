@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
 from runtime_delivery.common import (
     MAX_DURATION_SECONDS,
-    absolute_path,
     duration_seconds,
+    executable_path,
     fail,
     https_origin,
     json_object,
@@ -78,7 +78,7 @@ def validate_run_config(raw: str | bytes | bytearray, issuer: str) -> dict[str, 
     image = IMAGE_REFERENCE.fullmatch(config["SERVER_IMAGE"])
     if image is None or len(image["repository"]) > MAX_IMAGE_REPOSITORY_LENGTH:
         fail("immutable loadgen image required")
-    absolute_path(config["LOADTEST_BIN"])
+    executable_path(config["LOADTEST_BIN"])
     if not re.fullmatch("[1-9][0-9]*", config["WORKERS"]):
         fail("canonical positive worker integer required")
     if not re.fullmatch(

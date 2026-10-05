@@ -85,6 +85,9 @@ def performance_consumer_interface(template: str) -> dict[str, Any]:
         "artifact_receipt_version": 1,
         "report": {
             "schema_version": 2,
+            "max_bytes": ast.literal_eval(
+                delivery_assignment(trees["filesystem.py"], "MAX_REPORT_BYTES")
+            ),
             "request_unit": "scenario_invocations",
             "memory_subject": "load_generator_process",
             "config_fields": sorted(config_names),

@@ -141,6 +141,16 @@ def absolute_path(value: object) -> Path:
     return Path(value)
 
 
+def executable_path(value: object) -> Path:
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*", value) is None
+        or any(part in {".", ".."} for part in value.split("/"))
+    ):
+        fail("canonical executable path required")
+    return Path(value)
+
+
 def duration_seconds(value: str, *, warmup: bool = False) -> int:
     match = re.fullmatch("(0|[1-9][0-9]*)([smh]?)", value)
     if not match:

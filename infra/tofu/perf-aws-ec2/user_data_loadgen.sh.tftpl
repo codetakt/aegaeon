@@ -285,6 +285,8 @@ flock -x 9
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(cat /proc/sys/kernel/random/uuid)"
 OUT_DIR="/opt/aegaeon/results/$${RUN_ID}"
 mkdir -m 0700 "$${OUT_DIR}"
+REPORT_DIR="$${OUT_DIR}/workload"
+mkdir -m 0700 "$${REPORT_DIR}"
 SUPPLY_PARENT="/run/aegaeon-supplies/$${RUN_ID}"
 mkdir -m 0700 "$${SUPPLY_PARENT}"
 SUPPLY_DIR="$${SUPPLY_PARENT}/inputs"
@@ -335,7 +337,7 @@ docker run --rm \
   --security-opt no-new-privileges \
   --env-file "$${SUPPLY_DIR}/client.env" \
   --entrypoint "$${LOADTEST_BIN}" \
-  -v "$${OUT_DIR}:/results" \
+  -v "$${REPORT_DIR}:/results" \
   --mount "type=bind,src=$${SUPPLY_DIR}/profile.json,dst=/run/aegaeon-inputs/profile.json,readonly" \
   --mount "type=bind,src=$${SUPPLY_DIR}/session.txt,dst=/run/aegaeon-inputs/session.txt,readonly" \
   --mount "type=bind,src=$${SUPPLY_DIR}/session-provenance.json,dst=/run/aegaeon-inputs/session-provenance.json,readonly" \
@@ -355,7 +357,7 @@ COLLECTION_FAILED=0
 if ! printf '%s\n' "$${LOADTEST_EXIT_CODE}" >"$${OUT_DIR}/exit_code.txt"; then
   COLLECTION_FAILED=1
 fi
-if [[ ! -f "$${OUT_DIR}/report.json" ]]; then
+if [[ ! -f "$${REPORT_DIR}/report.json" ]]; then
   echo "[perf] load test failed before producing report.json (exit_code=$${LOADTEST_EXIT_CODE})" >&2
   COLLECTION_FAILED=1
 fi

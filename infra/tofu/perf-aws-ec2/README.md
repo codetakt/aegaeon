@@ -21,6 +21,9 @@ Supply these required OpenTofu inputs through your normal private configuration:
 - `server_image` and `loadgen_image`, each pinned with `@sha256:` and the actual
   artifact digest; `server_entrypoint` and `loadgen_entrypoint` are explicit
   absolute paths verified in those images. No sibling executable is inferred.
+  Use nonempty ASCII filename components containing letters, digits, dots,
+  underscores or hyphens. Root, repeated or trailing slashes, and `.`/`..`
+  components are rejected by both planning and load-generator admission.
 - `server_secret_arn`/`server_secret_version` and
   `client_secret_arn`/`client_secret_version`: exact Secrets Manager ARN and
   version ID. Bundle contents are managed externally. OpenTofu never reads them.
@@ -51,6 +54,17 @@ to 4 KiB of UTF-8 data and the file to 16 KiB; control characters, duplicate
 fields, unsafe file permissions and changed files are rejected. Recreate node
 userdata from these templates when upgrading from the former `registry.env`
 format; the helper requires the JSON file.
+
+The only writable host bind mount is the dedicated `workload/` report directory,
+mounted at `/results`. Configuration, artifact/source receipts, logs and driver
+results remain in the protected parent directory. After Docker exits, the driver
+accepts only a regular, singly linked report of at most 16 MiB and copies its exact bytes
+to the protected `report.json` before checking identity and configuration.
+Symlinks and special files are rejected before report contents are read or
+uploaded. Invalid JSON remains available in the protected copy; oversized or
+unsafe outputs remain in the workload directory and make collection fail.
+Regenerate node userdata when
+upgrading, and ensure the selected OCI consumer respects this report limit.
 
 ## Server bundle
 

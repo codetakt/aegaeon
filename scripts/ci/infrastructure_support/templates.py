@@ -61,8 +61,8 @@ SHELL_BODY_SHAPES = {
         "rendered": "2efe69d484aa670f597108dcbb31de088c70c2886c45d00fb10cc4226b788db8",
     },
     "/usr/local/bin/aegaeon-run-loadtest": {
-        "source": "6825735514dae1049be0eaf08b3b0bbe8c9d7a11ad73a207cb118230aa150b61",
-        "rendered": "46c1d1c7c5aae092a7739a2d2077c8db67022fa84e24cd910067437396c08d31",
+        "source": "6e16bf8349342c24c05f2235b3637ca62207e241f1a378569d55d17788f5b02c",
+        "rendered": "68ae947b11c60a772194d88c2f0029ec2636308a79496479c6d4dfbe1556c7dd",
     },
     "/etc/systemd/system/aegaeon-loadtest.service": {
         "source": "88e14cd224ed36367fd9e8c904264812d5bf2a3ecb9a6999086f1a58ec80884f",
@@ -333,7 +333,7 @@ def perf_loadgen_environment_wiring(
         "--entrypoint",
         "${LOADTEST_BIN}",
         "-v",
-        "${OUT_DIR}:/results",
+        "${REPORT_DIR}:/results",
         "--mount",
         "type=bind,src=${SUPPLY_DIR}/profile.json,dst=/run/aegaeon-inputs/profile.json,readonly",
         "--mount",

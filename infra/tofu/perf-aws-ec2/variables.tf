@@ -229,8 +229,8 @@ variable "server_entrypoint" {
   type        = string
   description = "Explicit externally verified container executable path."
   validation {
-    condition     = can(regex("^/[A-Za-z0-9._/-]+$", var.server_entrypoint)) && !contains(split("/", var.server_entrypoint), "..") && !contains(split("/", var.server_entrypoint), ".")
-    error_message = "An absolute executable path without traversal is required."
+    condition     = can(regex("^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$", var.server_entrypoint)) && !contains(split("/", var.server_entrypoint), "..") && !contains(split("/", var.server_entrypoint), ".")
+    error_message = "An absolute executable path with nonempty components and no traversal is required."
   }
 }
 
@@ -238,8 +238,8 @@ variable "loadgen_entrypoint" {
   type        = string
   description = "Explicit externally verified container executable path."
   validation {
-    condition     = can(regex("^/[A-Za-z0-9._/-]+$", var.loadgen_entrypoint)) && !contains(split("/", var.loadgen_entrypoint), "..") && !contains(split("/", var.loadgen_entrypoint), ".")
-    error_message = "An absolute executable path without traversal is required."
+    condition     = can(regex("^/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$", var.loadgen_entrypoint)) && !contains(split("/", var.loadgen_entrypoint), "..") && !contains(split("/", var.loadgen_entrypoint), ".")
+    error_message = "An absolute executable path with nonempty components and no traversal is required."
   }
 }
 

@@ -17,6 +17,7 @@ from runtime_delivery.credentials import retrieve
 from runtime_delivery.filesystem import (
     atomic_write,
     aws_executable,
+    capture_report,
     prepare_directory,
     prepare_driver,
     protected_path,
@@ -127,6 +128,7 @@ def dispatch() -> int:
     )
     directory = Path("/run/aegaeon-supplies")
     if sys.argv[1] == "verify-report":
+        capture_report(Path(sys.argv[2]))
         verify_report(Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4])
     elif sys.argv[1] == "run-config":
         run_config(sys.argv[2], Path(sys.argv[3]), config["issuer_url"])

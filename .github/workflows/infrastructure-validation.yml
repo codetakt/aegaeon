@@ -32,12 +32,10 @@ jobs:
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
       - name: Check infrastructure runner regressions
-        env:
-          PYTHONPATH: scripts/ci
         run: |
-          nix develop .#integrity --command python3 -m unittest discover \
+          nix develop .#integrity --command env PYTHONPATH=scripts/ci python3 -m unittest discover \
             -s tests/ci -p test_infrastructure_validation.py
-          nix develop .#integrity --command python3 -m pytest -q \
+          nix develop .#integrity --command env PYTHONPATH=scripts/ci python3 -m pytest -q \
             tests/ci/test_perf_delivery_package.py tests/ci/test_perf_runtime_delivery.py
       - name: Validate infrastructure inputs
         env:

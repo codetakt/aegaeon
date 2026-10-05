@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -51,11 +52,38 @@ class InfrastructureTests(unittest.TestCase):
         regression = next(
             step for step in steps if step["name"] == "Check infrastructure runner regressions"
         )
-        assert "test_infrastructure_validation.py" in regression["run"]
-        assert (
-            "tests/ci/test_perf_delivery_package.py tests/ci/test_perf_runtime_delivery.py"
-            in regression["run"]
-        )
+        commands = [
+            shlex.split(line) for line in regression["run"].replace("\\\n", "").splitlines()
+        ]
+        prefix = [
+            "nix",
+            "develop",
+            ".#integrity",
+            "--command",
+            "env",
+            "PYTHONPATH=scripts/ci",
+            "python3",
+        ]
+        assert commands == [
+            [
+                *prefix,
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "tests/ci",
+                "-p",
+                "test_infrastructure_validation.py",
+            ],
+            [
+                *prefix,
+                "-m",
+                "pytest",
+                "-q",
+                "tests/ci/test_perf_delivery_package.py",
+                "tests/ci/test_perf_runtime_delivery.py",
+            ],
+        ]
         validation = next(
             step for step in steps if step["name"] == "Validate infrastructure inputs"
         )
@@ -69,6 +97,75 @@ class InfrastructureTests(unittest.TestCase):
         assert diagnostics["if"] == "always()"
         assert diagnostics["with"]["path"] == "artifacts/infrastructure-validation"
         assert diagnostics["with"]["if-no-files-found"] == "error"
+
+    def test_infrastructure_workflow_import_path_survives_nix_environment_replacement(self):
+        workflow = yaml.safe_load(
+            (ROOT / ".github/workflows/infrastructure-validation.yml").read_text()
+        )
+        regression = next(
+            step
+            for step in workflow["jobs"]["infrastructure"]["steps"]
+            if step["name"] == "Check infrastructure runner regressions"
+        )
+        commands = [
+            shlex.split(line) for line in regression["run"].replace("\\\n", "").splitlines()
+        ]
+        tools = self.root / "workflow-probes"
+        tools.mkdir()
+        python_probe = tools / "python3"
+        python_probe.write_text(
+            f"#!{sys.executable}\n"
+            "import importlib.util, json, os, sys\n"
+            "spec = importlib.util.find_spec('validate_infrastructure')\n"
+            "if os.environ.get('PYTHONPATH') != 'scripts/ci' or spec is None:\n"
+            "    raise SystemExit('infrastructure import path was replaced by Nix')\n"
+            "with open(os.environ['WORKFLOW_PROBE_RECORD'], 'w') as record:\n"
+            "    json.dump({'args': sys.argv[1:], 'origin': spec.origin}, record)\n"
+        )
+        nix_probe = tools / "nix"
+        nix_probe.write_text(
+            f"#!{sys.executable}\n"
+            "import os, subprocess, sys\n"
+            "assert sys.argv[1:4] == ['develop', '.#integrity', '--command']\n"
+            "environment = {**os.environ, 'PYTHONPATH': '/nix/replaced-python-environment'}\n"
+            "raise SystemExit(subprocess.call(sys.argv[4:], env=environment))\n"
+        )
+        python_probe.chmod(0o755)
+        nix_probe.chmod(0o755)
+        record = self.root / "workflow-probe.json"
+        environment = {
+            **os.environ,
+            "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+            "PYTHONPATH": "scripts/ci",
+            "WORKFLOW_PROBE_RECORD": str(record),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        for command in commands:
+            for command_local_path in (True, False):
+                with self.subTest(command=command, command_local_path=command_local_path):
+                    invocation = (
+                        command[1:] if command_local_path else [*command[1:4], *command[6:]]
+                    )
+                    result = subprocess.run(  # noqa: S603 - fixed local probes, no production tests
+                        [str(nix_probe), *invocation],
+                        cwd=ROOT,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    if command_local_path:
+                        assert result.returncode == 0, result.stderr
+                        observed = json.loads(record.read_text())
+                        assert observed["args"] == command[7:]
+                        assert (
+                            Path(observed["origin"])
+                            == ROOT / "scripts/ci/validate_infrastructure.py"
+                        )
+                    else:
+                        assert result.returncode != 0
+                        assert "infrastructure import path was replaced by Nix" in result.stderr
 
     def test_selects_only_affected_modules(self):
         paths = ["infra/tofu/perf-aws-ec2/versions.tf", "infra/tofu/perf-aws-ec2/deleted.tf"]
@@ -738,6 +835,7 @@ class InfrastructureTests(unittest.TestCase):
         )
         self.assertEqual(interface["artifact_receipt_version"], 1)  # noqa: PT009 - active under -O
         self.assertEqual(interface["report"]["schema_version"], 2)  # noqa: PT009 - active under -O
+        self.assertEqual(interface["report"]["max_bytes"], 16_777_216)  # noqa: PT009 - active under -O
         self.assertEqual(  # noqa: PT009 - active under -O
             interface["report"]["request_unit"], "scenario_invocations"
         )

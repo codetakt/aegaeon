@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -20,6 +21,47 @@ from infrastructure_support.orchestration import copy_module_inputs
 from test_perf_runtime_delivery import MODULE, config
 
 pytest_plugins = ["test_perf_runtime_delivery"]
+
+
+@pytest.mark.parametrize("change", ["unchanged", "altered", "missing", "extra"])
+def test_guest_package_pins_verify_actual_bytes_before_import(tmp_path, change):
+    raw = (MODULE / "delivery_helper.py").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == infra.DELIVERY_BODY_SHA256
+    declaration = next(
+        node
+        for node in ast.parse(raw).body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "PACKAGE_SHA256"
+    )
+    guest_pins = ast.literal_eval(declaration.value)
+    actual = {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (MODULE / "runtime_delivery").iterdir()
+    }
+    assert len(actual) == 8
+    assert guest_pins == infra.DELIVERY_PACKAGE_SHA256 == actual
+    package = tmp_path / "runtime_delivery"
+    shutil.copytree(MODULE / "runtime_delivery", package)
+    facade = types.ModuleType("verified_guest_facade")
+    facade.__file__ = str(MODULE / "delivery_helper.py")
+    exec(compile(raw, facade.__file__, "exec"), vars(facade))  # noqa: S102 - body verified above
+    facade.PACKAGE_ROOT = package
+    facade.OWNER_UID = os.getuid()
+    # Only the physical fixture owner/root is substituted; all eight package bytes stay exact.
+    facade.protected_directory = lambda path: facade.protected_entry(path, directory=True)
+    if change == "altered":
+        path = package / "reports.py"
+        path.write_bytes(path.read_bytes() + b"\nraise RuntimeError('unverified source')\n")
+    elif change == "missing":
+        (package / "reports.py").unlink()
+    elif change == "extra":
+        (package / "extra.py").write_text("raise RuntimeError('unverified source')\n")
+    if change == "unchanged":
+        facade.package_sources()
+    else:
+        with pytest.raises(ValueError, match=r"implementation (source|inventory)"):
+            facade.package_sources()
 
 
 @pytest.fixture
