@@ -1097,6 +1097,7 @@
       {
         packages = flakePackages // {
           perf-load-supplier = perfLoadSupplier.package;
+          ci-controller-python = import ./nix/ci-controller-python.nix { inherit pkgs; };
         };
 
         apps = lib.mapAttrs mkAppFromSpec (
