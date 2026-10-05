@@ -46,6 +46,27 @@ path is limited to 255 characters, excluding the registry and digest. Tags,
 empty path components and uppercase names are rejected; update invalid image
 inputs before regenerating node userdata.
 
+Planning rejects worker counts outside the integer range `1..4294967295` and
+rates that convert to zero, a negative value or a nonfinite binary64 value.
+The rate check uses the same binary64 rounding as the guest and CLI, including
+the per-worker delay limit of 86400 seconds; the configured rate is rendered
+unchanged. Run time is a canonical positive integer, optionally followed by
+`s`, `m` or `h`, with a maximum of one day. Warmup is an integer number of
+seconds from 0 through 86400. Only the documented scenario names are accepted;
+the explicit unsupported behavior of `key-rotation` remains.
+
+The supplied or generated report bucket must satisfy the guest's lowercase
+3-to-63-character bucket contract. The generated name uses `name_prefix` plus
+an eight-character hexadecimal suffix. Report prefixes must end in `/` and
+use letters, digits, `_`, `.`, `/` or `-`, with no empty, `.` or `..` segments;
+multiple trailing slashes remain accepted. Artifact receipt and source-manifest
+paths must be distinct printable canonical absolute file paths. Printable
+spaces and Unicode names remain usable; repeated or trailing slashes, `.` and
+`..` components, and control or separator characters are rejected. Existing
+variable files containing invalid values must be corrected before applying.
+These lexical checks do not establish file existence, ownership, inode
+separation, supplier authenticity or remote bucket availability.
+
 Existing network, node sizing, registry-token identifier and report-bucket
 inputs remain available. The two roles share registry access only when enabled;
 server supply/signing permissions and load-generator client/metrics/report

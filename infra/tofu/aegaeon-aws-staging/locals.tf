@@ -103,7 +103,7 @@ locals {
   ])
 
   container_environment = [
-    { name = "AWS_REGION", value = data.aws_region.current.name },
+    { name = "AWS_REGION", value = data.aws_region.current.region },
     { name = "AEGAEON_RUNTIME_ISSUER_HOST", value = local.runtime_issuer_host },
     { name = "AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY", value = "1" },
     { name = "AEGAEON_REQUIRE_TLS_PROXY", value = local.https_enabled ? "1" : "0" },

@@ -150,8 +150,11 @@ variable "artifact_bucket_name" {
   default     = null
 
   validation {
-    condition     = var.artifact_bucket_name == null ? true : length(trimspace(var.artifact_bucket_name)) > 0
-    error_message = "artifact_bucket_name must be null or a non-empty bucket name."
+    condition = can(regex(
+      "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      var.artifact_bucket_name == null ? "${var.name_prefix}-00000000" : var.artifact_bucket_name,
+    ))
+    error_message = "The supplied or generated artifact bucket name must match the guest's lowercase 3-to-63-character bucket contract."
   }
 }
 
@@ -163,12 +166,17 @@ variable "artifact_bucket_force_destroy" {
 
 variable "artifact_prefix" {
   type        = string
+  nullable    = false
   description = "S3 key prefix for uploaded reports (e.g. perf/)."
   default     = "perf/"
 
   validation {
-    condition     = length(var.artifact_prefix) > 0
-    error_message = "artifact_prefix must be a non-empty string."
+    condition = (
+      can(regex("^[A-Za-z0-9_./-]+/$", var.artifact_prefix))
+      && !startswith(var.artifact_prefix, "/")
+      && alltrue([for part in split("/", trim(var.artifact_prefix, "/")) : !contains(["", ".", ".."], part)])
+    )
+    error_message = "artifact_prefix must end in /, contain only letters, digits, _, ., / or -, and have no empty, . or .. path segments."
   }
 }
 
@@ -180,32 +188,68 @@ variable "auto_run_loadtest" {
 
 variable "loadtest_workers" {
   type        = number
+  nullable    = false
   description = "Load test workers (concurrency)."
   default     = 50
+  validation {
+    condition     = var.loadtest_workers == floor(var.loadtest_workers) && var.loadtest_workers >= 1 && var.loadtest_workers <= 4294967295
+    error_message = "loadtest_workers must be an integer from 1 through 4294967295."
+  }
 }
 
 variable "loadtest_rps" {
   type        = number
+  nullable    = false
   description = "Target scenario invocations per second; HTTP attempts are accounted separately."
   default     = 200
+  validation {
+    # pow(x, 1) converts to binary64, matching the guest and load-test CLI.
+    # Check the converted rate and delay, preserving accepted rounding at the bounds.
+    condition = try(
+      pow(var.loadtest_rps, 1) > 0
+      && pow(var.loadtest_rps, 1) <= pow(1.7976931348623157e308, 1)
+      && pow(var.loadtest_workers / pow(var.loadtest_rps, 1), 1) <= 86400,
+      false,
+    )
+    error_message = "loadtest_rps must convert to a finite positive binary64 rate with a per-worker delay of at most 86400 seconds."
+  }
 }
 
 variable "loadtest_run_time" {
   type        = string
-  description = "Run time duration string (e.g. 60s, 5m)."
+  nullable    = false
+  description = "Canonical positive integer duration, optionally followed by s, m or h; at most one day."
   default     = "60s"
+  validation {
+    condition = try(
+      tonumber(regex("^([1-9][0-9]*)([smh]?)$", var.loadtest_run_time)[0])
+      * lookup({ "" = 1, s = 1, m = 60, h = 3600 }, regex("^([1-9][0-9]*)([smh]?)$", var.loadtest_run_time)[1]) <= 86400,
+      false,
+    )
+    error_message = "loadtest_run_time must be a canonical positive integer number of seconds, minutes or hours, no greater than 86400 seconds."
+  }
 }
 
 variable "loadtest_warmup" {
   type        = number
+  nullable    = false
   description = "Warmup duration (seconds)."
   default     = 10
+  validation {
+    condition     = var.loadtest_warmup == floor(var.loadtest_warmup) && var.loadtest_warmup >= 0 && var.loadtest_warmup <= 86400
+    error_message = "loadtest_warmup must be an integer number of seconds from 0 through 86400."
+  }
 }
 
 variable "loadtest_scenario" {
   type        = string
+  nullable    = false
   description = "Selection: smoke, auth-code, introspection, revocation, dpop, userinfo, discovery, jwks, par, mixed, policy-mixed or key-rotation (explicitly unsupported)."
   default     = "mixed"
+  validation {
+    condition     = contains(["smoke", "auth-code", "introspection", "revocation", "dpop", "userinfo", "discovery", "jwks", "par", "mixed", "policy-mixed", "key-rotation"], var.loadtest_scenario)
+    error_message = "Select a documented load-test scenario; key-rotation remains explicitly unsupported by the consumer."
+  }
 }
 
 variable "server_image" {
@@ -366,18 +410,27 @@ variable "runtime_kms_key_arns" {
 variable "loadgen_artifact_receipt_path" {
   description = "Externally supplied trusted build artifact protected absolute host path; no Terraform retrieval or artifact creation."
   type        = string
+  nullable    = false
   validation {
-    condition     = can(regex("^/[^[:cntrl:]]+$", var.loadgen_artifact_receipt_path))
-    error_message = "loadgen_artifact_receipt_path must be an absolute protected host path."
+    condition = (
+      can(regex("^/(?:[^\\p{C}\\p{Z}]| )+$", var.loadgen_artifact_receipt_path))
+      && alltrue([for part in slice(split("/", var.loadgen_artifact_receipt_path), 1, length(split("/", var.loadgen_artifact_receipt_path))) : !contains(["", ".", ".."], part)])
+      && var.loadgen_artifact_receipt_path != var.loadgen_source_manifest_path
+    )
+    error_message = "Use a printable canonical absolute receipt file path, without empty, . or .. components, distinct from the source manifest path."
   }
 }
 
 variable "loadgen_source_manifest_path" {
   description = "Externally supplied trusted build artifact protected absolute host path; no Terraform retrieval or artifact creation."
   type        = string
+  nullable    = false
   validation {
-    condition     = can(regex("^/[^[:cntrl:]]+$", var.loadgen_source_manifest_path))
-    error_message = "loadgen_source_manifest_path must be an absolute protected host path."
+    condition = (
+      can(regex("^/(?:[^\\p{C}\\p{Z}]| )+$", var.loadgen_source_manifest_path))
+      && alltrue([for part in slice(split("/", var.loadgen_source_manifest_path), 1, length(split("/", var.loadgen_source_manifest_path))) : !contains(["", ".", ".."], part)])
+    )
+    error_message = "Use a printable canonical absolute manifest file path, without empty, . or .. components."
   }
 }
 
