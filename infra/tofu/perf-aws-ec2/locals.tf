@@ -5,7 +5,10 @@ locals {
     "ManagedBy" = "opentofu"
   }
 
-  server_trusted_proxies = trimspace(var.server_trusted_proxies)
+  server_trusted_proxy_cidrs = distinct([
+    for cidr in split(",", var.server_trusted_proxies) : trimspace(cidr)
+  ])
+  server_trusted_proxies = join(",", local.server_trusted_proxy_cidrs)
 
   subnet_id = (
     var.subnet_id != null ? var.subnet_id : (

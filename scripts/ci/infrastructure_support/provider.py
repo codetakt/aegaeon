@@ -40,9 +40,85 @@ def lock_contract(module: Path) -> dict[str, str]:
     return result
 
 
+def perf_proxy_network_contract(module: Path) -> None:
+    """Bind the IPv4 proxy sources to the entire backend ingress boundary."""
+    perf_template_bindings(module)
+    server_group = block(
+        (module / "network.tf").read_text(), 'resource "aws_security_group" "server"'
+    )
+    require(
+        compact_expression(server_group)
+        == compact_expression(
+            'name = "${var.name_prefix}-server" description = "Aegaeon server" '
+            "vpc_id = local.vpc_id ingress { "
+            "from_port = var.server_port to_port = var.server_port "
+            'protocol = "tcp" cidr_blocks = local.server_trusted_proxy_cidrs '
+            'description = "Trusted TLS proxies to server" } '
+            'egress { from_port = 0 to_port = 0 protocol = "-1" '
+            'cidr_blocks = ["0.0.0.0/0"] }'
+        ),
+        "Server ingress must admit only the trusted TLS proxy CIDRs and backend TCP port",
+    )
+    require(
+        not any(
+            re.search(
+                r'resource\s+"aws_(?:security_group_rule|vpc_security_group_ingress_rule)"',
+                uncomment(path.read_text()),
+            )
+            for path in module.glob("*.tf")
+        ),
+        "Separate ingress rules bypass the proxy source boundary",
+    )
+    require(
+        not any(
+            re.search(
+                r'resource\s+"aws_network_interface(?:_[a-z_]+)?"', uncomment(path.read_text())
+            )
+            for path in module.glob("*.tf")
+        ),
+        "Additional network interfaces or attachments bypass the proxy source boundary",
+    )
+    variable = block((module / "variables.tf").read_text(), 'variable "server_trusted_proxies"')
+    require(
+        assignment(variable, "type") == "string" and assignment(variable, "nullable") == "false",
+        "Proxy CIDR input type or nullability changed",
+    )
+    require(
+        compact_expression(expression(block(variable, "validation"), "condition"))
+        == compact_expression(
+            "length(trimspace(var.server_trusted_proxies)) > 0 && alltrue([ "
+            'for cidr in split(",", var.server_trusted_proxies) : ('
+            '!strcontains(trimspace(cidr), ":") '
+            "&& try(cidrsubnet(trimspace(cidr), 0, 0) == trimspace(cidr), false) "
+            '&& try(tonumber(split("/", trimspace(cidr))[1]) > 0, false))])'
+        ),
+        "Proxy CIDR validation must require canonical bounded IPv4 networks",
+    )
+    instances = (module / "instances.tf").read_text()
+    for name in ("server", "loadgen"):
+        require(
+            assignment(
+                block(instances, f'resource "aws_instance" "{name}"'), "vpc_security_group_ids"
+            )
+            == f"[aws_security_group.{name}.id]",
+            "Node network boundary changed",
+        )
+    local_source = block((module / "locals.tf").read_text(), "locals")
+    for field, wanted in {
+        "server_trusted_proxy_cidrs": (
+            'distinct([for cidr in split(",", var.server_trusted_proxies) : trimspace(cidr)])'
+        ),
+        "server_trusted_proxies": 'join(",", local.server_trusted_proxy_cidrs)',
+    }.items():
+        require(
+            compact_expression(expression(local_source, field)) == compact_expression(wanted),
+            "Proxy ingress/header trust source changed: " + field,
+        )
+
+
 def resource_contract(module: Path, providers: dict[str, str]) -> None:
     if module.name == "perf-aws-ec2":
-        perf_template_bindings(module)
+        perf_proxy_network_contract(module)
         instances = (module / "instances.tf").read_text()
         for name in ("server", "loadgen"):
             body = block(instances, f'resource "aws_instance" "{name}"')

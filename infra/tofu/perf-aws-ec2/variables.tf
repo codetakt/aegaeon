@@ -71,10 +71,17 @@ variable "server_port" {
 
 variable "server_trusted_proxies" {
   type        = string
-  description = "Explicit trusted TLS terminator CIDRs; no automatic subnet trust."
+  nullable    = false
+  description = "Canonical IPv4 CIDRs of TLS proxy sources reaching the backend; shared by ingress and header trust."
   validation {
-    condition     = length(trimspace(var.server_trusted_proxies)) > 0 && alltrue([for cidr in split(",", var.server_trusted_proxies) : can(cidrhost(trimspace(cidr), 0))])
-    error_message = "Supply explicit comma-separated proxy CIDRs."
+    condition = length(trimspace(var.server_trusted_proxies)) > 0 && alltrue([
+      for cidr in split(",", var.server_trusted_proxies) : (
+        !strcontains(trimspace(cidr), ":")
+        && try(cidrsubnet(trimspace(cidr), 0, 0) == trimspace(cidr), false)
+        && try(tonumber(split("/", trimspace(cidr))[1]) > 0, false)
+      )
+    ])
+    error_message = "Supply comma-separated canonical IPv4 proxy CIDRs with prefixes 1 through 32; IPv6, host bits and unrestricted /0 are not supported by these IPv4 backend nodes."
   }
 }
 

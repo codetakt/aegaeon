@@ -255,6 +255,103 @@ class InfrastructureTests(unittest.TestCase):
         )
         infra.resource_contract(self.module(), {"aws": "6.66.0"})
 
+    def test_perf_proxy_ingress_and_header_trust_use_the_same_sources(self):
+        module = self.module("perf-aws-ec2")
+        providers = infra.lock_contract(module)
+        infra.resource_contract(module, providers)
+        cases = [
+            (
+                "network.tf",
+                "cidr_blocks = local.server_trusted_proxy_cidrs",
+                'cidr_blocks = ["0.0.0.0/0"]',
+                "Server ingress",
+            ),
+            (
+                "network.tf",
+                "cidr_blocks = local.server_trusted_proxy_cidrs",
+                "security_groups = [aws_security_group.loadgen.id]",
+                "Server ingress",
+            ),
+            (
+                "network.tf",
+                "to_port     = var.server_port",
+                "to_port     = 65535",
+                "Server ingress",
+            ),
+            ("network.tf", 'protocol    = "tcp"', 'protocol    = "-1"', "Server ingress"),
+            (
+                "network.tf",
+                'description = "Trusted TLS proxies to server"',
+                'description = "Trusted TLS proxies to server"\n    ipv6_cidr_blocks = ["::/0"]',
+                "Server ingress",
+            ),
+            (
+                "network.tf",
+                'description = "Trusted TLS proxies to server"',
+                (
+                    'description = "Trusted TLS proxies to server"\n  }\n'
+                    '  dynamic "ingress" { for_each = [1] content { '
+                    'from_port = 0 to_port = 65535 protocol = "tcp" '
+                    'cidr_blocks = ["0.0.0.0/0"] }'
+                ),
+                "Server ingress",
+            ),
+            (
+                "network.tf",
+                'resource "aws_security_group" "server" {',
+                (
+                    'resource "aws_vpc_security_group_ingress_rule" "other" {\n}\n'
+                    'resource "aws_security_group" "server" {'
+                ),
+                "Separate ingress rules",
+            ),
+            (
+                "instances.tf",
+                "vpc_security_group_ids = [aws_security_group.server.id]",
+                "vpc_security_group_ids = [aws_security_group.loadgen.id]",
+                "Node network boundary",
+            ),
+            (
+                "network.tf",
+                'resource "aws_security_group" "server" {',
+                (
+                    'resource "aws_network_interface_sg_attachment" "other" {\n}\n'
+                    'resource "aws_security_group" "server" {'
+                ),
+                "Additional network interfaces",
+            ),
+            (
+                "variables.tf",
+                "condition = length(trimspace(var.server_trusted_proxies))",
+                "condition = true || length(trimspace(var.server_trusted_proxies))",
+                "Proxy CIDR validation",
+            ),
+            ("variables.tf", "nullable    = false", "nullable    = true", "Proxy CIDR input"),
+            (
+                "locals.tf",
+                'join(",", local.server_trusted_proxy_cidrs)',
+                "var.server_trusted_proxies",
+                "Proxy ingress/header trust",
+            ),
+            (
+                "locals.tf",
+                'for cidr in split(",", var.server_trusted_proxies) : trimspace(cidr)',
+                'for cidr in split(",", var.server_trusted_proxies) : "0.0.0.0/0"',
+                "Proxy ingress/header trust",
+            ),
+        ]
+        for filename, original, replacement, diagnostic in cases:
+            path = module / filename
+            source = path.read_text()
+            self.assertIn(original, source)  # noqa: PT009 - mutation must remain active under -O
+            path.write_text(source.replace(original, replacement, 1))
+            with (
+                self.subTest(filename=filename, replacement=replacement),
+                pytest.raises(ValueError, match=diagnostic),
+            ):
+                infra.resource_contract(module, providers)
+            path.write_text(source)
+
     def test_encryption_and_key_type_regressions_rejected(self):
         for filename, before, after in [
             ("redis.tf", "transit_encryption_enabled = true", "transit_encryption_enabled = false"),

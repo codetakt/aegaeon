@@ -17,7 +17,12 @@ Supply these required OpenTofu inputs through your normal private configuration:
 
 - `issuer_host` and matching `issuer_url` (`https://` plus the canonical DNS host).
   The HTTPS origin is the load-generator target. Supply actual ingress, DNS,
-  certificate validation and narrow `server_trusted_proxies` CIDRs.
+  certificate validation and narrow `server_trusted_proxies` CIDRs. These are
+  the TLS proxy source addresses actually observed by the backend, including
+  any source translation, and are shared by its TCP ingress and header trust.
+  Supply canonical IPv4 networks with prefixes 1 through 32; IPv6, host bits,
+  leading-zero aliases, empty entries and unrestricted `/0` are rejected.
+  Spaces around entries and duplicates are removed consistently for both uses.
 - `server_image` and `loadgen_image`, each pinned with `@sha256:` and the actual
   artifact digest; `server_entrypoint` and `loadgen_entrypoint` are explicit
   absolute paths verified in those images. No sibling executable is inferred.
@@ -46,6 +51,15 @@ inputs remain available. The two roles share registry access only when enabled;
 server supply/signing permissions and load-generator client/metrics/report
 permissions remain separate. Migration DDL and management bootstrap privileges
 are external and are not granted to these node roles.
+
+The server admits its backend TCP port only from those explicit proxy CIDRs.
+The load generator reaches the canonical HTTPS issuer through that proxy;
+it has no separate direct backend ingress grant. The generated VPC, routes and
+server listener support IPv4. A provided subnet still requires IPv4 backend
+connectivity. Configure the external proxy's routing, ACLs and backend target
+registration separately; an ingress rule alone does not establish reachability.
+When upgrading, replace unsupported proxy CIDR forms and verify the actual
+proxy source addresses before applying the changed ingress.
 
 Registry identifiers are rendered as quoted JSON data in root-owned mode-0600
 `/etc/aegaeon/registry.json`. The login helper validates the exact six string
