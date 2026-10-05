@@ -191,6 +191,16 @@ def checked_output(root: pathlib.Path, value: str, *, directory: bool) -> pathli
     return path
 
 
+def reject_supplier_overlap(root: pathlib.Path, paths: list[pathlib.Path]) -> None:
+    if SUPPLIER_CONTEXT is None:
+        return
+    inputs = [output_path(root, str(path)) for path in SUPPLIER_CONTEXT.input_paths()]
+    for value in paths:
+        path = output_path(root, str(value))
+        if any(path.is_relative_to(source) or source.is_relative_to(path) for source in inputs):
+            fail("output overlaps immutable supplier input")
+
+
 def output_roles(
     root: pathlib.Path,
     evidence: pathlib.Path,
@@ -199,6 +209,7 @@ def output_roles(
 ) -> None:
     destinations = [(output_path(root, value), directory) for value, directory in outputs]
     status = status or evidence.parent / "source-status.json"
+    reject_supplier_overlap(root, [evidence, status, *(path for path, _ in destinations)])
     for position, (path, directory) in enumerate(destinations):
         if (
             path == evidence
@@ -223,6 +234,7 @@ def output_roles(
 
 def private_root(root: pathlib.Path, forbidden: list[pathlib.Path]) -> pathlib.Path:
     temporary = output_path(root, os.environ.get("TMPDIR") or tempfile.gettempdir())
+    reject_supplier_overlap(root, [temporary])
     if (
         temporary.is_symlink()
         or not temporary.is_dir()
@@ -286,6 +298,7 @@ def output_boundaries(
 def reject_source_overlap(
     root: pathlib.Path, domain: dict[str, Any], paths: list[pathlib.Path]
 ) -> None:
+    reject_supplier_overlap(root, paths)
     for path in paths:
         if path == root or root.is_relative_to(path):
             fail("output overlaps source root")
@@ -299,6 +312,7 @@ def cargo_outputs(root: pathlib.Path) -> list[pathlib.Path]:
     target = os.environ.get("CARGO_TARGET_DIR")
     if target:
         path = output_path(root, target)
+        reject_supplier_overlap(root, [path])
         if path.exists() and (
             not stat.S_ISDIR(path.lstat().st_mode) or path.lstat().st_uid != os.geteuid()
         ):
@@ -947,6 +961,7 @@ def verify_report(
 
 def status_boundary(root: pathlib.Path, artifact: str) -> pathlib.Path:
     directory = checked_output(root, artifact, directory=True)
+    reject_supplier_overlap(root, [directory, directory / "source-status.json"])
     parent = directory.parent
     while not parent.exists():
         parent = parent.parent

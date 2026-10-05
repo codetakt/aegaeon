@@ -274,11 +274,36 @@ def bind_pair(
 class SupplierContext:
     """Constants supplied by the generated store launcher, never by the user CLI."""
 
-    def __init__(self, helper: ModuleType, binding: str, expected: str, git: str):
+    def __init__(
+        self,
+        helper: ModuleType,
+        binding: str,
+        expected: str,
+        git: str,
+        *,
+        fixed_inputs: tuple[str, ...] = (),
+    ):
         self.helper = helper
         self.path = pathlib.Path(binding)
         self.expected = expected
         self.git = git
+        self.fixed_inputs = tuple(pathlib.Path(value) for value in fixed_inputs)
+
+    def input_paths(self) -> tuple[pathlib.Path, ...]:
+        _, binding, _ = self.validate()
+        # Runtime tool names may link to separate executable input leaves.
+        runtime = (pathlib.Path(self.git), *self.fixed_inputs)
+        return (
+            self.path,
+            *runtime,
+            *(path.resolve(strict=True) for path in runtime),
+            pathlib.Path(binding["source_inventory"]["path"]),
+            pathlib.Path(binding["source_inventory"]["source_path"]),
+            pathlib.Path(binding["build_source"]["path"]),
+            pathlib.Path(binding["build"]["package"]),
+            pathlib.Path(binding["build"]["cargo_log"]["path"]),
+            pathlib.Path(binding["build"]["resolved_graph"]["path"]),
+        )
 
     def validate(self) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
         raw, binding = record(self.path, self.expected)
@@ -479,7 +504,8 @@ def generated_launchers(
         " return module\n"
         "helper=load('aegaeon_perf_source','source_manifest.py')\n"
         "supplier=load('aegaeon_perf_supplier','loadtest_supplier.py')\n"
-        f"context=supplier.SupplierContext(helper,{str(binding)!r},{sha256(raw)!r},{tools['git']!r})\n"
+        f"context=supplier.SupplierContext(helper,{str(binding)!r},{sha256(raw)!r},{tools['git']!r},"
+        f"fixed_inputs={(str(output), tools['python'], tools['bash'], tools['git'])!r})\n"
     )
     internal = output / "source-helper"
     internal.write_text(

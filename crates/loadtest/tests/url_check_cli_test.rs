@@ -7,14 +7,18 @@ struct Fixture {
 }
 
 impl Fixture {
-    fn new() -> Self {
+    fn new() -> std::io::Result<Self> {
         let root = std::env::temp_dir().join(format!("aegaeon-url-check-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&root).unwrap();
-        fs::write(root.join("source-status.json"), b"preserved status\n").unwrap();
-        Self { root }
+        fs::create_dir(&root)?;
+        let fixture = Self { root };
+        fs::write(
+            fixture.root.join("source-status.json"),
+            b"preserved status\n",
+        )?;
+        Ok(fixture)
     }
 
-    fn run(&self, arguments: &[impl AsRef<OsStr>]) -> std::process::Output {
+    fn run(&self, arguments: &[impl AsRef<OsStr>]) -> std::io::Result<std::process::Output> {
         let result = Command::new(env!("CARGO_BIN_EXE_aegaeon-loadtest-url-check"))
             .args(arguments)
             .env_clear()
@@ -23,26 +27,26 @@ impl Fixture {
             .env("AEG_LOADTEST_SESSION_FILE", "absent-session.json")
             .env("AEG_LOADTEST_SESSION_PROVENANCE", "absent-provenance.json")
             .current_dir(&self.root)
-            .output()
-            .unwrap();
+            .output()?;
         assert_eq!(
-            fs::read(self.root.join("source-status.json")).unwrap(),
+            fs::read(self.root.join("source-status.json"))?,
             b"preserved status\n"
         );
-        assert_eq!(fs::read_dir(&self.root).unwrap().count(), 1);
-        result
+        assert_eq!(fs::read_dir(&self.root)?.count(), 1);
+        Ok(result)
     }
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).unwrap();
+        let cleanup = fs::remove_dir_all(&self.root);
+        assert!(cleanup.is_ok(), "fixture cleanup failed: {cleanup:?}");
     }
 }
 
 #[test]
-fn accepted_targets_and_canonical_issuers_exit_silently_without_files() {
-    let fixture = Fixture::new();
+fn accepted_targets_and_canonical_issuers_exit_silently_without_files() -> std::io::Result<()> {
+    let fixture = Fixture::new()?;
     for args in [
         vec!["--url", "http://localhost:8080"],
         vec![r"--url=https://issuer.example.test\tenant"],
@@ -60,16 +64,17 @@ fn accepted_targets_and_canonical_issuers_exit_silently_without_files() {
             "--url=https://issuer.example.test",
         ],
     ] {
-        let result = fixture.run(&args);
+        let result = fixture.run(&args)?;
         assert!(result.status.success(), "{args:?}");
         assert!(result.stdout.is_empty());
         assert!(result.stderr.is_empty());
     }
+    Ok(())
 }
 
 #[test]
-fn invalid_inputs_and_cli_forms_fail_generically_without_files() {
-    let fixture = Fixture::new();
+fn invalid_inputs_and_cli_forms_fail_generically_without_files() -> std::io::Result<()> {
+    let fixture = Fixture::new()?;
     for args in [
         vec![],
         vec!["--url"],
@@ -120,20 +125,22 @@ fn invalid_inputs_and_cli_forms_fail_generically_without_files() {
         vec!["--url=https:fixture://fixture-secret"],
         vec!["--url=http:fixture://fixture-secret"],
     ] {
-        let result = fixture.run(&args);
+        let result = fixture.run(&args)?;
         assert_eq!(result.status.code(), Some(2), "{args:?}");
         assert!(result.stdout.is_empty());
         assert_eq!(result.stderr, b"[perf] URL validation failed\n");
     }
+    Ok(())
 }
 
 #[cfg(unix)]
 #[test]
-fn non_utf8_input_fails_generically() {
+fn non_utf8_input_fails_generically() -> std::io::Result<()> {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-    let fixture = Fixture::new();
-    let result = fixture.run(&[OsString::from("--url"), OsString::from_vec(vec![0xff])]);
+    let fixture = Fixture::new()?;
+    let result = fixture.run(&[OsString::from("--url"), OsString::from_vec(vec![0xff])])?;
     assert_eq!(result.status.code(), Some(2));
     assert!(result.stdout.is_empty());
     assert_eq!(result.stderr, b"[perf] URL validation failed\n");
+    Ok(())
 }

@@ -17,7 +17,7 @@ import unittest
 import uuid
 from unittest import mock
 
-from perf_supplier_fixture import prepare as prepare_supplier
+from perf_supplier_fixture import module as supplier_module, prepare as prepare_supplier
 
 SOURCE = pathlib.Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -102,10 +102,16 @@ class PerfSourceManifestTests(unittest.TestCase):
         return path
 
     def invoke(
-        self, action: str, *args: str, env: dict[str, str] | None = None
+        self,
+        action: str,
+        *args: str,
+        env: dict[str, str] | None = None,
+        immutable: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        supplier_action = action in {"urls", "invocation", "report"} or (
-            action in {"bind", "binary"} and "aegaeon-loadtest" in args
+        supplier_action = (
+            immutable
+            or action in {"urls", "invocation", "report"}
+            or (action in {"bind", "binary"} and "aegaeon-loadtest" in args)
         )
         entrypoint = self.root / "scripts/perf/source_manifest.py"
         if supplier_action:
@@ -1878,6 +1884,213 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertEqual(list(self.private.iterdir()), [])
                 self.assertFalse((self.owner / "tool-calls").exists())
                 self.assertFalse((status.parent / "source").exists())
+
+    def supplier_input_snapshot(self) -> dict[pathlib.Path, tuple[int, bytes | str]]:
+        return {
+            path: (
+                path.lstat().st_mode,
+                str(path.readlink()) if path.is_symlink() else path.read_bytes(),
+            )
+            for path in (self.owner / "supplier").rglob("*")
+            if path.is_symlink() or path.is_file()
+        }
+
+    def test_supplier_fixed_inputs_reject_output_aliases_before_status_and_tools(self) -> None:
+        accepted = self.runner(artifact="artifacts/perf/supplier-accepted")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        supplier = self.owner / "supplier"
+        inputs = [
+            supplier / "package/bin/aegaeon-loadtest",
+            supplier / "package/bin/aegaeon-loadtest-url-check",
+            supplier / "context.json",
+            supplier / "source.json",
+            supplier / "source/scripts/perf/source_manifest.py",
+            supplier / "source/nix/build-source.nix",
+            supplier / "build.jsonl",
+            supplier / "graph.json",
+            supplier / "controller/aegaeon-perf-load",
+            supplier / "controller/source-helper",
+            supplier / "controller/runner.sh",
+        ]
+        cases = [("LEGACY_REPORT", path) for path in inputs]
+        cases.extend(
+            (role, path)
+            for role in ["REPORT_PATH", "LOADTEST_LOG", "SERVER_LOG"]
+            for path in inputs[:2]
+        )
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for number, (role, path) in enumerate(cases):
+            with self.subTest(role=role, path=path):
+                artifact = f"artifacts/perf/supplier-output-{number}"
+                status = self.write(artifact + "/source-status.json", b"prior complete")
+                result = self.runner(
+                    artifact=artifact,
+                    overrides={role: str(path.parent) + "/./" + path.name},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(self.supplier_input_snapshot(), before)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse((status.parent / "source").exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_supplier_directories_reject_artifact_cargo_and_private_writes(self) -> None:
+        accepted = self.runner(artifact="artifacts/perf/supplier-directory-accepted")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for number, (role, directory) in enumerate(
+            (role, self.owner / "supplier" / directory)
+            for role in ["ARTIFACT_DIR", "CARGO_TARGET_DIR", "TMPDIR"]
+            for directory in ["source", "package", "controller"]
+        ):
+            with self.subTest(role=role, directory=directory):
+                artifact = f"artifacts/perf/supplier-directory-{number}"
+                status = self.write(artifact + "/source-status.json", b"prior complete")
+                result = self.runner(artifact=artifact, overrides={role: str(directory) + "/./"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(self.supplier_input_snapshot(), before)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((self.owner / "tool-calls").exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_supplier_direct_status_and_evidence_reject_ancestor_and_descendant_aliases(
+        self,
+    ) -> None:
+        accepted = self.runner()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        artifact = self.root / "artifacts/perf/runner"
+        status = artifact / "source-status.json"
+        before_status = status.read_bytes()
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for directory in [
+            self.owner / "supplier",
+            self.owner / "supplier/package/bin",
+            self.owner / "supplier/source/scripts/perf",
+            self.owner / "supplier/controller",
+            self.owner / "supplier/controller/nested",
+        ]:
+            alias = str(directory) + "/./"
+            with self.subTest(action="status", artifact=alias):
+                result = self.invoke(
+                    "status",
+                    "--artifact-directory",
+                    alias,
+                    "--stage",
+                    "complete",
+                    immutable=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+            self.evidence = directory
+            for action in ["paths", "freeze"]:
+                with self.subTest(action=action, evidence=alias):
+                    result = self.invoke(
+                        action,
+                        "--artifact-directory",
+                        str(artifact),
+                        "--evidence",
+                        alias,
+                        immutable=True,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(status.read_bytes(), before_status)
+            self.assertEqual(self.supplier_input_snapshot(), before)
+            self.assertEqual(set(self.private.iterdir()), retained)
+            self.assertFalse((self.owner / "tool-calls").exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_supplier_fixed_runtime_tools_reject_output_aliases(self) -> None:
+        accepted = self.runner()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        supplier = self.owner / "supplier"
+        runtime = supplier / "runtime"
+        runtime.mkdir()
+        tools = {}
+        for name, original in [
+            ("python", sys.executable),
+            ("bash", str(shutil.which("bash"))),
+            ("git", str(shutil.which("git"))),
+        ]:
+            path = runtime / (name + "-actual")
+            path.write_text(
+                f"#!{sys.executable}\nimport os,sys\n"
+                f"os.execv({original!r},[{original!r},*sys.argv[1:]])\n"
+            )
+            path.chmod(0o755)
+            alias = runtime / name
+            alias.symlink_to(path.name)
+            tools[name] = str(alias)
+        supplier_module(SOURCE).generated_launchers(
+            supplier / "source",
+            supplier / "context.json",
+            supplier / "controller",
+            tools | {"runtime_path": self.last_runner_environment["PATH"]},
+        )
+        accepted = self.runner(artifact="artifacts/perf/runtime-accepted")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for name in ["python-actual", "bash-actual", "git-actual"]:
+            with self.subTest(tool=name):
+                artifact = "artifacts/perf/runtime-output-" + name
+                status = self.write(artifact + "/source-status.json", b"prior complete")
+                result = self.runner(
+                    artifact=artifact,
+                    overrides={"LEGACY_REPORT": str(runtime) + "/./" + name},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(self.supplier_input_snapshot(), before)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse((status.parent / "source").exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_supplier_binary_readmission_rejects_mutated_frozen_output_aliases(self) -> None:
+        accepted = self.runner()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        self.evidence = self.root / "artifacts/perf/runner/source"
+        sha = hashlib.sha256((self.evidence / "SOURCE-MANIFEST.json").read_bytes()).hexdigest()
+        outputs_path = self.evidence / "OUTPUTS.json"
+        origin_path = self.evidence / "ORIGIN.json"
+        outputs = json.loads(outputs_path.read_bytes())
+        origin = json.loads(origin_path.read_bytes())
+        status = self.evidence.parent / "source-status.json"
+        status_before = status.read_bytes()
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for path in [
+            self.owner / "supplier/package/bin/aegaeon-loadtest",
+            self.owner / "supplier/package/bin/aegaeon-loadtest-url-check",
+            self.owner / "supplier/context.json",
+            self.owner / "supplier/graph.json",
+            self.owner / "supplier/controller/source-helper",
+        ]:
+            with self.subTest(path=path):
+                raw = PRODUCER.canonical([*outputs, [str(path.parent) + "/./" + path.name, False]])
+                changed_origin = origin | {"outputs_sha256": hashlib.sha256(raw).hexdigest()}
+                for leaf, contents in [
+                    (outputs_path, raw),
+                    (origin_path, PRODUCER.canonical(changed_origin)),
+                ]:
+                    leaf.chmod(0o600)
+                    leaf.write_bytes(contents)
+                    leaf.chmod(0o444)
+                result = self.invoke("binary", "--sha256", sha, "--name", "aegaeon-loadtest")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), status_before)
+                self.assertEqual(self.supplier_input_snapshot(), before)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((self.owner / "tool-calls").exists())
 
     def test_report_legacy_alias_is_explicit_and_cannot_alias_a_third_role(self) -> None:
         artifact = "artifacts/perf/report-alias"
