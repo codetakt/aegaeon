@@ -128,14 +128,20 @@ production deployments.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
-| `AEG_LOADTEST_CLIENT_ID` | `test-client` | `test` | Client ID used by load test scenarios. |
-| `AEG_LOADTEST_CLIENT_SECRET` | _unset_ | `test` | Client secret used by load test scenarios. |
-| `AEG_LOADTEST_CLIENT_SECRET_POST` | _unset_ | `test` | Client secret (client_secret_post) used by load test scenarios. |
-| `AEG_LOADTEST_REDIRECT_URI` | _unset_ | `test` | Redirect URI used by load test scenarios. |
-| `AEG_LOADTEST_SCOPE` | `read write` | `test` | Scope string used by load test scenarios. |
-| `AEG_LOADTEST_OIDC_SCOPE` | `openid profile` | `test` | Scope string used when the load scenario must acquire an OIDC `userinfo` token. |
-| `AEG_LOADTEST_PROOF_ORIGIN` | _unset_ | `test` | Public origin used when constructing `DPoP` proof `htu` values; set this when the server validates against an HTTPS origin that differs from the local HTTP target URL. |
-| `AEG_LOADTEST_PUBLIC_ORIGIN` | _unset_ | `test` | Backward-compatible alias for `AEG_LOADTEST_PROOF_ORIGIN`. Prefer the proof-specific name for new setups. |
+| `AEG_LOADTEST_SOURCE_SHA256` | required | `test` | Digest of the frozen source manifest associated with the actual binary. Required for all selections. |
+| `AEG_LOADTEST_PROFILE_MANIFEST` | required for OAuth | `test` | Frozen activated client/issuer/policy/subject JSON receipt; no invented client defaults. |
+| `AEG_LOADTEST_CLIENT_SECRET` | required for OAuth | `test` | Actual registered confidential-client secret; auth method is explicit in the profile manifest. |
+| `AEG_LOADTEST_SESSION_FILE` | required for OAuth | `test` | Protected file containing the genuine public-login issuer cookie. Sent only to authorize. |
+| `AEG_LOADTEST_SESSION_PROVENANCE` | required for OAuth | `test` | Protected producer receipt binding issuer, subject, profile digest and session digest. |
+| `AEG_LOADTEST_CA_CERT` | system trust | `test` | Optional genuine PEM fixture CA; certificate/hostname validation remains enabled. |
+
+The old client ID, redirect URI, scope and OIDC-scope defaults are replaced by
+explicit profile-manifest fields. `AEG_LOADTEST_CLIENT_SECRET_POST`,
+`AEG_LOADTEST_PROOF_ORIGIN`, and `AEG_LOADTEST_PUBLIC_ORIGIN` overrides are rejected.
+Use the actual HTTPS issuer URL and supported TLS routing. See the
+[load consumer contract](../../performance/README.md#load-consumer-inputs-and-reporting)
+for profile/session schemas, supported RS256 ID Token validation, scenario
+completeness, failure preservation and scenario-versus-HTTP reporting units.
 
 ## Source references
 

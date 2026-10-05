@@ -124,6 +124,7 @@ in
     cargoExtraArgs = "--workspace";
     nativeBuildInputs = [
       pkgs.pkg-config
+      pkgs.openssl
       karamel
     ];
     buildInputs = [
