@@ -105,7 +105,7 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          nix develop .#ci --command cargo xtask openapi --check
+          nix develop .#ci --command cargo run --locked --package xtask --bin xtask --features openapi -- openapi --check
 
       - name: nix flake check
         if: ${{ !inputs.delegate-formal-checks }}
