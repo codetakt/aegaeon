@@ -11,11 +11,25 @@ pub fn validate_report_urls(
             !value.chars().any(|c| c.is_control() || c.is_whitespace()),
             "URL inputs must not contain controls or whitespace"
         );
+        let suffix = value
+            .split_once("://")
+            .filter(|(scheme, _)| {
+                scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+            })
+            .map(|(_, suffix)| suffix)
+            .ok_or_else(|| anyhow::anyhow!("URL inputs require an explicit authority"))?;
         ensure!(
-            !value.split_once("://").is_some_and(|(_, suffix)| suffix
+            suffix
+                .split(['/', '\\', '?', '#'])
+                .next()
+                .is_some_and(|authority| !authority.is_empty()),
+            "URL inputs require a nonempty authority"
+        );
+        ensure!(
+            !suffix
                 .split(['/', '?', '#'])
                 .next()
-                .is_some_and(|authority| authority.contains('@'))),
+                .is_some_and(|authority| authority.contains('@')),
             "URL inputs must not contain credentials"
         );
     }
@@ -54,6 +68,7 @@ mod tests {
             "https://issuer.example.test:444",
             "https://issuer.example.test:65535",
             "https://issuer.example.test/tenant",
+            "https://issuer.example.test/https://fixture-secret",
             "https://issuer.example.test/caf%C3%A9",
             "https://issuer.example.test/caf%c3%a9",
             "https://xn--bcher-kva.example.test/tenant",
@@ -91,6 +106,7 @@ mod tests {
             "https://b\u{00fc}cher.example.test/tenant",
             "https://%69ssuer.example.test/tenant",
             "https://issuer.example.test/tenant/",
+            r"https://issuer.example.test\tenant",
         ] {
             assert!(
                 validate_report_urls("http://127.0.0.1:8080", Some(value)).is_err(),
@@ -107,8 +123,23 @@ mod tests {
     fn malformed_or_secret_bearing_urls_are_rejected_for_both_roles() {
         for value in [
             "",
+            "https:///fixture-secret",
+            "http:///fixture-secret",
+            "https:////fixture-secret",
+            r"https://\fixture-secret",
+            r"https://\\fixture-secret",
+            r"https:\\fixture-secret",
+            "https:/fixture-secret",
+            "https:fixture-secret",
+            "https:fixture://fixture-secret",
+            "http:fixture://fixture-secret",
             "https://user:synthetic-secret@issuer.example.test",
             "https://@issuer.example.test",
+            "https://:synthetic-secret@issuer.example.test",
+            "https://user:@issuer.example.test",
+            "https://@/fixture-secret",
+            "https://user:synthetic-secret@/fixture-secret",
+            r"https://issuer.example.test\@fixture-secret",
             "https://issuer.example.test?synthetic-secret",
             "https://issuer.example.test#synthetic-secret",
             "https://issuer.example.test/\nsynthetic-secret",

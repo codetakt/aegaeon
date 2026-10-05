@@ -1790,28 +1790,31 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertFalse((self.root / "target").exists())
                 destination.unlink()
 
-    def test_prior_complete_status_replaced_on_caller_failure_and_success(self) -> None:
+    def test_prior_complete_status_preserved_on_caller_rejection_and_replaced_on_success(
+        self,
+    ) -> None:
+        prior = b"prior complete"
         for number, caller_failure in enumerate([True, False]):
             with self.subTest(caller_failure=caller_failure):
                 artifact = f"artifacts/perf/status-outcome-{number}"
-                status = self.write(artifact + "/source-status.json", b"prior complete")
+                status = self.write(artifact + "/source-status.json", prior)
                 if caller_failure:
                     self.environment["AEG_LOADTEST_SOURCE_SHA256"] = ""
                 else:
                     self.environment.pop("AEG_LOADTEST_SOURCE_SHA256", None)
                 result = self.runner(artifact=artifact)
                 self.assertEqual(result.returncode, 2 if caller_failure else 0, result.stderr)
-                self.assertEqual(
-                    json.loads(status.read_bytes()),
-                    {
-                        "stage": "paths" if caller_failure else "complete",
-                        "exit_status": result.returncode,
-                    },
-                )
-                self.assertEqual(
-                    len(list(self.private.glob("aegaeon-perf-status-*/source-status.raw"))),
-                    number + 1,
-                )
+                retained = list(self.private.glob("aegaeon-perf-status-*/source-status.raw"))
+                if caller_failure:
+                    self.assertEqual(status.read_bytes(), prior)
+                    self.assertEqual(retained, [])
+                else:
+                    self.assertEqual(
+                        json.loads(status.read_bytes()),
+                        {"stage": "complete", "exit_status": 0},
+                    )
+                    self.assertEqual(len(retained), 1)
+                    self.assertEqual(retained[0].read_bytes(), prior)
 
     def test_reserved_output_overlap_and_links_block_external_status_private_reads(self) -> None:
         for number, kind in enumerate(["tracked-target", "target-link", "perf-link"]):

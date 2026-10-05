@@ -45,6 +45,8 @@ fn accepted_targets_and_canonical_issuers_exit_silently_without_files() {
     let fixture = Fixture::new();
     for args in [
         vec!["--url", "http://localhost:8080"],
+        vec![r"--url=https://issuer.example.test\tenant"],
+        vec!["--url=https://issuer.example.test/https://fixture-secret"],
         vec!["--url=HTTPS://ISSUER.example.test:443/caf\u{00e9}"],
         vec!["--url", "https://[0:0:0:0:0:0:0:1]:443/tenant/"],
         vec![
@@ -83,6 +85,12 @@ fn invalid_inputs_and_cli_forms_fail_generically_without_files() {
             "--discovery-expected-issuer=https://other.example.test",
         ],
         vec!["--url=https://user:synthetic-secret@issuer.example.test"],
+        vec!["--url=https://@issuer.example.test"],
+        vec!["--url=https://:synthetic-secret@issuer.example.test"],
+        vec!["--url=https://user:@issuer.example.test"],
+        vec!["--url=https://@/fixture-secret"],
+        vec!["--url=https://user:synthetic-secret@/fixture-secret"],
+        vec![r"--url=https://issuer.example.test\@fixture-secret"],
         vec!["--synthetic-secret=value"],
         vec![
             "--url=http://localhost:8080",
@@ -101,6 +109,16 @@ fn invalid_inputs_and_cli_forms_fail_generically_without_files() {
             "--discovery-expected-issuer=",
         ],
         vec!["--url=https://issuer.example.test:not-a-port"],
+        vec!["--url=https:///fixture-secret"],
+        vec!["--url=http:///fixture-secret"],
+        vec!["--url=https:////fixture-secret"],
+        vec![r"--url=https://\fixture-secret"],
+        vec![r"--url=https://\\fixture-secret"],
+        vec![r"--url=https:\\fixture-secret"],
+        vec!["--url=https:/fixture-secret"],
+        vec!["--url=https:fixture-secret"],
+        vec!["--url=https:fixture://fixture-secret"],
+        vec!["--url=http:fixture://fixture-secret"],
     ] {
         let result = fixture.run(&args);
         assert_eq!(result.status.code(), Some(2), "{args:?}");
