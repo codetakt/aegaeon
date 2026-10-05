@@ -9,18 +9,15 @@ import tempfile
 from typing import TYPE_CHECKING
 
 from .boundaries import (
-    cargo_outputs,
     checked_output,
+    output_boundaries,
     output_path,
     output_roles,
     private_root,
-    reject_source_overlap,
     reject_supplier_overlap,
 )
 from .git_source import git_domain
 from .io import (
-    LEGACY,
-    ancestors,
     canonical,
     fail,
     stamp,
@@ -84,36 +81,12 @@ def status_geometry(
     *,
     runtime: Dependencies,
 ) -> None:
-    domain = git_domain(root, runtime=runtime)
-    output_roles(root, evidence, outputs, runtime=runtime)
+    # The shared admission checks kinds, ownership and link counts as well as
+    # geometry. Prior status links are retained separately, never opened for writes.
+    output_boundaries(root, git_domain(root, runtime=runtime), evidence, outputs, runtime=runtime)
     private_root(
         root,
         [evidence.parent] + [output_path(root, value) for value, directory in outputs if directory],
-        runtime=runtime,
-    )
-    for reserved in [root / "target", root / "artifacts/perf"]:
-        ancestors(reserved)
-        if reserved.is_symlink():
-            fail("reserved output directory is a link")
-    for value, directory in outputs:
-        output = output_path(root, value)
-        if output.is_relative_to(root):
-            relative = output.relative_to(root).as_posix()
-            if not (relative == "artifacts/perf" or relative.startswith("artifacts/perf/")) and (
-                directory or relative not in LEGACY
-            ):
-                fail("output is outside the reserved performance domain")
-    reject_source_overlap(
-        root,
-        domain,
-        [
-            evidence,
-            *(output_path(root, value) for value, _ in outputs),
-            root / "target",
-            root / "artifacts/perf",
-            *(root / name for name in LEGACY),
-            *cargo_outputs(root, runtime=runtime),
-        ],
         runtime=runtime,
     )
 

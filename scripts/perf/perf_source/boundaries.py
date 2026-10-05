@@ -155,6 +155,7 @@ def output_boundaries(
     *,
     runtime: Dependencies,
 ) -> None:
+    """Admit every write destination before retention, status or build effects."""
     output_roles(root, evidence, outputs, runtime=runtime)
     paths = [checked_output(root, str(evidence), directory=True)]
     paths.extend((checked_output(root, value, directory=is_dir) for value, is_dir in outputs))

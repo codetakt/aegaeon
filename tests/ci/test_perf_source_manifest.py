@@ -1704,12 +1704,14 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertFalse((directory / "source").exists())
                 self.assertFalse((self.root / "target").exists())
                 self.assertFalse((self.owner / "tool-calls").exists())
-                self.assertEqual(
-                    json.loads((directory / "source-status.json").read_bytes()),
-                    {"stage": "paths", "exit_status": 1},
-                )
                 if kind == "stale":
+                    self.assertEqual(
+                        json.loads((directory / "source-status.json").read_bytes()),
+                        {"stage": "paths", "exit_status": 1},
+                    )
                     self.assertEqual(destination.read_bytes(), b"prior output")
+                else:
+                    self.assertFalse((directory / "source-status.json").exists())
                 if kind == "directory":
                     destination.rmdir()
                 else:
@@ -1796,6 +1798,9 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 artifact = f"artifacts/perf/custom-{number}"
                 directory = self.root / artifact
                 directory.mkdir(parents=True)
+                status = directory / "source-status.json"
+                status.write_bytes(b"prior complete")
+                retained = set(self.private.iterdir())
                 destination = (
                     self.root / "artifacts/load-test-report.json"
                     if name == "legacy"
@@ -1805,8 +1810,79 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 result = self.runner(artifact=artifact)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual((self.root / "tracked.txt").read_bytes(), original)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((directory / "source").exists())
+                self.assertFalse((self.owner / "tool-calls").exists())
                 self.assertFalse((self.root / "target").exists())
                 destination.unlink()
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_supplier_hardlink_outputs_preserve_status_and_private_retention(self) -> None:
+        accepted = self.runner()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        (self.owner / "tool-calls").unlink()
+        supplier = self.owner / "supplier"
+        inputs = [
+            supplier / "package/bin/aegaeon-loadtest",
+            supplier / "package/bin/aegaeon-loadtest-url-check",
+            supplier / "source.json",
+            supplier / "controller/runner.sh",
+        ]
+        before = self.supplier_input_snapshot()
+        retained = set(self.private.iterdir())
+        for number, (role, source) in enumerate(
+            (role, source)
+            for role in ["SERVER_LOG", "LOADTEST_LOG", "REPORT_PATH", "LEGACY_REPORT"]
+            for source in inputs
+        ):
+            with self.subTest(role=role, source=source):
+                artifact = f"artifacts/perf/supplier-hardlink-{number}"
+                status = self.write(artifact + "/source-status.json", b"prior complete")
+                output = self.owner / f"hardlink-output-{number}"
+                os.link(source, output)
+                result = self.runner(artifact=artifact, overrides={role: str(output)})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(status.read_bytes(), b"prior complete")
+                self.assertEqual(self.supplier_input_snapshot(), before)
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((self.owner / "tool-calls").exists())
+                self.assertFalse((status.parent / "source").exists())
+                output.unlink()
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+
+    def test_initialize_status_admits_outputs_before_retaining_prior_links(self) -> None:
+        prior = b"prior complete"
+        retained = set(self.private.iterdir())
+        for number, (status_kind, output_kind) in enumerate(
+            (status_kind, output_kind)
+            for status_kind in ["raw", "link", "hardlink"]
+            for output_kind in ["link", "hardlink", "fifo", "directory"]
+        ):
+            with self.subTest(status_kind=status_kind, output_kind=output_kind):
+                artifact = self.owner / f"direct-status-{number}"
+                artifact.mkdir()
+                status = artifact / "source-status.json"
+                if status_kind == "link":
+                    status.symlink_to(self.root / "tracked.txt")
+                elif status_kind == "hardlink":
+                    os.link(self.root / "tracked.txt", status)
+                else:
+                    status.write_bytes(prior)
+                output = artifact / "report.json"
+                self.make_guard_destination(output, output_kind)
+                before = status.lstat()
+                with (
+                    mock.patch.dict(os.environ, self.environment),
+                    self.assertRaises(PRODUCER.SourceError),
+                ):
+                    PRODUCER.initialize_status(
+                        self.root, str(artifact), [(str(output), False)], artifact / "source"
+                    )
+                self.assertEqual(PRODUCER.stamp(status.lstat()), PRODUCER.stamp(before))
+                self.assertEqual(set(self.private.iterdir()), retained)
+                self.assertFalse((artifact / "source").exists())
+        self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
 
     def test_prior_complete_status_preserved_on_caller_rejection_and_replaced_on_success(
         self,

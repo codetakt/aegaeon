@@ -492,9 +492,10 @@ def dispatch(args: argparse.Namespace, *, runtime: Dependencies | None = None) -
         outputs = declared_outputs(root, args, runtime=runtime)
         if args.artifact_directory:
             initialize_status(root, args.artifact_directory, outputs, evidence, runtime=runtime)
-        output_boundaries(
-            root, git_domain(root, runtime=runtime), evidence, outputs, runtime=runtime
-        )
+        else:
+            output_boundaries(
+                root, git_domain(root, runtime=runtime), evidence, outputs, runtime=runtime
+            )
         require_fresh_outputs(root, args.fresh_output_file)
     elif args.action == "status":
         write_status(
