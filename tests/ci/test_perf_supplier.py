@@ -48,7 +48,6 @@ class PerfSupplierTests(unittest.TestCase):
             supplier.sha256(context_path.read_bytes()),
             str(shutil.which("git")),
         )
-        helper.SUPPLIER_CONTEXT = context
         return supplier, context, controller
 
     def test_supplier_pair_requires_real_selected_observations_and_exact_installation(self):
@@ -179,7 +178,7 @@ class PerfSupplierTests(unittest.TestCase):
         self.write("tracked.txt", b"worktree after a different staged blob\n")
         self.write("docs/supplier-control.md", b"full domain\n")
         self.write("ROOT-CONTROL.md", b"root prose\n")
-        self.git(self.root, "add", "docs/supplier-control.md", "ROOT-CONTROL.md")
+        self.git(self.root, "add", "--force", "docs/supplier-control.md", "ROOT-CONTROL.md")
         _supplier, context, _controller = self.fixture_context()
         domain = context.helper.git_domain(self.root)
         files, _ = context.helper.read_source(self.root, domain)
@@ -393,6 +392,35 @@ class PerfSupplierTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(observed.read_bytes()), ["127.0.0.3", 8080])
         self.assertEqual(result.stdout.strip(), "http://127.0.0.3:18095")
+
+    def test_fixed_package_caller_changes_reject_under_isolated_generated_helper(self):
+        _supplier, context, _controller = self.fixture_context()
+        admitted = self.invoke("urls", "--url", "https://issuer.example.test")
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
+        prior = self.evidence.parent / "source-status.json"
+        prior.parent.mkdir(parents=True)
+        prior.write_bytes(b"prior status bytes\n")
+        for name in (*PRODUCER.MODULE_FILES, "scripts/perf/loadtest_supplier.py"):
+            path = self.root / name
+            raw, mode = path.read_bytes(), path.lstat().st_mode & 0o777
+            for change in ("missing", "bytes"):
+                with self.subTest(path=name, change=change):
+                    if change == "missing":
+                        path.unlink()
+                    else:
+                        path.write_bytes(raw + b"\n# changed caller source\n")
+                    result = self.invoke(
+                        "paths", "--artifact-directory", str(self.evidence.parent), immutable=True
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("evidence validation failed", result.stderr)
+                    self.assertEqual(prior.read_bytes(), b"prior status bytes\n")
+                    self.assertFalse(self.evidence.exists())
+                    self.assertFalse(list(self.private.iterdir()))
+                    path.write_bytes(raw)
+                    path.chmod(mode)
+        context.admit(self.root)
+        self.assertFalse(self.evidence.exists())
 
 
 if __name__ == "__main__":

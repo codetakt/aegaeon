@@ -6,12 +6,14 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 import uuid
@@ -2213,6 +2215,243 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         self.assertIn("if: always()", upload)
         self.assertIn("artifacts/perf/ci-load-smoke/", upload)
         self.assertIn("artifacts/perf/ci-policy-mixed/", upload)
+
+    def test_helper_packages_are_fresh_and_bound_to_exact_source_location(self) -> None:
+        supplier = supplier_module(SOURCE)
+        first = supplier.source_module(self.root)
+        first._helpers["io"].MAX_RUN_SECONDS = 7
+        other = self.owner / "other"
+        shutil.copytree(self.root / "scripts/perf", other / "scripts/perf")
+        other_io = other / "scripts/perf/perf_source/io.py"
+        other_io.write_text(other_io.read_text() + "\nMAX_RUN_SECONDS += 1\n")
+        original_path = sys.path.copy()
+        hostile_path = [str(other / "scripts/perf"), *original_path]
+        with (
+            mock.patch.object(sys, "path", hostile_path),
+            mock.patch.dict(sys.modules, {"perf_source": first._helpers["io"]}),
+        ):
+            second = supplier.source_module(self.root)
+            alternate = supplier.source_module(other)
+            repeated = supplier.source_module(self.root)
+            self.assertEqual(sys.path, hostile_path)
+        self.assertEqual(sys.path, original_path)
+        packages = [first, second, alternate, repeated]
+        self.assertEqual(len({value._helpers["io"].__package__ for value in packages}), 4)
+        self.assertEqual(second.MAX_RUN_SECONDS, PRODUCER.MAX_RUN_SECONDS)
+        self.assertEqual(repeated.MAX_RUN_SECONDS, PRODUCER.MAX_RUN_SECONDS)
+        self.assertEqual(alternate.MAX_RUN_SECONDS, PRODUCER.MAX_RUN_SECONDS + 1)
+        for helper, source in ((second, self.root), (alternate, other), (repeated, self.root)):
+            for name, value in helper._helpers.items():
+                self.assertEqual(
+                    pathlib.Path(value.__file__), source / f"scripts/perf/perf_source/{name}.py"
+                )
+                self.assertIs(value.fail, helper._helpers["io"].fail)
+            self.assertEqual(helper._helpers["invocation"].MAX_RUN_SECONDS, helper.MAX_RUN_SECONDS)
+            self.assertFalse(hasattr(helper, "SUPPLIER_CONTEXT"))
+
+    def reference_git_tree(self, runtime, inputs):
+        reference = self.private / "reference"
+        reference.mkdir()
+        (reference / "objects").mkdir()
+        env = {
+            **PRODUCER.environment(),
+            "GIT_INDEX_FILE": str(reference / "index"),
+            "GIT_OBJECT_DIRECTORY": str(reference / "objects"),
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(self.root / ".git/objects"),
+        }
+        records = []
+        for name, (mode, raw) in inputs.items():
+            blob = (
+                runtime.command(
+                    self.root, "hash-object", "--no-filters", "-w", "--stdin", env=env, data=raw
+                )
+                .decode()
+                .strip()
+            )
+            records.append(f"{mode} {blob}\t{name}\0".encode())
+        runtime.command(self.root, "read-tree", "--empty", env=env)
+        runtime.command(
+            self.root, "update-index", "-z", "--index-info", env=env, data=b"".join(records)
+        )
+        tree = runtime.command(self.root, "write-tree", env=env).decode().strip()
+        patch = runtime.command(
+            self.root,
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--binary",
+            "--full-index",
+            self.original_head.decode().strip(),
+            tree,
+            "--",
+            env=env,
+        )
+        return tree, patch
+
+    def reference_source_archive(self, inputs):
+        raw_archive = io.BytesIO()
+        with tarfile.open(fileobj=raw_archive, mode="w") as archive:
+            for name, (mode, raw) in inputs.items():
+                info = tarfile.TarInfo(name)
+                info.mode = (self.root / name).lstat().st_mode & 0o777
+                if mode == "120000":
+                    info.type = tarfile.SYMTYPE
+                    info.linkname = raw.decode()
+                    archive.addfile(info)
+                else:
+                    info.size = len(raw)
+                    archive.addfile(info, io.BytesIO(raw))
+        return raw_archive.getvalue()
+
+    def test_batched_blobs_preserve_independent_tree_patch_archive_and_source(self) -> None:
+        for number in range(259):
+            self.write(f"batch/member{number:03d}", f"member {number}\n".encode())
+        self.write("batch/executable", b"executable bytes\0\n", 0o755)
+        (self.root / "batch/link").symlink_to("./member000")
+        self.git(self.root, "add", "batch")
+        self.write("batch/member000", b"dirty after stage\0\xff\n")
+        index = (self.root / ".git/index").read_bytes()
+        names = self.git(self.root, "ls-files", "-z").decode().strip("\0").split("\0")
+        links = {"literal": b"tracked.txt", "batch/link": b"./member000"}
+        inputs = {
+            name: (
+                "120000"
+                if name in links
+                else ("100755" if (self.root / name).lstat().st_mode & 0o111 else "100644"),
+                links[name] if name in links else (self.root / name).read_bytes(),
+            )
+            for name in sorted(names)
+        }
+        runtime = PRODUCER.select()
+        expected_tree, expected_patch = self.reference_git_tree(runtime, inputs)
+        domain = PRODUCER.git_domain(self.root, runtime=runtime)
+        files, contents = PRODUCER.read_source(self.root, domain)
+        selected = mock.Mock(wraps=runtime)
+        selected.supplier = runtime.supplier
+        with (
+            mock.patch.dict(os.environ, self.environment, clear=True),
+            mock.patch.object(
+                PRODUCER, "select", side_effect=RuntimeError("ambient tool selection")
+            ),
+        ):
+            tree, patch, private = PRODUCER.private_tree(
+                self.root, domain, files, contents, [self.evidence.parent], runtime=selected
+            )
+        self.assertEqual((tree, patch), (expected_tree, expected_patch))
+        self.assertEqual(
+            (private / "source.tar").read_bytes(), self.reference_source_archive(inputs)
+        )
+        batches = [
+            call for call in selected.command.call_args_list if call.args[1] == "hash-object"
+        ]
+        self.assertEqual(len(batches), (len(inputs) + 127) // 128)
+        self.assertTrue(all(0 < len(call.args[5:]) <= 128 for call in batches))
+        self.assertEqual((self.root / ".git/index").read_bytes(), index)
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
+        self.assertEqual((self.root / "batch/member000").read_bytes(), inputs["batch/member000"][1])
+        self.assertEqual((self.root / "batch/executable").lstat().st_mode & 0o777, 0o755)
+
+    def test_blob_batches_reject_missing_or_mismatched_results_before_index(self) -> None:
+        runtime = PRODUCER.select()
+        domain = PRODUCER.git_domain(self.root, runtime=runtime)
+        files, contents = PRODUCER.read_source(self.root, domain)
+        for malformed in ("missing", "mismatch"):
+            with self.subTest(result=malformed):
+
+                def command(root, *args, malformed=malformed, **options):
+                    raw = runtime.command(root, *args, **options)
+                    if args[0] == "hash-object":
+                        return b"" if malformed == "missing" else b"0" * 40 + raw[40:]
+                    return raw
+
+                selected = mock.Mock(wraps=runtime)
+                selected.supplier = runtime.supplier
+                selected.command.side_effect = command
+                with (
+                    mock.patch.dict(os.environ, self.environment, clear=True),
+                    self.assertRaises(PRODUCER.SourceError),
+                ):
+                    PRODUCER.private_tree(
+                        self.root, domain, files, contents, [self.evidence.parent], runtime=selected
+                    )
+                self.assertFalse(
+                    any(
+                        call.args[1] in {"read-tree", "update-index", "write-tree"}
+                        for call in selected.command.call_args_list
+                    )
+                )
+                self.assertEqual((self.root / ".git/index").read_bytes(), self.original_index)
+                self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.original_head)
+                self.assertFalse(self.evidence.exists())
+        for private in self.private.glob("aegaeon-perf-source-*"):
+            self.assertFalse((private / "index").exists())
+            self.assertFalse((private / "source.tar").exists())
+
+    def test_each_fixed_helper_is_required_in_complete_selected_git_domain(self) -> None:
+        for name in (*PRODUCER.MODULE_FILES, "scripts/perf/loadtest_supplier.py"):
+            with self.subTest(missing=name):
+                self.git(self.root, "rm", "--cached", "--quiet", name)
+                result = self.invoke("freeze", "--output-directory", str(self.evidence.parent))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.evidence.exists())
+                self.assertFalse(list(self.private.iterdir()))
+                self.git(self.root, "add", name)
+
+    def test_pacing_rejects_nonfinite_interval_and_keeps_positive_tiny_domain(self) -> None:
+        workload = self.write("target/release/aegaeon-loadtest", b"inert workload\n", 0o755)
+        prepare_supplier(
+            SOURCE, self.root, self.owner, PRODUCER, workload, runtime_path=self.environment["PATH"]
+        )
+        supplier = supplier_module(SOURCE)
+        helper = supplier.source_module(self.owner / "supplier/source")
+        context_path = self.owner / "supplier/context.json"
+        context = supplier.SupplierContext(
+            helper,
+            str(context_path),
+            supplier.sha256(context_path.read_bytes()),
+            str(shutil.which("git")),
+        )
+        runtime = PRODUCER.select(supplier=context)
+        config = {
+            "target_url": "https://issuer.example.test",
+            "discovery_expected_issuer": None,
+            "workers": 1,
+            "duration": {"secs": 1, "nanos": 0},
+            "target_rps": 1e308,
+            "warmup_duration": {"secs": 0, "nanos": 0},
+            "scenario": "Smoke",
+            "debug": False,
+        }
+        # Exact Duration representability remains the selected Rust executable's decision.
+        self.assertEqual(PRODUCER.validate_config(config, runtime=runtime), config)
+        for target_rps in (5e-324, 1e-5):
+            with self.subTest(target_rps=target_rps), self.assertRaises(PRODUCER.SourceError):
+                PRODUCER.validate_config({**config, "target_rps": target_rps}, runtime=runtime)
+        self.assertFalse(self.evidence.exists())
+        self.assertFalse(list(self.private.iterdir()))
+
+    def test_public_helpers_keep_positional_inputs_and_reject_unknown_dependency_options(self):
+        runtime = PRODUCER.select()
+        domain = PRODUCER.git_domain(self.root, runtime=runtime)
+        files, contents = PRODUCER.read_source(self.root, domain)
+        with self.assertRaises(TypeError):
+            PRODUCER.private_tree(self.root, domain, files, contents, [], unrelated=runtime)
+        with self.assertRaises(TypeError):
+            PRODUCER.bind(
+                self.root, self.evidence, "digest", None, "aegaeon-server", unrelated=runtime
+            )
+        with (
+            mock.patch.object(
+                PRODUCER, "select", side_effect=RuntimeError("ambient tool selection")
+            ),
+            mock.patch.object(PRODUCER, "verify"),
+            self.assertRaises(PRODUCER.SourceError),
+        ):
+            PRODUCER.bind(
+                self.root, self.evidence, "digest", None, "aegaeon-server", runtime=runtime
+            )
+        self.assertFalse(self.evidence.exists())
+        self.assertFalse(list(self.private.iterdir()))
 
 
 if __name__ == "__main__":

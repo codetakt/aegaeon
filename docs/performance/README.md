@@ -155,6 +155,11 @@ report/configuration overrides, are rejected. `--debug` and
 `--discovery-expected-issuer` can also be supplied before `--`. Numeric duration
 counts and worker counts use ASCII decimal digits in managed runs.
 
+Execution and report acceptance use the same configuration validation. Worker
+count and target invocation rate must produce a finite, bounded interval that
+Rust can represent as a positive `Duration`; a rate that rounds the interval to
+zero is rejected before worker startup.
+
 Authorization retains state, issuer, nonce, scope/resource and PKCE through the
 entire transaction. It requests `prompt=none` and query response mode. Required
 PAR holds all transaction parameters; only client ID and request URI remain on

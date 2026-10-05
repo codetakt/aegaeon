@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod accounting;
+pub mod config;
+pub use config::{LoadTestConfig, TestScenario};
 pub mod generator;
 pub mod metrics;
 pub mod oidc;
@@ -13,164 +15,6 @@ use num_traits::ToPrimitive;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-
-/// Load test configuration
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LoadTestConfig {
-    /// Target server URL
-    pub target_url: String,
-
-    /// Canonical issuer expected in public discovery, independently of HTTP transport.
-    #[serde(deserialize_with = "required_discovery_issuer")]
-    pub discovery_expected_issuer: Option<String>,
-
-    /// Number of concurrent workers
-    pub workers: usize,
-
-    /// Duration of the test
-    pub duration: Duration,
-
-    /// Requests per second target
-    pub target_rps: f64,
-
-    /// Warm-up duration
-    pub warmup_duration: Duration,
-
-    /// Test scenario
-    pub scenario: TestScenario,
-
-    /// Enable debug logging
-    pub debug: bool,
-}
-
-// A nullable value is required: serde's ordinary Option handling accepts absent fields.
-fn required_discovery_issuer<'de, D>(
-    deserializer: D,
-) -> std::result::Result<Option<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    serde::Deserialize::deserialize(deserializer)
-}
-
-impl Default for LoadTestConfig {
-    fn default() -> Self {
-        Self {
-            target_url: "http://localhost:8080".to_string(),
-            discovery_expected_issuer: None,
-            workers: 10,
-            duration: Duration::from_secs(60),
-            target_rps: 100.0,
-            warmup_duration: Duration::from_secs(10),
-            scenario: TestScenario::Smoke,
-            debug: false,
-        }
-    }
-}
-
-/// Test scenarios
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum TestScenario {
-    /// Smoke endpoints that should succeed on a bare server
-    Smoke,
-
-    /// Authorization code flow
-    AuthorizationCode,
-
-    /// Token introspection
-    Introspection,
-
-    /// Token revocation
-    Revocation,
-
-    /// DPoP-bound tokens
-    DPoP,
-
-    /// OIDC userinfo
-    Userinfo,
-
-    /// OAuth authorization server metadata
-    Discovery,
-
-    /// JWKS distribution
-    Jwks,
-
-    /// PAR flow
-    PAR,
-
-    /// Mixed scenario (all flows)
-    Mixed,
-
-    /// Mixed success-path and policy-rejection traffic
-    PolicyMixed,
-
-    /// Key rotation stress test
-    KeyRotation,
-}
-
-impl TestScenario {
-    #[must_use]
-    pub fn requires_profile(&self) -> bool {
-        !matches!(
-            self,
-            Self::Smoke | Self::Discovery | Self::Jwks | Self::KeyRotation
-        )
-    }
-    #[must_use]
-    pub fn requires_oidc(&self) -> bool {
-        matches!(self, Self::Userinfo | Self::PolicyMixed)
-    }
-    #[must_use]
-    pub fn requires_dpop(&self) -> bool {
-        matches!(self, Self::DPoP | Self::Mixed)
-    }
-    /// Leg identity is chosen before execution, including failures before HTTP setup.
-    #[must_use]
-    pub fn leg(&self, iteration: u64) -> (String, bool) {
-        let name = match self {
-            Self::Smoke => {
-                if iteration.is_multiple_of(2) {
-                    "health"
-                } else {
-                    "system-version"
-                }
-            }
-            Self::AuthorizationCode => "auth-code",
-            Self::DPoP => "dpop",
-            Self::PAR => "par",
-            Self::Introspection => "introspection",
-            Self::Revocation => "revocation",
-            Self::Userinfo => "userinfo",
-            Self::Discovery => "discovery",
-            Self::Jwks => "jwks",
-            Self::KeyRotation => "key-rotation",
-            Self::Mixed => ["dpop", "introspection", "revocation", "par"][(iteration % 4) as usize],
-            Self::PolicyMixed => [
-                "introspection",
-                "introspection-missing-client-auth",
-                "revocation",
-                "revocation-missing-client-auth",
-                "userinfo",
-                "userinfo-missing-authorization",
-            ][(iteration % 6) as usize],
-        };
-        (
-            name.into(),
-            matches!(self, Self::PolicyMixed) && iteration % 6 % 2 == 1,
-        )
-    }
-    #[must_use]
-    pub fn required_legs(&self) -> Vec<String> {
-        let count = match self {
-            Self::Smoke => 2,
-            Self::Mixed => 4,
-            Self::PolicyMixed => 6,
-            _ => 1,
-        };
-        (0..count).map(|i| self.leg(i).0).collect()
-    }
-}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ReportIdentity {
@@ -532,12 +376,9 @@ impl LoadTestResults {
             "configuration witness digest mismatch"
         );
         let config: LoadTestConfig = serde_json::from_str(&identity.config_json)?;
+        config.validate()?;
         ensure!(
-            config.workers > 0
-                && config.target_rps.is_finite()
-                && config.target_rps > 0.0
-                && !config.duration.is_zero()
-                && serde_json::to_value(&config.scenario)? == serde_json::to_value(scenario)?
+            serde_json::to_value(&config.scenario)? == serde_json::to_value(scenario)?
                 && self.warmup_requested != config.warmup_duration.is_zero(),
             "configuration witness differs from selected execution"
         );
@@ -647,6 +488,24 @@ mod report_tests {
         report.finalize(Duration::from_secs(1)).await;
         assert!(report.validate_complete().is_ok());
         let saved = report.identity.as_ref().unwrap().clone();
+        // A hash-consistent witness must still satisfy the actual execution gate.
+        for change in ["pacing", "duration", "url", "workers"] {
+            let mut invalid: LoadTestConfig = serde_json::from_str(&saved.config_json).unwrap();
+            match change {
+                "pacing" => invalid.target_rps = 1e100,
+                "duration" => invalid.duration = Duration::from_secs(86_401),
+                "url" => invalid.target_url = "https://@issuer.example.test".into(),
+                _ => invalid.workers = 0,
+            }
+            let identity = report.identity.as_mut().unwrap();
+            identity.config_json = serde_json::to_string(&invalid).unwrap();
+            identity.config_sha256 = profile::sha256(identity.config_json.as_bytes());
+            assert!(
+                report.validate_complete().is_err(),
+                "accepted {change} witness"
+            );
+        }
+        report.identity = Some(saved.clone());
         report.identity.as_mut().unwrap().config_json.push(' ');
         assert!(report.validate_complete().is_err());
         report.identity = Some(saved.clone());

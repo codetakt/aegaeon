@@ -11,7 +11,7 @@ import shutil
 import stat
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Any, Never
+from typing import TYPE_CHECKING, Any, Never, cast
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -353,7 +353,8 @@ class SupplierContext:
             manifest["source_nar_sha256"],
         ) != (source["source_path"], source["source_nar_sha256"]):
             invalid("supplier source projection mismatch")
-        if pathlib.Path(self.helper.__file__) != (
+        helper_path = self.helper.__file__
+        if helper_path is None or pathlib.Path(helper_path) != (
             pathlib.Path(source["source_path"]) / "scripts/perf/source_manifest.py"
         ):
             invalid("immutable helper differs from supplier source")
@@ -409,13 +410,13 @@ class SupplierContext:
 
     def admit(self, root: pathlib.Path) -> None:
         self.validate()
-        domain = self.helper.git_domain(root)
+        domain = self.helper.git_domain(root, runtime=self.helper.select(git=self.git))
         self.helper.unexpected_paths(root, domain)
         files, _ = self.helper.read_source(root, domain)
         self.check_files(files)
         self.helper.unexpected_paths(root, domain)
         if (
-            self.helper.git_domain(root) != domain
+            self.helper.git_domain(root, runtime=self.helper.select(git=self.git)) != domain
             or self.helper.read_source(root, domain)[0] != files
         ):
             invalid("source changed during immutable admission")
@@ -457,7 +458,7 @@ class SupplierContext:
                 }
             ),
         )
-        return selected["path"]
+        return cast("str", selected["path"])
 
     def verify_workload(
         self, evidence: pathlib.Path, source_sha256: str, binding: dict[str, Any]
