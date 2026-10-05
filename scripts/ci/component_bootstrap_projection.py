@@ -1,23 +1,18 @@
-"""Retained exclusive source projection and fixed isolated-import seam.
+"""Authenticate original source bytes and retain their exclusive projection.
 
-Only authenticate_and_project acquires original input authority. Filesystem
-controls and fixture import success establish neither readonly mounts, native
-execution admission nor a production original-service/runtime implementation.
+This module never imports or executes candidate source. Retained FDs and source
+rechecks do not establish process isolation, an admitted import closure, readonly
+mounts, native execution admission, or production runtime/CA/credential access.
+Those independent gates remain required before any candidate execution.
 """
 
 from __future__ import annotations
 
-import builtins
-import importlib.abc
-import importlib.util
 import os
 import stat
-import sys
-from contextlib import contextmanager
 from dataclasses import dataclass
-from importlib.machinery import BuiltinImporter, FrozenImporter, PathFinder
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from component_bootstrap_origin import (
     path_parts,
@@ -26,10 +21,7 @@ from component_bootstrap_origin import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
-    from importlib.machinery import ModuleSpec
     from pathlib import Path
-    from types import ModuleType
 
     from component_bootstrap_origin import BootstrapPremises, OriginalRead, VerifiedSources
 
@@ -196,10 +188,10 @@ class RetainedProjection:
     def source_bytes(self, path: str) -> bytes:
         self.recheck()
         name = "source/" + path
-        require(name in self._files, "unadmitted source module path")
+        require(name in self._files, "unadmitted source path")
         raw = self._contents[name]
         observed = os.pread(self._files[name].descriptor, len(raw) + 1, 0)
-        require(observed == raw, "source changed at load boundary")
+        require(observed == raw, "source changed at read boundary")
         self.recheck()
         return observed
 
@@ -216,130 +208,3 @@ def authenticate_and_project(
 ) -> RetainedProjection:
     original = verify_original_sources(reader, premises, policy)
     return RetainedProjection(original, parent)
-
-
-class _FixedLoader(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def __init__(self, projection: RetainedProjection, modules: Mapping[str, str]) -> None:
-        self.projection = projection
-        self.modules = MappingProxyType(dict(modules))
-        self.loaded: dict[str, ModuleType] = {}
-        self.original_meta_path = tuple(sys.meta_path)
-
-    def verify_import_state(self) -> None:
-        premises = self.projection.original.premises
-        self.projection.recheck()
-        require(
-            sys.flags.isolated == 1
-            and sys.executable == premises.interpreter
-            and tuple(sys.path) == premises.runtime_import_paths
-            and tuple(sys.meta_path) == (self, *self.original_meta_path),
-            "fixed isolated runtime/import roots differ",
-        )
-
-    def _import(
-        self,
-        name: str,
-        globals: dict[str, Any] | None = None,  # noqa: A002 - exact Python __import__ protocol
-        locals: dict[str, Any] | None = None,  # noqa: A002 - exact Python __import__ protocol
-        fromlist: Sequence[str] = (),
-        level: int = 0,
-    ) -> Any:  # noqa: ANN401 - Python's fixed __import__ protocol
-        self.verify_import_state()
-        absolute = name
-        if level:
-            require(
-                globals is not None and type(globals.get("__package__")) is str,
-                "closed relative package unavailable",
-            )
-            namespace = cast("dict[str, Any]", globals)
-            absolute = importlib.util.resolve_name("." * level + name, namespace["__package__"])
-        require(
-            absolute in self.modules
-            or absolute.split(".")[0] in sys.stdlib_module_names
-            or absolute.split(".")[0] in self.projection.original.premises.runtime_packages,
-            "import outside independently fixed source/runtime domain",
-        )
-        return builtins.__import__(name, globals, locals, fromlist, level)
-
-    def find_spec(
-        self, fullname: str, path: Sequence[str] | None, target: ModuleType | None = None
-    ) -> ModuleSpec | None:
-        self.verify_import_state()
-        if fullname not in self.modules:
-            return None
-        require(
-            target is None and (path is None or not path),
-            "candidate reload or nonvirtual package route rejected",
-        )
-        source = self.modules[fullname]
-        return importlib.util.spec_from_loader(
-            fullname,
-            self,
-            origin=str(self.projection.root / "source" / source),
-            is_package=source.endswith("/__init__.py"),
-        )
-
-    def create_module(self, spec: ModuleSpec) -> ModuleType | None:
-        require(spec.name in self.modules, "unadmitted module creation")
-        return None
-
-    def exec_module(self, module: ModuleType) -> None:
-        self.verify_import_state()
-        path = self.modules[module.__name__]
-        raw = self.projection.source_bytes(path)
-        filename = str(self.projection.root / "source" / path)
-        code = compile(raw, filename, "exec", dont_inherit=True)
-        self.verify_import_state()
-        module.__file__ = filename
-        module.__dict__["__builtins__"] = {**vars(builtins), "__import__": self._import}
-        # Package paths are virtual: all local imports go through this fixed map.
-        if path.endswith("/__init__.py"):
-            module.__path__ = []
-        self.loaded[module.__name__] = module
-        exec(code, module.__dict__)  # noqa: S102 - only authenticated retained source bytes
-        self.verify_import_state()
-
-
-@contextmanager
-def load_admitted_entry(
-    projection: RetainedProjection,
-) -> Iterator[ModuleType]:
-    """Load a fixed protected module map in the independently isolated runtime.
-
-    Module map/entry come from retained protected premises, never the descriptor.
-    This seam does not launch consumers, assign NativeAdmission, or bypass richer
-    S installer admissions. Invoke that richer installer within this scope so
-    lazy source imports retain the same loader and original identity checks.
-    A clean independently admitted process is required; FD closure is explicit.
-    """
-    premises = projection.original.premises
-    modules, entry = dict(premises.module_map), premises.entrypoint
-    require(
-        tuple(sys.meta_path) == (BuiltinImporter, FrozenImporter, PathFinder),
-        "ambient or unadmitted runtime import finder",
-    )
-    for name, path in modules.items():
-        require(
-            all(part.isidentifier() for part in name.split("."))
-            and name.split(".")[0] not in sys.stdlib_module_names
-            and name not in sys.modules
-            and path in projection.original.sources
-            and path.endswith(".py"),
-            "ambient collision or unadmitted module map",
-        )
-    loader = _FixedLoader(projection, modules)
-    sys.meta_path.insert(0, loader)
-    try:
-        loader.verify_import_state()
-        result = importlib.import_module(entry)
-        loader.verify_import_state()
-        yield result
-        loader.verify_import_state()
-    finally:
-        try:
-            loader.verify_import_state()
-        finally:
-            sys.meta_path[:] = loader.original_meta_path
-            for name, module in loader.loaded.items():
-                if sys.modules.get(name) is module:
-                    del sys.modules[name]

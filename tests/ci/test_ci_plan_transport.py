@@ -963,6 +963,21 @@ class CiPlanTransportTests(unittest.TestCase):
                         "pr-title": "${{ github.event.pull_request.title || '' }}",
                     },
                 }
+            expected = (
+                {
+                    **expected,
+                    "steps": [
+                        *expected["steps"],
+                        {
+                            "name": "Check component package-source admission",
+                            "run": "nix develop .#integrity --command python3 -m unittest discover "
+                            "-s tests/ci -p test_component_bootstrap_origin.py -v\n",
+                        },
+                    ],
+                }
+                if job == "integrity"
+                else expected
+            )
             self.assertEqual(workflow["jobs"][job], expected)
         documentation = yaml.safe_load((ROOT / ".github/workflows/documentation.yml").read_text())
         self.assertEqual(set(documentation["jobs"]), {"metadata", "helpers", "complete"})

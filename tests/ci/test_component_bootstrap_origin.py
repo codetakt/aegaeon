@@ -23,10 +23,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # Only the new protected bootstrap modules enter this test process; remove the
-# temporary path before constructing any fixture premises or loading candidates.
+# temporary path before constructing any fixture premises; candidates stay inert.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/ci"))
 import component_bootstrap_origin as origin_module
-from component_bootstrap_loader import authenticate_and_project, load_admitted_entry
 from component_bootstrap_origin import (
     API_ROOT,
     CREDENTIAL_SCOPE,
@@ -41,6 +40,7 @@ from component_bootstrap_origin import (
     sha256,
     verify_original_sources,
 )
+from component_bootstrap_projection import authenticate_and_project
 
 sys.path.pop(0)
 
@@ -215,29 +215,37 @@ class BootstrapOriginTests(unittest.TestCase):
         del vars(builtins)["_aegaeon_origin_probe"]
 
     @isolated_test
-    def test_positive_originals_project_and_load_only_fixed_verified_bytes(self) -> None:
+    def test_positive_originals_retain_verified_bytes_without_candidate_execution(self) -> None:
         large_probe = PROBE_BYTES + b"#" + b"x" * (3 * 1024 * 1024 // 2) + b"\n"
         self.assertGreater(len(large_probe), 1024 * 1024)
-        for probe_bytes in (PROBE_BYTES, large_probe):
+        for probe_bytes, mode in ((PROBE_BYTES, "100644"), (large_probe, "100755")):
             with (
-                self.subTest(source_bytes=len(probe_bytes)),
+                self.subTest(source_bytes=len(probe_bytes), mode=mode),
                 tempfile.TemporaryDirectory() as temporary,
             ):
                 vars(builtins)["_aegaeon_origin_probe"] = 0
                 fixture = PrivateOriginalFixture(probe_bytes)
+                fixture.rows[0]["git_mode"] = mode
+                fixture.documents["git/trees/" + SOURCE_TREE + "?recursive=1"]["tree"][0][
+                    "mode"
+                ] = mode
+                fixture.rebind_descriptor()
                 projection = authenticate_and_project(
                     fixture, fixture.premises, fixture.policy, Path(temporary)
                 )
                 try:
                     projection.recheck()
                     self.assertEqual(projection.source_bytes(PROBE), probe_bytes)
-                    with load_admitted_entry(projection) as module:
-                        self.assertEqual(module.installed_value(), 17)
-                        self.assertIn("origin_sibling", sys.modules)
-                    self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 1)
+                    self.assertEqual(projection.source_bytes(SIBLING), SIBLING_BYTES)
+                    source = projection.root / "source"
+                    self.assertEqual(
+                        (source / PROBE).stat().st_mode & 0o777,
+                        0o555 if mode == "100755" else 0o444,
+                    )
+                    self.assertEqual((source / SIBLING).stat().st_mode & 0o777, 0o444)
+                    self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
                     self.assertNotIn("origin_probe", sys.modules)
-                    with self.assertRaises(OriginRejectedError):
-                        module.installed_value()
+                    self.assertNotIn("origin_sibling", sys.modules)
                     self.assertGreater(fixture.rechecks, len(fixture.reads) * 2)
                     self.assertTrue(all(url.startswith(API_ROOT) for url in fixture.reads))
                     self.assertFalse(any("/contents/" in url for url in fixture.reads))
@@ -407,7 +415,7 @@ class BootstrapOriginTests(unittest.TestCase):
                 self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
 
     @isolated_test
-    def test_retained_mutations_and_ambient_imports_reject_before_entry_exec(self) -> None:  # noqa: PLR0912, PLR0915 - retained filesystem fault matrix
+    def test_retained_mutations_reject_on_explicit_projection_recheck(self) -> None:  # noqa: PLR0912, PLR0915 - retained filesystem fault matrix
         for kind in [
             "bytes",
             "mode",
@@ -416,14 +424,12 @@ class BootstrapOriginTests(unittest.TestCase):
             "missing",
             "hardlink",
             "ancestor",
-            "ambient-path",
         ]:
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 fixture = PrivateOriginalFixture()
                 projection = authenticate_and_project(
                     fixture, fixture.premises, fixture.policy, Path(temporary)
                 )
-                original_path = list(sys.path)
                 try:
                     source = projection.root / "source" / PROBE
                     if kind == "bytes":
@@ -447,17 +453,107 @@ class BootstrapOriginTests(unittest.TestCase):
                         renamed = Path(temporary + "-retained")
                         Path(temporary).rename(renamed)
                         Path(temporary).mkdir()
-                    else:
-                        sys.path.insert(0, temporary)
-                    with self.assertRaises(OriginRejectedError), load_admitted_entry(projection):
-                        self.fail("modified input reached candidate entry")
+                    with self.assertRaises(OriginRejectedError):
+                        projection.recheck()
                     self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
                 finally:
-                    sys.path[:] = original_path
                     projection.close()
                     if kind == "ancestor":
                         Path(temporary).rmdir()
                         Path(temporary + "-retained").rename(Path(temporary))
+
+    @isolated_test
+    def test_invalid_content_type_rejects_before_projection(self) -> None:
+        content_types: tuple[object, ...] = (None, 1, True, [], b"application/json")
+        for content_type in content_types:
+            with (
+                self.subTest(content_type=content_type),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                fixture = PrivateOriginalFixture()
+
+                def change_reply(
+                    reply: OriginalReply, invalid: Any = content_type
+                ) -> OriginalReply:
+                    return dataclasses.replace(reply, content_type=invalid)
+
+                fixture.reply_change = change_reply
+                with self.assertRaises(OriginRejectedError):
+                    authenticate_and_project(
+                        fixture, fixture.premises, fixture.policy, Path(temporary)
+                    )
+                self.assertEqual(len(fixture.reads), 1)
+                self.assertEqual(list(Path(temporary).iterdir()), [])
+                self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
+                self.assertNotIn("origin_probe", sys.modules)
+                self.assertNotIn("origin_sibling", sys.modules)
+
+    @isolated_test
+    def test_deep_original_json_rejects_before_projection(self) -> None:
+        depth = 10_000
+        malformed = b'{"nested":' + b"[" * depth + b"0" + b"]" * depth + b"}"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = PrivateOriginalFixture()
+            fixture.reply_change = lambda reply: dataclasses.replace(reply, body=malformed)
+            with self.assertRaises(OriginRejectedError):
+                authenticate_and_project(fixture, fixture.premises, fixture.policy, Path(temporary))
+            self.assertEqual(len(fixture.reads), 1)
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+            self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
+
+    @isolated_test
+    def test_surrogate_source_paths_reject_before_projection(self) -> None:
+        for domain in ("tree", "registry"):
+            with self.subTest(domain=domain), tempfile.TemporaryDirectory() as temporary:
+                fixture = PrivateOriginalFixture()
+                malformed = "scripts/ci/\ud800.py"
+                if domain == "tree":
+                    fixture.documents["git/trees/" + SOURCE_TREE + "?recursive=1"]["tree"][0][
+                        "path"
+                    ] = malformed
+                else:
+                    fixture.rows[0]["relative_path"] = malformed
+                    fixture.rebind_descriptor()
+                with self.assertRaises(OriginRejectedError):
+                    authenticate_and_project(
+                        fixture, fixture.premises, fixture.policy, Path(temporary)
+                    )
+                self.assertEqual(list(Path(temporary).iterdir()), [])
+                self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
+
+    @isolated_test
+    def test_unhashable_source_fields_reject_before_projection(self) -> None:
+        invalid_values: tuple[object, ...] = ([], {})
+        for field in ("components", "tree-type", "tree-mode", "registry-mode"):
+            for invalid in invalid_values:
+                with (
+                    self.subTest(field=field, invalid=invalid),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    fixture = PrivateOriginalFixture()
+                    if field == "components":
+                        policy = json.loads(fixture.policy)
+                        policy["supplemental_lanes"]["components"] = invalid
+                        fixture.policy = encoded(policy)
+                        fixture._commit(
+                            BASE,
+                            BASE_TREE,
+                            {POLICY_PATH: fixture.policy, DESCRIPTOR_PATH: fixture.descriptor},
+                        )
+                    elif field == "registry-mode":
+                        fixture.rows[0]["git_mode"] = invalid
+                        fixture.rebind_descriptor()
+                    else:
+                        key = "type" if field == "tree-type" else "mode"
+                        fixture.documents["git/trees/" + SOURCE_TREE + "?recursive=1"]["tree"][0][
+                            key
+                        ] = invalid
+                    with self.assertRaises(OriginRejectedError):
+                        authenticate_and_project(
+                            fixture, fixture.premises, fixture.policy, Path(temporary)
+                        )
+                    self.assertEqual(list(Path(temporary).iterdir()), [])
+                    self.assertEqual(vars(builtins)["_aegaeon_origin_probe"], 0)
 
     @isolated_test
     def test_existing_destination_is_preserved_and_never_overwritten(self) -> None:

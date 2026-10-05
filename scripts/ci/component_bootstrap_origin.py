@@ -3,7 +3,9 @@
 This private seam assumes an independently admitted original-service reader and
 protected runtime/CA/credential/inventory inputs. Constructing these records or
 providing fixture replies does not establish those premises or production access.
-The richer package installer must still perform its existing release checks.
+This gate authenticates source only and supplies no candidate import or execution.
+Independent process isolation and import-closure admission remain unresolved;
+the richer package installer must still perform its existing release checks.
 """
 
 from __future__ import annotations
@@ -51,9 +53,13 @@ def object_id(value: object) -> bool:
 
 def path_parts(value: str) -> tuple[str, ...]:
     require(type(value) is str, "original source path is not text")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise OriginRejectedError("noncanonical original source path") from error
     parts = tuple(value.split("/"))
     require(
-        0 < len(value.encode()) <= 4096
+        0 < len(encoded) <= 4096
         and len(parts) <= 128
         and all(part not in {"", ".", ".."} and len(part.encode()) <= 255 for part in parts)
         and "\\" not in value
@@ -81,7 +87,7 @@ def strict_object(raw: bytes) -> JsonObject:
         value = json.loads(
             raw.decode("utf-8"), object_pairs_hook=_unique, parse_constant=_reject_constant
         )
-    except (UnicodeError, ValueError) as error:
+    except (RecursionError, UnicodeError, ValueError) as error:
         raise OriginRejectedError("malformed original JSON") from error
     require(type(value) is dict, "original JSON object required")
     return cast("JsonObject", value)
@@ -213,6 +219,7 @@ class _OriginalGate:
             and reply.method == "GET"
             and type(reply.status) is int
             and reply.status == 200
+            and type(reply.content_type) is str
             and reply.content_type.split(";", 1)[0].strip().lower() == "application/json",
             "fixed original GET/TLS route or response fields differ",
         )
@@ -277,7 +284,9 @@ class _OriginalGate:
                 "duplicate path or invalid blob in original whole tree",
             )
             require(
-                (entry.get("type"), entry.get("mode"))
+                type(entry.get("type")) is str
+                and type(entry.get("mode")) is str
+                and (entry.get("type"), entry.get("mode"))
                 in {
                     ("blob", "100644"),
                     ("blob", "100755"),
@@ -340,6 +349,7 @@ def verify_original_sources(  # noqa: PLR0915 - ordered original admissions befo
         type(value.get("plan_envelope_version")) is int
         and value["plan_envelope_version"] == 2
         and type(value.get("supplemental_lanes")) is dict
+        and type(value["supplemental_lanes"].get("components")) is str
         and value["supplemental_lanes"].get("components") in {"pending", "required"},
         "adopted protected component policy unavailable",
     )
@@ -385,6 +395,7 @@ def verify_original_sources(  # noqa: PLR0915 - ordered original admissions befo
         require(
             row.get("repository_or_supplier") == REPOSITORY
             and object_id(row.get("commit_or_version"))
+            and type(row.get("git_mode")) is str
             and row.get("git_mode") in {"100644", "100755"}
             and not (path == POLICY_PATH and row["commit_or_version"] == premises.actual_base),
             "original repository/commit/mode or policy backedge differs",
