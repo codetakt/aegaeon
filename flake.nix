@@ -1079,7 +1079,9 @@
 
       in
       {
-        packages = flakePackages;
+        packages = flakePackages // {
+          ci-controller-python = import ./nix/ci-controller-python.nix { inherit pkgs; };
+        };
 
         apps = lib.mapAttrs mkAppFromSpec (
           lib.removeAttrs appSpecs (lib.optional (!isLinux) "verify-kani")
