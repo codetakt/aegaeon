@@ -668,7 +668,8 @@ class SanitizerFixture:
         def stopped():
             try:
                 return stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
+                # procfs can return ESRCH after open when the process exits.
                 return True
 
         deadline = time.monotonic() + 5
@@ -803,6 +804,21 @@ class SanitizerFixture:
 
 
 class SanitizerTests(SanitizerFixture, unittest.TestCase):
+    def test_child_stop_observation_handles_only_process_disappearance(self):
+        for error in (FileNotFoundError("gone"), ProcessLookupError("gone")):
+            with (
+                self.subTest(error=type(error).__name__),
+                patch.object(Path, "read_text", side_effect=["1234", error, error]),
+            ):
+                self.assert_child_stopped()
+        error = PermissionError("procfs access denied")
+        with (
+            patch.object(Path, "read_text", side_effect=["1234", error]),
+            self.assertRaises(PermissionError) as caught,  # noqa: PT027 - unittest discovery
+        ):
+            self.assert_child_stopped()
+        self.assertIs(caught.exception, error)  # noqa: PT009 - preserve inspection failures
+
     def test_nonstandard_names_and_cache_bound_to_all_required_targets(self):
         for mode in ("success", "fresh-cache", "ignored-policy"):
             with self.subTest(mode=mode):
