@@ -205,7 +205,7 @@ variable "server_image" {
   type        = string
   description = "Exact externally tested OCI artifact digest."
   validation {
-    condition     = can(regex("^[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}$", var.server_image))
+    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", var.server_image))
     error_message = "A digest-pinned OCI reference is required."
   }
 }
@@ -214,7 +214,7 @@ variable "loadgen_image" {
   type        = string
   description = "Exact externally tested OCI artifact digest."
   validation {
-    condition     = can(regex("^[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}$", var.loadgen_image))
+    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", var.loadgen_image))
     error_message = "A digest-pinned OCI reference is required."
   }
 }
@@ -269,7 +269,7 @@ variable "server_secret_version" {
   description = "Exact supplier version ID for the bundle."
   validation {
     condition     = can(regex("^[A-Za-z0-9-]{32,64}$", var.server_secret_version))
-    error_message = "A pinned version ID is required; absent metrics must have no version."
+    error_message = "server_secret_version must be a pinned version ID of 32 to 64 letters, digits, or hyphens."
   }
 }
 
@@ -297,7 +297,7 @@ variable "client_secret_version" {
   description = "Exact supplier version ID for the bundle."
   validation {
     condition     = can(regex("^[A-Za-z0-9-]{32,64}$", var.client_secret_version))
-    error_message = "A pinned version ID is required; absent metrics must have no version."
+    error_message = "client_secret_version must be a pinned version ID of 32 to 64 letters, digits, or hyphens."
   }
 }
 

@@ -125,6 +125,8 @@ restart_server_script=$'set -euo pipefail\nsudo systemctl restart aegaeon-server
 
 server_stats_script=$'set -euo pipefail\nsudo systemctl show aegaeon-server \\\n  -p CPUUsageNSec \\\n  -p MemoryCurrent \\\n  -p MemoryPeak \\\n  -p TasksCurrent \\\n  -p NRestarts \\\n  --no-pager\n'
 
+SWEEP_EXIT_CODE=0
+
 IFS=',' read -r -a rps_values <<<"$RPS_LIST"
 
 for rps in "${rps_values[@]}"; do
@@ -156,7 +158,10 @@ umask 077
 CONFIG_FILE="\$(mktemp /etc/aegaeon/.loadtest-invocation-XXXXXXXX.json)"
 trap 'rm -f -- "\$CONFIG_FILE"' EXIT
 printf '%s' '${config_payload}' | base64 --decode >"\$CONFIG_FILE"
-/usr/local/bin/aegaeon-run-loadtest --config-file "\$CONFIG_FILE"
+DRIVER_EXIT_CODE=0
+/usr/local/bin/aegaeon-run-loadtest --config-file "\$CONFIG_FILE" || DRIVER_EXIT_CODE=\$?
+printf 'DRIVER_EXIT_CODE=%s\n' "\$DRIVER_EXIT_CODE"
+exit 0
 SCRIPT
 	)
 
@@ -166,6 +171,7 @@ SCRIPT
 
 	run_id="$(printf '%s\n' "$lg_stdout" | sed -n 's/^RUN_ID=//p' | tail -n 1)"
 	exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^EXIT_CODE=//p' | tail -n 1)"
+	driver_exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^DRIVER_EXIT_CODE=//p' | tail -n 1)"
 	if [[ -z $run_id ]]; then
 		echo "[perf/aws] failed to detect RUN_ID in loadgen output" >&2
 		echo "$lg_stdout" >&2
@@ -176,6 +182,37 @@ SCRIPT
 	mkdir -p "$run_dir"
 	printf '%s' "$lg_stdout" >"$run_dir/ssm_loadgen.stdout.log"
 	printf '%s' "$lg_stderr" >"$run_dir/ssm_loadgen.stderr.log"
+
+	RUN_FAILED=0
+	if [[ ! $exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $exit_code -gt 255 ||
+		! $driver_exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $driver_exit_code -gt 255 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^EXIT_CODE=/p' | wc -l) -ne 1 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^DRIVER_EXIT_CODE=/p' | wc -l) -ne 1 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^RUN_ID=/p' | wc -l) -ne 1 ]]; then
+		echo "[perf/aws] missing or ambiguous driver outcome" >&2
+		RUN_FAILED=1
+	elif [[ $exit_code -ne 0 || $driver_exit_code -ne 0 ]]; then
+		RUN_FAILED=1
+	fi
+
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/report.json" \
+		"$run_dir/report.json" || RUN_FAILED=1
+	for artifact in loadtest.stdout.log loadtest.stderr.log exit_code.txt run-receipt.json client.version.json driver-config.json artifact-receipt.json SOURCE-MANIFEST.json; do
+		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+			"s3://${artifact_bucket}/${artifact_prefix}${run_id}/${artifact}" \
+			"$run_dir/${artifact}" || RUN_FAILED=1
+	done
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/server.metrics.prom" \
+		"$run_dir/server.metrics.prom" ||
+		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+			"s3://${artifact_bucket}/${artifact_prefix}${run_id}//server.metrics.prom" \
+			"$run_dir/server.metrics.prom" || true
+
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/metrics-status.json" \
+		"$run_dir/metrics-status.json" || RUN_FAILED=1
 
 	stats_resp="$(ssm_run "$server_instance_id" "aegaeon: collect server stats rps=${rps}" "$server_stats_script")"
 	stats_stdout="$(jq -r '.StandardOutputContent' <<<"$stats_resp")"
@@ -190,28 +227,10 @@ SCRIPT
 
 	server_cpu_s="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1e9)' "$server_cpu_ns")"
 
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/report.json" \
-		"$run_dir/report.json"
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/loadtest.stdout.log" \
-		"$run_dir/loadtest.stdout.log" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/loadtest.stderr.log" \
-		"$run_dir/loadtest.stderr.log" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/exit_code.txt" \
-		"$run_dir/exit_code.txt" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/server.metrics.prom" \
-		"$run_dir/server.metrics.prom" ||
-		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-			"s3://${artifact_bucket}/${artifact_prefix}${run_id}//server.metrics.prom" \
-			"$run_dir/server.metrics.prom" || true
-
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/metrics-status.json" \
-		"$run_dir/metrics-status.json"
+	if [[ $RUN_FAILED -ne 0 ]]; then
+		SWEEP_EXIT_CODE=1
+		continue
+	fi
 
 	export PERF_RPS_TARGET="$rps"
 	export PERF_WORKERS="$WORKERS"
@@ -331,3 +350,5 @@ PY
 done
 
 echo "[perf/aws] sweep done: $OUT_ROOT"
+
+exit "$SWEEP_EXIT_CODE"

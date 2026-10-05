@@ -36,6 +36,14 @@ server supply/signing permissions and load-generator client/metrics/report
 permissions remain separate. Migration DDL and management bootstrap privileges
 are external and are not granted to these node roles.
 
+Registry identifiers are rendered as quoted JSON data in root-owned mode-0600
+`/etc/aegaeon/registry.json`. The login helper validates the exact six string
+fields before using them; it never sources their values. Each field is limited
+to 4 KiB of UTF-8 data and the file to 16 KiB; control characters, duplicate
+fields, unsafe file permissions and changed files are rejected. Recreate node
+userdata from these templates when upgrading from the former `registry.env`
+format; the helper requires the JSON file.
+
 ## Server bundle
 
 The JSON object must contain exactly `AEGAEON_DATABASE_URL`,
@@ -203,7 +211,11 @@ outputs rather than selecting a floating replacement image. Automatic execution
 is off by default. The driver attempts to preserve every available report, stdout/stderr log, exit-code
 and metrics-status file before returning the actual nonzero load-generator status.
 Missing required outputs, failed enabled metrics or failed required uploads return
-failure. Checks parse both outer userdata and each embedded Bash executable;
+failure. The sweep records workload and driver exit codes separately. A failed
+driver still permits the SSM wrapper to return its run ID so that available
+logs, exit code, metrics and receipts can be downloaded, including when the
+report is missing. Any failed or ambiguous outcome keeps the sweep's final
+status unsuccessful; SSM transport failures and missing run IDs also fail. Checks parse both outer userdata and each embedded Bash executable;
 outer heredoc syntax alone does not validate the driver.
 
 Reports live under exclusive run directories in `/opt/aegaeon/results` and the

@@ -8,6 +8,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1652,3 +1653,305 @@ def test_sweep_produces_exclusive_config_without_evaluating_values(tmp_path):
     }
     assert not list(tmp_path.glob("*.json"))
     assert not (tmp_path / "must-not-exist").exists()
+
+
+@pytest.mark.parametrize("role", ["server", "loadgen"])
+def test_registry_login_treats_all_rendered_credentials_as_data(tmp_path, role):  # noqa: PLR0915 -- bounded real-helper fixture plus credential/data controls
+    """Execute the actual login helper with controlled paths/UID/tools, never root/cloud."""
+    sections, _ = infra.template_sections(infra.source_template(MODULE, role))
+    script = sections["/usr/local/bin/aegaeon-docker-login"].replace("$${", "${")
+    cfg_path = tmp_path / "registry.json"
+    script = script.replace('path = "/etc/aegaeon/registry.json"', f"path = {str(cfg_path)!r}")
+    script = script.replace("before.st_uid != 0", "before.st_uid != " + str(os.getuid()))
+    script = script.replace("/usr/bin/python3", sys.executable)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    calls = tmp_path / "calls.jsonl"
+    for name in ("aws", "docker"):
+        tool = tools / name
+        tool.write_text(
+            f"#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\n"
+            f"with Path({str(calls)!r}).open('a') as log: log.write(json.dumps(sys.argv)+'\\n')\n"
+            + ("print('controlled-token')\n" if name == "aws" else "sys.stdin.read()\n")
+        )
+        tool.chmod(0o755)
+    cfg = {
+        "AWS_REGION": "us-east-1",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "GHCR_AUTH_ENABLED": "1",
+        "GHCR_USERNAME": "fixture",
+        "GHCR_TOKEN_SSM_PARAMETER_NAME": "/aegaeon/token",
+        "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID": "",
+    }
+    marker = tmp_path / "must-not-exist"
+    for field in (
+        "GHCR_USERNAME",
+        "GHCR_TOKEN_SSM_PARAMETER_NAME",
+        "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID",
+    ):
+        for payload in (f"$(touch {marker})", f"`touch {marker}`", "quote'\" \\ dollar$;value"):
+            changed = {**cfg, field: payload}
+            if field == "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID":
+                changed["GHCR_TOKEN_SSM_PARAMETER_NAME"] = ""
+            cfg_path.write_text(json.dumps(changed))
+            cfg_path.chmod(0o600)
+            calls.unlink(missing_ok=True)
+            result = subprocess.run(  # noqa: S603 -- exact fixed helper, controlled data/tool paths
+                [
+                    shutil.which("bash"),
+                    "-c",
+                    script,
+                    "fixture",
+                    "ghcr.io/aegaeon@sha256:" + "a" * 64,
+                ],
+                env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
+                capture_output=True,
+                check=False,
+                timeout=10,
+            )
+            assert result.returncode == 0, result.stderr
+            assert not marker.exists()
+            records = [json.loads(line) for line in calls.read_text().splitlines()]
+            assert len(records) == 2
+            command = "docker" if field == "GHCR_USERNAME" else "aws"
+            argv = next(item for item in records if Path(item[0]).name == command)
+            option = {
+                "GHCR_USERNAME": "--username",
+                "GHCR_TOKEN_SSM_PARAMETER_NAME": "--name",
+                "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID": "--secret-id",
+            }[field]
+            assert argv[argv.index(option) + 1] == payload
+            assert payload.encode() not in result.stdout + result.stderr
+
+    invalid = [{**cfg, field: "value\n$(touch " + str(marker) + ")"} for field in cfg]
+    invalid += [{**cfg, field: "x" * 4097} for field in cfg]
+    invalid += [
+        {**cfg, "GHCR_AUTH_ENABLED": "2"},
+        {**cfg, "AWS_REGION": "US-EAST-1"},
+        {**cfg, "AWS_DEFAULT_REGION": "us-west-2"},
+        {**cfg, "GHCR_USERNAME": 1},
+        {**cfg, "extra": "value"},
+        {key: value for key, value in cfg.items() if key != "GHCR_USERNAME"},
+    ]
+    for value in invalid:
+        cfg_path.write_text(json.dumps(value))
+        cfg_path.chmod(0o600)
+        calls.unlink(missing_ok=True)
+        result = subprocess.run(  # noqa: S603 -- owned helper negative controls
+            [shutil.which("bash"), "-c", script, "fixture", "ghcr.io/aegaeon"],
+            env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        assert result.returncode != 0
+        assert result.stderr == b"[aegaeon] registry configuration validation failed\n"
+        assert not calls.exists()
+        assert not marker.exists()
+    for raw, mode in (
+        ("not JSON $(touch " + str(marker) + ")", 0o600),
+        (json.dumps(cfg)[:-1] + ',"GHCR_USERNAME":"duplicate"}', 0o600),
+        (json.dumps(cfg), 0o644),
+        (" " * 16385, 0o600),
+    ):
+        cfg_path.write_text(raw)
+        cfg_path.chmod(mode)
+        calls.unlink(missing_ok=True)
+        result = subprocess.run(  # noqa: S603 -- malformed/replaced protected config controls
+            [shutil.which("bash"), "-c", script, "fixture", "ghcr.io/aegaeon"],
+            env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        assert result.returncode != 0
+        assert not calls.exists()
+        assert not marker.exists()
+    cfg_path.unlink()
+    for missing in (True, False):
+        if not missing:
+            target = tmp_path / "replacement.json"
+            target.write_text(json.dumps(cfg))
+            target.chmod(0o600)
+            cfg_path.symlink_to(target)
+        result = subprocess.run(  # noqa: S603 -- missing/symlink config controls
+            [shutil.which("bash"), "-c", script, "fixture", "ghcr.io/aegaeon"],
+            env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        assert result.returncode != 0
+        assert not calls.exists()
+        assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    ("workload_exit", "driver_exit", "report_present", "outcome", "expected"),
+    [
+        (0, 0, True, "normal", 0),
+        (7, 7, True, "normal", 1),
+        (7, 7, False, "normal", 1),
+        (0, 1, True, "normal", 1),
+        (7, 0, True, "normal", 1),
+        (0, 0, True, "duplicate", 1),
+        (0, 0, True, "missing-run", 1),
+        (0, 0, True, "ssm-failure", 1),
+    ],
+)
+def test_sweep_collects_failed_driver_outputs_and_preserves_failure(  # noqa: PLR0913, PLR0915, PLR0917 -- independent outcomes in owned full-sweep fixture
+    tmp_path, workload_exit, driver_exit, report_present, outcome, expected
+):
+    """Execute the real sweep and remote wrapper with local substitutes; no AWS/service calls."""
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    output = tmp_path / "output"
+    state = tmp_path / "state"
+    state.mkdir()
+    driver = tools / "driver"
+    driver.write_text(
+        f"#!{sys.executable}\nimport sys\n"
+        + ("print('RUN_ID=controlled-run')\n" if outcome != "missing-run" else "")
+        + f"print('EXIT_CODE={workload_exit}')\n"
+        + (f"print('EXIT_CODE={workload_exit}')\n" if outcome == "duplicate" else "")
+        + f"raise SystemExit({driver_exit})\n"
+    )
+    driver.chmod(0o755)
+    tofu = tools / "tofu"
+    values = {
+        "server_instance_id": "controlled-server",
+        "loadgen_instance_id": "controlled-loadgen",
+        "loadgen_image": "registry.example/aegaeon@sha256:" + "a" * 64,
+        "loadgen_entrypoint": "/bin/aegaeon-loadtest",
+        "loadgen_artifact": {},
+        "server_url": "https://issuer.example.com",
+        "artifact_bucket_name": "controlled-bucket",
+        "artifact_prefix": "ci/",
+    }
+    tofu.write_text(
+        f"#!{sys.executable}\nimport json\n"
+        f"print(json.dumps({{key:{{'value':value}} for key,value in {values!r}.items()}}))\n"
+    )
+    tofu.chmod(0o755)
+    aws = tools / "aws"
+    aws.write_text(
+        f"#!{sys.executable}\n"
+        r"""import json,os,subprocess,sys
+from pathlib import Path
+args=sys.argv[1:];state=Path(os.environ["FIXTURE_STATE"])
+def option(name):return args[args.index(name)+1]
+if "ec2" in args:print("{}");raise SystemExit(0)
+if "ssm" in args:
+    if "send-command" in args:
+        index=len(list(state.glob("command-*.json")))
+        identifier="command-"+str(index)
+        if "run loadtest" in option("--comment"):
+            script=json.loads(option("--parameters"))["commands"][0]
+            result=subprocess.run([os.environ["FIXTURE_BASH"],"-c",script],
+                                  capture_output=True,text=True,check=False)
+            status="Success" if result.returncode==0 else "Failed"
+            if os.environ["FIXTURE_OUTCOME"]=="ssm-failure":status="Failed"
+            record={"Status":status,"StandardOutputContent":result.stdout,"StandardErrorContent":result.stderr}
+        else:record={"Status":"Success","StandardOutputContent":"CPUUsageNSec=0\nMemoryCurrent=0\nMemoryPeak=0\n","StandardErrorContent":""}
+        (state/(identifier+".json")).write_text(json.dumps(record));print(identifier)
+    else:
+        record=json.loads((state/(option("--command-id")+".json")).read_text())
+        if "wait" in args:raise SystemExit(0 if record["Status"]=="Success" else 1)
+        print(json.dumps(record))
+    raise SystemExit(0)
+name=Path(args[-2]).name
+with (state/"downloads").open("a") as log:log.write(name+"\n")
+if name=="server.metrics.prom" or (
+    name=="report.json" and os.environ["FIXTURE_REPORT_PRESENT"]=="0"
+):
+    raise SystemExit(1)
+path=Path(args[-1]);path.parent.mkdir(parents=True,exist_ok=True)
+content={"report.json":"{}","metrics-status.json":json.dumps({"status":"absent"}),
+         "exit_code.txt":os.environ["FIXTURE_WORKLOAD_EXIT"]}
+path.write_text(content.get(name,"controlled preserved output"))
+"""
+    )
+    aws.chmod(0o755)
+    source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
+    source = source.replace(
+        "/etc/aegaeon/.loadtest-invocation-", str(tmp_path / ".loadtest-invocation-")
+    )
+    source = source.replace("/usr/local/bin/aegaeon-run-loadtest", str(driver))
+    result = subprocess.run(  # noqa: S603 -- actual sweep with controlled executable/environment routes
+        [shutil.which("bash"), "-c", source],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+            "AWS_PROFILE": "controlled",
+            "AWS_REGION": "us-east-1",
+            "RPS_LIST": "1",
+            "WORKERS": "1",
+            "RUN_TIME": "1s",
+            "WARMUP": "0",
+            "SCENARIO": "mixed",
+            "OUT_ROOT": str(output),
+            "FIXTURE_STATE": str(state),
+            "FIXTURE_BASH": str(shutil.which("bash")),
+            "FIXTURE_OUTCOME": outcome,
+            "FIXTURE_REPORT_PRESENT": "1" if report_present else "0",
+            "FIXTURE_WORKLOAD_EXIT": str(workload_exit),
+        },
+        capture_output=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == expected, result.stderr
+    command = json.loads((state / "command-1.json").read_text())
+    if outcome == "ssm-failure":
+        assert command["Status"] == "Failed"
+    else:
+        assert command["Status"] == "Success"
+        assert f"DRIVER_EXIT_CODE={driver_exit}" in command["StandardOutputContent"]
+    if outcome in {"missing-run", "ssm-failure"}:
+        assert not (state / "downloads").exists()
+    else:
+        files = output / "rps-1"
+        for name in (
+            "loadtest.stdout.log",
+            "loadtest.stderr.log",
+            "exit_code.txt",
+            "metrics-status.json",
+            "run-receipt.json",
+            "client.version.json",
+            "driver-config.json",
+            "artifact-receipt.json",
+            "SOURCE-MANIFEST.json",
+        ):
+            assert (files / name).is_file()
+        assert (files / "exit_code.txt").read_text() == str(workload_exit)
+        assert (files / "report.json").exists() == report_present
+        assert (files / "ssm_loadgen.stdout.log").is_file()
+        assert len((output / "summary.csv").read_text().splitlines()) == (2 if expected == 0 else 1)
+
+
+@pytest.mark.parametrize(
+    ("image", "accepted"),
+    [
+        ("registry.example/aegaeon@sha256:" + "a" * 64, True),
+        ("registry.example:5000/path/aegaeon@sha256:" + "a" * 64, True),
+        ("REGISTRY.example/aegaeon@sha256:" + "a" * 64, False),
+        ("registry.example/aegaeon:tag@sha256:" + "a" * 64, False),
+        ("aegaeon@sha256:" + "a" * 64, False),
+    ],
+)
+def test_plan_image_grammar_matches_runtime_admission(helper, tmp_path, image, accepted):
+    text = (MODULE / "variables.tf").read_text()
+    cfg, _, _ = artifact_fixture(helper, tmp_path)
+    cfg["SERVER_IMAGE"] = image
+    for variable in ("server_image", "loadgen_image"):
+        block = infra.block(text, 'variable "' + variable + '"')
+        pattern = re.search(r'can\(regex\("([^"\n]+)"', block)[1]
+        assert (
+            re.fullmatch(pattern.removeprefix("^").removesuffix("$"), image) is not None
+        ) == accepted
+    if accepted:
+        assert helper.validate_run_config(json.dumps(cfg), config()["issuer_url"]) == cfg
+    else:
+        with pytest.raises(ValueError, match="immutable loadgen image"):
+            helper.validate_run_config(json.dumps(cfg), config()["issuer_url"])

@@ -24,13 +24,13 @@ from infrastructure_support.hcl import (
     VALUE,
     block,
     expression,
-    heredoc_environment,
     strict_matches,
 )
 from infrastructure_support.templates import (
     perf_loadgen_environment_wiring,
     perf_server_environment_wiring,
     perf_template_bindings,
+    registry_configuration,
     registry_helper_wiring,
     source_template,
 )
@@ -53,8 +53,8 @@ def process_inputs(module: Path, root: Path) -> dict[str, dict[str, str]]:
         registry_helper_wiring(loadgen, "loadgen", rendered=False)
         return {
             "server": performance_delivery_inputs(server, "server", root=root),
-            "server_registry": heredoc_environment(server, "registry"),
-            "loadgen_registry": heredoc_environment(loadgen, "registry"),
+            "server_registry": registry_configuration(server),
+            "loadgen_registry": registry_configuration(loadgen),
             "loadgen": client_inputs,
         }
     output = block((module / "outputs.tf").read_text(), 'output "oidc_signing_env"')

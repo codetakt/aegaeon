@@ -33,6 +33,8 @@ jobs:
         run: |
           nix develop .#integrity --command python3 -m unittest discover \
             -s tests/ci -p test_infrastructure_validation.py
+          nix develop .#integrity --command python3 -m pytest -q \
+            tests/ci/test_perf_delivery_package.py tests/ci/test_perf_runtime_delivery.py
       - name: Validate infrastructure inputs
         env:
           INFRASTRUCTURE_PATHS_JSON: ${{ inputs.paths-json }}

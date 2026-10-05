@@ -53,8 +53,8 @@ def perf_server_environment_wiring(template: str) -> None:
 
 SHELL_BODY_SHAPES = {
     "/usr/local/bin/aegaeon-docker-login": {
-        "source": "aba0123fbe0d221327d4e961f5f8bb0025c1607fbca6181c34376b8b3619dce6",
-        "rendered": "3ea9a5647dd87b675648a1f732a49ec6068b21c10cefe186415b857295d0a6db",
+        "source": "fdd5e40c4b4289e507349743023bacaba3265a5e7b2e3997564d906020d79531",
+        "rendered": "80e0bd4036d75754b1095e695ab20fd05503eaf8daec87e014a7e41c7a037989",
     },
     "/etc/systemd/system/aegaeon-server.service": {
         "source": "2efe69d484aa670f597108dcbb31de088c70c2886c45d00fb10cc4226b788db8",
@@ -71,12 +71,12 @@ SHELL_BODY_SHAPES = {
 }
 
 TEMPLATE_SCAFFOLD_SHAPES = {
-    "server-source": "b9ab1c314c7c1a064a80534bb33b9950495b73ff1a5dd95b13eba93e52aba8c1",
-    "server-False": "4a9b223327f2382e8eec1ba759cb9e6b7e686ae1772be56ccb6bf607b82f8826",
-    "server-True": "4a9b223327f2382e8eec1ba759cb9e6b7e686ae1772be56ccb6bf607b82f8826",
-    "loadgen-source": "a546f471af7825c894b8363f364b8a91e2e6f4381deccc04fa3c61533d1859b8",
-    "loadgen-False": "076363d630f32cd1046c5eebf02026609e1c6350ab6fd860719a07ff5d20a091",
-    "loadgen-True": "86b217d2668321ae6d9d1662c081b93f7eada557f183b480a65e13a8e5597a07",
+    "server-source": "b8a2fdbccf8f7fae30ce3a7bdb5739ade7a0f28de7f2ff9f4ed7f284c0ffa44a",
+    "server-False": "a48ee28c18ebea548cf419eab54b834d63dd59a24112647746c5251bd1277c8a",
+    "server-True": "a48ee28c18ebea548cf419eab54b834d63dd59a24112647746c5251bd1277c8a",
+    "loadgen-source": "9572c1ddce2cbf526c2f0c6f1bec6545504ed1fd5070dc2c9fa85632699d84ed",
+    "loadgen-False": "87b18c9fb0ab72b6e13dbd2ad157adc7dcbf7d8cfe85d8ba01f5e147c3451dd5",
+    "loadgen-True": "15cf2f31e055f8d4fe635a14cd316043ce21629ae22aae3772660ba08f1a19d6",
 }
 
 SHELL_HEREDOC = re.compile(r"(?m)^cat >(/[^\s]+) <<('?)([A-Za-z_]\w*)\2\n")
@@ -121,7 +121,7 @@ def reviewed_template_sections(
 ) -> dict[str, str]:
     sections, scaffold = template_sections(template)
     expected = {
-        "/etc/aegaeon/registry.env",
+        "/etc/aegaeon/registry.json",
         "/usr/local/bin/aegaeon-docker-login",
     } | (
         {
@@ -159,15 +159,52 @@ def require_body_shape(path: str, body: str, *, rendered: bool) -> None:
     )
 
 
+REGISTRY_CONFIG_FIELDS = {
+    "AWS_REGION": "aws_region",
+    "AWS_DEFAULT_REGION": "aws_region",
+    "GHCR_AUTH_ENABLED": 'ghcr_auth_enabled ? "1" : "0"',
+    "GHCR_USERNAME": "ghcr_username",
+    "GHCR_TOKEN_SSM_PARAMETER_NAME": "ghcr_token_ssm_parameter_name",
+    "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID": "ghcr_token_secretsmanager_secret",
+}
+
+
+def registry_configuration(template: str, *, rendered: bool = False) -> dict[str, str]:
+    sections, _ = template_sections(template)
+    raw = sections.get("/etc/aegaeon/registry.json", "").strip()
+    if rendered:
+        values = json.loads(raw, object_pairs_hook=duplicate_free_object)
+        require(
+            isinstance(values, dict)
+            and values.keys() == REGISTRY_CONFIG_FIELDS.keys()
+            and all(type(value) is str for value in values.values()),
+            "Invalid bound registry input/secret reference",
+        )
+        return values
+    expected = (
+        "${jsonencode({"
+        + ", ".join(name + " = " + value for name, value in REGISTRY_CONFIG_FIELDS.items())
+        + "})}"
+    )
+    require(
+        compact_expression(raw) == compact_expression(expected),
+        "Registry JSON fields must use the exact bound inputs",
+    )
+    return {name: "${" + value + "}" for name, value in REGISTRY_CONFIG_FIELDS.items()}
+
+
 def registry_helper_wiring(
     template: str, role: str, *, rendered: bool, enabled: bool = False
 ) -> None:
     sections = reviewed_template_sections(template, role, rendered=rendered, enabled=enabled)
     path = "/usr/local/bin/aegaeon-docker-login"
     body = semantic_shell_shape(sections[path], rendered=rendered)
+    registry_configuration(template, rendered=rendered)
     require(
-        "set -a\nsource /etc/aegaeon/registry.env\nset +a" in body,
-        "Registry helper must source/export the validated registry environment",
+        re.search(r"(?m)^(?:source|eval)\s", body) is None
+        and 'REGISTRY_VALUES="$(/usr/bin/python3 -I -B -' in body
+        and 'mapfile -t REGISTRY_FIELDS <<<"$REGISTRY_VALUES"' in body,
+        "Registry helper must synchronously parse the validated JSON data",
     )
     for variable, command, options in (
         (

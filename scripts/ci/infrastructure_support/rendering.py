@@ -10,10 +10,10 @@ from infrastructure_support.common import require
 from infrastructure_support.delivery import performance_delivery_inputs
 from infrastructure_support.fixtures import template_values
 from infrastructure_support.guest import guest_sources
-from infrastructure_support.hcl import heredoc_environment
 from infrastructure_support.selection import SUPPORT_PATHS
 from infrastructure_support.templates import (
     loadgen_configuration,
+    registry_configuration,
     registry_helper_wiring,
     template_sections,
 )
@@ -30,7 +30,7 @@ def rendered_contract(
     registry_helper_wiring(rendered, role, rendered=True, enabled=enabled)
     performance_delivery_inputs(rendered, "server" if role == "server" else "client", rendered=True)
     values = template_values()
-    registry = heredoc_environment(rendered, "registry")
+    registry = registry_configuration(rendered, rendered=True)
     expected_registry = {
         "AWS_REGION": values["aws_region"],
         "AWS_DEFAULT_REGION": values["aws_region"],
@@ -41,7 +41,7 @@ def rendered_contract(
     }
     require(
         registry == expected_registry,
-        "Rendered registry environment lost bound input/secret reference",
+        "Rendered registry JSON lost bound input/secret reference",
     )
     if role == "server":
         require(

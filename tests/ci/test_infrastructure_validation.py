@@ -451,6 +451,15 @@ class InfrastructureTests(unittest.TestCase):
         )
 
         sections, _ = infra.template_sections(text)
+        registry = {
+            "AWS_REGION": values["aws_region"],
+            "AWS_DEFAULT_REGION": values["aws_region"],
+            "GHCR_AUTH_ENABLED": "1" if registry_enabled else "0",
+            "GHCR_USERNAME": values["ghcr_username"],
+            "GHCR_TOKEN_SSM_PARAMETER_NAME": values["ghcr_token_ssm_parameter_name"],
+            "GHCR_TOKEN_SECRETSMANAGER_SECRET_ID": values["ghcr_token_secretsmanager_secret"],
+        }
+        text = text.replace(sections["/etc/aegaeon/registry.json"].strip(), json.dumps(registry))
         if "/etc/aegaeon/loadtest.json" in sections:
             loadtest = {
                 "SERVER_URL": str(values["server_url"]),
@@ -957,7 +966,7 @@ class InfrastructureTests(unittest.TestCase):
                     '--secret-id "$OTHER_SECRET"',
                 ),
                 ("'SecretString'", "'ARN'"),
-                ("source /etc/aegaeon/registry.env", "source /etc/aegaeon/unused.env"),
+                ('path = "/etc/aegaeon/registry.json"', 'path = "/etc/aegaeon/unused.json"'),
             ]
             for old, new in changes:
                 assert old in rendered
@@ -1105,8 +1114,8 @@ class InfrastructureTests(unittest.TestCase):
     def test_rendered_contract_missing_secret_reference_fails(self):
         rendered = self.fixture_rendered_template("server")
         rendered = rendered.replace(
-            "GHCR_TOKEN_SSM_PARAMETER_NAME=/aegaeon/registry-token\n",
-            "# GHCR_TOKEN_SSM_PARAMETER_NAME=/aegaeon/registry-token\n",
+            '"GHCR_TOKEN_SSM_PARAMETER_NAME": "/aegaeon/registry-token"',
+            '"GHCR_TOKEN_SSM_PARAMETER_NAME": ""',
         )
         with pytest.raises(ValueError, match="bound input/secret reference"):
             infra.rendered_contract(rendered, "server", enabled=True)
