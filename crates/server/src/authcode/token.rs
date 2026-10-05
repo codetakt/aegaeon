@@ -13,6 +13,7 @@ mod validator;
 pub use self::authorization_code::{AuthorizationCodeIssueError, AuthorizationCodeIssueInput};
 use self::id_token::IdTokenBuildInput;
 use self::jwt_access::sign_jwt;
+pub(crate) use self::resource_selection::AccessTokenAudiencePolicy;
 pub use self::validator::{
     BearerTokenValidationError, TokenPolicyContext, TokenPolicyError, TokenValidator,
 };
@@ -122,28 +123,23 @@ pub struct TokenIssuer {
 }
 
 impl TokenIssuer {
-    fn access_token_audience(
+    pub(crate) fn access_token_audience_policy(&self) -> AccessTokenAudiencePolicy {
+        AccessTokenAudiencePolicy::new(
+            self.jwt_access_tokens_enabled,
+            self.oidc
+                .as_ref()
+                .map(|cfg| crate::resource_audience::userinfo(&cfg.issuer)),
+        )
+    }
+
+    pub(crate) fn access_token_audience(
         &self,
         client_id: &str,
         scope: Option<&str>,
         selected_resource: Option<&str>,
     ) -> Result<String, &'static str> {
-        if let Some(resource) = selected_resource {
-            return Ok(resource.to_string());
-        }
-        if let Some(cfg) = self
-            .oidc
-            .as_ref()
-            .filter(|_| scope_contains(scope, "openid"))
-        {
-            return Ok(crate::resource_audience::userinfo(&cfg.issuer));
-        }
-        // RFC 9068 §3: a client identifier is not an inferred resource default.
-        // No generic or JWT-bearer default is configured by the current policy.
-        if self.jwt_access_tokens_enabled {
-            return Err("JWT access tokens require a resource or an approved resource default");
-        }
-        Ok(client_id.to_string())
+        self.access_token_audience_policy()
+            .resolve(client_id, scope, selected_resource)
     }
 
     fn issue_access_token_value(&self, mint: BearerAccessTokenMint<'_>) -> Result<String, String> {

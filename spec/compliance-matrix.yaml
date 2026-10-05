@@ -3902,9 +3902,10 @@ rfc_9068:
   applies_to:
   - as
   notes:
-  - "Resource selection is shared by JWT-bearer, authorization-code and refresh issuance; it does not infer a JWT resource from client_id."
+  - "Resource selection is shared by JWT-bearer, authorization-code, refresh and device-code issuance; it does not infer a JWT resource from client_id."
   - "OpenID grants retain the UserInfo resource default; client_credentials uses its consumed authorization permit. JWT-bearer currently has no configured default and requires resource."
   - "Legacy opaque code and refresh defaults cannot be promoted to JWT resource authority. Missing-resource refusals precede code consumption or refresh rotation."
+  - "Approved device codes are retained on undefined JWT resource defaults. Both store backends admit the same strict scope/resource policy before consumption; Redis compares the admitted snapshot atomically."
   - "Scoped issuer and store regressions are in crates/server/src/authcode/token/tests/jwt_resource_defaults.rs; no formal discharge is asserted."
 
 draft_oauth_browser_based_apps:

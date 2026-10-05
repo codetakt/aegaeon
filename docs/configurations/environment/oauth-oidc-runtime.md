@@ -162,6 +162,12 @@ resource can be selected. Codes or refresh grants created under legacy opaque
 client-ID defaults cannot become JWT resource grants after enabling JWT output;
 clients must authorize again with a resource. Refresh target snapshots continue
 to prevent switching resources or widening scopes.
+Device-code redemption applies the same audience policy before consuming an
+approved code. A missing JWT resource without an approved default returns
+`invalid_target` and retains the code. A resource explicitly bound at device
+authorization is retained even when omitted at redemption. UserInfo defaults
+require configured OpenID support and the granted `openid` scope; requesting a
+different resource at redemption cannot add authority to the device grant.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
