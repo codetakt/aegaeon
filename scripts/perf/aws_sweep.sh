@@ -17,6 +17,7 @@
 #   RPS_LIST="200,500,1000" WORKERS=50 RUN_TIME=60s WARMUP=10 SCENARIO=mixed ./scripts/perf/aws_sweep.sh
 
 set -euo pipefail
+umask 077
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
@@ -87,41 +88,11 @@ rps_target,workers,run_time,warmup,scenario,run_id,exit_code,total_requests,succ
 CSV
 
 ssm_run() {
-	local instance_id="$1"
-	local comment="$2"
-	local script="$3"
-
-	local params_json cmd_id resp status
-	params_json="$(python3 -c 'import json,sys; print(json.dumps({"commands":[sys.stdin.read()]}))' <<<"$script")"
-
-	cmd_id="$(AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm send-command \
-		--instance-ids "$instance_id" \
-		--document-name AWS-RunShellScript \
-		--comment "$comment" \
-		--parameters "$params_json" \
-		--query 'Command.CommandId' \
-		--output text)"
-
-	AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm wait command-executed \
-		--command-id "$cmd_id" \
-		--instance-id "$instance_id"
-
-	resp="$(AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm get-command-invocation \
-		--command-id "$cmd_id" \
-		--instance-id "$instance_id" \
-		--output json)"
-
-	status="$(jq -r '.Status' <<<"$resp")"
-	if [[ $status != "Success" ]]; then
-		echo "[perf/aws] SSM command failed (instance=$instance_id comment=$comment status=$status)" >&2
-		echo "$resp" >&2
-		exit 1
-	fi
-
-	printf '%s' "$resp"
+	local instance_id="$1" comment="$2" script="$3" evidence="$4"
+	python3 "$REPO_ROOT/scripts/perf/ssm_sweep.py" command "$instance_id" "$comment" "$evidence" <<<"$script"
 }
 
-restart_server_script=$'set -euo pipefail\nsudo systemctl restart aegaeon-server\nfor i in $(seq 1 60); do\n  if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then\n    echo \"SERVER_HEALTH=OK\"\n    exit 0\n  fi\n  sleep 1\ndone\necho \"SERVER_HEALTH=FAIL\" >&2\nsudo systemctl status aegaeon-server --no-pager -l || true\nexit 1\n'
+restart_server_script=$'set -euo pipefail\ntimeout 30 sudo systemctl restart aegaeon-server\ndeadline=$((SECONDS + 75))\nwhile ((SECONDS < deadline)); do\n  if curl --connect-timeout 2 --max-time 3 -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then\n    echo "SERVER_HEALTH=OK"\n    exit 0\n  fi\n  sleep 1\ndone\necho "SERVER_HEALTH=FAIL" >&2\ntimeout 5 sudo systemctl status aegaeon-server --no-pager -l || true\nexit 1\n'
 
 server_stats_script=$'set -euo pipefail\nsudo systemctl show aegaeon-server \\\n  -p CPUUsageNSec \\\n  -p MemoryCurrent \\\n  -p MemoryPeak \\\n  -p TasksCurrent \\\n  -p NRestarts \\\n  --no-pager\n'
 
@@ -129,15 +100,19 @@ SWEEP_EXIT_CODE=0
 
 IFS=',' read -r -a rps_values <<<"$RPS_LIST"
 
+invocation_index=0
 for rps in "${rps_values[@]}"; do
 	rps="$(echo "$rps" | tr -d '[:space:]')"
 	if [[ -z $rps ]]; then
 		continue
 	fi
 
+	invocation_index=$((invocation_index + 1))
+	run_dir="$(mktemp -d "$OUT_ROOT/invocation-${invocation_index}-XXXXXXXX")"
+	printf 'rps_target=%s\n' "$rps" >"$run_dir/metadata.txt"
 	echo "[perf/aws] === rps=${rps} ==="
 
-	ssm_run "$server_instance_id" "aegaeon: restart server for sweep rps=${rps}" "$restart_server_script" >/dev/null
+	ssm_run "$server_instance_id" "aegaeon: restart server for sweep invocation=${invocation_index}" "$restart_server_script" "$run_dir/ssm-restart" >/dev/null
 
 	# JSON/base64 carries values as data; no remote shell interpolation of user values.
 	config_payload="$(
@@ -151,39 +126,26 @@ config["artifact"] = json.loads(sys.argv[11])
 print(base64.b64encode(json.dumps(config).encode()).decode())
 PY
 	)"
-	loadgen_script=$(
-		cat <<SCRIPT
-set -euo pipefail
-umask 077
-CONFIG_FILE="\$(mktemp /etc/aegaeon/.loadtest-invocation-XXXXXXXX.json)"
-trap 'rm -f -- "\$CONFIG_FILE"' EXIT
-printf '%s' '${config_payload}' | base64 --decode >"\$CONFIG_FILE"
-DRIVER_EXIT_CODE=0
-/usr/local/bin/aegaeon-run-loadtest --config-file "\$CONFIG_FILE" || DRIVER_EXIT_CODE=\$?
-printf 'DRIVER_EXIT_CODE=%s\n' "\$DRIVER_EXIT_CODE"
-exit 0
-SCRIPT
-	)
+	transport_failed=0
+	lg_resp="$(python3 "$REPO_ROOT/scripts/perf/ssm_sweep.py" loadtest "$loadgen_instance_id" \
+		"aegaeon: run loadtest invocation=${invocation_index}" "$run_dir/ssm-loadgen" <<<"$config_payload")" || transport_failed=1
 
-	lg_resp="$(ssm_run "$loadgen_instance_id" "aegaeon: run loadtest rps=${rps}" "$loadgen_script")"
 	lg_stdout="$(jq -r '.StandardOutputContent' <<<"$lg_resp")"
 	lg_stderr="$(jq -r '.StandardErrorContent' <<<"$lg_resp")"
 
 	run_id="$(printf '%s\n' "$lg_stdout" | sed -n 's/^RUN_ID=//p' | tail -n 1)"
 	exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^EXIT_CODE=//p' | tail -n 1)"
 	driver_exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^DRIVER_EXIT_CODE=//p' | tail -n 1)"
-	if [[ -z $run_id ]]; then
-		echo "[perf/aws] failed to detect RUN_ID in loadgen output" >&2
-		echo "$lg_stdout" >&2
-		exit 1
-	fi
-
-	run_dir="$OUT_ROOT/rps-${rps}"
-	mkdir -p "$run_dir"
 	printf '%s' "$lg_stdout" >"$run_dir/ssm_loadgen.stdout.log"
 	printf '%s' "$lg_stderr" >"$run_dir/ssm_loadgen.stderr.log"
+	if [[ ! $run_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+		echo "[perf/aws] failed to detect RUN_ID in loadgen output" >&2
+		echo "$lg_stdout" >&2
+		SWEEP_EXIT_CODE=1
+		continue
+	fi
 
-	RUN_FAILED=0
+	RUN_FAILED=$transport_failed
 	if [[ ! $exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $exit_code -gt 255 ||
 		! $driver_exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $driver_exit_code -gt 255 ||
 		$(printf '%s\n' "$lg_stdout" | sed -n '/^EXIT_CODE=/p' | wc -l) -ne 1 ||
@@ -214,7 +176,7 @@ SCRIPT
 		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/metrics-status.json" \
 		"$run_dir/metrics-status.json" || RUN_FAILED=1
 
-	stats_resp="$(ssm_run "$server_instance_id" "aegaeon: collect server stats rps=${rps}" "$server_stats_script")"
+	stats_resp="$(ssm_run "$server_instance_id" "aegaeon: collect server stats invocation=${invocation_index}" "$server_stats_script" "$run_dir/ssm-stats")" || RUN_FAILED=1
 	stats_stdout="$(jq -r '.StandardOutputContent' <<<"$stats_resp")"
 	printf '%s' "$stats_stdout" >"$run_dir/server.systemd.txt"
 

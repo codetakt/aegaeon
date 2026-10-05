@@ -9,6 +9,7 @@ import importlib
 import json
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -427,17 +428,17 @@ def test_role_supplier_and_iam_bindings(tmp_path):
     infra.resource_contract(module, {"aws": "6.66.0"})
     for filename, before, after in (
         (
-            "instances.tf",
+            "userdata.tf",
             "server_secret_version            = var.server_secret_version",
             "server_secret_version = var.client_secret_version",
         ),
         (
-            "instances.tf",
+            "userdata.tf",
             "server_image                     = var.loadgen_image",
             "server_image = var.server_image",
         ),
         (
-            "instances.tf",
+            "userdata.tf",
             "server_secret_arn                = var.server_secret_arn",
             (
                 "server_secret_arn = var.server_secret_arn\n"
@@ -752,6 +753,8 @@ raise SystemExit(0 if os.environ['FIXTURE_HEALTH'] == 'ready' else 7)
         "FIXTURE_REPORT_PREEXISTS": "1" if settings.get("report_preexists") else "0",
         "FIXTURE_HEALTH": "ready" if settings.get("health_ready", True) else "failed",
     }
+    if "sweep_id" in settings:
+        env["AEGAEON_SWEEP_ID"] = settings["sweep_id"]
     (tmp_path / "actual-driver.sh").write_text(script)
     (tmp_path / "fixture-environment.json").write_text(json.dumps(env))
     result = subprocess.run(  # noqa: S603 -- actual driver with owned local mechanics substitutes
@@ -764,6 +767,45 @@ raise SystemExit(0 if os.environ['FIXTURE_HEALTH'] == 'ready' else 7)
         else []
     )
     return result, runs[0] if runs else None, uploaded, calls
+
+
+@pytest.mark.parametrize("sweep_id", [None, "01234567-89ab-4cde-8f01-23456789abcd"])
+def test_driver_names_only_supervised_sweep_container(tmp_path, sweep_id):
+    settings = {} if sweep_id is None else {"sweep_id": sweep_id}
+    result, output, uploaded, calls = run_driver_fixture(tmp_path, **settings)
+    assert result.returncode == 0, result.stderr
+    argv = json.loads((tmp_path / "docker.argv").read_text())
+    if sweep_id is None:
+        assert "--name" not in argv
+    else:
+        assert argv[argv.index("--name") + 1] == "aegaeon-sweep-" + sweep_id
+    assert re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f-]{36}", output.name)
+    assert "RUN_ID=" + output.name in result.stdout.decode()
+    assert output.name != sweep_id
+    assert_restricted_workload_mounts(tmp_path / "docker.argv")
+    assert set(calls) == {path.name for path in uploaded.iterdir()}
+    assert (uploaded / "report.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "sweep_id",
+    [
+        "",
+        "01234567-89AB-4cde-8f01-23456789abcd",
+        "01234567-89ab-3cde-8f01-23456789abcd",
+        "01234567-89ab-4cde-7f01-23456789abcd",
+        "01234567-89ab-4cde-8f01-23456789abcd\n",
+        "01234567-89ab-4cde-8f01-23456789abcd --privileged",
+    ],
+)
+def test_driver_rejects_invalid_sweep_uuid_before_any_effect(tmp_path, sweep_id):
+    result, output, _, calls = run_driver_fixture(tmp_path, sweep_id=sweep_id)
+    assert result.returncode == 2
+    assert b"invalid sweep UUID" in result.stderr
+    assert not (tmp_path / "docker.calls").exists()
+    assert not (tmp_path / "delivery.calls").exists()
+    assert output is None
+    assert calls == []
 
 
 @pytest.mark.parametrize(
@@ -1838,23 +1880,22 @@ def test_run_config_protected_file_rejected_before_artifact_reads(helper, tmp_pa
 def test_sweep_produces_exclusive_config_without_evaluating_values(tmp_path):
     source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
     start = source.index('\tconfig_payload="$(\n')
-    end = source.index("\n\tlg_resp=", start)
+    end = source.index("\n\ttransport_failed=", start)
     snippet = source[start:end]
-    driver = tmp_path / "record-driver"
-    driver.write_text(
+    namespace = runpy.run_path(str(ROOT / "scripts/perf/ssm_sweep.py"))
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    systemd = tools / "systemd-run"
+    systemd.write_text(
         f"#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\n"
-        f"root=Path({str(tmp_path)!r})\np=Path(sys.argv[2])\n"
-        "assert sys.argv[1]=='--config-file'\n"
+        f"root=Path({str(tmp_path)!r}); p=Path(sys.argv[-1]).parent/'config.json'\n"
         "assert p.stat().st_mode & 0o777 == 0o600\n"
-        "(root/(p.name+'.captured')).write_bytes(p.read_bytes())\n"
+        "(root/(p.parent.name+'.captured')).write_bytes(p.read_bytes())\n"
     )
-    driver.chmod(0o755)
-    snippet = snippet.replace(
-        "/etc/aegaeon/.loadtest-invocation-", str(tmp_path / ".loadtest-invocation-")
-    )
-    snippet = snippet.replace("/usr/local/bin/aegaeon-run-loadtest", str(driver))
+    systemd.chmod(0o755)
     env = {
         **os.environ,
+        "PATH": str(tools) + os.pathsep + os.environ["PATH"],
         "server_url": "https://issuer.example.com",
         "SERVER_IMAGE": "synthetic-image",
         "artifact_bucket": "synthetic-fixture",
@@ -1867,10 +1908,23 @@ def test_sweep_produces_exclusive_config_without_evaluating_values(tmp_path):
         "LOADTEST_BIN": "/bin/aegaeon-loadtest",
         "artifact_config": "{}",
     }
-    for workers in ("2", "3", "$(touch " + str(tmp_path / "must-not-exist") + ")"):
-        result = subprocess.run(  # noqa: S603 -- exact config-producing sweep snippet, no cloud calls
-            [shutil.which("bash"), "-c", snippet + '\nbash -c "$loadgen_script"'],
+    for index, workers in enumerate(
+        ("2", "3", "$(touch " + str(tmp_path / "must-not-exist") + ")")
+    ):
+        result = subprocess.run(  # noqa: S603 -- exact config-producing snippet, no cloud calls
+            [shutil.which("bash"), "-c", snippet + '\nprintf %s "$config_payload"'],
             env={**env, "WORKERS": workers},
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        identifier = f"12345678-1234-4234-8234-{index:012d}"
+        script = namespace["dispatch_script"](identifier, result.stdout.decode(), 960)
+        script = script.replace("/etc/aegaeon/.sweep-", str(tmp_path / ".sweep-"))
+        script = script.replace('[[ "$(id -u)" == 0 ]]', "true")
+        result = subprocess.run(  # noqa: S603 -- actual dispatch with controlled paths/systemd tool
+            [shutil.which("bash"), "-c", script],
+            env=env,
             capture_output=True,
             check=False,
         )
@@ -1882,7 +1936,6 @@ def test_sweep_produces_exclusive_config_without_evaluating_values(tmp_path):
         "3",
         "$(touch " + str(tmp_path / "must-not-exist") + ")",
     }
-    assert not list(tmp_path.glob("*.json"))
     assert not (tmp_path / "must-not-exist").exists()
 
 
@@ -2076,12 +2129,19 @@ if "ssm" in args:
     if "send-command" in args:
         index=len(list(state.glob("command-*.json")))
         identifier="command-"+str(index)
-        if "run loadtest" in option("--comment"):
+        if any(label in option("--comment") for label in (
+            "run loadtest", "sweep status", "sweep cleanup"
+        )):
             script=json.loads(option("--parameters"))["commands"][0]
+            script=script.replace('/etc/aegaeon/.sweep-',str(state/'.sweep-'))
+            script=script.replace('== 0:700','== '+str(os.getuid())+':700')
+            script=script.replace('[[ "$(id -u)" == 0 ]]','true')
+            script=script.replace('exec /bin/bash', 'exec '+os.environ['FIXTURE_BASH'])
             result=subprocess.run([os.environ["FIXTURE_BASH"],"-c",script],
                                   capture_output=True,text=True,check=False)
             status="Success" if result.returncode==0 else "Failed"
-            if os.environ["FIXTURE_OUTCOME"]=="ssm-failure":status="Failed"
+            if (os.environ["FIXTURE_OUTCOME"]=="ssm-failure"
+                and "run loadtest" in option("--comment")):status="Failed"
             record={"Status":status,"StandardOutputContent":result.stdout,"StandardErrorContent":result.stderr}
         else:record={"Status":"Success","StandardOutputContent":"CPUUsageNSec=0\nMemoryCurrent=0\nMemoryPeak=0\n","StandardErrorContent":""}
         (state/(identifier+".json")).write_text(json.dumps(record));print(identifier)
@@ -2103,6 +2163,45 @@ path.write_text(content.get(name,"controlled preserved output"))
 """
     )
     aws.chmod(0o755)
+    for name in ("systemd-run", "systemctl"):
+        tool = tools / name
+        tool.write_text(
+            f"#!{sys.executable}\n"
+            r"""import json,os,subprocess,sys
+from pathlib import Path
+args=sys.argv[1:]; state=Path(os.environ['FIXTURE_STATE']); service=state/'service.json'
+if Path(sys.argv[0]).name=='systemd-run':
+    runner=Path(args[-1]); source=runner.read_text()
+    source=source.replace('/etc/aegaeon/.sweep-',str(state/'.sweep-'))
+    source=source.replace('/usr/local/bin/aegaeon-run-loadtest',os.environ['FIXTURE_DRIVER'])
+    runner.write_text(source)
+    with ((runner.parent/'stdout.log').open('w') as out,
+          (runner.parent/'stderr.log').open('w') as err):
+        rc=subprocess.run([os.environ['FIXTURE_BASH'],str(runner)],
+                          stdout=out,stderr=err,check=False).returncode
+    service.write_text(json.dumps({'runner':str(runner),
+        'ActiveState':'active' if rc==0 else 'failed',
+        'SubState':'exited' if rc==0 else 'failed',
+        'Result':'success' if rc==0 else 'exit-code',
+        'ExecMainStatus':str(rc),'LoadState':'loaded'}))
+    # Launch acknowledgement is independent of the later driver outcome.
+    raise SystemExit(0)
+record=json.loads(service.read_text()) if service.exists() else {
+    'ActiveState':'inactive','SubState':'dead','LoadState':'not-found'}
+if args[0]=='stop' and service.exists():
+    rc=subprocess.run([os.environ['FIXTURE_BASH'],record['runner'],'cleanup'],check=False).returncode
+    record['ActiveState']='inactive' if rc==0 else 'failed'; record['SubState']='dead'
+    service.write_text(json.dumps(record));raise SystemExit(rc)
+for name in ('LoadState','ActiveState','SubState','Result','ExecMainStatus'):
+    print(name+'='+record.get(name,''))
+"""
+        )
+        tool.chmod(0o755)
+    docker = tools / "docker"
+    docker.write_text(
+        f"#!{sys.executable}\nimport sys\nraise SystemExit(1 if sys.argv[1]=='rm' else 0)\n"
+    )
+    docker.chmod(0o755)
     source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
     source = source.replace(
         "/etc/aegaeon/.loadtest-invocation-", str(tmp_path / ".loadtest-invocation-")
@@ -2123,6 +2222,7 @@ path.write_text(content.get(name,"controlled preserved output"))
             "SCENARIO": "mixed",
             "OUT_ROOT": str(output),
             "FIXTURE_STATE": str(state),
+            "FIXTURE_DRIVER": str(driver),
             "FIXTURE_BASH": str(shutil.which("bash")),
             "FIXTURE_OUTCOME": outcome,
             "FIXTURE_REPORT_PRESENT": "1" if report_present else "0",
@@ -2138,11 +2238,10 @@ path.write_text(content.get(name,"controlled preserved output"))
         assert command["Status"] == "Failed"
     else:
         assert command["Status"] == "Success"
-        assert f"DRIVER_EXIT_CODE={driver_exit}" in command["StandardOutputContent"]
-    if outcome in {"missing-run", "ssm-failure"}:
+    if outcome == "missing-run":
         assert not (state / "downloads").exists()
     else:
-        files = output / "rps-1"
+        files = next(output.glob("invocation-1-*"))
         for name in (
             "loadtest.stdout.log",
             "loadtest.stderr.log",
@@ -2157,7 +2256,9 @@ path.write_text(content.get(name,"controlled preserved output"))
             assert (files / name).is_file()
         assert (files / "exit_code.txt").read_text() == str(workload_exit)
         assert (files / "report.json").exists() == report_present
+        assert f"DRIVER_EXIT_CODE={driver_exit}" in (files / "ssm_loadgen.stdout.log").read_text()
         assert (files / "ssm_loadgen.stdout.log").is_file()
+        assert not list(state.glob(".sweep-*/config.json"))
         assert len((output / "summary.csv").read_text().splitlines()) == (2 if expected == 0 else 1)
 
 

@@ -253,8 +253,11 @@ Rotate by explicitly selecting and reviewing new version identifiers; an existin
 running server container does not refresh itself.
 
 Secret values must stay out of OpenTofu variables, data sources, state, outputs,
-userdata and logs. Only identifiers enter configuration. Userdata is gzip encoded
-for EC2's size limit and processed by cloud-init. Runtime files and Docker process
+userdata and logs. Only identifiers enter configuration. Each node's userdata is
+rendered once, gzip encoded and processed by cloud-init. A resource precondition
+checks the exact compressed payload against EC2's 16,384-byte limit before node
+creation; Base64 text length and the expanded script size are separate quantities.
+Oversized configurations fail with a role-specific diagnostic. Runtime files and Docker process
 configuration contain actual secret values and require the node's normal trusted
 administrator boundary. Do not attach Docker inspection or credential-bearing
 runtime files to public logs.
@@ -272,7 +275,28 @@ failure. The sweep records workload and driver exit codes separately. A failed
 driver still permits the SSM wrapper to return its run ID so that available
 logs, exit code, metrics and receipts can be downloaded, including when the
 report is missing. Any failed or ambiguous outcome keeps the sweep's final
-status unsuccessful; SSM transport failures and missing run IDs also fail. Checks parse both outer userdata and each embedded Bash executable;
+status unsuccessful; SSM transport failures and missing run IDs also fail.
+
+The sweep uses short SSM commands to dispatch, inspect and stop a UUID-named
+systemd service. Each SSM command has an explicit 120-second execution timeout
+and a separate 60-second delivery timeout. The service permits the configured
+run and warmup durations, including one day each, plus a 900-second setup and
+collection allowance. A service runtime limit bounds the driver independently
+of the caller, while local monotonic deadlines bound polling and AWS requests.
+Exhausting either budget is a failed or inconclusive run.
+
+Invocation configuration and supervisor output remain in a root-owned mode-0700
+directory outside the workload mount. `AEGAEON_SWEEP_ID` names only the supervised
+Docker container; the driver's report identity remains independent. On completion,
+timeout or interruption, the supervisor attempts to stop the service and confirms the named
+container is absent before accepting cleanup. A cancellation marker prevents a
+delayed dispatch from restarting an invocation after cleanup. Failed cleanup
+keeps the outcome unsuccessful and retains remote evidence. Local invocation
+directories preserve SSM responses, partial output and bounded stdout/stderr tails;
+full supervisor logs remain on the node. These logs require the same private
+handling as other runtime diagnostics.
+
+Checks parse both outer userdata and each embedded Bash executable;
 outer heredoc syntax alone does not validate the driver.
 
 Reports live under exclusive run directories in `/opt/aegaeon/results` and the

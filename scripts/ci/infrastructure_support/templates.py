@@ -19,7 +19,13 @@ from infrastructure_support.guest import (
     GUEST_PACKAGE_ROOT,
     source_template as guest_source_template,
 )
-from infrastructure_support.hcl import block, compact_expression, expression, strict_matches
+from infrastructure_support.hcl import (
+    block,
+    compact_expression,
+    expression,
+    strict_matches,
+    top_level,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -61,8 +67,8 @@ SHELL_BODY_SHAPES = {
         "rendered": "2efe69d484aa670f597108dcbb31de088c70c2886c45d00fb10cc4226b788db8",
     },
     "/usr/local/bin/aegaeon-run-loadtest": {
-        "source": "6e16bf8349342c24c05f2235b3637ca62207e241f1a378569d55d17788f5b02c",
-        "rendered": "68ae947b11c60a772194d88c2f0029ec2636308a79496479c6d4dfbe1556c7dd",
+        "source": "f2c180143fd3e77d481233d51171e03e09cd1341b6397656f022e57b2e6ad448",
+        "rendered": "80cc8961f1ed8a1cb24ca1c3d216f0d334c0fd2ffae285457e15c889c6bdd023",
     },
     "/etc/systemd/system/aegaeon-loadtest.service": {
         "source": "88e14cd224ed36367fd9e8c904264812d5bf2a3ecb9a6999086f1a58ec80884f",
@@ -320,6 +326,7 @@ def perf_loadgen_environment_wiring(
         "docker",
         "run",
         "--rm",
+        "${CONTAINER_ARGS[@]}",
         "--network",
         "host",
         "--user",
@@ -447,19 +454,80 @@ PERF_TEMPLATE_BINDINGS = {
 }
 
 
+def perf_userdata_locals(module: Path) -> str:
+    source = (module / "userdata.tf").read_text()
+    require(compact_expression(top_level(source)) == "locals{}", "Changed userdata local scope")
+    payloads = block(source, "locals")
+    expected = {
+        f"{role}_user_data_{field}"
+        for role in PERF_TEMPLATE_BINDINGS
+        for field in ("base64", "bytes")
+    }
+    names = re.findall(r"(?m)^\s*(\w+)\s*=", top_level(payloads))
+    require(
+        set(names) == expected and len(names) == len(expected), "Changed userdata local ownership"
+    )
+    for path in module.glob("*.tf"):
+        if path.name != "userdata.tf":
+            for name in expected:
+                require(
+                    re.search(r"(?m)^\s*" + re.escape(name) + r"\s*=", path.read_text()) is None,
+                    "Duplicated userdata local ownership",
+                )
+    return payloads
+
+
+def perf_userdata_guard(resource: str, payloads: str, role: str) -> None:
+    payload = f"{role}_user_data_base64"
+    size = f"{role}_user_data_bytes"
+    require(
+        expression(resource, "user_data_base64") == f"local.{payload}",
+        "Changed active EC2 userdata payload ownership",
+    )
+    expected_size = (
+        f"(length(local.{payload}) * 3 / 4 "
+        f'- (endswith(local.{payload}, "==") ? 2 : '
+        f'endswith(local.{payload}, "=") ? 1 : 0))'
+    )
+    require(
+        compact_expression(expression(payloads, size)) == compact_expression(expected_size),
+        "Changed decoded gzip userdata byte count",
+    )
+    lifecycle = block(resource, "lifecycle")
+    require(
+        compact_expression(top_level(lifecycle)) == "precondition{}",
+        "Changed userdata precondition ownership",
+    )
+    precondition = block(lifecycle, "precondition")
+    expected_guard = (
+        f"condition = local.{size} <= 16384\n"
+        f'error_message = "{role.capitalize()} EC2 gzip user data must be at most 16384 bytes."'
+    )
+    require(
+        compact_expression(precondition) == compact_expression(expected_guard),
+        "Changed EC2 compressed userdata size precondition",
+    )
+
+
 def perf_template_bindings(module: Path) -> None:
     source = (module / "instances.tf").read_text()
+    payloads = perf_userdata_locals(module)
     for role, expected in PERF_TEMPLATE_BINDINGS.items():
         resource = block(source, f'resource "aws_instance" "{role}"')
         names = re.findall(r"(?m)^\s*(user_data(?:_base64)?)\s*=", resource)
         require(names == ["user_data_base64"], "Changed active EC2 userdata ownership")
-        value = expression(resource, "user_data_base64")
+        perf_userdata_guard(resource, payloads, role)
+        value = expression(payloads, f"{role}_user_data_base64")
         header = 'base64gzip(templatefile("${path.module}/user_data_' + role + '.sh.tftpl",'
         require(
             value.startswith(header) and value.endswith("}))"),
             "Changed active role-specific template identity",
         )
         mapping = block(value, header)
+        require(
+            compact_expression(value) == compact_expression(header + "{" + mapping + "}))"),
+            "Changed canonical EC2 gzip template expression",
+        )
         entries = strict_matches(
             r"\s*(\w+)\s*=\s*([^\n]+)\n?", mapping, "EC2 templatefile argument map"
         )

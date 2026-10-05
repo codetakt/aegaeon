@@ -41,6 +41,7 @@ CONTRACT_SOURCES: tuple[str, ...] = (
     "scripts/validation/run_oidc_aws_kms_parity_from_tofu.sh",
     "scripts/validation/run_oidc_kms_parity.sh",
     "scripts/perf/aws_sweep.sh",
+    "scripts/perf/ssm_sweep.py",
     "scripts/ci/validate_infrastructure.py",
     "tests/ci/test_infrastructure_validation.py",
     "crates/server/src/main.rs",

@@ -24,6 +24,8 @@ SUPPORT_PATHS = {
     "tests/ci/test_perf_runtime_delivery.py": ("perf-aws-ec2",),
     "tests/ci/test_perf_delivery_package.py": ("perf-aws-ec2",),
     "scripts/perf/aws_sweep.sh": ("perf-aws-ec2",),
+    "scripts/perf/ssm_sweep.py": ("perf-aws-ec2",),
+    "tests/ci/test_perf_ssm_sweep.py": ("perf-aws-ec2",),
     "scripts/validation/run_oidc_aws_kms_parity_from_tofu.sh": ("oidc-aws-kms-parity",),
 }
 

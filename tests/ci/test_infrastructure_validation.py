@@ -82,6 +82,7 @@ class InfrastructureTests(unittest.TestCase):
                 "-q",
                 "tests/ci/test_perf_delivery_package.py",
                 "tests/ci/test_perf_runtime_delivery.py",
+                "tests/ci/test_perf_ssm_sweep.py",
             ],
         ]
         validation = next(
@@ -1217,7 +1218,7 @@ class InfrastructureTests(unittest.TestCase):
 
     def test_actual_ec2_template_arguments_have_exact_role_ownership(self):
         module = self.module("perf-aws-ec2")
-        path = module / "instances.tf"
+        path = module / "userdata.tf"
         original = path.read_text()
         infra.resource_contract(module, {"aws": "6.66.0"})
         for before, after in (
@@ -1235,20 +1236,66 @@ class InfrastructureTests(unittest.TestCase):
                 "    extra = var.loadtest_warmup\n    warmup = var.loadtest_warmup",
             ),
             ("user_data_server.sh.tftpl", "user_data_loadgen.sh.tftpl"),
-            (
-                "  user_data_base64 = base64gzip(templatefile",
-                "  user_data = base64gzip(templatefile",
-            ),
             ('ghcr_username == null ? ""', 'ghcr_username == null ? " "'),
         ):
             assert before in original
-            path.write_text(
-                original.replace(before, after, 1) + "\nlocals { decorative = templatefile("
-                '"${path.module}/user_data_server.sh.tftpl", {}) }\n'
-            )
+            path.write_text(original.replace(before, after, 1))
             with self.subTest(change=after), pytest.raises(ValueError, match=r"."):
                 infra.resource_contract(module, {"aws": "6.66.0"})
         path.write_text(original)
+
+    def test_actual_ec2_userdata_size_guard_cannot_be_bypassed(self):
+        module = self.module("perf-aws-ec2")
+        originals = {name: (module / name).read_text() for name in ("instances.tf", "userdata.tf")}
+        infra.resource_contract(module, {"aws": "6.66.0"})
+        changes = (
+            ("instances.tf", "user_data_base64 = local.", "user_data = local."),
+            (
+                "instances.tf",
+                "user_data_base64 = local.server_user_data_base64",
+                "user_data_base64 = local.loadgen_user_data_base64",
+            ),
+            (
+                "instances.tf",
+                "user_data_base64 = local.server_user_data_base64",
+                'user_data_base64 = base64gzip("decoy")',
+            ),
+            ("instances.tf", "precondition {", "postcondition {"),
+            ("instances.tf", "local.server_user_data_bytes <=", "local.loadgen_user_data_bytes <="),
+            ("instances.tf", "<= 16384", "<= 16385"),
+            ("instances.tf", "<= 16384", "< 16384"),
+            ("instances.tf", "local.server_user_data_bytes <= 16384", "true"),
+            ("userdata.tf", "length(local.server_user_data_base64) * 3 / 4", "1"),
+            (
+                "userdata.tf",
+                'endswith(local.server_user_data_base64, "==") ? 2',
+                'endswith(local.server_user_data_base64, "==") ? 1',
+            ),
+            (
+                "userdata.tf",
+                'endswith(local.loadgen_user_data_base64, "=") ? 1',
+                'endswith(local.loadgen_user_data_base64, "=") ? 0',
+            ),
+            (
+                "userdata.tf",
+                "server_user_data_base64 = base64gzip(templatefile",
+                "server_user_data_base64 = base64encode(templatefile",
+            ),
+            (
+                "userdata.tf",
+                "  }))\n\n  server_user_data_bytes",
+                '  })) == "" ? "" : base64gzip(format("%s", "decoy"))\n\n  server_user_data_bytes',
+            ),
+        )
+        for name, before, after in changes:
+            assert before in originals[name]
+            (module / name).write_text(originals[name].replace(before, after, 1))
+            with self.subTest(path=name, change=after), pytest.raises(ValueError, match=r"."):
+                infra.resource_contract(module, {"aws": "6.66.0"})
+            (module / name).write_text(originals[name])
+        (module / "extra.tf").write_text("locals {\nserver_user_data_bytes = 0\n}\n")
+        with pytest.raises(ValueError, match="Duplicated userdata local ownership"):
+            infra.resource_contract(module, {"aws": "6.66.0"})
 
     def test_actual_template_checks_request_both_registry_states(self):
         module = self.module("perf-aws-ec2")
@@ -1530,7 +1577,7 @@ class InfrastructureTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate guest source interpolation"):  # noqa: PT027
                 infra.source_template(module, role)
             template.write_text(original)
-        instances = module / "instances.tf"
+        instances = module / "userdata.tf"
         original = instances.read_text()
         for replacement in ('file("${path.module}/other.py")', "var.delivery_helper"):
             instances.write_text(

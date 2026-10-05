@@ -277,6 +277,16 @@ if [[ "$#" -ne 0 ]]; then
   CONFIG_FILE="$2"
 fi
 
+# A supervised sweep owns only its UUID-named container; report identity stays independent.
+CONTAINER_ARGS=()
+if [[ -v AEGAEON_SWEEP_ID ]]; then
+  if [[ ! "$AEGAEON_SWEEP_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+    echo "[perf] invalid sweep UUID" >&2
+    exit 2
+  fi
+  CONTAINER_ARGS=(--name "aegaeon-sweep-$AEGAEON_SWEEP_ID")
+fi
+
 # One invocation owns configuration, supplies, mounts, collection and cleanup.
 /usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies prepare-driver
 exec 9>/run/aegaeon-supplies/driver.lock
@@ -330,7 +340,7 @@ docker pull "$${SERVER_IMAGE}"
 
 echo "[perf] running load test (scenario=$${SCENARIO}, workers=$${WORKERS}, rps=$${RPS}, run_time=$${RUN_TIME})..."
 set +e
-docker run --rm \
+docker run --rm "$${CONTAINER_ARGS[@]}" \
   --network host \
   --user 0:0 \
   --cap-drop ALL \
