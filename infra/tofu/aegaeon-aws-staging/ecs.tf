@@ -49,7 +49,7 @@ resource "aws_ecs_task_definition" "server" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.server.name
-          awslogs-region        = data.aws_region.current.region
+          awslogs-region        = data.aws_region.current.name
           awslogs-stream-prefix = "server"
         }
       }
@@ -93,7 +93,7 @@ resource "aws_ecs_task_definition" "migrate" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.migrate.name
-          awslogs-region        = data.aws_region.current.region
+          awslogs-region        = data.aws_region.current.name
           awslogs-stream-prefix = "migrate"
         }
       }
@@ -130,14 +130,14 @@ resource "aws_ecs_task_definition" "hosted_bootstrap" {
       entryPoint = ["/usr/local/bin/aegaeon-hosted-bootstrap"]
 
       environment = [
-        { name = "AWS_REGION", value = data.aws_region.current.region },
+        { name = "AWS_REGION", value = data.aws_region.current.name },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_ISSUER_URL", value = local.base_url },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_OWNER_EMAIL", value = var.bootstrap_owner_email },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_TEAM_SLUG", value = var.bootstrap_team_slug },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_TENANT_SLUG", value = var.bootstrap_tenant_slug },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_TENANT_REGION", value = var.bootstrap_tenant_region },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_ENVIRONMENT_SLUG", value = var.bootstrap_environment_slug },
-        { name = "AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION", value = data.aws_region.current.region },
+        { name = "AEGAEON_HOSTED_BOOTSTRAP_KMS_REGION", value = data.aws_region.current.name },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_KMS_KEY_ID", value = local.oidc_kms_key_id },
         { name = "AEGAEON_HOSTED_BOOTSTRAP_KMS_KID", value = local.oidc_kms_kid },
         { name = "RUST_LOG", value = "info,aegaeon_server=info" },
@@ -153,7 +153,7 @@ resource "aws_ecs_task_definition" "hosted_bootstrap" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.bootstrap.name
-          awslogs-region        = data.aws_region.current.region
+          awslogs-region        = data.aws_region.current.name
           awslogs-stream-prefix = "bootstrap"
         }
       }

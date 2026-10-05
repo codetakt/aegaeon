@@ -737,7 +737,7 @@ class InfrastructureTests(unittest.TestCase):
             ('"   "', '"\\t"', False),
             ('""', None, False),
             (None, '"   "', False),
-            ("data.aws_region.current.region", None, True),
+            ("data.aws_region.current.name", None, True),
         ]
         for preferred, fallback, accepted in cases:
             assignments = ""
