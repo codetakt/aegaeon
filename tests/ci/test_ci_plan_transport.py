@@ -951,7 +951,7 @@ class CiPlanTransportTests(unittest.TestCase):
             if job == "docs":
                 # Full regression discovery has an explicitly increased budget.
                 self.assertEqual(expected["timeout-minutes"], 15)
-                expected["timeout-minutes"] = 30
+                expected["timeout-minutes"] = 40
             self.assertEqual(workflow["jobs"][job], expected)
         outputs = workflow["jobs"]["plan"]["outputs"]
         self.assertEqual(outputs["plan_artifact_id"], "${{ steps.evidence.outputs.artifact-id }}")
