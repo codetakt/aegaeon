@@ -355,7 +355,13 @@ impl TokenIssuer {
                 ));
             }
         };
-        let audience = resource.unwrap_or_else(|| client_id.to_string());
+        // An assertion grant is not an OpenID authorization grant, even when
+        // its requested scope contains openid; it has no UserInfo default.
+        let audience = self
+            .access_token_audience(client_id, None, resource.as_deref())
+            .map_err(|description| {
+                SubjectTokenGrantError::invalid_target(description.to_string())
+            })?;
         let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
             application_grant,
             subject,

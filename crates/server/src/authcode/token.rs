@@ -127,19 +127,23 @@ impl TokenIssuer {
         client_id: &str,
         scope: Option<&str>,
         selected_resource: Option<&str>,
-    ) -> String {
-        selected_resource.map_or_else(
-            || {
-                self.oidc
-                    .as_ref()
-                    .filter(|_| scope_contains(scope, "openid"))
-                    .map_or_else(
-                        || client_id.to_string(),
-                        |cfg| crate::resource_audience::userinfo(&cfg.issuer),
-                    )
-            },
-            str::to_string,
-        )
+    ) -> Result<String, &'static str> {
+        if let Some(resource) = selected_resource {
+            return Ok(resource.to_string());
+        }
+        if let Some(cfg) = self
+            .oidc
+            .as_ref()
+            .filter(|_| scope_contains(scope, "openid"))
+        {
+            return Ok(crate::resource_audience::userinfo(&cfg.issuer));
+        }
+        // RFC 9068 §3: a client identifier is not an inferred resource default.
+        // No generic or JWT-bearer default is configured by the current policy.
+        if self.jwt_access_tokens_enabled {
+            return Err("JWT access tokens require a resource or an approved resource default");
+        }
+        Ok(client_id.to_string())
     }
 
     fn issue_access_token_value(&self, mint: BearerAccessTokenMint<'_>) -> Result<String, String> {

@@ -132,6 +132,13 @@ No database migration or new environment setting is required.
 
 ## JWT bearer grant (RFC 7523)
 
+When JWT access tokens are enabled, a JWT-bearer request must include a valid
+`resource`. The current policy defines no default resource for this grant;
+omission returns `invalid_target` before token storage. A client identifier and
+the assertion's token-endpoint audience do not select an access-token resource.
+The client_credentials default-target policy authorizes that grant only and is
+not reused for JWT-bearer subjects. Opaque-token behavior remains compatible.
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_ENABLE_JWT_BEARER_GRANT` | _removed_ | `environment` | Removed startup-environment fallback. Enables the JWT bearer authorization grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:jwt-bearer`. |
@@ -145,6 +152,16 @@ No database migration or new environment setting is required.
 | `AEGAEON_ENABLE_TOKEN_EXCHANGE` | _removed_ | `environment` | Removed startup-environment fallback. Enables the token exchange grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:token-exchange`. |
 
 ## JWT access tokens / JWT introspection response
+
+RFC 9068 section 3 requires a resource audience for JWT access tokens. The
+existing OpenID grant default is the issuer's UserInfo resource; authorized
+client_credentials permits supply their selected resource audience. Other
+grants without an explicit resource or an approved default return
+`invalid_target`. Authorization codes are rejected before storage when no JWT
+resource can be selected. Codes or refresh grants created under legacy opaque
+client-ID defaults cannot become JWT resource grants after enabling JWT output;
+clients must authorize again with a resource. Refresh target snapshots continue
+to prevent switching resources or widening scopes.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |

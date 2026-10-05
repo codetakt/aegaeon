@@ -7,7 +7,7 @@ fn projection() -> Result<Grant, String> {
     serde_json::from_value(serde_json::json!({
         "version":1, "environment_id":uuid::Uuid::new_v4(),
         "issuer":"https://issuer.example", "client_id":"test_client", "subject":"user123",
-        "revision":7, "audiences":["test_client"], "selected_organization":null,
+        "revision":7, "audiences":["https://resource.example/api"], "selected_organization":null,
         "claims":{"roles":["USER"], "organization_roles":[]}
     }))
     .map_err(|e| e.to_string())
@@ -21,7 +21,7 @@ async fn application_exchange_lineage_retains_projection_with_and_without_refres
             let policy = must_ok!(
                 serde_json::from_value(serde_json::json!({
                     "version":1, "targets":[{"audience":"api", "resourceAliases":[]}],
-                    "rules":[{"clientId":"test_client", "sourceAudience":"test_client",
+                    "rules":[{"clientId":"test_client", "sourceAudience":"https://resource.example/api",
                         "targetAudience":"api", "scopes":[{"targetScope":"api.read", "sourceScopes":["read"]}],
                         "defaultScopes":["api.read"]}]
                 })),
@@ -32,7 +32,7 @@ async fn application_exchange_lineage_retains_projection_with_and_without_refres
                 .with_issuer("https://issuer.example".into())
                 .with_jwt_access_tokens_enabled(true);
             let mut input = crate::authcode::token::AuthorizationCodeIssueInput::new(
-                authorization_request("read offline_access", None),
+                authorization_request("read offline_access", Some("https://resource.example/api")),
                 "user123".into(),
                 true,
                 1,

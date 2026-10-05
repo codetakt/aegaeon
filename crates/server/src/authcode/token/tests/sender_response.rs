@@ -31,7 +31,7 @@ fn fixture() -> Result<(TokenIssuer, TokenRequest), String> {
     .with_issuer("https://issuer.example".into())
     .with_jwt_access_tokens_enabled(true);
     let (code, _) = issuer.issue_authorization_code(
-        authorization_request("read offline_access", None),
+        authorization_request("read offline_access", Some("https://resource.example/api")),
         "sender-user".into(),
     )?;
     Ok((issuer, token_request_for_code(code, None)))

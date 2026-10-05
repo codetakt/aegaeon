@@ -1,6 +1,6 @@
 use super::super::{access_token_expires_at, BearerAccessTokenMint, TokenIssuer};
 use super::context::{PreparedAuthorizationCodeGrantIssue, ValidatedAuthorizationCodeGrant};
-use super::error::TokenGrantError;
+use super::error::{TokenGrantError, TokenGrantErrorCode};
 use super::issuance;
 use crate::authcode::types::{AccessToken, CnfClaim, SenderBinding, TokenResponse};
 use std::time::SystemTime;
@@ -72,11 +72,15 @@ impl TokenIssuer {
         } = grant;
         let (code, authorization_code_commit_payload) = code.into_parts();
 
-        let audience = self.access_token_audience(
-            &code.client_id,
-            code.scope.as_deref(),
-            selected_resource.as_deref(),
-        );
+        let audience = self
+            .access_token_audience(
+                &code.client_id,
+                code.scope.as_deref(),
+                selected_resource.as_deref(),
+            )
+            .map_err(|description| {
+                TokenGrantError::described(TokenGrantErrorCode::InvalidTarget, description)
+            })?;
         let issue_context = issuance::GrantIssueContext {
             client_id: &code.client_id,
             user_id: &code.user_id,

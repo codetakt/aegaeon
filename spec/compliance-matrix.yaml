@@ -3891,6 +3891,21 @@ rfc_9068:
   - "Default remains opaque tokens + introspection (safe default)."
   - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata includes access_token_signing_alg_values_supported: [EdDSA]."
   - "Opaque-vs-JWT switching verified in jwt_access_token_test.rs."
+- id: 9068-005
+  section: '3'
+  requirement: MUST
+  description: JWT issuance uses an explicit or approved default resource audience and rejects an undefined default.
+  module: crates/server/src/authcode/token.rs
+  proof: []
+  status: implemented
+  runtime_link: crates/server/src/authcode/token.rs
+  applies_to:
+  - as
+  notes:
+  - "Resource selection is shared by JWT-bearer, authorization-code and refresh issuance; it does not infer a JWT resource from client_id."
+  - "OpenID grants retain the UserInfo resource default; client_credentials uses its consumed authorization permit. JWT-bearer currently has no configured default and requires resource."
+  - "Legacy opaque code and refresh defaults cannot be promoted to JWT resource authority. Missing-resource refusals precede code consumption or refresh rotation."
+  - "Scoped issuer and store regressions are in crates/server/src/authcode/token/tests/jwt_resource_defaults.rs; no formal discharge is asserted."
 
 draft_oauth_browser_based_apps:
 - id: browser-apps-001
