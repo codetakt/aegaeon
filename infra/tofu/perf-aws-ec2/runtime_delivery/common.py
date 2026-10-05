@@ -6,8 +6,11 @@ import base64
 import json
 import re
 from pathlib import Path, PurePosixPath
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from urllib.parse import SplitResult
 
 REDIS_NAMES = (
     "AEGAEON_PAR_REDIS_URL",
@@ -79,8 +82,20 @@ def single_line(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip()) and all(c.isprintable() for c in value)
 
 
+def checked_url(value: str) -> SplitResult:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.netloc.rsplit("@", 1)[-1].split("]", 1)[-1].partition(":")[2]
+        if port and (not port.isascii() or not port.isdecimal()):
+            fail("invalid URL syntax/port")
+        _ = parsed.port
+    except ValueError:
+        fail("invalid URL syntax/port")
+    return parsed
+
+
 def https_origin(value: str) -> str:
-    parsed = urlsplit(value)
+    parsed = checked_url(value)
     if (
         parsed.scheme != "https"
         or not parsed.hostname

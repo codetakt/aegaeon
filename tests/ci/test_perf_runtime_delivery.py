@@ -200,6 +200,106 @@ def test_unknown_duplicate_removed_and_unsafe_urls(helper, supplies):
             )
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        ("AEGAEON_DATABASE_URL", "postgresql", "/db?sslmode=require"),
+        ("AEGAEON_DPOP_REDIS_URL", "rediss", "/0"),
+    ],
+)
+@pytest.mark.parametrize(
+    "port",
+    [
+        "not-a-port",
+        "443.0",
+        "+443",
+        " 443 ",
+        "\u0664\u0664\u0663",
+        "-1",
+        "65536",
+        "999999",
+        "443:80",
+    ],
+)
+def test_server_bundle_rejects_invalid_url_ports(helper, supplies, target, port):
+    name, scheme, path = target
+    supplies[name] = f"{scheme}://synthetic.invalid:{port}{path}"
+    with pytest.raises(ValueError, match="invalid URL syntax/port"):
+        helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        ("AEGAEON_DATABASE_URL", "postgresql", "/db?sslmode=require"),
+        ("AEGAEON_DPOP_REDIS_URL", "rediss", "/0"),
+    ],
+)
+@pytest.mark.parametrize("port", ["", ":", ":0", ":5432", ":005432", ":65535"])
+def test_server_bundle_preserves_valid_url_ports(helper, supplies, target, port):
+    name, scheme, path = target
+    supplies[name] = f"{scheme}://synthetic.invalid{port}{path}"
+    assert (
+        helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"]) == supplies
+    )
+
+
+@pytest.mark.parametrize(
+    ("port", "other", "accepted"),
+    [
+        (":0", ":0", True),
+        (":0", ":6379", False),
+        (":6379", ":0", False),
+        ("", ":6379", True),
+        (":", ":6379", True),
+        ("", ":", True),
+    ],
+)
+def test_server_bundle_atomic_ports_preserve_endpoint_identity(
+    helper, supplies, port, other, accepted
+):
+    for name in helper.ATOMIC_NAMES:
+        supplies[name] = f"rediss://synthetic.invalid{port}/0"
+    supplies[helper.ATOMIC_NAMES[0]] = f"rediss://synthetic.invalid{other}/0"
+    if accepted:
+        assert (
+            helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
+            == supplies
+        )
+    else:
+        with pytest.raises(ValueError, match="atomic Redis topology"):
+            helper.validate_bundle("server", json.dumps(supplies), config()["issuer_url"])
+
+
+@pytest.mark.parametrize(
+    ("authority", "accepted"),
+    [
+        ("client.example.com", True),
+        ("client.example.com:", True),
+        ("client.example.com:0", True),
+        ("client.example.com:00443", True),
+        ("[2001:db8::1]", True),
+        ("[2001:db8::1]:443", True),
+        ("user:password@[2001:db8::1]:443", True),
+        ("client.example.com:+443", False),
+        ("client.example.com: 443 ", False),
+        ("client.example.com:\u0664\u0664\u0663", False),
+        ("[2001:db8::1]:+443", False),
+        ("[2001:db8::1]: 443 ", False),
+        ("[2001:db8::1]:\u0664\u0664\u0663", False),
+    ],
+)
+def test_url_port_grammar_is_independent_of_python_accessor(helper, authority, accepted):
+    # Earlier Python versions accepted sign, whitespace and Unicode through int(port, 10).
+    parsed = types.SimpleNamespace(netloc=authority, port=443)
+    with patch.dict(helper.checked_url.__globals__, urlsplit=lambda _: parsed):
+        if accepted:
+            assert helper.checked_url("https://" + authority) is parsed
+        else:
+            with pytest.raises(ValueError, match="invalid URL syntax/port"):
+                helper.checked_url("https://" + authority)
+
+
 def test_exact_secret_identity_version_and_denial(helper, supplies, monkeypatch):
     cfg = config()
     monkeypatch.setitem(helper.retrieve.__globals__, "aws_executable", lambda: Path("/fixture/aws"))
@@ -869,7 +969,7 @@ def test_embedded_driver_syntax_is_checked_beyond_outer_userdata(tmp_path):
         infra.check_embedded_bash(broken, "loadgen", commands, shutil.which("bash"), tmp_path)
 
 
-def client_bundle_fixture():
+def client_bundle_fixture(**profile_changes):
     """Synthetic bytes and receipts exercise mechanics, not genuine login/readback supply."""
     profile = {
         "issuer": config()["issuer_url"],
@@ -887,6 +987,7 @@ def client_bundle_fixture():
         "sender_policy": "dpop",
         "par_policy": "required",
         "resource": "https://resource.example.com/",
+        **profile_changes,
     }
     profile_raw = json.dumps(profile, indent=2).encode() + b"\n"
     cookie = "aegaeon_auth_session=synthetic_cookie"
@@ -907,6 +1008,123 @@ def client_bundle_fixture():
         "session_provenance_base64": base64.b64encode(provenance_raw).decode(),
     }
     return bundle, profile_raw, provenance_raw
+
+
+@pytest.mark.parametrize("field", ["redirect_uri", "resource"])
+@pytest.mark.parametrize(
+    "port",
+    [
+        "not-a-port",
+        "443.0",
+        "+443",
+        " 443 ",
+        "\u0664\u0664\u0663",
+        "-1",
+        "65536",
+        "999999",
+        "443:80",
+        "\uff14\uff14\uff13",
+    ],
+)
+def test_client_bundle2_rejects_invalid_profile_url_ports(helper, field, port):
+    bundle, _, _ = client_bundle_fixture(**{field: f"https://client.example.com:{port}/path"})
+    with pytest.raises(ValueError, match="invalid URL syntax/port"):
+        helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+
+
+@pytest.mark.parametrize(
+    "port",
+    [
+        "not-a-port",
+        "443.0",
+        "+443",
+        " 443 ",
+        "\u0664\u0664\u0663",
+        "-1",
+        "65536",
+        "999999",
+        "443:80",
+    ],
+)
+def test_client_bundle2_rejects_invalid_issuer_port(helper, port):
+    issuer = f"https://issuer.example.com:{port}"
+    bundle, _, _ = client_bundle_fixture(issuer=issuer)
+    with pytest.raises(ValueError, match="invalid URL syntax/port"):
+        helper.validate_bundle("client", json.dumps(bundle), issuer)
+
+
+@pytest.mark.parametrize("port", ["", ":", ":0", ":443", ":00443", ":65535"])
+def test_client_bundle2_preserves_valid_issuer_port_and_exact_origin(helper, port):
+    issuer = f"https://issuer.example.com{port}"
+    bundle, profile, provenance = client_bundle_fixture(issuer=issuer)
+    values = helper.validate_bundle("client", json.dumps(bundle), issuer)
+    assert values["profile"] == profile
+    assert values["provenance"] == provenance
+    assert helper.https_origin(issuer) == issuer
+
+
+@pytest.mark.parametrize("field", ["issuer", "redirect_uri", "resource"])
+@pytest.mark.parametrize("port", ["", ":", ":0", ":00443", ":65535"])
+def test_client_bundle2_preserves_ipv6_authority_ports(helper, field, port):
+    url = f"https://[2001:db8::1]{port}"
+    bundle, profile, provenance = client_bundle_fixture(**{field: url})
+    issuer = url if field == "issuer" else config()["issuer_url"]
+    values = helper.validate_bundle("client", json.dumps(bundle), issuer)
+    assert values["profile"] == profile
+    assert values["provenance"] == provenance
+
+
+@pytest.mark.parametrize("field", ["redirect_uri", "resource"])
+@pytest.mark.parametrize("port", ["", ":", ":0", ":443", ":00443", ":65535"])
+def test_client_bundle2_valid_profile_url_ports_preserve_exact_supply(helper, field, port):
+    url = f"https://client.example.com{port}/path?fixed=a%2Fb&second=2"
+    bundle, profile, provenance = client_bundle_fixture(**{field: url})
+    values = helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+    assert values["profile"] == profile
+    assert values["provenance"] == provenance
+    assert values["profile_sha256"] == hashlib.sha256(profile).hexdigest()
+    assert values["provenance_sha256"] == hashlib.sha256(provenance).hexdigest()
+    unbound = json.loads(provenance)
+    unbound["profile_sha256"] = "0" * 64
+    bundle["session_provenance_base64"] = base64.b64encode(json.dumps(unbound).encode()).decode()
+    with pytest.raises(ValueError, match="provenance binding"):
+        helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+
+
+@pytest.mark.parametrize("field", ["redirect_uri", "resource"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://client.example.com:443/path",
+        "https://user@client.example.com:443/path",
+        "https://user:password@client.example.com:443/path",
+        "https://client.example.com:443/path#fragment",
+    ],
+)
+def test_client_bundle2_profile_url_policy_remains_fail_closed(helper, field, url):
+    bundle, _, _ = client_bundle_fixture(**{field: url})
+    with pytest.raises(ValueError, match=r"profile redirect|profile resource"):
+        helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+
+
+def test_client_bundle2_rejects_noncanonical_issuer_trailing_slash(helper):
+    issuer = config()["issuer_url"] + "/"
+    bundle, _, _ = client_bundle_fixture(issuer=issuer)
+    with pytest.raises(ValueError, match="profile policy/issuer"):
+        helper.validate_bundle("client", json.dumps(bundle), issuer)
+
+
+def test_client_bundle2_profile_query_policy_is_field_specific(helper):
+    url = "https://client.example.com:443/path?state=fixed"
+    for field in ("redirect_uri", "resource"):
+        bundle, _, _ = client_bundle_fixture(**{field: url})
+        if field == "redirect_uri":
+            with pytest.raises(ValueError, match="profile redirect"):
+                helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+        else:
+            helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
+    bundle, _, _ = client_bundle_fixture(resource=None)
+    helper.validate_bundle("client", json.dumps(bundle), config()["issuer_url"])
 
 
 def test_client_bundle2_preserves_exact_profile_provenance_and_inert_secret(helper, tmp_path):

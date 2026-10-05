@@ -121,7 +121,6 @@ if [[ -z "$IMAGE_REF" ]]; then
   exit 0
 fi
 
-# Synchronously parse a bounded, root-owned JSON file; never execute its values.
 REGISTRY_VALUES="$(/usr/bin/python3 -I -B - <<'PYTHON'
 import json
 import os
@@ -277,7 +276,6 @@ if [[ "$#" -ne 0 ]]; then
   CONFIG_FILE="$2"
 fi
 
-# A supervised sweep owns only its UUID-named container; report identity stays independent.
 CONTAINER_ARGS=()
 if [[ -v AEGAEON_SWEEP_ID ]]; then
   if [[ ! "$AEGAEON_SWEEP_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
@@ -287,7 +285,6 @@ if [[ -v AEGAEON_SWEEP_ID ]]; then
   CONTAINER_ARGS=(--name "aegaeon-sweep-$AEGAEON_SWEEP_ID")
 fi
 
-# One invocation owns configuration, supplies, mounts, collection and cleanup.
 /usr/bin/python3 -I -B /usr/local/bin/aegaeon-deliver-supplies prepare-driver
 exec 9>/run/aegaeon-supplies/driver.lock
 flock -x 9

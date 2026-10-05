@@ -7,7 +7,7 @@ import hashlib
 import re
 import subprocess
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs
 
 from runtime_delivery.common import (
     ATOMIC_NAMES,
@@ -15,6 +15,7 @@ from runtime_delivery.common import (
     REDIS_NAMES,
     SERVER_NAMES,
     canonical_base64,
+    checked_url,
     fail,
     https_origin,
     json_object,
@@ -54,7 +55,6 @@ def profile_fields(profile: dict[str, Any]) -> None:
 def profile_policy(profile: dict[str, Any], issuer: str) -> None:
     if (
         profile["issuer"] != issuer
-        or issuer.endswith("/")
         or https_origin(issuer) != issuer
         or (profile["activation"] != "ACTIVE")
         or (profile["client_auth"] not in {"client_secret_basic", "client_secret_post"})
@@ -62,31 +62,27 @@ def profile_policy(profile: dict[str, Any], issuer: str) -> None:
         or (profile["par_policy"] not in {"optional", "required"})
     ):
         fail("profile policy/issuer")
-    redirect = urlsplit(profile["redirect_uri"])
-    if (
-        redirect.scheme != "https"
-        or not redirect.hostname
-        or redirect.username is not None
-        or (redirect.password is not None)
-        or redirect.fragment
-        or set(parse_qs(redirect.query, keep_blank_values=True))
-        & {"state", "iss", "code", "error", "error_description", "error_uri"}
-    ):
-        fail("profile redirect")
+    for field in ("redirect_uri", "resource"):
+        if field == "resource" and profile.get(field) is None:
+            continue
+        url = checked_url(profile[field])
+        if (
+            url.scheme != "https"
+            or not url.hostname
+            or url.username is not None
+            or url.password is not None
+            or url.fragment
+            or (
+                field == "redirect_uri"
+                and set(parse_qs(url.query, keep_blank_values=True))
+                & {"state", "iss", "code", "error", "error_description", "error_uri"}
+            )
+        ):
+            fail("profile redirect" if field == "redirect_uri" else "profile resource")
     scope = scope_tokens(profile["scope"])
     oidc = scope_tokens(profile["oidc_scope"]) if profile.get("oidc_scope") is not None else set()
     if ("openid" in scope or "openid" in oidc) and profile.get("id_token_alg") != "RS256":
         fail("RS256 profile required")
-    if profile.get("resource") is not None:
-        resource = urlsplit(profile["resource"])
-        if (
-            resource.scheme != "https"
-            or not resource.hostname
-            or resource.username is not None
-            or (resource.password is not None)
-            or resource.fragment
-        ):
-            fail("profile resource")
 
 
 def session_provenance(
@@ -148,7 +144,7 @@ def server_bundle(values: dict[str, Any]) -> None:
     decoded = base64.urlsafe_b64decode(kek + "=" * (-len(kek) % 4))
     if len(decoded) != KEK_BYTES or base64.urlsafe_b64encode(decoded).decode().rstrip("=") != kek:
         fail("noncanonical KEK")
-    db = urlsplit(values["AEGAEON_DATABASE_URL"])
+    db = checked_url(values["AEGAEON_DATABASE_URL"])
     if (
         db.scheme not in ("postgres", "postgresql")
         or not db.hostname
@@ -158,7 +154,7 @@ def server_bundle(values: dict[str, Any]) -> None:
         fail("TLS database required")
     identities = {}
     for name in REDIS_NAMES:
-        url = urlsplit(values[name])
+        url = checked_url(values[name])
         if (
             url.scheme != "rediss"
             or not url.hostname
@@ -170,7 +166,7 @@ def server_bundle(values: dict[str, Any]) -> None:
         identities[name] = (
             url.scheme,
             url.hostname.lower(),
-            url.port or 6379,
+            url.port if url.port is not None else 6379,
             int(url.path.lstrip("/") or "0"),
         )
     if len({identities[name] for name in ATOMIC_NAMES}) != 1:
