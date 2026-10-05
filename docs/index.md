@@ -103,7 +103,7 @@ Audience: contributors, maintainers
 | `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-09-07 | CI / Automation | CI maintainers, contributors |
 | `docs/automation/ci-diagnostics.md` | automation | CI Diagnostics and Evidence | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers, CI maintainers |
 | `docs/automation/flakehub-preview.md` | automation | Private FlakeHub server preview | current implementation baseline | 2026-09-09 | CI / Automation | maintainer using Aegaeon in internal development projects |
-| `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-09-30 | CI / Automation | contributors, reviewers, repository administrators |
+| `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-10-05 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/security-analysis.md` | automation | Security Analysis Execution | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers |
 
 ## Program Management
@@ -315,7 +315,7 @@ Audience: contributors, maintainers
 | `docs/verification/runbooks/ffi-contracts.md` | runbook | FFI Contract Register | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/hacl-integration.md` | runbook | HACL* Integration Documentation | current implementation baseline | 2026-03-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
-| `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-10-04 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/tamarin-evidence-admission.md` | runbook | Tamarin Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |

@@ -237,7 +237,7 @@
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "163d1d8d2b5046bd97340e238277d0cbf8f8e2b682e2d8d9b6f5cae885849d57",
+      "sha256": "9160a4821f9d9556e7e88ee80e0d5249ff5e1c437eb84495189b3f26aadb9930",
       "entries": [
         "9449-004",
         "9449-005",
@@ -250,7 +250,7 @@
       "critical": false
     },
     "crates/server/src/middleware/replay_store.rs": {
-      "sha256": "bf3b09d6c4e284102f9352097282f39a86a5adc8c3b24713d9a597234453220f",
+      "sha256": "26a35eef5a1e20ca6305f584fe2c8f75f47f2b1fb134937c6f72b7cf56ae030d",
       "entries": [
         "9449-009"
       ],
@@ -325,7 +325,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "3b5bde89fc1c584ef4d7e407b050c2123e4e985c23326a5a73cd950d697fd394",
+      "sha256": "254e6f8b71bda2af06617d6e16675fb8aeb0177da278e698fedd1611b05f512d",
       "entries": [
         "6749-014",
         "7521-201",

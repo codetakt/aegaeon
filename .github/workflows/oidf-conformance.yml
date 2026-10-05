@@ -78,10 +78,10 @@ jobs:
             sleep 2
           done
 
-      - name: Setup Java 17 (required for conformance suite)
+      - name: Setup Java 21 (required for conformance suite)
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Clone OpenID Foundation Conformance Suite
@@ -114,6 +114,7 @@ jobs:
             --server.port=9999 \
             --server.forward-headers-strategy=native \
             --spring.profiles.active=dev \
+            --spring.mongodb.uri="mongodb://admin:password@localhost:27017/conformance?authSource=admin" \
             --spring.data.mongodb.uri="mongodb://admin:password@localhost:27017/conformance?authSource=admin" \
             --fintechlabs.base_url="${SUITE_BASE}" \
             --fintechlabs.devmode=true &

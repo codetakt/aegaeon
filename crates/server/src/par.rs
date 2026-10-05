@@ -6,22 +6,22 @@
 //! front-channel authorization validator remains responsible for applying the
 //! current client policy to the materialized request.
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::collections::HashMap;
 use std::sync::{atomic::AtomicU64, Arc};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::sync::{RwLock, RwLockWriteGuard};
 use std::time::{Duration, SystemTime};
 
 use crate::authcode::store::ParAuthorizationCodeCommit;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use crate::client_registry::ClientSecretCredential;
 use crate::config::{
     require_shared_runtime_store_url, valid_par_expires_in_secs, ConfigError,
     RuntimeStateNamespace, DEFAULT_PAR_EXPIRES_IN_SECS,
 };
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 mod client_registry;
 mod endpoint;
 mod request_uri;
@@ -31,12 +31,12 @@ mod types;
 mod validation;
 pub use endpoint::ParEndpoint;
 pub use state::ParStateError;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use state::{try_read_lock, try_write_lock};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use storage::InMemoryParRequestStore;
 use storage::{ParRequestStore, ParStorageError, RedisParRequestStore};
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub use types::Client;
 use types::ValidatedParRequest;
 pub use types::{ParError, ParRequest, ParResponse, ReservedParRequest, StoredParRequest};
@@ -44,16 +44,17 @@ pub use types::{ParError, ParRequest, ParResponse, ReservedParRequest, StoredPar
 /// PAR store for managing request URIs
 pub struct ParStore {
     request_store: Arc<dyn ParRequestStore>,
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     clients: Arc<RwLock<HashMap<String, Client>>>,
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     client_secret_credentials: Arc<RwLock<HashMap<String, Vec<ClientSecretCredential>>>>,
     expires_in: AtomicU64,
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub(crate) struct ParRuntimeClientProjectionWriteGuard<'a> {
     clients: RwLockWriteGuard<'a, HashMap<String, Client>>,
+    #[cfg(test)]
     client_secret_credentials: RwLockWriteGuard<'a, HashMap<String, Vec<ClientSecretCredential>>>,
 }
 
@@ -69,7 +70,7 @@ fn storage_error_to_par_error(error: &ParStorageError) -> ParError {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 fn state_error_to_par_error(error: &ParStateError) -> ParError {
     tracing::error!(error = %error, "PAR runtime state operation failed");
     ParError {
@@ -93,7 +94,7 @@ impl ParStore {
     /// Production code should use [`Self::try_new_from_shared_store_env_with_expires_in`] so shared
     /// runtime state is required and the TTL comes from the management configuration snapshot.
     #[doc(hidden)]
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     #[must_use]
     pub fn new_process_local_for_tests() -> Self {
         Self::with_expires_in(Self::DEFAULT_EXPIRES_IN)
@@ -125,7 +126,7 @@ impl ParStore {
         Ok(Self::with_request_store(expires_in, request_store))
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     fn with_expires_in(expires_in: u64) -> Self {
         Self::with_request_store(expires_in, Arc::new(InMemoryParRequestStore::new()))
     }
@@ -138,9 +139,9 @@ impl ParStore {
         };
         Self {
             request_store,
-            #[cfg(test)]
+            #[cfg(any(test, fuzzing))]
             clients: Arc::new(RwLock::new(HashMap::new())),
-            #[cfg(test)]
+            #[cfg(any(test, fuzzing))]
             client_secret_credentials: Arc::new(RwLock::new(HashMap::new())),
             expires_in: AtomicU64::new(expires_in),
         }
