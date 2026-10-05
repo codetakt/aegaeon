@@ -28,6 +28,25 @@ The project provides **two deployment paths** for verified code:
 Both artifacts are built from the same extracted C and are expected to be behaviorally
 equivalent. Shared test vectors should be run against both outputs to detect drift.
 
+### Pinned extraction entrypoints
+
+Use `nix run .#verify-lowstar` for the Low* gate. Run the standalone extraction
+or packaging scripts through `nix develop .#verification --command bash`.
+The verification and default shells export absolute `FSTAR`, `KAMEL` and
+`EVERPARSE` executable routes together with their provider directories. The
+batch entrypoint activates the same verification shell for CI regeneration.
+
+Extraction no longer selects tools from PATH, a local `result` link or arbitrary
+Nix store candidates. Missing pins, executables, provider layouts or mismatched
+tool/package or installed-source routes fail before extraction outputs, temporary
+copies or supplier invocations. The Nix environment also requires HACL* and
+EverCrypt packages to derive from the same pinned source, without retaining an
+extra raw-source copy in the runtime closure. Optional WASM compilation
+also requires explicit `WASI_CLANG` and `WASI_SYSROOT` with include/lib layouts.
+The existing module/include ordering, extraction flags and cache policies remain
+in force. Route admission is not formal proof or release evidence; see the
+[current assumption register](../claims/assumptions/current-register.md).
+
 ## 2. Extraction Coverage Map
 
 ### 2.1 F\* Modules Extracted to WASM

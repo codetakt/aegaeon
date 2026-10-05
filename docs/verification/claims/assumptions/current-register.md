@@ -34,6 +34,15 @@ sources and provider `.checked` imports) are reconstructed by
 descriptions below as "honest" or "permanent" do not discharge any
 obligation. See [contract status](../assurance-case/contract-status.md).
 
+Extraction entrypoints require explicit tool and provider routes from the pinned
+Nix environment before creating outputs or invoking F*, KaRaMeL or EverParse.
+EverParse executable and installed source directories use the same package;
+Nix checks that HACL* and EverCrypt packages derive from the same pinned source
+when constructing the extraction environment. Runtime preflight checks executable
+and installed-source routes and directory layouts. These checks do not attest
+supplier verification, checked-artifact validity or tool soundness, and does
+not change the `specified-not-attested` provider obligations above.
+
 ## 1. Introduction
 
 ### What is an `assume val`?

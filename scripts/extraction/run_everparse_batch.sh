@@ -7,7 +7,6 @@ cd "$ROOT"
 source "$ROOT/scripts/extraction/lib/everparse_postprocess.sh"
 
 OUT_DIR="$ROOT/generated/everparse"
-mkdir -p "$OUT_DIR"
 
 SCHEMAS=(
 	"fstar/lowparse/JoseHeader.3d"
@@ -41,10 +40,12 @@ nix develop .#verification --command bash -lc '
   cd "$ROOT"
 
   OUT_DIR="${AEG_EVERPARSE_OUT_DIR:?}"
+  source "$ROOT/scripts/extraction/lib/toolchain_preflight.sh"
+  extraction_preflight
   mkdir -p "$OUT_DIR"
 
-  EVERPARSE_BIN=$(command -v everparse)
-  KRML_BIN=$(command -v krml)
+  EVERPARSE_BIN=$EVERPARSE
+  KRML_BIN=$KAMEL
 
   # EverParse expects:
   #   - $(KRML_HOME)/krml
@@ -56,12 +57,12 @@ nix develop .#verification --command bash -lc '
 
   ln -s "$KRML_BIN" "$KRML_HOME_TMP/krml"
 
-  EVERPARSE_ROOT=$(dirname "$(dirname "$(readlink -f "$EVERPARSE_BIN")")")
+  EVERPARSE_ROOT=$EVERPARSE_SOURCE_ROOT
   ln -s "$EVERPARSE_ROOT/krmllib" "$KRML_HOME_TMP/krmllib"
 
   export KRML_HOME="$KRML_HOME_TMP"
 
-  everparse \
+  "$EVERPARSE_BIN" \
     --odir generated/everparse \
     --batch \
     --skip_c_makefiles \
@@ -78,6 +79,8 @@ nix develop .#verification --command bash -lc '
 nix develop .#verification --command bash -lc '
   set -euo pipefail
   cd "$(git rev-parse --show-toplevel)"
+  source scripts/extraction/lib/toolchain_preflight.sh
+  extraction_preflight
   source scripts/extraction/lib/everparse_postprocess.sh
   postprocess_everparse_dir "${AEG_EVERPARSE_OUT_DIR:?}"
 '
