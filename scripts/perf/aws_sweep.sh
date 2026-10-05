@@ -98,11 +98,12 @@ server_stats_script=$'set -euo pipefail\nsudo systemctl show aegaeon-server \\\n
 
 SWEEP_EXIT_CODE=0
 
-IFS=',' read -r -a rps_values <<<"$RPS_LIST"
+IFS=',' read -r -d '' -a rps_values < <(printf '%s\0' "$RPS_LIST")
 
 invocation_index=0
 for rps in "${rps_values[@]}"; do
-	rps="$(echo "$rps" | tr -d '[:space:]')"
+	rps="${rps#"${rps%%[![:space:]]*}"}"
+	rps="${rps%"${rps##*[![:space:]]}"}"
 	if [[ -z $rps ]]; then
 		continue
 	fi

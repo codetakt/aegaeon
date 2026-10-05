@@ -18,7 +18,7 @@ PACKAGE_SHA256: dict[str, str] = {
     "filesystem.py": "61c7c9b4f709711dcf8d07a4c4a5bbdfa66439fc49b1179bd5436d059941fb89",
     "metrics.py": "30efa2e1a66585e2dc85c1147b25244d96249062d3d6e5ccf58ef5c01d53fe1f",
     "orchestration.py": "3881babdd873e5abe62987cc71375f33f051e0144f9a68578960c9b1e2b91559",
-    "reports.py": "49018fa4201ea453c4952863cab9b0dcafc6b2eff8e1d056c580a049bd387b7c",
+    "reports.py": "a5a05bb5903842456f750435ba4cf6491e653b0e6f1fe599d38479633df131de",
 }
 
 

@@ -150,11 +150,15 @@ variable "artifact_bucket_name" {
   default     = null
 
   validation {
-    condition = can(regex(
-      "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
-      var.artifact_bucket_name == null ? "${var.name_prefix}-00000000" : var.artifact_bucket_name,
-    ))
-    error_message = "The supplied or generated artifact bucket name must match the guest's lowercase 3-to-63-character bucket contract."
+    condition = alltrue([for name in [var.artifact_bucket_name == null ? "${var.name_prefix}-00000000" : var.artifact_bucket_name] : (
+      can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", name))
+      && !strcontains(name, "..")
+      && !can(regex("^[0-9]+([.][0-9]+){3}$", name))
+      && !anytrue([for prefix in ["xn--", "sthree-", "amzn-s3-demo-"] : startswith(name, prefix)])
+      && !anytrue([for suffix in ["-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3"] : endswith(name, suffix)])
+      && (!endswith(name, "-an") || can(regex("^[a-z0-9][a-z0-9.-]*-[0-9]{12}-[a-z]+(-[a-z]+)+-[0-9]+-an$", name)))
+    )])
+    error_message = "The supplied or generated artifact bucket must satisfy general-purpose S3 naming and reserved namespace rules."
   }
 }
 

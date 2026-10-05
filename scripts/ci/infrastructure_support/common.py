@@ -60,7 +60,7 @@ class RuntimeContractError(ValueError):
         )
 
 
-DELIVERY_BODY_SHA256 = "cee4ec7e937ea6ad9412fea49870b7c7b267d0328452fa623f05f2812d0a4ec6"
+DELIVERY_BODY_SHA256 = "8469ece834abfb172dedeaad6ea1dcce06145e51594edf222a5239f2912d5a91"
 
 DELIVERY_PACKAGE_FIELDS = {
     "delivery_init": "__init__.py",
@@ -79,7 +79,7 @@ DELIVERY_PACKAGE_SHA256 = {
     "credentials.py": "66222125d9e1c3bbd6f29410f3a4ac0a289609aed91dcda32e2c0ccd264bacc1",
     "filesystem.py": "61c7c9b4f709711dcf8d07a4c4a5bbdfa66439fc49b1179bd5436d059941fb89",
     "artifacts.py": "495c96705a96d58935f4004f93c9a3d8dfaca190e7bb665afd792f8c1a1ecdaa",
-    "reports.py": "49018fa4201ea453c4952863cab9b0dcafc6b2eff8e1d056c580a049bd387b7c",
+    "reports.py": "a5a05bb5903842456f750435ba4cf6491e653b0e6f1fe599d38479633df131de",
     "metrics.py": "30efa2e1a66585e2dc85c1147b25244d96249062d3d6e5ccf58ef5c01d53fe1f",
     "orchestration.py": "3881babdd873e5abe62987cc71375f33f051e0144f9a68578960c9b1e2b91559",
 }

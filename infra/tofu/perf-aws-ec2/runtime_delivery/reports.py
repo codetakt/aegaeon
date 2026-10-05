@@ -67,6 +67,20 @@ IMAGE_REFERENCE = re.compile(
 MAX_IMAGE_REPOSITORY_LENGTH = 255
 
 
+def bucket_name(value: str) -> bool:
+    return bool(
+        re.fullmatch("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", value)
+        and ".." not in value
+        and not re.fullmatch("[0-9]+(?:[.][0-9]+){3}", value)
+        and not value.startswith(("xn--", "sthree-", "amzn-s3-demo-"))
+        and not value.endswith(("-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3"))
+        and (
+            not value.endswith("-an")
+            or re.fullmatch("[a-z0-9][a-z0-9.-]*-[0-9]{12}-[a-z]+(?:-[a-z]+)+-[0-9]+-an", value)
+        )
+    )
+
+
 def validate_run_config(raw: str | bytes | bytearray, issuer: str) -> dict[str, Any]:
     config = json_object(raw)
     if set(config) != set(LOADTEST_NAMES) | {"artifact"} or not all(
@@ -98,7 +112,7 @@ def validate_run_config(raw: str | bytes | bytearray, issuer: str) -> dict[str, 
     if config["SCENARIO"] not in SCENARIOS:
         fail("unsupported selection")
     if (
-        not re.fullmatch("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", config["ARTIFACT_BUCKET"])
+        not bucket_name(config["ARTIFACT_BUCKET"])
         or any(v in {"", ".", ".."} for v in config["ARTIFACT_PREFIX"].rstrip("/").split("/"))
         or (not re.fullmatch("[A-Za-z0-9_./-]+/", config["ARTIFACT_PREFIX"]))
     ):

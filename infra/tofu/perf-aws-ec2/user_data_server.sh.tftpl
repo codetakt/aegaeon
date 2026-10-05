@@ -114,7 +114,6 @@ if [[ -z "$IMAGE_REF" ]]; then
   exit 0
 fi
 
-# Synchronously parse a bounded, root-owned JSON file; never execute its values.
 REGISTRY_VALUES="$(/usr/bin/python3 -I -B - <<'PYTHON'
 import json
 import os
@@ -193,37 +192,7 @@ if [[ -z "$${GHCR_USERNAME:-}" ]]; then
   exit 1
 fi
 
-detect_region() {
-  if [[ -n "$${AWS_REGION:-}" ]]; then
-    echo "$AWS_REGION"
-    return 0
-  fi
-  if [[ -n "$${AWS_DEFAULT_REGION:-}" ]]; then
-    echo "$AWS_DEFAULT_REGION"
-    return 0
-  fi
-
-  local token region az identity
-  token="$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
-
-  region="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/region" 2>/dev/null || true)"
-  if [[ -n "$region" ]]; then
-    echo "$region"
-    return 0
-  fi
-
-  az="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/placement/availability-zone" 2>/dev/null || true)"
-  if [[ -n "$az" ]]; then
-    echo "$${az::-1}"
-    return 0
-  fi
-
-  identity="$(curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/dynamic/instance-identity/document" 2>/dev/null || true)"
-  region="$(echo "$identity" | tr -d '\n' | sed -n 's/.*\"region\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')"
-  echo "$region"
-}
-
-region="$(detect_region || true)"
+region="$AWS_REGION"
 if [[ -z "$region" ]]; then
   echo "[aegaeon] failed to detect AWS region for GHCR token retrieval" >&2
   exit 1

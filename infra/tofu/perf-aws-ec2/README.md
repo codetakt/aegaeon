@@ -55,9 +55,12 @@ unchanged. Run time is a canonical positive integer, optionally followed by
 seconds from 0 through 86400. Only the documented scenario names are accepted;
 the explicit unsupported behavior of `key-rotation` remains.
 
-The supplied or generated report bucket must satisfy the guest's lowercase
-3-to-63-character bucket contract. The generated name uses `name_prefix` plus
-an eight-character hexadecimal suffix. Report prefixes must end in `/` and
+The supplied or generated report bucket must use 3 to 63 lowercase characters
+and satisfy [S3 naming rules](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html).
+Adjacent periods, IPv4-address forms and reserved prefixes/suffixes are rejected.
+Account-regional names ending in `-an` require the documented account/region
+suffix. The generated name uses `name_prefix` plus an eight-character hexadecimal
+suffix. Report prefixes must end in `/` and
 use letters, digits, `_`, `.`, `/` or `-`, with no empty, `.` or `..` segments;
 multiple trailing slashes remain accepted. Artifact receipt and source-manifest
 paths must be distinct printable canonical absolute file paths. Printable
@@ -227,6 +230,8 @@ The immutable boot default is root-owned mode-0600
 `source_manifest_sha256` and `executable_sha256`. The existing `SERVER_IMAGE`
 identifier carries `loadgen_image`. Workers are positive bounded integers;
 RPS accepts positive finite f64 values, including fractional/scientific values.
+The sweep trims whitespace only at token edges; interior whitespace, including
+newlines, is preserved for rejection rather than changed into a different rate.
 Run/warmup durations accept integer seconds or `s`/`m`/`h`, bounded to one day;
 main duration is positive and warmup may be zero.
 

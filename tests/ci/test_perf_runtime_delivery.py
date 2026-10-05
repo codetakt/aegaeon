@@ -2230,6 +2230,7 @@ def test_registry_login_treats_all_rendered_credentials_as_data(tmp_path, role):
     invalid += [
         {**cfg, "GHCR_AUTH_ENABLED": "2"},
         {**cfg, "AWS_REGION": "US-EAST-1"},
+        {**cfg, "AWS_REGION": "", "AWS_DEFAULT_REGION": ""},
         {**cfg, "AWS_DEFAULT_REGION": "us-west-2"},
         {**cfg, "GHCR_USERNAME": 1},
         {**cfg, "extra": "value"},
@@ -2593,3 +2594,47 @@ def test_plan_image_grammar_matches_runtime_admission(helper, tmp_path, image, a
     else:
         with pytest.raises(ValueError, match="immutable loadgen image"):
             helper.validate_run_config(json.dumps(cfg), config()["issuer_url"])
+
+
+@pytest.mark.parametrize(
+    ("name", "accepted"),
+    [
+        ("abc", True),
+        ("a.b", True),
+        ("a-0.b", True),
+        ("a" * 63, True),
+        ("a..b", False),
+        ("192.168.0.1", False),
+        ("999.999.999.999", False),
+        ("xn--bucket", False),
+        ("sthree-bucket", False),
+        ("amzn-s3-demo-bucket", False),
+        ("bucket-s3alias", False),
+        ("bucket--ol-s3", False),
+        ("bucket.mrap", False),
+        ("bucket--x-s3", False),
+        ("bucket--table-s3", False),
+        ("bucket-an", False),
+        ("reports-111122223333-us-west-2-an", True),
+        ("reports-012345678910-ap-southeast-2-an", True),
+        ("reports-111122223333-us-gov-east-1-an", True),
+        ("reports-111122223333-eusc-de-east-1-an", True),
+        ("reports-11112222333-us-west-2-an", False),
+        ("reports-111122223333-region-an", False),
+        ("xn--reports-111122223333-us-west-2-an", False),
+        ("ab", False),
+        ("a" * 64, False),
+        ("Abc", False),
+    ],
+)
+def test_artifact_bucket_general_purpose_syntax(helper, tmp_path, name, accepted):
+    cfg, _, _ = artifact_fixture(helper, tmp_path)
+    cfg["ARTIFACT_BUCKET"] = name
+    if accepted:
+        assert (
+            helper.validate_run_config(json.dumps(cfg), cfg["SERVER_URL"])["ARTIFACT_BUCKET"]
+            == name
+        )
+    else:
+        with pytest.raises(ValueError, match="artifact destination"):
+            helper.validate_run_config(json.dumps(cfg), cfg["SERVER_URL"])

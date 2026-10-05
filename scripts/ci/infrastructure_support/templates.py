@@ -59,8 +59,8 @@ def perf_server_environment_wiring(template: str) -> None:
 
 SHELL_BODY_SHAPES = {
     "/usr/local/bin/aegaeon-docker-login": {
-        "source": "fdd5e40c4b4289e507349743023bacaba3265a5e7b2e3997564d906020d79531",
-        "rendered": "80e0bd4036d75754b1095e695ab20fd05503eaf8daec87e014a7e41c7a037989",
+        "source": "7d982bedd1fddf63c4b2bb784d33e1cc75d8d50d40ddb2e7c6553a13583f1211",
+        "rendered": "7dcd3a7bb2671e5ae660d5ccec3e7b1449a2f69c73f40c5b3e1127bf6b518eb4",
     },
     "/etc/systemd/system/aegaeon-server.service": {
         "source": "2efe69d484aa670f597108dcbb31de088c70c2886c45d00fb10cc4226b788db8",

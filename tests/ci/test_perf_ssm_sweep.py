@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from test_perf_runtime_delivery import run_sweep_csv_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("ssm_sweep", ROOT / "scripts/perf/ssm_sweep.py")
@@ -21,6 +22,41 @@ assert SPEC.loader is not None
 sweep = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(sweep)
 UUID = "12345678-1234-4234-8234-123456789abc"
+
+
+@pytest.mark.parametrize(
+    ("rates", "expected"),
+    [
+        (" 1 ,\t2.50\t, 1e+2 , ,3,", ["1", "2.50", "1e+2", "3"]),
+        (" , \t,", []),
+        ("1 0, 1\t0 , 1 e2", ["1 0", "1\t0", "1 e2"]),
+        ("1\n0,2", ["1\n0", "2"]),
+        ("1,2\n3,4", ["1", "2\n3", "4"]),
+        ("\n 1 , 2 \n", ["1", "2"]),
+        (" \n,\t\n", []),
+    ],
+)
+def test_sweep_rate_tokens_trim_only_edges_and_preserve_order(tmp_path, rates, expected):
+    source = (ROOT / "scripts/perf/aws_sweep.sh").read_text()
+    start = source.index("IFS=',' read -r -d '' -a rps_values")
+    end = source.index("\tinvocation_index=$((invocation_index + 1))", start)
+    # Execute the actual token loop before its first workload effect.
+    script = "set -euo pipefail\n" + source[start:end] + "printf '%s\\0' \"$rps\"\ndone\n"
+    result = subprocess.run(  # noqa: S603 -- extracted token loop only; no AWS/service operations
+        [shutil.which("bash"), "-c", script],
+        env={**os.environ, "RPS_LIST": rates},
+        capture_output=True,
+        check=False,
+        timeout=2,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split(b"\0")[:-1] == [rate.encode() for rate in expected]
+    for rate in expected:
+        if any(character.isspace() for character in rate):
+            response = run_sweep_csv_fixture(tmp_path, rps=rate)
+            assert response.returncode != 0
+            assert b"RPS required" in response.stderr
+            assert not response.stdout
 
 
 def payload(run="1s", warmup="0"):
