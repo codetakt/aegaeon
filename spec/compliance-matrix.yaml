@@ -5174,6 +5174,31 @@ draft_oauth_v2_1:
   - Token endpoint accepts client_id + client_secret as form parameters (client_secret_post method).
   - Token endpoint client-auth parsing and client registry validation enforce client_secret_post admission.
 
+openid_federation_rp:
+- id: fed-rp-021
+  section: '3.2, 4, 10.2'
+  requirement: MUST
+  description: Trust-chain signatures MUST verify with issuer-configuration keys and superior-endorsed keys up to the configured trust anchor
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/endorsed_keys.rs
+  - crates/server/src/federation/tests/repositories/resolve_cached.rs
+  - crates/server/src/federation/tests/pg_repositories.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, sections 3.2, 4, and 10.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths reconstruct retained compact JWS
+    and verify each subordinate with its issuer configuration and the keys endorsed by its superior.
+    Leaf self-signatures and current configured anchor keys remain required; overlapping key sets
+    are allowed without complete JWKS equality.
+  - Signed finite ES256 and PostgreSQL regressions cover endorsement, rollover, tampering,
+    backtracking, detached metadata, and current anchor-key replacement. These tests do not
+    establish live federation HTTP transport, formal proof, or complete protocol conformance.
+  - Header, statement-profile, metadata-policy, and constraint requirements remain separately
+    tracked; this row records only the signing-key endorsement boundary.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
