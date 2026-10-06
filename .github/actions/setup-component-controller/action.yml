@@ -56,9 +56,10 @@ runs:
         [[ "$action_root" =~ /_actions/codetakt/aegaeon/[0-9a-f]{40}$ ]]
         [[ "$ACTION_SOURCE" == "$action_root/.github/actions/setup-component-controller" ]]
         sudo -n /usr/bin/env -i PATH=/usr/bin:/bin NIX_USER_CONF_FILES=/dev/null \
-          /bin/bash --noprofile --norc -s -- "$action_root" <<'BOOTSTRAP'
+          /bin/bash --noprofile --norc -s -- "$action_root" "$GITHUB_OUTPUT" <<'BOOTSTRAP'
         set -euo pipefail
         action_root=$1
+        github_output=$2
         readonly root=/trusted/component-bootstrap
         readonly python=/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14
         readonly runtime=/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env
@@ -81,42 +82,51 @@ runs:
         cleanup() {
           local status=$? cleanup_status=0 outcome_fd=''
           local setup_status=$status
+          local mount_cleanup_attempted=false
           trap - EXIT
+          release_failed_mount() {
+            if (( status != 0 || cleanup_status != 0 )) &&
+              [[ "$mounted" == true && "$mount_cleanup_attempted" == false ]]; then
+              mount_cleanup_attempted=true
+              if umount "$root"; then mounted=false; else
+                cleanup_status=1
+                echo 'Owned bootstrap mount cleanup failed; evidence and source retained.' >&2 || :
+              fi
+            fi
+          }
           # Keep a writable descriptor across sealing; it also avoids reopening
           # readonly evidence after the final cleanup status is known.
           if ! exec {outcome_fd}> "$work/outcome.txt"; then
             cleanup_status=1
-            echo 'Bootstrap outcome could not be opened; observations retained.' >&2
+            echo 'Bootstrap outcome could not be opened; observations retained.' >&2 || :
           fi
           for entry in "$work"/*; do
             if [[ -f "$entry" && ! -L "$entry" ]]; then chmod 0444 "$entry" || cleanup_status=1; fi
           done
           chmod 0500 "$work" || cleanup_status=1
-          if (( status != 0 || cleanup_status != 0 )) && [[ "$mounted" == true ]]; then
-            if umount "$root"; then mounted=false; else
-              cleanup_status=1
-              echo 'Owned bootstrap mount cleanup failed; evidence and source retained.' >&2
-            fi
-          fi
+          printf 'Private bootstrap observations retained at %s.\n' "$work" >&2 || cleanup_status=1
+          release_failed_mount
           if (( status == 0 && cleanup_status != 0 )); then status=1; fi
           if [[ -n "${outcome_fd:-}" ]]; then
             if ! printf 'stage=%s\nsetup_status=%s\ncleanup_status=%s\nexit_status=%s\nsource_created=%s\nmount_retained=%s\n' \
               "$stage" "$setup_status" "$cleanup_status" "$status" "$source_created" "$mounted" >&"$outcome_fd"; then
               cleanup_status=1
               if (( status == 0 )); then status=1; fi
-              echo 'Bootstrap outcome write failed; retained outcome is incomplete.' >&2
+              echo 'Bootstrap outcome write failed; retained outcome is incomplete.' >&2 || :
             fi
             if ! exec {outcome_fd}>&-; then
               cleanup_status=1
               if (( status == 0 )); then status=1; fi
-              echo 'Bootstrap outcome close failed; retained outcome is incomplete.' >&2
+              echo 'Bootstrap outcome close failed; retained outcome is incomplete.' >&2 || :
             fi
           fi
-          printf 'Private bootstrap observations retained at %s (setup=%s cleanup=%s).\n' \
-            "$work" "$setup_status" "$cleanup_status" >&2
+          # Terminal I/O may fail after the first release decision. Recheck the
+          # same owned-mount obligation; failed unmount is never silently retried.
+          release_failed_mount
           exit "$status"
         }
         trap cleanup EXIT
+        [[ -f "$github_output" && ! -L "$github_output" ]]
         printf '%s\n' "$action_root" > "$work/action-source.txt"
         cp "$action_root/ci/component-bootstrap-runtime.json" "$work/component-bootstrap-runtime.json"
         sha256sum "$action_root/.github/actions/setup-component-controller/action.yml" \
@@ -157,8 +167,10 @@ runs:
         "$python" -I -B "$root/bootstrap_component_controller.py" \
           --script-sha256 "$script_hash" --runtime-sha256 "$runtime_hash" \
           --observed-nar-map "$work/observed.json"
+        # The platform output file is an initial platform-custody premise. Write
+        # while the owned-mount EXIT handler can still observe any output error.
+        stage=platform-outputs
+        printf 'interpreter=%s\nsource-root=%s\n' "$python" "$root" >> "$github_output"
         # Keep the verified source mount and private observations; no admission receipt.
         stage=complete
         BOOTSTRAP
-        echo 'interpreter=/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14' >> "$GITHUB_OUTPUT"
-        echo 'source-root=/trusted/component-bootstrap' >> "$GITHUB_OUTPUT"

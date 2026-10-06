@@ -126,9 +126,7 @@ class InitialBootstrapTests(unittest.TestCase):
     def test_action_retains_uncertain_observations_and_only_cleans_owned_mount(self) -> None:
         action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
         self.assertNotIn('rm -rf "$work"', action)
-        self.assertIn(
-            'if (( status != 0 || cleanup_status != 0 )) && [[ "$mounted" == true ]]', action
-        )
+        self.assertIn('[[ "$mounted" == true && "$mount_cleanup_attempted" == false ]]', action)
         self.assertIn("Private bootstrap observations retained at %s", action)
         self.assertIn('exit "$status"', action)
         for evidence in [
@@ -244,6 +242,189 @@ class InitialBootstrapTests(unittest.TestCase):
                     self.assertEqual(outcome["mount_retained"], "false")
                     self.assertEqual((work / "observed.json").read_text(), "{}")
                     work.chmod(0o700)
+
+    def test_terminal_io_failure_releases_owned_mount_once(self) -> None:
+        action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
+        cleanup = action[
+            action.index("        cleanup() {") : action.index("        trap cleanup EXIT")
+        ]
+        for failure in ["open", "write", "close", "locator"]:
+            for setup_status in [0, 7]:
+                for mount_failure in [False, True]:
+                    with (
+                        self.subTest(
+                            failure=failure, setup_status=setup_status, mount_failure=mount_failure
+                        ),
+                        tempfile.TemporaryDirectory(prefix="aegaeon-terminal-io-") as directory,
+                    ):
+                        work = Path(directory) / "private"
+                        work.mkdir()
+                        (work / "observed.json").write_text("{}")
+                        calls = Path(directory) / "unmount-calls"
+                        program = (
+                            r"""
+                        work=$1; failure=$2; calls=$3; mount_failure=$4
+                        root=/unused; mounted=true; source_created=true; stage=fixture; exec_calls=0
+                        umount() {
+                          command printf 'attempt\n' >> "$calls"
+                          return "$mount_failure"
+                        }
+                        printf() {
+                          if [[ "$failure" == write && "$1" == stage=* ]] ||
+                             [[ "$failure" == locator && "$1" == 'Private bootstrap'* ]]; then
+                            return 1
+                          fi
+                          command printf "$@"
+                        }
+                        exec() {
+                          exec_calls=$((exec_calls + 1))
+                          if [[ "$failure" == open && "$exec_calls" == 1 ]] ||
+                             [[ "$failure" == close && "$exec_calls" == 2 ]]; then
+                            return 1
+                          fi
+                          builtin exec "$@"
+                        }
+                        """
+                            + cleanup
+                            + f"\ntrap cleanup EXIT; exit {setup_status}"
+                        )
+                        result = subprocess.run(  # noqa: S603 - actual cleanup with modeled primitive failures
+                            [
+                                shutil.which("bash") or "/bin/bash",
+                                "-c",
+                                program,
+                                "terminal-io",
+                                str(work),
+                                failure,
+                                str(calls),
+                                str(int(mount_failure)),
+                            ],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                            timeout=10,
+                        )
+                        self.assertEqual(result.returncode, setup_status or 1)
+                        self.assertEqual(calls.read_text().splitlines(), ["attempt"])
+                        self.assertEqual((work / "observed.json").read_text(), "{}")
+                        if failure in {"write", "close"}:
+                            self.assertIn("retained outcome is incomplete", result.stderr)
+                        if mount_failure:
+                            self.assertIn("mount cleanup failed", result.stderr)
+                        work.chmod(0o700)
+
+    def test_platform_output_failure_is_inside_owned_mount_cleanup(self) -> None:
+        action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
+        cleanup = action[
+            action.index("        cleanup() {") : action.index("        trap cleanup EXIT")
+        ]
+        output = action[
+            action.index("        stage=platform-outputs") : action.index("        BOOTSTRAP")
+        ]
+        for output_failure in [False, True]:
+            with (
+                self.subTest(output_failure=output_failure),
+                tempfile.TemporaryDirectory(prefix="aegaeon-platform-output-") as directory,
+            ):
+                work = Path(directory) / "private"
+                work.mkdir()
+                (work / "observed.json").write_text("{}")
+                platform_output = Path(directory) / "output"
+                if output_failure:
+                    platform_output.mkdir()
+                else:
+                    platform_output.touch()
+                calls = Path(directory) / "unmount-calls"
+                program = (
+                    r"""
+                set -euo pipefail
+                work=$1; github_output=$2; calls=$3
+                root=/unused; python=/fixed/python; mounted=true; source_created=true; stage=fixture
+                umount() { command printf 'attempt\n' >> "$calls"; return 0; }
+                """
+                    + cleanup
+                    + "\ntrap cleanup EXIT\n"
+                    + output
+                )
+                result = subprocess.run(  # noqa: S603 - actual output/cleanup blocks and private paths
+                    [
+                        shutil.which("bash") or "/bin/bash",
+                        "-c",
+                        program,
+                        "platform-output",
+                        str(work),
+                        str(platform_output),
+                        str(calls),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(result.returncode, int(output_failure))
+                self.assertEqual(calls.exists(), output_failure)
+                outcome = dict(
+                    line.split("=", 1) for line in (work / "outcome.txt").read_text().splitlines()
+                )
+                self.assertEqual(
+                    outcome["stage"], "platform-outputs" if output_failure else "complete"
+                )
+                self.assertEqual(outcome["setup_status"], str(int(output_failure)))
+                self.assertEqual(outcome["mount_retained"], str(not output_failure).lower())
+                if output_failure:
+                    self.assertEqual(calls.read_text().splitlines(), ["attempt"])
+                else:
+                    self.assertEqual(
+                        platform_output.read_text(),
+                        "interpreter=/fixed/python\nsource-root=/unused\n",
+                    )
+                work.chmod(0o700)
+
+    def test_outcome_open_failure_never_releases_unowned_mount(self) -> None:
+        action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
+        cleanup = action[
+            action.index("        cleanup() {") : action.index("        trap cleanup EXIT")
+        ]
+        for owned_mount in [False, True]:
+            with (
+                self.subTest(owned_mount=owned_mount),
+                tempfile.TemporaryDirectory(prefix="aegaeon-outcome-open-") as directory,
+            ):
+                work = Path(directory) / "private"
+                work.mkdir()
+                (work / "observed.json").write_text("{}")
+                # A real failed redirection, independent of the exec function model.
+                (work / "outcome.txt").mkdir()
+                calls = Path(directory) / "unmount-calls"
+                program = (
+                    "set -euo pipefail; work=$1; mounted=$2; calls=$3; root=/unused; "
+                    "source_created=true; stage=fixture; "
+                    "umount() { command printf 'attempt\\n' >> \"$calls\"; return 0; }; "
+                    + cleanup
+                    + "\ntrap cleanup EXIT; exit 0"
+                )
+                result = subprocess.run(  # noqa: S603 - actual cleanup with real failed outcome redirection
+                    [
+                        shutil.which("bash") or "/bin/bash",
+                        "-c",
+                        program,
+                        "outcome-open",
+                        str(work),
+                        str(owned_mount).lower(),
+                        str(calls),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(calls.exists(), owned_mount)
+                self.assertIn("outcome could not be opened", result.stderr)
+                self.assertEqual((work / "observed.json").read_text(), "{}")
+                if owned_mount:
+                    self.assertEqual(calls.read_text().splitlines(), ["attempt"])
+                work.chmod(0o700)
 
     def test_action_pins_actual_script_and_runtime_bytes(self) -> None:
         action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
