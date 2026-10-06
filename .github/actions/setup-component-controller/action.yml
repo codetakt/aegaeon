@@ -79,25 +79,41 @@ runs:
         source_created=false
         stage=source-custody
         cleanup() {
-          local status=$? cleanup_status=0
+          local status=$? cleanup_status=0 outcome_fd=''
+          local setup_status=$status
           trap - EXIT
-          if (( status != 0 )) && [[ "$mounted" == true ]]; then
-            if umount "$root"; then mounted=false; else
-              cleanup_status=1
-              echo 'Owned bootstrap mount cleanup failed; evidence and source retained.' >&2
-            fi
-          fi
-          if ! printf 'stage=%s\nsetup_status=%s\ncleanup_status=%s\nsource_created=%s\nmount_retained=%s\n' \
-            "$stage" "$status" "$cleanup_status" "$source_created" "$mounted" > "$work/outcome.txt"; then
+          # Keep a writable descriptor across sealing; it also avoids reopening
+          # readonly evidence after the final cleanup status is known.
+          if ! exec {outcome_fd}> "$work/outcome.txt"; then
             cleanup_status=1
+            echo 'Bootstrap outcome could not be opened; observations retained.' >&2
           fi
           for entry in "$work"/*; do
             if [[ -f "$entry" && ! -L "$entry" ]]; then chmod 0444 "$entry" || cleanup_status=1; fi
           done
           chmod 0500 "$work" || cleanup_status=1
-          printf 'Private bootstrap observations retained at %s (setup=%s cleanup=%s).\n' \
-            "$work" "$status" "$cleanup_status" >&2
+          if (( status != 0 || cleanup_status != 0 )) && [[ "$mounted" == true ]]; then
+            if umount "$root"; then mounted=false; else
+              cleanup_status=1
+              echo 'Owned bootstrap mount cleanup failed; evidence and source retained.' >&2
+            fi
+          fi
           if (( status == 0 && cleanup_status != 0 )); then status=1; fi
+          if [[ -n "${outcome_fd:-}" ]]; then
+            if ! printf 'stage=%s\nsetup_status=%s\ncleanup_status=%s\nexit_status=%s\nsource_created=%s\nmount_retained=%s\n' \
+              "$stage" "$setup_status" "$cleanup_status" "$status" "$source_created" "$mounted" >&"$outcome_fd"; then
+              cleanup_status=1
+              if (( status == 0 )); then status=1; fi
+              echo 'Bootstrap outcome write failed; retained outcome is incomplete.' >&2
+            fi
+            if ! exec {outcome_fd}>&-; then
+              cleanup_status=1
+              if (( status == 0 )); then status=1; fi
+              echo 'Bootstrap outcome close failed; retained outcome is incomplete.' >&2
+            fi
+          fi
+          printf 'Private bootstrap observations retained at %s (setup=%s cleanup=%s).\n' \
+            "$work" "$setup_status" "$cleanup_status" >&2
           exit "$status"
         }
         trap cleanup EXIT

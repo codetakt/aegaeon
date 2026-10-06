@@ -126,7 +126,9 @@ class InitialBootstrapTests(unittest.TestCase):
     def test_action_retains_uncertain_observations_and_only_cleans_owned_mount(self) -> None:
         action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
         self.assertNotIn('rm -rf "$work"', action)
-        self.assertIn('if (( status != 0 )) && [[ "$mounted" == true ]]', action)
+        self.assertIn(
+            'if (( status != 0 || cleanup_status != 0 )) && [[ "$mounted" == true ]]', action
+        )
         self.assertIn("Private bootstrap observations retained at %s", action)
         self.assertIn('exit "$status"', action)
         for evidence in [
@@ -172,10 +174,76 @@ class InitialBootstrapTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, expected)
                 self.assertTrue((work / "observed.json").is_file())
+                outcome = dict(
+                    line.split("=", 1) for line in (work / "outcome.txt").read_text().splitlines()
+                )
+                self.assertEqual(outcome["setup_status"], str(setup_status))
+                self.assertEqual(outcome["cleanup_status"], str(int(mount_failure)))
+                self.assertEqual(outcome["exit_status"], str(expected))
+                self.assertEqual(
+                    outcome["mount_retained"], str(setup_status == 0 or mount_failure).lower()
+                )
                 self.assertIn("Private bootstrap observations retained", result.stderr)
                 if mount_failure:
                     self.assertIn("mount cleanup failed", result.stderr)
                 work.chmod(0o700)
+
+    def test_cleanup_records_final_sealing_failure_and_original_setup_status(self) -> None:
+        action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
+        cleanup = action[
+            action.index("        cleanup() {") : action.index("        trap cleanup EXIT")
+        ]
+        for setup_status in [0, 7]:
+            for failure in ["observation", "outcome", "directory"]:
+                with (
+                    self.subTest(setup_status=setup_status, failure=failure),
+                    tempfile.TemporaryDirectory(prefix="aegaeon-sealing-failure-") as directory,
+                ):
+                    work = Path(directory) / "private"
+                    work.mkdir()
+                    (work / "observed.json").write_text("{}")
+                    program = (
+                        r"""
+                    work=$1; failure=$2; root=/unused; mounted=true
+                    source_created=true; stage=fixture
+                    umount() { return 0; }
+                    chmod() {
+                      if [[ "$failure" == observation && "$2" == "$work/observed.json" ]] ||
+                         [[ "$failure" == outcome && "$2" == "$work/outcome.txt" ]] ||
+                         [[ "$failure" == directory && "$1" == 0500 ]]; then
+                        return 1
+                      fi
+                      command chmod "$@"
+                    }
+                    """
+                        + cleanup
+                        + f"\ntrap cleanup EXIT; exit {setup_status}"
+                    )
+                    result = subprocess.run(  # noqa: S603 - fixed own cleanup and modeled chmod/unmount failures
+                        [
+                            shutil.which("bash") or "/bin/bash",
+                            "-c",
+                            program,
+                            "sealing-failure",
+                            str(work),
+                            failure,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,
+                    )
+                    self.assertEqual(result.returncode, setup_status or 1)
+                    outcome = dict(
+                        line.split("=", 1)
+                        for line in (work / "outcome.txt").read_text().splitlines()
+                    )
+                    self.assertEqual(outcome["setup_status"], str(setup_status))
+                    self.assertEqual(outcome["cleanup_status"], "1")
+                    self.assertEqual(outcome["exit_status"], str(result.returncode))
+                    self.assertEqual(outcome["mount_retained"], "false")
+                    self.assertEqual((work / "observed.json").read_text(), "{}")
+                    work.chmod(0o700)
 
     def test_action_pins_actual_script_and_runtime_bytes(self) -> None:
         action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
