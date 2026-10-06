@@ -202,6 +202,27 @@ rfc_6749:
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+- id: 6749-019
+  section: '1.9, 3.2; RFC 8693 sections 2.1, 2.2'
+  requirement: MUST
+  description: Ignore unknown token request names while preserving the recognized grant-limited organization restriction and effective singleton semantics.
+  module: crates/server/src/web/token_form.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_form/tests.rs
+  - crates/server/src/web/token_exchange/tests/omission_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters/membership.rs
+  - crates/server/src/web/token_client_credentials/tests/unknown_parameters.rs
+  status: implemented
+  ci_check: token-unknown-parameter-handling
+  runtime_link: crates/server/src/web/application_authorization.rs
+  notes:
+  - The normative unknown-name and no-value rules ignore organizationId without adding an alias. Canonical organization_id is a recognized local restriction; its nonexchange refusal is implementation policy, not a newly asserted RFC MUST.
+  - Empty canonical fields are omitted before applicability and multiplicity checks. Duplicate nonempty canonical fields reject; duplicate unknown fields remain ignored. Raw transport limits are unchanged.
+  - Canonical exchange selection preserves existing membership, target, scope and currentness boundaries; selected parents retain selection when omitted and cannot switch organizations. Unknown fields do not supply a missing selection or remove global roles.
+  - Finite native parser and PostgreSQL HTTP tests include actual membership SQL on isolated test-owned tables, projection currentness, output claims and code/refresh nonconsumption controls. Fixture join-key types do not adopt an external production schema or writer contract. No full protocol, deployment or product assurance claim.
+
 - id: 6749-010
   section: '10.3'
   requirement: MUST
