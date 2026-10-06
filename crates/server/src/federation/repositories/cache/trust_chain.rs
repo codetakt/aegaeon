@@ -71,6 +71,33 @@ where
     F: FnMut(Vec<TrustAnchor>) -> Fut,
     Fut: Future<Output = Result<ResolvedTrustChain, FederationError>>,
 {
+    resolve_trust_chain_artifacts_cached_with(
+        leaf_entity_id,
+        environment_id,
+        trust_anchor_repo,
+        chain_cache,
+        config,
+        now,
+        resolve_fresh,
+    )
+    .await
+    .map(ResolvedTrustChain::into_trust_chain)
+}
+
+/// Retain the verified bytes for protocol-specific context admission.
+pub(crate) async fn resolve_trust_chain_artifacts_cached_with<F, Fut>(
+    leaf_entity_id: &str,
+    environment_id: Uuid,
+    trust_anchor_repo: &dyn TrustAnchorRepository,
+    chain_cache: &dyn TrustChainCacheRepository,
+    config: &FederationCacheConfig,
+    now: i64,
+    resolve_fresh: F,
+) -> Result<ResolvedTrustChain, FederationError>
+where
+    F: FnMut(Vec<TrustAnchor>) -> Fut,
+    Fut: Future<Output = Result<ResolvedTrustChain, FederationError>>,
+{
     let stored_anchors = trust_anchor_repo
         .list_for_environment(environment_id)
         .await?;
@@ -95,7 +122,6 @@ where
         resolve_fresh,
     )
     .await
-    .map(ResolvedTrustChain::into_trust_chain)
 }
 
 /// Resolve a trust chain with cache support while retaining the compact JWS chain.

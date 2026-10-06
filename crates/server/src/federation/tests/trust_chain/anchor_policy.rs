@@ -137,7 +137,9 @@ fn allowed_leaf_entity_types_accepts_matching_leaf_metadata() {
     });
 
     let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
+    let mut leaf = sample_entity_config(leaf_id, now);
+    must_some(leaf.metadata.as_mut()).remove("federation_entity");
+    fetcher.add_entity_config(leaf_id, leaf);
     fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
     fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
 
