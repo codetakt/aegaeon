@@ -447,3 +447,13 @@ mod endorsed_keys {
     use super::*;
     include!("tests/endorsed_keys.rs");
 }
+
+mod purpose {
+    use super::*;
+    include!("tests/purpose.rs");
+}
+
+mod key_admission {
+    use super::*;
+    include!("tests/key_admission.rs");
+}
