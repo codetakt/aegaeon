@@ -11,7 +11,7 @@ fn reconstruct_chain_valid() {
     let anchor = TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: must_ok(JwkSet::from_value(signed_chain.anchor_jwks.clone())),
-        metadata_policy: None,
+        metadata_policy: Some(json!({})),
     };
 
     let cached = StoredTrustChain {
@@ -24,7 +24,7 @@ fn reconstruct_chain_valid() {
         expires_at: now + 3600,
     };
 
-    let chain = must_ok(reconstruct_chain_from_cache(&cached, &anchor));
+    let chain = must_ok(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
     assert_eq!(chain.chain.len(), 3);
     assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
 }
@@ -57,10 +57,10 @@ fn reconstruct_chain_from_cache_rejects_malformed_statement_shape() {
     let anchor = TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: None,
+        metadata_policy: Some(json!({})),
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor));
+    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
 
     assert!(matches!(err, FederationError::Json(_)));
 }
@@ -80,10 +80,10 @@ fn reconstruct_chain_empty_array() {
     let anchor = TrustAnchor {
         entity_id: "anchor".to_string(),
         jwks: sample_jwks(),
-        metadata_policy: None,
+        metadata_policy: Some(json!({})),
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor));
+    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
     assert!(matches!(err, FederationError::Validation(_)));
 }
 
@@ -102,10 +102,10 @@ fn reconstruct_chain_not_array() {
     let anchor = TrustAnchor {
         entity_id: "anchor".to_string(),
         jwks: sample_jwks(),
-        metadata_policy: None,
+        metadata_policy: Some(json!({})),
     };
 
-    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor));
+    let err = must_err(reconstruct_chain_from_cache(&cached, &anchor, cached.resolved_at));
     assert!(matches!(err, FederationError::Validation(_)));
 }
 

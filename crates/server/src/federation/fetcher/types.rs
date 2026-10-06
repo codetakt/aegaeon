@@ -8,8 +8,9 @@ pub type FederationFetchFuture<'a, T> =
 /// Trait for fetching and verifying federation metadata.
 ///
 /// Implementations handle HTTP transport and JWS signature verification.
-/// The trait returns parsed, verified [`EntityStatement`]s so that the
-/// trust chain resolution algorithm can focus on chain logic.
+/// Trust-chain resolution requires compact JWS from both `*_with_jws` methods
+/// and independently verifies the complete path using superior-endorsed keys.
+/// Parsed statements are discovery inputs only; they do not authorize metadata.
 pub trait FederationFetcher: Send + Sync {
     /// Fetch and verify a self-signed Entity Configuration from
     /// `{entity_id}/.well-known/openid-federation`.
@@ -25,8 +26,9 @@ pub trait FederationFetcher: Send + Sync {
     /// Fetch and verify a self-signed Entity Configuration, retaining the raw JWS when the
     /// implementation has access to it.
     ///
-    /// Implementations that only model the verified statement can use this default; HTTP
-    /// production fetchers override it so persistent caches can preserve the received JWS.
+    /// The default preserves source compatibility for decoded-only implementations.
+    /// Such implementations cannot resolve trust chains: resolution explicitly fails
+    /// when a compact JWS is missing. Override both JWS methods to support resolution.
     fn fetch_entity_configuration_with_jws<'a>(
         &'a self,
         entity_id: &'a str,

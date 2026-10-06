@@ -27,6 +27,7 @@ fn host_matches_allowlist_multiple() {
 
 #[test]
 fn resolve_chain_up_logs_and_reports_errors() {
+    let _guard = raw_json_env_guard();
     // When all authority_hints fail, the error message should reference
     // the current entity. We can't directly test tracing output, but
     // we verify the correct error variant is returned with context.
@@ -67,6 +68,7 @@ fn resolve_chain_up_logs_and_reports_errors() {
 
 #[test]
 fn resolve_chain_up_intermediate_no_hints_continues() {
+    let _guard = raw_json_env_guard();
     // An intermediate authority with no authority_hints should be
     // gracefully skipped (with logging) rather than panic.
     let now = 1_700_000_000_i64;

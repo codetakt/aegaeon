@@ -5,12 +5,19 @@ fn requested_anchor_order_fixture(
     second_ta_id: &str,
     leaf_id: &str,
     now: i64,
-) -> (MockFetcher, Vec<TrustAnchor>, SignedDirectChain, SignedDirectChain) {
-    let first_chain = signed_direct_chain(first_ta_id, leaf_id, now);
+) -> (
+    MockFetcher,
+    Vec<TrustAnchor>,
+    SignedDirectChain,
+    SignedDirectChain,
+) {
+    let mut first_chain = signed_direct_chain(first_ta_id, leaf_id, now);
     let second_chain = signed_direct_chain(second_ta_id, leaf_id, now);
 
     let mut leaf_config = first_chain.leaf_config.clone();
     leaf_config.authority_hints = Some(vec![second_ta_id.to_string(), first_ta_id.to_string()]);
+    first_chain.leaf_jws = sign_entity_statement_for_test(&first_chain.leaf_key, &leaf_config);
+    first_chain.leaf_config = leaf_config.clone();
 
     let mut fetcher = MockFetcher::new();
     fetcher.add_entity_config_with_jws(leaf_id, leaf_config, first_chain.leaf_jws.clone());
@@ -53,103 +60,122 @@ fn requested_anchor_order_fixture(
     (fetcher, trust_anchors, first_chain, second_chain)
 }
 
-#[tokio::test]
-async fn resolve_cached_fresh_resolution() {
-    let now = 1_700_000_000_i64;
-    let env_id = Uuid::new_v4();
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-    let signed_chain = signed_direct_chain(ta_id, leaf_id, now);
+#[test]
+fn resolve_cached_fresh_resolution() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let now = 1_700_000_000_i64;
+        let env_id = Uuid::new_v4();
+        let ta_id = "https://ta.example.com";
+        let leaf_id = "https://rp.example.com";
+        let signed_chain = signed_direct_chain(ta_id, leaf_id, now);
 
-    let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+        let anchor_repo = InMemoryTrustAnchorRepo::new();
+        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
 
-    let chain_cache = InMemoryTrustChainCacheRepo::new();
-    let config = FederationCacheConfig::default();
+        let chain_cache = InMemoryTrustChainCacheRepo::new();
+        let config = FederationCacheConfig::default();
 
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_signed_direct_chain(ta_id, leaf_id, &signed_chain);
+        let mut fetcher = MockFetcher::new();
+        fetcher.add_signed_direct_chain(ta_id, leaf_id, &signed_chain);
 
-    let chain = must_ok(resolve_trust_chain_cached(
-        leaf_id,
-        env_id,
-        &anchor_repo,
-        &chain_cache,
-        &fetcher,
-        &config,
-        now,
-    )
-    .await);
+        let chain = must_ok(
+            resolve_trust_chain_cached(
+                leaf_id,
+                env_id,
+                &anchor_repo,
+                &chain_cache,
+                &fetcher,
+                &config,
+                now,
+            )
+            .await,
+        );
 
-    assert_eq!(must_ok(chain.depth()), 1);
-    assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
+        assert_eq!(must_ok(chain.depth()), 1);
+        assert_eq!(must_ok(chain.leaf()).iss, leaf_id);
 
-    // Verify it was cached
-    let cached = must_ok(chain_cache.get(env_id, leaf_id, ta_id, now));
-    assert!(cached.is_some());
+        // Verify it was cached
+        let cached = must_ok(chain_cache.get(env_id, leaf_id, ta_id, now));
+        assert!(cached.is_some());
+    });
 }
 
-#[tokio::test]
-async fn resolve_cached_fresh_resolution_respects_requested_anchor_order() {
-    let now = 1_700_000_000_i64;
-    let env_id = Uuid::new_v4();
-    let first_ta_id = "https://first-ta.example.com";
-    let second_ta_id = "https://second-ta.example.com";
-    let leaf_id = "https://rp.example.com";
-    let (fetcher, trust_anchors, _, _) =
-        requested_anchor_order_fixture(first_ta_id, second_ta_id, leaf_id, now);
-    let chain_cache = InMemoryTrustChainCacheRepo::new();
+#[test]
+fn resolve_cached_fresh_resolution_respects_requested_anchor_order() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let now = 1_700_000_000_i64;
+        let env_id = Uuid::new_v4();
+        let first_ta_id = "https://first-ta.example.com";
+        let second_ta_id = "https://second-ta.example.com";
+        let leaf_id = "https://rp.example.com";
+        let (fetcher, trust_anchors, _, _) =
+            requested_anchor_order_fixture(first_ta_id, second_ta_id, leaf_id, now);
+        let chain_cache = InMemoryTrustChainCacheRepo::new();
 
-    let resolved = must_ok(resolve_trust_chain_jwts_cached_with(
-        leaf_id,
-        env_id,
-        trust_anchors,
-        &chain_cache,
-        &FederationCacheConfig::default(),
-        now,
-        |trust_anchors| {
-            let fetcher = &fetcher;
-            async move { resolve_trust_chain_with_jwts(leaf_id, &trust_anchors, fetcher, now).await }
-        },
-    )
-    .await);
+        let resolved = must_ok(
+            resolve_trust_chain_jwts_cached_with(
+                leaf_id,
+                env_id,
+                trust_anchors,
+                &chain_cache,
+                &FederationCacheConfig::default(),
+                now,
+                |trust_anchors| {
+                    let fetcher = &fetcher;
+                    async move {
+                        resolve_trust_chain_with_jwts(leaf_id, &trust_anchors, fetcher, now).await
+                    }
+                },
+            )
+            .await,
+        );
 
-    assert_eq!(resolved.trust_chain.anchor.entity_id, first_ta_id);
+        assert_eq!(resolved.trust_chain.anchor.entity_id, first_ta_id);
+    });
 }
 
-#[tokio::test]
-async fn resolve_cached_requested_anchor_order_prefers_earlier_fresh_over_later_cache() {
-    let now = 1_700_000_000_i64;
-    let env_id = Uuid::new_v4();
-    let first_ta_id = "https://first-ta.example.com";
-    let second_ta_id = "https://second-ta.example.com";
-    let leaf_id = "https://rp.example.com";
-    let (fetcher, trust_anchors, _, second_chain) =
-        requested_anchor_order_fixture(first_ta_id, second_ta_id, leaf_id, now);
-    let chain_cache = InMemoryTrustChainCacheRepo::new();
-    must_ok(chain_cache.upsert(
-        env_id,
-        leaf_id,
-        second_ta_id,
-        &signed_chain_jwts(&second_chain),
-        now + 3600
-    ));
+#[test]
+fn resolve_cached_requested_anchor_order_prefers_earlier_fresh_over_later_cache() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let now = 1_700_000_000_i64;
+        let env_id = Uuid::new_v4();
+        let first_ta_id = "https://first-ta.example.com";
+        let second_ta_id = "https://second-ta.example.com";
+        let leaf_id = "https://rp.example.com";
+        let (fetcher, trust_anchors, _, second_chain) =
+            requested_anchor_order_fixture(first_ta_id, second_ta_id, leaf_id, now);
+        let chain_cache = InMemoryTrustChainCacheRepo::new();
+        must_ok(chain_cache.upsert(
+            env_id,
+            leaf_id,
+            second_ta_id,
+            &signed_chain_jwts(&second_chain),
+            now + 3600,
+        ));
 
-    let resolved = must_ok(resolve_trust_chain_jwts_cached_with(
-        leaf_id,
-        env_id,
-        trust_anchors,
-        &chain_cache,
-        &FederationCacheConfig::default(),
-        now,
-        |trust_anchors| {
-            let fetcher = &fetcher;
-            async move { resolve_trust_chain_with_jwts(leaf_id, &trust_anchors, fetcher, now).await }
-        },
-    )
-    .await);
+        let resolved = must_ok(
+            resolve_trust_chain_jwts_cached_with(
+                leaf_id,
+                env_id,
+                trust_anchors,
+                &chain_cache,
+                &FederationCacheConfig::default(),
+                now,
+                |trust_anchors| {
+                    let fetcher = &fetcher;
+                    async move {
+                        resolve_trust_chain_with_jwts(leaf_id, &trust_anchors, fetcher, now).await
+                    }
+                },
+            )
+            .await,
+        );
 
-    assert_eq!(resolved.trust_chain.anchor.entity_id, first_ta_id);
+        assert_eq!(resolved.trust_chain.anchor.entity_id, first_ta_id);
+    });
 }
 
 #[test]
@@ -171,7 +197,7 @@ fn resolve_cached_uses_cache() {
         leaf_id,
         ta_id,
         &signed_chain_jwts(&signed_chain),
-        now + 3600
+        now + 3600,
     ));
 
     let config = FederationCacheConfig::default();
@@ -200,30 +226,25 @@ fn resolve_cached_revalidates_cached_statement_temporal_bounds() {
     let env_id = Uuid::new_v4();
     let ta_id = "https://ta.example.com";
     let leaf_id = "https://rp.example.com";
-    let mut expired_signed_chain = signed_direct_chain(ta_id, leaf_id, now);
-    expired_signed_chain.leaf_config.exp = now - 120;
-    let leaf_key = InMemoryKeyManager::new();
-    expired_signed_chain.leaf_config.jwks = Some(federation_jwks_value(&leaf_key));
-    expired_signed_chain.leaf_jws =
-        sign_entity_statement_for_test(&leaf_key, &expired_signed_chain.leaf_config);
     let fresh_signed_chain = signed_direct_chain(ta_id, leaf_id, now);
+    let mut expired_leaf = fresh_signed_chain.leaf_config.clone();
+    expired_leaf.exp = now - 120;
+    let expired_jwts = json!([
+        sign_entity_statement_for_test(&fresh_signed_chain.leaf_key, &expired_leaf),
+        fresh_signed_chain.subordinate_jws,
+        fresh_signed_chain.anchor_config_jws,
+    ]);
 
     let anchor_repo = InMemoryTrustAnchorRepo::new();
     must_ok(anchor_repo.upsert(
         env_id,
         ta_id,
         &fresh_signed_chain.anchor_jwks,
-        Some(&json!({}))
+        Some(&json!({})),
     ));
 
     let chain_cache = InMemoryTrustChainCacheRepo::new();
-    must_ok(chain_cache.upsert(
-        env_id,
-        leaf_id,
-        ta_id,
-        &signed_chain_jwts(&expired_signed_chain),
-        now + 3600
-    ));
+    must_ok(chain_cache.upsert(env_id, leaf_id, ta_id, &expired_jwts, now + 3600));
 
     let mut fetcher = MockFetcher::new();
     fetcher.add_signed_direct_chain(ta_id, leaf_id, &fresh_signed_chain);
@@ -270,7 +291,7 @@ fn resolve_cached_rejects_cached_chain_continuity_mismatch() {
         leaf_id,
         ta_id,
         &signed_chain_jwts(&signed_chain),
-        now + 3600
+        now + 3600,
     ));
 
     let result = block_on_test_future(resolve_trust_chain_cached(
@@ -315,7 +336,7 @@ fn resolve_cached_rejects_cached_allowed_leaf_entity_types_violation() {
         leaf_id,
         ta_id,
         &signed_chain_jwts(&signed_chain),
-        now + 3600
+        now + 3600,
     ));
 
     let result = block_on_test_future(resolve_trust_chain_cached(
@@ -334,42 +355,46 @@ fn resolve_cached_rejects_cached_allowed_leaf_entity_types_violation() {
     );
 }
 
-#[tokio::test]
-async fn resolve_cached_cache_write_expires_at_shortest_statement_exp() {
-    let now = 1_700_000_000_i64;
-    let env_id = Uuid::new_v4();
-    let ta_id = "https://ta.example.com";
-    let leaf_id = "https://rp.example.com";
-    let mut signed_chain = signed_direct_chain(ta_id, leaf_id, now);
-    signed_chain.leaf_config.exp = now + 120;
-    let leaf_key = InMemoryKeyManager::new();
-    signed_chain.leaf_config.jwks = Some(federation_jwks_value(&leaf_key));
-    signed_chain.leaf_jws = sign_entity_statement_for_test(&leaf_key, &signed_chain.leaf_config);
+#[test]
+fn resolve_cached_cache_write_expires_at_shortest_statement_exp() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let now = 1_700_000_000_i64;
+        let env_id = Uuid::new_v4();
+        let ta_id = "https://ta.example.com";
+        let leaf_id = "https://rp.example.com";
+        let mut signed_chain = signed_direct_chain(ta_id, leaf_id, now);
+        signed_chain.leaf_config.exp = now + 120;
+        signed_chain.leaf_jws =
+            sign_entity_statement_for_test(&signed_chain.leaf_key, &signed_chain.leaf_config);
 
-    let anchor_repo = InMemoryTrustAnchorRepo::new();
-    must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
-    let chain_cache = InMemoryTrustChainCacheRepo::new();
-    let config = FederationCacheConfig {
-        trust_chain_cache_ttl: Duration::from_secs(3600),
-        ..FederationCacheConfig::default()
-    };
+        let anchor_repo = InMemoryTrustAnchorRepo::new();
+        must_ok(anchor_repo.upsert(env_id, ta_id, &signed_chain.anchor_jwks, Some(&json!({}))));
+        let chain_cache = InMemoryTrustChainCacheRepo::new();
+        let config = FederationCacheConfig {
+            trust_chain_cache_ttl: Duration::from_secs(3600),
+            ..FederationCacheConfig::default()
+        };
 
-    let mut fetcher = MockFetcher::new();
-    fetcher.add_signed_direct_chain(ta_id, leaf_id, &signed_chain);
+        let mut fetcher = MockFetcher::new();
+        fetcher.add_signed_direct_chain(ta_id, leaf_id, &signed_chain);
 
-    let chain = must_ok(resolve_trust_chain_cached(
-        leaf_id,
-        env_id,
-        &anchor_repo,
-        &chain_cache,
-        &fetcher,
-        &config,
-        now,
-    )
-    .await);
-    assert_eq!(must_ok(chain.leaf()).exp, now + 120);
-    assert!(must_ok(chain_cache.get(env_id, leaf_id, ta_id, now + 119)).is_some());
-    assert!(must_ok(chain_cache.get(env_id, leaf_id, ta_id, now + 121)).is_none());
+        let chain = must_ok(
+            resolve_trust_chain_cached(
+                leaf_id,
+                env_id,
+                &anchor_repo,
+                &chain_cache,
+                &fetcher,
+                &config,
+                now,
+            )
+            .await,
+        );
+        assert_eq!(must_ok(chain.leaf()).exp, now + 120);
+        assert!(must_ok(chain_cache.get(env_id, leaf_id, ta_id, now + 119)).is_some());
+        assert!(must_ok(chain_cache.get(env_id, leaf_id, ta_id, now + 121)).is_none());
+    });
 }
 
 #[test]
@@ -388,28 +413,33 @@ fn trust_chain_cache_expiry_rejects_overflowing_configured_ttl() {
     assert!(matches!(err, FederationError::Validation(_)));
 }
 
-#[tokio::test]
-async fn resolve_cached_no_trust_anchors() {
-    let now = 1_700_000_000_i64;
-    let env_id = Uuid::new_v4();
+#[test]
+fn resolve_cached_no_trust_anchors() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let now = 1_700_000_000_i64;
+        let env_id = Uuid::new_v4();
 
-    let anchor_repo = InMemoryTrustAnchorRepo::new();
-    let chain_cache = InMemoryTrustChainCacheRepo::new();
-    let config = FederationCacheConfig::default();
-    let fetcher = MockFetcher::new();
+        let anchor_repo = InMemoryTrustAnchorRepo::new();
+        let chain_cache = InMemoryTrustChainCacheRepo::new();
+        let config = FederationCacheConfig::default();
+        let fetcher = MockFetcher::new();
 
-    let err = must_err(resolve_trust_chain_cached(
-        "https://rp.example.com",
-        env_id,
-        &anchor_repo,
-        &chain_cache,
-        &fetcher,
-        &config,
-        now,
-    )
-    .await);
+        let err = must_err(
+            resolve_trust_chain_cached(
+                "https://rp.example.com",
+                env_id,
+                &anchor_repo,
+                &chain_cache,
+                &fetcher,
+                &config,
+                now,
+            )
+            .await,
+        );
 
-    assert!(matches!(err, FederationError::ChainResolution(_)));
+        assert!(matches!(err, FederationError::ChainResolution(_)));
+    });
 }
 
 #[test]
@@ -432,7 +462,7 @@ fn resolve_cached_fails_closed_on_invalid_stored_trust_anchor() {
         leaf_id,
         good_ta_id,
         &signed_chain_jwts(&signed_chain),
-        now + 3600
+        now + 3600,
     ));
 
     let err = must_err(block_on_test_future(resolve_trust_chain_cached(

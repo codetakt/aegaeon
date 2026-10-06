@@ -6,6 +6,7 @@ fn resolve_trust_chain_for_test(
     fetcher: &dyn FederationFetcher,
     now: i64,
 ) -> Result<TrustChain, FederationError> {
+    let _guard = raw_json_env_guard();
     block_on_test_future(crate::federation::resolve_trust_chain(
         leaf_entity_id,
         trust_anchors,

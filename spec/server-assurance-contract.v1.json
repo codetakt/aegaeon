@@ -1081,6 +1081,26 @@
       ]
     },
     {
+      "matrix_key": "openid_federation_rp",
+      "source_ids": [
+        "openid-federation"
+      ],
+      "role": "server-side federation consumer",
+      "applicability": "conditional",
+      "trigger": "Trust-chain/anchor/metadata-policy/fetch/cache paths used; independent of deferred OP publication.",
+      "guarantee_ids": [
+        "G-01",
+        "G-02",
+        "G-08",
+        "G-10",
+        "G-11",
+        "G-13",
+        "G-14",
+        "G-15",
+        "G-16"
+      ]
+    },
+    {
       "matrix_key": "global",
       "source_ids": [],
       "role": "project",

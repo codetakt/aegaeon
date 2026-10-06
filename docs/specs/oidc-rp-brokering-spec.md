@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-07-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -61,6 +61,33 @@ This follows OpenID Connect Core errata set 2 §§3.1.3.6–3.1.3.8 and 3.3.2.11
 RSA-PSS digest associations in RFC 7518 §3.5. Finite signed-token and runtime-vector tests
 cover the server adapter; the new PSS mapping does not expand the extracted proof domain.
 No migration, environment setting or signature-algorithm enablement is introduced.
+
+## Federation Signing-Key Endorsements
+
+Fresh resolution and cache reconstruction verify retained compact JWS artifacts against the
+current configured trust anchor. Each subordinate statement supplies the endorsed keys used to
+verify the next lower statement; the leaf configuration must verify with its superior's endorsed
+keys as well as its self-published keys. The anchor configuration must verify with the configured
+anchor keys. Each subordinate signature must also verify with its issuer configuration's keys.
+Self-published intermediate keys alone do not authorize lower signatures. Overlapping endorsed
+and self-published key sets are supported during rollover;
+complete key-set equality is not required.
+
+The internal cache layout remains `[leaf configuration, subordinate statement, superior
+configuration, ...]`. Intermediate configurations are discovery artifacts, not extra normative
+Trust Chain links. Invalid candidate paths backtrack within the existing resolution limits.
+Cache reads and fresh resolver callbacks reconstruct metadata from the signed bytes and recheck
+the requested leaf and current anchor, so detached parsed metadata cannot override those bytes.
+
+Custom `FederationFetcher` implementations must retain compact JWS in both `*_with_jws` methods
+to support either public trust-chain resolver. Decoded-only implementations remain source
+compatible through trait defaults but resolution fails explicitly when JWS evidence is absent.
+Existing caches require no migration and are revalidated on use; stale or invalid chains trigger
+fresh resolution. Anchor key changes require an explicit configuration update.
+
+This boundary implements the signing-key endorsement requirements common to OpenID Federation
+1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
+complete header, statement-profile, metadata-policy, or constraints conformance.
 
 ## Upstream Discovery Endpoint Admission
 
