@@ -82,7 +82,8 @@ fn validate_path(
     validate_entity_configuration_link(leaf, leaf_entity_id)?;
     let leaf_entity_types = leaf_entity_types(leaf);
 
-    let mut current_entity_id = leaf.iss.as_str();
+    let mut subject_config = leaf;
+    let mut current_entity_id = subject_config.iss.as_str();
     let mut entities = std::collections::BTreeSet::from([current_entity_id]);
     let mut last_subordinate: Option<&EntityStatement> = None;
     for (depth, pair) in rest.chunks_exact(2).enumerate() {
@@ -92,9 +93,21 @@ fn validate_path(
         validate_entity_statement(sub_stmt, now)?;
         validate_entity_statement(superior_config, now)?;
         validate_subordinate_statement_link(sub_stmt, superior_config, current_entity_id)?;
+        // Section 3.2 requires the subject's signed configuration to name its
+        // immediate superior, including on cached and custom-fetched paths.
+        if !subject_config
+            .authority_hints
+            .as_ref()
+            .is_some_and(|hints| hints.iter().any(|hint| hint == &sub_stmt.iss))
+        {
+            return Err(FederationError::Validation(
+                "subordinate issuer is not in signed subject authority_hints".into(),
+            ));
+        }
         validate_path_constraints(sub_stmt, &leaf_entity_types, depth)?;
 
-        current_entity_id = superior_config.iss.as_str();
+        subject_config = superior_config;
+        current_entity_id = subject_config.iss.as_str();
         if !entities.insert(current_entity_id) {
             return Err(FederationError::Validation(
                 "signed path contains an entity cycle".into(),

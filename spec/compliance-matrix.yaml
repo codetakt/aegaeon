@@ -5224,6 +5224,21 @@ openid_federation_rp:
     These tests do not establish formal proof, complete all-key mandatory-kid profile
     conformance, Trust Mark issuer accreditation, or delegation validation.
 
+- id: fed-rp-001
+  section: '3.2'
+  requirement: MUST
+  description: Each subordinate statement issuer MUST match an authority_hints entry in its subject Entity Configuration
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/signed_parent.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, section 3.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths use signed configuration bytes with exact string matching.
+  - Signed regression fixtures cover each subject position, invalid hints, detached hints, and cache fallback; this is not formal proof evidence or full statement-profile conformance.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
