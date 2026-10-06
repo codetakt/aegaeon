@@ -623,7 +623,7 @@ class InitialRuntimeCallerTests(unittest.TestCase):
         self.assertEqual(
             initial["uses"],
             "codetakt/aegaeon/.github/actions/setup-component-controller@"
-            "49fa5165db37b950cd060437abb06c851d2b2119",
+            "924f45ef248955acf4467ac2ce5d63e132d9462c",
         )
         self.assertEqual(
             set(initial), {"name", "id", "uses"}

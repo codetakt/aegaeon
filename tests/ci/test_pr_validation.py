@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -652,6 +653,15 @@ class GitTests(unittest.TestCase):
         command = next(
             step["run"] for step in workflow["jobs"]["plan"]["steps"] if step.get("id") == "plan"
         )
+        # Model the checked runtime with this interpreter; production stays pinned.
+        controller_guard, command = command.split("\n", 1)
+        self.assertRegex(  # noqa: PT009 - active under Python -O
+            controller_guard,
+            r'^\[\[ "\$CONTROLLER_PYTHON" == /nix/store/[^ ]+/bin/python[^ ]+ \]\] \|\| exit 1$',
+        )
+        command = (
+            f'[[ "$CONTROLLER_PYTHON" == {shlex.quote(sys.executable)} ]] || exit 1\n' + command
+        )
         output = self.repo / "github-output"
         env = {
             **os.environ,
@@ -663,6 +673,7 @@ class GitTests(unittest.TestCase):
             "GITHUB_OUTPUT": str(output),
             "RUNNER_TEMP": str(tools),
             "EVENT_BASE_SHA": speculative_parent,
+            "CONTROLLER_PYTHON": sys.executable,
         }
         result = subprocess.run(  # noqa: S603 - fixed workflow with synthetic API and Git fixture
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],  # noqa: S607

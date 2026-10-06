@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: Set up the initial component controller runtime
         id: component_bootstrap
-        uses: codetakt/aegaeon/.github/actions/setup-component-controller@49fa5165db37b950cd060437abb06c851d2b2119
+        uses: codetakt/aegaeon/.github/actions/setup-component-controller@924f45ef248955acf4467ac2ce5d63e132d9462c
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
