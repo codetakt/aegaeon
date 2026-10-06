@@ -42,7 +42,7 @@ runs:
           experimental-features = nix-command flakes
           accept-flake-config = false
           substituters = https://cache.nixos.org
-          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMjFGspcDShjY=
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
         github-token: ${{ github.token }}
 
     - name: Verify and install the fixed initial runtime and B sources
@@ -72,7 +72,7 @@ runs:
           --option accept-flake-config false --option plugin-files '' --option nix-path ''
           --option substituters https://cache.nixos.org
           --option extra-substituters '' --option extra-trusted-public-keys ''
-          --option trusted-public-keys cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMjFGspcDShjY=)
+          --option trusted-public-keys cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=)
         [[ ! -e "$root" && ! -L "$root" ]]
         work=$(mktemp -d /run/aegaeon-component-bootstrap.XXXXXXXX)
         export NIX_CONF_DIR="$work"
