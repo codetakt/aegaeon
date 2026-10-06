@@ -125,3 +125,6 @@ pub(super) fn validate_upstream_outbound_url(
     crate::ssrf::validate_url_not_private(value)
         .map_err(|err| format!("{label} rejected by SSRF policy: {err}"))
 }
+
+#[cfg(test)]
+pub(crate) use federation::admit_upstream_federation_metadata;

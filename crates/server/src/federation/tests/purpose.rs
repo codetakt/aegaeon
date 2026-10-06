@@ -82,6 +82,8 @@ fn entity_configuration_and_subordinate_require_exact_purpose() {
     let config = entity_payload(&key);
     let mut subordinate = config.clone();
     subordinate["iss"] = json!("https://superior.example.com");
+    must_some(subordinate.as_object_mut()).remove("authority_hints");
+    must_some(subordinate.as_object_mut()).remove("metadata");
     let valid = header_for(&key, "entity-statement+jwt");
     must_ok(verify_entity_configuration(&sign_with_header(
         &key, &valid, &config,

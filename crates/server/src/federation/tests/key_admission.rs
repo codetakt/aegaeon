@@ -22,7 +22,17 @@ fn verify_consumers(
 ) -> [Result<(), FederationError>; 3] {
     let jwks = must_ok(JwkSet::from_value(keys.clone()));
     let mut entity = sample_entity_config(LEAF, NOW);
-    entity.jwks = Some(keys);
+    let mut statement_keys = keys;
+    // Raw statement keys require IDs; supplied decoded keys retain optional IDs.
+    for (index, jwk) in must_some(statement_keys["keys"].as_array_mut())
+        .iter_mut()
+        .enumerate()
+    {
+        if jwk.get("kid").is_none() {
+            jwk["kid"] = json!(format!("statement-key-{index}"));
+        }
+    }
+    entity.jwks = Some(statement_keys);
     let mut header = json!({"alg": FederationKeyManager::federation_alg(key),
         "typ": "entity-statement+jwt", "kid": kid});
     let jwt = purpose::sign_with_header(key, &header, &must_ok(serde_json::to_value(entity)));

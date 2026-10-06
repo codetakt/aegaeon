@@ -191,7 +191,7 @@ pub(in crate::web) fn build_entity_configuration_with_openid_provider_metadata(
         "federation_list_endpoint": format!("{}/.well-known/openid-federation/list", entity_id.trim_end_matches('/')),
     });
 
-    let payload = json!({
+    let mut payload = json!({
         "iss": entity_id,
         "sub": entity_id,
         "iat": now,
@@ -201,8 +201,10 @@ pub(in crate::web) fn build_entity_configuration_with_openid_provider_metadata(
             "openid_provider": openid_provider_metadata,
             "federation_entity": federation_metadata,
         },
-        "authority_hints": authority_hints,
     });
+    if !authority_hints.is_empty() {
+        payload["authority_hints"] = json!(authority_hints);
+    }
 
     sign_federation_jwt(
         key_manager,
@@ -237,10 +239,12 @@ pub(in crate::web) fn build_subordinate_statement(
     op_entity_id: &str,
     sub_entity_id: &str,
     client: &RegisteredClient,
+    subject_federation_jwks: &Value,
     exp_secs: u64,
     key_manager: &dyn FederationKeyManager,
 ) -> Result<String, KeyManagerError> {
     validate_distinct_federation_subjects(op_entity_id, sub_entity_id)?;
+    validate_subject_federation_jwks(subject_federation_jwks)?;
     let signing_material = federation_signing_material(key_manager)?;
     let rp_metadata = openid_relying_party_metadata(sub_entity_id, client)?;
 
@@ -256,6 +260,7 @@ pub(in crate::web) fn build_subordinate_statement(
         "sub": sub_entity_id,
         "iat": now,
         "exp": exp,
+        "jwks": subject_federation_jwks,
         "metadata": {
             "openid_relying_party": rp_metadata,
         },
@@ -268,6 +273,54 @@ pub(in crate::web) fn build_subordinate_statement(
         "entity-statement+jwt",
         &payload,
     )
+}
+
+fn validate_subject_federation_jwks(value: &Value) -> Result<(), KeyManagerError> {
+    let jwks = crate::federation::validate_federation_jwks(value)
+        .map_err(|_| KeyManagerError::OperationFailed)?;
+    let keys = value
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or(KeyManagerError::OperationFailed)?;
+    for key in keys {
+        if ["d", "p", "q", "dp", "dq", "qi", "oth", "k"]
+            .iter()
+            .any(|field| key.get(*field).is_some())
+        {
+            return Err(KeyManagerError::OperationFailed);
+        }
+    }
+    if !jwks.signature_keys().any(subject_signing_key_is_usable) {
+        return Err(KeyManagerError::OperationFailed);
+    }
+    Ok(())
+}
+
+fn subject_signing_key_is_usable(key: &aegaeon_jose::jwk::Jwk) -> bool {
+    use aegaeon_jose::jwk::KeyMaterial;
+    let encoded_length = |value: &str, length: usize| {
+        URL_SAFE_NO_PAD
+            .decode(value)
+            .is_ok_and(|bytes| bytes.len() == length)
+    };
+    match &key.material {
+        KeyMaterial::Ec { crv, x, y } => {
+            crv == "P-256"
+                && key.alg.as_deref().is_none_or(|alg| alg == "ES256")
+                && encoded_length(x, 32)
+                && encoded_length(y, 32)
+        }
+        KeyMaterial::Rsa { n, e } => {
+            key.alg
+                .as_deref()
+                .is_none_or(|alg| matches!(alg, "RS256" | "PS256"))
+                && [n, e].iter().all(|value| {
+                    URL_SAFE_NO_PAD
+                        .decode(value)
+                        .is_ok_and(|bytes| !bytes.is_empty() && bytes.iter().any(|byte| *byte != 0))
+                })
+        }
+    }
 }
 
 pub(in crate::web) fn build_resolve_response(
