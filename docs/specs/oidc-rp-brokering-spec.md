@@ -89,6 +89,38 @@ This boundary implements the signing-key endorsement requirements common to Open
 1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
 complete header, statement-profile, metadata-policy, or constraints conformance.
 
+## Federation JWT Purpose And Key Identification
+
+Entity Statement verification, including Entity Configurations and every statement retained in a
+trust chain, requires the exact protected header `typ: entity-statement+jwt`. Trust Mark
+verification requires `typ: trust-mark+jwt`. Missing, null, empty, or differently typed/purposed
+values are rejected even when the signature could otherwise verify. No alternative Trust Mark
+media-type profile is configured.
+
+Both verification boundaries require a nonempty string `kid` that exactly selects a supplied
+signing key. An absent key ID cannot fall back to the only available key. Type and key identifiers
+are case sensitive; key IDs are opaque and are not trimmed, including IDs containing whitespace.
+Duplicate protected headers remain rejected by the existing JWS parser. These requirements are
+scoped to Federation verification and do not change generic JWS, ID Token, or DPoP handling.
+
+Federation key sets reject duplicate named `kid` values across the whole set before selecting
+signature-capable keys. The rule applies to parsed Entity Statement and stored trust-anchor JWKS,
+as well as directly supplied verification keys. Repeated IDs reject even when the key material is
+identical or only one repeated key permits signature verification. Case-distinct and
+whitespace-distinct IDs remain distinct. Empty key arrays and keys without an optional `kid` retain
+their existing parsing behavior; signature verification fails when no usable matching key exists.
+This admission rule does not implement the separate all-key mandatory-`kid` profile requirement.
+
+Fresh and cached trust-chain verification use the same checks. Existing cached statements with
+missing or invalid purpose/key identification are rejected and trigger fresh resolution; there is
+no database migration. The explicitly unverified Entity Statement payload parser remains a
+discovery/parser API and does not establish acceptance.
+
+The scoped requirements are grounded in OpenID Federation 1.0, 2026-02-17 edition, sections 3,
+3.1.1, 3.2, and 7. Entity Statement header `kid` must be nonempty; the Trust Mark verifier retains
+the same product admission policy. This does not change the adopted edition or establish full
+statement profile conformance, Trust Mark issuer accreditation, or delegation validation.
+
 ## Upstream Discovery Endpoint Admission
 
 The server validates upstream OIDC discovery metadata before using any discovered endpoint. The

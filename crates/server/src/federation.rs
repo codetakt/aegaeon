@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 mod fetcher;
+mod headers;
 mod keys;
 mod metadata_policy;
 mod raw_payload;
@@ -172,52 +173,20 @@ pub fn parse_entity_statement_unverified(
 /// # Errors
 ///
 /// Returns [`FederationError`] when no suitable key is available, signature verification fails, or
-/// the payload cannot be parsed as an entity statement.
+/// the protected header lacks the Entity Statement purpose or a nonempty key ID, or the
+/// supplied JWKS contains duplicate key IDs, or the payload cannot be parsed as an entity statement.
 pub fn verify_entity_statement(
     jws_compact: &str,
     issuer_jwks: &JwkSet,
 ) -> Result<EntityStatement, FederationError> {
     let parsed = Jws::from_compact(jws_compact)?;
-    let alg = &parsed.header.alg;
+    let key =
+        keys::select_federation_signing_key(issuer_jwks, &parsed.header, "entity-statement+jwt")?;
+    let decoded = decode_jwk_material(key)?;
+    let verification_key = verification_key_for_alg(key, &decoded, &parsed.header.alg)?;
     let ctx = JoseContext::default();
-
-    let mut last_err = None;
-    for key in issuer_jwks.signature_keys() {
-        // If JWS header specifies kid, only try matching keys
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
-        }
-
-        let decoded = match decode_jwk_material(key) {
-            Ok(d) => d,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        let vk = match verification_key_for_alg(key, &decoded, alg) {
-            Ok(vk) => vk,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        match jws::verify_compact_with_context(jws_compact, vk, &ctx) {
-            Ok(payload_bytes) => {
-                let stmt = raw_payload::parse_entity_statement_payload(&payload_bytes)?;
-                return Ok(stmt);
-            }
-            Err(e) => {
-                last_err = Some(FederationError::Jws(e));
-            }
-        }
-    }
-
-    Err(last_err.unwrap_or(FederationError::NoSuitableKey))
+    let payload_bytes = jws::verify_compact_with_context(jws_compact, verification_key, &ctx)?;
+    raw_payload::parse_entity_statement_payload(&payload_bytes)
 }
 
 /// Verify a self-signed Entity Configuration.
