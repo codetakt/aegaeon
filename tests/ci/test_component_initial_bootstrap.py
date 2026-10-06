@@ -12,8 +12,16 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
+
+import yaml
+
+if TYPE_CHECKING:
+    from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/ci"))
 import bootstrap_component_controller as bootstrap
@@ -448,6 +456,252 @@ class InitialBootstrapTests(unittest.TestCase):
         self.assertIn('"$root/bootstrap_component_controller.py"', action[launch:])
         self.assertNotIn("./.github/actions/", action)
         self.assertIn("91391f8e5c8f753359399cf37d7adaaa6cea4d1c", action)
+
+    def runtime_model_record(self) -> tuple[bootstrap.JsonObject, bytes]:
+        # Deterministic model data; this does not attest installed CA bytes or custody.
+        record = copy.deepcopy(RECORD)
+        payload = b"modeled public CA bundle\n"
+        record["ca_sha256"] = bootstrap.hashlib.sha256(payload).hexdigest()
+        return record, payload
+
+    def runtime_root_metadata(
+        self, *, uid: int = 0, mode: int = 0o555, kind: int = stat.S_IFDIR
+    ) -> os.stat_result:
+        return os.stat_result((kind | mode, 0, 0, 1, uid, 0, 0, 0, 0, 0))
+
+    def runtime_model(
+        self,
+        record: bootstrap.JsonObject,
+        payload: bytes,
+        *,
+        paths: list[str] | None = None,
+        flags: tuple[int, int] = (1, 1),
+        roots: dict[str, os.stat_result] | None = None,
+    ) -> ExitStack:
+        runtime = SimpleNamespace(
+            executable=record["interpreter"],
+            flags=SimpleNamespace(isolated=flags[0], dont_write_bytecode=flags[1]),
+            path=paths if paths is not None else [record["runtime_root"] + "/lib/python3.14"],
+        )
+        root_metadata = roots if roots is not None else {}
+        default = self.runtime_root_metadata()
+
+        def metadata(path: Path) -> os.stat_result:
+            return root_metadata.get(str(path), default)
+
+        stack = ExitStack()
+        stack.enter_context(patch.object(bootstrap, "sys", runtime))
+        stack.enter_context(
+            patch.object(
+                Path,
+                "is_dir",
+                autospec=True,
+                side_effect=lambda p: (
+                    stat.S_ISDIR(metadata(p).st_mode) or stat.S_ISLNK(metadata(p).st_mode)
+                ),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda p: stat.S_ISLNK(metadata(p).st_mode),
+            )
+        )
+        stack.enter_context(patch.object(Path, "lstat", autospec=True, side_effect=metadata))
+        stack.enter_context(patch.object(Path, "read_bytes", autospec=True, return_value=payload))
+        return stack
+
+    def test_runtime_accepts_valid_modeled_environment(self) -> None:
+        record, payload = self.runtime_model_record()
+        roots = list(record["nar_map"])
+        with self.runtime_model(record, payload, paths=[roots[0], roots[-1] + "/lib"]):
+            bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_nonisolated_or_bytecode_enabled_execution(self) -> None:
+        record, payload = self.runtime_model_record()
+        for isolated, bytecode_disabled in [(0, 1), (1, 0)]:
+            with (
+                self.subTest(isolated=isolated, bytecode_disabled=bytecode_disabled),
+                self.runtime_model(record, payload, flags=(isolated, bytecode_disabled)),
+                self.assertRaisesRegex(
+                    bootstrap.BootstrapRejectedError, "explicit isolated runtime differs"
+                ),
+            ):
+                bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_import_paths_outside_exact_closure(self) -> None:
+        record, payload = self.runtime_model_record()
+        for entry in [
+            "",
+            "/candidate/python",
+            "/usr/lib/python",
+            record["runtime_root"] + "-sibling/lib",
+        ]:
+            with (
+                self.subTest(entry=entry),
+                self.runtime_model(record, payload, paths=[record["runtime_root"], entry]),
+                self.assertRaisesRegex(
+                    bootstrap.BootstrapRejectedError, "runtime import path leaves"
+                ),
+            ):
+                bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_unowned_or_writable_closure_roots(self) -> None:
+        record, payload = self.runtime_model_record()
+        for root in [record["runtime_root"], record["ca_root"], list(record["nar_map"])[-1]]:
+            for uid, mode in [(1000, 0o555), (0, 0o755), (0, 0o575), (0, 0o557)]:
+                with (
+                    self.subTest(root=root, uid=uid, mode=mode),
+                    self.runtime_model(
+                        record,
+                        payload,
+                        roots={root: self.runtime_root_metadata(uid=uid, mode=mode)},
+                    ),
+                    self.assertRaisesRegex(
+                        bootstrap.BootstrapRejectedError,
+                        "source custody is writable|source payload is writable",
+                    ),
+                ):
+                    bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_nondirectory_or_symlink_closure_roots(self) -> None:
+        record, payload = self.runtime_model_record()
+        root = list(record["nar_map"])[-1]
+        for kind in [stat.S_IFREG, stat.S_IFLNK]:
+            with (
+                self.subTest(kind=kind),
+                self.runtime_model(
+                    record, payload, roots={root: self.runtime_root_metadata(kind=kind)}
+                ),
+                self.assertRaisesRegex(bootstrap.BootstrapRejectedError, "runtime root differs"),
+            ):
+                bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_ca_outside_root_or_wrong_bundle_name(self) -> None:
+        original, payload = self.runtime_model_record()
+        for ca_file in [
+            "/candidate/ca-bundle.crt",
+            original["ca_root"] + "-sibling/ca-bundle.crt",
+            str(Path(original["ca_file"]).with_name("other.crt")),
+        ]:
+            record = {**original, "ca_file": ca_file}
+            with (
+                self.subTest(ca_file=ca_file),
+                self.runtime_model(record, payload),
+                self.assertRaisesRegex(
+                    bootstrap.BootstrapRejectedError, "literal public CA edge differs"
+                ),
+            ):
+                bootstrap.verify_runtime(record)
+
+    def test_runtime_rejects_changed_ca_bytes_or_expected_hash(self) -> None:
+        record, payload = self.runtime_model_record()
+        for observed, expected in [
+            (payload + b"changed", record["ca_sha256"]),
+            (payload, "0" * 64),
+        ]:
+            altered = {**record, "ca_sha256": expected}
+            with (
+                self.subTest(changed_bytes=observed != payload, expected=expected),
+                self.runtime_model(altered, observed),
+                self.assertRaisesRegex(bootstrap.BootstrapRejectedError, "public CA bytes differ"),
+            ):
+                bootstrap.verify_runtime(altered)
+
+
+class InitialRuntimeCallerTests(unittest.TestCase):
+    def plan_steps(self) -> list[dict[str, Any]]:
+        workflow = yaml.safe_load((REPOSITORY / ".github/workflows/pr.yml").read_text())
+        return cast("list[dict[str, Any]]", workflow["jobs"]["plan"]["steps"])
+
+    def test_real_immutable_bootstrap_is_first_without_failure_bypass(self) -> None:
+        steps = self.plan_steps()
+        initial = steps[0]
+        self.assertEqual(initial["id"], "component_bootstrap")
+        self.assertEqual(
+            initial["uses"],
+            "codetakt/aegaeon/.github/actions/setup-component-controller@"
+            "49fa5165db37b950cd060437abb06c851d2b2119",
+        )
+        self.assertEqual(
+            set(initial), {"name", "id", "uses"}
+        )  # No condition, override inputs or ignored failure.
+        self.assertEqual(
+            steps[1]["uses"], "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        )
+        for step in steps[1:]:
+            if "run" in step:
+                self.assertNotIn("if", step)
+                self.assertNotIn("continue-on-error", step)
+
+    def test_every_plan_python_start_uses_verified_isolated_interpreter(self) -> None:
+        runs = [str(step["run"]) for step in self.plan_steps() if "run" in step]
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(sum(run.count('"$CONTROLLER_PYTHON" -I -B') for run in runs), 4)
+        self.assertTrue(all("python3 -I" not in run for run in runs))
+        self.assertIn('"$CONTROLLER_PYTHON" -I -B "$trusted"', runs[0])
+        self.assertIn(
+            '"$CONTROLLER_PYTHON" -I -B scripts/ci/validate_change.py --bootstrap', runs[0]
+        )
+        for step in self.plan_steps():
+            if "run" in step:
+                self.assertEqual(
+                    step["env"]["CONTROLLER_PYTHON"],
+                    "${{ steps.component_bootstrap.outputs.interpreter }}",
+                )
+
+    def test_wrong_or_missing_interpreter_stops_before_any_plan_execution(self) -> None:
+        runs = [str(step["run"]) for step in self.plan_steps() if "run" in step]
+        for run in runs:
+            guard = run.splitlines()[0]
+            self.assertEqual(
+                guard, '[[ "$CONTROLLER_PYTHON" == ' + RECORD["interpreter"] + " ]] || exit 1"
+            )
+            for value in (None, "", "/usr/bin/python3", "/candidate/python", "$(false)"):
+                with self.subTest(run=guard, output=value):
+                    environment = dict(os.environ)
+                    if value is None:
+                        environment.pop("CONTROLLER_PYTHON", None)
+                    else:
+                        environment["CONTROLLER_PYTHON"] = value
+                    result = subprocess.run(  # noqa: S603 - actual fixed guard only, no plan/native operations
+                        [shutil.which("bash") or "/bin/bash", "-c", guard + "\nprintf reached"],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "")
+
+    def test_exact_verified_interpreter_passes_guard_without_launching_it(self) -> None:
+        for step in self.plan_steps():
+            if "run" not in step:
+                continue
+            guard = str(step["run"]).splitlines()[0]
+            result = subprocess.run(  # noqa: S603 - guard and harmless marker only
+                [shutil.which("bash") or "/bin/bash", "-c", guard + "\nprintf reached"],
+                env={**os.environ, "CONTROLLER_PYTHON": RECORD["interpreter"]},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "reached")
+
+    def test_caller_does_not_activate_private_package_or_carrier(self) -> None:
+        workflow = (REPOSITORY / ".github/workflows/pr.yml").read_text()
+        self.assertNotIn("Capture original protected invocation", workflow)
+        self.assertNotIn("component-original-invocation", workflow)
+        self.assertNotIn("/trusted/tools/python3", workflow)
+        self.assertNotIn("component-validation.yml", workflow)
+        policy = json.loads((REPOSITORY / "ci/pr-policy.json").read_text())
+        self.assertEqual(policy["supplemental_lanes"]["components"], "pending")
+        self.assertNotIn("component_release", policy)
 
 
 if __name__ == "__main__":
