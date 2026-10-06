@@ -6,6 +6,8 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -26,6 +28,46 @@ MOUNT = "41 22 0:20 / /trusted/component-bootstrap ro,nosuid,nodev,noexec - ext4
 
 
 class InitialBootstrapTests(unittest.TestCase):
+    def test_action_uses_canonical_binary_cache_key(self) -> None:
+        # Independent external trust contract, never derived from action or ambient config.
+        canonical = "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+        action = (REPOSITORY / ".github/actions/setup-component-controller/action.yml").read_text()
+        installer_blocks = re.findall(
+            r"(?m)^        extra-conf: \|\n((?:          [^\n]*\n)+)", action
+        )
+        self.assertEqual(len(installer_blocks), 1)
+        installer_options = [
+            (name.strip(), value.strip())
+            for line in installer_blocks[0].splitlines()
+            for name, separator, value in [line.partition("=")]
+            if separator
+        ]
+        self.assertEqual(
+            [value.split() for name, value in installer_options if name == "trusted-public-keys"],
+            [[canonical]],
+        )
+        self.assertEqual(
+            [value for name, value in installer_options if name == "extra-trusted-public-keys"],
+            [],
+        )
+
+        privileged_blocks = re.findall(r"(?ms)^\s*nix_flags=\((.*?)\)\s*$", action)
+        self.assertEqual(len(privileged_blocks), 1)
+        tokens = shlex.split(privileged_blocks[0])
+        privileged_options = [
+            (tokens[index + 1], tokens[index + 2])
+            for index, argument in enumerate(tokens)
+            if argument == "--option"
+        ]
+        self.assertEqual(
+            [value.split() for name, value in privileged_options if name == "trusted-public-keys"],
+            [[canonical]],
+        )
+        self.assertEqual(
+            [value for name, value in privileged_options if name == "extra-trusted-public-keys"],
+            [""],
+        )
+
     def test_exact_closure_predicate_accepts_frozen_map(self) -> None:
         bootstrap.verify_nar_map(RECORD["nar_map"], copy.deepcopy(RECORD["nar_map"]))
 
