@@ -487,3 +487,8 @@ mod key_admission {
     use super::*;
     include!("tests/key_admission.rs");
 }
+
+mod admission {
+    use super::*;
+    include!("tests/admission.rs");
+}

@@ -1249,7 +1249,6 @@ CREATE TABLE aegaeon.federation_entity_cache (
     fetched_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     CONSTRAINT federation_entity_cache_entity_id_nonempty CHECK ((length(entity_id) > 0)),
-    CONSTRAINT federation_entity_cache_expires_after_fetch CHECK ((expires_at > fetched_at)),
     CONSTRAINT federation_entity_cache_jws_nonempty CHECK ((length(TRIM(BOTH FROM entity_configuration_jws)) > 0))
 );
 

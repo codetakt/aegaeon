@@ -13,7 +13,8 @@
 // OIDC RP flow integration (wired in Phase 5, hardened in Phase 7–8):
 //
 //   1. On upstream `/authorize`, the trust chain is resolved via
-//      TrustChainCacheRepository → CachedFederationFetcher → HTTP.
+//      TrustChainCacheRepository → complete-chain resolver → HTTP.
+//      CachedFederationFetcher is a separate exported individual-statement wrapper.
 //      See `upstream_authorize()` in web/mod.rs.
 //
 //   2. Resolved metadata policy is applied to validate the upstream's
@@ -58,7 +59,6 @@ pub use cache::{
     resolve_trust_chain_cached, resolve_trust_chain_cached_with,
     resolve_trust_chain_jwts_cached_with, spawn_cache_cleanup, CachedFederationFetcher,
 };
-#[cfg(test)]
 pub(super) use clock::current_unix_epoch_secs;
 pub use config::{
     valid_federation_cache_max_entries, valid_federation_cache_ttl_secs, FederationCacheConfig,

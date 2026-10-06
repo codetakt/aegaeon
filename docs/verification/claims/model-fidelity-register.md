@@ -425,3 +425,27 @@ Its all-string functional lemmas are not a Rust, serde, URL parser, Redis or
 network refinement. See [scope and correspondence](../oidc/upstream-issuer-policy.md).
 The existing browser-binding model still receives issuer validation as a supplier;
 this module does not establish composition with that model or a release artifact.
+
+## Individual Federation cache timestamp ordering
+
+`Federation.PgRepo` remains `simplified`. The forward individual-cache migration
+removes the obsolete expiration-after-acquisition CHECK. Its model now permits
+retained rows with expiration at or before acquisition without changing either
+timestamp; uniqueness remains the entity-store invariant. Retrieval still
+requires `now < expires_at`, and cleanup removes expired rows. The existing six
+property families and the independent chain expiration/staleness contract remain.
+A focused lemma specifies exact single-row retention and non-reuse at acquisition.
+The theorem and harness require successful scoped tool runs before their
+statements may be treated as checked evidence for a particular revision.
+
+The F* timestamps are `nat`, while product repository timestamps use signed
+`i64` values and database timestamp precision. The companion Kani array store
+is bounded to four rows and 64-byte identifiers; it is a non-DB model. Its added
+`proof_entity_cache_retains_expired_acquisition` expresses insert/replacement, exact
+signed timestamps, uniqueness, strict non-reuse and cleanup for expiration at or
+before acquisition. Native model tests also exercise equal, earlier and extreme
+integer timestamps and tenant preservation. These checks do not prove SQL,
+transactions, clock conversion, JWS admission or production correspondence.
+Signed expiration caps are validated externally by statement admission and the
+refresh/cache wrappers. No matrix row is promoted and no product assurance
+obligation is discharged by this model alignment.

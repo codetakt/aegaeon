@@ -1,6 +1,4 @@
-use super::super::{
-    verify_entity_configuration, verify_entity_statement, EntityStatement, FederationError, JwkSet,
-};
+use super::super::{EntityStatement, FederationError, JwkSet};
 use super::transport::FederationHttpClient;
 use super::types::{
     FederationFetchFuture, FederationFetcher, FetchedEntityConfiguration,
@@ -10,6 +8,10 @@ use super::url_policy::{
     entity_configuration_url, host_matches_allowlist,
     normalize_federation_outbound_allowed_domains, subordinate_statement_url, validate_entity_url,
 };
+use crate::federation::admission::{
+    admit_entity_configuration, admit_subordinate_statement, validate_authority_configuration,
+};
+use crate::federation::repositories::current_unix_epoch_secs;
 
 /// HTTP-based [`FederationFetcher`] using async `reqwest`.
 ///
@@ -132,8 +134,10 @@ impl FederationFetcher for HttpFederationFetcher {
         entity_id: &'a str,
     ) -> FederationFetchFuture<'a, EntityStatement> {
         Box::pin(async move {
-            let jws = self.fetch_entity_configuration_jws(entity_id).await?;
-            verify_entity_configuration(&jws)
+            Ok(self
+                .fetch_entity_configuration_with_jws(entity_id)
+                .await?
+                .statement)
         })
     }
 
@@ -143,7 +147,8 @@ impl FederationFetcher for HttpFederationFetcher {
     ) -> FederationFetchFuture<'a, FetchedEntityConfiguration> {
         Box::pin(async move {
             let jws = self.fetch_entity_configuration_jws(entity_id).await?;
-            let statement = verify_entity_configuration(&jws)?;
+            let statement =
+                admit_entity_configuration(&jws, entity_id, current_unix_epoch_secs()?)?;
             Ok(FetchedEntityConfiguration::with_jws(statement, jws))
         })
     }
@@ -156,15 +161,15 @@ impl FederationFetcher for HttpFederationFetcher {
         issuer_jwks: &'a JwkSet,
     ) -> FederationFetchFuture<'a, EntityStatement> {
         Box::pin(async move {
-            self.validate_domain(authority_entity_id)?;
-            let url = subordinate_statement_url(
-                authority_entity_id,
-                authority_config,
-                subordinate_entity_id,
-            )?;
-            self.validate_fetch_url_domain(&url)?;
-            let jws = self.transport.fetch_text(&url).await?;
-            verify_entity_statement(&jws, issuer_jwks)
+            Ok(self
+                .fetch_subordinate_statement_with_jws(
+                    authority_entity_id,
+                    authority_config,
+                    subordinate_entity_id,
+                    issuer_jwks,
+                )
+                .await?
+                .statement)
         })
     }
 
@@ -176,6 +181,11 @@ impl FederationFetcher for HttpFederationFetcher {
         issuer_jwks: &'a JwkSet,
     ) -> FederationFetchFuture<'a, FetchedSubordinateStatement> {
         Box::pin(async move {
+            validate_authority_configuration(
+                authority_config,
+                authority_entity_id,
+                current_unix_epoch_secs()?,
+            )?;
             self.validate_domain(authority_entity_id)?;
             let url = subordinate_statement_url(
                 authority_entity_id,
@@ -184,7 +194,15 @@ impl FederationFetcher for HttpFederationFetcher {
             )?;
             self.validate_fetch_url_domain(&url)?;
             let jws = self.transport.fetch_text(&url).await?;
-            let statement = verify_entity_statement(&jws, issuer_jwks)?;
+            let now = current_unix_epoch_secs()?;
+            validate_authority_configuration(authority_config, authority_entity_id, now)?;
+            let statement = admit_subordinate_statement(
+                &jws,
+                authority_entity_id,
+                subordinate_entity_id,
+                issuer_jwks,
+                now,
+            )?;
             Ok(FetchedSubordinateStatement::with_jws(statement, jws))
         })
     }
