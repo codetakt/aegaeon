@@ -242,7 +242,15 @@ class SecurityAppLauncherProgramTests(unittest.TestCase):
         # Nix v2 reports paths relative to its store; older JSON used absolute paths.
         output = str(Path(derivation_path).parent / derivation["outputs"]["out"]["path"])
         self.assertEqual(output, derivation["env"]["out"])
-        self.assertEqual(app["program"], output + derivation["env"]["destination"])
+        # writeTextFile now uses structured attributes. Nix exposes them either
+        # directly or as serialized JSON; older builders used environment fields.
+        attributes = derivation.get("structuredAttrs")
+        if attributes is None:
+            environment = derivation["env"]
+            attributes = (
+                json.loads(environment["__json"]) if "__json" in environment else environment
+            )
+        self.assertEqual(app["program"], output + attributes["destination"])
 
 
 if __name__ == "__main__":
