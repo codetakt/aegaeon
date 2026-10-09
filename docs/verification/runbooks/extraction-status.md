@@ -35,6 +35,9 @@ or packaging scripts through `nix develop .#verification --command bash`.
 The verification and default shells export absolute `FSTAR`, `KAMEL` and
 `EVERPARSE` executable routes together with their provider directories. The
 batch entrypoint activates the same verification shell for CI regeneration.
+The legacy `ci/karamel.sh` archive helper also activates that shell; it no longer
+installs Docker or uses the unpinned Project Everest image. It retains its log
+and archive locations and removes the extracted JOSE directory after archiving.
 
 Extraction no longer selects tools from PATH, a local `result` link or arbitrary
 Nix store candidates. Missing pins, executables, provider layouts or mismatched

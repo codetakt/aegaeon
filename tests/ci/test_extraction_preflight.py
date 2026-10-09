@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ ENTRIES = (
     "scripts/extraction/package_verified_core.sh",
     "scripts/extraction/run_everparse_batch.sh",
     "scripts/flake/verify_lowstar.sh",
+    "ci/karamel.sh",
 )
 
 
@@ -176,6 +178,43 @@ os.execv({self.bash!r}, ["bash", *sys.argv[5:]])
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(name, result.stderr)
                 self.assertFalse(self.calls.exists())
+
+    def test_legacy_archive_enters_pinned_shell_and_retains_archive_and_log(self):
+        script = self.root / "scripts/extraction/run_jose_lowstar.sh"
+        script.write_text(
+            "set -euo pipefail\n"
+            "source scripts/extraction/lib/toolchain_preflight.sh\n"
+            "extraction_preflight\n"
+            "mkdir -p generated/lowstar/jose\n"
+            "printf 'controlled C output\\n' > generated/lowstar/jose/fixture.c\n"
+            "echo controlled extraction\n"
+        )
+        result = self.invoke("ci/karamel.sh")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with tarfile.open(self.root / "artifacts/karamel/jose-lowstar.tar.gz") as archive:
+            member = archive.extractfile("jose/fixture.c")
+            self.assertIsNotNone(member)
+            self.assertEqual(member.read(), b"controlled C output\n")
+        log = (self.root / "artifacts/karamel.log").read_text()
+        self.assertIn("controlled extraction", log)
+        self.assertIn("extraction completed", log)
+        self.assertFalse((self.root / "generated/lowstar/jose").exists())
+
+    def test_legacy_archive_propagates_extraction_failure_without_archiving(self):
+        script = self.root / "scripts/extraction/run_jose_lowstar.sh"
+        script.write_text("echo controlled failure >&2\nexit 73\n")
+        result = self.invoke("ci/karamel.sh")
+        self.assertEqual(result.returncode, 73, result.stderr)
+        self.assertIn("controlled failure", result.stdout)
+        self.assertNotIn("extraction completed", result.stdout)
+        self.assertFalse((self.root / "artifacts/karamel/jose-lowstar.tar.gz").exists())
+
+    def test_legacy_archive_rejects_shell_activation_failure_before_writes(self):
+        (self.root / "bin/nix").write_text(f"#!{self.bash}\nexit 67\n")
+        result = self.invoke("ci/karamel.sh")
+        self.assertEqual(result.returncode, 67, result.stderr)
+        self.assertFalse((self.root / "artifacts").exists())
+        self.assertFalse((self.root / "generated").exists())
 
     def test_invalid_executable_routes_do_not_fall_back_to_path(self):
         for value in ("fstar.exe", str(self.root / "absent"), str(self.tools / "fstar")):

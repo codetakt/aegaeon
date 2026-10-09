@@ -174,7 +174,7 @@ If you touch any F*/EverParse inputs:
 
 ```bash
 scripts/extraction/run_everparse_batch.sh
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 git diff -- generated/everparse generated/lowstar
 ```
 
