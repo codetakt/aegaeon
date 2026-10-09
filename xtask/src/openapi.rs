@@ -40,6 +40,23 @@ fn write_or_check(path: &Path, contents: &str, check: bool) -> anyhow::Result<()
         .context("OpenAPI artifact has no parent directory")?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     temporary.write_all(contents.as_bytes())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let permissions = match fs::metadata(path) {
+            Ok(metadata) => metadata.permissions(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::Permissions::from_mode(0o644)
+            }
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("Cannot inspect OpenAPI artifact: {}", path.display())
+                });
+            }
+        };
+        temporary.as_file().set_permissions(permissions)?;
+    }
     temporary.as_file().sync_all()?;
     temporary
         .persist(path)
@@ -96,6 +113,24 @@ mod tests {
         fs::create_dir(&blocked)?;
         assert!(write_or_check(&blocked, "{}\n", false).is_err());
         assert_eq!(fs::read_dir(root.path())?.count(), 2);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generation_preserves_unix_artifact_permissions() -> anyhow::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("api.json");
+        write_or_check(&path, "{}\n", false)?;
+        assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, 0o644);
+        for mode in [0o600, 0o640, 0o644, 0o440] {
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode))?;
+            write_or_check(&path, "{\"updated\":true}\n", false)?;
+            assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, mode);
+            assert_eq!(fs::read_to_string(&path)?, "{\"updated\":true}\n");
+        }
         Ok(())
     }
 }
