@@ -119,6 +119,19 @@ class LegacyDudectTests(unittest.TestCase):
             timeout=20,
         )
 
+    def test_unavailable_unix_locking_fails_clearly(self):
+        script = (
+            "import runpy, sys; sys.modules['fcntl'] = None; "
+            f"sys.path.insert(0, {str(self.runner.parent)!r}); "
+            f"runpy.run_path({str(self.runner)!r}, run_name='__main__')"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=False
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unix platform", result.stderr)
+        self.assertFalse(self.output.exists())
+
     def recorded(self):
         return [json.loads(line) for line in self.events.read_text().splitlines()]
 

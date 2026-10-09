@@ -263,7 +263,6 @@
             };
             check-symlinks = {
               enable = true;
-              excludes = [ "^crates/kani-harness/kani$" ];
             };
             check-vcs-permalinks.enable = true;
             forbid-new-submodules.enable = true;
@@ -650,7 +649,9 @@
 
         mkAppFromSpec =
           appId: spec:
-          if appId == "security-suite" then
+          if appId == "perf-load" then
+            mkApp perfLoadSupplier.controller spec.description
+          else if appId == "security-suite" then
             mkApp (import ./nix/flake/security-launcher.nix {
               inherit lib pkgs;
               name = spec.binName;
@@ -728,6 +729,21 @@
         buildSrc = import ./nix/build-source.nix {
           inherit lib;
           source = src;
+        };
+
+        perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
+          inherit
+            lib
+            pkgs
+            craneLib
+            stdenv
+            rustToolchain
+            llvmPackages
+            cargoArtifacts
+            buildSrc
+            ;
+          source = inputs.self.outPath;
+          runtimeInputs = appSpecs.perf-load.runtimeInputs;
         };
 
         cargoArtifacts = craneLib.buildDepsOnly {
@@ -1080,6 +1096,7 @@
       in
       {
         packages = flakePackages // {
+          perf-load-supplier = perfLoadSupplier.package;
           ci-controller-python = import ./nix/ci-controller-python.nix { inherit pkgs; };
         };
 

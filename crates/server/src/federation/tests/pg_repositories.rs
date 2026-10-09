@@ -596,3 +596,131 @@ async fn pg_trust_chain_cache_cleanup_expired() {
 
     must_ok(cleanup_test_environment(&pool, env_id).await);
 }
+
+#[test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+fn pg_cached_chain_revalidates_current_anchor_key() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let Some(pool) = must_ok(test_pg_pool().await) else {
+            return;
+        };
+        let env_id = must_ok(setup_test_environment(&pool).await);
+        let now = current_epoch_secs();
+        let ta_id = "https://anchor.example.com";
+        let leaf_id = "https://leaf.example.com";
+        let signed = signed_direct_chain(ta_id, leaf_id, now);
+        let anchor_repo = PgTrustAnchorRepository::new(pool.clone());
+        let cache = PgTrustChainCacheRepository::new(pool.clone());
+        must_ok(
+            anchor_repo
+                .upsert(env_id, ta_id, &signed.anchor_jwks, Some(&json!({})))
+                .await,
+        );
+        let mut fetcher = MockFetcher::new();
+        fetcher.add_signed_direct_chain(ta_id, leaf_id, &signed);
+        let config = FederationCacheConfig::default();
+        must_ok(
+            resolve_trust_chain_cached(
+                leaf_id,
+                env_id,
+                &anchor_repo,
+                &cache,
+                &fetcher,
+                &config,
+                now,
+            )
+            .await,
+        );
+        // An empty fetcher establishes that the second call actually uses persisted JWS.
+        let empty = MockFetcher::new();
+        must_ok(
+            resolve_trust_chain_cached(leaf_id, env_id, &anchor_repo, &cache, &empty, &config, now)
+                .await,
+        );
+        let replacement_keys = federation_jwks_value(&InMemoryKeyManager::new());
+        must_ok(
+            anchor_repo
+                .upsert(env_id, ta_id, &replacement_keys, Some(&json!({})))
+                .await,
+        );
+        assert!(resolve_trust_chain_cached(
+            leaf_id,
+            env_id,
+            &anchor_repo,
+            &cache,
+            &empty,
+            &config,
+            now
+        )
+        .await
+        .is_err());
+        must_ok(cleanup_test_environment(&pool, env_id).await);
+    });
+}
+
+#[test]
+#[ignore = "requires AEGAEON_DATABASE_URL-backed Postgres integration test"]
+fn pg_cached_chain_rejects_wrong_entity_statement_purpose() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let Some(pool) = must_ok(test_pg_pool().await) else {
+            return;
+        };
+        let env_id = must_ok(setup_test_environment(&pool).await);
+        let now = current_epoch_secs();
+        let ta_id = "https://anchor.example.com";
+        let leaf_id = "https://leaf.example.com";
+        let mut signed = signed_direct_chain(ta_id, leaf_id, now);
+        let anchors = PgTrustAnchorRepository::new(pool.clone());
+        let cache = PgTrustChainCacheRepository::new(pool.clone());
+        must_ok(
+            anchors
+                .upsert(env_id, ta_id, &signed.anchor_jwks, Some(&json!({})))
+                .await,
+        );
+        must_ok(
+            cache
+                .upsert(
+                    env_id,
+                    leaf_id,
+                    ta_id,
+                    &signed_chain_jwts(&signed),
+                    now + 3600,
+                )
+                .await,
+        );
+        let empty = MockFetcher::new();
+        let config = FederationCacheConfig::default();
+        must_ok(
+            resolve_trust_chain_cached(leaf_id, env_id, &anchors, &cache, &empty, &config, now)
+                .await,
+        );
+        let jwk = must_some(FederationKeyManager::federation_public_jwk(
+            &signed.leaf_key,
+        ));
+        let header = json!({"alg": FederationKeyManager::federation_alg(&signed.leaf_key), "typ": "trust-mark+jwt", "kid": jwk["kid"]});
+        signed.leaf_jws = super::purpose::sign_with_header(
+            &signed.leaf_key,
+            &header,
+            &must_ok(serde_json::to_value(&signed.leaf_config)),
+        );
+        must_ok(
+            cache
+                .upsert(
+                    env_id,
+                    leaf_id,
+                    ta_id,
+                    &signed_chain_jwts(&signed),
+                    now + 3600,
+                )
+                .await,
+        );
+        assert!(resolve_trust_chain_cached(
+            leaf_id, env_id, &anchors, &cache, &empty, &config, now
+        )
+        .await
+        .is_err());
+        must_ok(cleanup_test_environment(&pool, env_id).await);
+    });
+}

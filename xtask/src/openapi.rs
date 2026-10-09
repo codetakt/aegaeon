@@ -1,39 +1,101 @@
-use std::{fs, path::Path};
+use anyhow::Context;
+use std::{fs, io::Write, path::Path};
 
 pub(crate) fn run(repo_root: &Path, check: bool) -> anyhow::Result<()> {
     let out_dir = repo_root.join("generated/openapi");
-    fs::create_dir_all(&out_dir)?;
-
+    if !check {
+        fs::create_dir_all(&out_dir)?;
+    }
     let management = aegaeon_server::openapi::management_openapi();
     let ops = aegaeon_server::openapi::ops_openapi();
-
-    let management_path = out_dir.join("aegaeon-management-api.v1.json");
-    let ops_path = out_dir.join("aegaeon-ops.v1.json");
-
-    let management_json = format!("{}\n", serde_json::to_string_pretty(&management)?);
-    let ops_json = format!("{}\n", serde_json::to_string_pretty(&ops)?);
-
-    write_or_check(&management_path, &management_json, check)?;
-    write_or_check(&ops_path, &ops_json, check)?;
-
-    if check {
-        println!("checked {}", management_path.display());
-        println!("checked {}", ops_path.display());
-    } else {
-        println!("wrote {}", management_path.display());
-        println!("wrote {}", ops_path.display());
+    for (name, value) in [
+        ("aegaeon-management-api.v1.json", management),
+        ("aegaeon-ops.v1.json", ops),
+    ] {
+        let path = out_dir.join(name);
+        let contents = format!("{}\n", serde_json::to_string_pretty(&value)?);
+        write_or_check(&path, &contents, check)?;
+        println!(
+            "{} {}",
+            if check { "checked" } else { "wrote" },
+            path.display()
+        );
     }
     Ok(())
 }
 
 fn write_or_check(path: &Path, contents: &str, check: bool) -> anyhow::Result<()> {
     if check {
-        let existing = fs::read_to_string(path).unwrap_or_default();
-        if existing != contents {
-            anyhow::bail!("OpenAPI artifact is out of date: {}", path.display());
-        }
+        let existing = fs::read_to_string(path)
+            .with_context(|| format!("Cannot read OpenAPI artifact: {}", path.display()))?;
+        anyhow::ensure!(
+            existing == contents,
+            "OpenAPI artifact is out of date: {}",
+            path.display()
+        );
         return Ok(());
     }
-    fs::write(path, contents)?;
+    let parent = path
+        .parent()
+        .context("OpenAPI artifact has no parent directory")?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(contents.as_bytes())?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .with_context(|| format!("Cannot replace OpenAPI artifact: {}", path.display()))?;
+    #[cfg(unix)]
+    fs::File::open(parent)?.sync_all()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{run, write_or_check};
+    use std::fs;
+
+    #[test]
+    fn generation_is_stable_and_checks_do_not_modify_artifacts() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        run(root.path(), false)?;
+        run(root.path(), true)?;
+        for name in ["aegaeon-management-api.v1.json", "aegaeon-ops.v1.json"] {
+            let path = root.path().join("generated/openapi").join(name);
+            let contents = fs::read_to_string(&path)?;
+            assert!(contents.ends_with('\n') && !contents.ends_with("\n\n"));
+            let _: serde_json::Value = serde_json::from_str(&contents)?;
+            fs::write(&path, "stale")?;
+            assert!(run(root.path(), true).is_err());
+            assert_eq!(fs::read_to_string(&path)?, "stale");
+            fs::write(&path, contents)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn check_preserves_io_errors_and_does_not_create_directories() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        assert!(run(root.path(), true).is_err());
+        assert!(!root.path().join("generated").exists());
+        let error = write_or_check(root.path(), "{}\n", true)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("reading a directory unexpectedly succeeded"))?;
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+        assert!(error.to_string().contains("Cannot read"));
+        Ok(())
+    }
+
+    #[test]
+    fn replacement_is_complete_and_failed_publication_cleans_temporary() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("api.json");
+        fs::write(&path, "previous")?;
+        write_or_check(&path, "{\"complete\":true}\n", false)?;
+        assert_eq!(fs::read_to_string(&path)?, "{\"complete\":true}\n");
+        let blocked = root.path().join("directory.json");
+        fs::create_dir(&blocked)?;
+        assert!(write_or_check(&blocked, "{}\n", false).is_err());
+        assert_eq!(fs::read_dir(root.path())?.count(), 2);
+        Ok(())
+    }
 }

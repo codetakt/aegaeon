@@ -7,7 +7,6 @@ C schedules, statistics, maximum-p aggregation and warning policy are unchanged.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import math
 import os
@@ -20,6 +19,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -255,6 +259,8 @@ def publish(source: Path, destination: Path) -> None:
 
 
 def execute(root: Path, adapter: Adapter) -> int:
+    if fcntl is None:
+        fail("dudect requires a Unix platform with fcntl file locking")
     output = root / "artifacts/ct/dudect"
     output.mkdir(parents=True, exist_ok=True)
     with (output / ".legacy-run.lock").open("a", encoding="utf-8") as lock:
