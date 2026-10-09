@@ -1009,7 +1009,7 @@ class CiPlanTransportTests(unittest.TestCase):
             for step in workflow["jobs"]["plan"]["steps"]
             if step.get("id") == "transport"
         )
-        body = run.split("python3 -I - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        body = run.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         ast.parse(body)
         self.assertIn("legacy-full-installation", body)
         self.assertIn("plan.get('scope') != 'full'", body)
@@ -1023,7 +1023,7 @@ class CiPlanTransportTests(unittest.TestCase):
             for step in workflow["jobs"]["plan"]["steps"]
             if step.get("id") == "transport"
         )
-        body = run.split("python3 -I - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        body = run.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         head = LEGACY_SOURCE
         base = transport.git(ROOT, "rev-parse", f"{head}^1").decode().strip()
         tree = transport.git(ROOT, "rev-parse", f"{head}^{{tree}}").decode().strip()
@@ -1207,7 +1207,7 @@ class CiPlanTransportTests(unittest.TestCase):
         run = next(
             step["run"] for step in workflow["jobs"]["plan"]["steps"] if step.get("id") == "plan"
         )
-        preflight = run.split("python3 -I - <<'PY'\n", 1)[1].split("\nPY", 1)[0]
+        preflight = run.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
 
         def invoke(directory):
             return subprocess.run(

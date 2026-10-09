@@ -34,6 +34,9 @@ jobs:
       transport_version: ${{ steps.transport.outputs.transport_version }}
       plan_artifact_id: ${{ steps.evidence.outputs.artifact-id }}
     steps:
+      - name: Set up the initial component controller runtime
+        id: component_bootstrap
+        uses: codetakt/aegaeon/.github/actions/setup-component-controller@924f45ef248955acf4467ac2ce5d63e132d9462c
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -41,10 +44,12 @@ jobs:
       - name: Validate event, signatures and protected base policy
         id: plan
         env:
+          CONTROLLER_PYTHON: ${{ steps.component_bootstrap.outputs.interpreter }}
           EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 -I - <<'PY'
+          [[ "$CONTROLLER_PYTHON" == /nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14 ]] || exit 1
+          "$CONTROLLER_PYTHON" -I -B - <<'PY'
           from pathlib import Path
           for name in ('ci-plan.json', 'ci-validation.json', 'ci-input-union.json', 'ci-transport-admission.json'):
               try:
@@ -69,16 +74,17 @@ jobs:
           trusted="$RUNNER_TEMP/validate_change.py"
           if git cat-file -e "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py"; then
             git show "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py" > "$trusted"
-            python3 -I "$trusted"
+            "$CONTROLLER_PYTHON" -I -B "$trusted"
           else
             # Installation only: exact base and same-repository branch are checked.
             # Maintainers must also perform the mandatory manual signature gate.
             [[ "$GITHUB_EVENT_NAME" == pull_request ]]
-            python3 -I scripts/ci/validate_change.py --bootstrap
+            "$CONTROLLER_PYTHON" -I -B scripts/ci/validate_change.py --bootstrap
           fi
       - name: Admit protected transport or conservative legacy installation
         id: transport
         env:
+          CONTROLLER_PYTHON: ${{ steps.component_bootstrap.outputs.interpreter }}
           COMPONENT_TARGETS: ${{ steps.plan.outputs.component_targets }}
           COMPONENT_PLAN_SHA256: ${{ steps.plan.outputs.component_plan_sha256 }}
           COMPONENT_PLAN_PROVENANCE: ${{ steps.plan.outputs.component_plan_provenance }}
@@ -86,7 +92,8 @@ jobs:
           VALIDATED_HEAD: ${{ steps.plan.outputs.source_head }}
           VALIDATED_TEST: ${{ steps.plan.outputs.test_sha }}
         run: |
-          python3 -I - <<'PY'
+          [[ "$CONTROLLER_PYTHON" == /nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14 ]] || exit 1
+          "$CONTROLLER_PYTHON" -I -B - <<'PY'
           import hashlib
           import json
           import os
