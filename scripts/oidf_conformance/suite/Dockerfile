@@ -14,7 +14,7 @@ RUN git rev-parse HEAD > /src/SUITE_COMMIT.txt
 
 RUN mvn -B clean package -DskipTests=true
 
-FROM eclipse-temurin:21
+FROM eclipse-temurin:25
 
 WORKDIR /opt/suite
 COPY --from=build /src/target/*.jar /opt/suite/
