@@ -155,7 +155,7 @@ def binary_path(harness: Harness, adapter: Adapter) -> Path:
 
 
 def compiler_argv(harness: Harness, adapter: Adapter, flags: NativeFlags) -> list[str]:
-    common = ["-O2", "-std=c11", "-o", str(binary_path(harness, adapter))]
+    common = ["-O2", "-std=c11", "-D_DEFAULT_SOURCE", "-o", str(binary_path(harness, adapter))]
     if adapter is Adapter.XTASK:
         return [
             "gcc",
@@ -215,7 +215,11 @@ def discover_flags(root: Path, evidence: Path) -> NativeFlags:
         root, evidence, "pkg-config-libs", ["pkg-config", "--libs", "--static", "evercrypt"]
     )
     return NativeFlags(
-        (f"-I{prefix / 'include'}",),
+        (
+            f"-I{prefix / 'include'}",
+            f"-I{prefix / 'lib/krml/c'}",
+            f"-I{prefix / 'lib/krml/dist/generic'}",
+        ),
         tuple(shlex.split(cflags.decode("utf-8"))),
         tuple(shlex.split(libs.decode("utf-8"))),
     )
