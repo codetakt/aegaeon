@@ -668,7 +668,8 @@ class SanitizerFixture:
         def stopped():
             try:
                 return stat.read_text().rsplit(")", 1)[1].split()[0] in {"Z", "X"}
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
+                # procfs can return ESRCH after open when the process exits.
                 return True
 
         deadline = time.monotonic() + 5
@@ -803,6 +804,39 @@ class SanitizerFixture:
 
 
 class SanitizerTests(SanitizerFixture, unittest.TestCase):
+    def test_child_stop_observation_handles_only_process_disappearance(self):
+        child_pid = self.root / "child.pid"
+        proc_stat = Path("/proc/1234/stat")
+
+        def read_then_fail(error):
+            stat_reads = 0
+
+            def read_text(path, *args, **kwargs):
+                nonlocal stat_reads
+                if path == child_pid:
+                    return "1234"
+                self.assertEqual(path, proc_stat)  # noqa: PT009 - reject unexpected reads
+                stat_reads += 1
+                if stat_reads == 1:
+                    return "1234 (child) R 0"
+                raise error
+
+            return read_text
+
+        for error in (FileNotFoundError("gone"), ProcessLookupError("gone")):
+            with (
+                self.subTest(error=type(error).__name__),
+                patch.object(Path, "read_text", autospec=True, side_effect=read_then_fail(error)),
+            ):
+                self.assert_child_stopped()
+        error = PermissionError("procfs access denied")
+        with (
+            patch.object(Path, "read_text", autospec=True, side_effect=read_then_fail(error)),
+            self.assertRaises(PermissionError) as caught,  # noqa: PT027 - unittest discovery
+        ):
+            self.assert_child_stopped()
+        self.assertIs(caught.exception, error)  # noqa: PT009 - preserve inspection failures
+
     def test_nonstandard_names_and_cache_bound_to_all_required_targets(self):
         for mode in ("success", "fresh-cache", "ignored-policy"):
             with self.subTest(mode=mode):
