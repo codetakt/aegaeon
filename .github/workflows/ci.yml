@@ -87,9 +87,8 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          printf '%s\n' "$PR_TITLE" > /tmp/pr-title
-          nix develop .#ci --command commitlint --edit /tmp/pr-title
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: nix develop .#ci --command bash scripts/ci/lint_pr_title.sh
 
       - name: Workflow inventory audit
         run: |
