@@ -40,7 +40,7 @@ EverParse executable and installed source directories use the same package;
 Nix checks that HACL* and EverCrypt packages derive from the same pinned source
 when constructing the extraction environment. Runtime preflight checks executable
 and installed-source routes and directory layouts. These checks do not attest
-supplier verification, checked-artifact validity or tool soundness, and does
+supplier verification, checked-artifact validity or tool soundness, and do
 not change the `specified-not-attested` provider obligations above.
 
 ## 1. Introduction

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
 # Admit explicit extraction pins before creating outputs or invoking suppliers.
 
 extraction_pin_error() {
