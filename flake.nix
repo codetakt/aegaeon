@@ -532,12 +532,28 @@
         devTools = [ rustToolchain ] ++ devToolsCommon;
         asanDevTools = [ asanRustToolchain ] ++ devToolsCommon;
 
-        commonShellHook = ''
+        extractionShellHook =
+          assert lib.assertMsg (
+            haclStar.src == evercryptLib.src
+          ) "Extraction requires HACL* and EverCrypt from the same pinned source";
+          ''
+            export FSTAR=${verificationFstar}/bin/fstar.exe
+            export FSTAR_HOME=${verificationFstar}
+            export KAMEL=${karamel}/bin/krml
+            export KARAMEL_HOME=${karamel}
+            export EVERPARSE=${everparse}/bin/everparse
+            export EVERPARSE_PREFIX=${everparse}
+            export EVERPARSE_SOURCE_ROOT=${everparse}
+            export HACL_PREFIX=${haclStar}
+            export EVERCRYPT_PREFIX=${evercryptLib}
+            export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
+            export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
+          '';
+
+        commonShellHook = extractionShellHook + ''
           export PATH=${rustToolchain}/bin:$PATH
           export AEGAEON_DEV_SHELL=1
-          export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
           export STEEL_PATH=${steel}
-          export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
           export WASI_CLANG=${wasiClangBin}
           export WASI_SYSROOT=${wasiSysroot}
           export AEG_HOST_CC=${llvmPackages.clang}/bin/clang
@@ -657,6 +673,14 @@
               name = spec.binName;
               inherit (spec) runtimeInputs script;
             }) spec.description
+          else if appId == "verify-lowstar" then
+            mkShellApp {
+              name = spec.binName;
+              inherit (spec) description runtimeInputs;
+              text = extractionShellHook + ''
+                exec ${pkgs.bash}/bin/bash ${spec.script} "$@"
+              '';
+            }
           else
             mkShellApp {
               name = spec.binName;

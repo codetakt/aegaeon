@@ -120,7 +120,7 @@ resulting diffs as a single, focused change.
 
 ```bash
 # Low*/KaRaMeL extraction (JOSE)
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 
 # EverParse batch generation
 scripts/extraction/run_everparse_batch.sh

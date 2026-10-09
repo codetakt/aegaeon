@@ -11,35 +11,9 @@ EXTRACT_SCRIPT="$ROOT/scripts/extraction/run_verified_core_lowstar.sh"
 ARTIFACT_DIR="$ROOT/artifacts/verified-core"
 WASM_SOURCE="$ROOT/generated/lowstar/verified-core/wasm/verified_core.wasm"
 
-if [[ -z ${WASI_CLANG:-} || ! -x ${WASI_CLANG:-} ]]; then
-	if command -v wasm32-unknown-wasi-clang >/dev/null 2>&1; then
-		export WASI_CLANG="$(command -v wasm32-unknown-wasi-clang)"
-	else
-		candidate="$(find /nix/store -maxdepth 2 -name 'wasm32-unknown-wasi-clang' 2>/dev/null | head -n1 || true)"
-		if [[ -n $candidate && -x $candidate ]]; then
-			export WASI_CLANG="$candidate"
-		else
-			cat >&2 <<'ERR'
-[package-verified-core] WASI_CLANG not set and wasm32-unknown-wasi-clang not found.
-Use 'nix develop' or set WASI_CLANG explicitly.
-ERR
-			exit 1
-		fi
-	fi
-fi
-
-if [[ -z ${WASI_SYSROOT:-} || ! -d ${WASI_SYSROOT:-} ]]; then
-	candidate_sysroot="$(find /nix/store -maxdepth 1 -type d -name '*-wasi-sysroot' 2>/dev/null | head -n1 || true)"
-	if [[ -n $candidate_sysroot ]]; then
-		export WASI_SYSROOT="$candidate_sysroot"
-	else
-		cat >&2 <<'ERR'
-[package-verified-core] WASI_SYSROOT not set and no wasi-sysroot found.
-Use 'nix develop' or set WASI_SYSROOT explicitly.
-ERR
-		exit 1
-	fi
-fi
+source "$ROOT/scripts/extraction/lib/toolchain_preflight.sh"
+extraction_preflight
+extraction_wasi_preflight
 
 mkdir -p "$ARTIFACT_DIR"
 
