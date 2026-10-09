@@ -4706,6 +4706,7 @@ dependencies = [
  "aegaeon-server",
  "anyhow",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
