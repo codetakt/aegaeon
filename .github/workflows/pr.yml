@@ -235,6 +235,7 @@ jobs:
       source-head: ${{ needs.plan.outputs.source_head }}
       test-sha: ${{ needs.plan.outputs.test_sha }}
       pr-title: ${{ github.event.pull_request.title || '' }}
+      pr-author: ${{ github.event.pull_request.user.login || '' }}
 
   integrity:
     name: Assurance integrity

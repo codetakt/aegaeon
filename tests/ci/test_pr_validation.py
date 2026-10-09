@@ -810,6 +810,7 @@ class WiringTests(unittest.TestCase):
             "source-head": "${{ needs.plan.outputs.source_head }}",
             "test-sha": "${{ needs.plan.outputs.test_sha }}",
             "pr-title": "${{ github.event.pull_request.title || '' }}",
+            "pr-author": "${{ github.event.pull_request.user.login || '' }}",
         }
         docs = yaml.safe_load((ROOT / jobs["docs"]["uses"]).read_text())
         assert set(docs["jobs"]) == {"metadata", "helpers", "complete"}
