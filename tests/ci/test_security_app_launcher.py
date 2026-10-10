@@ -196,6 +196,57 @@ class SecurityAppLauncherTests(unittest.TestCase):
 
 
 class SecurityAppLauncherProgramTests(unittest.TestCase):
+    def test_generated_dispatch_overrides_inherited_native_provider_path(self) -> None:
+        nix = shutil.which("nix")
+        if nix is None:
+            self.fail("The supported test environment requires Nix")
+        expression = (
+            "let flake = builtins.getFlake "
+            + json.dumps(str(ROOT))
+            + "; pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; }; "
+            "in import "
+            + json.dumps(str(ROOT / "nix/flake/security-launcher.nix"))
+            + ' { inherit pkgs; inherit (pkgs) lib; name = "provider-path-control"; '
+            'runtimeInputs = []; nativePkgConfigPath = "/inert/pinned/lib/pkgconfig"; '
+            'script = pkgs.writeText "record-provider-path.sh" '
+            + json.dumps("printf '%s\\n' \"$PKG_CONFIG_PATH\"\n")
+            + "; }"
+        )
+        build = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command flakes",
+                "build",
+                "--offline",
+                "--impure",
+                "--no-link",
+                "--json",
+                "--expr",
+                expression,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        launcher = Path(json.loads(build.stdout)[0]["outputs"]["out"]) / "bin/provider-path-control"
+        for inherited in (None, "", "/inert/inherited/lib/pkgconfig"):
+            with self.subTest(inherited=inherited):
+                environment = os.environ.copy()
+                if inherited is None:
+                    environment.pop("PKG_CONFIG_PATH", None)
+                else:
+                    environment["PKG_CONFIG_PATH"] = inherited
+                observed = subprocess.run(
+                    [str(launcher)],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                self.assertEqual(observed.stdout, "/inert/pinned/lib/pkgconfig\n")
+                self.assertEqual(observed.stderr, "")
+
     def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
         nix = shutil.which("nix")
         if nix is None:
