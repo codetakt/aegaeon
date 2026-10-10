@@ -1,7 +1,7 @@
 // ── CachedFederationFetcher ─────────────────────────────────────
 
 #[test]
-fn cached_fetcher_returns_cached_entity_config() {
+fn cached_fetcher_returns_signed_entity_config_despite_forged_parsed_json() {
     let _guard = raw_json_env_guard();
     let now = current_epoch_secs();
     let env_id = Uuid::new_v4();
@@ -17,7 +17,8 @@ fn cached_fetcher_returns_cached_entity_config() {
     let mut stmt = sample_entity_config("https://rp.example.com", now);
     stmt.jwks = Some(federation_jwks_value(&key_manager));
     let entity_configuration_jws = sign_entity_statement_for_test(&key_manager, &stmt);
-    let parsed = must_ok(serde_json::to_value(&stmt));
+    let mut parsed = must_ok(serde_json::to_value(&stmt));
+    parsed["metadata"] = json!({"openid_relying_party": {"forged": true}});
     must_ok(cache.upsert(
         env_id,
         "https://rp.example.com",
@@ -34,7 +35,9 @@ fn cached_fetcher_returns_cached_entity_config() {
         fetcher.fetch_entity_configuration("https://rp.example.com"),
     );
     assert!(result.is_ok());
-    assert_eq!(must_ok(result).iss, "https://rp.example.com");
+    let verified = must_ok(result);
+    assert_eq!(verified.iss, "https://rp.example.com");
+    assert_eq!(verified.metadata, stmt.metadata);
 }
 
 #[test]

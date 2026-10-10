@@ -2731,8 +2731,8 @@ fn client_runtime_projection_mutation_api_is_not_public_database_bypass() -> Tes
 
     let par_module_source = server_source("src/par.rs", "PAR module source")?;
     assert!(
-        par_module_source.contains("#[cfg(test)]\nmod client_registry;"),
-        "PAR process-local client projection module must be test-gated"
+        par_module_source.contains("#[cfg(any(test, fuzzing))]\nmod client_registry;"),
+        "PAR process-local client projection module must be restricted to tests and fuzz harnesses"
     );
     let par_client_registry_source = server_source(
         "src/par/client_registry.rs",

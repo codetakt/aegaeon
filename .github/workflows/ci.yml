@@ -87,12 +87,13 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          printf '%s\n' "$PR_TITLE" > /tmp/pr-title
-          nix develop .#ci --command commitlint --edit /tmp/pr-title
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: nix develop .#ci --command bash scripts/ci/lint_pr_title.sh
 
       - name: Workflow inventory audit
         run: |
+          nix develop .#ci --command node --experimental-strip-types \
+            scripts/check-workflow-inventory.ts
           nix develop .#ci --command node --experimental-strip-types \
             tests/verified_core_wasm/workflow_inventory_policy_test.ts
 
@@ -103,7 +104,7 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          nix develop .#ci --command cargo xtask openapi --check
+          nix develop .#ci --command cargo run --locked --package xtask --bin xtask --features openapi -- openapi --check
 
       - name: nix flake check
         if: ${{ !inputs.delegate-formal-checks }}

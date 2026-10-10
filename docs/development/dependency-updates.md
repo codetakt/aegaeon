@@ -1,6 +1,6 @@
 # Reviewing Dependency Updates
 
-Last updated: 2026-10-02
+Last updated: 2026-10-10
 
 Status: current implementation baseline
 
@@ -47,8 +47,17 @@ do not add blanket exemptions to pass an update.
 
 Messages use fixed `ci(deps)` for Actions and `chore(deps)` otherwise. Do not add
 `include: scope`: npm development dependencies can then produce the unapproved
-`deps-dev` scope. Every title and commit header, including single-package updates,
-must fit the existing 72-character limit. Shorten generated text when necessary.
+`deps-dev` scope. Commit headers and ordinary PR titles must fit the existing
+72-character limit.
+For PRs authored by `dependabot[bot]`, title length above 72 characters produces a
+warning without blocking CI. All other title rules still apply. This exception
+uses GitHub's PR author metadata, so a human-triggered rerun has the same result;
+a missing or different author keeps the blocking limit. Branch names, labels and
+the workflow actor do not grant the exception.
+
+CI, Lint and Documentation use the same title-specific configuration. Commit
+messages still use the unchanged base configuration, including the blocking
+72-character header limit. Shorten generated commit headers when necessary.
 The current commitlint rules permit long HTTP(S) URL lines, including comparison
 links; ordinary body and footer lines still have their 100-character limit.
 

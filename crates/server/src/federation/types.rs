@@ -37,7 +37,7 @@ pub struct EntityStatement {
     /// Superior entity identifiers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authority_hints: Option<Vec<String>>,
-    /// Source endpoint URI, tracked internally and not part of the JWT.
+    /// Optional issuing fetch endpoint URL carried by a Subordinate Statement JWT.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_endpoint: Option<String>,
 }
@@ -59,7 +59,7 @@ impl EntityStatement {
             .jwks
             .as_ref()
             .ok_or(FederationError::MissingField("jwks"))?;
-        Ok(JwkSet::from_value(jwks_value.clone())?)
+        super::keys::parse_federation_jwks(jwks_value.clone())
     }
 }
 

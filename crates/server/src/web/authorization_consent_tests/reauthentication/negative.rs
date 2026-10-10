@@ -117,11 +117,16 @@ pub(super) async fn scenario(state: &AppState, sid: &str, mode: &str) -> TestRes
     );
     let (left, right) = (left?, right?);
     assert_eq!(
-        usize::from(left.status == StatusCode::SEE_OTHER)
-            + usize::from(right.status == StatusCode::SEE_OTHER),
+        usize::from(left.status == StatusCode::OK) + usize::from(right.status == StatusCode::OK),
         1
     );
-    if right.status == StatusCode::SEE_OTHER {
+    for page in [&left, &right] {
+        if page.status == StatusCode::OK {
+            assert!(page.location.is_none());
+            assert_eq!(continuation_destination(&page.body)?, return_to);
+        }
+    }
+    if right.status == StatusCode::OK {
         browser = concurrent;
     }
     let mut old_session = browser.clone();

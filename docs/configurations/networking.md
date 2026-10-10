@@ -97,7 +97,9 @@ If you run `aegaeon-server` directly on `127.0.0.1` without a reverse proxy, you
 2) Keep the policy on, but inject a forwarding header in your requests:
    - `X-Forwarded-Proto: https`
 
-The load test harness (`crates/loadtest`) already sets a `Forwarded:` header for local runs.
+OAuth load tests (`crates/loadtest`) require the actual HTTPS issuer and a trusted
+TLS route. The load generator does not inject forwarding headers; the trusted
+reverse proxy supplies them after terminating genuine TLS.
 
 ## Testing & evidence
 

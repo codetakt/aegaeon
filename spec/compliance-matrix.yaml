@@ -294,6 +294,25 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-017
+  section: '2.3.1 and Appendix B'
+  requirement: MUST
+  description: OAuth Basic credentials MUST form-encode client ID and password independently before Basic serialization.
+  module: crates/server/src/oauth_basic.rs
+  tests:
+  - crates/server/src/oauth_basic.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/registry_core/basic_auth.rs
+  - crates/server/src/web/token_lifecycle/basic_auth_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/basic_auth_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/basic_auth_tests.rs
+  ci_check: client-auth-verification
+  status: implemented
+  runtime_link: crates/server/src/client_registry/registry_store/authentication.rs
+  notes:
+  - "Previously 6749-015 in PR #77; renumbered to distinguish Basic credential encoding from form parameter admission."
+  - The AS decodes each credential exactly once after splitting the base64-decoded payload at the first literal colon; malformed percent escapes and invalid UTF-8 reject without raw fallback.
+  - Both upstream authorization-code and refresh Basic request builders form-encode each logical credential before reqwest Basic serialization.
+  - Finite registry, HTTP introspection and built-request header regressions cover reserved characters, UTF-8, once-only decoding and authentication-method separation; they do not establish formal proof discharge.
 rfc_6750:
 - id: 6750-001
   section: '2.1'
@@ -652,12 +671,15 @@ rfc_7009:
     file: fstar/revocation/Revocation.fst
     invariant: cascade_revoke
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: revocation-cascade
   status: verified
   runtime_link: crates/server/src/web/token_lifecycle.rs
   notes:
   - Revoking a refresh token deactivates the associated access token (revocation_introspection_http_test).
+  - "With retainRefreshChain enabled, HTTP introspection shares resource/UserInfo checks for a recorded rotated, missing or tombstoned refresh parent. This does not extend grant-wide ancestor revocation, refresh retention or expiry coverage; disabled retention preserves the existing rotation policy. The cited cascade model does not discharge those remaining runtime obligations."
 rfc_7662:
 - id: 7662-001
   section: '2'
@@ -733,6 +755,8 @@ rfc_7662:
     file: proofs/tamarin/introspection/introspection_security.spthy
     lemma: introspection_inactive_claim_sound
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: introspection-response-active
   status: verified
@@ -744,6 +768,8 @@ rfc_7662:
     test: crates/server/tests/introspection_schema_test.rs
   notes:
   - Active tokens return RFC 7662 fields (client_id, token_type, exp).
+  - "After token-store and caller-visibility checks, HTTP introspection enforces the selected retainRefreshChain parent policy. Invalid recorded parents yield inactive JSON or signed JWT inner bodies; parent-store failures return no-cache 503. No parent or disabled retention preserves existing behavior."
+  - "Redis/PostgreSQL lifecycle tests exercise actual regular grant commits and rotations; signed introspection fixtures verify the configured Ed25519 signature. Final response metrics distinguish inactive application currentness from active responses and exclude backend/signing errors. These finite tests do not prove all active criteria or close grant-wide ancestor revocation obligations."
   - The cited models describe their abstract response and issuance/revocation facts;
     they do not establish the new client-credentials authority or currentness decision.
     Runtime inactive responses also cover unauthorized disclosure and absent or stale authority.
@@ -1669,6 +1695,7 @@ rfc_9449:
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests/request_method.rs
   ci_check: dpop-htm-match
   status: verified
   runtime_link: crates/server/src/middleware/dpop.rs
@@ -1677,6 +1704,9 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Htm_validation.fst#validate_htm
     rust: crates/ffi/src/lib.rs#validate_dpop_htm_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "Runtime handlers forward the actual GET or HEAD method for resource/UserInfo and delegated application authorization; middleware preserves method-token case (RFC 9449 section 4.3 item 8; RFC 9110 section 9.1)."
+  - "The cited oracle covers the equality predicate, not router method extraction. HTTP regressions use the claims-only DPoP test double; real-signature FFI regressions remain separate. No new formal discharge is asserted."
 - id: 9449-006
   section: '4.3'
   requirement: MUST
@@ -1688,15 +1718,19 @@ rfc_9449:
     invariant: validate_htu
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_uri_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-htu-match
   status: verified
-  runtime_link: crates/server/src/middleware/dpop.rs
+  runtime_link: crates/ffi/src/dpop_uri.rs
   trace:
     kind: oracle
     fstar: fstar/dpop/Dpop.Htu_validation.fst#validate_htu
     rust: crates/ffi/src/lib.rs#validate_dpop_htu_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "The cited F* predicate and Rust spec oracle retain exact-string equality semantics. They do not prove HTTP URI parsing, RFC 3986 normalization, or its composition with production signature verification."
+  - "Both production FFI verification APIs compare validated HTTP(S) URI components using RFC 9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Runtime normalization and its composition remain distinct assurance obligations; signed Ed25519 fixtures exercise finite positive and rejection cases. Server claims-only tests are separate evidence."
 - id: 9449-007
   section: '4.3'
   requirement: MUST
@@ -4602,6 +4636,8 @@ draft_oauth_v2_1:
   notes:
   - PostgreSQL-backed management policy projects requireStateParameter into ServerConfig.require_state.
   - validate_authorize_request rejects missing state whenever the active runtime policy or OAuth profile requires it.
+  - RP state/nonce values may repeat across distinct transactions, including one client; the runtime preserves each original value and keeps code/PAR/JTI single-use controls. Observation markers and counts do not reject issuance.
+  - Existing proof models that assume globally unique RP state values do not establish correspondence for repeat acceptance; their assumptions require separate reassessment. This runtime change does not expand proof scope or discharge.
   - PKCE also provides CSRF protection per OAuth 2.1 §2.3.3.
 - id: v21-011
   section: '2.3.5'
@@ -5139,6 +5175,121 @@ draft_oauth_v2_1:
   - Token endpoint accepts client_id + client_secret as form parameters (client_secret_post method).
   - Token endpoint client-auth parsing and client registry validation enforce client_secret_post admission.
 
+openid_federation_rp:
+- id: fed-rp-021
+  section: '3.2, 4, 10.2'
+  requirement: MUST
+  description: Trust-chain signatures MUST verify with issuer-configuration keys and superior-endorsed keys up to the configured trust anchor
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/endorsed_keys.rs
+  - crates/server/src/federation/tests/repositories/resolve_cached.rs
+  - crates/server/src/federation/tests/pg_repositories.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, sections 3.2, 4, and 10.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths reconstruct retained compact JWS
+    and verify each subordinate with its issuer configuration and the keys endorsed by its superior.
+    Leaf self-signatures and current configured anchor keys remain required; overlapping key sets
+    are allowed without complete JWKS equality.
+  - Signed finite ES256 and PostgreSQL regressions cover endorsement, rollover, tampering,
+    backtracking, detached metadata, and current anchor-key replacement. These tests do not
+    establish live federation HTTP transport, formal proof, or complete protocol conformance.
+  - Header, statement-profile, metadata-policy, and constraint requirements remain separately
+    tracked; this row records only the signing-key endorsement boundary.
+
+- id: fed-rp-022
+  section: '3, 3.1.1, 3.2, 7, 7.3'
+  requirement: MUST
+  description: Federation JWT verification MUST enforce its configured purpose and exact header key identification and reject duplicate named key IDs before key selection
+  module: crates/server/src/federation/keys.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/purpose.rs
+  - crates/server/src/federation/tests/key_admission.rs
+  - crates/server/src/federation/tests/pg_repositories.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/keys.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, sections 3, 3.1.1, 3.2, 7, and 7.3; no new edition adoption.
+  - Entity Statements require entity-statement+jwt and a nonempty exact header kid.
+    Trust Marks require the configured trust-mark+jwt purpose and retain the same
+    nonempty header-kid product admission policy; no alternative media-type profile is configured.
+  - Parsed and directly supplied Federation key sets reject duplicate named IDs across
+    the whole set before signature-key filtering. IDs preserve case and whitespace.
+    Generic JOSE parsing, optional key kid, and empty key-array parsing remain unchanged.
+  - Signed finite tests cover public consumers, raw parse entries, fresh resolution,
+    cache fallback, callback admission, and existing algorithm/use/key_ops restrictions.
+    These tests do not establish formal proof, complete all-key mandatory-kid profile
+    conformance, Trust Mark issuer accreditation, or delegation validation.
+
+- id: fed-rp-001
+  section: '3.2'
+  requirement: MUST
+  description: Each subordinate statement issuer MUST match an authority_hints entry in its subject Entity Configuration
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/signed_parent.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, section 3.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths use signed configuration bytes with exact string matching.
+  - Signed regression fixtures cover each subject position, invalid hints, detached hints, and cache fallback; this is not formal proof evidence or full statement-profile conformance.
+
+- id: fed-rp-002
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: Verified Entity Statements MUST enforce common claim kind, presence, shape, and original-member key identification
+  module: crates/server/src/federation/profile/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/federation/tests/statement_profile.rs
+  status: implemented
+  runtime_link: crates/server/src/federation.rs
+  notes:
+  - Exact signature-verified bytes retain structural-backend and duplicate/trailing admission before raw-aware checks and typed correspondence.
+  - Includes HTTPS identifier syntax, required C/S JWKS and all-original-key unique string kid, optional claim shapes, immediate metadata null refusal, Trust Mark envelope/type equality, and unsupported critical claim refusal.
+  - Entity Statement trust_chain and peer_trust_chain protected headers are explicitly prohibited independently of generic unknown-header handling.
+  - Strict existing JWK material handling remains; no complete mixed-key admission, Trust Mark accreditation, full critical/constraints policy, NumericDate, or edition conformance claim.
+  - Unverified parsing remains structural; typed validation cannot recover discarded unknown claims or raw presence.
+- id: fed-rp-003
+  section: '5.1.1, 8.1, 8.2'
+  requirement: MUST
+  description: Known superior entities MUST advertise their fetch and list endpoints in their own signed configurations
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/federation/fetcher/url_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - Common canonical validation applies to fresh, custom, and cached paths; detached or subordinate metadata cannot supply missing superior endpoints.
+  - Fetch URL construction requires an advertised endpoint, preserves query/sub encoding and retrieval protection, and has no inferred fallback.
+  - Seven known federation endpoint values receive syntax checks; no endpoint availability or new producer operation is established.
+  - First/terminal path positions do not assert global leaf/rootless roles. Signed tests use in-process fetchers and repositories.
+- id: fed-rp-004
+  section: '3.2'
+  requirement: MUST
+  description: Ordinary upstream OIDC Federation consumption MUST reject aud and trust_anchor claims and require signed provider-role metadata
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/web/upstream_tests/federation_signing.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - OIDC restrictions common to Federation 1.0 and Federation Connect 1.1 section 3.2; no new edition or Explicit Registration profile adopted.
+  - Raw claim presence including null is rejected at every selected-chain position on fresh and cached use; signed first configuration must contain object openid_provider metadata.
+  - Generic Federation core may accept those ordinary extension claims and cache such a chain; cache storage does not constitute OIDC authorization.
+  - Existing resolved discovery issuer/endpoint/JWKS matching remains required; repository and web admission tests are not live HTTP or browser evidence.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'
@@ -5541,6 +5692,9 @@ openid_core:
     test: crates/server/tests/oidc_hash_vectors.rs
   notes:
   - See `crates/server/src/authcode/token/tests/oidc_id_token.rs::test_hash_computation` for known OIDC vectors (RS256 / SHA-256 / left-most 128 bits).
+  - "For already admitted PS256/384/512 signatures, the server adapter selects the existing SHA-256/384/512 hash operation without changing the verified signature algorithm."
+  - "The extracted dispatcher and public FFI accepted-name domain remain unchanged. The PSS digest-selector mapping is covered by finite Rust/Low* runtime and real signed-token tests, not by an expanded formal proof claim."
+  - "See crates/server/src/web/upstream_tests/id_token/tests/pss_hash.rs and crates/server/src/oidc/id_token/tests/pss_hash.rs; supplied hash claims require source material and omitted code-flow claims remain optional."
 - id: OIDC-1-004
   section: max_age / auth_time
   requirement: MUST
@@ -5868,8 +6022,8 @@ openid_logout:
   section: Back-Channel Logout
   requirement: MUST
   description: Logout Token must include required claims (iss, sub or sid, aud, iat,
-    events)
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+    exp, jti, events)
+  module: crates/server/src/web/backchannel_logout.rs
   proof:
   - type: fstar
     file: fstar/oidc/Logout.Spec.fst
@@ -5878,16 +6032,23 @@ openid_logout:
     document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   tests:
   - crates/server/src/oidc/session/tests.rs
+  - crates/server/src/web/backchannel_logout/tests/profile.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery.rs
+  - crates/server/src/web/backchannel_logout/tests/kms.rs
   ci_check: oidc-backchannel-logout-claims
-  status: verified
-  runtime_link: crates/server/src/oidc/session/tests.rs
+  status: partial
+  runtime_link: crates/server/src/web/backchannel_logout.rs
   trace:
     kind: guard
     fstar: fstar/oidc/Logout.Spec.fst#build_backchannel_logout_token_claims
     rust: crates/server/src/web/backchannel_logout.rs#build_backchannel_logout_claims
-    test: crates/server/src/web/upstream_tests/oauth_forms_logout.rs
+    test: crates/server/src/web/backchannel_logout/tests/profile.rs
   notes:
-  - Verified by `crates/server/src/oidc/session/tests.rs` (iss/aud/iat/events + sub/sid policy).
+  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
+  - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
+  - The id_token_hint consumer rejects logout+jwt and application/logout+jwt case-insensitively and rejects the exact back-channel logout event key after signature verification and duplicate-safe typed decoding, including JWT and untyped legacy tokens. Signed finite tests isolate each guard and preserve ordinary ID Token compatibility.
+  - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
+  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
 - id: OIDC-3-004
   section: Back-Channel Logout
   requirement: MUST

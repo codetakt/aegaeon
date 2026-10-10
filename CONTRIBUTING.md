@@ -77,9 +77,28 @@ nix build .#verify-dudect
 Local helpers:
 
 ```bash
-cargo xtask kani
+cargo xtask kani --scope diagnostic
+nix develop .#verification --command bash tests/constant_time/run.sh
 cargo xtask dudect
 ```
+
+Kani arguments are forwarded to the evidence runner; no arguments select its full
+scope. The two legacy dudect helpers cover comparison, HMAC, Ed25519, RSA and JWE,
+using their existing `cc` and `gcc` compiler routes respectively. They are separate
+from the formal Nix dudect lane above. They fail on a harness/process/result fault,
+state 0, or any individual p-value below 0.01; higher warning-band values retain
+existing behavior. Reports retain maximum p and `num_traces=20000` as configured
+minimum batch metadata, not measured or statistically admitted traces. State 1
+means no leakage evidence yet and includes warm-up or insufficient statistics.
+
+Each legacy attempt retains raw outputs under `artifacts/ct/dudect/runs/` and
+archives previous reports before running. Only a complete accepted attempt
+publishes the stable `report.json`. The C schedules and statistical limitations
+remain unchanged; these helpers do not establish universal constant-time behavior.
+
+OpenAPI remains available as `cargo xtask openapi --check`; it enables the optional
+OpenAPI feature once when needed. Kani, dudect and help do not build the server as
+an xtask dependency. CI selects the feature directly in its existing drift check.
 
 Verification logs are written under `artifacts/` (ignored by default).
 
@@ -101,7 +120,7 @@ resulting diffs as a single, focused change.
 
 ```bash
 # Low*/KaRaMeL extraction (JOSE)
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 
 # EverParse batch generation
 scripts/extraction/run_everparse_batch.sh

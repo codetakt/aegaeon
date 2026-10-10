@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-07-07
+Last updated: 2026-10-01
 
 Status: current implementation baseline
 
@@ -41,6 +41,153 @@ The current broker baseline includes:
 
 Configuration transactions are the current federation-management surface. A separate top-level
 federation resource is not required for the delivered posture.
+
+## Upstream ID Token Hash Claims
+
+For an already admitted and verified PS256, PS384 or PS512 ID Token signature, Aegaeon
+validates supplied `at_hash` and `c_hash` using SHA-256, SHA-384 or SHA-512 respectively:
+the leftmost half of the digest is encoded as unpadded base64url. The original signature
+algorithm remains attached to the token. Signature selection, discovery advertisement,
+key admission and hash-claim optionality are unchanged. A supplied hash requires the
+corresponding access token or authorization code; omitted code-flow hash claims remain optional.
+
+The server's hash adapter selects the existing RS256/384/512 digest operation when calling
+the Low* hash runtime for a PSS signature. This selects a digest only; it does not reinterpret
+the signature as RSA PKCS#1 v1.5. The extracted dispatcher and public FFI helper retain their
+existing accepted-name domain. The Rust fallback uses the same SHA family. The `verified-claim`
+profile continues to reject unavailable or failed required hash runtime operations.
+
+This follows OpenID Connect Core errata set 2 §§3.1.3.6–3.1.3.8 and 3.3.2.11 with the
+RSA-PSS digest associations in RFC 7518 §3.5. Finite signed-token and runtime-vector tests
+cover the server adapter; the new PSS mapping does not expand the extracted proof domain.
+No migration, environment setting or signature-algorithm enablement is introduced.
+
+## Federation Signing-Key Endorsements
+
+Fresh resolution and cache reconstruction verify retained compact JWS artifacts against the
+current configured trust anchor. Each subordinate statement supplies the endorsed keys used to
+verify the next lower statement; the leaf configuration must verify with its superior's endorsed
+keys as well as its self-published keys. The anchor configuration must verify with the configured
+anchor keys. Each subordinate signature must also verify with its issuer configuration's keys.
+Self-published intermediate keys alone do not authorize lower signatures. Overlapping endorsed
+and self-published key sets are supported during rollover;
+complete key-set equality is not required.
+
+The internal cache layout remains `[leaf configuration, subordinate statement, superior
+configuration, ...]`. Intermediate configurations are discovery artifacts, not extra normative
+Trust Chain links. Invalid candidate paths backtrack within the existing resolution limits.
+Cache reads and fresh resolver callbacks reconstruct metadata from the signed bytes and recheck
+the requested leaf and current anchor, so detached parsed metadata cannot override those bytes.
+
+Custom `FederationFetcher` implementations must retain compact JWS in both `*_with_jws` methods
+to support either public trust-chain resolver. Decoded-only implementations remain source
+compatible through trait defaults but resolution fails explicitly when JWS evidence is absent.
+Existing caches require no migration and are revalidated on use; stale or invalid chains trigger
+fresh resolution. Anchor key changes require an explicit configuration update.
+
+This boundary implements the signing-key endorsement requirements common to OpenID Federation
+1.0 sections 3.2, 4, and 10.2 and Federation 1.1. It does not adopt a new Federation edition or establish
+complete header, statement-profile, metadata-policy, or constraints conformance.
+
+## Federation Signed Parent Relation
+
+Every subordinate statement's issuer must exactly match an `authority_hints` entry in its
+subject's signed Entity Configuration. The comparison is case sensitive and does not normalize
+URLs or remove trailing slashes. Missing, null, empty, or nonmatching hints reject that path even
+when its signatures and key endorsements are valid. Additional hints are permitted when one
+matches the immediate superior. A configured terminal anchor may itself have superiors; its
+hints do not add another edge to the selected path.
+
+Fresh resolution, custom resolver callbacks, and cache reconstruction check this relation from
+retained compact JWS. Final path validation uses signed hints; detached parsed hints cannot replace
+them. Invalid cache entries still trigger fresh resolution, and invalid fresh paths
+are neither returned as accepted nor written to the cache. Existing caches need no migration.
+
+This implements the parent-relation requirement in the adopted OpenID Federation 1.0,
+2026-02-17 edition, section 3.2. It does not establish full statement-profile conformance.
+
+## Federation JWT Purpose And Key Identification
+
+Entity Statement verification, including Entity Configurations and every statement retained in a
+trust chain, requires the exact protected header `typ: entity-statement+jwt`. Trust Mark
+verification requires `typ: trust-mark+jwt`. Missing, null, empty, or differently typed/purposed
+values are rejected even when the signature could otherwise verify. No alternative Trust Mark
+media-type profile is configured.
+
+Both verification boundaries require a nonempty string `kid` that exactly selects a supplied
+signing key. An absent key ID cannot fall back to the only available key. Type and key identifiers
+are case sensitive; key IDs are opaque and are not trimmed, including IDs containing whitespace.
+Duplicate protected headers remain rejected by the existing JWS parser. These requirements are
+scoped to Federation verification and do not change generic JWS, ID Token, or DPoP handling.
+
+Federation key sets reject duplicate named `kid` values across the whole set before selecting
+signature-capable keys. The rule applies to parsed Entity Statement and stored trust-anchor JWKS,
+as well as directly supplied verification keys. Repeated IDs reject even when the key material is
+identical or only one repeated key permits signature verification. Case-distinct and
+whitespace-distinct IDs remain distinct. Empty key arrays and keys without an optional `kid` retain
+their existing parsing behavior; signature verification fails when no usable matching key exists.
+This admission rule does not implement the separate all-key mandatory-`kid` profile requirement.
+
+Fresh and cached trust-chain verification use the same checks. Existing cached statements with
+missing or invalid purpose/key identification are rejected and trigger fresh resolution; there is
+no database migration. The explicitly unverified Entity Statement payload parser remains a
+discovery/parser API and does not establish acceptance.
+
+The scoped requirements are grounded in OpenID Federation 1.0, 2026-02-17 edition, sections 3,
+3.1.1, 3.2, and 7. Entity Statement header `kid` must be nonempty; the Trust Mark verifier retains
+the same product admission policy. This does not change the adopted edition or establish full
+statement profile conformance, Trust Mark issuer accreditation, or delegation validation.
+
+## Federation Statement Claim Admission
+
+Signature verification admits the exact verified payload through the existing structural JSON
+backend and a common claim-profile gate. Duplicate members and trailing JSON are rejected before
+projection. The public unverified parser remains structural; typed validation cannot reconstruct
+raw null presence or discarded extensions. Signature and profile success alone do not establish
+requested identity, freshness, anchor trust, or complete-chain acceptance.
+
+Entity Identifiers require HTTPS authority and host without userinfo, query, fragment, whitespace,
+control characters, or backslashes. Strings retain their original spelling for identity checks.
+Endpoint URLs permit query parameters. Shape checks do not retrieve unused identifiers or endpoints;
+actual retrieval retains the existing SSRF, domain, and rebinding protections.
+
+Both configurations and subordinate statements require a nonempty signing JWKS. Every original
+member must have a unique string `kid`, including unused keys, before material parsing. Existing
+strict material admission remains; this does not establish full mixed-key or public-key conformance.
+Configuration-only hints and Trust Mark fields and subordinate-only constraints, metadata policy,
+policy critical members, and source endpoint reject wrong-kind presence, including null. Hints,
+when present, must be nonempty identifier arrays. Metadata entity types must be objects and their
+immediate parameters non-null; null inside structured parameter values remains supported.
+
+Trust Mark envelopes require the exact `trust_mark_type` and a signed compact JWT whose raw type
+matches the envelope. Owner and issuer maps receive shape and identifier checks. This does not
+verify Trust Mark accreditation, issuer trust, or delegation. Any present payload `crit` or
+`metadata_policy_crit` is refused because no corresponding critical extension is implemented.
+Entity Statements explicitly prohibit `trust_chain` and `peer_trust_chain` protected headers.
+
+Every known superior in a selected chain must publish its own signed `federation_entity` metadata
+with HTTPS fetch and list endpoints. Subordinate statements cannot supply these two endpoints.
+Fetch URL construction requires the advertised endpoint; the inferred well-known fetch fallback
+has been removed. A first entity may also offer subordinate services, and a configured terminal
+anchor may have superiors. Those path positions do not assert global leaf or rootless roles.
+
+The upstream OIDC consumer additionally rejects raw `aud` and `trust_anchor` presence, even null,
+in every selected statement, and requires `openid_provider` in the signed first configuration.
+An empty provider object passes this role check, with resolved issuer, endpoint, and key checks
+still required. This context gate applies to fresh and cached use. Generic Federation processing
+continues to ignore these ordinary extension claims; a core-valid cached chain need not be valid
+for OIDC authorization.
+
+Existing cache entries need no migration. Invalid core/profile entries are refused on use and
+follow the existing fresh-resolution fallback, including cache replacement after successful
+resolution. Test-only statement builders omit empty hints and require explicit subject Federation public
+keys, separate from issuer keys and registered OAuth client keys. These builders do not activate
+public Federation producer endpoints.
+
+These changes implement common subsets of Federation 1.0/1.1 sections 3.1, 3.2, 5.1.1, 8.1, and 8.2,
+and ordinary OIDC restrictions shared by Federation 1.0 and Federation Connect 1.1 section 3.2.
+Full metadata-policy, constraints, key-material, temporal-domain, and individual entity admission
+remain separate obligations. No edition adoption or new formal assurance follows from these checks.
 
 ## Upstream Discovery Endpoint Admission
 

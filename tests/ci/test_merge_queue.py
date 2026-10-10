@@ -199,22 +199,55 @@ class SignatureTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
     def test_classifier_loaded_from_protected_main_not_speculative_parent(self):
+        legacy_policy = json.loads((ROOT / "ci/pr-policy.json").read_text())
+        for key in (
+            "plan_envelope_version",
+            "component_plan_version",
+            "components",
+            "infrastructure_modules",
+            "supplemental_lanes",
+        ):
+            legacy_policy.pop(key, None)
+        classifier = (ROOT / "scripts/ci/pr_plan.py").read_bytes()
+        policy = json.dumps(legacy_policy).encode()
+        sources = {
+            f"{BASE}:scripts/ci/pr_plan.py": classifier,
+            f"{BASE}:ci/pr-policy.json": policy,
+        }
+        expected = {
+            "version": 1,
+            "base": BASE,
+            "head": HEAD,
+            "scope": "full",
+            "selected": legacy_policy["scopes"]["full"],
+            "changes": [],
+        }
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "plan.json"
 
-            def run(argv, **kwargs):
+            def show(argv, **_kwargs):
+                assert argv[:2] == ["git", "show"]
+                return sources[argv[2]]
+
+            def execute(argv, **kwargs):
                 assert argv[argv.index("--base") + 1] == BASE
                 assert argv[argv.index("--head") + 1] == HEAD
+                self.assertEqual((argv[1], Path(argv[2]).read_bytes()), ("-I", classifier))  # noqa: PT009 - active under -O
+                assert Path(argv[argv.index("--policy") + 1]).read_bytes() == policy
                 assert "GITHUB_OUTPUT" not in kwargs["env"]
-                output.write_text('{"scope":"full"}')
+                output.write_text(json.dumps(expected))
 
             with (
-                patch("validate_change.subprocess.check_output", return_value=b"trusted\n") as show,
-                patch("validate_change.subprocess.run", side_effect=run),
+                patch("validate_change.subprocess.check_output", side_effect=show) as reads,
+                patch("validate_change.subprocess.run", side_effect=execute),
             ):
-                result = classify({"base": BASE, "source_head": HEAD}, output)
-            assert result["scope"] == "full"
-            assert all(call.args[0][-1].startswith(BASE + ":") for call in show.call_args_list)
+                result = classify({"base": BASE, "event_base": PARENT, "source_head": HEAD}, output)
+            assert result == expected
+            assert "component_plan" not in result
+            assert [call.args[0] for call in reads.call_args_list] == [
+                ["git", "show", f"{BASE}:scripts/ci/pr_plan.py"],
+                ["git", "show", f"{BASE}:ci/pr-policy.json"],
+            ]
 
     def test_missing_classifier_retains_full_fallback(self):
         with patch(
@@ -420,6 +453,9 @@ class WorkflowTests(unittest.TestCase):
                         assert step["with"]["persist-credentials"] is False
 
     def test_group_docs_lints_range_without_fabricating_title(self):
-        script = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        script = (ROOT / "scripts/ci/run_docs_metadata.sh").read_text()
+        full = (ROOT / "scripts/ci/run_docs.sh").read_text()
+        assert "python3 -m unittest discover -s tests/ci -p 'test_*.py' -v" in full
+        assert "bash scripts/ci/run_docs_metadata.sh" in full
         assert 'scripts/commitlint-range.sh --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA"' in script
         assert "if [[ $GITHUB_EVENT_NAME == pull_request ]]; then" in script

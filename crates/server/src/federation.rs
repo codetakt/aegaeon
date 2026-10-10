@@ -38,8 +38,10 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 mod fetcher;
+mod headers;
 mod keys;
 mod metadata_policy;
+mod profile;
 mod raw_payload;
 mod repositories;
 mod trust_chain;
@@ -53,6 +55,10 @@ pub use fetcher::{
 };
 pub use keys::{decode_jwk_material, verification_key_for_alg, DecodedKeyMaterial};
 pub use metadata_policy::apply_metadata_policy;
+#[cfg(test)]
+pub(crate) use profile::validate_federation_jwks;
+pub(crate) use profile::validate_oidc_upstream_chain;
+pub(crate) use repositories::resolve_trust_chain_artifacts_cached_with;
 pub use repositories::{
     resolve_trust_chain_cached, resolve_trust_chain_cached_with,
     resolve_trust_chain_jwts_cached_with, spawn_cache_cleanup, valid_federation_cache_max_entries,
@@ -166,58 +172,27 @@ pub fn parse_entity_statement_unverified(
 ///
 /// Used for subordinate statements (verify against the issuer's known JWKS).
 ///
-/// Enforces Tamarin property `subordinate_statement_authenticity`:
-/// the JWS signature must be verifiable with a key from the provided JWKS.
+/// Checks the signature and common statement claim profile. Expected identity,
+/// current time, configured trust and complete-chain admission remain contextual.
 ///
 /// # Errors
 ///
 /// Returns [`FederationError`] when no suitable key is available, signature verification fails, or
-/// the payload cannot be parsed as an entity statement.
+/// the protected header lacks the Entity Statement purpose or a nonempty key ID, or the
+/// supplied JWKS contains duplicate key IDs, or the payload cannot be parsed as an entity statement.
 pub fn verify_entity_statement(
     jws_compact: &str,
     issuer_jwks: &JwkSet,
 ) -> Result<EntityStatement, FederationError> {
     let parsed = Jws::from_compact(jws_compact)?;
-    let alg = &parsed.header.alg;
+    headers::validate_entity_statement_headers(jws_compact)?;
+    let key =
+        keys::select_federation_signing_key(issuer_jwks, &parsed.header, "entity-statement+jwt")?;
+    let decoded = decode_jwk_material(key)?;
+    let verification_key = verification_key_for_alg(key, &decoded, &parsed.header.alg)?;
     let ctx = JoseContext::default();
-
-    let mut last_err = None;
-    for key in issuer_jwks.signature_keys() {
-        // If JWS header specifies kid, only try matching keys
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
-        }
-
-        let decoded = match decode_jwk_material(key) {
-            Ok(d) => d,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        let vk = match verification_key_for_alg(key, &decoded, alg) {
-            Ok(vk) => vk,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        match jws::verify_compact_with_context(jws_compact, vk, &ctx) {
-            Ok(payload_bytes) => {
-                let stmt = raw_payload::parse_entity_statement_payload(&payload_bytes)?;
-                return Ok(stmt);
-            }
-            Err(e) => {
-                last_err = Some(FederationError::Jws(e));
-            }
-        }
-    }
-
-    Err(last_err.unwrap_or(FederationError::NoSuitableKey))
+    let payload_bytes = jws::verify_compact_with_context(jws_compact, verification_key, &ctx)?;
+    profile::validate_verified_payload(&payload_bytes)
 }
 
 /// Verify a self-signed Entity Configuration.
@@ -291,6 +266,9 @@ pub fn validate_temporal(
 /// # Errors
 ///
 /// Returns [`FederationError`] when required claims are missing or temporal validation fails.
+/// This typed gate checks representable claims only; it cannot recover discarded
+/// unknown claims or distinguish absent fields from raw null. Signed admission
+/// additionally applies the raw profile gate in [`verify_entity_statement`].
 pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(), FederationError> {
     if stmt.iss.is_empty() {
         return Err(FederationError::MissingField("iss"));
@@ -298,10 +276,7 @@ pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(),
     if stmt.sub.is_empty() {
         return Err(FederationError::MissingField("sub"));
     }
-    // Self-signed entity configurations must include JWKS
-    if stmt.is_self_signed() && stmt.jwks.is_none() {
-        return Err(FederationError::MissingField("jwks"));
-    }
+    profile::validate_typed(stmt)?;
     validate_temporal(stmt, now, DEFAULT_CLOCK_SKEW_SECS)
 }
 

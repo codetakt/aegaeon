@@ -90,12 +90,15 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "ed25519-dalek",
+ "form_urlencoded",
  "hdrhistogram",
  "jsonwebtoken",
  "num-traits",
  "prometheus",
  "rand 0.8.6",
+ "rcgen",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -4703,6 +4706,7 @@ dependencies = [
  "aegaeon-server",
  "anyhow",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

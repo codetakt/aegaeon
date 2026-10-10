@@ -1,0 +1,117 @@
+name: Documentation and CI helpers
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        required: true
+        type: string
+      source-head:
+        required: true
+        type: string
+      test-sha:
+        required: true
+        type: string
+      pr-title:
+        required: false
+        type: string
+        default: ""
+      pr-author:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CI_HELPER_TEST_SHA: ${{ inputs.test-sha }}
+
+jobs:
+  metadata:
+    name: Documentation metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.test-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix-ci
+      - name: Check documentation and PR metadata
+        env:
+          PR_BASE_SHA: ${{ inputs.base }}
+          PR_HEAD_SHA: ${{ inputs.source-head }}
+          PR_TITLE: ${{ inputs.pr-title }}
+          PR_AUTHOR_LOGIN: ${{ inputs.pr-author }}
+        run: nix develop .#docs --command bash scripts/ci/run_docs_metadata.sh
+
+  helpers:
+    name: CI helper tests (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        group: [sanitizer, security-fuzz, other]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.test-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix-ci
+      - name: Run every helper in the module group
+        env:
+          HELPER_GROUP: ${{ matrix.group }}
+          PR_BASE_SHA: ${{ inputs.base }}
+        run: |
+          # Expand variables inside the Nix shell.
+          # shellcheck disable=SC2016
+          nix develop .#docs --command bash -c '
+            PYTHONUNBUFFERED=1 PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" \
+              python3 scripts/ci/run_ci_helpers.py run \
+              --group "$HELPER_GROUP" --receipt "$RUNNER_TEMP/ci-helper-$HELPER_GROUP.json"
+          '
+
+      - name: Preserve helper accounting
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-helper-${{ matrix.group }}
+          path: ${{ runner.temp }}/ci-helper-${{ matrix.group }}.json
+          if-no-files-found: error
+
+  complete:
+    name: Complete documentation and helper gate
+    if: ${{ always() }}
+    needs: [metadata, helpers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.test-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-nix-ci
+      - name: Retrieve complete helper accounting
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ci-helper-*
+          path: ${{ runner.temp }}/ci-helper-accounting
+          merge-multiple: true
+      - name: Require metadata and complete helper execution
+        env:
+          CI_HELPER_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          # Expand variables inside the Nix shell.
+          # shellcheck disable=SC2016
+          nix develop .#docs --command bash -c '
+            PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" \
+              python3 scripts/ci/run_ci_helpers.py aggregate \
+              --directory "$RUNNER_TEMP/ci-helper-accounting"
+          '

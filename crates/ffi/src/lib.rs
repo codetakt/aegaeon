@@ -18,6 +18,8 @@ use std::slice;
 mod aead_bounds;
 pub mod dcr;
 pub mod dcr_parser;
+#[cfg(not(kani))]
+mod dpop_uri;
 pub mod id_token;
 pub mod jose_header;
 pub mod raw_json_structural;
@@ -1473,14 +1475,9 @@ pub fn verify_dpop_with_iat_window(
         return None;
     }
 
-    // RFC 9449: htu claim MUST NOT include query or fragment parts.
-    if claims.htu.contains('?') || claims.htu.contains('#') {
-        return None;
-    }
-
-    // RFC 9449 Section 4.3: compare htu ignoring query and fragment parts of the request URI.
-    let expected_htu = strip_query_and_fragment(uri);
-    if claims.htu != expected_htu {
+    // RFC 9449 §4.3: compare validated HTTP URI components after RFC 3986
+    // normalization. The signature above covers the original, unmodified bytes.
+    if !dpop_uri::matches(&claims.htu, uri) {
         return None;
     }
 
@@ -1498,19 +1495,6 @@ pub fn verify_dpop_with_iat_window(
         jti: claims.jti,
         nonce: claims.nonce,
     })
-}
-
-#[cfg(not(kani))]
-fn strip_query_and_fragment(uri: &str) -> &str {
-    let query_idx = uri.find('?');
-    let fragment_idx = uri.find('#');
-    let cut = match (query_idx, fragment_idx) {
-        (Some(q), Some(f)) => q.min(f),
-        (Some(q), None) => q,
-        (None, Some(f)) => f,
-        (None, None) => return uri,
-    };
-    &uri[..cut]
 }
 
 #[cfg(kani)]

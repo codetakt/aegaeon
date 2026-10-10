@@ -232,7 +232,7 @@ impl TokenIssuer {
         self.token_store.try_cleanup_expired()
     }
 
-    /// Get the current count of tracked states (for monitoring/debugging).
+    /// Count distinct state values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn state_count(&self) -> usize {
@@ -240,12 +240,12 @@ impl TokenIssuer {
             .expect("test token issuer state count should succeed")
     }
 
-    /// Get the current count of tracked states (for monitoring/debugging), reporting backend failures.
+    /// Count distinct state observations, reporting backend failures.
     pub fn try_state_count(&self) -> Result<usize, String> {
         self.code_store.try_state_count()
     }
 
-    /// Get the current count of tracked nonces (for monitoring/debugging).
+    /// Count distinct nonce values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn nonce_count(&self) -> usize {
@@ -253,7 +253,7 @@ impl TokenIssuer {
             .expect("test token issuer nonce count should succeed")
     }
 
-    /// Get the current count of tracked nonces (for monitoring/debugging), reporting backend failures.
+    /// Count distinct nonce observations, reporting backend failures.
     pub fn try_nonce_count(&self) -> Result<usize, String> {
         self.code_store.try_nonce_count()
     }

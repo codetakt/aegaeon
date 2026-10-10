@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-17 AS build
+FROM maven:3-eclipse-temurin-21 AS build
 
 ARG SUITE_REPO=https://github.com/openid-certification/conformance-suite.git
 ARG SUITE_REF=master
@@ -14,7 +14,7 @@ RUN git rev-parse HEAD > /src/SUITE_COMMIT.txt
 
 RUN mvn -B clean package -DskipTests=true
 
-FROM eclipse-temurin:17
+FROM eclipse-temurin:25
 
 WORKDIR /opt/suite
 COPY --from=build /src/target/*.jar /opt/suite/

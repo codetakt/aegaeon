@@ -19,129 +19,130 @@ evidence gates before promoting any block.
 
 ### Headline
 
-Aegaeon、Verified Core の WASM と公式 SDK を公開
+Aegaeon Releases Verified Core WASM and Official SDKs
 
 ### Subheadline
 
-フロントエンド統合の実装リスクを削減し、安全な導入を加速
+Reducing implementation risk in frontend integration and accelerating safe adoption
 
 ### Lead
 
-Aegaeon は、Verified Core を WASM として提供し、TypeScript / Rust SDK を公開しました。
-トークン検証、DPoP など実装差分が事故につながりやすい領域を共通化し、統合実装のばらつきを抑制します。
+Aegaeon now provides Verified Core as WASM and has released TypeScript / Rust SDKs.
+It standardizes areas such as token validation and DPoP, where implementation differences can readily lead to incidents, to reduce variation in integration implementations.
 
 ### Body
 
-- Verified Core を WASM として提供し、統合側の実装差分を減らします
-- 公式 SDK により、推奨の統合パターンと安全なデフォルトを標準化します
-- 既存システムへの組み込みを短期間で進めやすくし、導入の再現性を高めます
-- 管理 API クライアントにより、運用統制をアプリケーション側から一貫して扱えるようにします
+- Providing Verified Core as WASM reduces implementation differences on the integration side
+- Official SDKs standardize recommended integration patterns and secure defaults
+- Makes it easier to embed into existing systems in less time and improves repeatability of adoption
+- The management API client enables consistent handling of operational controls from the application side
 
 ### Quote template
 
-「導入の成否は、統合実装の品質と再現性で決まります。WASM と SDK で危険な再発明を減らし、
-運用統制まで含めて導入を加速します。」
+"Successful adoption depends on the quality and repeatability of integration implementations. WASM and SDKs
+reduce risky reinvention and accelerate adoption, including operational controls."
 
-— `[代表者名・役職]`
+— `[representative name and title]`
 
 ### Availability block
 
 - SDK: `TypeScript / Rust`
-- Verified Core: `WASM 提供`
-- 資料: `統合ガイド`, `更新版 Spec Sheet`
+- Verified Core: `Available as WASM`
+- Materials: `Integration guide`, `Updated Spec Sheet`
 
 ### CTA
 
-統合ガイドと更新版 Spec Sheet は公開ページから入手できます。評価・導入相談を受け付けています。
+The integration guide and updated Spec Sheet are available on the public page. We welcome evaluation and adoption inquiries.
 
 ### Whitepaper title
 
-フロント統合を事故らせない：Verified Core WASM と SDK で OAuth/OIDC 実装リスクを削減
+Preventing Frontend Integration Incidents: Reducing OAuth/OIDC Implementation Risk with Verified Core WASM and SDKs
 
 ## Aegaeon v0.2.0 Education Ready
 
 ### Headline
 
-Aegaeon、LTI 1.3 準拠の Education Ready を提供開始
+Aegaeon Launches LTI 1.3-Compliant Education Ready
 
 ### Subheadline
 
-教育機関向けの導入手順と運用統制を標準化
+Standardizing adoption procedures and operational controls for educational institutions
 
 ### Lead
 
-Aegaeon は、LTI 1.3 準拠の Education Ready を提供開始しました。教育機関・教育サービス
-事業者が求める導入容易性と、監査、鍵運用、RBAC、設定変更管理などの運用統制を一体で提供します。
+Aegaeon has launched LTI 1.3-compliant Education Ready. It brings together the ease of adoption
+that educational institutions and education service providers need with operational controls
+such as audits, key operations, RBAC, and configuration change management.
 
 ### Body
 
-- LTI 1.3 準拠により、教育機関での利用をスムーズに開始できます
-- 鍵運用、監査、RBAC、設定変更管理を標準装備し、長期運用を支援します
-- 既存 LMS・教育サービスとの統合を前提に、導入の再現性を高めます
-- セキュリティ既定値を維持しながら、教育現場の要件に合わせた運用を可能にします
+- LTI 1.3 compliance enables a smooth start for use in educational institutions
+- Key operations, audits, RBAC, and configuration change management are included as standard to support long-term operations
+- Improves repeatability of adoption with integration into existing LMS and education services in mind
+- Enables operations tailored to educational requirements while maintaining secure defaults
 
 ### Quote template
 
-「教育は運用期間が長く、統制と監査が重要です。Aegaeon は導入のしやすさと、事故らない
-運用を同時に提供します。」
+"Education involves long operational lifetimes, making controls and audits essential.
+Aegaeon provides both ease of adoption and incident-free operation."
 
-— `[代表者名・役職]`
+— `[representative name and title]`
 
 ### Availability block
 
-- `Education Ready パッケージ`
-- `教育向け統合ガイド`
-- `更新版 Spec Sheet`
+- `Education Ready package`
+- `Education integration guide`
+- `Updated Spec Sheet`
 
 ### CTA
 
-教育向け統合ガイドと更新版 Spec Sheet は公開ページから入手できます。評価・導入相談を受け付けています。
+The education integration guide and updated Spec Sheet are available on the public page. We welcome evaluation and adoption inquiries.
 
 ### Whitepaper title
 
-教育機関がすぐ使える LTI 1.3：導入と運用統制を標準化した認証認可基盤
+LTI 1.3 Ready for Immediate Use by Educational Institutions: An Authentication and Authorization Foundation with Standardized Adoption and Operational Controls
 
 ## Aegaeon SAML Facade v0.1.0
 
 ### Headline
 
-Aegaeon、SAML Facade と監査可能な属性マッピング機構を提供開始
+Aegaeon Launches SAML Facade and Auditable Attribute Mapping
 
 ### Subheadline
 
-OIDC を中核に据えたまま、レガシーエンタープライズ統合を実現
+Enabling legacy enterprise integration while keeping OIDC at the core
 
 ### Lead
 
-Aegaeon は、SAML Facade と属性マッピング機構を提供開始しました。OIDC を中核に据えながら、
-SAML を必要とする既存環境との統合を境界化し、属性変換や個別要件を監査・変更管理の対象として
-統制下で扱えるようにします。
+Aegaeon has launched SAML Facade and an attribute mapping mechanism. While keeping OIDC at the core,
+it places an explicit boundary around integration with existing environments that require SAML,
+enabling attribute transformations and specific requirements to be governed through audits and change management.
 
 ### Body
 
-- OIDC を中核に維持しながら、SAML 統合を明示的な境界として吸収します
-- 属性マッピングを監査・変更管理の対象とし、例外設定の恒久化を抑えます
-- 組織固有の要件に対応しつつ、統合運用の再現性と統制を確立します
-- 既存システムからの段階移行を進めやすくし、移行時の運用負債を抑制します
+- Accommodates SAML integration at an explicit boundary while keeping OIDC at the core
+- Brings attribute mapping under audits and change management to help prevent exception settings from becoming permanent
+- Establishes repeatability and control in integration operations while accommodating organization-specific requirements
+- Makes gradual migration from existing systems easier and reduces operational debt during migration
 
 ### Quote template
 
-「統合の難しさは技術そのものより、例外をどう運用し続けるかにあります。Aegaeon は SAML と
-属性マッピングを統制下に置くことで、移行と長期運用を両立させます。」
+"The difficulty of integration lies less in the technology itself than in how exceptions are managed over time.
+By keeping SAML and attribute mapping under control, Aegaeon supports both migration and long-term operations."
 
-— `[代表者名・役職]`
+— `[representative name and title]`
 
 ### Availability block
 
 - `SAML Facade`
-- `属性マッピング機構`
-- `エンタープライズ統合ガイド`
-- `更新版 Spec Sheet`
+- `Attribute mapping mechanism`
+- `Enterprise integration guide`
+- `Updated Spec Sheet`
 
 ### CTA
 
-エンタープライズ統合ガイドと更新版 Spec Sheet は公開ページから入手できます。評価・導入相談を受け付けています。
+The enterprise integration guide and updated Spec Sheet are available on the public page. We welcome evaluation and adoption inquiries.
 
 ### Whitepaper title
 
-OIDC を中核に、レガシー統合を吸収する：SAML Facade と監査可能な属性マッピング
+Accommodating Legacy Integration with OIDC at the Core: SAML Facade and Auditable Attribute Mapping

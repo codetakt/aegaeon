@@ -1,0 +1,176 @@
+name: Setup component controller bootstrap
+description: Check the fixed initial B runtime and source custody before any package import.
+
+# Initial platform executables, immutable remote action resolution, download TLS,
+# privileged Nix store integrity, fixed cache keys and token custody are external
+# trust premises. This action does not establish hosted or product assurance.
+outputs:
+  interpreter:
+    description: Exact initial interpreter after the custody checks succeed.
+    value: ${{ steps.bootstrap.outputs.interpreter }}
+  source-root:
+    description: Root-owned readonly initial B source projection.
+    value: ${{ steps.bootstrap.outputs.source-root }}
+
+runs:
+  using: composite
+  steps:
+    - name: Reject candidate or configurable initial setup
+      shell: bash
+      env:
+        ACTION_SOURCE: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        [[ "$(uname -s)-$(uname -m)" == Linux-x86_64 ]]
+        action_root=$(realpath -e "$ACTION_SOURCE/../../..")
+        [[ "$action_root" =~ /_actions/codetakt/aegaeon/[0-9a-f]{40}$ ]]
+        [[ "$ACTION_SOURCE" == "$action_root/.github/actions/setup-component-controller" ]]
+        workspace=$(realpath -e "$GITHUB_WORKSPACE")
+        [[ "$action_root" != "$workspace" && "$action_root" != "$workspace/"* ]]
+        for name in NIX_CONFIG NIX_USER_CONF_FILES NIX_CONF_DIR NIX_PATH NIX_REMOTE \
+                    NIXPKGS_CONFIG NIX_BUILD_SHELL NIX_SSL_CERT_FILE PYTHONPATH PYTHONHOME \
+                    LD_PRELOAD LD_LIBRARY_PATH SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE \
+                    REQUESTS_CA_BUNDLE BASH_ENV ENV HTTP_PROXY HTTPS_PROXY ALL_PROXY \
+                    http_proxy https_proxy all_proxy; do
+          [[ ! -v "$name" ]]
+        done
+
+    - name: Install the independently admitted Nix platform
+      uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      with:
+        extra-conf: |
+          experimental-features = nix-command flakes
+          accept-flake-config = false
+          substituters = https://cache.nixos.org
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+        github-token: ${{ github.token }}
+
+    - name: Verify and install the fixed initial runtime and B sources
+      id: bootstrap
+      shell: bash
+      env:
+        ACTION_SOURCE: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        action_root=$(realpath -e "$ACTION_SOURCE/../../..")
+        [[ "$action_root" =~ /_actions/codetakt/aegaeon/[0-9a-f]{40}$ ]]
+        [[ "$ACTION_SOURCE" == "$action_root/.github/actions/setup-component-controller" ]]
+        sudo -n /usr/bin/env -i PATH=/usr/bin:/bin NIX_USER_CONF_FILES=/dev/null \
+          /bin/bash --noprofile --norc -s -- "$action_root" "$GITHUB_OUTPUT" <<'BOOTSTRAP'
+        set -euo pipefail
+        action_root=$1
+        github_output=$2
+        readonly root=/trusted/component-bootstrap
+        readonly python=/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14
+        readonly runtime=/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env
+        readonly ca=/nix/store/cfd9q3cczhrn2dn8bk4cqx2rxzc7ilj4-nss-cacert-3.126
+        readonly script_hash=c3de8f083817175bb6a1260175950c5ef16ac01691bd73ff8bc1441e4ce3a2c6
+        readonly runtime_hash=ae8887aa20fea043a0d405466fcf7127455813b9e931572f2efcf9cd7c70284d
+        readonly recipe=github:codetakt/aegaeon/91391f8e5c8f753359399cf37d7adaaa6cea4d1c
+        readonly nix=/nix/var/nix/profiles/default/bin/nix
+        nix_flags=(--extra-experimental-features 'nix-command flakes'
+          --option accept-flake-config false --option plugin-files '' --option nix-path ''
+          --option substituters https://cache.nixos.org
+          --option extra-substituters '' --option extra-trusted-public-keys ''
+          --option trusted-public-keys cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=)
+        [[ ! -e "$root" && ! -L "$root" ]]
+        work=$(mktemp -d /run/aegaeon-component-bootstrap.XXXXXXXX)
+        export NIX_CONF_DIR="$work"
+        mounted=false
+        source_created=false
+        stage=source-custody
+        cleanup() {
+          local status=$? cleanup_status=0 outcome_fd=''
+          local setup_status=$status
+          local mount_cleanup_attempted=false
+          trap - EXIT
+          release_failed_mount() {
+            if (( status != 0 || cleanup_status != 0 )) &&
+              [[ "$mounted" == true && "$mount_cleanup_attempted" == false ]]; then
+              mount_cleanup_attempted=true
+              if umount "$root"; then mounted=false; else
+                cleanup_status=1
+                echo 'Owned bootstrap mount cleanup failed; evidence and source retained.' >&2 || :
+              fi
+            fi
+          }
+          # Keep a writable descriptor across sealing; it also avoids reopening
+          # readonly evidence after the final cleanup status is known.
+          if ! exec {outcome_fd}> "$work/outcome.txt"; then
+            cleanup_status=1
+            echo 'Bootstrap outcome could not be opened; observations retained.' >&2 || :
+          fi
+          for entry in "$work"/*; do
+            if [[ -f "$entry" && ! -L "$entry" ]]; then chmod 0444 "$entry" || cleanup_status=1; fi
+          done
+          chmod 0500 "$work" || cleanup_status=1
+          printf 'Private bootstrap observations retained at %s.\n' "$work" >&2 || cleanup_status=1
+          release_failed_mount
+          if (( status == 0 && cleanup_status != 0 )); then status=1; fi
+          if [[ -n "${outcome_fd:-}" ]]; then
+            if ! printf 'stage=%s\nsetup_status=%s\ncleanup_status=%s\nexit_status=%s\nsource_created=%s\nmount_retained=%s\n' \
+              "$stage" "$setup_status" "$cleanup_status" "$status" "$source_created" "$mounted" >&"$outcome_fd"; then
+              cleanup_status=1
+              if (( status == 0 )); then status=1; fi
+              echo 'Bootstrap outcome write failed; retained outcome is incomplete.' >&2 || :
+            fi
+            if ! exec {outcome_fd}>&-; then
+              cleanup_status=1
+              if (( status == 0 )); then status=1; fi
+              echo 'Bootstrap outcome close failed; retained outcome is incomplete.' >&2 || :
+            fi
+          fi
+          # Terminal I/O may fail after the first release decision. Recheck the
+          # same owned-mount obligation; failed unmount is never silently retried.
+          release_failed_mount
+          exit "$status"
+        }
+        trap cleanup EXIT
+        [[ -f "$github_output" && ! -L "$github_output" ]]
+        printf '%s\n' "$action_root" > "$work/action-source.txt"
+        cp "$action_root/ci/component-bootstrap-runtime.json" "$work/component-bootstrap-runtime.json"
+        sha256sum "$action_root/.github/actions/setup-component-controller/action.yml" \
+          "$action_root/scripts/ci/bootstrap_component_controller.py" \
+          "$action_root/ci/component-bootstrap-runtime.json" > "$work/source-before.sha256"
+        [[ "$(sha256sum "$action_root/scripts/ci/bootstrap_component_controller.py" | cut -d' ' -f1)" == "$script_hash" ]]
+        [[ "$(sha256sum "$action_root/ci/component-bootstrap-runtime.json" | cut -d' ' -f1)" == "$runtime_hash" ]]
+        if [[ -e /trusted || -L /trusted ]]; then
+          [[ -d /trusted && ! -L /trusted && "$(stat -c %u /trusted)" == 0 ]]
+          [[ "$(stat -c %a /trusted)" == 755 ]]
+        else
+          install -d -o root -g root -m 0755 /trusted
+        fi
+        install -d -o root -g root -m 0555 "$root"
+        source_created=true
+        install -o root -g root -m 0444 "$action_root/scripts/ci/bootstrap_component_controller.py" "$root/"
+        install -o root -g root -m 0444 "$action_root/ci/component-bootstrap-runtime.json" "$root/"
+        [[ "$(sha256sum "$root/bootstrap_component_controller.py" | cut -d' ' -f1)" == "$script_hash" ]]
+        [[ "$(sha256sum "$root/component-bootstrap-runtime.json" | cut -d' ' -f1)" == "$runtime_hash" ]]
+        mount --bind "$root" "$root"
+        mounted=true
+        mount -o remount,bind,ro,nosuid,nodev,noexec "$root"
+        cat /proc/self/mountinfo > "$work/mountinfo.txt"
+        sha256sum "$root/bootstrap_component_controller.py" "$root/component-bootstrap-runtime.json" > "$work/source-installed.sha256"
+        stage=runtime-realization
+        "$nix" "${nix_flags[@]}" build --no-write-lock-file --no-link "$recipe#ci-controller-python"
+        "$nix" "${nix_flags[@]}" build --no-link --expr "(builtins.getFlake \"$recipe\").inputs.nixpkgs.legacyPackages.x86_64-linux.cacert"
+        stage=nar-verification
+        "$nix" "${nix_flags[@]}" store verify --recursive "$runtime" "$ca"
+        "$nix" "${nix_flags[@]}" path-info --recursive --json "$runtime" "$ca" > "$work/observed.json"
+        predicate="let expected = (builtins.fromJSON (builtins.readFile \"$root/component-bootstrap-runtime.json\")).nar_map;
+          actual = builtins.fromJSON (builtins.readFile \"$work/observed.json\");
+          projected = builtins.mapAttrs (_: row: { inherit (row) narHash narSize references; }) actual;
+          in expected == projected && builtins.length (builtins.attrNames projected) == 35"
+        [[ "$("$nix" "${nix_flags[@]}" eval --impure --json --expr "$predicate")" == true ]]
+        [[ "$(sha256sum "$ca/etc/ssl/certs/ca-bundle.crt" | cut -d' ' -f1)" == 3ba2000fe3d55cb6c41323fabbb105743e2c9422151eea213311538b07b23f5a ]]
+        stage=initial-python-recheck
+        "$python" -I -B "$root/bootstrap_component_controller.py" \
+          --script-sha256 "$script_hash" --runtime-sha256 "$runtime_hash" \
+          --observed-nar-map "$work/observed.json"
+        # The platform output file is an initial platform-custody premise. Write
+        # while the owned-mount EXIT handler can still observe any output error.
+        stage=platform-outputs
+        printf 'interpreter=%s\nsource-root=%s\n' "$python" "$root" >> "$github_output"
+        # Keep the verified source mount and private observations; no admission receipt.
+        stage=complete
+        BOOTSTRAP

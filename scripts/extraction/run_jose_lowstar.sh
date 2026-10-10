@@ -6,41 +6,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/everparse_postprocess.sh"
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-FSTAR_BIN=${FSTAR:-$(command -v fstar.exe || command -v fstar || echo "")}
-if [[ -z $FSTAR_BIN ]]; then
-	echo "[error] fstar.exe not found in PATH." \
-		"Launch via 'nix develop .#verification' or set FSTAR variable." >&2
-	exit 1
-fi
-
-EVERPARSE_BIN=${EVERPARSE:-$(command -v everparse || command -v 3d || echo "")}
-if [[ -z $EVERPARSE_BIN ]]; then
-	if [[ -x "$ROOT/result/bin/everparse" ]]; then
-		EVERPARSE_BIN="$ROOT/result/bin/everparse"
-	else
-		echo "[error] everparse (3d) binary not found." \
-			"Run 'nix build .#everparse' or set EVERPARSE variable." >&2
-		exit 1
-	fi
-fi
-
-EVERPARSE_ROOT="$(dirname "$(dirname "$(readlink -f "$EVERPARSE_BIN")")")"
-
-# Allow callers to override the root that contains the EverParse F* sources.
-EVERPARSE_SOURCE_ROOT="${EVERPARSE_SOURCE_ROOT:-}"
-if [[ -z $EVERPARSE_SOURCE_ROOT ]]; then
-	# Scan for a sibling derivation that ships the src/ tree (e.g., ...-source)
-	while IFS= read -r candidate; do
-		if [[ -d "$candidate/src/3d/prelude" ]]; then
-			EVERPARSE_SOURCE_ROOT="$candidate"
-			break
-		fi
-	done < <(ls -d "$(dirname "$EVERPARSE_ROOT")"/*everparse-* 2>/dev/null)
-fi
-
-if [[ -z $EVERPARSE_SOURCE_ROOT ]]; then
-	EVERPARSE_SOURCE_ROOT="$EVERPARSE_ROOT"
-fi
+source "$ROOT/scripts/extraction/lib/toolchain_preflight.sh"
+extraction_preflight
+FSTAR_BIN=$FSTAR
+KAMEL_BIN=$KAMEL
+KAMEL_ROOT=$KARAMEL_HOME
+EVERPARSE_BIN=$EVERPARSE
+EVERPARSE_ROOT=$EVERPARSE_PREFIX
 
 EVERPARSE_SHARE="$EVERPARSE_SOURCE_ROOT/share/everparse"
 EVERPARSE_LIB="$EVERPARSE_SOURCE_ROOT/lib"
@@ -234,15 +206,6 @@ for dir in "${LOWSTAR_EVERPARSE_INCLUDE_DIRS[@]}"; do
 	LOWSTAR_EVERPARSE_INCLUDE_FLAGS+=(--include "$dir")
 done
 
-if [[ -z ${EVERCRYPT_SRC_DIR:-} ]]; then
-	while IFS= read -r candidate; do
-		if [[ -d "$candidate/share/evercrypt/providers" ]]; then
-			EVERCRYPT_SRC_DIR="$candidate/share/evercrypt"
-			break
-		fi
-	done < <(ls -d /nix/store/*evercrypt* 2>/dev/null | sort -r)
-fi
-
 if [[ -n ${EVERCRYPT_SRC_DIR:-} && -d ${EVERCRYPT_SRC_DIR} ]]; then
 	for candidate in \
 		"$EVERCRYPT_SRC_DIR/providers" \
@@ -269,15 +232,6 @@ if [[ -n ${EVERCRYPT_SRC_DIR:-} && -d ${EVERCRYPT_SRC_DIR} ]]; then
 else
 	echo "[evercrypt] EVERCRYPT_SRC_DIR not set or missing; skipping EverCrypt includes" >&2
 fi
-
-KAMEL_BIN=${KAMEL:-$(command -v kamel || command -v krml || echo "")}
-if [[ -z $KAMEL_BIN ]]; then
-	echo "[error] KaRaMeL (kamel/krml) not found in PATH." \
-		"Install KaRaMeL or enter the verification shell." >&2
-	exit 1
-fi
-
-KAMEL_ROOT="$(dirname "$(dirname "$(readlink -f "$KAMEL_BIN")")")"
 
 OUT_DIR="${ROOT}/generated/lowstar/jose"
 TMP_DIR="/tmp/aegaeon-lowstar"
@@ -759,7 +713,7 @@ fi
 INCLUDE_ARGS=()
 
 # Add F* standard library (ulib)
-FSTAR_ROOT="$(dirname "$(dirname "$(readlink -f "$FSTAR_BIN")")")"
+FSTAR_ROOT=$FSTAR_HOME
 if [[ -d "$FSTAR_ROOT/lib/fstar/ulib" ]]; then
 	INCLUDE_ARGS+=(--include "$FSTAR_ROOT/lib/fstar/ulib")
 	echo "[lowstar] Added F* ulib: $FSTAR_ROOT/lib/fstar/ulib"

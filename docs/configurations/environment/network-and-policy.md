@@ -86,6 +86,35 @@ Earlier versions accepted `b64:true` without its required critical declaration.
 Clients using it must omit `b64`, keep the payload base64url encoded, and sign a
 new proof. No storage migration or configuration change is needed.
 
+DPoP `htm` matches the actual HTTP method exactly, including case (RFC 9449
+section 4.3 item 8 and RFC 9110 section 9.1). `/resource` and `/userinfo` handle
+HEAD with the same authentication checks as GET, require a proof for HEAD, and
+return no response body. `/application/authorization`, which delegates its
+credential validation to UserInfo, also forwards the actual method. UserInfo
+POST continues to require a proof for POST. Resource latency metrics use the
+actual GET or HEAD method with the fixed `/resource` route label.
+
+Both FFI entry points compare `htu` using HTTP(S) URI normalization from RFC
+9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Scheme and host
+case, percent-escape hex case, escaped unreserved characters, dot segments,
+default or empty ports, and an empty path are normalized. For example,
+`HTTPS://ISSUER.EXAMPLE:443/a/../%7Euser` matches
+`https://issuer.example/~user`. Signature verification still covers the
+original JWT bytes.
+
+Path case, repeated and trailing slashes, nondefault ports, trailing host dots,
+numeric host spellings, and escaped reserved delimiters remain distinct.
+`/a%2Fb` does not match `/a/b`. IPv6 literals are validated and compared without
+rewriting their address spelling beyond case. Invalid URI syntax, userinfo,
+non-ASCII raw input, whitespace, backslashes, and malformed escapes are rejected,
+even when the two inputs are identical. The proof's `htu` cannot contain a
+query or fragment; valid query and fragment components on the expected request
+URI are excluded from comparison. No configuration or state migration is needed.
+
+The existing `validate_dpop_htu_for_spec_oracle` remains an exact-string
+equality oracle. Its model does not establish these runtime parsing and
+normalization properties; signed FFI regression tests cover finite examples.
+
 ## Authorization endpoint behaviour
 
 | Variable | Default | Scope | Notes |
@@ -95,7 +124,7 @@ new proof. No storage migration or configuration change is needed.
 | `AEGAEON_ALLOW_DEMO_AUTHORIZE_LOGIN` | `0` | `test` | Enables the demo `/authorize` login shortcut. Keep disabled outside local demos/tests; normal deployments should use the server-handled credential surfaces. |
 | `AEGAEON_AUTHORIZATION_CODE_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback authorization code lifetime in seconds (valid range 1-600). In the supported PostgreSQL-backed runtime, `policy.authorizationCodeTimeToLiveSeconds` is authoritative. |
 | `AEGAEON_STATE_NONCE_TTL_SECS` | _removed_ | `environment` | Removed legacy alias. It is no longer read as a fallback; the supported runtime uses `policy.authorizationCodeTimeToLiveSeconds` and rejects this startup-managed policy variable when it is set. |
-| `AEGAEON_AUTH_CODE_REDIS_URL` | _unset_ | `system` | Redis URL for shared authorization-code, `state`, and `nonce` storage. Must match `AEGAEON_TOKEN_STORE_REDIS_URL` so authorization-code exchange can consume the code and commit issued tokens atomically. |
+| `AEGAEON_AUTH_CODE_REDIS_URL` | _unset_ | `system` | Redis URL for shared single-use authorization codes and `state`/`nonce` observation markers. Repeated RP values refresh their marker TTL; they do not reject issuance. Must match `AEGAEON_TOKEN_STORE_REDIS_URL` so authorization-code exchange can consume the code and commit issued tokens atomically. |
 
 ## Token lifetimes
 

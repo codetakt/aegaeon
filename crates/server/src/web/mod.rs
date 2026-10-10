@@ -14,6 +14,7 @@ mod authorize_reauthentication;
 mod authorize_request;
 mod authorize_validation;
 mod backchannel_logout;
+mod browser_continuation;
 mod client_credentials_authorization;
 mod dcr_client_build;
 mod dcr_configuration;
@@ -171,3 +172,6 @@ mod upstream_tests;
 
 #[cfg(test)]
 mod oauth_conformance_tests;
+
+#[cfg(test)]
+pub(crate) use upstream_metadata::admit_upstream_federation_metadata;
