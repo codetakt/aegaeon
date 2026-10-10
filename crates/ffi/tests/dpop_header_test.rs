@@ -60,8 +60,7 @@ fn dpop_public_key_and_noncritical_extensions_are_accepted() {
             r#", "kid":"test", "use":"sig", "custom":{"label":true}"#,
             r#", "kid":"header-test", "custom":{"label":true}"#,
         ),
-        ("", r#", "b64":true"#),
-        ("", r#", "\u006264":true"#),
+        ("", r#", "custom":{"b64":false,"crit":["b64"]}"#),
     ] {
         assert_header(&header(jwk_extra, header_extra), true);
     }
@@ -103,10 +102,7 @@ fn dpop_every_critical_extension_shape_is_rejected() {
         r#"["b64"]"#,
     ] {
         assert_header(
-            &header(
-                "",
-                &format!(r#", "custom":true, "b64":true, "crit":{value}"#),
-            ),
+            &header("", &format!(r#", "custom":true, "crit":{value}"#)),
             false,
         );
     }
@@ -117,11 +113,22 @@ fn dpop_every_critical_extension_shape_is_rejected() {
 }
 
 #[test]
-fn dpop_unencoded_or_malformed_payload_encoding_is_rejected() {
-    for value in ["false", "null", "1", r#""true""#, "[]", "{}"] {
-        assert_header(&header("", &format!(r#", "b64":{value}"#)), false);
+fn dpop_payload_encoding_extension_is_rejected_for_every_value_and_crit_shape() {
+    for name in ["b64", r"\u006264", r"b\u00364"] {
+        for value in ["true", "false", "null", "1", r#""true""#, "[]", "{}"] {
+            for crit in [
+                "",
+                r#", "crit":null"#,
+                r#", "crit":"b64""#,
+                r#", "crit":[]"#,
+                r#", "crit":["b64"]"#,
+                r#", "crit":["b64","b64"]"#,
+                r#", "\u0063rit":["b64"]"#,
+            ] {
+                assert_header(&header("", &format!(r#", "{name}":{value}{crit}"#)), false);
+            }
+        }
     }
-    assert_header(&header("", r#", "b64":false, "crit":["b64"]"#), false);
 }
 
 #[test]
@@ -137,6 +144,7 @@ fn dpop_duplicate_header_names_including_escaped_aliases_are_rejected() {
         r#", "custom":1, "custom":2"#.to_owned(),
         r#", "custom":1, "\u0063ustom":1"#.to_owned(),
         r#", "b64":true, "b64":true"#.to_owned(),
+        r#", "b64":true, "\u006264":false"#.to_owned(),
     ] {
         assert_header(&header("", &extra), false);
     }
@@ -189,7 +197,7 @@ fn dpop_required_header_and_key_types_remain_enforced() {
 
 #[test]
 fn dpop_allowed_header_does_not_bypass_signature_verification() {
-    let proof = sign_header(&header("", r#", "b64":true, "custom":true"#));
+    let proof = sign_header(&header("", r#", "custom":true"#));
     assert_proof(&proof, true);
     let (input, encoded_signature) = proof.rsplit_once('.').expect("compact proof");
     let mut signature = URL_SAFE_NO_PAD
