@@ -59,7 +59,7 @@ if 'AEGAEON_DUDECT_TRACE_FD' in os.environ and not options.get('omit_trace'):
             trace.write(b'\x00')
         if options.get('truncate_trace'): trace.truncate(trace.tell() - 1)
 for row in rows[sys.argv[1]]:
-    if options.get('invalid'): row['schema_version'] = 2
+    if options.get('invalid') or options.get('invalid_binary') == NAME: row['schema_version'] = 2
     print(json.dumps(row), flush=True)
     if sys.stdin.buffer.read(1) != b'c': raise SystemExit(2)
 if options.get('trailing'): print('{}', flush=True)

@@ -17,6 +17,15 @@ CHARACTERIZATION_ROLES = {
 }
 
 
+class ObservationError(ValueError):
+    """A valid, completed observation did not meet its statistical requirement."""
+
+
+def require_observation(condition: bool, message: str) -> None:
+    if not condition:
+        raise ObservationError(message)
+
+
 def contract_roles(contract: Any) -> dict[str, str]:
     require(isinstance(contract, dict), "Observation contract required")
     require(
@@ -31,6 +40,13 @@ def contract_roles(contract: Any) -> dict[str, str]:
     expected = {f"{suite}/{name}" for suite, names in CANDIDATE_CASES.items() for name in names}
     roles = {case["stable_id"]: case["proposed_role"] for case in cases}
     require(len(cases) == len(roles) and set(roles) == expected, "Contract case inventory mismatch")
+    require(
+        all(
+            role in NONDETECTION_ROLES | CHARACTERIZATION_ROLES | {"measurement_positive_control"}
+            for role in roles.values()
+        ),
+        "Unknown observation role",
+    )
     return roles
 
 
@@ -39,19 +55,19 @@ def assess_case(
 ) -> dict[str, Any]:
     final = history[-1]
     require(final["collection_complete"], f"Incomplete schedule: {case_id}")
-    require(
+    require_observation(
         min(final["raw_class_counts"]) >= PROFILES[profile][1],
         f"Raw class floor not reached: {case_id}",
     )
     outcome = final["candidate_statistical_outcome"]
     name = case_id.split("/")[1]
     if role in NONDETECTION_ROLES:
-        require(outcome == NONDETECTION, f"{case_id}: {outcome}")
+        require_observation(outcome == NONDETECTION, f"{case_id}: {outcome}")
         requirement = "complete_nondetection"
     elif role == "measurement_positive_control":
         require(name in POSITIVE_STATISTICS, "Unknown positive control")
         statistic = POSITIVE_STATISTICS[name]
-        require(
+        require_observation(
             any(row["tests"][statistic].get("p", 1) < ALPHA for row in history),
             f"Required control statistic {statistic} not detected: {case_id}",
         )

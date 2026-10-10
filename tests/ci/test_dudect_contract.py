@@ -13,12 +13,93 @@ from dudect_fixture import ROOT, NativeFixture
 
 sys.path.insert(0, str(ROOT / "tests/constant_time"))
 from dudect_candidate import CANDIDATE_CASES, CandidateAdmission
-from dudect_contract import assess_case, contract_roles
+from dudect_contract import ObservationError, assess_case, contract_roles
 from run_contract import contract_at, validate_report_file
-from test_dudect_candidate import observation
+from test_dudect_candidate import observation, support
 
 
 class ContractTests(unittest.TestCase):
+    def test_failed_controls_and_targets_collect_later_cases_without_admission(self):
+        fixture = NativeFixture(self)
+        self.add_statistical_failures(fixture)
+        result = fixture.invoke("--suite", "legacy")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(fixture.report_path().exists())
+        evidence = fixture.evidence()[-1]
+        self.assertFalse(json.loads((evidence / "status.json").read_text())["accepted"])
+        self.assertFalse((evidence / "report.json").exists())
+        diagnostic = json.loads((evidence / "diagnostics.json").read_text())
+        self.assertTrue(diagnostic["collection_complete"])
+        self.assertEqual(diagnostic["uncompleted_cases"], [])
+        self.assertEqual(diagnostic["admission"], "inactive")
+        cases = diagnostic["cases"]
+        self.assertEqual(set(cases), set(CANDIDATE_CASES["legacy"]))
+        failures = {name for name, case in cases.items() if not case["requirement_satisfied"]}
+        self.assertEqual(
+            failures, {"compare", "control_mean_shift", "hmac_key_reject", "compare_product_32"}
+        )
+        self.assertEqual(cases["compare"]["looks"][0]["detected_statistics"][0]["id"], 0)
+        sparse = cases["hmac_key_reject"]["looks"][-1]
+        self.assertEqual(sparse["ineligible_statistics"][0]["class_counts"], [2100, 2100])
+        self.assertEqual(sparse["retained_counts_since_previous_look"][1], [300, 300])
+        self.assertEqual(sparse["ineligible_statistics"][0]["reason"], "insufficient_count")
+        degenerate = cases["compare_product_32"]["looks"][-1]["ineligible_statistics"][0]
+        self.assertEqual(degenerate["reason"], "degenerate_variance")
+        self.assertEqual(degenerate["native_support"][0]["tick_min"], 100)
+        self.assertEqual(degenerate["native_support"][0]["tick_max"], 100)
+        self.assertEqual(len(json.loads((evidence / "collection.json").read_text())["cases"]), 11)
+        self.assertTrue(
+            json.loads((evidence / "executions/jwe_key_reject/process.json").read_text())[
+                "collection_complete"
+            ]
+        )
+
+    def add_statistical_failures(self, fixture):
+        rows = json.loads(fixture.rows.read_text())
+        for row in rows["dudect_controls"]["pr"]:
+            if row["case"] == "control_mean_shift":
+                row["statistics"][0][2] = 100
+        for row in rows["compare"]["pr"]:
+            row["statistics"][0][2] = 103
+        for row in rows["hmac_key_reject"]["pr"]:
+            count = row["look"] * 300
+            row["statistics"][1][:2] = [count, count]
+            for pair in row["support"][1]:
+                pair["count"] = count
+        for row in rows["compare_product_32"]["pr"]:
+            count = row["statistics"][1][0]
+            row["statistics"][1][4] = 0
+            row["support"][1][0] = support(count, 100, 100, 100, 100)
+        fixture.rows.write_text(json.dumps(rows))
+
+    def test_malformed_later_case_aborts_and_preserves_prior_statistical_failure(self):
+        fixture = NativeFixture(self)
+        rows = json.loads(fixture.rows.read_text())
+        for row in rows["compare"]["pr"]:
+            row["statistics"][0][2] = 103
+        fixture.rows.write_text(json.dumps(rows))
+        result = fixture.invoke("--suite", "legacy", invalid_binary="hmac")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(fixture.report_path().exists())
+        evidence = fixture.evidence()[-1]
+        diagnostic = json.loads((evidence / "diagnostics.json").read_text())
+        self.assertFalse(diagnostic["collection_complete"])
+        self.assertIn("legacy/hmac", diagnostic["uncompleted_cases"])
+        self.assertFalse(diagnostic["cases"]["compare"]["requirement_satisfied"])
+        self.assertFalse((evidence / "executions/ed25519").exists())
+        self.assertFalse((evidence / "collection.json").exists())
+
+    def test_incomplete_schedule_and_unknown_role_are_not_statistical_failures(self):
+        row = observation()
+        history = [CandidateAdmission("compare", "pr", binding=row["binding"]).admit(row)]
+        with self.assertRaises(ValueError) as error:
+            assess_case("legacy/compare", "measurement_negative_control", history, "pr")
+        self.assertNotIsInstance(error.exception, ObservationError)
+        contract = contract_at(ROOT)
+        contract["cases"][0]["proposed_role"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "Unknown observation role"):
+            contract_roles(contract)
+
     def test_ci_inventory_matches_active_observation_contract(self):
         inventory = json.loads((ROOT / "ci/ci-expected-inventory.json").read_text())
         recorded = inventory["families"]["dudect"]
@@ -136,6 +217,8 @@ class ContractTests(unittest.TestCase):
             evidence / "executions/dudect_harness/native.stdout",
             evidence / "executions/dudect_harness/observations.json",
             evidence / "executions/dudect_harness/process.json",
+            evidence / "diagnostics.json",
+            evidence / "collection.json",
             path,
         ]
         for target in mutations:

@@ -118,6 +118,26 @@ inconclusiveness, setup/process/deadline failures and evidence-write failures al
 return nonzero. A public-fixture difference is reported as characterization,
 never as evidence of secret noninterference.
 
+A statistically rejected case does not cancel the remaining planned native
+executions. Missing required control detections, protected-case detections,
+insufficient samples and unsupported inference remain failures while later cases
+are collected in the same fixed order. Invalid output, setup/process/deadline failures
+and diagnostic-write failures still stop collection immediately. Later successful
+cases cannot cancel an earlier rejection; a rejected attempt publishes no success
+report and exits nonzero.
+
+Each run updates `diagnostics.json` after a native executable completes. The
+non-admitting summary binds each case to its original build, profile and numerical
+contract. It retains all case requirement failures, detections by inspection,
+ineligible statistic reasons, counts, moments, native extrema, frozen pilot and
+retained counts since the previous inspection. Periodic inspection intervals can
+span multiple batches. Uncompleted cases stay explicit if a subsequent process
+fails. Once every executable completes, `collection.json` also retains the whole
+non-admitting observation collection, including rejected attempts. The successful
+report validator checks the retained collection and recomputes the diagnostic
+summary from its bound observations;
+summaries never replace native evidence or change statistical decisions.
+
 Runs reside under `artifacts/ct/dudect/runs/` or `artifacts/ct/dudect-nix/runs/`.
 Each keeps frozen sources, the contract, exact compiler arguments/environment,
 build and executable hashes, native stdout/stderr, process status, observations,
