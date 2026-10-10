@@ -43,6 +43,7 @@ modules:
   fstar/dpop/Dpop.fst: faithful
   fstar/federation/Federation.EntityConfig.fst: simplified
   fstar/federation/Federation.PgRepo.fst: simplified
+  fstar/federation/OidcRp.IssuerPolicy.fst: simplified
   fstar/federation/OidcRp.BrowserBinding.fst: simplified
   fstar/federation/OidcRp.BrowserBindingWitnesses.fst: simplified
   fstar/federation/OidcRp.Properties.fst: simplified

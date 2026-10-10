@@ -181,6 +181,30 @@
           "name": "upstream_deadline::fraction_ceiling_is_minimal",
           "file": "crates/kani-harness/src/upstream_deadline.rs",
           "domain": "Auxiliary oracle lemma, every canonical u32 nanosecond fraction: numerator-based ceiling is the minimal integer milliseconds covering the fraction, zero iff zero. Composed by ordinary arithmetic with an integer seconds*1000 term in the production TTL and strict-deadline harnesses; not independently a production claim."
+        },
+        {
+          "name": "upstream_issuer::policy_version_full_domain",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production version admission across every u32; serde missing/type rejection and Redis atomicity excluded.",
+          "rows": [
+            "9207-001"
+          ]
+        },
+        {
+          "name": "upstream_issuer::frozen_requirement_all_metadata_states",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production freeze across every boolean profile and all three discovery Option<bool> values; trusted discovery excluded.",
+          "rows": [
+            "9207-001"
+          ]
+        },
+        {
+          "name": "upstream_issuer::exact_issuer_bytes_bounded",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production byte equality for arbitrary byte arrays with independent lengths 0..=8; no UTF-8, URL parser, network or full-string-domain proof.",
+          "rows": [
+            "9207-001"
+          ]
         }
       ]
     },

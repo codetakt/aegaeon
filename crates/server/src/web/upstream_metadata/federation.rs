@@ -1,5 +1,5 @@
 use super::super::oauth_errors::json_error_with_iss;
-use super::super::{normalize_issuer, now_epoch_secs, AppState};
+use super::super::{now_epoch_secs, validate_upstream_issuer, AppState};
 use super::validate_upstream_endpoint;
 use aegaeon_jose::jwk::{JwkSet, KeyMaterial};
 use axum::{http::StatusCode, response::Response};
@@ -51,15 +51,20 @@ pub(in crate::web) fn validate_upstream_discovery_matches_federation_metadata(
         return Err("federation openid_provider metadata must be an object".to_string());
     }
 
-    let expected_issuer = normalize_issuer(expected_issuer)
+    let expected_issuer = validate_upstream_issuer(expected_issuer)
         .ok_or_else(|| "expected upstream issuer invalid".to_string())?;
-    let metadata_issuer = normalize_issuer(federation_metadata_string(metadata, "issuer")?)
-        .ok_or_else(|| "federation openid_provider issuer invalid".to_string())?;
+    let metadata_issuer = validate_upstream_issuer(
+        metadata
+            .get("issuer")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "federation openid_provider metadata missing issuer".to_string())?,
+    )
+    .ok_or_else(|| "federation openid_provider issuer invalid".to_string())?;
     if metadata_issuer != expected_issuer {
         return Err("federation openid_provider issuer mismatch".to_string());
     }
 
-    let discovery_issuer = normalize_issuer(&discovery.issuer)
+    let discovery_issuer = validate_upstream_issuer(&discovery.issuer)
         .ok_or_else(|| "upstream discovery issuer invalid".to_string())?;
     if discovery_issuer != metadata_issuer {
         return Err("upstream discovery issuer does not match federation metadata".to_string());

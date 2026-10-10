@@ -3,6 +3,8 @@
 
 #[cfg(kani)]
 mod upstream_deadline;
+#[cfg(kani)]
+mod upstream_issuer;
 
 #[cfg(kani)]
 mod bounded_device_authz;

@@ -1,5 +1,5 @@
 use super::oauth_errors::json_error_with_iss;
-use super::{no_cache_redirect_response, normalize_issuer, AppState};
+use super::{no_cache_redirect_response, validate_upstream_issuer, AppState};
 use axum::{
     http::{HeaderMap, StatusCode},
     response::Response,
@@ -127,9 +127,17 @@ pub(super) fn validate_upstream_callback_issuer(
     request: &UpstreamAuthRequest,
     issuer_base: &str,
 ) -> Result<(), Response> {
-    if request.require_iss_parameter {
-        let iss = require_upstream_callback_param(params.iss.as_deref(), "iss", issuer_base)?;
-        let normalized = normalize_issuer(iss).ok_or_else(|| {
+    let iss = if request.require_iss_parameter {
+        Some(require_upstream_callback_param(
+            params.iss.as_deref(),
+            "iss",
+            issuer_base,
+        )?)
+    } else {
+        params.iss.as_deref()
+    };
+    if let Some(iss) = iss {
+        let validated = validate_upstream_issuer(iss).ok_or_else(|| {
             json_error_with_iss(
                 StatusCode::BAD_REQUEST,
                 "invalid_request",
@@ -137,24 +145,10 @@ pub(super) fn validate_upstream_callback_issuer(
                 issuer_base,
             )
         })?;
-        if normalized != request.issuer {
-            return Err(json_error_with_iss(
-                StatusCode::BAD_REQUEST,
-                "invalid_request",
-                Some("iss does not match"),
-                issuer_base,
-            ));
-        }
-    } else if let Some(iss) = params.iss.as_deref() {
-        let normalized = normalize_issuer(iss).ok_or_else(|| {
-            json_error_with_iss(
-                StatusCode::BAD_REQUEST,
-                "invalid_request",
-                Some("iss is invalid"),
-                issuer_base,
-            )
-        })?;
-        if normalized != request.issuer {
+        if !aegaeon_pure::upstream_issuer::issuer_matches(
+            request.issuer.as_bytes(),
+            validated.as_bytes(),
+        ) {
             return Err(json_error_with_iss(
                 StatusCode::BAD_REQUEST,
                 "invalid_request",
