@@ -69,13 +69,18 @@ only to absence, after add. subset_of filters an array, potentially to an empty
 array, which satisfies essential presence. Null top-level metadata parameters,
 empty supplied policies and contradictory operator combinations are rejected.
 The historical `intersect` operator is a local compatibility alias for subset_of,
-not a standard operator. When both occur, their operands are intersected before
-combination validation. Previously accepted contradictory alias combinations may fail.
+not a standard operator. When both occur, their original operand types are checked
+before intersection and combination validation. Client scope operands, including
+alias operands, must contain valid tokens before normalization. Previously accepted
+contradictory or invalid alias combinations may fail.
 
 Set operators support homogeneous arrays of strings, objects or numbers, including
 empty arrays. Nonempty set operands within one parameter policy must use the same
 element type, even for undeclared entity types; empty operands impose no element type.
-This check also applies after each ancestor merge. one_of accepts string/object/number metadata. value/default also
+This check also applies after each ancestor merge. Different ancestors' subset
+operands may still intersect to an empty, type-neutral set. one_of accepts
+string/object/number metadata, so it rejects present client scope arrays; absent
+optional scope remains allowed. value/default also
 support objects and arbitrary arrays; essential supports objects. Structural equality
 ignores object key order and retains array order. Decimal comparison uses Number's
 representation without converting integers to floating point. Precision already lost

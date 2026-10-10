@@ -5349,6 +5349,7 @@ openid_federation_rp:
   - Covers standard operator order, types, conflicts, scoped client scope representation, optional object/number support and the local intersect compatibility alias.
   - Scope without recognized operators is preserved; a valid value operator replaces or removes scope before decoding any prior value. Operand and null-metadata admission remain enforced.
   - Incompatible nonempty set operand types fail before metadata application, including unused entity types and cross-ancestor combinations; empty operands remain type-neutral.
+  - Original scope/alias operands are checked before intersection can discard invalid inputs. Ancestor subset intersections may be empty; one_of retains its scalar metadata contract.
   - Existing Jose.Federation policy models are simplified historical algebra; they do not prove this resolver or its scope conversion.
   - Typed-helper specification example and signed direct/multi-edge in-process controls are distinct finite tests; original signed claims are preserved.
   - Raw critical declarations remain refused. Original numeric precision, local anchor pinning, chain/cache admission timing and authoritative live OIDC consumption remain separate obligations.

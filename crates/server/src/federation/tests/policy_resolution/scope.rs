@@ -109,3 +109,33 @@ fn scope_conversion_keeps_operand_and_metadata_admission_checks() {
         }
     }
 }
+
+#[test]
+fn scope_alias_intersection_cannot_hide_invalid_original_operands() {
+    for entity_type in ["openid_relying_party", "oauth_client"] {
+        for operators in [
+            json!({"subset_of":[1],"intersect":[2]}),
+            json!({"subset_of":["read write"],"intersect":["read"]}),
+            json!({"subset_of":["read"],"intersect":["read write"]}),
+        ] {
+            assert!(apply_metadata_policy_for_entity_type(
+                entity_type,
+                &json!({}),
+                &json!({"scope":operators}),
+            )
+            .is_err());
+        }
+        // one_of supports scalar metadata, while client scope is an array.
+        let policy = json!({"scope":{"one_of":["read"]}});
+        assert!(apply_metadata_policy_for_entity_type(
+            entity_type,
+            &json!({"scope":"read"}),
+            &policy,
+        )
+        .is_err());
+        assert_eq!(
+            must_ok(apply_metadata_policy_for_entity_type(entity_type, &json!({}), &policy)),
+            json!({})
+        );
+    }
+}

@@ -187,6 +187,34 @@ fn wrapped(ops: Value) -> Value {
 }
 
 #[test]
+fn policy_resolution_alias_domains_and_empty_ancestor_intersection() {
+    for (left, right) in [
+        (json!(["a"]), json!([1])),
+        (json!([1]), json!([{"a":1}])),
+        (json!([{"a":1}]), json!(["a"])),
+    ] {
+        assert!(policy_chain(
+            wrapped(json!({"subset_of":left,"intersect":right})),
+            Value::Null,
+            None,
+        )
+        .resolved_metadata()
+        .is_err());
+        // Different ancestors may narrow a single subset operator to an empty
+        // intersection. An empty array satisfies both restrictions.
+        let chain = policy_chain(
+            wrapped(json!({"subset_of":left})),
+            wrapped(json!({"subset_of":right})),
+            Some(json!({"x":left})),
+        );
+        assert_eq!(
+            must_some(must_ok(chain.resolved_metadata()))["openid_relying_party"],
+            json!({"x":[]})
+        );
+    }
+}
+
+#[test]
 fn policy_resolution_hierarchical_conflicts_and_merges() {
     for (left, right) in [
         (json!({"value":"a"}), json!({"value":"b"})),

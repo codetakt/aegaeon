@@ -56,7 +56,16 @@ impl FieldPolicy {
         }
         if let Some(alias) = original.get("intersect") {
             let normalized = if let Some(standard) = ops.get("subset_of") {
-                Value::Array(intersection(array(standard)?, array(alias)?))
+                let standard = array(standard)?;
+                let alias = array(alias)?;
+                if standard
+                    .first()
+                    .zip(alias.first())
+                    .is_some_and(|(left, right)| kind(left) != kind(right))
+                {
+                    return Err(error("set operators require compatible element types"));
+                }
+                Value::Array(intersection(standard, alias))
             } else {
                 alias.clone()
             };

@@ -269,7 +269,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/crypto-allowlist.md` | claim | Verified Crypto Allowlist (Strong-Constraint Mode) | current implementation baseline | 2026-09-11 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/crypto-claim-mapping.md` | claim | Crypto Claim Mapping | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/formal-claim-overview.md` | claim | Formal Claim Overview | current implementation baseline | 2026-09-07 | Verification | verification reviewers, maintainers |
-| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-09-14 | Verification | verification reviewers, maintainers |
+| `docs/verification/claims/model-fidelity-register.md` | claim | Model Fidelity Register | current implementation baseline | 2026-10-11 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/sdk-assurance/README.md` | index | SDK Assurance Contract Documents | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/assurance-contract.md` | claim | SDK Assurance Contract | current implementation baseline | 2026-09-07 | Verification / SDK Engineering / Security | SDK implementers, verification reviewers, release managers |
 | `docs/verification/claims/sdk-assurance/contract-status.md` | claim | SDK Assurance Contract Status | snapshot | 2026-09-07 | Verification / SDK Engineering / Security / Release Engineering | maintainers, verification reviewers, release managers |

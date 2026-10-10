@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-09-14
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 

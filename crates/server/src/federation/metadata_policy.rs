@@ -81,10 +81,10 @@ fn parse_type(policy: &Value, entity_type: Option<&str>) -> Result<TypePolicy, F
     fields
         .iter()
         .map(|(field, value)| {
-            let parsed = FieldPolicy::parse(value)?;
             if scope::is_client_scope(entity_type, field) {
-                scope::validate_policy(&parsed)?;
+                scope::validate_policy(value)?;
             }
+            let parsed = FieldPolicy::parse(value)?;
             Ok((field.clone(), parsed))
         })
         .collect()
