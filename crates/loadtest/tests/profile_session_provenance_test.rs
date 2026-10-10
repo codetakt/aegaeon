@@ -100,7 +100,8 @@ fn run_fixture_cases(owned: &FixtureDirectory) -> FixtureResult<Vec<(&'static st
     for case in CASES {
         let provenance = owned.0.join(format!("provenance-{case}.json"));
         fs::write(&provenance, provenance_bytes(case)?)?;
-        let child = Command::new(&executable)
+        let mut command = Command::new(&executable);
+        command
             .current_dir(&owned.0)
             .args([
                 "--exact",
@@ -113,8 +114,13 @@ fn run_fixture_cases(owned: &FixtureDirectory) -> FixtureResult<Vec<(&'static st
             .env("AEG_LOADTEST_PROFILE_MANIFEST", &manifest)
             .env("AEG_LOADTEST_CLIENT_SECRET", SECRET)
             .env("AEG_LOADTEST_SESSION_FILE", &session)
-            .env("AEG_LOADTEST_SESSION_PROVENANCE", &provenance)
-            .output()?;
+            .env("AEG_LOADTEST_SESSION_PROVENANCE", &provenance);
+        // Preserve instrumentation output while isolating all application inputs.
+        // Default profiles in the fixture would be discarded during cleanup.
+        if let Some(profile) = std::env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", profile);
+        }
+        let child = command.output()?;
         outcomes.push((
             case,
             child.status.success(),
