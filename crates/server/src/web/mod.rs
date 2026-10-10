@@ -122,8 +122,8 @@ use resource_endpoint::resource;
 use runtime_authority_guard::runtime_authority_guard_middleware;
 use shared::{
     build_upstream_logout_callback_uri, clock_error_response, issuer_host_from_url,
-    no_cache_redirect_response, normalize_issuer, now_epoch_secs, parse_acr_values,
-    select_supported_acr, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
+    no_cache_redirect_response, now_epoch_secs, parse_acr_values, select_supported_acr,
+    validate_upstream_issuer, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
     CSRF_COOKIE_MAX_AGE_SECS, DEVICE_CODE_GRANT_TYPE, LOCAL_AUTH_CSRF_COOKIE_NAME,
     OAUTH_PROFILE_TYPE_DOWNSTREAM, OAUTH_PROFILE_TYPE_UPSTREAM, OAUTH_TOKEN_TYPE_ACCESS_TOKEN,
     RESOURCE_SCOPES, TOKEN_EXCHANGE_GRANT_TYPE, UPSTREAM_MAX_BODY_BYTES,

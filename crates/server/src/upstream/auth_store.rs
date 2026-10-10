@@ -48,6 +48,7 @@ pub(super) struct RedisUpstreamAuthStoreBackend {
 pub(super) struct RedisUpstreamAuthRequest {
     #[serde(default)]
     pub(super) browser_binding_digest: Option<String>,
+    pub(super) issuer_policy_version: u32,
     pub(super) state: String,
     pub(super) nonce: String,
     pub(super) code_verifier: Option<String>,
@@ -276,6 +277,7 @@ impl RedisUpstreamAuthRequest {
         let (connection_id, team_id, tenant_id, environment_id, configuration_version_id) =
             context_uuid_strings(request.context);
         Ok(Self {
+            issuer_policy_version: aegaeon_pure::upstream_issuer::POLICY_VERSION,
             browser_binding_digest: request.browser_binding_digest.clone(),
             state: request.state.clone(),
             nonce: request.nonce.clone(),
@@ -306,6 +308,11 @@ impl RedisUpstreamAuthRequest {
     }
 
     pub(super) fn into_request(self) -> Result<UpstreamAuthRequest, UpstreamAuthStorageError> {
+        if !aegaeon_pure::upstream_issuer::supported_policy_version(self.issuer_policy_version) {
+            return Err(UpstreamAuthStorageError::Codec(
+                "unsupported upstream issuer policy".into(),
+            ));
+        }
         Ok(UpstreamAuthRequest {
             browser_binding_digest: self.browser_binding_digest,
             state: self.state,

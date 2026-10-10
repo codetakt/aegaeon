@@ -8,7 +8,7 @@ use super::upstream_token_response::{
     parse_upstream_token_response_body, validate_upstream_authorization_code_token_response_shape,
     UpstreamTokenResponse, UpstreamTokenResponseContext,
 };
-use super::{normalize_issuer, AppState, UPSTREAM_MAX_BODY_BYTES};
+use super::{validate_upstream_issuer, AppState, UPSTREAM_MAX_BODY_BYTES};
 use aegaeon_jose::jwk::JwkSet;
 use axum::{http::StatusCode, response::Response};
 use reqwest::{Client, RequestBuilder};
@@ -52,7 +52,7 @@ async fn fetch_upstream_callback_discovery(
             issuer_base,
         )
     })?;
-    let normalized_issuer = normalize_issuer(&discovery.issuer).ok_or_else(|| {
+    let validated_issuer = validate_upstream_issuer(&discovery.issuer).ok_or_else(|| {
         json_error_with_iss(
             StatusCode::BAD_GATEWAY,
             "server_error",
@@ -60,7 +60,7 @@ async fn fetch_upstream_callback_discovery(
             issuer_base,
         )
     })?;
-    if normalized_issuer != request.issuer
+    if validated_issuer != request.issuer
         || discovery.token_endpoint != request.token_endpoint
         || discovery.jwks_uri != request.jwks_uri
     {

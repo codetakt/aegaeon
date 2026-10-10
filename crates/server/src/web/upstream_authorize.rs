@@ -84,3 +84,6 @@ pub(super) async fn upstream_authorize(
 
 #[cfg(test)]
 mod flow_tests;
+
+#[cfg(test)]
+mod issuer_tests;

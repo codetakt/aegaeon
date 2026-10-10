@@ -1,0 +1,60 @@
+theory UpstreamIssuerPolicy
+begin
+
+/* Only the issuer gate is modeled. Browser/state/expiry/URL admission and trusted
+   metadata are suppliers. Store terms are immutable and cannot be attacker-written.
+   Arbitrary network responses are not authenticated by an iss parameter. */
+rule Initiate_Profile:
+  [ In(issuer), Fr(~state) ]
+  --[ Initiated(~state, issuer, 'required', 'profile') ]->
+  [ Store(~state, 'v1', issuer, 'required'), Out(~state) ]
+rule Initiate_Discovery:
+  [ In(issuer), Fr(~state) ]
+  --[ Initiated(~state, issuer, 'required', 'discovery') ]->
+  [ Store(~state, 'v1', issuer, 'required'), Out(~state) ]
+rule Initiate_Optional:
+  [ In(issuer), Fr(~state) ]
+  --[ Initiated(~state, issuer, 'optional', 'neither') ]->
+  [ Store(~state, 'v1', issuer, 'optional'), Out(~state) ]
+rule Legacy_Record:
+  [ In(issuer), Fr(~state) ]
+  --[ Legacy(~state) ]->
+  [ Store(~state, 'legacy', issuer, 'optional'), Out(~state) ]
+rule Receive:
+  [ In(<state, received, kind>) ]
+  --[ Submitted(state, received, kind) ]->
+  [ Response(state, received, kind) ]
+rule Accept_Present:
+  [ Store(state, 'v1', issuer, required), Response(state, <'some', issuer>, kind) ]
+  --[ Accepted(state, issuer, <'some', issuer>, kind) ]-> [ ]
+rule Accept_Absent:
+  [ Store(state, 'v1', issuer, 'optional'), Response(state, 'none', kind) ]
+  --[ Accepted(state, issuer, 'none', kind) ]-> [ ]
+
+lemma current_policy_origin:
+  "All s issuer received kind #i. Accepted(s, issuer, received, kind) @ i
+   ==> Ex required source #j. Initiated(s, issuer, required, source) @ j & j < i"
+lemma legacy_never_accepted:
+  "All s issuer received kind #i #j. Legacy(s) @ i & Accepted(s, issuer, received, kind) @ j ==> F"
+lemma exact_present_issuer:
+  "All s issuer value kind #i. Accepted(s, issuer, <'some', value>, kind) @ i ==> value = issuer"
+lemma required_issuer_present:
+  "All s issuer source received kind #i #j.
+   Initiated(s, issuer, 'required', source) @ i & Accepted(s, issuer, received, kind) @ j
+   ==> received = <'some', issuer>"
+lemma single_consumption:
+  "All s a b k a2 b2 k2 #i #j.
+   Accepted(s, a, b, k) @ i & Accepted(s, a2, b2, k2) @ j ==> #i = #j"
+lemma profile_code_reachable: exists-trace
+  "Ex s issuer #i #j. Initiated(s, issuer, 'required', 'profile') @ i & Accepted(s, issuer, <'some', issuer>, 'code') @ j"
+lemma discovery_error_reachable: exists-trace
+  "Ex s issuer #i #j. Initiated(s, issuer, 'required', 'discovery') @ i & Accepted(s, issuer, <'some', issuer>, 'error') @ j"
+lemma optional_absent_reachable: exists-trace
+  "Ex s issuer #i #j. Initiated(s, issuer, 'optional', 'neither') @ i & Accepted(s, issuer, 'none', 'code') @ j"
+lemma legacy_submission_reachable: exists-trace
+  "Ex s #i #j. Legacy(s) @ i & Submitted(s, 'none', 'code') @ j"
+lemma required_omission_submission_reachable: exists-trace
+  "Ex s issuer #i #j. Initiated(s, issuer, 'required', 'discovery') @ i & Submitted(s, 'none', 'error') @ j"
+lemma mismatch_submission_reachable: exists-trace
+  "Ex s issuer other #i #j. Initiated(s, issuer, 'optional', 'neither') @ i & Submitted(s, <'some', other>, 'code') @ j & not (issuer = other)"
+end

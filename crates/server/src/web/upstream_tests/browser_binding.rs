@@ -9,7 +9,7 @@ fn bound_request(
     secret: &str,
 ) -> crate::upstream::UpstreamAuthRequest {
     let mut request = make_auth_request(token, std::time::Duration::from_secs(60));
-    request.issuer = normalize_issuer(&request.issuer).expect("valid test issuer");
+    request.issuer = validate_upstream_issuer(&request.issuer).expect("valid test issuer");
     request.browser_binding_digest = Some(aegaeon_crypto::hash::sha256_hex(secret.as_bytes()));
     request.redirect_uri = build_upstream_redirect_uri(state.base_url.as_str(), "example");
     request.return_to = Some("/continue".to_string());

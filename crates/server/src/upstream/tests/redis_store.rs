@@ -91,6 +91,7 @@ fn redis_upstream_auth_request_rejects_missing_managed_context() {
         "return_to": null,
         "max_age": null,
         "require_iss_parameter": true,
+        "issuer_policy_version": 1,
         "jit_provisioning_policy": null,
         "attribute_mappings": [],
         "claim_release_policy": null,
@@ -397,5 +398,85 @@ fn upstream_browser_binding_redis_invalid_snapshots_remain_unconsumed(
             .subsec_nanos(),
         0
     );
+    Ok(())
+}
+
+#[test]
+fn upstream_issuer_policy_codec_rejects_legacy_and_unknown_versions(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let request = make_upstream_auth_request("issuer-policy", Duration::from_secs(60));
+    let dto = super::RedisUpstreamAuthRequest::from_request(&request)?;
+    let payload = serde_json::to_value(dto)?;
+    let mut legacy = payload.clone();
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("issuer_policy_version");
+    assert!(serde_json::from_value::<super::RedisUpstreamAuthRequest>(legacy).is_err());
+    for version in [0, 1, 2, u32::MAX] {
+        let mut candidate = payload.clone();
+        candidate["issuer_policy_version"] = serde_json::json!(version);
+        let decoded: super::RedisUpstreamAuthRequest = serde_json::from_value(candidate)?;
+        assert_eq!(decoded.into_request().is_ok(), version == 1);
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn upstream_issuer_policy_redis_rejects_legacy_without_consuming(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL")?;
+    let prefix = format!("upstream-issuer-policy:{}", uuid::Uuid::new_v4());
+    let store = UpstreamAuthStore::redis_for_test(&url, &prefix, 60)?;
+    let mut request = make_upstream_auth_request("issuer-policy", Duration::from_secs(60));
+    request.require_iss_parameter = false;
+    let digest = request.browser_binding_digest.clone().unwrap();
+    let uri = request.redirect_uri.clone();
+    store.try_insert(request)?;
+    let key = format!(
+        "{prefix}:{}",
+        aegaeon_crypto::hash::sha256_hex(b"issuer-policy")
+    );
+    let mut conn = redis::Client::open(url)?.get_connection()?;
+    let payload: String = redis::cmd("GET").arg(&key).query(&mut conn)?;
+    for version in [None, Some(0), Some(2), Some(u32::MAX)] {
+        let mut legacy: serde_json::Value = serde_json::from_str(&payload)?;
+        match version {
+            None => {
+                legacy
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("issuer_policy_version");
+            }
+            Some(value) => {
+                legacy["issuer_policy_version"] = serde_json::json!(value);
+            }
+        }
+        let legacy = legacy.to_string();
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(&legacy)
+            .arg("PX")
+            .arg(60000)
+            .query::<()>(&mut conn)?;
+        assert!(store
+            .try_consume_bound("issuer-policy", &digest, &uri)
+            .is_err());
+        let unchanged: String = redis::cmd("GET").arg(&key).query(&mut conn)?;
+        assert_eq!(unchanged, legacy);
+    }
+    redis::cmd("SET")
+        .arg(&key)
+        .arg(&payload)
+        .arg("PX")
+        .arg(60000)
+        .query::<()>(&mut conn)?;
+    assert!(store
+        .try_consume_bound("issuer-policy", &digest, &uri)?
+        .is_some());
+    assert!(store
+        .try_consume_bound("issuer-policy", &digest, &uri)?
+        .is_none());
     Ok(())
 }

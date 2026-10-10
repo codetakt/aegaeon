@@ -430,7 +430,8 @@ MODULES="$MODULES \
 	federation/OidcRp.Transitions.fst \
 	federation/OidcRp.Properties.fst \
 	federation/OidcRp.BrowserBinding.fst \
-	federation/OidcRp.BrowserBindingWitnesses.fst"
+	federation/OidcRp.BrowserBindingWitnesses.fst \
+	federation/OidcRp.IssuerPolicy.fst"
 # Management (Phase 4-5)
 MODULES="$MODULES \
 	management/Management.ClientLifecycle.fst \

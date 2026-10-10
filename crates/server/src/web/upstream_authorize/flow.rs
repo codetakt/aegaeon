@@ -78,7 +78,10 @@ pub(super) async fn store_upstream_authorize_request(
         redirect_uri: redirect_uri.clone(),
         return_to: input.return_to.clone(),
         max_age: input.max_age,
-        require_iss_parameter: context.profile.require_iss_parameter,
+        require_iss_parameter: aegaeon_pure::upstream_issuer::requires_issuer(
+            context.profile.require_iss_parameter,
+            discovery.authorization_response_iss_parameter_supported,
+        ),
         jit_provisioning_policy: context.connection.jit_provisioning_policy.clone(),
         attribute_mappings: context.connection.attribute_mappings.clone(),
         claim_release_policy: context.connection.claim_release_policy.clone(),

@@ -8,3 +8,5 @@ include!("upstream_tests/federation_signing.rs");
 include!("upstream_tests/federation_list.rs");
 
 mod browser_binding;
+
+pub(super) mod issuer_identity;

@@ -416,3 +416,12 @@ currentness, a separate resource from authorization-state consumption.
 These classifications and model results do not establish Rust/Lua refinement,
 cryptographic entropy/collision resistance, Redis supplier behavior, browser
 cookie semantics, or released-artifact/full-system assurance.
+
+## Upstream issuer policy
+
+`fstar/federation/OidcRp.IssuerPolicy.fst` is `simplified`. It models exact string
+identity, profile/discovery policy freezing and versioned record admission.
+Its all-string functional lemmas are not a Rust, serde, URL parser, Redis or
+network refinement. See [scope and correspondence](../oidc/upstream-issuer-policy.md).
+The existing browser-binding model still receives issuer validation as a supplier;
+this module does not establish composition with that model or a release artifact.

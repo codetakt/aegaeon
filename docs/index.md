@@ -307,6 +307,7 @@ Audience: contributors, maintainers
 | `docs/verification/oidc/rs256-interop-slice.md` | verification | OIDC `RS256 Interop Slice` | current implementation baseline | 2026-10-01 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/rs256-required-slice.md` | verification | OIDC `RS256 Required Slice` | current implementation baseline | 2026-07-24 | Verification | verification reviewers, contributors |
 | `docs/verification/oidc/upstream-browser-binding-fstar.md` | verification | Upstream callback functional model | current implementation baseline | 2026-10-10 | Verification | verification reviewers, maintainers |
+| `docs/verification/oidc/upstream-issuer-policy.md` | verification | Upstream issuer policy verification scope | current implementation baseline | 2026-10-10 | Verification | verification reviewers, maintainers |
 | `docs/verification/runbooks/README.md` | index | Verification Runbooks Overview | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/extraction-status.md` | runbook | KaRaMeL Extraction and Verified Core Status | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/ffi-contracts/README.md` | index | FFI Contract Register Details | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
