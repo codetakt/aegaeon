@@ -1,6 +1,6 @@
 # Timing observation profiles
 
-Last updated: 2026-10-10
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -180,7 +180,7 @@ Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse
 crops or one-class zero variance in the original failing execution. Its
-`AEGTIM02` framing binds the native build, contract, numerical identity, case
+`AEGTIM03` framing binds the native build, contract, numerical identity, case
 order, input stride and full profile. Each case also records the input, timestamp
 and class-buffer addresses modulo 4096, so cache-line position need not be
 guessed from sample index. These offsets do not reveal full addresses or establish
@@ -195,15 +195,30 @@ For `sha256` and `hmac_sha256`, the timing file additionally retains every origi
 32-byte synthetic message after each batch's timestamp and class arrays. Class 0
 must contain the specified `0xAA` or `0xBB` bytes. Class 1 retains the original
 random bytes, enabling later analysis of input contents and neighboring samples.
+For `hmac_sha256_key`, the same file retains each original 32-byte synthetic key:
+class 0 must contain `0x42` bytes and class 1 preserves its random bytes. The
+message remains the source-bound fixed 32-byte `0x5a` fixture. These keys belong
+only to the synthetic test and are unrelated to runtime credentials.
 Earlier `AEGTIM01` evidence did not retain these messages or buffer offsets;
-they cannot be reconstructed from that evidence. Historical packets stay unchanged
-and must be read with their bound source version.
+`AEGTIM02` added SHA/HMAC messages but omitted HMAC-key inputs. Missing original
+bytes cannot be reconstructed. Historical packets stay unchanged and must be
+read with their bound source version; the current consumer requires `AEGTIM03`.
+
+After the native process exits, the consumer derives `clock_batches` in
+`process.json` from every original timestamp array. Each pilot and measured batch
+records adjacent-difference extrema, their greatest common divisor, timestamp
+residue modulo that divisor, and zero/backward counts. An all-equal array has
+divisor zero and no residue. This diagnostic covers **all adjacent timestamps**,
+including the leading samples excluded by the statistical rule; it does not
+change sample admission or discard backward readings. Observed divisibility is
+not an attestation of physical timer resolution or an explanation of timing
+differences. Bundle validation recomputes the summary from the bound raw file.
 
 The recorder makes no calls or writes inside the timed loop and stores no
 product inputs. It reuses existing native buffers, requiring no additional sample
 allocation. Uncompressed size is about 4.5 MiB per case for PR and 55.7 MiB for
-periodic; the two message traces increase their respective cases to 20.5 MiB
-and 254 MiB. All 21 periodic cases use about 1.53 GiB, plus the separate comparison
+periodic; the three message/key traces increase their respective cases to 20.5 MiB
+and 254 MiB. All 21 periodic cases use about 1.72 GiB, plus the separate comparison
 input trace below. Missing, truncated, reordered or
 misbound timing records prevent a successful report. Partial files remain
 retained on failure; recording never retries or changes statistical admission.
@@ -220,8 +235,8 @@ measurements and statistical updates, before its observation/acknowledgment.
 They can affect the conditions of later batches; instrumentation is not assumed
 to be physically invisible. The allocation is 2 MiB plus bounded framing;
 files are about 21 MiB for PR and 254 MiB for periodic. The SHA/HMAC messages
-are retained in `native.timing`; remaining cases retain ordered timing/class
-evidence without their synthetic input bytes.
+and HMAC test keys are retained in `native.timing`; remaining cases retain
+ordered timing/class evidence without their synthetic input bytes.
 
 `AEGAEON_DUDECT_TRACE_FD` and `AEGAEON_DUDECT_TIMING_FD` are internal
 parent-to-child verification descriptors, not server settings or user overrides.

@@ -133,7 +133,7 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
             for name in self.names
         ]
         bound = self.bindings[self.names[0]]
-        header = b"AEGTIM02" + b"".join(
+        header = b"AEGTIM03" + b"".join(
             bound[key].encode() for key in ("build_sha256", "contract_sha256", "numerical_sha256")
         )
         self.binary.write_text(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+import math
 import struct
 from typing import TYPE_CHECKING, Any
 
@@ -17,7 +19,7 @@ TIMING_NAME = "native.timing"
 TIMING_ENV = "AEGAEON_DUDECT_TIMING_FD"
 CASE = struct.Struct("<64s5Q")
 BATCH = struct.Struct("<18Q")
-INPUTS = {"sha256": 0xAA, "hmac_sha256": 0xBB}
+INPUTS = {"sha256": 0xAA, "hmac_sha256": 0xBB, "hmac_sha256_key": 0x42}
 STRIDES = {
     "compare": 32,
     "compare_product_32": 32,
@@ -40,8 +42,24 @@ STRIDES = {
 }
 
 
-def validate_samples(source: BinaryIO, name: str, width: int) -> None:
-    source.seek(BATCH_SIZE * 8, 1)
+def summarize_ticks(source: BinaryIO) -> dict[str, int | None]:
+    """Describe every adjacent timestamp; never filter or admit samples."""
+    ticks = struct.unpack(f"<{BATCH_SIZE}q", source.read(BATCH_SIZE * 8))
+    deltas = tuple(after - before for before, after in itertools.pairwise(ticks))
+    divisor = math.gcd(*deltas)
+    return {
+        "adjacent_pairs": len(ticks) - 1,
+        "delta_min": min(deltas),
+        "delta_max": max(deltas),
+        "delta_gcd": divisor,
+        "timestamp_residue_mod_gcd": ticks[0] % divisor if divisor else None,
+        "zero_deltas": deltas.count(0),
+        "backward_deltas": sum(delta < 0 for delta in deltas),
+    }
+
+
+def validate_samples(source: BinaryIO, name: str, width: int) -> dict[str, int | None]:
+    clock = summarize_ticks(source)
     classes = source.read(BATCH_SIZE)
     require(set(classes) <= {0, 1}, "Invalid timing sample class")
     if width:
@@ -54,6 +72,7 @@ def validate_samples(source: BinaryIO, name: str, width: int) -> None:
             ),
             "Invalid fixed-class synthetic timing input",
         )
+    return clock
 
 
 def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
@@ -74,12 +93,13 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
     with path.open("rb") as source:
         require(
             source.read(HEADER_SIZE)
-            == b"AEGTIM02" + b"".join(first[key].encode("ascii") for key in keys),
+            == b"AEGTIM03" + b"".join(first[key].encode("ascii") for key in keys),
             "All-case timing binding mismatch",
         )
         previous_end = 0
         previous_counters = [0] * 6
         layouts = {}
+        clocks: dict[str, list[dict[str, int | None]]] = {}
         for name in bindings:
             native_name, stride, width, *offsets = CASE.unpack(source.read(CASE.size))
             require(
@@ -90,6 +110,7 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
             )
             require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
             layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
+            clocks[name] = []
             for batch in range(frames):
                 values = BATCH.unpack(source.read(BATCH.size))
                 require(values[:2] == (batch, BATCH_SIZE), "Timing batch order or size mismatch")
@@ -110,14 +131,16 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
                 )
                 previous_end = end
                 previous_counters = list(values[7::2])
-                validate_samples(source, name, width)
+                clocks[name].append({"batch": batch, **validate_samples(source, name, width)})
         require(source.read(1) == b"", "Trailing all-case timing evidence")
     return {
         **identity,
-        "format": "AEGTIM02",
+        "format": "AEGTIM03",
         "cases": list(bindings),
         "input_cases": [name for name in bindings if name in INPUTS],
         "buffer_offsets_mod4096": layouts,
+        "clock_scope": "all_adjacent_timestamps_including_discarded_samples",
+        "clock_batches": clocks,
         "frames_per_case": frames,
         "complete": True,
     }

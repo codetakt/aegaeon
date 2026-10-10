@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -14,7 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dudect_fixture import ROOT
-from dudect_timing import BATCH, CASE, TIMING_ENV, validate_timing
+from dudect_timing import BATCH, CASE, INPUTS, TIMING_ENV, summarize_ticks, validate_timing
 from test_dudect_candidate import binding
 
 PROBE = r"""
@@ -32,10 +33,12 @@ void prepare_inputs(dudect_config_t *c, uint8_t *data, uint8_t *classes) {
     }
 }
 int main(void) {
-    const char *names[] = {"compare_product_32", "ct_eq_128", "sha256", "hmac_sha256"};
-    const size_t strides[] = {32, 128, 32, 32};
-    const uint8_t values[] = {0, 0, 0xAA, 0xBB};
-    for (size_t n = 0; n < 4; ++n) {
+    const char *names[] = {
+        "compare_product_32", "ct_eq_128", "sha256", "hmac_sha256", "hmac_sha256_key"
+    };
+    const size_t strides[] = {32, 128, 32, 32, 32};
+    const uint8_t values[] = {0, 0, 0xAA, 0xBB, 0x42};
+    for (size_t n = 0; n < 5; ++n) {
         fixed = values[n];
         dudect_config_t config = {strides[n], 128}; dudect_ctx_t ctx;
         dudect_init(&ctx, &config);
@@ -63,7 +66,7 @@ int main(void) {
 
 class NativeTimingTests(unittest.TestCase):
     def test_original_ticks_pilot_context_and_multiple_cases_are_retained(self):
-        names = ("compare_product_32", "ct_eq_128", "sha256", "hmac_sha256")
+        names = ("compare_product_32", "ct_eq_128", "sha256", "hmac_sha256", "hmac_sha256_key")
         bindings = {name: binding(name) for name in names}
         fixed = next(iter(bindings.values()))
         with tempfile.TemporaryDirectory() as directory:
@@ -147,10 +150,31 @@ class NativeTimingTests(unittest.TestCase):
                             wanted = (
                                 bytes((i + j) % 256 for j in range(32))
                                 if i % 2
-                                else bytes([0xAA if name == "sha256" else 0xBB]) * 32
+                                else bytes([INPUTS[name]]) * 32
                             )
                             self.assertEqual(inputs[i * width : (i + 1) * width], wanted)
             self.assertEqual(data.read(1), b"")
+
+    def test_clock_lattice_keeps_zeros_backwards_and_absolute_phase(self):
+        for ticks, gcd, phase, zeros, backwards, low, high in (
+            ([7, 33, 85, 85, 59], 26, 7, 1, 1, -26, 52),
+            ([7, 9, 13, 19, 27], 2, 1, 0, 0, 2, 8),
+            ([7, 7, 7, 7, 7], 0, None, 4, 0, 0, 0),
+        ):
+            with self.subTest(ticks=ticks), patch("dudect_timing.BATCH_SIZE", len(ticks)):
+                clock = summarize_ticks(io.BytesIO(struct.pack("<5q", *ticks)))
+                self.assertEqual(
+                    clock,
+                    {
+                        "adjacent_pairs": 4,
+                        "delta_min": low,
+                        "delta_max": high,
+                        "delta_gcd": gcd,
+                        "timestamp_residue_mod_gcd": phase,
+                        "zero_deltas": zeros,
+                        "backward_deltas": backwards,
+                    },
+                )
 
 
 if __name__ == "__main__":

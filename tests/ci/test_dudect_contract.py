@@ -241,7 +241,18 @@ class ContractTests(unittest.TestCase):
             target.write_bytes(original)
             target.chmod(mode)
         validate_report_file(fixture.root, path)
+        self.assert_clock_summary_is_bound(fixture, evidence, path)
+
+    def assert_clock_summary_is_bound(self, fixture, evidence, path):
         validate_report_file(fixture.root, evidence / "report.json")
+        process_path = evidence / "executions/dudect_harness/process.json"
+        original = process_path.read_bytes()
+        process = json.loads(original)
+        process["diagnostics"]["timing"]["clock_batches"]["ct_eq_128"][0]["delta_gcd"] = 26
+        process_path.write_text(json.dumps(process))
+        with self.assertRaises(ValueError):
+            validate_report_file(fixture.root, path)
+        process_path.write_bytes(original)
 
 
 if __name__ == "__main__":

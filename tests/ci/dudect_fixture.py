@@ -35,7 +35,7 @@ if 'AEGAEON_DUDECT_TIMING_FD' in os.environ and not options.get('omit_timing'):
     profile = rows[sys.argv[1]]
     binding = profile[0]['binding']
     with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb') as timing:
-        timing.write(b'AEGTIM02' + b''.join(binding[key].encode() for key in
+        timing.write(b'AEGTIM03' + b''.join(binding[key].encode() for key in
                      ('build_sha256', 'contract_sha256', 'numerical_sha256')))
         stamp = 1
         for name in dict.fromkeys(row['case'] for row in profile):

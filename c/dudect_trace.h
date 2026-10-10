@@ -20,7 +20,8 @@ typedef struct {
 } dudect_trace_t;
 
 static size_t dudect_timing_input_width(const char *name) {
-    return !strcmp(name, "sha256") || !strcmp(name, "hmac_sha256") ? 32 : 0;
+    return !strcmp(name, "sha256") || !strcmp(name, "hmac_sha256") ||
+           !strcmp(name, "hmac_sha256_key") ? 32 : 0;
 }
 
 static void dudect_trace_write(int fd, const void *data, size_t size) {
@@ -49,7 +50,7 @@ static int dudect_timing_begin(const char *name, dudect_ctx_t *ctx) {
     if (initialized < 0) {
         dudect_require(info.st_size == 0 && lseek((int)fd, 0, SEEK_CUR) == 0,
                        "empty timing evidence file");
-        dudect_trace_write((int)fd, "AEGTIM02", 8);
+        dudect_trace_write((int)fd, "AEGTIM03", 8);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_BUILD_SHA256, 64);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_CONTRACT_SHA256, 64);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_NUMERICAL_SHA256, 64);

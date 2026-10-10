@@ -110,18 +110,20 @@ class DiagnosticTests(unittest.TestCase):
     def timing_fixture(self):
         self.enterContext(patch("dudect_timing.BATCH_SIZE", 2))
         self.enterContext(patch.dict("dudect_timing.PROFILES", {"pr": ((1,), 1, 1)}))
-        bindings = {name: binding(name, suite="nix") for name in ("ct_eq_64", "sha256")}
-        data = b"AEGTIM02" + self.header[8:]
+        names = ("ct_eq_64", "sha256", "hmac_sha256_key")
+        bindings = {name: binding(name, suite="nix") for name in names}
+        data = b"AEGTIM03" + self.header[8:]
         stamp = 1
-        for name, stride in (("ct_eq_64", 64), ("sha256", 32)):
-            width = 32 if name == "sha256" else 0
+        for name in names:
+            stride = 64 if name == "ct_eq_64" else 32
+            width = 0 if name == "ct_eq_64" else 32
             data += CASE.pack(name.encode(), stride, width, 16, 32, 48)
             for batch in range(2):
                 data += BATCH.pack(batch, 2, stamp, stamp + 1, *([0] * 14))
                 stamp += 2
                 data += struct.pack("<2q", 100, 110) + b"\0\1"
                 if width:
-                    data += bytes([0xAA]) * 32 + bytes([7]) * 32
+                    data += bytes([0xAA if name == "sha256" else 0x42]) * 32 + bytes([7]) * 32
         return bindings, data
 
     def test_all_case_trace_retains_original_layout_and_input_cases(self):
@@ -129,19 +131,37 @@ class DiagnosticTests(unittest.TestCase):
         self.path.write_bytes(data)
         validated = validate_timing(self.path, bindings, "pr")
         self.assertEqual(validated["cases"], list(bindings))
-        self.assertEqual(validated["input_cases"], ["sha256"])
+        self.assertEqual(validated["input_cases"], ["sha256", "hmac_sha256_key"])
         self.assertEqual(
             validated["buffer_offsets_mod4096"]["sha256"],
             {"inputs": 16, "ticks": 32, "classes": 48},
         )
+        for name in bindings:
+            for batch, clock in enumerate(validated["clock_batches"][name]):
+                self.assertEqual(clock["batch"], batch)
+                self.assertEqual(clock["delta_gcd"], 10)
+                self.assertEqual(clock["timestamp_residue_mod_gcd"], 0)
+                self.assertEqual(clock["backward_deltas"], 0)
 
     def test_all_case_trace_rejects_bad_context_layout_classes_and_inputs(self):
         bindings, data = self.timing_fixture()
-        changes = [data[:-1], data + b"x"]
+        changes = [data[:-1], data + b"x", b"AEGTIM02" + data[8:]]
         first_batch = 200 + CASE.size
         sha_case = first_batch + 2 * (BATCH.size + 18)
         sha_inputs = sha_case + CASE.size + BATCH.size + 18
-        for offset in (0, 8, 200, 264, 272, first_batch, first_batch + 8, sha_inputs):
+        key_case = sha_case + CASE.size + 2 * (BATCH.size + 18 + 64)
+        key_inputs = key_case + CASE.size + BATCH.size + 18
+        for offset in (
+            0,
+            8,
+            200,
+            264,
+            272,
+            first_batch,
+            first_batch + 8,
+            sha_inputs,
+            key_inputs,
+        ):
             bad = bytearray(data)
             bad[offset] = 9
             changes.append(bytes(bad))
@@ -150,7 +170,7 @@ class DiagnosticTests(unittest.TestCase):
             bad = bytearray(data)
             struct.pack_into("<Q", bad, first_batch + field * 8, value)
             changes.append(bytes(bad))
-        for offset, value in ((280, 4096), (sha_case + 72, 0)):
+        for offset, value in ((280, 4096), (sha_case + 72, 0), (key_case + 72, 0)):
             bad = bytearray(data)
             struct.pack_into("<Q", bad, offset, value)
             changes.append(bytes(bad))
