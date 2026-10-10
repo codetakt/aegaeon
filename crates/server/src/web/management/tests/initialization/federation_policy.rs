@@ -451,14 +451,19 @@ async fn refresh_anchor_changes(
                 match change {
                     "pin" => {
                         repo.upsert(environment, ANCHOR, &jwks, Some(&changed_pin))
-                            .await?;
+                            .await
+                            .expect("concurrent anchor update must succeed");
                     }
                     "keys" => {
                         repo.upsert(environment, ANCHOR, &replacement_jwks, None)
-                            .await?;
+                            .await
+                            .expect("concurrent key update must succeed");
                     }
                     _ => {
-                        assert!(repo.delete(environment, ANCHOR).await?);
+                        assert!(repo
+                            .delete(environment, ANCHOR)
+                            .await
+                            .expect("concurrent anchor deletion must succeed"));
                     }
                 }
                 Ok(raw)
