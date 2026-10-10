@@ -196,56 +196,97 @@ class SecurityAppLauncherTests(unittest.TestCase):
 
 
 class SecurityAppLauncherProgramTests(unittest.TestCase):
-    def test_generated_dispatch_overrides_inherited_native_provider_path(self) -> None:
-        nix = shutil.which("nix")
-        if nix is None:
-            self.fail("The supported test environment requires Nix")
+    def generated_dispatch_text(self, nix: str, bash: str, script: Path) -> str:
         expression = (
             "let flake = builtins.getFlake "
             + json.dumps(str(ROOT))
-            + "; pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; }; "
-            "in import "
+            + "; packages = import flake.inputs.nixpkgs { system = builtins.currentSystem; }; "
+            "pkgs = packages // { bash = "
+            + json.dumps(str(Path(bash).parent.parent))
+            + "; }; app = import "
             + json.dumps(str(ROOT / "nix/flake/security-launcher.nix"))
             + ' { inherit pkgs; inherit (pkgs) lib; name = "provider-path-control"; '
             'runtimeInputs = []; nativePkgConfigPath = "/inert/pinned/lib/pkgconfig"; '
-            'script = pkgs.writeText "record-provider-path.sh" '
-            + json.dumps("printf '%s\\n' \"$PKG_CONFIG_PATH\"\n")
-            + "; }"
+            "script = " + json.dumps(str(script)) + "; }; in builtins.getContext app.text"
         )
-        build = subprocess.run(
+        # Use the real writeShellApplication output without realizing its
+        # build/check dependencies, which need not exist in the helper shell.
+        evaluation = subprocess.run(
             [
                 nix,
                 "--extra-experimental-features",
                 "nix-command flakes",
-                "build",
+                "eval",
                 "--offline",
                 "--impure",
-                "--no-link",
                 "--json",
                 "--expr",
                 expression,
             ],
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
         )
-        launcher = Path(json.loads(build.stdout)[0]["outputs"]["out"]) / "bin/provider-path-control"
-        for inherited in (None, "", "/inert/inherited/lib/pkgconfig"):
-            with self.subTest(inherited=inherited):
-                environment = os.environ.copy()
-                if inherited is None:
-                    environment.pop("PKG_CONFIG_PATH", None)
-                else:
-                    environment["PKG_CONFIG_PATH"] = inherited
-                observed = subprocess.run(
-                    [str(launcher)],
-                    env=environment,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                self.assertEqual(observed.stdout, "/inert/pinned/lib/pkgconfig\n")
-                self.assertEqual(observed.stderr, "")
+        self.assertEqual(evaluation.returncode, 0, evaluation.stderr)
+        dispatches = [
+            path
+            for path in json.loads(evaluation.stdout)
+            if path.endswith("-provider-path-control.drv")
+        ]
+        self.assertEqual(len(dispatches), 1)
+        result = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command",
+                "derivation",
+                "show",
+                dispatches[0],
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = json.loads(result.stdout)
+        derivation = next(iter(document.get("derivations", document).values()))
+        attributes = derivation.get("structuredAttrs")
+        if attributes is None:
+            environment = derivation["env"]
+            attributes = (
+                json.loads(environment["__json"]) if "__json" in environment else environment
+            )
+        return attributes["text"]
+
+    def test_generated_dispatch_overrides_inherited_native_provider_path(self) -> None:
+        nix = shutil.which("nix")
+        bash = shutil.which("bash")
+        if nix is None or bash is None:
+            self.fail("The supported test environment requires Nix and Bash")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            script = directory / "record-provider-path.sh"
+            script.write_text("printf '%s\\n' \"$PKG_CONFIG_PATH\"\n")
+            text = self.generated_dispatch_text(nix, bash, script)
+            dispatch = directory / "dispatch.sh"
+            dispatch.write_text(text)
+            for inherited in (None, "", "/inert/inherited/lib/pkgconfig"):
+                with self.subTest(inherited=inherited):
+                    environment = os.environ.copy()
+                    if inherited is None:
+                        environment.pop("PKG_CONFIG_PATH", None)
+                    else:
+                        environment["PKG_CONFIG_PATH"] = inherited
+                    observed = subprocess.run(
+                        [bash, str(dispatch)],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(observed.returncode, 0, observed.stderr)
+                    self.assertEqual(observed.stdout, "/inert/pinned/lib/pkgconfig\n")
+                    self.assertEqual(observed.stderr, "")
 
     def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
         nix = shutil.which("nix")
