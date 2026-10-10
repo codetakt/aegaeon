@@ -60,6 +60,7 @@ class SecurityAppLauncherTests(unittest.TestCase):
             };
             name = "aegaeon-security";
             runtimeInputs = [ "/inert/runtime-one" "/inert/runtime-two" ];
+            nativePkgConfigPath = "/inert/native/lib/pkgconfig";
             script = /inert/outer.sh;
           }
         """

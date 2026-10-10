@@ -4,12 +4,16 @@
   pkgs,
   name,
   runtimeInputs,
+  nativePkgConfigPath,
   script,
 }:
 let
   dispatch = pkgs.writeShellApplication {
     inherit name;
     runtimeInputs = lib.unique runtimeInputs;
+    # PATH alone does not expose headers/libraries to ffi/build.rs. Bind the
+    # security tests to the same native providers as the pinned development shell.
+    runtimeEnv.PKG_CONFIG_PATH = nativePkgConfigPath;
     text = ''
       set -euo pipefail
       exec ${pkgs.bash}/bin/bash ${script} "$@"

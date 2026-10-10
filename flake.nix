@@ -672,6 +672,11 @@
               inherit lib pkgs;
               name = spec.binName;
               inherit (spec) runtimeInputs script;
+              nativePkgConfigPath = lib.makeSearchPath "lib/pkgconfig" [
+                (lib.getDev pkgs.mbedtls)
+                (lib.getDev pkgs.libsodium)
+                evercryptDist
+              ];
             }) spec.description
           else if appId == "verify-lowstar" then
             mkShellApp {
