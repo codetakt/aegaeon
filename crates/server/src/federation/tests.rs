@@ -492,3 +492,8 @@ mod admission {
     use super::*;
     include!("tests/admission.rs");
 }
+
+mod policy_resolution {
+    use super::*;
+    include!("tests/policy_resolution.rs");
+}

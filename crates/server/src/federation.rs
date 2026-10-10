@@ -5,7 +5,7 @@
 // - Entity Statement / Entity Configuration types (§3)
 // - Subordinate Statement verification (§3.1)
 // - Trust chain resolution from leaf to trust anchor (§4)
-// - Metadata policy resolution with basic operators (§5)
+// - Metadata policy validation, hierarchical merge and application (§6.1)
 // - .well-known/openid-federation endpoint URL construction (§6)
 //
 // Security properties verified by Tamarin model (proofs/tamarin/federation/trust_chain.spthy):
@@ -56,7 +56,7 @@ pub use fetcher::{
     FetchedEntityConfiguration, FetchedSubordinateStatement, HttpFederationFetcher,
 };
 pub use keys::{decode_jwk_material, verification_key_for_alg, DecodedKeyMaterial};
-pub use metadata_policy::apply_metadata_policy;
+pub use metadata_policy::{apply_metadata_policy, apply_metadata_policy_for_entity_type};
 #[cfg(test)]
 pub(crate) use profile::validate_federation_jwks;
 pub(crate) use profile::validate_oidc_upstream_chain;

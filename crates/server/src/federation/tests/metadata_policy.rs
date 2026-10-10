@@ -96,15 +96,15 @@ fn metadata_policy_subset_of_valid() {
 }
 
 #[test]
-fn metadata_policy_subset_of_invalid() {
+fn metadata_policy_subset_of_removes_disallowed_values() {
     let metadata = json!({
         "grant_types": ["authorization_code", "implicit"]
     });
     let policy = json!({
         "grant_types": { "subset_of": ["authorization_code", "refresh_token"] }
     });
-    let err = must_err(apply_metadata_policy(&metadata, &policy));
-    assert!(matches!(err, FederationError::MetadataPolicy(_)));
+    let result = must_ok(apply_metadata_policy(&metadata, &policy));
+    assert_eq!(result["grant_types"], json!(["authorization_code"]));
 }
 
 #[test]
@@ -158,15 +158,14 @@ fn metadata_policy_add_no_duplicates() {
 }
 
 #[test]
-fn metadata_policy_rejects_unknown_operator() {
+fn metadata_policy_ignores_unknown_noncritical_operator() {
     let metadata = json!({
         "grant_types": ["authorization_code"]
     });
     let policy = json!({
         "grant_types": { "unknown_operator": ["authorization_code"] }
     });
-    let err = must_err(apply_metadata_policy(&metadata, &policy));
-    assert!(matches!(err, FederationError::MetadataPolicy(_)));
+    assert_eq!(must_ok(apply_metadata_policy(&metadata, &policy)), metadata);
 }
 
 #[test]

@@ -512,3 +512,71 @@ mod statement_profile {
     use super::*;
     include!("statement_profile.rs");
 }
+
+#[test]
+fn signed_policy_resolution_preserves_raw_direct_and_multi_edge_paths() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        for intermediates in 0..=2 {
+            let mut fixture = SignedPathFixture::new(intermediates);
+            let policy = json!({"openid_relying_party":{"grant_types":{"subset_of":["authorization_code"]}}});
+            for statement in &mut fixture.subordinates {
+                statement.metadata_policy = Some(must_ok(serde_json::from_value(policy.clone())));
+            }
+            fixture.anchor.metadata_policy = Some(policy);
+            fixture.subordinates[0].metadata = Some(HashMap::from([(
+                "openid_relying_party".into(),
+                json!({"grant_types":["authorization_code","implicit"],"client_name":"immediate"}),
+            )]));
+            let fetcher = fixture.fetcher();
+            let result = must_ok(
+                resolve_trust_chain_with_jwts(
+                    &fixture.configs[0].iss,
+                    &[fixture.anchor.clone()],
+                    &fetcher,
+                    NOW,
+                )
+                .await,
+            );
+            let before = result.chain_jwts.clone();
+            let raw_claims = must_ok(serde_json::to_value(&result.trust_chain.chain));
+            let metadata = must_some(must_ok(result.trust_chain.resolved_metadata()));
+            assert_eq!(
+                metadata["openid_relying_party"]["grant_types"],
+                json!(["authorization_code"])
+            );
+            assert_eq!(
+                metadata["openid_relying_party"]["client_name"],
+                json!("immediate")
+            );
+            assert_eq!(result.chain_jwts, before);
+            assert_eq!(
+                must_ok(serde_json::to_value(&result.trust_chain.chain)),
+                raw_claims
+            );
+        }
+    });
+}
+
+#[test]
+fn signed_policy_resolution_detects_conflicts_after_signature_admission() {
+    let _guard = raw_json_env_guard();
+    block_on_test_future(async {
+        let mut fixture = SignedPathFixture::new(1);
+        let upper = json!({"openid_relying_party":{"client_name":{"value":"upper"}}});
+        let lower = json!({"openid_relying_party":{"client_name":{"value":"lower"}}});
+        fixture.anchor.metadata_policy = Some(upper.clone());
+        fixture.subordinates[1].metadata_policy = Some(must_ok(serde_json::from_value(upper)));
+        fixture.subordinates[0].metadata_policy = Some(must_ok(serde_json::from_value(lower)));
+        let result = must_ok(
+            resolve_trust_chain_with_jwts(
+                &fixture.configs[0].iss,
+                &[fixture.anchor.clone()],
+                &fixture.fetcher(),
+                NOW,
+            )
+            .await,
+        );
+        assert!(result.trust_chain.resolved_metadata().is_err());
+    });
+}

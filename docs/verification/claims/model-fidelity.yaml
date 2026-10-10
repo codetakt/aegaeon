@@ -65,11 +65,11 @@ modules:
   fstar/jose/Jose.Context.fst: faithful
   fstar/jose/Jose.Dcr.fst: faithful
   fstar/jose/Jose.False.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Lemmas.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Merge.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Order.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Types.fst: faithful
-  fstar/jose/Jose.Federation.fst: faithful
+  fstar/jose/Jose.Federation.Policy.Lemmas.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Merge.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Order.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Types.fst: simplified
+  fstar/jose/Jose.Federation.fst: simplified
   fstar/jose/Jose.HeaderKeyLemmas.fst: faithful
   fstar/jose/Jose.HeaderMicro.fst: faithful
   fstar/jose/Jose.HeaderParser.Assumptions.fst: faithful
