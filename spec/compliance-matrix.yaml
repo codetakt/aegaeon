@@ -5830,6 +5830,8 @@ openid_core:
   - crates/server/src/web/upstream_callback.rs
   - crates/server/src/web/upstream_callback_connection.rs
   - crates/server/src/web/management/connections/preparation/update.rs
+  - crates/server/src/web/upstream_refresh/tests/cases.rs
+  - crates/server/src/web/upstream_refresh_token_envelope/tests.rs
   ci_check: oidc-rp-upstream-refresh
   status: verified
   runtime_link: crates/server/src/web/upstream_refresh.rs
@@ -5846,6 +5848,10 @@ openid_core:
   - "Persists rotated upstream refresh_token to account_links when upstream IdP issues a new one, guarded by upstream_refresh_token_generation optimistic CAS and connection binding."
   - "Uses bounded NonAuthoritativeMetadataCache for upstream discovery and JWKS to avoid repeated fetches without making process-local cache authoritative."
   - "Comprehensive error handling: 401 (invalid bearer), 404 (no link/token), 502 (upstream failures), and 503 for transient PostgreSQL-backed repository/service unavailability after mandatory startup preflight succeeds."
+  - "OIDC Core 1.0 errata set 2, section 12.2: refreshed upstream ID Tokens retain exact original issuer/subject and semantic audience members. Present auth_time/nonce must match captured original values; absent originals cannot corroborate newly supplied values and are refused by local fail-closed policy. Absent refreshed ID Tokens preserve context. Existing signature and claim checks remain conjunctive."
+  - "Original authentication context is encrypted with the refresh token in a version 3 envelope and retained through generation-CAS rotations. Legacy version 2 requires reauthentication before exchange. The cited F* model does not establish encrypted storage, original-authentication continuity, database concurrency, RNG/AEAD or complete callback/refresh composition; finite signed/PG tests are separate implementation evidence."
+  - "Post-exchange persistence holds shared active-runtime and connection locks through generation-CAS commit; client/issuer/identifier/auth-method, encrypted credentials, effective explicit/default profile or lifecycle/configuration mismatches reject both rotation and last-use updates before token response publication. Current-state equality is not historical revision/ABA detection."
+  - "Local RP freshness policy requires nonnegative refreshed iat at or after HTTP request-start minus configured leeway, alongside existing future/expiry validation. This supports the OP issuance-time requirement; it does not prove replay-freedom within clock skew. The direct production lower-bound helper has a separately registered full numeric-domain Kani harness; actual SQL and clock/HTTP integration remain outside that harness."
 - id: OIDC-1-010
   section: Verification boundary
   requirement: MUST

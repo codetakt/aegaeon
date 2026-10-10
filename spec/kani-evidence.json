@@ -205,6 +205,11 @@
           "rows": [
             "9207-001"
           ]
+        },
+        {
+          "name": "upstream_refresh::freshness_full_numeric_domain",
+          "file": "crates/kani-harness/src/upstream_refresh.rs",
+          "domain": "Direct production lower-bound freshness predicate over all i64 iat and u64 request-start/leeway values, checked against independent i128 subtraction. Clock accuracy, request timestamp capture, upper-time/expiry checks, signatures, DB concurrency and replay-freedom excluded."
         }
       ]
     },
