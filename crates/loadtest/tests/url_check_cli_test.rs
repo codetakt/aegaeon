@@ -33,6 +33,12 @@ impl Fixture {
             .env("AEG_LOADTEST_SESSION_FILE", "absent-session.json")
             .env("AEG_LOADTEST_SESSION_PROVENANCE", "absent-provenance.json")
             .current_dir(&self.root);
+        // Keep instrumented children in cargo-llvm-cov's profile collection.
+        // Otherwise LLVM writes its default profile into the fixture directory,
+        // violating the no-files invariant and losing the child's coverage.
+        if let Some(profile) = std::env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", profile);
+        }
         command
     }
 

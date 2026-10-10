@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 # ruff: noqa: PT009 - assertions must remain active under Python -O.
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,6 +16,53 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class PerformanceWorkflowTests(unittest.TestCase):
+    def test_coverage_threshold_without_optional_host_tools(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
+        step = next(
+            step
+            for step in workflow["jobs"]["coverage"]["steps"]
+            if step.get("name") == "Check coverage threshold"
+        )
+        script = step["run"].split("<<'EOF'\n", 1)[1].rsplit("\nEOF", 1)[0]
+        bash, awk = shutil.which("bash"), shutil.which("awk")
+        self.assertIsNotNone(bash)
+        self.assertIsNotNone(awk)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / "bin"
+            tools.mkdir()
+            (tools / "awk").symlink_to(awk)
+            environment = {**os.environ, "PATH": str(tools)}
+            for hits, found, accepted in [
+                (3999, 10000, False),
+                (40, 100, True),
+                (4001, 10000, True),
+                (0, 0, False),
+            ]:
+                with self.subTest(hits=hits, found=found):
+                    (root / "lcov.info").write_text(f"LF:{found}\nLH:{hits}\n")
+                    result = subprocess.run(  # noqa: S603 - checked-in workflow and synthetic LCOV
+                        [bash, "-c", script],
+                        cwd=root,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        result.returncode == 0, accepted, result.stdout + result.stderr
+                    )
+            (root / "lcov.info").unlink()
+            result = subprocess.run(  # noqa: S603 - checked-in workflow with missing LCOV
+                [bash, "-c", script],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, "missing LCOV must fail")
+
     def test_direct_http_policy_is_scoped_to_public_smoke(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
         flags = {"AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY", "AEGAEON_REQUIRE_TLS_PROXY"}

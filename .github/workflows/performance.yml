@@ -355,7 +355,7 @@ jobs:
             }
           ' lcov.info)
           echo "Coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < 40" | bc -l) )); then
+          if ! awk -v coverage="$COVERAGE" 'BEGIN { exit (coverage >= 40 ? 0 : 1) }'; then
             echo "Coverage ${COVERAGE}% is below 40% threshold"
             exit 1
           fi
