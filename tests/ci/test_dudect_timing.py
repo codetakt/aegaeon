@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import io
+import itertools
 import json
 import os
 import shutil
@@ -162,7 +162,9 @@ class NativeTimingTests(unittest.TestCase):
             ([7, 7, 7, 7, 7], 0, None, 4, 0, 0, 0),
         ):
             with self.subTest(ticks=ticks), patch("dudect_timing.BATCH_SIZE", len(ticks)):
-                clock = summarize_ticks(io.BytesIO(struct.pack("<5q", *ticks)))
+                clock = summarize_ticks(
+                    tuple(ticks), tuple(b - a for a, b in itertools.pairwise(ticks))
+                )
                 self.assertEqual(
                     clock,
                     {

@@ -8,6 +8,7 @@ import struct
 from typing import TYPE_CHECKING, Any
 
 from dudect_diagnostics import HEADER_SIZE, file_identity
+from dudect_distribution import summarize_context, summarize_distribution
 from dudect_results import BATCH_SIZE, PROFILES
 from dudect_support import require
 
@@ -42,10 +43,8 @@ STRIDES = {
 }
 
 
-def summarize_ticks(source: BinaryIO) -> dict[str, int | None]:
+def summarize_ticks(ticks: tuple[int, ...], deltas: tuple[int, ...]) -> dict[str, int | None]:
     """Describe every adjacent timestamp; never filter or admit samples."""
-    ticks = struct.unpack(f"<{BATCH_SIZE}q", source.read(BATCH_SIZE * 8))
-    deltas = tuple(after - before for before, after in itertools.pairwise(ticks))
     divisor = math.gcd(*deltas)
     return {
         "adjacent_pairs": len(ticks) - 1,
@@ -58,8 +57,12 @@ def summarize_ticks(source: BinaryIO) -> dict[str, int | None]:
     }
 
 
-def validate_samples(source: BinaryIO, name: str, width: int) -> dict[str, int | None]:
-    clock = summarize_ticks(source)
+def validate_samples(
+    source: BinaryIO, name: str, width: int
+) -> tuple[dict[str, int | None], dict[str, Any]]:
+    ticks = struct.unpack(f"<{BATCH_SIZE}q", source.read(BATCH_SIZE * 8))
+    deltas = tuple(after - before for before, after in itertools.pairwise(ticks))
+    clock = summarize_ticks(ticks, deltas)
     classes = source.read(BATCH_SIZE)
     require(set(classes) <= {0, 1}, "Invalid timing sample class")
     if width:
@@ -72,7 +75,29 @@ def validate_samples(source: BinaryIO, name: str, width: int) -> dict[str, int |
             ),
             "Invalid fixed-class synthetic timing input",
         )
-    return clock
+    return clock, summarize_distribution(deltas, classes)
+
+
+def validate_context(
+    values: tuple[int, ...], batch: int, previous_end: int | None, counters: list[int]
+) -> None:
+    require(values[:2] == (batch, BATCH_SIZE), "Timing batch order or size mismatch")
+    begin, end = values[2:4]
+    require(
+        0 < begin <= end and (previous_end is None or previous_end <= begin),
+        "Invalid native batch clock",
+    )
+    require(
+        all(cpu <= 2**31 - 1 or cpu == 2**64 - 1 for cpu in values[4:6]),
+        "Invalid native batch CPU",
+    )
+    require(
+        all(
+            previous <= before <= after
+            for previous, before, after in zip(counters, values[6::2], values[7::2], strict=True)
+        ),
+        "Regressed native batch counters",
+    )
 
 
 def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
@@ -96,10 +121,11 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
             == b"AEGTIM03" + b"".join(first[key].encode("ascii") for key in keys),
             "All-case timing binding mismatch",
         )
-        previous_end = 0
+        previous_end = None
         previous_counters = [0] * 6
         layouts = {}
         clocks: dict[str, list[dict[str, int | None]]] = {}
+        distributions: dict[str, list[dict[str, Any]]] = {}
         for name in bindings:
             native_name, stride, width, *offsets = CASE.unpack(source.read(CASE.size))
             require(
@@ -111,27 +137,16 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
             require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
             layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
             clocks[name] = []
+            distributions[name] = []
             for batch in range(frames):
                 values = BATCH.unpack(source.read(BATCH.size))
-                require(values[:2] == (batch, BATCH_SIZE), "Timing batch order or size mismatch")
-                begin, end = values[2:4]
-                require(begin > 0 and previous_end <= begin <= end, "Invalid native batch clock")
-                require(
-                    all(cpu <= 2**31 - 1 or cpu == 2**64 - 1 for cpu in values[4:6]),
-                    "Invalid native batch CPU",
-                )
-                require(
-                    all(
-                        previous <= before <= after
-                        for previous, before, after in zip(
-                            previous_counters, values[6::2], values[7::2], strict=True
-                        )
-                    ),
-                    "Regressed native batch counters",
-                )
-                previous_end = end
+                validate_context(values, batch, previous_end, previous_counters)
+                context = summarize_context(values, previous_end)
+                previous_end = values[3]
                 previous_counters = list(values[7::2])
-                clocks[name].append({"batch": batch, **validate_samples(source, name, width)})
+                clock, distribution = validate_samples(source, name, width)
+                clocks[name].append({"batch": batch, **clock})
+                distributions[name].append({"batch": batch, "context": context, **distribution})
         require(source.read(1) == b"", "Trailing all-case timing evidence")
     return {
         **identity,
@@ -141,6 +156,9 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
         "buffer_offsets_mod4096": layouts,
         "clock_scope": "all_adjacent_timestamps_including_discarded_samples",
         "clock_batches": clocks,
+        "distribution_scope": "native_indices_10_through_penultimate_nonnegative_deltas",
+        "distribution_quantiles": "zero_based_floor_n_times_p_no_interpolation",
+        "distribution_batches": distributions,
         "frames_per_case": frames,
         "complete": True,
     }

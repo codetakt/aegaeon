@@ -253,6 +253,20 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_report_file(fixture.root, path)
         process_path.write_bytes(original)
+        for field in ("distribution", "context", "scope"):
+            process = json.loads(original)
+            timing = process["diagnostics"]["timing"]
+            row = timing["distribution_batches"]["ct_eq_128"][0]
+            if field == "distribution":
+                row["blocks"][0]["classes"][0]["count"] += 1
+            elif field == "context":
+                row["context"]["cpus"][0] = 123
+            else:
+                timing["distribution_scope"] = "all_samples"
+            process_path.write_text(json.dumps(process))
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_report_file(fixture.root, path)
+            process_path.write_bytes(original)
 
 
 if __name__ == "__main__":

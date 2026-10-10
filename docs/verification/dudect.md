@@ -214,6 +214,29 @@ change sample admission or discard backward readings. Observed divisibility is
 not an attestation of physical timer resolution or an explanation of timing
 differences. Bundle validation recomputes the summary from the bound raw file.
 
+The same post-exit pass retains `distribution_batches`: both class distributions
+for each pilot/measured batch and eight contiguous blocks in original sample
+order. Blocks partition native duration indices 10 through the penultimate
+timestamp index; the last computation has no following timestamp. Negative
+deltas have explicit counts and do not enter these distributions; zero durations
+remain included. Each class records its count and integer minimum, 5th percentile,
+median, 95th percentile and maximum, using zero-based `floor(n * p)` ranks without
+interpolation. Empty classes have null order statistics. These are descriptive
+quantiles, not replacements for the frozen pilot cutoffs or statistical tests.
+
+Each batch summary also exposes its original monotonic interval, time since the
+previous batch ended (including across cases in the same executable), boundary
+CPUs and resource-counter differences. The first gap is null; unavailable CPU
+lookups are null rather than a CPU number. Gaps include input preparation,
+statistics, evidence writes, collector work and scheduling; they do not isolate
+any one cause. Whole-batch and block distributions make late timing changes
+visible even when CPU endpoints match. They neither certify stationarity nor
+change admission, retry policy, sample counts or family error control. Validation
+recomputes all these fields from the bound timing file. Historical process
+summaries lacking these fields require their original source-version consumer.
+Post-exit processing can delay the next executable in the campaign; this work
+is not assumed invisible to subsequent measurements.
+
 The recorder makes no calls or writes inside the timed loop and stores no
 product inputs. It reuses existing native buffers, requiring no additional sample
 allocation. Uncompressed size is about 4.5 MiB per case for PR and 55.7 MiB for
