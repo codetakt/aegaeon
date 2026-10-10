@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-09-14
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -111,6 +111,25 @@ on the foreign declarations. The `bytes_prefix_of_buffer` heap effects, copied
 contents and ownership, functional SHA-2 results, allocation/failure behavior,
 provider evidence and correspondence to production remain open. Both foreign
 entries remain `specified-not-attested` in `spec/assumption-register.json`.
+
+## Federation metadata policy correspondence
+
+`Jose.Federation.Policy.{Types,Merge,Order,Lemmas}` and their consumer
+`Jose.Federation` are classified as `simplified`. They remain historical policy
+algebra models, not a refinement of the current Rust metadata resolver.
+In particular, the model selects a descendant default instead of rejecting
+unequal defaults, uses `essential=true` without `value` as a conflict sentinel,
+and omits null deletion, JSON object/number set domains, operator-combination
+admission, immediate-superior metadata overlays and client scope conversion.
+Its restrictiveness lemmas do not establish the Rust application's behavior.
+
+The runtime contract is recorded in the
+[Federation specification](../../specs/openid-federation-spec.md#metadata-policy-resolution)
+and the implemented `fed-rp-006` matrix row. That row cites implementation tests
+and no formal proof. Existing solver success remains evidence only for the
+identified models. Full-domain model/implementation correspondence and their
+composition obligations remain open; these classification corrections do not
+change a product requirement or discharge it.
 
 ## Review Rule
 

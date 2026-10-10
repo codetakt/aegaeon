@@ -5329,6 +5329,31 @@ openid_federation_rp:
   - A forward migration removes only the individual cache expiry-after-fetch CHECK so skew-admitted administrative rows preserve signed exp and accurate fetched_at. Predecessor rejection, unchanged existing rows, desired-schema parity, expired-read refusal and cleanup are tested.
   - Generic signature/profile verifiers and explicit-now complete-chain APIs retain their limited contracts. This is finite implementation coverage, not full NumericDate, trust-chain, edition or product assurance.
 
+- id: fed-rp-006
+  section: '3.1.1, 6.1'
+  requirement: MUST
+  description: Metadata resolution MUST merge standard policies before applying immediate-superior metadata and the resolved policy
+  module: crates/server/src/federation/metadata_policy.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/policy_resolution.rs
+  - crates/server/src/federation/tests/policy_resolution/scope.rs
+  - crates/server/src/federation/tests/metadata_policy.rs
+  - crates/server/src/federation/tests/trust_chain/metadata.rs
+  - crates/server/src/federation/tests/endorsed_keys.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Common Federation 1.0 and 1.1 rules; no new edition or actor adoption.
+  - Validates every supplied policy and intermediate merge, applies the immediate superior overlay only to declared types, and applies the merged policy once.
+  - Covers standard operator order, types, conflicts, scoped client scope representation, optional object/number support and the local intersect compatibility alias.
+  - Scope without recognized operators is preserved; a valid value operator replaces or removes scope before decoding any prior value. Operand and null-metadata admission remain enforced.
+  - Incompatible nonempty set operand types fail before metadata application, including unused entity types and cross-ancestor combinations; empty operands remain type-neutral.
+  - Original scope/alias operands are checked before intersection can discard invalid inputs. Ancestor subset intersections may be empty; one_of retains its scalar metadata contract.
+  - Existing Jose.Federation policy models are simplified historical algebra; they do not prove this resolver or its scope conversion.
+  - Typed-helper specification example and signed direct/multi-edge in-process controls are distinct finite tests; original signed claims are preserved.
+  - Raw critical declarations remain refused. Original numeric precision, local anchor pinning, chain/cache admission timing and authoritative live OIDC consumption remain separate obligations.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

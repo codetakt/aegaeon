@@ -160,8 +160,17 @@ fn profile_invalid_cache_falls_back_and_fresh_callbacks_cannot_repair_signed_cla
     });
 }
 
+fn valid_metadata_policy(fixture: &mut SignedPathFixture) {
+    let policy = json!({"openid_provider":{"issuer":{"essential":false}}});
+    for statement in &mut fixture.subordinates {
+        statement.metadata_policy = Some(must_ok(serde_json::from_value(policy.clone())));
+    }
+    fixture.anchor.metadata_policy = Some(policy);
+}
+
 fn oidc_fixture() -> SignedPathFixture {
     let mut fixture = SignedPathFixture::new(2);
+    valid_metadata_policy(&mut fixture);
     let issuer = fixture.configs[0].iss.clone();
     must_some(fixture.configs[0].metadata.as_mut())
         .insert("openid_provider".into(), json!({"issuer":issuer}));
@@ -186,7 +195,7 @@ fn oidc_web_context_rejects_core_extensions_at_every_position_on_fresh_and_cache
                         env_id,
                         &fixture.anchor.entity_id,
                         must_some(must_some(fixture.configs.last()).jwks.as_ref()),
-                        Some(&json!({})),
+                        fixture.anchor.metadata_policy.as_ref(),
                     ));
                     let cache = ObservedCache::default();
                     let calls = AtomicUsize::new(0);
@@ -228,6 +237,7 @@ fn oidc_web_context_requires_signed_leaf_role_even_if_subordinate_supplies_it() 
     block_on_test_future(async {
         for signed_role in [false, true] {
             let mut fixture = SignedPathFixture::new(0);
+            valid_metadata_policy(&mut fixture);
             if signed_role {
                 must_some(fixture.configs[0].metadata.as_mut())
                     .insert("openid_provider".into(), json!({}));
@@ -242,7 +252,7 @@ fn oidc_web_context_requires_signed_leaf_role_even_if_subordinate_supplies_it() 
                 env_id,
                 &fixture.anchor.entity_id,
                 must_some(fixture.configs[1].jwks.as_ref()),
-                Some(&json!({})),
+                fixture.anchor.metadata_policy.as_ref(),
             ));
             let cache = ObservedCache::default();
             let calls = AtomicUsize::new(0);
@@ -330,7 +340,7 @@ fn artifacts_repository_wrapper_preserves_anchor_order_and_cached_fallback() {
             env_id,
             &fixture.anchor.entity_id,
             must_some(must_some(fixture.configs.last()).jwks.as_ref()),
-            Some(&json!({})),
+            fixture.anchor.metadata_policy.as_ref(),
         ));
         let cache = ObservedCache::default();
         let observed = std::sync::Mutex::new(Vec::new());
