@@ -116,6 +116,14 @@ fn exercise_browser_binding_store(store: &UpstreamAuthStore) -> Result<(), Strin
     assert!(store
         .try_consume_bound("bound-state", &"0".repeat(64), &uri)?
         .is_none());
+    for position in [0, 63] {
+        let mut wrong = digest.clone().into_bytes();
+        wrong[position] = if wrong[position] == b'0' { b'1' } else { b'0' };
+        let wrong = String::from_utf8(wrong).map_err(|err| err.to_string())?;
+        assert!(store
+            .try_consume_bound("bound-state", &wrong, &uri)?
+            .is_none());
+    }
     assert!(store
         .try_consume_bound("bound-state", &digest, "https://rp.example/wrong")?
         .is_none());

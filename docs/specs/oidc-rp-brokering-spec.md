@@ -236,7 +236,9 @@ Redis preserves the deadline as whole seconds plus nanoseconds. It validates the
 in Rust, then atomically compares the unchanged serialized bytes and the Redis clock before
 deleting the key. This requires one additional Redis read. Key retention rounds up to milliseconds;
 the stored absolute deadline still determines admission. Records without the fractional field retain
-their conservative whole-second deadline.
+their conservative whole-second deadline. A final Rust freshness check also rejects an already
+expired transaction if transport delay or clock differences cross the deadline after atomic
+consumption; that authorization must restart.
 Issuer validation also applies before an upstream error can redirect to the saved return location.
 Every response after consumption expires that transaction's cookie, preserving other pending
 transaction cookies and any new login session cookie. Existing successful-login connection

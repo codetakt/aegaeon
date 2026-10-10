@@ -152,7 +152,12 @@ impl UpstreamAuthStore {
                 let Some(request) = entries.get(state) else {
                     return Ok(None);
                 };
-                if request.browser_binding_digest.as_deref() != Some(browser_digest)
+                if !request
+                    .browser_binding_digest
+                    .as_deref()
+                    .is_some_and(|stored| {
+                        crate::util::constant_time_eq(stored.as_bytes(), browser_digest.as_bytes())
+                    })
                     || request.redirect_uri != redirect_uri
                     || !upstream_auth_request_is_fresh_at(request, SystemTime::now())
                 {

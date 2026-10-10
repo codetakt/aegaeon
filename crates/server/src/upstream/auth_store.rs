@@ -250,7 +250,12 @@ impl RedisUpstreamAuthStoreBackend {
         let request = dto.into_request()?;
         if !super::store::valid_browser_binding_digest(browser_digest)
             || request.state != state
-            || request.browser_binding_digest.as_deref() != Some(browser_digest)
+            || !request
+                .browser_binding_digest
+                .as_deref()
+                .is_some_and(|stored| {
+                    crate::util::constant_time_eq(stored.as_bytes(), browser_digest.as_bytes())
+                })
             || request.redirect_uri != redirect_uri
             || !upstream_auth_request_is_fresh_at(&request, SystemTime::now())
         {
@@ -263,6 +268,9 @@ impl RedisUpstreamAuthStoreBackend {
             .arg(nanos)
             .invoke::<Option<String>>(&mut conn)
             .map_err(|err| UpstreamAuthStorageError::BackendUnavailable(err.to_string()))?;
+        // A consumed snapshot must also still be fresh when returned to the caller.
+        // If transport delay or clock differences cross the deadline, fail closed;
+        // the authorization must restart rather than reuse the consumed state.
         Ok(consumed
             .filter(|_| upstream_auth_request_is_fresh_at(&request, SystemTime::now()))
             .map(|_| request))
