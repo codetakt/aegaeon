@@ -16,6 +16,9 @@ let
     runtimeEnv.PKG_CONFIG_PATH = nativePkgConfigPath;
     text = ''
       set -euo pipefail
+      # Ordinary startup has already run in this dispatch. Prevent child shells
+      # from reapplying it after the native provider paths have been pinned.
+      unset BASH_ENV
       exec ${pkgs.bash}/bin/bash ${script} "$@"
     '';
   };

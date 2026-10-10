@@ -288,6 +288,55 @@ class SecurityAppLauncherProgramTests(unittest.TestCase):
                     self.assertEqual(observed.stdout, "/inert/pinned/lib/pkgconfig\n")
                     self.assertEqual(observed.stderr, "")
 
+    def test_generated_dispatch_pins_native_path_after_ordinary_startup(self) -> None:
+        nix = shutil.which("nix")
+        bash = shutil.which("bash")
+        if nix is None or bash is None:
+            self.fail("The supported test environment requires Nix and Bash")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            script = directory / "record-startup.sh"
+            script.write_text(
+                'printf \'%s\\0\' "${PKG_CONFIG_PATH-unset}" "$0" "$@" '
+                '"$AEG_FIXTURE_STARTUPS" "$AEG_FIXTURE_VALUE" "${BASH_ENV-unset}"\n'
+            )
+            dispatch = directory / "dispatch.sh"
+            dispatch.write_text(self.generated_dispatch_text(nix, bash, script))
+            startup = directory / "startup.sh"
+            arguments = [b"", b"space and quote'", b"line\nbreak", b"\xff"]
+            for action in (
+                "export PKG_CONFIG_PATH=/inert/startup/lib/pkgconfig",
+                "unset PKG_CONFIG_PATH",
+            ):
+                with self.subTest(action=action):
+                    startup.write_text(
+                        action + "\n"
+                        "export AEG_FIXTURE_STARTUPS=$((AEG_FIXTURE_STARTUPS + 1))\n"
+                        "export AEG_FIXTURE_VALUE=ordinary-startup\n"
+                    )
+                    environment = os.environ.copy()
+                    environment.update(BASH_ENV=str(startup), AEG_FIXTURE_STARTUPS="0")
+                    observed = subprocess.run(
+                        [os.fsencode(bash), os.fsencode(dispatch), *arguments],
+                        env=environment,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(observed.returncode, 0, observed.stderr)
+                    self.assertEqual(
+                        observed.stdout.split(b"\0"),
+                        [
+                            b"/inert/pinned/lib/pkgconfig",
+                            os.fsencode(script),
+                            *arguments,
+                            b"1",
+                            b"ordinary-startup",
+                            b"unset",
+                            b"",
+                        ],
+                    )
+                    self.assertEqual(observed.stderr, b"")
+
     def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
         nix = shutil.which("nix")
         if nix is None:
