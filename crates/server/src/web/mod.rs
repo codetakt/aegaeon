@@ -67,6 +67,7 @@ mod token_response;
 mod token_sender_binding;
 mod transport_boundary;
 mod upstream_authorize;
+mod upstream_browser_binding;
 mod upstream_callback;
 mod upstream_callback_connection;
 mod upstream_callback_exchange;

@@ -10,6 +10,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn fixture(id: &str, secret: &str, method: &str) -> UpstreamAuthRequest {
     let now = SystemTime::now();
     UpstreamAuthRequest {
+        browser_binding_digest: None,
         state: "state".into(),
         nonce: "nonce".into(),
         code_verifier: Some("verifier".into()),

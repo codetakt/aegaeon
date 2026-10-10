@@ -2101,6 +2101,25 @@ rfc_9700:
     test: crates/server/src/web/token_exchange_tests/resource_request.rs
   notes:
   - "Requests with mismatched audience are rejected with invalid_audience; regression suite exercises policy_enforces_scope_and_audience, and Tamarin verifies cross-audience replay is infeasible."
+- id: 9700-011
+  section: '2.1, 4.7.1'
+  requirement: MUST
+  description: OAuth clients MUST prevent CSRF at the redirection endpoint and bind transaction-specific state to the initiating user agent.
+  module: crates/server/src/web/upstream_callback_state.rs
+  applicability: client_only
+  tests:
+  - crates/server/src/web/upstream_authorize/flow_tests.rs
+  - crates/server/src/web/upstream_tests/browser_binding.rs
+  - crates/server/src/upstream/tests/redis_store.rs
+  - crates/server/src/upstream/auth_store.rs
+  ci_check: cargo test -p aegaeon-server upstream_browser_binding
+  status: implemented
+  runtime_link: crates/server/src/upstream/auth_store.rs
+  notes:
+  - "Applies to Aegaeon's upstream OAuth client role: per-transaction Secure/HttpOnly host cookies bind both success and error callbacks to the initiating browser, saved state, callback route and deadline."
+  - "Rust validates the record before Redis atomically consumes the unchanged snapshot; wrong bindings and routes preserve the transaction, while matching consumption is single-use."
+  - "DB/Redis-gated tests also run in the container integration lane. Scoped Tamarin/F* callback models and direct-production Kani deadline harnesses are described in docs/specs/oidc-rp-brokering-spec.md; their assumptions and implementation correspondence remain explicit. This row remains implemented, not verified. Neither finite tests nor these narrow checks establish a complete provider exchange/session round trip, timing or deployed-system assurance."
+  - "The upstream-auth:v2 rollout requires coordinated writers and consumers; legacy unbound flows restart. The runtime-link manifest only hashes verified rows, so this implemented row does not add a formal drift claim."
 rfc_6755:
 - id: 6755-001
   requirement: TRACKING

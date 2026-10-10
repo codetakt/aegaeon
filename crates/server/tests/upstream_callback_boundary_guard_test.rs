@@ -9,12 +9,31 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
     let callback_body = function_body(&callback_source, "pub(super) async fn upstream_callback(")
         .test_context("upstream callback handler should exist")?;
 
+    assert!(
+        callback_body.contains("complete_bound_upstream_callback("),
+        "the outer callback handler must invoke the bound callback completion helper"
+    );
+    let completion_body = function_body(
+        &callback_source,
+        "async fn complete_bound_upstream_callback(",
+    )
+    .test_context("bound callback completion helper should exist")?;
+    assert!(
+        completion_body.contains("persist_bound_upstream_callback("),
+        "bound callback completion must invoke the persistence helper"
+    );
+    let persistence_body = function_body(
+        &callback_source,
+        "async fn persist_bound_upstream_callback(",
+    )
+    .test_context("bound callback persistence helper should exist")?;
+
     assert_ordered_markers(
-        callback_body,
+        persistence_body,
         &[
             "state.db_pool.begin().await",
-            "resolve_upstream_callback_user(\n        &mut tx,",
-            "record_upstream_callback_audit(\n        &mut tx,",
+            "resolve_upstream_callback_user(&mut tx,",
+            "record_upstream_callback_audit(&mut tx,",
             "persist_upstream_callback_refresh_token(&mut tx,",
             "sync_upstream_callback_projection(\n        &mut tx,",
             "tx.commit().await",

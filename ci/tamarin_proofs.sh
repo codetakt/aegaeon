@@ -105,6 +105,17 @@ PROOFS=(
 	"token_exchange_preserves_sender_binding,token_exchange_reachable"
 
 	# --- federation ---
+	"federation/upstream_browser_binding.spthy:"
+	"store_lifecycle,deadline_lifecycle,browser_secret_secrecy,consume_browser_and_route_binding,"
+	"accepted_browser_and_route_binding,single_consumption,"
+	"validated_snapshot_consumed,no_stale_snapshot_consumed,"
+	"no_expired_consumption,no_expired_acceptance,"
+	"code_callback_reachable,error_callback_reachable,"
+	"concurrent_validation_reachable,stale_rejection_reachable,"
+	"expiry_rejection_reachable,delayed_return_restarts,"
+	"wrong_browser_submission_reachable,wrong_route_submission_reachable,"
+	"forged_cookie_submission_reachable,wrong_browser_preserves_legitimate_callback,"
+	"wrong_route_preserves_legitimate_callback"
 	"federation/rp_brokering.spthy:"
 	"flow_relay_integrity,pkce_upstream_required,code_confusion_prevention,"
 	"issuer_validation_before_downstream,upstream_code_single_use,"
