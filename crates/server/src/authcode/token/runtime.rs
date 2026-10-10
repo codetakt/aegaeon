@@ -176,6 +176,11 @@ impl TokenIssuer {
         self
     }
 
+    pub(crate) fn has_server_issuer(&self, issuer: &str, oidc_issuer: Option<&str>) -> bool {
+        self.issuer.as_deref() == Some(issuer)
+            && self.oidc.as_ref().map(|config| config.issuer.as_str()) == oidc_issuer
+    }
+
     /// Attach the issuer used for JWT access token issuance.
     #[must_use]
     pub fn with_issuer(mut self, issuer: String) -> Self {

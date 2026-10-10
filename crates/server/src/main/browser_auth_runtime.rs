@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use aegaeon_server::config::RuntimeStateNamespace;
-use aegaeon_server::management::types::PolicyDocument;
-use aegaeon_server::web::AuthSessionStore;
+use crate::config::RuntimeStateNamespace;
+use crate::management::types::PolicyDocument;
+use crate::web::AuthSessionStore;
 use anyhow::Result;
 
 pub(super) struct BrowserAuthRuntime {

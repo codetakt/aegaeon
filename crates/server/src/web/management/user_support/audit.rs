@@ -164,7 +164,7 @@ pub(in crate::web::management) async fn mark_user_management_runtime_command_exe
     let updated = sqlx::query(
         r"
 UPDATE aegaeon.management_user_runtime_commands
-SET status = $2,
+SET status = $2::aegaeon.management_runtime_command_status,
     phase = $3,
     attempts = attempts + 1,
     execution_started_at = COALESCE(execution_started_at, now()),
@@ -211,7 +211,7 @@ pub(in crate::web::management) async fn write_user_management_runtime_command_ou
     let updated = sqlx::query(
         r"
 UPDATE aegaeon.management_user_runtime_commands
-SET status = $2,
+SET status = $2::aegaeon.management_runtime_command_status,
     phase = $3,
     result = $4,
     updated_at = now(),

@@ -5932,7 +5932,25 @@ openid_core:
   notes:
   - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use opaque UUIDv4 values; collisions refuse instead of adopting an existing user."
   - "Existing linked identities and explicit email reuse are preserved. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
-  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; that obligation and legacy-history reconciliation remain open."
+  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; permanent ownership and legacy-history adoption are tracked separately in OIDC-1-026."
+- id: OIDC-1-026
+  section: '2 (sub), 5.7, 8'
+  requirement: MUST
+  description: Preserve permanent issuer-scoped subject ownership and global end-user UUID tombstones across rename and deletion
+  module: crates/server/src/subject_ownership.rs
+  proof: []
+  tests:
+  - crates/server/src/web/namespace_runtime/tests.rs
+  - crates/server/src/web/namespace_runtime/lifecycle_tests.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/application_identity_reuse.rs
+  - crates/server/src/subject_ownership/history/validation.rs
+  ci_check: db-integration
+  status: implemented
+  runtime_link: crates/server/src/web/namespace_runtime.rs
+  notes:
+  - "Four immutable authority tables preserve C-collated subject reservations and global UUID tombstones; same-owner rename-back is allowed, cross-owner reuse is refused."
+  - "Existing namespaces require strict offline history adoption; external history completeness and authenticity remain explicit operator premises. See docs/operations/subject-ownership.md."
+  - "Opaque server construction validates restricted database authority, issuer and identity services before protected publication and mutation. No formal proof, deployed-history completeness, certification or full product assurance is claimed."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration

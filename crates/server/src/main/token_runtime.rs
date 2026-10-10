@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use aegaeon_server::authcode::{TokenIssuer, TokenStore, TokenValidator};
-use aegaeon_server::config::{RuntimeStateNamespace, ServerConfig};
-use aegaeon_server::kms::KeyManager;
-use aegaeon_server::oidc::{OidcConfig, OidcSessionStore};
+use crate::authcode::{TokenIssuer, TokenStore, TokenValidator};
+use crate::config::{RuntimeStateNamespace, ServerConfig};
+use crate::kms::KeyManager;
+use crate::oidc::{OidcConfig, OidcSessionStore};
 use anyhow::Result;
 
 pub(super) struct TokenRuntime {

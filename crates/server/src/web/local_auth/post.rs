@@ -277,6 +277,9 @@ pub(in crate::web) async fn local_login_post(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let pool = &state.db_pool;
     let request_id = request_id_from_headers(&headers);
     let submission = match parse_local_login_submission_async(&state, &headers, form).await {

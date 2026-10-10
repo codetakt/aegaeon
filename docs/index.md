@@ -370,6 +370,7 @@ Audience: contributors, maintainers
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
 | `docs/operations/sdk-release.md` | runbook | SDK Release Handoff Runbook (Backend Companion) | current implementation baseline | 2026-09-07 | Operations | operators, maintainers |
 | `docs/operations/step-up-authentication.md` | runbook | Step-Up Authentication (RFC 9470) | current implementation baseline | 2026-08-03 | Operations | operators, maintainers |
+| `docs/operations/subject-ownership.md` | runbook | Permanent OIDC subject ownership | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 
 ## Security
 

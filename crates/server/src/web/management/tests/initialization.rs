@@ -29,27 +29,36 @@ fn input() -> InitializationInput {
 }
 
 // A separate disposable DB is essential: initialization operates on a global singleton.
-// Never delete or reseed the caller's database. The CI Postgres role has CREATEDB.
+// Never delete or reseed the caller's database. Only the explicit test setup
+// administrator supplier may create this private database and its schema.
+// Actual API operations use the separate restricted runtime login.
 async fn database() -> anyhow::Result<(PgPool, PgPool, String)> {
-    let url = std::env::var("AEGAEON_DATABASE_URL")?;
+    let url = std::env::var("AEGAEON_TEST_ADMIN_DATABASE_URL")?;
     let control = PgPoolOptions::new()
         .max_connections(2)
         .connect(&url)
         .await?;
     let name = format!("initialization_{}", Uuid::new_v4().simple());
-    sqlx::query(&format!("CREATE DATABASE {name}"))
-        .execute(&control)
-        .await?;
-    let options = control.connect_options().as_ref().clone().database(&name);
+    let setup_name = name.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("python3")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../scripts/tests/subject_ownership_fixture.py"
+            ))
+            .args(["prepare-child", &setup_name])
+            .status()
+    })
+    .await??;
+    anyhow::ensure!(
+        status.success(),
+        "isolated initialization database setup failed"
+    );
+    let options: sqlx::postgres::PgConnectOptions =
+        std::env::var("AEGAEON_DATABASE_URL")?.parse()?;
     let pool = PgPoolOptions::new()
         .max_connections(6)
-        .connect_with(options)
-        .await?;
-    sqlx::raw_sql(include_str!("../../../../../../db/schema.sql"))
-        .execute(&pool)
-        .await?;
-    sqlx::query("SET search_path = aegaeon, public")
-        .execute(&pool)
+        .connect_with(options.database(&name))
         .await?;
     Ok((control, pool, name))
 }
@@ -150,14 +159,17 @@ async fn pg_initialization_rejects_invalid_input_and_rolls_back_all_writes() -> 
         assert!(initialize_management(&pool, &bad).await.is_err());
         let admins: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.administrators").fetch_one(&pool).await?;
         assert_eq!(admins, 0);
+        let admin = PgPoolOptions::new().max_connections(1)
+            .connect_with(control.connect_options().as_ref().clone().database(&name)).await?;
         // Abort the last required audit write, after owner, policy and topology inserts.
-        sqlx::raw_sql("CREATE FUNCTION aegaeon.reject_initialization_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type = 'MANAGEMENT_INITIALIZED' THEN RAISE EXCEPTION 'injected audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_initialization_audit BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.reject_initialization_audit();").execute(&pool).await?;
+        sqlx::raw_sql("CREATE FUNCTION aegaeon.reject_initialization_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type = 'MANAGEMENT_INITIALIZED' THEN RAISE EXCEPTION 'injected audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_initialization_audit BEFORE INSERT ON aegaeon.audit_events FOR EACH ROW EXECUTE FUNCTION aegaeon.reject_initialization_audit();").execute(&admin).await?;
         assert!(initialize_management(&pool, &input()).await.is_err());
         for table in ["administrators", "control_plane_policies", "teams", "tenants", "environments", "configuration_versions", "environment_policies", "environment_key_stores", "environment_scope_allowlist", "team_memberships", "audit_events"] {
             let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM aegaeon.{table}")).fetch_one(&pool).await?;
             assert_eq!(count, 0, "rollback must remove {table}");
         }
-        sqlx::query("DROP TRIGGER reject_initialization_audit ON aegaeon.audit_events").execute(&pool).await?;
+        sqlx::query("DROP TRIGGER reject_initialization_audit ON aegaeon.audit_events").execute(&admin).await?;
+        admin.close().await;
         initialize_management(&pool, &input()).await?;
         Ok(())
     }.await;
@@ -274,9 +286,11 @@ async fn pg_initialization_runtime_fingerprints_ignore_search_path() -> Manageme
         let baseline = crate::runtime_configuration::load_database_runtime_configuration(
             &default_path, &initialized.issuer_host).await?;
         let expected = baseline.authority_revision()?;
+        let admin = crate::web::test_support::test_admin_pool(&pool).await?;
         // A caller-controlled search_path must not replace the migrated hash function.
         sqlx::raw_sql("CREATE FUNCTION public.digest(text, text) RETURNS bytea LANGUAGE sql AS $$ SELECT decode(repeat('00',32),'hex') $$; CREATE FUNCTION public.digest(bytea, text) RETURNS bytea LANGUAGE sql AS $$ SELECT decode(repeat('00',32),'hex') $$;")
-            .execute(&default_path).await?;
+            .execute(&admin).await?;
+        admin.close().await;
         let actual = crate::runtime_configuration::load_active_runtime_configuration_revision_for_issuer_host(
             &default_path, &initialized.issuer_host).await?;
         assert_eq!(expected, actual);

@@ -38,3 +38,36 @@ pub(in crate::web::management) fn user_profile_not_found(request_id: &str) -> Re
         Some(request_id),
     )
 }
+
+/// Stable ownership conflicts do not disclose the historical owner or subject.
+pub(in crate::web::management) fn subject_ownership_error(
+    error: &sqlx::Error,
+    request_id: &str,
+) -> Option<Response> {
+    let sqlx::Error::Database(error) = error else {
+        return None;
+    };
+    let (status, code, message) = match (error.code().as_deref(), error.constraint()) {
+        (
+            Some("23505"),
+            Some("end_users_subject_owner_conflict" | "end_users_historical_uuid_reuse"),
+        ) => (
+            StatusCode::CONFLICT,
+            "conflict",
+            "Subject ownership conflict",
+        ),
+        (Some("23514"), Some("subject_ownership_namespace_pending")) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "Subject namespace unavailable",
+        ),
+        _ => return None,
+    };
+    Some(error_response(
+        status,
+        code,
+        message,
+        None,
+        Some(request_id),
+    ))
+}

@@ -405,7 +405,7 @@ fn direct_production_env_reads(sources: &[&'static str]) -> BTreeSet<&'static st
 fn direct_main_env_reads_are_classified() {
     let inventory = main_env_inventory_map();
     let direct_reads = direct_production_env_reads(&[
-        include_str!("../../main.rs"),
+        include_str!("../../server_runtime.rs"),
         include_str!("../../config.rs"),
         include_str!("../../config/database.rs"),
         include_str!("../../config/authorization_admission.rs"),

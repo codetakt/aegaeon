@@ -84,7 +84,7 @@ async fn shared_redis_token_exchange_dpop_code_refresh_reexchange() -> TestResul
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         flow(&state).await
     }
     .await;
@@ -105,7 +105,7 @@ async fn shared_redis_bound_refresh_enforced_when_policy_option_disabled() -> Te
             .bind(env.environment_id).execute(&pool).await?;
         Arc::make_mut(&mut state.cfg).security_policy = state.cfg.security_policy
             .with_sender_binding_enforcement(false);
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         assert!(!state.cfg.security_policy.enforce_sender_binding());
         let enforcing_profiles: i64 = sqlx::query_scalar("SELECT count(*) FROM aegaeon.oauth_profiles WHERE environment_id = $1 AND enforce_refresh_sender_binding")
             .bind(env.environment_id).fetch_one(&pool).await?;

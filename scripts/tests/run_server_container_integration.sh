@@ -52,6 +52,10 @@ esac
 export AEGAEON_DATABASE_URL
 export DATABASE_URL="${AEGAEON_DATABASE_URL}"
 export AEGAEON_TEST_REDIS_URL
+# Owned loopback notification receivers are part of the ignored acceptance suite.
+export AEGAEON_BACKCHANNEL_LOGOUT_ALLOW_HTTP_LOOPBACK_FOR_TESTS=true
+# Synthetic fixture key matches the owned upstream acceptance fixture.
+export AEGAEON_KEY_ENCRYPTION_KEY="V1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1c"
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 export CC_x86_64_unknown_linux_gnu="${CC_x86_64_unknown_linux_gnu:-clang}"
 export CXX_x86_64_unknown_linux_gnu="${CXX_x86_64_unknown_linux_gnu:-clang++}"
@@ -92,12 +96,28 @@ wait_for_redis() {
 }
 
 with_test_redis() {
-	# Production shared-store adapters and legacy test helpers must use the
-	# same dedicated Redis, regardless of inherited runtime settings.
-	AEGAEON_PAR_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+	# All actual adapters share the dedicated fixture Redis endpoint.
+	env \
 		AEGAEON_AUTH_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
-		AEGAEON_TOKEN_STORE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_AUTH_SESSION_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DEVICE_CODE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DEVICE_CSRF_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DPOP_NONCE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_DPOP_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_JWKS_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_MANAGEMENT_SESSION_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_PAR_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_STEPUP_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_TOKEN_STORE_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_UPSTREAM_AUTH_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
+		AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL="$AEGAEON_TEST_REDIS_URL" \
 		"$@"
 }
 
@@ -111,15 +131,37 @@ run_mixed_tests() {
 	with_test_redis cargo test -p aegaeon-server shared_redis_ --lib -- --ignored --test-threads=1 "${NAMESPACE_TEST_SKIPS[@]}"
 }
 
+cleanup_subject_database_fixture() {
+	local test_status=$?
+	trap - EXIT
+	if ! python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"; then
+		echo "owned subject database fixture cleanup failed: $SUBJECT_FIXTURE_DIRECTORY" >&2
+		if [[ $test_status == 0 ]]; then test_status=1; fi
+	fi
+	exit "$test_status"
+}
+
+prepare_subject_database_fixture() {
+	export AEGAEON_TEST_ADMIN_DATABASE_URL="${AEGAEON_TEST_ADMIN_DATABASE_URL:-$AEGAEON_DATABASE_URL}"
+	SUBJECT_FIXTURE_DIRECTORY=$(mktemp -d "${TMPDIR:-/tmp}/aegaeon-subject-fixture.XXXXXXXX")
+	chmod 700 "$SUBJECT_FIXTURE_DIRECTORY"
+	trap cleanup_subject_database_fixture EXIT
+	python3 scripts/tests/subject_ownership_fixture.py prepare "$SUBJECT_FIXTURE_DIRECTORY"
+	# The generated file is private and contains only shell-quoted fixture URLs.
+	# shellcheck disable=SC1091
+	source "$SUBJECT_FIXTURE_DIRECTORY/runtime-env.sh"
+}
+
 run_postgres_tests() {
+	python3 -m unittest discover -s scripts/tests -p test_subject_ownership_fixture.py
 	echo "applying database migrations"
-	atlas migrate apply --env local
+	prepare_subject_database_fixture
 
 	# Run the full ignored sweep (minus Redis-backed tests) instead of a
 	# name-prefix filter: prefix filtering silently skipped DB-gated tests
 	# that were not named pg_* (e.g. the dcr_configuration_* RFC 7592 tests).
 	echo "running Postgres-backed aegaeon-server ignored lib tests"
-	cargo test -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ "${NAMESPACE_TEST_SKIPS[@]}"
+	cargo test -p aegaeon-server --lib -- --ignored --test-threads=1 --skip redis_ --skip pre_migration_ "${NAMESPACE_TEST_SKIPS[@]}"
 
 	echo "running Postgres-backed dynamic client registration integration test"
 	cargo test -p aegaeon-server --test dcr_database_test -- --ignored --test-threads=1
@@ -177,6 +219,11 @@ postgres)
 	run_postgres_tests
 	;;
 esac
+
+if [[ -n ${SUBJECT_FIXTURE_DIRECTORY:-} ]]; then
+	python3 scripts/tests/subject_ownership_fixture.py cleanup "$SUBJECT_FIXTURE_DIRECTORY"
+	trap - EXIT
+fi
 
 if [[ ${AEGAEON_SERVER_CONTAINER_DOWN:-0} == "1" ]]; then
 	compose down

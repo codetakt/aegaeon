@@ -2,7 +2,7 @@ async fn subject_format_snapshot(
     pool: &sqlx::PgPool,
     environment: Uuid,
 ) -> Result<serde_json::Value, Box<dyn StdError>> {
-    Ok(sqlx::query_scalar("SELECT jsonb_build_object('users',(SELECT jsonb_agg(to_jsonb(u) ORDER BY id) FROM aegaeon.end_users u WHERE environment_id=$1),'profiles',(SELECT jsonb_agg(to_jsonb(p) ORDER BY end_user_id) FROM aegaeon.end_user_profiles p JOIN aegaeon.end_users u ON u.id=p.end_user_id WHERE u.environment_id=$1),'tokens',(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM aegaeon.end_user_recovery_tokens r JOIN aegaeon.end_users u ON u.id=r.end_user_id WHERE u.environment_id=$1),'audit',(SELECT count(*) FROM aegaeon.audit_events WHERE environment_id=$1))")
+    Ok(sqlx::query_scalar("SELECT jsonb_build_object('users',(SELECT jsonb_agg(to_jsonb(u) ORDER BY id) FROM aegaeon.end_users u WHERE environment_id=$1),'profiles',(SELECT jsonb_agg(to_jsonb(p) ORDER BY end_user_id) FROM aegaeon.end_user_profiles p JOIN aegaeon.end_users u ON u.id=p.end_user_id WHERE u.environment_id=$1),'tokens',(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM aegaeon.end_user_recovery_tokens r JOIN aegaeon.end_users u ON u.id=r.end_user_id WHERE u.environment_id=$1),'audit',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.occurred_at,a.id) FROM aegaeon.audit_events a WHERE environment_id=$1))")
         .bind(environment).fetch_one(pool).await?)
 }
 
@@ -20,10 +20,11 @@ async fn cleanup_subject_format_users(pool: &sqlx::PgPool, environment: Uuid) ->
 }
 
 #[tokio::test]
-#[ignore = "requires isolated PostgreSQL"]
+#[ignore = "requires isolated restricted PostgreSQL and explicit admin observations"]
 async fn oidc_subject_format_management_routes_are_atomic() -> TestResult {
     let pool = membership_test_pool().await?;
     let env = setup_runtime_key_test_environment(&pool).await?;
+    let admin = crate::web::test_support::test_admin_pool(&pool).await?;
     let result: TestResult = async {
         let mgmt = test_management_state();
         let sid = mgmt.sessions.create(env.administrator_id, crate::util::now_unix_epoch_secs()?).ok_or("session")?;
@@ -32,6 +33,8 @@ async fn oidc_subject_format_management_routes_are_atomic() -> TestResult {
         assert_eq!(response.status(), StatusCode::CREATED);
         let user = response_json(response).await?;
         assert_eq!(user["subject"], "CaseSensitive");
+        let owner: Uuid = user["id"].as_str().ok_or("id")?.parse()?;
+        assert_subject_owner(&admin,env.environment_id,owner,&["CaseSensitive"]).await?;
         let patch = format!("users/{}",user["id"].as_str().ok_or("id")?);
         for invalid in [String::new(), "  ".into(), "é".into(), "x".repeat(256)] {
             for (method, path, body) in [
@@ -40,11 +43,11 @@ async fn oidc_subject_format_management_routes_are_atomic() -> TestResult {
                 (Method::PATCH, patch.as_str(), serde_json::json!({"subject":invalid})),
                 (Method::POST, "users/importCsv", serde_json::json!({"csv":format!("subject,email\npending,pending@example.com\n{invalid},bad@example.com\n")})),
             ] {
-                let before = subject_format_snapshot(&pool,env.environment_id).await?;
+                let before = full_subject_snapshot(&pool,&admin,env.environment_id).await?;
                 let response = app.clone().oneshot(membership_http_request(method, &env,path,&sid,body)?).await?;
                 assert_eq!(response.status(), StatusCode::BAD_REQUEST);
                 assert_eq!(response_json(response).await?["errorCode"], "invalid_request");
-                assert_eq!(subject_format_snapshot(&pool,env.environment_id).await?,before);
+                assert_eq!(full_subject_snapshot(&pool,&admin,env.environment_id).await?,before);
             }
         }
         for (path, body, expected) in [
@@ -56,10 +59,13 @@ async fn oidc_subject_format_management_routes_are_atomic() -> TestResult {
             assert!(response.status().is_success(), "{path}: {}", response.status());
             let stored: String=sqlx::query_scalar("SELECT subject FROM aegaeon.end_users WHERE environment_id=$1 AND subject=$2").bind(env.environment_id).bind(&expected).fetch_one(&pool).await?;
             assert_eq!(stored,expected);
+            let id:Uuid=sqlx::query_scalar("SELECT id FROM aegaeon.end_users WHERE environment_id=$1 AND subject=$2").bind(env.environment_id).bind(&expected).fetch_one(&pool).await?;
+            assert_subject_owner(&admin,env.environment_id,id,&[&expected]).await?;
         }
-        let response=app.oneshot(membership_http_request(Method::PATCH,&env,&patch,&sid,serde_json::json!({"subject":" A\tB\u{7f} "}))?).await?;
+        let response=app.clone().oneshot(membership_http_request(Method::PATCH,&env,&patch,&sid,serde_json::json!({"subject":" A\tB\u{7f} "}))?).await?;
         assert_eq!(response.status(),StatusCode::OK);
         assert_eq!(response_json(response).await?["subject"],"A\tB\u{7f}");
+        assert_subject_owner(&admin,env.environment_id,owner,&["CaseSensitive","A\tB\u{7f}"]).await?;
         Ok(())
     }.await;
     cleanup_subject_format_users(&pool, env.environment_id).await?;
@@ -71,8 +77,21 @@ async fn oidc_subject_format_management_routes_are_atomic() -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL"]
-async fn oidc_subject_format_inventory_preserves_all_statuses() -> TestResult {
-    let pool = membership_test_pool().await?;
+async fn pre_migration_oidc_subject_format_inventory_preserves_all_statuses() -> TestResult {
+    let url = std::env::var("AEGAEON_PRE_MIGRATION_DATABASE_URL")?;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(4)
+        .connect(&url)
+        .await?;
+    let installed: bool = sqlx::query_scalar(
+        "SELECT to_regclass('aegaeon.subject_ownership_namespaces') IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert!(
+        !installed,
+        "pre-migration inventory test requires the predecessor schema"
+    );
     let env = setup_runtime_key_test_environment(&pool).await?;
     let result: TestResult=async {
         let mut ids=Vec::new();
@@ -94,3 +113,5 @@ async fn oidc_subject_format_inventory_preserves_all_statuses() -> TestResult {
         cleanup_runtime_key_test_environment(&pool, &env).await,
     )
 }
+
+include!("subject_format/ownership.rs");

@@ -68,24 +68,9 @@ async fn setup_test_environment(pool: &PgPool) -> Result<Uuid, sqlx::Error> {
     Ok(env_id)
 }
 
-/// Helper: clean up test federation data and the minimal FK parent rows.
+/// Helper: remove federation data, preserving permanent namespace parents.
 async fn cleanup_test_environment(pool: &PgPool, env_id: Uuid) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let tenant_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT tenant_id FROM aegaeon.environments WHERE id = $1")
-            .bind(env_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-    let team_id: Option<Uuid> = match tenant_id {
-        Some(tenant_id) => {
-            sqlx::query_scalar("SELECT team_id FROM aegaeon.tenants WHERE id = $1")
-                .bind(tenant_id)
-                .fetch_optional(&mut *tx)
-                .await?
-        }
-        None => None,
-    };
-
     sqlx::query("DELETE FROM aegaeon.federation_trust_chains WHERE environment_id = $1")
         .bind(env_id)
         .execute(&mut *tx)
@@ -98,24 +83,7 @@ async fn cleanup_test_environment(pool: &PgPool, env_id: Uuid) -> Result<(), sql
         .bind(env_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM aegaeon.environments WHERE id = $1")
-        .bind(env_id)
-        .execute(&mut *tx)
-        .await?;
-
-    if let Some(tenant_id) = tenant_id {
-        sqlx::query("DELETE FROM aegaeon.tenants WHERE id = $1")
-            .bind(tenant_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    if let Some(team_id) = team_id {
-        sqlx::query("DELETE FROM aegaeon.teams WHERE id = $1")
-            .bind(team_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-
+    // Permanent namespaces and their parents live until owned database teardown.
     tx.commit().await
 }
 

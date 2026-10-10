@@ -1,5 +1,5 @@
 use super::*;
-use aegaeon_server::runtime_keys::RuntimeKeySet;
+use crate::runtime_keys::RuntimeKeySet;
 
 const TEST_DATABASE_URL: &str = "postgres://aegaeon:test@127.0.0.1/aegaeon_test";
 const TEST_REDIS_URL: &str = "redis://127.0.0.1:6379/0";

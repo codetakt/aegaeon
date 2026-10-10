@@ -346,55 +346,10 @@ ORDER BY occurred_at ASC, id ASC
 }
 
 async fn cleanup_runtime_key_test_environment(
-    pool: &sqlx::PgPool,
-    env: &RuntimeKeyTestEnvironment,
+    _pool: &sqlx::PgPool,
+    _env: &RuntimeKeyTestEnvironment,
 ) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    for sql in [
-        "DELETE FROM aegaeon.audit_events WHERE environment_id = $1",
-        "DELETE FROM aegaeon.environment_dcr_bearer_tokens WHERE environment_id = $1",
-        "DELETE FROM aegaeon.runtime_keys WHERE environment_id = $1",
-        "DELETE FROM aegaeon.environment_policies WHERE environment_id = $1",
-    ] {
-        sqlx::query(sql)
-            .bind(env.environment_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    sqlx::query(
-        "UPDATE aegaeon.environments SET active_configuration_version_id = NULL WHERE id = $1",
-    )
-    .bind(env.environment_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query("DELETE FROM aegaeon.configuration_versions WHERE environment_id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.environments WHERE id = $1")
-        .bind(env.environment_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.tenants WHERE id = $1")
-        .bind(env.tenant_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query(
-        "DELETE FROM aegaeon.team_memberships WHERE team_id = $1 AND administrator_id = $2",
-    )
-    .bind(env.team_id)
-    .bind(env.administrator_id)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query("DELETE FROM aegaeon.teams WHERE id = $1")
-        .bind(env.team_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM aegaeon.administrators WHERE id IN ($1, $2)")
-        .bind(env.administrator_id)
-        .bind(env.non_member_administrator_id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await
+    // Namespaces, receipts and their history live until this owned test database
+    // is torn down. Per-test cleanup must not erase permanent authority.
+    Ok(())
 }

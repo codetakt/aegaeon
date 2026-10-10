@@ -90,6 +90,7 @@ pub(crate) async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<
         .with_issuer(Some(env.issuer_url.clone()))
         .with_jwt_access_tokens_enabled(true),
     );
+    state.validate_subject_namespace().await?;
     Ok(state)
 }
 
@@ -473,7 +474,7 @@ fn signed_dpop_with_key(material: &aegaeon_crypto::signing::Ed25519KeyData) -> T
 }
 
 // Each integration scenario owns an issuer-specific namespace in the private test Redis.
-pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
+pub(crate) async fn use_redis(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
         "exchange-{}",
         uuid::Uuid::new_v4()
@@ -490,6 +491,7 @@ pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
             codes,
             store.clone(),
         )
+        .with_oidc(state.oidc.config.as_deref().cloned())
         .with_issuer(state.issuer.to_string())
         .with_token_exchange_policy(state.cfg.token_exchange.clone())
         .with_jwt_access_tokens_enabled(true),
@@ -503,6 +505,7 @@ pub(crate) fn use_redis(state: &mut AppState) -> TestResult {
         .with_issuer(Some(state.issuer.to_string()))
         .with_jwt_access_tokens_enabled(true),
     );
+    state.validate_subject_namespace().await?;
     Ok(())
 }
 
@@ -516,7 +519,7 @@ async fn shared_redis_token_exchange_target_http_contract() -> TestResult {
     let env = setup_test_environment(&pool).await?;
     let result = async {
         let mut state = fixture(&pool, &env).await?;
-        use_redis(&mut state)?;
+        use_redis(&mut state).await?;
         scenarios(&state).await
     }
     .await;

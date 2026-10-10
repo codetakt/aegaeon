@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use aegaeon_server::client_registry::ClientRegistry;
-use aegaeon_server::config::ServerConfig;
-use aegaeon_server::kms::KeyManager;
-use aegaeon_server::middleware::tls::TransportSecurity;
-use aegaeon_server::middleware::DpopMiddleware;
-use aegaeon_server::oidc::{OidcConfig, OidcSessionStore, UserinfoEndpoint};
-use aegaeon_server::runtime_authority::RuntimeAuthorityState;
-use aegaeon_server::runtime_restart::RuntimeRestartState;
-use aegaeon_server::web::management::ManagementState;
-use aegaeon_server::web::{
+use crate::client_registry::ClientRegistry;
+use crate::config::ServerConfig;
+use crate::kms::KeyManager;
+use crate::middleware::tls::TransportSecurity;
+use crate::middleware::DpopMiddleware;
+use crate::oidc::{OidcConfig, OidcSessionStore, UserinfoEndpoint};
+use crate::runtime_authority::RuntimeAuthorityState;
+use crate::runtime_restart::RuntimeRestartState;
+use crate::web::management::ManagementState;
+use crate::web::{
     AppState, BrowserAuthState, DeviceState, FederationState, KeyManagersState, OidcState,
     ProtocolState, ReadinessState, TokenState, UpstreamState,
 };
@@ -54,7 +54,7 @@ pub(super) struct AppStateParts {
     pub(super) device: DeviceRuntimeStores,
 }
 
-pub(super) fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppState> {
+pub(super) async fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppState> {
     let AppStateParts {
         cfg,
         base_url,
@@ -83,11 +83,12 @@ pub(super) fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppSt
         device,
     } = parts;
 
-    Ok(AppState {
-        application_authority: Some(
-            aegaeon_server::application_authorization::Authority::from_env(db_pool.clone())
+    let mut state = AppState {
+        subject_namespace: None,
+        application_authority: Some(Arc::new(
+            crate::application_authorization::Authority::from_env(db_pool.clone())
                 .map_err(anyhow::Error::msg)?,
-        ),
+        )),
         cfg,
         base_url: Arc::new(base_url),
         issuer: Arc::new(issuer),
@@ -149,5 +150,7 @@ pub(super) fn app_state_from_parts(parts: AppStateParts) -> anyhow::Result<AppSt
             local_login_rate_limiter: device.local_login_rate_limiter,
             rate_limiter: device.device_rate_limiter,
         },
-    })
+    };
+    state.validate_subject_namespace().await?;
+    Ok(state)
 }
