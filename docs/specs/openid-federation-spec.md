@@ -140,6 +140,12 @@ independently checked before cache upsert. Signed claims and cached raw evidence
 not replaced with derived metadata, and freely constructed public chain types attest
 no validation by themselves.
 
+The subordinate-statement builder omits `metadata_policy` when it has no policy
+to impose. It does not emit an empty object, which would invalidate the signed
+chain. This compatibility rule does not enable the deferred publication endpoints.
+The management OpenAPI request schema describes the pin's three nonempty object
+levels; operator operand, combination and scope rules remain runtime validations.
+
 Management chain refresh rechecks acquired raw JWS against the expected leaf and
 configured anchor, including policy resolution, before cache renewal and success
 audit. Acquisition targets the cached row's anchor even when other anchors are

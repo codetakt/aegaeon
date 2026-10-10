@@ -247,10 +247,9 @@ fn build_subordinate_statement_uses_es256() {
     assert_eq!(payload["iss"], "https://op.example", "SS-1: iss = OP");
     assert_eq!(payload["sub"], "https://rp.example", "SS-2: sub = RP");
     assert_ne!(payload["iss"], payload["sub"], "SS-3: iss != sub");
-    assert_eq!(
-        payload["metadata_policy"],
-        json!({}),
-        "local subordinate statements must carry an explicit empty metadata_policy"
+    assert!(
+        payload.get("metadata_policy").is_none(),
+        "an absent policy must be omitted; an empty policy is invalid"
     );
     assert_eq!(
         payload["metadata"]["openid_relying_party"]["client_id"],
@@ -271,6 +270,77 @@ fn build_subordinate_statement_uses_es256() {
     assert_eq!(
         payload["metadata"]["openid_relying_party"]["jwks_uri"],
         "https://rp.example/jwks.json"
+    );
+}
+
+#[test]
+fn federation_subordinate_builder_round_trips_through_signed_chain_admission() {
+    let issuer = crate::kms::InMemoryKeyManager::new();
+    let subject = crate::kms::InMemoryKeyManager::new();
+    let subject_jwk = subject.federation_public_jwk().expect("subject key");
+    let subject_jwks = json!({"keys": [subject_jwk]});
+    let client = federation_test_registered_client("https://rp.example");
+    let subordinate = build_subordinate_statement(
+        "https://op.example",
+        "https://rp.example",
+        &client,
+        &subject_jwks,
+        300,
+        &issuer,
+    )
+    .expect("subordinate");
+    let anchor = build_entity_configuration(
+        "https://op.example",
+        "https://op.example",
+        &[],
+        300,
+        &issuer,
+    )
+    .expect("anchor configuration");
+    let anchor_config = crate::federation::verify_entity_configuration(&anchor).expect("anchor");
+    let now = crate::util::now_unix_epoch_secs()
+        .expect("clock")
+        .cast_signed();
+    let header = json!({"alg": "ES256", "typ": "entity-statement+jwt", "kid": subject_jwk["kid"]});
+    let metadata = json!({"openid_relying_party": {"client_id": "https://rp.example", "redirect_uris": client.redirect_uris}});
+    let leaf = json!({"iss": "https://rp.example", "sub": "https://rp.example", "iat": now, "exp": now + 300,
+        "jwks": subject_jwks, "authority_hints": ["https://op.example"], "metadata": metadata});
+    let signing_input = format!(
+        "{}.{}",
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap()),
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&leaf).unwrap())
+    );
+    let leaf_jws = format!(
+        "{signing_input}.{}",
+        URL_SAFE_NO_PAD.encode(
+            subject
+                .sign_federation(signing_input.as_bytes())
+                .expect("leaf signature")
+        )
+    );
+    let configured_anchor = crate::federation::TrustAnchor {
+        entity_id: "https://op.example".into(),
+        jwks: anchor_config.parse_jwks().expect("anchor keys"),
+        metadata_policy: None,
+    };
+    let chain = crate::federation::verify_signed_path(
+        &[leaf_jws, subordinate, anchor],
+        "https://rp.example",
+        &configured_anchor,
+        now,
+    )
+    .expect("locally built subordinate must pass policy-aware chain admission");
+    let resolved = chain
+        .resolved_metadata()
+        .expect("policy resolution")
+        .expect("metadata");
+    assert_eq!(
+        resolved["openid_relying_party"]["client_id"],
+        "https://rp.example"
+    );
+    assert_eq!(
+        resolved["openid_relying_party"]["redirect_uris"],
+        metadata["openid_relying_party"]["redirect_uris"]
     );
 }
 
