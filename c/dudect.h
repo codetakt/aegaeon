@@ -102,6 +102,7 @@ typedef struct {
 
 #ifdef AEGAEON_DUDECT_CANDIDATE
 #include "dudect_support.h"
+#include "dudect_context.h"
 #endif
 
 typedef struct {
@@ -126,6 +127,10 @@ typedef struct {
   double pilot_center;
   size_t pilot_count;
   volatile uint8_t sink;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  int timing_enabled;
+  dudect_context_t timing_before, timing_after;
+#endif
 } dudect_ctx_t;
 
 typedef enum {
@@ -363,7 +368,13 @@ void dudect_collect(dudect_ctx_t *ctx) {
     dudect_input_classes[ctx->classes[i]]++;
   }
 #endif
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  if (ctx->timing_enabled) ctx->timing_before = dudect_context();
+#endif
   measure(ctx);
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  if (ctx->timing_enabled) ctx->timing_after = dudect_context();
+#endif
   if (ctx->batches == 0) {
     double total = 0.0;
     size_t count = 0;
@@ -388,6 +399,9 @@ int dudect_init(dudect_ctx_t *ctx, dudect_config_t *conf)
   ctx->pilot_center = 0;
   ctx->pilot_count = 0;
   ctx->sink = 0;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  ctx->timing_enabled = 0;
+#endif
   ctx->config = (dudect_config_t*) calloc(1, sizeof(*conf));
   assert(ctx->config);
   assert(conf->number_measurements > 11);

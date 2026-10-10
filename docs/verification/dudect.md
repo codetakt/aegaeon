@@ -139,6 +139,128 @@ their original outcomes. `run_candidate.py` remains a diagnostic collector: its
 `candidate_collection_complete` result has `admission: inactive` and cannot admit
 CI. Retired `DUDECT_*` overrides cannot change the active contract.
 
+## Original-run failure diagnostics
+
+The collector retains `runtime.jsonl` for each native process. It records startup,
+each existing acknowledgment boundary, and shutdown: timestamps, native affinity,
+CPU counters (including steal time), memory/load/pressure, kernel and processor
+identity, boot identity, isolation configuration, and available frequency state.
+Read-only APERF/MPERF samples are attempted for at most 64 allowed CPUs when the
+host exposes `/dev/cpu/*/msr`; absent or denied telemetry is recorded explicitly.
+The collector neither changes CPU policy nor requires privileged access. Counter
+intervals include work between observations and are not per-sample frequencies.
+No additional polling worker runs during a timed loop. Environment dumps and
+unrelated process command lines are excluded from these runtime snapshots.
+At acknowledgment boundaries the owned native process's `/proc/PID/stat`,
+`sched` and `schedstat` retain its last CPU, migration and scheduling counters.
+The capture's finishing timestamp makes its duration visible. These snapshots
+do not prove the CPU stayed unchanged between observations.
+
+Every native executable also writes `native.timing`: ordered timestamp and
+class arrays for **every case and every batch**, including the independent
+pilot. This preserves distribution shifts and the observations behind sparse
+crops or one-class zero variance in the original failing execution. Its
+`AEGTIM02` framing binds the native build, contract, numerical identity, case
+order, input stride and full profile. Each case also records the input, timestamp
+and class-buffer addresses modulo 4096, so cache-line position need not be
+guessed from sample index. These offsets do not reveal full addresses or establish
+physical cache placement. Each batch includes monotonic timestamps,
+actual CPUs and cumulative process resource counters before and after the
+measurement function. CPU lookup failure is recorded as `UINT64_MAX`;
+clock/resource lookup failure aborts collection. Boundary CPUs do not exclude
+migration away and back inside a batch. Resource intervals also include the
+timestamp-difference construction, not only the computation loop.
+
+For `sha256` and `hmac_sha256`, the timing file additionally retains every original
+32-byte synthetic message after each batch's timestamp and class arrays. Class 0
+must contain the specified `0xAA` or `0xBB` bytes. Class 1 retains the original
+random bytes, enabling later analysis of input contents and neighboring samples.
+Earlier `AEGTIM01` evidence did not retain these messages or buffer offsets;
+they cannot be reconstructed from that evidence. Historical packets stay unchanged
+and must be read with their bound source version.
+
+The recorder makes no calls or writes inside the timed loop and stores no
+product inputs. It reuses existing native buffers, requiring no additional sample
+allocation. Uncompressed size is about 4.5 MiB per case for PR and 55.7 MiB for
+periodic; the two message traces increase their respective cases to 20.5 MiB
+and 254 MiB. All 21 periodic cases use about 1.53 GiB, plus the separate comparison
+input trace below. Missing, truncated, reordered or
+misbound timing records prevent a successful report. Partial files remain
+retained on failure; recording never retries or changes statistical admission.
+As with all instrumentation, boundary capture and writes can affect later
+batches. Evidence binds the instrumented artifact and makes no claim of
+physical invisibility.
+
+For the local `ct_eq_128` negative control, `native.samples` preserves **every**
+batch in the same execution, including the pilot. The name denotes a 128-byte
+input stride; the comparison itself reads 32 bytes. Each batch records the
+original timestamp order, class labels, and the actual 32-byte synthetic inputs.
+The unused 96 bytes of stride padding are omitted. Writes occur after a batch's
+measurements and statistical updates, before its observation/acknowledgment.
+They can affect the conditions of later batches; instrumentation is not assumed
+to be physically invisible. The allocation is 2 MiB plus bounded framing;
+files are about 21 MiB for PR and 254 MiB for periodic. The SHA/HMAC messages
+are retained in `native.timing`; remaining cases retain ordered timing/class
+evidence without their synthetic input bytes.
+
+`AEGAEON_DUDECT_TRACE_FD` and `AEGAEON_DUDECT_TIMING_FD` are internal
+parent-to-child verification descriptors, not server settings or user overrides.
+The collector replaces inherited values and supplies empty regular files.
+Failure to write diagnostics fails the run;
+partial files and original stdout remain retained. Complete collection requires
+all expected trace frames, the matching build/contract/numerical identities,
+and valid class/input framing. The report validator rechecks file hashes and
+trace completeness; an incomplete trace cannot publish success. Existing CI
+failure uploads include these files with the rest of the run directory.
+
+The VerifiedReqs workflow also copies the requested Nix store output after an
+attempted build, including failed builds, before uploading `dudect-nix-gate-output`.
+It records the build step outcome and missing or incomplete collection explicitly.
+A copied or cached Nix output is not asserted to be a fresh timing execution;
+the separate runtime step remains required. Failed outputs must be copied before
+garbage collection or runner teardown, and collection errors fail the job.
+Both Nix gates make their declared output directories traversable and files
+readable when the builder exits, including unsuccessful exits. This lets the
+separate CI user copy private temporary run directories that Nix would otherwise
+leave inaccessible after a failed build. The original gate failure remains
+nonzero; a permission-finalization error also prevents success. This applies
+only to the declared Nix output, does not grant write access or follow symlinks,
+and leaves ordinary local run directories private. A forcibly killed builder
+may not execute its exit handler; missing or inaccessible output remains an
+explicit collection failure.
+
+The core CI job evaluates the complete flake inventory, then finishes its other
+checks before building `verifyDudect` and `verified-reqs` one at a time. This
+avoids concurrent Rust builds/tests and overlapping timing gates on that runner;
+it does not establish physical CPU isolation or explain earlier timing failures.
+Both gates remain required, including in push/manual runs that also own the
+formal checks. Their exact derivations and output paths are recorded before
+building, failed builds use `--keep-failed`, and an always-run collector uploads
+the original available outputs even when a gate fails. Unstarted gates and
+interrupted builds remain explicit; collection does not rerun measurements or
+claim cached observations are fresh. The dedicated runtime jobs still collect
+fresh observations. A CI inconclusive result without retained observations
+cannot be diagnosed from the summary line alone.
+
+The binary format is little endian. Its 200-byte header is ASCII `AEGTRC01`,
+then three 64-byte ASCII SHA-256 values: build, contract, numerical policy. Each
+frame starts with four unsigned 64-bit integers: zero-based batch index, sample
+count (65,536), stride (128), captured input width (32). These are followed by
+65,536 signed 64-bit timestamps, 65,536 byte class labels, and 65,536 contiguous
+32-byte inputs. Batch zero is the pilot. To reconstruct durations, subtract
+adjacent timestamps and apply the documented exclusions; the last timestamp
+has no following measured duration. Stored observations preserve the pilot
+cutoffs/center needed to replay all 102 statistics. Keep all files from the
+failed attempt before any new experiment, and record interventions separately.
+
+A retained historical periodic `ct_eq_128` detection remains causally unresolved.
+Subsequent isolated and shared-host diagnostic nondetections do not invalidate
+it or establish a repair. This capture closes the missing-data gap for future
+runs; it cannot reconstruct the absent ordered samples and CPU history of that
+old attempt. Further diagnosis must distinguish input association, temporal
+structure, processor state, artifact changes, and collector effects without
+weakening the contract or discarding the original failure.
+
 ## Calibration and limitations
 
 Each suite executes class-independent synthetic work, a deliberate mean shift

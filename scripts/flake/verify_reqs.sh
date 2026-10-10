@@ -5,6 +5,8 @@
 # (warning mode).
 set -euo pipefail
 
+source scripts/flake/dudect_output_permissions.sh
+
 python3 -m unittest discover -s tests/ci -p 'test_kani_*.py'
 python3 -m unittest discover -s tests/ci -p 'test_assumption_graph*.py'
 python3 scripts/validation/check_kani_citations.py

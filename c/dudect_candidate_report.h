@@ -12,6 +12,8 @@
 #error Candidate builds require the exact numerical implementation identity
 #endif
 
+#include "dudect_trace.h"
+
 static void dudect_print_candidate(const char *name, const char *profile,
                                    dudect_ctx_t *ctx, size_t batch, size_t look) {
     size_t size = ctx->config->number_measurements;
@@ -75,15 +77,21 @@ static int dudect_run_case(const char *name, size_t chunk, int argc, char **argv
     const int periodic = !strcmp(argv[1], "periodic");
     const size_t looks[] = {1, 2, 4, 8, 16, 32, 64, 98};
     size_t look = 0;
+    dudect_trace_t trace = dudect_trace_begin(name, &ctx);
     dudect_collect(&ctx);
+    dudect_trace_batch(&trace, &ctx, 0);
     for (size_t batch = 1; batch <= (periodic ? 98U : 7U); ++batch) {
         dudect_collect(&ctx);
+        dudect_trace_batch(&trace, &ctx, batch);
         if (periodic && batch != looks[look]) continue;
         ++look;
         dudect_require(isfinite(ctx.pilot_center), "finite pilot");
         dudect_print_candidate(name, argv[1], &ctx, batch, look);
-        if (fflush(stdout) || getchar() != 'c') { dudect_free(&ctx); return 2; }
+        if (fflush(stdout) || getchar() != 'c') {
+            dudect_trace_end(&trace); dudect_free(&ctx); return 2;
+        }
     }
+    dudect_trace_end(&trace);
     dudect_free(&ctx);
     return 0;
 }

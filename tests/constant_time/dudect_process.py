@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from dudect_results import NONDETECTION, PROFILES, CaseAdmission, invalid
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
     from typing import IO
 
@@ -46,6 +47,7 @@ def load_json(data: str | bytes) -> Any:
 class ObservationStream:
     cases: tuple[str, ...]
     profile: str
+    before_observation: Callable[[], None] | None = None
     index: int = 0
     buffer: bytes = b""
     total: int = 0
@@ -78,6 +80,8 @@ class ObservationStream:
             invalid("Native dudect output exceeded its bound")
         while b"\n" in self.buffer:
             line, self.buffer = self.buffer.split(b"\n", 1)
+            if self.before_observation is not None:
+                self.before_observation()
             self.observe(line)
             acknowledgments.write(b"c")
             acknowledgments.flush()

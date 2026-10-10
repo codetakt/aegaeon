@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import platform
 import shutil
@@ -26,9 +27,18 @@ from dudect_candidate import (
     digest,
     validate_candidate_report,
 )
+from dudect_diagnostics import (
+    CONTEXT_NAME,
+    TRACE_ENV,
+    TRACE_NAME,
+    RuntimeCapture,
+    file_identity,
+    validate_trace,
+)
 from dudect_process import load_json, receive, terminate
 from dudect_results import BATCH_SIZE, PROFILES, STATISTICS
 from dudect_support import require
+from dudect_timing import TIMING_ENV, TIMING_NAME, validate_timing
 from run import (
     HARNESSES,
     Adapter,
@@ -151,7 +161,7 @@ def build(
     for name in (*spec.sources, "c/dudect.h", "c/dudect_report.h", "c/dudect_candidate_report.h"):
         require((snapshot / name).is_file(), f"Required native source unavailable: {name}")
     binary = evidence / spec.name
-    argv = compiler_argv(spec, inputs.adapter, inputs.flags)
+    argv = [*compiler_argv(spec, inputs.adapter, inputs.flags), "-D_GNU_SOURCE=1"]
     argv[argv.index("-o") + 1] = str(binary)
     compiler = shutil.which(argv[0])
     if compiler is None:
@@ -206,7 +216,7 @@ def build(
     return binary, identity
 
 
-def collect(
+def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle together
     snapshot: Path, evidence: Path, binary: Path, profile: str, bindings: dict[str, Any]
 ) -> dict[str, Any]:
     names = tuple(bindings)
@@ -215,11 +225,27 @@ def collect(
     status = {"argv": argv, "accepted": False, "collection_complete": False}
     process = None
     started = time.monotonic()
+    diagnostics: dict[str, Any] = {}
+    status["diagnostics"] = diagnostics
     try:
         with (
             (evidence / "native.stdout").open("wb") as output,
             (evidence / "native.stderr").open("wb") as errors,
+            (evidence / CONTEXT_NAME).open("xb") as runtime,
+            contextlib.ExitStack() as files,
         ):
+            capture = RuntimeCapture(runtime)
+            capture.snapshot("start")
+            environment = dict(os.environ)
+            environment.pop(TRACE_ENV, None)
+            environment.pop(TIMING_ENV, None)
+            timing = files.enter_context((evidence / TIMING_NAME).open("xb"))
+            descriptors: tuple[int, ...] = (timing.fileno(),)
+            environment[TIMING_ENV] = str(timing.fileno())
+            if "ct_eq_128" in bindings:
+                samples = files.enter_context((evidence / TRACE_NAME).open("xb"))
+                descriptors = (*descriptors, samples.fileno())
+                environment[TRACE_ENV] = str(samples.fileno())
             process = subprocess.Popen(
                 argv,
                 cwd=snapshot,
@@ -227,14 +253,38 @@ def collect(
                 stdout=subprocess.PIPE,
                 stderr=errors,
                 start_new_session=True,
+                env=environment,
+                pass_fds=descriptors,
+            )
+            stream.before_observation = lambda: capture.snapshot(
+                "observation",
+                process.pid,
+                case=names[min(stream.index, len(names) - 1)],
+                look=len(stream.histories[names[min(stream.index, len(names) - 1)]]) + 1,
             )
             budget = PROFILES[profile][2]
-            receive(process, output, stream, started + budget, case_budget=budget)
+            try:
+                receive(process, output, stream, started + budget, case_budget=budget)
+            finally:
+                status["exit"] = terminate(process)
+                capture.snapshot("end")
+            diagnostics["timing"] = validate_timing(evidence / TIMING_NAME, bindings, profile)
+            if "ct_eq_128" in bindings:
+                diagnostics["samples"] = validate_trace(
+                    evidence / TRACE_NAME, bindings["ct_eq_128"], profile
+                )
             status["collection_complete"] = True
     finally:
-        if process is not None:
+        if process is not None and "exit" not in status:
             status["exit"] = terminate(process)
         status["elapsed_seconds"] = time.monotonic() - started
+        for name, filename in (
+            ("runtime", CONTEXT_NAME),
+            ("samples", TRACE_NAME),
+            ("timing", TIMING_NAME),
+        ):
+            if (evidence / filename).is_file() and name not in diagnostics:
+                diagnostics[name] = file_identity(evidence / filename)
         for name, value in (
             ("process", status),
             ("observations", stream.histories),

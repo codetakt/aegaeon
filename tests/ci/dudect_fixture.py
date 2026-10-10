@@ -20,7 +20,7 @@ from test_dudect_candidate import observation
 ROOT = Path(__file__).resolve().parents[2]
 
 NATIVE = r"""
-import json, os, signal, sys
+import json, os, signal, struct, sys
 from pathlib import Path
 rows = ROWS
 options = json.loads(Path(os.environ['FIXTURE_OPTIONS']).read_text())
@@ -29,6 +29,35 @@ with Path(os.environ['FIXTURE_EVENTS']).open('a') as out:
 if options.get('signal'): os.kill(os.getpid(), signal.SIGTERM)
 if options.get('exit'): raise SystemExit(options['exit'])
 if options.get('empty'): raise SystemExit(0)
+if 'AEGAEON_DUDECT_TIMING_FD' in os.environ and not options.get('omit_timing'):
+    sys.path.insert(0, str(Path.cwd() / "tests/constant_time"))
+    from dudect_timing import INPUTS, STRIDES
+    profile = rows[sys.argv[1]]
+    binding = profile[0]['binding']
+    with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb') as timing:
+        timing.write(b'AEGTIM02' + b''.join(binding[key].encode() for key in
+                     ('build_sha256', 'contract_sha256', 'numerical_sha256')))
+        stamp = 1
+        for name in dict.fromkeys(row['case'] for row in profile):
+            width = 32 if name in INPUTS else 0
+            timing.write(struct.pack('<64s5Q', name.encode(), STRIDES[name], width, 16, 16, 16))
+            for batch in range(99 if sys.argv[1] == 'periodic' else 8):
+                timing.write(struct.pack('<18Q', batch, 65536, stamp, stamp + 1, *([0] * 14)))
+                stamp += 2
+                timing.seek(65536 * 9 - 1, 1)
+                timing.write(b'\x00')
+                if width: timing.write(bytes([INPUTS[name]]) * (65536 * width))
+        if options.get('truncate_timing'): timing.truncate(timing.tell() - 1)
+if 'AEGAEON_DUDECT_TRACE_FD' in os.environ and not options.get('omit_trace'):
+    binding = next(row['binding'] for row in rows[sys.argv[1]] if row['case'] == 'ct_eq_128')
+    with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TRACE_FD'])), 'wb') as trace:
+        trace.write(b'AEGTRC01' + b''.join(binding[key].encode() for key in
+                    ('build_sha256', 'contract_sha256', 'numerical_sha256')))
+        for batch in range(99 if sys.argv[1] == 'periodic' else 8):
+            trace.write(struct.pack('<4Q', batch, 65536, 128, 32))
+            trace.seek(65536 * 41 - 1, 1)
+            trace.write(b'\x00')
+        if options.get('truncate_trace'): trace.truncate(trace.tell() - 1)
 for row in rows[sys.argv[1]]:
     if options.get('invalid'): row['schema_version'] = 2
     print(json.dumps(row), flush=True)
@@ -73,7 +102,11 @@ class NativeFixture:
             destination = self.root / source.relative_to(ROOT)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-        for name in ("tests/constant_time/run.sh", "scripts/flake/verify_dudect.sh"):
+        for name in (
+            "tests/constant_time/run.sh",
+            "scripts/flake/verify_dudect.sh",
+            "scripts/flake/dudect_output_permissions.sh",
+        ):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)

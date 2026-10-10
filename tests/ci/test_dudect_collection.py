@@ -119,7 +119,7 @@ int main(void) {
                         [*argv, str(source), "-o", str(executable)],
                         [
                             *argv,
-                            "-D_DEFAULT_SOURCE",
+                            "-D_GNU_SOURCE=1",
                             '-DAEGAEON_DUDECT_SUITE="nix"',
                             *definitions,
                             "-I",
@@ -203,7 +203,7 @@ int main(void) {
                             compiler,
                             "-O2",
                             "-std=c11",
-                            "-D_DEFAULT_SOURCE",
+                            "-D_GNU_SOURCE=1",
                             "-DAEGAEON_DUDECT_CANDIDATE=1",
                             "-I",
                             str(ROOT / "c"),

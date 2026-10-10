@@ -85,6 +85,32 @@ class ContractTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 contract_roles(bad)
 
+    def test_missing_or_truncated_original_samples_cannot_publish_success(self):
+        for option in ("omit_trace", "truncate_trace"):
+            with self.subTest(option=option):
+                fixture = NativeFixture(self)
+                result = fixture.invoke("--suite", "nix", **{option: True})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(fixture.report_path().exists())
+                output = fixture.evidence()[-1] / "executions/dudect_harness"
+                process = json.loads((output / "process.json").read_text())
+                self.assertFalse(process["collection_complete"])
+                self.assertIn("samples", process["diagnostics"])
+                self.assertTrue((output / "native.stdout").is_file())
+
+    def test_all_case_timing_is_required_even_without_ct128(self):
+        for option in ("omit_timing", "truncate_timing"):
+            with self.subTest(option=option):
+                fixture = NativeFixture(self)
+                result = fixture.invoke("--suite", "legacy", **{option: True})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(fixture.report_path().exists())
+                output = fixture.evidence()[-1] / "executions/dudect_controls"
+                process = json.loads((output / "process.json").read_text())
+                self.assertFalse(process["collection_complete"])
+                self.assertIn("timing", process["diagnostics"])
+                self.assertTrue((output / "native.stdout").is_file())
+
     def test_report_binds_artifact_sources_native_stdout_and_assessment(self):
         fixture = NativeFixture(self)
         result = fixture.invoke("--suite", "nix")
@@ -104,6 +130,9 @@ class ContractTests(unittest.TestCase):
             evidence / "package/sources/c/dudect.h",
             evidence / "package/native/dudect_harness/dudect_harness",
             evidence / "package/native/dudect_harness/build-manifest.json",
+            evidence / "executions/dudect_harness/native.samples",
+            evidence / "executions/dudect_harness/native.timing",
+            evidence / "executions/dudect_harness/runtime.jsonl",
             evidence / "executions/dudect_harness/native.stdout",
             evidence / "executions/dudect_harness/observations.json",
             evidence / "executions/dudect_harness/process.json",

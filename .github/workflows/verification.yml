@@ -826,12 +826,33 @@ jobs:
           if-no-files-found: error
 
       - name: Run VerifiedReqs checks (Nix)
+        id: verified-reqs-nix
         run: |
-          nix build .#verified-reqs -L
+          output="$(nix eval --raw .#verified-reqs.outPath)"
+          printf 'store-output=%s\n' "$output" >> "$GITHUB_OUTPUT"
+          nix build .#verified-reqs --keep-failed -L
           if [ -L result ]; then
             echo "=== VerifiedReqs Integrity Log ==="
             cat result/verify.log 2>/dev/null || true
           fi
+
+      - name: Collect attempted Nix timing gate output
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.verified-reqs-nix.outcome) }}
+        env:
+          DUDECT_NIX_OUTPUT: ${{ steps.verified-reqs-nix.outputs.store-output }}
+          DUDECT_NIX_OUTCOME: ${{ steps.verified-reqs-nix.outcome }}
+        run: >-
+          python3 scripts/ci/collect_dudect_nix_output.py
+          --store-output "$DUDECT_NIX_OUTPUT" --outcome "$DUDECT_NIX_OUTCOME"
+          --output artifacts/ct/dudect-nix-gate
+
+      - name: Preserve attempted Nix timing gate output
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.verified-reqs-nix.outcome) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-nix-gate-output
+          path: artifacts/ct/dudect-nix-gate/
+          if-no-files-found: error
 
   # FFI Contract Drift Detection
   # Validates that F* assume vals match their C implementations.

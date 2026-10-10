@@ -4,6 +4,8 @@ set -euo pipefail
 : "${OUT_DIR:?OUT_DIR not set}"
 : "${EVERCRYPT_DIST:?EVERCRYPT_DIST not set}"
 
+source scripts/flake/dudect_output_permissions.sh
+
 # Build-time observations are retained here; CI still collects afresh.
 status=0
 python3 tests/constant_time/run_contract.py --suite nix --profile pr \

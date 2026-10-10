@@ -14,6 +14,7 @@ from typing import Any
 
 from dudect_candidate import COLLECTION_COMPLETE, CandidateAdmission
 from dudect_contract import CONTRACT_COMPLETE, assess_case, assess_collection, contract_roles
+from dudect_diagnostics import validate_diagnostics
 from dudect_package import build_package, checked_package, expected_bindings, import_package
 from dudect_process import NativeError, load_json
 from dudect_results import PROFILES
@@ -124,6 +125,12 @@ def validate_bundle(root: Path, evidence: Path, report: dict[str, Any]) -> None:
             and process["exit"] == 0
             and process.get("collection_complete") is True,
             "Native process did not complete successfully",
+        )
+        validate_diagnostics(
+            output,
+            process,
+            {name: expected["bindings"][name] for name in entry["cases"]},
+            report["profile"],
         )
         observations = load_json((output / "observations.json").read_bytes())
         require(

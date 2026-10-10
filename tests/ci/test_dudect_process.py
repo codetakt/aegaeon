@@ -132,8 +132,21 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
             [json.dumps(candidate_observation(name, look=look)) for look in range(1, 8)]
             for name in self.names
         ]
+        bound = self.bindings[self.names[0]]
+        header = b"AEGTIM02" + b"".join(
+            bound[key].encode() for key in ("build_sha256", "contract_sha256", "numerical_sha256")
+        )
         self.binary.write_text(
-            f"#!{sys.executable}\nimport sys, time\n"
+            f"#!{sys.executable}\nimport os, struct, sys, time\n"
+            "with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb') as f:\n"
+            f" f.write({header!r})\n"
+            " stamp=1\n"
+            " for name, stride in [('ct_eq_32',32), ('ct_eq_64',64)]:\n"
+            "  f.write(struct.pack('<64s5Q',name.encode(),stride,0,16,16,16))\n"
+            "  for batch in range(8):\n"
+            "   f.write(struct.pack('<18Q',batch,65536,stamp,stamp+1,*([0]*14)))\n"
+            "   stamp+=2\n"
+            "   f.seek(65536*9-1,1)\n   f.write(b'\\0')\n"
             f"for delay, rows in zip({delays!r}, {rows!r}, strict=True):\n"
             " time.sleep(delay)\n"
             " for row in rows:\n"
