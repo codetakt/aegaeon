@@ -115,11 +115,15 @@ pub struct TrustAnchor {
     pub entity_id: String,
     /// The trust anchor's public keys.
     pub jwks: JwkSet,
-    /// Optional metadata policy that subordinate statements must match.
+    /// Optional local equality pin for the anchor-issued subordinate policy.
+    /// None adds no local pin; signed policies still undergo full resolution.
     pub metadata_policy: Option<Value>,
 }
 
-/// A verified trust chain from a leaf entity to a trust anchor.
+/// A chain from a leaf entity to a configured trust anchor.
+///
+/// Successful resolver APIs verify signatures, path and metadata policies.
+/// Constructing this public type directly does not attest those checks.
 #[derive(Debug, Clone)]
 pub struct TrustChain {
     /// Ordered entity statements from leaf to trust anchor.
@@ -128,7 +132,10 @@ pub struct TrustChain {
     pub anchor: TrustAnchor,
 }
 
-/// A verified trust chain plus the compact JWS artifacts used to verify it.
+/// A trust chain plus its compact JWS artifacts.
+///
+/// Successful resolver APIs validate the original signed path and metadata
+/// policy before returning. Public construction alone attests no validation.
 #[derive(Debug, Clone)]
 pub struct ResolvedTrustChain {
     /// The semantic trust chain used by callers.

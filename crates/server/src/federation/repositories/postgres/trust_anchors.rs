@@ -103,6 +103,7 @@ WHERE environment_id = $1 AND entity_id = $2
         metadata_policy: Option<&'a Value>,
     ) -> RepositoryFuture<'a, StoredTrustAnchor> {
         Box::pin(async move {
+            crate::federation::validate_metadata_policy_pin(metadata_policy)?;
             let row = sqlx::query(
                 r"
 INSERT INTO aegaeon.federation_trust_anchors

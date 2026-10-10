@@ -24,7 +24,7 @@ fn resolve_trust_chain_direct() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut fetcher = MockFetcher::new();
@@ -151,7 +151,7 @@ fn resolve_trust_chain_intermediate() {
     let trust_anchors = vec![TrustAnchor {
         entity_id: ta_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }];
 
     let mut leaf_config = sample_entity_config(leaf_id, now);

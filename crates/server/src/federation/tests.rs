@@ -123,7 +123,7 @@ fn sample_trust_anchor(entity_id: &str) -> TrustAnchor {
     TrustAnchor {
         entity_id: entity_id.to_string(),
         jwks: sample_jwks(),
-        metadata_policy: Some(json!({})),
+        metadata_policy: None,
     }
 }
 
@@ -277,7 +277,7 @@ fn sample_subordinate_statement(issuer: &str, subject: &str, now: i64) -> Entity
         exp: now + 3600,
         jwks: Some(sample_jwks_value()),
         metadata: None,
-        metadata_policy: Some(HashMap::new()),
+        metadata_policy: None,
         constraints: None,
         trust_marks: None,
         authority_hints: None,

@@ -264,7 +264,6 @@ pub(in crate::web) fn build_subordinate_statement(
         "metadata": {
             "openid_relying_party": rp_metadata,
         },
-        "metadata_policy": {},
     });
 
     sign_federation_jwt(

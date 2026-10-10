@@ -10,7 +10,7 @@ use crate::federation::{
 
 /// Verify the retained discovery layout, authorizing normative links from the anchor down.
 /// Intermediate self-configurations are discovery artifacts, not endorsed signing authorities.
-pub(in crate::federation) fn verify_signed_path(
+pub(crate) fn verify_signed_path(
     jwts: &[String],
     leaf_entity_id: &str,
     anchor: &TrustAnchor,
@@ -56,6 +56,9 @@ pub(in crate::federation) fn verify_signed_path(
         anchor: anchor.clone(),
     };
     validate_path(&chain, leaf_entity_id, now)?;
+    // Policy errors invalidate this candidate before return/cache success. Keep
+    // original signed statements intact; resolved metadata remains derived.
+    chain.resolved_metadata()?;
     Ok(chain)
 }
 

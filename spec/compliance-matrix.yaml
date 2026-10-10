@@ -5354,6 +5354,26 @@ openid_federation_rp:
   - Typed-helper specification example and signed direct/multi-edge in-process controls are distinct finite tests; original signed claims are preserved.
   - Raw critical declarations remain refused. Original numeric precision, local anchor pinning, chain/cache admission timing and authoritative live OIDC consumption remain separate obligations.
 
+- id: fed-rp-007
+  section: '3.1.3, 6.1.4, 10.2'
+  requirement: MUST
+  description: Complete-chain admission MUST reject metadata policy errors before return or successful cache refresh
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/chain_policy_admission.rs
+  - crates/server/src/federation/tests/trust_chain/anchor_policy.rs
+  - crates/server/src/web/management/tests/initialization/federation_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - Common Federation 1.0 and 1.1 policy admission; no new edition or actor adoption.
+  - Signed candidate failure uses existing bounded backtracking. Cached and custom raw paths are reverified before return or upsert; original signed evidence is preserved.
+  - Optional local pin absence permits otherwise valid chains; supplied valid pins retain exact structural equality and all supplied pins require policy grammar. Administrators using absence to disable anchors must remove them before upgrade.
+  - Management pin CRUD uses real router and PostgreSQL controls. Refresh uses the common PostgreSQL workflow with only signed raw acquisition supplied; remote HTTP and SSRF transport are inherited, not newly executed.
+  - Management refresh targets the cached anchor and revalidates current keys, pin and time under anchor row locks before renewal and success audit; regression controls change or remove the anchor during acquisition.
+  - Live OIDC authority, complete critical/constraint processing, original numeric precision and full-chain cache temporal domains remain separate obligations; no formal proof or product assurance is claimed.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

@@ -122,6 +122,10 @@ unequal defaults, uses `essential=true` without `value` as a conflict sentinel,
 and omits null deletion, JSON object/number set domains, operator-combination
 admission, immediate-superior metadata overlays and client scope conversion.
 Its restrictiveness lemmas do not establish the Rust application's behavior.
+The historical `Jose.Federation` anchor model also requires a nonoptional policy
+and an exact subordinate-policy match. Rust accepts an absent local pin while
+still resolving all signed policies; the model does not establish that admission
+behavior or PostgreSQL refresh revalidation under current anchor row locks.
 
 The runtime contract is recorded in the
 [Federation specification](../../specs/openid-federation-spec.md#metadata-policy-resolution)

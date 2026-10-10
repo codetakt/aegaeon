@@ -9,7 +9,9 @@ use axum::response::Response;
 pub(in crate::web::management) use delete::delete_federation_trust_chain_row;
 pub(in crate::web::management) use entry::load_federation_trust_chain_entry;
 pub(in crate::web::management) use refresh::store_refreshed_federation_trust_chain;
-pub(in crate::web::management) use resolution::resolve_refreshed_trust_chain_payload;
+pub(in crate::web::management) use resolution::{
+    resolve_refreshed_trust_chain_payload, validate_refreshed_trust_chain,
+};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 

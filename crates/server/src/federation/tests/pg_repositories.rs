@@ -180,11 +180,15 @@ async fn pg_trust_anchor_crud() {
     assert_eq!(must_ok(repo.list_for_environment(env_id).await).len(), 1);
 
     // Delete
-    assert!(must_ok(repo.delete(env_id, "https://ta.test.example.com").await));
+    assert!(must_ok(
+        repo.delete(env_id, "https://ta.test.example.com").await
+    ));
     assert!(must_ok(repo.list_for_environment(env_id).await).is_empty());
 
     // Delete non-existent
-    assert!(!must_ok(repo.delete(env_id, "https://ta.test.example.com").await));
+    assert!(!must_ok(
+        repo.delete(env_id, "https://ta.test.example.com").await
+    ));
 
     must_ok(cleanup_test_environment(&pool, env_id).await);
 }
@@ -285,13 +289,11 @@ async fn pg_entity_cache_crud_and_ttl() {
     assert_eq!(entry.parsed_statement, parsed);
 
     // Expired — use a "now" far in the future
-    assert!(
-        must_ok(
-            repo.get(env_id, "https://rp.test.example.com", now + 1801)
-                .await
-        )
-        .is_none()
-    );
+    assert!(must_ok(
+        repo.get(env_id, "https://rp.test.example.com", now + 1801)
+            .await
+    )
+    .is_none());
 
     // Upsert (update)
     must_ok(
@@ -304,12 +306,9 @@ async fn pg_entity_cache_crud_and_ttl() {
         )
         .await,
     );
-    let updated = must_some(must_ok(repo.get(
-        env_id,
-        "https://rp.test.example.com",
-        now,
-    )
-    .await));
+    let updated = must_some(must_ok(
+        repo.get(env_id, "https://rp.test.example.com", now).await,
+    ));
     assert_eq!(updated.entity_configuration_jws, "eyJ-v2");
 
     must_ok(cleanup_test_environment(&pool, env_id).await);
@@ -408,13 +407,11 @@ async fn pg_entity_cache_cleanup_expired() {
     assert!(removed >= 1);
 
     // e2 should still be present
-    assert!(
-        must_ok(
-            repo.get(env_id, "https://e2.test.example.com", cleanup_at)
-                .await
-        )
-        .is_some()
-    );
+    assert!(must_ok(
+        repo.get(env_id, "https://e2.test.example.com", cleanup_at)
+            .await
+    )
+    .is_some());
 
     must_ok(cleanup_test_environment(&pool, env_id).await);
 }
@@ -491,13 +488,15 @@ async fn pg_trust_chain_cache_crud_and_ttl() {
         )
         .await,
     );
-    let updated = must_some(must_ok(repo.get(
-        env_id,
-        "https://rp.test.example.com",
-        "https://ta.test.example.com",
-        now,
-    )
-    .await));
+    let updated = must_some(must_ok(
+        repo.get(
+            env_id,
+            "https://rp.test.example.com",
+            "https://ta.test.example.com",
+            now,
+        )
+        .await,
+    ));
     assert_eq!(updated.chain_jwts, new_chain);
 
     must_ok(cleanup_test_environment(&pool, env_id).await);
@@ -614,7 +613,7 @@ fn pg_cached_chain_revalidates_current_anchor_key() {
         let cache = PgTrustChainCacheRepository::new(pool.clone());
         must_ok(
             anchor_repo
-                .upsert(env_id, ta_id, &signed.anchor_jwks, Some(&json!({})))
+                .upsert(env_id, ta_id, &signed.anchor_jwks, None)
                 .await,
         );
         let mut fetcher = MockFetcher::new();
@@ -641,7 +640,7 @@ fn pg_cached_chain_revalidates_current_anchor_key() {
         let replacement_keys = federation_jwks_value(&InMemoryKeyManager::new());
         must_ok(
             anchor_repo
-                .upsert(env_id, ta_id, &replacement_keys, Some(&json!({})))
+                .upsert(env_id, ta_id, &replacement_keys, None)
                 .await,
         );
         assert!(resolve_trust_chain_cached(
@@ -676,7 +675,7 @@ fn pg_cached_chain_rejects_wrong_entity_statement_purpose() {
         let cache = PgTrustChainCacheRepository::new(pool.clone());
         must_ok(
             anchors
-                .upsert(env_id, ta_id, &signed.anchor_jwks, Some(&json!({})))
+                .upsert(env_id, ta_id, &signed.anchor_jwks, None)
                 .await,
         );
         must_ok(
