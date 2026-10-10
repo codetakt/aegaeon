@@ -341,19 +341,64 @@ async fn pg_individual_entity_refresh_admits_raw_before_transactional_update_and
     Ok(())
 }
 
+#[tokio::test]
+#[ignore = "requires PostgreSQL with CREATEDB; isolated connection-failure fixture"]
+async fn pg_individual_entity_refresh_cleans_up_after_initial_connection_failure(
+) -> anyhow::Result<()> {
+    let name = format!("federation_refresh_{}", Uuid::new_v4().simple());
+    let result = run_database_named(false, &name, true).await;
+    assert!(
+        result.is_err(),
+        "injected connection failure must reach the caller"
+    );
+    let control = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
+        .await?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname=$1)")
+            .bind(&name)
+            .fetch_one(&control)
+            .await?;
+    control.close().await;
+    assert!(
+        !exists,
+        "failed initial connection must not leak its database"
+    );
+    Ok(())
+}
+
 async fn run_database(predecessor: bool) -> anyhow::Result<TableContract> {
+    let name = format!("federation_refresh_{}", Uuid::new_v4().simple());
+    run_database_named(predecessor, &name, false).await
+}
+
+async fn run_database_named(
+    predecessor: bool,
+    name: &str,
+    reject_connection: bool,
+) -> anyhow::Result<TableContract> {
     let control = PgPoolOptions::new()
         .max_connections(2)
         .connect(&std::env::var("AEGAEON_DATABASE_URL")?)
         .await?;
-    let name = format!("federation_refresh_{}", Uuid::new_v4().simple());
     sqlx::query(&format!("CREATE DATABASE {name}"))
         .execute(&control)
         .await?;
-    let pool = PgPoolOptions::new()
-        .max_connections(4)
-        .connect_with(control.connect_options().as_ref().clone().database(&name))
-        .await?;
+    let mut options = PgPoolOptions::new().max_connections(4);
+    if reject_connection {
+        options = options
+            .acquire_timeout(Duration::from_millis(100))
+            .after_connect(|_, _| {
+                Box::pin(async {
+                    Err(sqlx::Error::Protocol(
+                        "injected initial connection failure".into(),
+                    ))
+                })
+            });
+    }
+    // Defer the first connection until the scenario, so errors also reach cleanup.
+    let pool = options.connect_lazy_with(control.connect_options().as_ref().clone().database(name));
     eprintln!("owned workflow fixture database: {name}");
     let scenario_pool = pool.clone();
     let result = match tokio::spawn(async move {
@@ -373,7 +418,7 @@ async fn run_database(predecessor: bool) -> anyhow::Result<TableContract> {
                 pool.close().await;
                 let count: i64 =
                     sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=$1")
-                        .bind(&name)
+                        .bind(name)
                         .fetch_one(&control)
                         .await?;
                 if pool.size() == 0 && count == 0 {
@@ -411,11 +456,19 @@ struct TableContract {
 }
 
 async fn table_contract(pool: &PgPool) -> anyhow::Result<TableContract> {
-    Ok(TableContract {
-        constraints: sqlx::query_as("SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='aegaeon.federation_entity_cache'::regclass ORDER BY conname").fetch_all(pool).await?,
-        columns: sqlx::query_as("SELECT attname::text, attnotnull FROM pg_attribute WHERE attrelid='aegaeon.federation_entity_cache'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attname").fetch_all(pool).await?,
-        indexes: sqlx::query_as("SELECT indexname::text, indexdef FROM pg_indexes WHERE schemaname='aegaeon' AND tablename='federation_entity_cache' ORDER BY indexname").fetch_all(pool).await?,
-    })
+    // Render catalog definitions with a stable path on the same connection.
+    // Schema setup may have changed search_path on a different pooled connection.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET LOCAL search_path = pg_catalog")
+        .execute(&mut *tx)
+        .await?;
+    let contract = TableContract {
+        constraints: sqlx::query_as("SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='aegaeon.federation_entity_cache'::regclass ORDER BY conname").fetch_all(&mut *tx).await?,
+        columns: sqlx::query_as("SELECT attname::text, attnotnull FROM pg_attribute WHERE attrelid='aegaeon.federation_entity_cache'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attname").fetch_all(&mut *tx).await?,
+        indexes: sqlx::query_as("SELECT indexname::text, indexdef FROM pg_indexes WHERE schemaname='aegaeon' AND tablename='federation_entity_cache' ORDER BY indexname").fetch_all(&mut *tx).await?,
+    };
+    tx.commit().await?;
+    Ok(contract)
 }
 
 async fn upgrade_predecessor(pool: &PgPool, row: Uuid) -> anyhow::Result<()> {
