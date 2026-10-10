@@ -1,15 +1,12 @@
 # ruff: noqa: S603 - fixed compiler profiles and structured tool argv
-"""Legacy five-harness runner; formal Nix dudect lanes are separate.
-
-num_traces is the configured minimum batch size, not observed/admitted traces.
-C schedules, statistics, maximum-p aggregation and warning policy are unchanged.
-"""
+"""Compile or load native dudect programs and admit fresh observed evidence."""
 
 from __future__ import annotations
 
+import hashlib
 import json
-import math
 import os
+import platform
 import shlex
 import shutil
 import subprocess
@@ -18,15 +15,14 @@ import tempfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
+from dudect_process import NativeError, run_native
+from dudect_results import LEGACY_CASES, NIX_CASES, NONDETECTION, PROFILES, validate_report
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from types import ModuleType
     from typing import NoReturn
 
 
@@ -61,28 +57,14 @@ HARNESSES = (
     ),
     Harness("jwe", ("tests/constant_time/jwe_timing_test.c", "c/jwe.c"), ("-lcrypto", "-lm")),
 )
-# Existing configured batches: 200000, 200000, 20000, 100000, 100000.
-CONFIGURED_MIN_BATCH = 20_000
-FAIL_THRESHOLD = 0.01
 
+fcntl: ModuleType | None
+try:
+    import fcntl as _fcntl
 
-@dataclass(frozen=True)
-class NativeFlags:
-    karamel: tuple[str, ...]
-    cflags: tuple[str, ...]
-    libs: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Result:
-    name: str
-    state: int
-    p_value: float
-    payload: dict[str, object]
-
-    @property
-    def accepted(self) -> bool:
-        return self.state == 1 and self.p_value >= FAIL_THRESHOLD
+    fcntl = _fcntl
+except ImportError:
+    fcntl = None
 
 
 class RunError(Exception):
@@ -95,58 +77,11 @@ def fail(message: str, code: int = 1) -> NoReturn:
     raise RunError(message, code)
 
 
-def strict_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            fail(f"Duplicate dudect JSON key: {key}")
-        result[key] = value
-    return result
-
-
-def reject_constant(value: str) -> object:
-    fail(f"Non-finite dudect JSON constant: {value}")
-
-
-def finite_float(value: str) -> float:
-    number = float(value)
-    if not math.isfinite(number):
-        fail(f"Non-finite dudect JSON number: {value}")
-    return number
-
-
-def parse_result(name: str, stdout: bytes) -> Result:
-    lines = stdout.decode("utf-8").splitlines()
-    if not lines:
-        fail(f"No output from dudect {name}")
-    data: object = json.loads(
-        lines[-1],
-        object_pairs_hook=strict_object,
-        parse_constant=reject_constant,
-        parse_float=finite_float,
-    )
-    if not isinstance(data, dict):
-        fail(f"dudect {name} result must be a JSON object")
-    payload = cast("dict[str, object]", data)
-    state = payload.get("state")
-    p_value = payload.get("p")
-    if type(state) is not int or state not in (0, 1):
-        fail(f"dudect {name} requires state 0 or 1")
-    if type(p_value) not in (int, float):
-        fail(f"dudect {name} requires a numeric p-value")
-    numeric = cast("int | float", p_value)
-    if not 0 <= numeric <= 1 or not math.isfinite(numeric):
-        fail(f"dudect {name} requires a finite p-value in [0, 1]")
-    return Result(name, state, float(numeric), payload)
-
-
-def aggregate(results: Sequence[Result]) -> dict[str, object]:
-    return {
-        "state": int(all(result.state == 1 for result in results)),
-        "p": max(result.p_value for result in results),
-        "num_traces": CONFIGURED_MIN_BATCH,
-        "tests": {result.name: result.payload for result in results},
-    }
+@dataclass(frozen=True)
+class NativeFlags:
+    karamel: tuple[str, ...]
+    cflags: tuple[str, ...]
+    libs: tuple[str, ...]
 
 
 def binary_path(harness: Harness, adapter: Adapter) -> Path:
@@ -231,24 +166,33 @@ def archive_existing(path: Path, archive: Path) -> None:
         path.rename(archive / path.name)
 
 
-def run_harness(
-    root: Path, evidence: Path, harness: Harness, adapter: Adapter, flags: NativeFlags
-) -> Result:
-    binary = root / binary_path(harness, adapter)
-    binary.parent.mkdir(parents=True, exist_ok=True)
-    archive_existing(binary, evidence / "previous-binaries")
-    run_checked(root, evidence, f"{harness.name}-compile", compiler_argv(harness, adapter, flags))
-    if (
-        binary.is_symlink()
-        or not binary.is_file()
-        or not binary.stat().st_size
-        or not os.access(binary, os.X_OK)
-    ):
-        fail(f"Compiler did not produce a nonempty executable: {binary}")
-    stdout = run_checked(root, evidence, harness.name, [str(binary)])
-    result = parse_result(harness.name, stdout)
-    write_json(evidence / f"{harness.name}.json", result.payload)
-    return result
+def legacy_cases(
+    root: Path, evidence: Path, adapter: Adapter, profile: str
+) -> dict[str, list[object]]:
+    flags = discover_flags(root, evidence)
+    cases = {}
+    for harness in HARNESSES:
+        binary = root / binary_path(harness, adapter)
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        archive_existing(binary, evidence / "previous-binaries")
+        run_checked(
+            root, evidence, f"{harness.name}-compile", compiler_argv(harness, adapter, flags)
+        )
+        if (
+            binary.is_symlink()
+            or not binary.is_file()
+            or not binary.stat().st_size
+            or not os.access(binary, os.X_OK)
+        ):
+            fail(f"Compiler did not produce a nonempty executable: {binary}")
+        write_json(
+            evidence / f"{harness.name}.binary.json",
+            {"sha256": hashlib.sha256(binary.read_bytes()).hexdigest()},
+        )
+        cases[harness.name] = run_native(root, evidence, binary, (harness.name,), profile)[
+            harness.name
+        ]
+    return cases
 
 
 def publish(source: Path, destination: Path) -> None:
@@ -262,39 +206,95 @@ def publish(source: Path, destination: Path) -> None:
         raise
 
 
-def execute(root: Path, adapter: Adapter) -> int:
+def execute(root: Path, adapter: Adapter, profile: str, nix_binary: Path | None = None) -> int:
     if fcntl is None:
         fail("dudect requires a Unix platform with fcntl file locking")
-    output = root / "artifacts/ct/dudect"
+    output = root / ("artifacts/ct/dudect" if nix_binary is None else "artifacts/ct/dudect-nix")
     output.mkdir(parents=True, exist_ok=True)
     with (output / ".legacy-run.lock").open("a", encoding="utf-8") as lock:
         try:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             fail("Another legacy dudect run owns the shared outputs")
-        return execute_locked(root, adapter)
+        return execute_locked(root, adapter, profile, output, nix_binary)
 
 
-def execute_locked(root: Path, adapter: Adapter) -> int:
-    output = root / "artifacts/ct/dudect"
+def record_context(root: Path, evidence: Path) -> None:
+    sources = [
+        *root.glob("c/*"),
+        *root.glob("include/*"),
+        *root.glob("tests/constant_time/*"),
+        root / "flake.lock",
+        root / "nix/dudect.nix",
+    ]
+    hashes = {}
+    for path in sources:
+        if path.is_file():
+            relative = path.relative_to(root)
+            destination = evidence / "sources" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, destination)
+            hashes[str(relative)] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    write_json(
+        evidence / "context.json",
+        {
+            "platform": platform.platform(),
+            "python": sys.version,
+            "tools": {name: shutil.which(name) for name in ("cc", "gcc", "krml", "pkg-config")},
+            "affinity": sorted(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else None,
+            "load_average": os.getloadavg(),
+            "sources": hashes,
+        },
+    )
+
+
+def execute_locked(
+    root: Path, adapter: Adapter, profile: str, output: Path, nix_binary: Path | None
+) -> int:
     runs = output / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     evidence = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
-    print(f"Legacy dudect raw evidence: {evidence}", flush=True)
-    status: dict[str, object] = {"adapter": adapter.value, "accepted": False}
+    print(f"Dudect raw evidence: {evidence}", flush=True)
+    status: dict[str, object] = {"adapter": adapter.value, "profile": profile, "accepted": False}
     try:
-        for name in ("report", *(harness.name for harness in HARNESSES)):
+        for name in ("report", *LEGACY_CASES):
             archive_existing(output / f"{name}.json", evidence / "previous-results")
-        flags = discover_flags(root, evidence)
-        results = [run_harness(root, evidence, harness, adapter, flags) for harness in HARNESSES]
-        write_json(evidence / "report.json", aggregate(results))
-        if not all(result.accepted for result in results):
-            fail("dudect reported leakage or an individual p-value below 0.01")
+        for key in (
+            "DUDECT_MIN_TRACES",
+            "DUDECT_TAU_WARN",
+            "DUDECT_TAU_FAIL",
+            "DUDECT_WARN_THRESHOLD",
+            "DUDECT_FAIL_THRESHOLD",
+        ):
+            if key in os.environ:
+                fail(f"{key} is retired; select --profile pr or periodic")
+        record_context(root, evidence)
+        if nix_binary is not None:
+            binary = nix_binary.resolve(strict=True)
+            write_json(
+                evidence / "binary.json",
+                {"path": str(binary), "sha256": hashlib.sha256(binary.read_bytes()).hexdigest()},
+            )
+            cases = run_native(root, evidence, binary, NIX_CASES, profile)
+            suite = "nix"
+        else:
+            cases = legacy_cases(root, evidence, adapter, profile)
+            suite = "legacy"
+        report = {
+            "schema_version": 2,
+            "suite": suite,
+            "profile": profile,
+            "outcome": NONDETECTION,
+            "cases": cases,
+        }
+        write_json(evidence / "report.json", report)
+        validate_report(report)
         status["accepted"] = True
         write_json(evidence / "status.json", status)
-        for name in (*(harness.name for harness in HARNESSES), "report"):
-            publish(evidence / f"{name}.json", output / f"{name}.json")
-    except (RunError, OSError, ValueError, UnicodeError) as error:
+        publish(evidence / "report.json", output / "report.json")
+    except (RunError, OSError, ValueError, UnicodeError, subprocess.TimeoutExpired) as error:
         status["accepted"] = False
         status["error"] = str(error)
         write_json(evidence / "status.json", status)
@@ -304,16 +304,25 @@ def execute_locked(root: Path, adapter: Adapter) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if args not in ([], ["--xtask-adapter"]):
-        print("usage: tests/constant_time/run.sh (no options)", file=sys.stderr)
-        return 2
-    adapter = Adapter.XTASK if args else Adapter.SHELL
-    root = Path(__file__).resolve().parents[2]
+    adapter = Adapter.SHELL
+    profile = "pr"
+    nix_binary = None
     try:
-        return execute(root, adapter)
-    except (RunError, OSError, ValueError, UnicodeError) as error:
-        print(f"Legacy dudect failed: {error}", file=sys.stderr)
-        return error.code if isinstance(error, RunError) else 1
+        if args and args[0] == "--xtask-adapter":
+            adapter = Adapter.XTASK
+            args.pop(0)
+        if args[:1] == ["--nix-binary"] and len(args) >= 2:
+            nix_binary = Path(args[1])
+            args = args[2:]
+        if len(args) == 2 and args[0] == "--profile" and args[1] in PROFILES:
+            profile = args[1]
+            args = []
+        if args:
+            fail("usage: dudect [--profile pr|periodic]", 2)
+        return execute(Path(__file__).resolve().parents[2], adapter, profile, nix_binary)
+    except (RunError, OSError, ValueError, UnicodeError, subprocess.TimeoutExpired) as error:
+        print(f"Dudect failed: {error}", file=sys.stderr)
+        return error.code if isinstance(error, (RunError, NativeError)) else 1
 
 
 if __name__ == "__main__":

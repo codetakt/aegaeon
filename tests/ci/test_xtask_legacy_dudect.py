@@ -53,22 +53,38 @@ from pathlib import Path
 name = Path(sys.argv[0]).name.removesuffix('_timing_test')
 with Path(os.environ['EVENTS']).open('a') as out:
     out.write(json.dumps({'tool':'binary','name':name})+'\n')
-if name == 'jwe' and os.environ.get('STATUS_DIRECTORY'):
-    run = next(Path('artifacts/ct/dudect/runs').glob('run-*'))
-    (run/'status.json').mkdir()
-if name == 'jwe' and os.environ.get('REPORT_DIRECTORY'):
-    Path('artifacts/ct/dudect/report.json').mkdir()
-print('controlled diagnostic prefix',flush=True)
-if os.environ.get('RAW_HEX'):
-    sys.stdout.buffer.write(bytes.fromhex(os.environ['RAW_HEX']))
-    sys.stdout.buffer.flush()
-else:
-    print(json.dumps(json.loads(os.environ['RESULTS']).get(name, {'state':1,'p':0.8})),flush=True)
 if name == os.environ.get('BINARY_FAIL'):
     print('controlled harness failure',file=sys.stderr)
     raise SystemExit(43)
 if name == os.environ.get('BINARY_SIGNAL'):
     os.kill(os.getpid(),signal.SIGTERM)
+if os.environ.get('RAW_HEX'):
+    sys.stdout.buffer.write(bytes.fromhex(os.environ['RAW_HEX']))
+    sys.stdout.buffer.flush()
+    raise SystemExit(0)
+profile = sys.argv[1]
+looks = [1,2,3,4,5,6,7] if profile == 'pr' else [1,2,4,8,16,32,64,98]
+for look,batches in enumerate(looks,1):
+    count=batches*(65536-11)
+    n0=count//2; n1=count-n0
+    stats=[[n0,n1,100.0,100.0,(n0-1)*4.0,(n1-1)*4.0] for _ in range(102)]
+    if name == os.environ.get('LEAK'):
+        stats[0][2]=150.0
+    value={'schema_version':2,'case':name,'profile':profile,'batch_size':65536,
+           'batches':batches,'look':look,'executed':65536*(batches+1),
+           'warmup':65536,'rejected':0,'statistics':stats,
+           'pilot':{'count':65525,'center':100,'cutoffs':[200]*100}}
+    if name == os.environ.get('BAD_COUNT'):
+        value['executed']+=1
+    print(json.dumps(value),flush=True)
+    if sys.stdin.buffer.read(1)!=b'c':
+        raise SystemExit(2)
+if name == 'jwe' and os.environ.get('STATUS_DIRECTORY'):
+    runs = Path('artifacts/ct/dudect/runs').glob('run-*')
+    run = sorted(runs,key=lambda p:p.stat().st_mtime_ns)[-1]
+    (run/'status.json').mkdir()
+if name == 'jwe' and os.environ.get('REPORT_DIRECTORY'):
+    Path('artifacts/ct/dudect/report.json').mkdir()
 """
 
 
@@ -78,8 +94,8 @@ class LegacyDudectTests(unittest.TestCase):
         self.root = self.directory / "repository with spaces"
         self.runner = self.root / "tests/constant_time/run.py"
         self.runner.parent.mkdir(parents=True)
-        shutil.copyfile(ROOT / "tests/constant_time/run.py", self.runner)
-        shutil.copyfile(ROOT / "tests/constant_time/run.sh", self.runner.with_suffix(".sh"))
+        for filename in ("run.py", "dudect_process.py", "dudect_results.py"):
+            shutil.copyfile(ROOT / "tests/constant_time" / filename, self.runner.parent / filename)
         self.bin = self.directory / "karamel with spaces/bin"
         self.bin.mkdir(parents=True)
         for name in ("cc", "gcc", "pkg-config", "krml"):
@@ -107,7 +123,7 @@ class LegacyDudectTests(unittest.TestCase):
         command = (
             [sys.executable, str(self.runner), "--xtask-adapter"]
             if xtask
-            else [shutil.which("bash"), str(self.runner.with_suffix(".sh"))]
+            else [sys.executable, str(self.runner)]
         )
         return subprocess.run(
             [*command, *extra],
@@ -131,6 +147,13 @@ class LegacyDudectTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Unix platform", result.stderr)
         self.assertFalse(self.output.exists())
+
+    def test_retired_threshold_overrides_fail_without_reusing_report(self):
+        self.seed_previous()
+        result = self.invoke(DUDECT_MIN_TRACES="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retired", result.stderr)
+        self.assertFalse((self.output / "report.json").exists())
 
     def recorded(self):
         return [json.loads(line) for line in self.events.read_text().splitlines()]
@@ -238,36 +261,29 @@ class LegacyDudectTests(unittest.TestCase):
         )
         self.assertEqual([e["name"] for e in self.recorded() if e["tool"] == "binary"], list(NAMES))
 
-    def test_report_keeps_maximum_p_and_configured_batch_metadata(self):
-        values = {
-            name: {"state": 1, "p": p}
-            for name, p in zip(NAMES, (0.2, 0.9, 0.4, 0.5, 0.6), strict=True)
-        }
-        result = self.invoke(RESULTS=json.dumps(values))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads((self.output / "report.json").read_text())
-        self.assertEqual(report, {"state": 1, "p": 0.9, "num_traces": 20000, "tests": values})
-        for name in NAMES:
-            self.assertEqual(json.loads((self.output / f"{name}.json").read_text()), values[name])
+    def test_report_contains_all_actual_observations_and_profile(self):
+        for profile, count in (("pr", 7), ("periodic", 8)):
+            result = self.invoke(extra=("--profile", profile))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads((self.output / "report.json").read_text())
+            self.assertEqual(report["schema_version"], 2)
+            self.assertEqual(report["profile"], profile)
+            self.assertEqual(set(report["cases"]), set(NAMES))
+            self.assertNotIn("num_traces", report)
+            self.assertEqual(len(report["cases"]["compare"]), count)
 
-    def test_individual_leakage_and_low_p_cannot_be_hidden_by_maximum(self):
-        for state, p_value in ((0, 0.8), (1, 0.001)):
-            with self.subTest(state=state, p=p_value):
-                result = self.invoke(RESULTS=json.dumps({"hmac": {"state": state, "p": p_value}}))
+    def test_individual_leakage_or_bad_counts_stop_before_later_cases(self):
+        for variable in ("LEAK", "BAD_COUNT"):
+            with self.subTest(variable=variable):
+                result = self.invoke(**{variable: "hmac"})
                 self.assert_failed(result)
                 run = self.runs()[-1]
-                self.assertTrue((run / "report.json").is_file())
                 self.assertFalse(json.loads((run / "status.json").read_text())["accepted"])
                 self.assertTrue((run / "hmac.stdout").is_file())
                 self.assertEqual(
-                    [e["name"] for e in self.recorded() if e["tool"] == "binary"][-5:], list(NAMES)
+                    [e["name"] for e in self.recorded() if e["tool"] == "binary"][-2:],
+                    ["compare", "hmac"],
                 )
-
-    def test_existing_warning_band_and_failure_boundary_are_preserved(self):
-        for p_value in (0.01, 0.03, 0.05):
-            with self.subTest(p=p_value):
-                result = self.invoke(RESULTS=json.dumps({"rsa": {"state": 1, "p": p_value}}))
-                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_malformed_nonfinite_and_ambiguous_json_is_rejected(self):
         samples = (
@@ -302,11 +318,6 @@ class LegacyDudectTests(unittest.TestCase):
         ):
             with self.subTest(sample=sample):
                 self.assert_failed(self.invoke(RAW_HEX=sample.hex()))
-        sample = b'{"state":1,"p":0.8,"extra":{"value":0.25}}\n'
-        result = self.invoke(RAW_HEX=sample.hex())
-        self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads((self.output / "report.json").read_text())
-        self.assertEqual(report["tests"]["hmac"]["extra"], {"value": 0.25})
 
     def test_compiler_failure_retains_stale_outputs_without_reusing_them(self):
         self.seed_previous()
@@ -338,9 +349,7 @@ class LegacyDudectTests(unittest.TestCase):
                 result = self.invoke(**{variable: "compare"})
                 self.assert_failed(result)
                 self.assertEqual(result.returncode, expected)
-                self.assertIn(
-                    "controlled diagnostic prefix", (self.runs()[-1] / "compare.stdout").read_text()
-                )
+                self.assertTrue((self.runs()[-1] / "compare.process.json").is_file())
 
     def test_pkg_config_failure_is_nonzero_before_any_compilation(self):
         self.seed_previous()
@@ -361,8 +370,8 @@ class LegacyDudectTests(unittest.TestCase):
         self.assertEqual((self.output / "report.json").read_bytes(), previous)
         self.assertFalse(self.events.exists())
 
-    def test_no_public_options_are_accepted_by_shell_adapter(self):
-        result = self.invoke(extra=("--xtask-adapter",))
+    def test_unknown_public_options_are_rejected_by_shell_adapter(self):
+        result = self.invoke(extra=("--unknown",))
         self.assertEqual(result.returncode, 2)
         self.assertFalse(self.events.exists())
         self.assertFalse(self.output.exists())

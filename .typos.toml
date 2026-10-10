@@ -12,6 +12,9 @@ activ = "activ"
 [default.extend-identifiers]
 # Compiler include option in the preserved legacy invocation.
 Iinclude = "Iinclude"
+# Types and members supplied by the vendored dudect header.
+ttest_ctx_t = "ttest_ctx_t"
+ttest_ctxs = "ttest_ctxs"
 environment_policies_federation_entity_cache_ttl_secon_not_null = "environment_policies_federation_entity_cache_ttl_secon_not_null"
 
 [files]

@@ -116,7 +116,7 @@ These are “build-time” verification commands that produce a `result/` tree w
 
 - `nix build .#verify-fstar -L`
 - `nix build .#verify-tamarin -L`
-- `nix build .#verify-dudect -L`
+- `bash scripts/ci/dudect_check.sh pr` (fresh observations; see [timing profiles](../verification/dudect.md))
 - `nix build .#verify-jose -L`
 - `nix build .#verify-kani -L`
 

@@ -136,12 +136,16 @@ PY
 	fi
 
 	echo ""
-	echo "--- dudect constant-time evidence (fail-close) ---"
+	echo "--- dudect per-case timing observations (fail-close) ---"
 	python3 scripts/validation/test_dudect.py
-	if python3 scripts/validation/check_dudect.py 2>&1; then
-		echo "  dudect constant-time evidence passed."
+	# The checked-in legacy summary contains nominal counts and is not evidence.
+	# Retain the bound native bundle after Nix removes the build directory.
+	dudect_output="${OUT_DIR:-artifacts/ct}/dudect"
+	python3 tests/constant_time/run_contract.py --profile pr --output "$dudect_output"
+	if python3 scripts/validation/check_dudect.py "$dudect_output/report.json" 2>&1; then
+		echo "  dudect per-case timing observations passed."
 	else
-		echo "  FAIL: dudect constant-time evidence failed (fail-close)."
+		echo "  FAIL: dudect per-case timing observations failed (fail-close)."
 		exit 1
 	fi
 

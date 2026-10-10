@@ -83,18 +83,17 @@ cargo xtask dudect
 ```
 
 Kani arguments are forwarded to the evidence runner; no arguments select its full
-scope. The two legacy dudect helpers cover comparison, HMAC, Ed25519, RSA and JWE,
-using their existing `cc` and `gcc` compiler routes respectively. They are separate
-from the formal Nix dudect lane above. They fail on a harness/process/result fault,
-state 0, or any individual p-value below 0.01; higher warning-band values retain
-existing behavior. Reports retain maximum p and `num_traces=20000` as configured
-minimum batch metadata, not measured or statistically admitted traces. State 1
-means no leakage evidence yet and includes warm-up or insufficient statistics.
+scope. The shell and xtask dudect helpers share the five-case legacy runner;
+`--profile pr` (default) and `--profile periodic` select bounded measurement
+budgets. Both require actual observation counts and complete finite statistics.
+Leakage, insufficient measurements, native failures and evidence-write failures
+return nonzero. Raw observations and failed attempts are retained under
+`artifacts/ct/dudect/runs/`.
 
-Each legacy attempt retains raw outputs under `artifacts/ct/dudect/runs/` and
-archives previous reports before running. Only a complete accepted attempt
-publishes the stable `report.json`. The C schedules and statistical limitations
-remain unchanged; these helpers do not establish universal constant-time behavior.
+For the six-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select
+`periodic`. Building `.#dudect-check` alone supplies the executable; CI collects
+fresh observations after that build. See the [timing profile contract](docs/verification/dudect.md)
+for numerical assumptions, evidence format and limitations.
 
 OpenAPI remains available as `cargo xtask openapi --check`; it enables the optional
 OpenAPI feature once when needed. Kani, dudect and help do not build the server as

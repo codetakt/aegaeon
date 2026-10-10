@@ -270,6 +270,7 @@ jobs:
   # Dudect Constant-Time Analysis (HACL*/EverCrypt)
   dudect:
     name: Constant-Time (dudect, HACL*)
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -285,10 +286,16 @@ jobs:
         with:
           enable-flakehub-cache: "true"
 
-      - name: Run dudect-check (Nix)
-        run: |
-          nix build .#dudect-check -L
-          echo "dudect-check: PASS"
+      - name: Run fresh dudect observations
+        run: bash scripts/ci/dudect_check.sh pr
+
+      - name: Preserve dudect observations
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-pr-observations
+          path: artifacts/ct/dudect-nix/
+          if-no-files-found: error
 
   # Tamarin Protocol Verification
   tamarin:
@@ -791,6 +798,7 @@ jobs:
   verified-reqs:
     name: VerifiedReqs Integrity
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -805,6 +813,17 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           enable-flakehub-cache: "true"
+
+      - name: Collect fresh legacy timing observations
+        run: nix develop .#verification --command python3 tests/constant_time/run_contract.py --profile pr
+
+      - name: Preserve legacy timing observations
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-legacy-pr-observations
+          path: artifacts/ct/dudect/
+          if-no-files-found: error
 
       - name: Run VerifiedReqs checks (Nix)
         run: |

@@ -1,337 +1,276 @@
-# ruff: noqa: PT009, S603 - unittest assertions and controlled tool argv
-"""Exercise the required dudect wrapper and its actual caller with controlled tools."""
+# ruff: noqa: PT009, PT027, S603 - unittest assertions and controlled tool argv
+"""Fresh native execution, failed evidence retention and required caller behavior."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[2]
-WRAPPER = ROOT / "scripts/flake/verify_dudect.sh"
-BINARY = """import json
-import os
-import signal
-from pathlib import Path
+import yaml
+from dudect_fixture import ROOT, NativeFixture
 
-with Path(os.environ["DUDECT_EVENTS"]).open("a") as output:
-    output.write(json.dumps({"tool": "binary", "stale": False}) + "\\n")
-print("controlled dudect output", flush=True)
-if os.environ.get("BINARY_SIGNAL"):
-    os.kill(os.getpid(), signal.SIGTERM)
-raise SystemExit(int(os.environ.get("BINARY_EXIT", "0")))
-"""
-TOOL = """import json
-import os
-import sys
-from pathlib import Path
-
-tool = Path(sys.argv[0]).name
-with Path(os.environ["DUDECT_EVENTS"]).open("a") as output:
-    output.write(json.dumps({"tool": tool, "args": sys.argv[1:]}) + "\\n")
-if tool == "krml":
-    raise SystemExit("krml is located, not executed, by this wrapper")
-if tool == "dirname":
-    if os.environ.get("DIRNAME_BAD_PATH"):
-        print("/missing-dudect-control-directory")
-    else:
-        print(str(Path(sys.argv[1]).parent))
-    raise SystemExit(int(os.environ.get("DIRNAME_EXIT", "0")))
-if tool == "rm":
-    status = int(os.environ.get("RM_EXIT", "0"))
-    if status:
-        raise SystemExit(status)
-    os.execv(os.environ["DUDECT_REAL_RM"], ["rm", *sys.argv[1:]])
-if tool == "clang":
-    status = int(os.environ.get("COMPILER_EXIT", "0"))
-    if status:
-        raise SystemExit(status)
-    if not os.environ.get("OMIT_BINARY"):
-        target = Path(sys.argv[sys.argv.index("-o") + 1])
-        if os.environ.get("DIRECTORY_BINARY"):
-            target.mkdir()
-            raise SystemExit(0)
-        target.write_text(
-            "" if os.environ.get("EMPTY_BINARY")
-            else "#!" + sys.executable + "\\n" + os.environ["DUDECT_BINARY_SOURCE"]
-        )
-        target.chmod(0o600 if os.environ.get("NONEXECUTABLE_BINARY") else 0o755)
-    raise SystemExit(0)
-if tool == "tee":
-    status = int(os.environ.get("TEE_EXIT", "0"))
-    if status:
-        sys.stdin.buffer.read()
-        raise SystemExit(status)
-    os.execv(os.environ["DUDECT_REAL_TEE"], ["tee", *sys.argv[1:]])
-raise SystemExit("unexpected dudect fixture tool")
-"""
+sys.path.insert(0, str(ROOT / "tests/constant_time"))
+import run_contract
+from run_contract import execute, validate_report_file
 
 
 class DudectRunnerTests(unittest.TestCase):
     def setUp(self):
-        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        self.fixture = self.directory / "source"
-        (self.fixture / "c").mkdir(parents=True)
-        for name in ("dudect_harness.c", "dudect.h"):
-            (self.fixture / "c" / name).write_text("/* controlled source input */\n")
-        self.bin = self.directory / "karamel/bin"
-        self.bin.mkdir(parents=True)
-        for name in ("clang", "krml", "dirname", "rm", "tee"):
-            executable = self.bin / name
-            executable.write_text(f"#!{sys.executable}\n{TOOL}")
-            executable.chmod(0o755)
-        self.out = self.directory / "out"
-        self.out.mkdir()
-        self.evercrypt = self.directory / "evercrypt"
-        self.evercrypt.mkdir()
-        self.events = self.directory / "events.jsonl"
+        self.fixture = NativeFixture(self)
 
-    def environment(self, **changes):
-        environment = {
-            **os.environ,
-            "PATH": str(self.bin),
-            "OUT_DIR": str(self.out),
-            "EVERCRYPT_DIST": str(self.evercrypt),
-            "DUDECT_EVENTS": str(self.events),
-            "DUDECT_BINARY_SOURCE": BINARY,
-            "DUDECT_REAL_TEE": shutil.which("tee"),
-            "DUDECT_REAL_RM": shutil.which("rm"),
-        }
-        for name in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"):
-            environment.pop(name, None)
-        for name, value in changes.items():
-            if value is None:
-                environment.pop(name, None)
-            else:
-                environment[name] = value
-        return environment
+    def assert_failed(self, result):
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.fixture.report_path().exists())
+        evidence = self.fixture.evidence()
+        if evidence:
+            self.assertFalse(json.loads((evidence[-1] / "status.json").read_text())["accepted"])
 
-    def invoke(self, **changes):
-        return subprocess.run(
-            [shutil.which("bash"), str(WRAPPER)],
-            cwd=self.fixture,
-            env=self.environment(**changes),
+    def test_each_required_source_must_be_present(self):
+        for relative in (
+            "c/dudect.h",
+            "tests/constant_time/contracts/case-contract-candidate.json",
+            "flake.lock",
+        ):
+            path = self.fixture.root / relative
+            original = path.read_bytes()
+            path.unlink()
+            # Missing headers cannot disappear silently from the checked input manifest.
+            if relative == "c/dudect.h":
+                path.symlink_to(self.fixture.directory / "absent")
+            self.assert_failed(self.fixture.invoke("--suite", "nix"))
+            path.unlink(missing_ok=True)
+            path.write_bytes(original)
+
+    def test_bad_compiler_outputs_never_execute_prior_binary(self):
+        stale = self.fixture.root / "dudect_test"
+        stale.write_text("stale build output")
+        for options in (
+            {"compiler_exit": 31},
+            {"omit_binary": True},
+            {"empty_binary": True},
+            {"nonexecutable_binary": True},
+            {"directory_binary": True},
+        ):
+            with self.subTest(options=options):
+                result = self.fixture.invoke("--suite", "nix", **options)
+                self.assert_failed(result)
+                self.assertFalse(self.fixture.events.exists())
+                self.assertEqual(stale.read_text(), "stale build output")
+                if "compiler_exit" in options:
+                    self.assertEqual(result.returncode, 31)
+
+    def test_process_failures_and_malformed_streams_retain_raw_evidence(self):
+        for options in (
+            {"exit": 43},
+            {"signal": True},
+            {"empty": True},
+            {"invalid": True},
+            {"trailing": True},
+            {"late_exit": True},
+        ):
+            with self.subTest(options=options):
+                result = self.fixture.invoke("--suite", "nix", **options)
+                self.assert_failed(result)
+                native = self.fixture.evidence()[-1] / "executions/dudect_controls"
+                self.assertTrue((native / "native.stdout").is_file())
+                self.assertTrue((native / "process.json").is_file())
+                if options.get("exit"):
+                    self.assertEqual(result.returncode, 43)
+                if options.get("signal"):
+                    self.assertEqual(result.returncode, 143)
+
+    def test_stale_report_is_archived_before_build_failure(self):
+        self.fixture.report_path().parent.mkdir()
+        self.fixture.report_path().write_text("old accepted report")
+        self.assert_failed(self.fixture.invoke("--suite", "nix", compiler_exit=31))
+        self.assertEqual(
+            (self.fixture.evidence()[-1] / "previous-results/report.json").read_text(),
+            "old accepted report",
+        )
+
+    def test_both_profiles_and_adapters_preserve_native_binding(self):
+        for profile, adapter in (("pr", "shell"), ("periodic", "xtask")):
+            result = self.fixture.invoke("--profile", profile, "--adapter", adapter)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            validate_report_file(self.fixture.root, self.fixture.report_path())
+            evidence = self.fixture.evidence()[-1]
+            manifest = json.loads(
+                (evidence / "package/native/compare/build-manifest.json").read_text()
+            )
+            self.assertEqual(Path(manifest["compiler"]).name, "cc" if adapter == "shell" else "gcc")
+
+    def test_native_package_reuse_still_executes_and_rejects_changed_source(self):
+        result = self.fixture.invoke("--suite", "nix")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        package = self.fixture.evidence()[-1] / "package"
+        before = len(self.fixture.events.read_text().splitlines())
+        result = self.fixture.invoke("--suite", "nix", "--native-package", str(package))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.fixture.events.read_text().splitlines()), before + 2)
+        path = self.fixture.root / "c/dudect.h"
+        path.write_text(path.read_text() + "\n")
+        self.assert_failed(self.fixture.invoke("--suite", "nix", "--native-package", str(package)))
+        self.assertEqual(len(self.fixture.events.read_text().splitlines()), before + 2)
+
+    def test_wrapper_requires_environment_and_preserves_exit(self):
+        for variable in ("OUT_DIR", "EVERCRYPT_DIST"):
+            with patch.dict("os.environ", {}):
+                env = self.fixture.environment()
+                env.pop(variable)
+                result = subprocess.run(
+                    [shutil.which("bash"), "scripts/flake/verify_dudect.sh"],
+                    cwd=self.fixture.root,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+        result = self.fixture.invoke(wrapper=True, exit=43)
+        self.assertEqual(result.returncode, 43)
+        self.assertIn("Dudect failed:", (self.fixture.output / "dudect.log").read_text())
+
+    def test_failed_status_or_report_publication_cannot_leave_success(self):
+        args = SimpleNamespace(suite="nix", profile="pr", adapter="shell", native_package=None)
+        original = run_contract.write_json
+
+        def fail_accepted_status(path, data):
+            if path.name == "status.json" and data.get("accepted") is True:
+                message = "injected status write failure"
+                raise OSError(message)
+            original(path, data)
+
+        for failure in ("status", "publish"):
+            replacement = (
+                patch.object(run_contract, "write_json", side_effect=fail_accepted_status)
+                if failure == "status"
+                else patch.object(
+                    run_contract, "publish", side_effect=OSError("injected publish failure")
+                )
+            )
+            with (
+                patch.dict("os.environ", self.fixture.environment()),
+                replacement,
+                self.assertRaises(OSError),
+            ):
+                execute(self.fixture.root, args, self.fixture.output / "evidence")
+            self.assertFalse(self.fixture.report_path().exists())
+            evidence = self.fixture.evidence()[-1]
+            self.assertFalse(json.loads((evidence / "status.json").read_text())["accepted"])
+            with self.assertRaisesRegex(ValueError, "did not finish"):
+                validate_report_file(self.fixture.root, evidence / "report.json")
+
+    def test_shared_lock_rejects_a_concurrent_run_without_archiving_report(self):
+        output = self.fixture.report_path().parent
+        output.mkdir()
+        self.fixture.report_path().write_text("previous report")
+        with (output / ".legacy-run.lock").open("a") as lock:
+            run_contract.fcntl.flock(lock.fileno(), run_contract.fcntl.LOCK_EX)
+            result = self.fixture.invoke("--suite", "nix")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Another dudect run", result.stderr)
+        self.assertEqual(self.fixture.report_path().read_text(), "previous report")
+
+    def test_actual_workflow_collects_current_source_bound_legacy_evidence(self):
+        document = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())
+        step = next(
+            row
+            for row in document["jobs"]["verified-reqs"]["steps"]
+            if row.get("name") == "Collect fresh legacy timing observations"
+        )
+        command = shlex.split(step["run"])
+        prefix = ["nix", "develop", ".#verification", "--command"]
+        self.assertEqual(command[:4], prefix)
+        result = subprocess.run(
+            command[4:],
+            cwd=self.fixture.root,
+            env=self.fixture.environment(),
             capture_output=True,
             text=True,
-            timeout=15,
             check=False,
+            timeout=40,
         )
-
-    def recorded(self):
-        return (
-            [json.loads(line) for line in self.events.read_text().splitlines()]
-            if self.events.exists()
-            else []
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        validate_report_file(
+            self.fixture.root, self.fixture.root / "artifacts/ct/dudect/report.json"
         )
-
-    def check_failure(self, result, *, before_compile=False):
-        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertFalse((self.out / "success").exists())
-        if before_compile:
-            self.assertNotIn("clang", [event["tool"] for event in self.recorded()])
-            self.assertNotIn("binary", [event["tool"] for event in self.recorded()])
-
-    def test_each_required_input_must_be_a_file(self):
-        for name in ("dudect_harness.c", "dudect.h"):
-            for kind in ("missing", "directory", "dangling-symlink"):
-                with self.subTest(input=name, kind=kind):
-                    path = self.fixture / "c" / name
-                    path.unlink()
-                    if kind == "directory":
-                        path.mkdir()
-                    elif kind == "dangling-symlink":
-                        path.symlink_to(self.directory / "missing")
-                    result = self.invoke()
-                    self.check_failure(result, before_compile=True)
-                    self.assertIn(f"Required dudect input not found: c/{name}", result.stderr)
-                    if kind == "directory":
-                        path.rmdir()
-                    elif kind == "dangling-symlink":
-                        path.unlink()
-                    path.write_text("/* controlled source input */\n")
-
-    def test_mandatory_environment_cannot_be_missing_or_empty(self):
-        for name in ("OUT_DIR", "EVERCRYPT_DIST"):
-            for value in (None, ""):
-                with self.subTest(variable=name, value=value):
-                    self.check_failure(self.invoke(**{name: value}), before_compile=True)
-
-    def test_missing_required_tools_fail(self):
-        for tool in ("krml", "dirname", "rm", "clang", "tee"):
-            with self.subTest(tool=tool):
-                executable = self.bin / tool
-                original = executable.read_bytes()
-                executable.unlink()
-                self.events.unlink(missing_ok=True)
-                result = self.invoke()
-                self.check_failure(result, before_compile=tool in ("krml", "dirname", "rm"))
-                self.assertIn(tool, result.stderr)
-                executable.write_bytes(original)
-                executable.chmod(0o755)
-
-    def test_failed_path_resolution_stops_before_compilation(self):
-        for changes in ({"DIRNAME_EXIT": "37"}, {"DIRNAME_BAD_PATH": "1"}):
-            with self.subTest(changes=changes):
-                self.check_failure(self.invoke(**changes), before_compile=True)
-
-    def create_stale_binary(self):
-        stale = self.fixture / "dudect_test"
-        stale.write_text(
-            f"#!{sys.executable}\n"
-            "import json, os\n"
-            "from pathlib import Path\n"
-            "with Path(os.environ['DUDECT_EVENTS']).open('a') as output:\n"
-            "    output.write(json.dumps({'tool': 'binary', 'stale': True}) + '\\n')\n"
-        )
-        stale.chmod(0o755)
-        return stale
-
-    def test_failed_compiler_never_executes_a_stale_binary(self):
-        stale = self.create_stale_binary()
-        self.check_failure(self.invoke(COMPILER_EXIT="31"))
-        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm", "clang"])
-        self.assertFalse(stale.exists())
-
-    def test_successful_compiler_without_output_cannot_reuse_a_stale_binary(self):
-        stale = self.create_stale_binary()
-        result = self.invoke(OMIT_BINARY="1")
-        self.check_failure(result)
-        self.assertIn("Required dudect compiler output", result.stderr)
-        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm", "clang"])
-        self.assertFalse(stale.exists())
-        self.assertFalse((self.out / "dudect.log").exists())
-
-    def test_failed_output_removal_prevents_compilation_and_execution(self):
-        stale = self.create_stale_binary()
-        result = self.invoke(RM_EXIT="39")
-        self.check_failure(result, before_compile=True)
-        self.assertIn("Unable to remove prior dudect compiler output", result.stderr)
-        self.assertEqual([event["tool"] for event in self.recorded()], ["dirname", "rm"])
-        self.assertTrue(stale.exists())
-        self.assertFalse((self.out / "dudect.log").exists())
-
-    def test_existing_directory_cannot_be_removed_as_prior_compiler_output(self):
-        target = self.fixture / "dudect_test"
-        target.mkdir()
-        result = self.invoke()
-        self.check_failure(result, before_compile=True)
-        self.assertTrue(target.is_dir())
-        self.assertIn("Unable to remove prior dudect compiler output", result.stderr)
-
-    def test_missing_or_nonexecutable_compiler_output_fails(self):
-        for changes in (
-            {"OMIT_BINARY": "1"},
-            {"NONEXECUTABLE_BINARY": "1"},
-            {"EMPTY_BINARY": "1"},
-        ):
-            with self.subTest(changes=changes):
-                self.events.unlink(missing_ok=True)
-                (self.fixture / "dudect_test").unlink(missing_ok=True)
-                self.check_failure(self.invoke(**changes))
-                self.assertNotIn("binary", [event["tool"] for event in self.recorded()])
-
-    def test_compiler_directory_output_cannot_count_as_an_executable(self):
-        result = self.invoke(DIRECTORY_BINARY="1")
-        self.check_failure(result)
-        self.assertIn("Required dudect compiler output", result.stderr)
-        self.assertNotIn("binary", [event["tool"] for event in self.recorded()])
-
-    def test_binary_failure_and_signal_propagate_through_successful_tee(self):
-        for changes in ({"BINARY_EXIT": "43"}, {"BINARY_SIGNAL": "1"}):
-            with self.subTest(changes=changes):
-                self.check_failure(self.invoke(**changes))
-                self.assertEqual(
-                    (self.out / "dudect.log").read_text(), "controlled dudect output\n"
-                )
-
-    def test_tee_and_output_write_failures_are_nonzero(self):
-        self.check_failure(self.invoke(TEE_EXIT="41"))
-        self.check_failure(self.invoke(OUT_DIR=str(self.directory / "absent-output-directory")))
-
-    def test_success_preserves_compiler_route_and_captures_executed_output(self):
-        result = self.invoke()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.out / "dudect.log").read_text(), "controlled dudect output\n")
-        self.assertEqual(
-            [event for event in self.recorded() if event["tool"] == "rm"],
-            [{"tool": "rm", "args": ["-f", "--", "dudect_test"]}],
-        )
-        compiler = [event for event in self.recorded() if event["tool"] == "clang"]
-        self.assertEqual(len(compiler), 1)
-        karamel = self.bin.parent
-        self.assertEqual(
-            compiler[0]["args"],
-            [
-                "-O2",
-                "-Ic",
-                "-I",
-                str(self.evercrypt / "include"),
-                "-I",
-                str(karamel / "include"),
-                "-I",
-                str(karamel / "lib/krml/c"),
-                "-I",
-                str(karamel / "lib/krml/dist/generic"),
-                "c/dudect_harness.c",
-                "-L",
-                str(self.evercrypt / "lib"),
-                "-levercrypt",
-                "-lm",
-                "-o",
-                "dudect_test",
-            ],
-        )
-        self.assertIn({"tool": "binary", "stale": False}, self.recorded())
 
     def caller_script(self):
         source = (ROOT / "flake.nix").read_text().split("mkVerification =", 1)[1]
         source = source.split("mkLightVerification =", 1)[0]
-        match = re.search(r"''\n(.*?)\n\s*'';", source, re.DOTALL)
-        self.assertIsNotNone(match)
-        script = match.group(1)
+        script = re.search(r"''\n(.*?)\n\s*'';", source, re.DOTALL).group(1)
         substitutions = {
-            "src": self.fixture,
-            "haclStar": self.directory,
-            "steel": self.directory,
-            "evercryptDist": self.evercrypt,
+            "src": self.fixture.root,
+            "haclStar": self.fixture.directory,
+            "steel": self.fixture.directory,
+            "evercryptDist": self.fixture.directory,
             "pkgs.bash": Path(shutil.which("bash")).parents[1],
-            "scriptPath": WRAPPER,
+            "scriptPath": self.fixture.root / "scripts/flake/verify_dudect.sh",
         }
         for name, value in substitutions.items():
             script = script.replace("${" + name + "}", shlex.quote(str(value)))
         self.assertNotIn("${", script)
         return script
 
-    def test_actual_nix_caller_shell_creates_marker_only_after_success(self):
-        for tool in ("cp", "chmod", "mkdir", "touch"):
-            (self.bin / tool).symlink_to(shutil.which(tool))
-        cases = ({"COMPILER_EXIT": "31"}, {"BINARY_EXIT": "43"}, {"TEE_EXIT": "41"}, {})
-        for position, changes in enumerate(cases):
-            with self.subTest(changes=changes):
-                build = self.directory / f"build-{position}"
-                build.mkdir()
-                output = self.directory / f"caller-out-{position}"
-                result = subprocess.run(
-                    [shutil.which("bash"), "-e", "-o", "pipefail", "-c", self.caller_script()],
-                    cwd=build,
-                    env={**self.environment(**changes), "out": str(output), "TMPDIR": str(build)},
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                    check=False,
-                )
-                self.assertEqual((output / "success").exists(), not changes)
-                if changes:
-                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-                else:
-                    self.assertEqual(result.returncode, 0, result.stderr)
+    def test_verified_reqs_retains_bundle_outside_temporary_build_source(self):
+        source = (ROOT / "scripts/flake/verify_reqs.sh").read_text()
+        start = source.index("\tdudect_output=")
+        script = source[start : source.index('\n\techo ""', start)]
+        validator = self.fixture.root / "scripts/validation/check_dudect.py"
+        validator.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "scripts/validation/check_dudect.py", validator)
+        for position, options in enumerate(({"compiler_exit": 31}, {"exit": 43}, {})):
+            self.fixture.options.write_text(json.dumps(options))
+            output = self.fixture.directory / f"retained output {position}"
+            output.mkdir()
+            result = subprocess.run(
+                [shutil.which("bash"), "-e", "-o", "pipefail", "-c", script],
+                cwd=self.fixture.root,
+                env={**self.fixture.environment(), "OUT_DIR": str(output)},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=40,
+            )
+            report = output / "dudect/report.json"
+            self.assertEqual(result.returncode == 0, not options, result.stdout + result.stderr)
+            self.assertEqual(report.exists(), not options)
+            runs = list((output / "dudect/runs").iterdir())
+            self.assertEqual(len(runs), 1)
+            status = json.loads((runs[0] / "status.json").read_text())
+            self.assertEqual(status["accepted"], not options)
+        # The build workspace can disappear; native sources, executables and
+        # stdout must still be sufficient for validation against current inputs.
+        shutil.rmtree(self.fixture.root)
+        validate_report_file(ROOT, report)
+
+    def test_actual_nix_caller_marks_success_only_after_valid_observations(self):
+        for position, options in enumerate(({"compiler_exit": 31}, {"exit": 43}, {})):
+            self.fixture.options.write_text(json.dumps(options))
+            build = self.fixture.directory / f"build-{position}"
+            build.mkdir()
+            output = self.fixture.directory / f"caller-{position}"
+            result = subprocess.run(
+                [shutil.which("bash"), "-e", "-o", "pipefail", "-c", self.caller_script()],
+                cwd=build,
+                env={**self.fixture.environment(), "out": str(output), "TMPDIR": str(build)},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=40,
+            )
+            self.assertEqual(
+                (output / "success").exists(), not options, result.stdout + result.stderr
+            )
+            self.assertEqual(result.returncode == 0, not options, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

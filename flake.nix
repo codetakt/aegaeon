@@ -859,7 +859,14 @@
 
         assuranceStandards = import ./nix/assurance-sources.nix { inherit pkgs; };
         verifiedReqs =
-          (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [ ]).overrideAttrs
+          (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [
+            llvmPackages.clang
+            pkgs.pkg-config
+            pkgs.openssl
+            pkgs.mbedtls
+            evercryptDist
+            karamel
+          ]).overrideAttrs
             (_: {
               AEGAEON_ASSURANCE_SOURCE_DIR = assuranceStandards;
             });
@@ -898,7 +905,9 @@
 
         verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];
 
-        verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [ ];
+        verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
+          pkgs.pkg-config
+        ];
 
         verifyJose = craneLib.mkCargoDerivation {
           pname = "verify-jose";

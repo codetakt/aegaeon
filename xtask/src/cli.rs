@@ -1,12 +1,12 @@
 use std::ffi::OsString;
 
 pub(crate) const USAGE: &str =
-    "usage: cargo xtask {dudect|kani [ARGS...]|openapi [--check]|--help}";
+    "usage: cargo xtask {dudect [--profile pr|periodic]|kani [ARGS...]|openapi [--check]|--help}";
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Task {
     Help,
-    Dudect,
+    Dudect { profile: String },
     Kani(Vec<OsString>),
     Openapi { check: bool },
 }
@@ -20,7 +20,18 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<
     let remaining: Vec<_> = args.collect();
     match command.to_str() {
         Some("--help" | "-h") if remaining.is_empty() => Ok(Task::Help),
-        Some("dudect") if remaining.is_empty() => Ok(Task::Dudect),
+        Some("dudect") if remaining.is_empty() => Ok(Task::Dudect {
+            profile: "pr".into(),
+        }),
+        Some("dudect")
+            if remaining.len() == 2
+                && remaining[0] == "--profile"
+                && (remaining[1] == "pr" || remaining[1] == "periodic") =>
+        {
+            Ok(Task::Dudect {
+                profile: remaining[1].to_string_lossy().into_owned(),
+            })
+        }
         Some("openapi") if remaining.iter().all(|arg| arg == "--check") => Ok(Task::Openapi {
             check: !remaining.is_empty(),
         }),
@@ -46,6 +57,9 @@ mod tests {
             &[][..],
             &["unknown"],
             &["dudect", "--scope", "partial"],
+            &["dudect", "--profile"],
+            &["dudect", "--profile", "unknown"],
+            &["dudect", "--profile", "pr", "extra"],
             &["openapi", "--unknown"],
             &["--help", "extra"],
         ] {
@@ -57,13 +71,31 @@ mod tests {
     fn help_and_openapi_compatibility_are_explicit() -> anyhow::Result<()> {
         assert_eq!(parse(args(&["--help"]))?, Task::Help);
         assert_eq!(parse(args(&["-h"]))?, Task::Help);
-        assert_eq!(parse(args(&["dudect"]))?, Task::Dudect);
+        assert_eq!(
+            parse(args(&["dudect"]))?,
+            Task::Dudect {
+                profile: "pr".into()
+            }
+        );
         assert_eq!(parse(args(&["openapi"]))?, Task::Openapi { check: false });
         // The original parser accepted repeated --check flags.
         assert_eq!(
             parse(args(&["openapi", "--check", "--check"]))?,
             Task::Openapi { check: true }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn dudect_profiles_are_forwarded() -> anyhow::Result<()> {
+        for profile in ["pr", "periodic"] {
+            assert_eq!(
+                parse(args(&["dudect", "--profile", profile]))?,
+                Task::Dudect {
+                    profile: profile.into()
+                }
+            );
+        }
         Ok(())
     }
 

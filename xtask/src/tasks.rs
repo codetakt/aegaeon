@@ -15,17 +15,17 @@ pub(crate) fn run(root: &Path, task: Task) -> anyhow::Result<ExitCode> {
             println!("{}", crate::cli::USAGE);
             Ok(ExitCode::SUCCESS)
         }
-        Task::Dudect => replace(legacy_dudect_command(root)),
+        Task::Dudect { profile } => replace(legacy_dudect_command(root, &profile)),
         Task::Kani(args) => replace(kani_command(root, args)),
         Task::Openapi { check } => run_openapi(root, check),
     }
 }
 
-fn legacy_dudect_command(root: &Path) -> Command {
+fn legacy_dudect_command(root: &Path, profile: &str) -> Command {
     let mut command = Command::new("python3");
     command
-        .arg(root.join("tests/constant_time/run.py"))
-        .arg("--xtask-adapter")
+        .arg(root.join("tests/constant_time/run_contract.py"))
+        .args(["--adapter", "xtask", "--profile", profile])
         .current_dir(root);
     command
 }
@@ -116,13 +116,16 @@ mod tests {
     #[test]
     fn legacy_adapter_selects_only_the_existing_xtask_route() {
         let root = Path::new("/repository");
-        let command = legacy_dudect_command(root);
+        let command = legacy_dudect_command(root, "periodic");
         assert_eq!(command.get_program(), "python3");
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
             [
-                root.join("tests/constant_time/run.py").as_os_str(),
-                OsStr::new("--xtask-adapter")
+                root.join("tests/constant_time/run_contract.py").as_os_str(),
+                OsStr::new("--adapter"),
+                OsStr::new("xtask"),
+                OsStr::new("--profile"),
+                OsStr::new("periodic")
             ]
         );
         assert_eq!(command.get_current_dir(), Some(root));
