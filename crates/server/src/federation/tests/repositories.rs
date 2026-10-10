@@ -42,3 +42,6 @@ mod lru {
     use super::*;
     include!("repositories/lru.rs");
 }
+
+#[path = "repositories/individual_admission.rs"]
+mod individual_admission;

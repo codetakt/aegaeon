@@ -42,6 +42,9 @@ modules:
   fstar/dpop/Dpop.Validation.fst: faithful
   fstar/dpop/Dpop.fst: faithful
   fstar/federation/Federation.EntityConfig.fst: simplified
+  # Individual cache storage admits either timestamp order; GET remains strict.
+  # F* nat time differs from product i64; bounded Kani is not a DB model.
+  # Signed expiration caps are validated outside these repository models.
   fstar/federation/Federation.PgRepo.fst: simplified
   fstar/federation/OidcRp.IssuerPolicy.fst: simplified
   fstar/federation/OidcRp.BrowserBinding.fst: simplified

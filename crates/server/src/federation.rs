@@ -37,6 +37,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
 
+mod admission;
 mod fetcher;
 mod headers;
 mod keys;
@@ -48,6 +49,7 @@ mod trust_chain;
 mod trust_marks;
 mod types;
 
+pub(crate) use admission::admit_entity_configuration;
 pub use fetcher::{
     entity_configuration_url, normalize_federation_outbound_allowed_domains,
     subordinate_statement_url, validate_entity_url, FederationFetchFuture, FederationFetcher,

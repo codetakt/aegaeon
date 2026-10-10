@@ -7,7 +7,7 @@
 //!
 //! DB constraints verified:
 //!   - federation_entity_cache_env_entity_unique
-//!   - federation_entity_cache_expires_after_fetch
+//! Individual entity rows admit either timestamp order; reuse requires now < expiry.
 //!   - federation_trust_chains_env_leaf_anchor_unique
 //!   - federation_trust_chains_expires_after_resolve
 //!   - oauth_profiles_default_unique (at most one active default per env)
@@ -58,11 +58,6 @@ impl EntityCacheEntry {
         }
     }
 
-    /// DB constraint: expires_at > fetched_at
-    pub fn is_well_formed(&self) -> bool {
-        !self.occupied || self.expires_at > self.fetched_at
-    }
-
     /// Entry is valid (not expired) at time `now`.
     /// Expiration: now >= expires_at ⟹ expired (matches F* is_expired)
     pub fn is_valid_at(&self, now: i64) -> bool {
@@ -109,9 +104,6 @@ impl BoundedEntityCacheStore {
         fetched_at: i64,
         expires_at: i64,
     ) -> bool {
-        if expires_at <= fetched_at {
-            return false;
-        }
         // Check for existing entry with same key
         let mut i = 0;
         while i < self.len {
@@ -138,18 +130,6 @@ impl BoundedEntityCacheStore {
         e.expires_at = expires_at;
         e.occupied = true;
         self.len += 1;
-        true
-    }
-
-    /// DB constraint check over occupied entity-cache entries.
-    pub fn all_entries_well_formed(&self) -> bool {
-        let mut i = 0;
-        while i < self.len {
-            if !self.entries[i].is_well_formed() {
-                return false;
-            }
-            i += 1;
-        }
         true
     }
 
@@ -247,13 +227,7 @@ impl BoundedChainCacheStore {
     }
 
     /// Get a non-expired chain entry.
-    pub fn get(
-        &self,
-        env_id: u8,
-        leaf: &[u8],
-        anchor: &[u8],
-        now: i64,
-    ) -> Option<usize> {
+    pub fn get(&self, env_id: u8, leaf: &[u8], anchor: &[u8], now: i64) -> Option<usize> {
         let mut i = 0;
         while i < self.len {
             if self.entries[i].occupied
@@ -360,12 +334,7 @@ impl BoundedRpSession {
 
     /// Initiate authorization: store state, nonce, expected issuer, endpoints, TTL.
     /// Transitions Idle → PendingCallback.
-    pub fn authorize(
-        &mut self,
-        state: &[u8],
-        nonce: &[u8],
-        issuer: &[u8],
-    ) -> bool {
+    pub fn authorize(&mut self, state: &[u8], nonce: &[u8], issuer: &[u8]) -> bool {
         if self.state != RpSessionState::Idle {
             return false;
         }
@@ -524,9 +493,7 @@ impl BoundedProfileEntry {
 
     /// Profile is valid at time `now`.
     pub fn is_valid_at(&self, now: i64) -> bool {
-        self.occupied
-            && self.is_active
-            && (self.expires_at == 0 || now < self.expires_at)
+        self.occupied && self.is_active && (self.expires_at == 0 || now < self.expires_at)
     }
 
     /// Modern flow well-formedness: profiles cannot relax PKCE.
@@ -613,12 +580,7 @@ impl BoundedProfileStore {
 
     /// Resolve the effective policy.
     /// Precedence: client profile > default > baseline 2.1
-    pub fn resolve(
-        &self,
-        env_id: u8,
-        client_profile_id: Option<u8>,
-        now: i64,
-    ) -> ResolvedPolicy {
+    pub fn resolve(&self, env_id: u8, client_profile_id: Option<u8>, now: i64) -> ResolvedPolicy {
         if let Some(pid) = client_profile_id {
             if let Some(idx) = self.find_profile(env_id, pid, now) {
                 let p = &self.entries[idx];
@@ -668,4 +630,78 @@ impl BoundedProfileStore {
         }
         true
     }
+}
+
+#[cfg(test)]
+mod expiration_storage_tests {
+    use super::BoundedEntityCacheStore;
+
+    #[test]
+    fn expired_and_equal_rows_are_retained_without_timestamp_changes() {
+        for (fetched_at, expires_at) in [
+            (1000, 999),
+            (1000, 1000),
+            (-1, -2),
+            (i64::MIN, i64::MIN),
+            (i64::MAX, i64::MAX),
+        ] {
+            let mut store = BoundedEntityCacheStore::new();
+            assert!(store.upsert(1, b"entity", fetched_at, expires_at));
+            assert_eq!(store.len, 1);
+            assert_eq!(store.entries[0].fetched_at, fetched_at);
+            assert_eq!(store.entries[0].expires_at, expires_at);
+            assert_eq!(store.count_key(1, b"entity"), 1);
+            assert!(store.get(1, b"entity", fetched_at).is_none());
+            assert!(store.get(1, b"entity", expires_at).is_none());
+            store.cleanup_expired(fetched_at);
+            assert_eq!(store.count_key(1, b"entity"), 0);
+            assert_eq!(store.len, 0);
+        }
+    }
+
+    #[test]
+    fn expired_replacement_preserves_uniqueness_and_other_tenant() {
+        for (fetched_at, expires_at) in [(1000, 999), (1000, 1000)] {
+            let mut store = BoundedEntityCacheStore::new();
+            assert!(store.upsert(1, b"entity", 0, 2000));
+            assert!(store.upsert(2, b"entity", 0, 2000));
+            assert!(store.upsert(1, b"entity", fetched_at, expires_at));
+            assert_eq!(store.len, 2);
+            assert_eq!(store.entries[0].fetched_at, fetched_at);
+            assert_eq!(store.entries[0].expires_at, expires_at);
+            assert_eq!(store.count_key(1, b"entity"), 1);
+            assert!(store.get(1, b"entity", fetched_at).is_none());
+            assert!(store.get(2, b"entity", fetched_at).is_some());
+            store.cleanup_expired(fetched_at);
+            assert_eq!(store.count_key(1, b"entity"), 0);
+            assert_eq!(store.count_key(2, b"entity"), 1);
+            assert_eq!(store.entries[0].fetched_at, 0);
+            assert_eq!(store.entries[0].expires_at, 2000);
+        }
+    }
+}
+
+#[cfg(kani)]
+#[kani::proof]
+#[kani::unwind(70)]
+fn proof_entity_cache_retains_expired_acquisition() {
+    let fetched_at: i64 = kani::any();
+    let expires_at: i64 = kani::any();
+    kani::assume(expires_at <= fetched_at);
+    let replacement_fetched_at: i64 = kani::any();
+    let replacement_expires_at: i64 = kani::any();
+    kani::assume(replacement_expires_at <= replacement_fetched_at);
+    let mut store = BoundedEntityCacheStore::new();
+    assert!(store.upsert(1, b"entity", fetched_at, expires_at));
+    assert_eq!(store.entries[0].fetched_at, fetched_at);
+    assert_eq!(store.entries[0].expires_at, expires_at);
+    assert!(store.get(1, b"entity", fetched_at).is_none());
+    assert!(store.upsert(1, b"entity", replacement_fetched_at, replacement_expires_at));
+    assert_eq!(store.entries[0].fetched_at, replacement_fetched_at);
+    assert_eq!(store.entries[0].expires_at, replacement_expires_at);
+    assert_eq!(store.count_key(1, b"entity"), 1);
+    assert!(store.get(1, b"entity", replacement_fetched_at).is_none());
+    assert!(store.get(1, b"entity", replacement_expires_at).is_none());
+    store.cleanup_expired(replacement_fetched_at);
+    assert_eq!(store.count_key(1, b"entity"), 0);
 }

@@ -1,6 +1,6 @@
 # OpenID Connect Federation 1.0 Runtime Specification
 
-Last updated: 2026-07-07
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -21,7 +21,7 @@ metadata admission. Public OP publication endpoints are not routed in production
 The active runtime supports OpenID Federation as a relying-party / trust-chain consumer:
 
 - federation entity ID URL construction for `/.well-known/openid-federation`
-- federation fetch URL construction for `/.well-known/openid-federation/fetch`
+- subordinate fetch URL construction from the authority's advertised endpoint
 - outbound entity-statement fetch with SSRF and redirect guards
 - environment-scoped trust anchors
 - persistent federation entity and trust-chain caches
@@ -52,9 +52,59 @@ userinfo, query, or fragment. Non-routable literal hosts, private DNS targets, u
 and redirect targets outside the optional environment-scoped domain allowlist are rejected before
 entity-statement processing.
 
-Fetched Entity Statements are retained as compact JWS artifacts in the persistent entity cache.
-Cache admission is bounded by the environment policy for federation entity cache TTL and maximum
-entry count.
+Individual HTTP fetches verify the original signed JWT and common statement profile, then require
+exact requested identities and current temporal validity. Entity Configurations must have
+`iss == sub == requested entity ID`; Subordinate Statements must be non-self-issued with the
+requested issuer and subject. JSON escapes are decoded for comparison, but URL normalization,
+redirects and endpoint construction do not create entity-identifier aliases. The existing
+60-second clock skew, claim ordering and checked arithmetic remain in force.
+
+A subordinate fetch validates the caller-supplied authority configuration's identity, typed
+profile and time before acquisition and again after it. That configuration supplies discovery
+metadata; it does not authenticate its detached contents. Signature verification uses the
+separately supplied issuer keys, which may be superior-endorsed keys. Individual admission does
+not establish signed parent membership, configured-anchor trust or complete-chain policies.
+The generic `verify_entity_configuration` / `verify_entity_statement` APIs remain limited to
+signature and profile verification, and the explicit raw-JWS transport API remains unparsed.
+
+The exported `CachedFederationFetcher` wrapper revalidates raw JWTs on cache hits and fresh
+callback results. It checks the returned row's environment, original entity key and current
+cache expiry, ignores detached parsed data, and caps writes at the earlier of configured TTL
+and signed `exp`. Zero TTL or an already elapsed signed expiry produces no reusable entry.
+Clock samples are refreshed after awaited lookup, acquisition and writes; lookup failures
+propagate, invalid entries trigger refetch, and a write failure can still return a valid fresh
+result. There is no stale-success fallback. The live upstream resolver uses the complete-chain
+cache and direct HTTP fetcher; it does not construct this individual cache wrapper.
+
+The management entity-cache refresh operation applies the same contextual raw admission to the
+existing row's entity ID. Its second lifecycle-role gate remains before mutation. It rechecks
+time after that gate, stores only raw-derived parsed data, and binds a checked absolute expiry
+capped by signed `exp`. Validation failure leaves the old row and success audit unchanged;
+update and audit share a transaction. Administrative lists may display expired rows without
+authorizing their protocol use.
+
+### Compatibility for custom fetchers
+
+The public trait signatures and decoded-only defaults remain source compatible. Custom fetchers
+used with the contextual cache wrapper must retain the compact JWT in both `*_with_jws` methods;
+missing raw now fails, as it already does for complete-chain resolution. Detached result fields
+and public result constructors do not establish verification. Wrong-entity, expired or future
+responses previously accepted by individual paths now fail. Entity keys remain unchanged and no cache purge is required.
+
+### Database upgrade
+
+Apply `20261002100000_federation_entity_cache_expiration.sql` with the matching Atlas migration
+inventory and deploy the matching binary through the existing schema gates. It removes only the
+individual entity-cache `expires_at > fetched_at` CHECK; it does not rewrite existing rows. A
+statement accepted within the clock-skew allowance can retain an already elapsed signed expiry
+with an accurate acquisition timestamp. Cache reads still exclude expired rows and cleanup still
+removes them. Management policy TTL remains 1..=86400 seconds; zero-TTL tests cover only the
+direct API seam.
+
+Once such rows exist, re-adding the old CHECK or rolling back the binary is not automatically
+valid. Follow the matching database/binary recovery procedure in
+[database development](../development/database.md#startup-schema-checks-and-upgrades); do not
+extend signed expiry or falsify acquisition time to make rollback succeed.
 
 ## Trust-Chain Resolution
 

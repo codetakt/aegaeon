@@ -60,6 +60,7 @@ class SecurityAppLauncherTests(unittest.TestCase):
             };
             name = "aegaeon-security";
             runtimeInputs = [ "/inert/runtime-one" "/inert/runtime-two" ];
+            nativePkgConfigPath = "/inert/native/lib/pkgconfig";
             script = /inert/outer.sh;
           }
         """
@@ -195,6 +196,147 @@ class SecurityAppLauncherTests(unittest.TestCase):
 
 
 class SecurityAppLauncherProgramTests(unittest.TestCase):
+    def generated_dispatch_text(self, nix: str, bash: str, script: Path) -> str:
+        expression = (
+            "let flake = builtins.getFlake "
+            + json.dumps(str(ROOT))
+            + "; packages = import flake.inputs.nixpkgs { system = builtins.currentSystem; }; "
+            "pkgs = packages // { bash = "
+            + json.dumps(str(Path(bash).parent.parent))
+            + "; }; app = import "
+            + json.dumps(str(ROOT / "nix/flake/security-launcher.nix"))
+            + ' { inherit pkgs; inherit (pkgs) lib; name = "provider-path-control"; '
+            'runtimeInputs = []; nativePkgConfigPath = "/inert/pinned/lib/pkgconfig"; '
+            "script = " + json.dumps(str(script)) + "; }; in builtins.getContext app.text"
+        )
+        # Use the real writeShellApplication output without realizing its
+        # build/check dependencies, which need not exist in the helper shell.
+        evaluation = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command flakes",
+                "eval",
+                "--offline",
+                "--impure",
+                "--json",
+                "--expr",
+                expression,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(evaluation.returncode, 0, evaluation.stderr)
+        dispatches = [
+            path
+            for path in json.loads(evaluation.stdout)
+            if path.endswith("-provider-path-control.drv")
+        ]
+        self.assertEqual(len(dispatches), 1)
+        result = subprocess.run(
+            [
+                nix,
+                "--extra-experimental-features",
+                "nix-command",
+                "derivation",
+                "show",
+                dispatches[0],
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = json.loads(result.stdout)
+        derivation = next(iter(document.get("derivations", document).values()))
+        attributes = derivation.get("structuredAttrs")
+        if attributes is None:
+            environment = derivation["env"]
+            attributes = (
+                json.loads(environment["__json"]) if "__json" in environment else environment
+            )
+        return attributes["text"]
+
+    def test_generated_dispatch_overrides_inherited_native_provider_path(self) -> None:
+        nix = shutil.which("nix")
+        bash = shutil.which("bash")
+        if nix is None or bash is None:
+            self.fail("The supported test environment requires Nix and Bash")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            script = directory / "record-provider-path.sh"
+            script.write_text("printf '%s\\n' \"$PKG_CONFIG_PATH\"\n")
+            text = self.generated_dispatch_text(nix, bash, script)
+            dispatch = directory / "dispatch.sh"
+            dispatch.write_text(text)
+            for inherited in (None, "", "/inert/inherited/lib/pkgconfig"):
+                with self.subTest(inherited=inherited):
+                    environment = os.environ.copy()
+                    if inherited is None:
+                        environment.pop("PKG_CONFIG_PATH", None)
+                    else:
+                        environment["PKG_CONFIG_PATH"] = inherited
+                    observed = subprocess.run(
+                        [bash, str(dispatch)],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(observed.returncode, 0, observed.stderr)
+                    self.assertEqual(observed.stdout, "/inert/pinned/lib/pkgconfig\n")
+                    self.assertEqual(observed.stderr, "")
+
+    def test_generated_dispatch_pins_native_path_after_ordinary_startup(self) -> None:
+        nix = shutil.which("nix")
+        bash = shutil.which("bash")
+        if nix is None or bash is None:
+            self.fail("The supported test environment requires Nix and Bash")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            script = directory / "record-startup.sh"
+            script.write_text(
+                'printf \'%s\\0\' "${PKG_CONFIG_PATH-unset}" "$0" "$@" '
+                '"$AEG_FIXTURE_STARTUPS" "$AEG_FIXTURE_VALUE" "${BASH_ENV-unset}"\n'
+            )
+            dispatch = directory / "dispatch.sh"
+            dispatch.write_text(self.generated_dispatch_text(nix, bash, script))
+            startup = directory / "startup.sh"
+            arguments = [b"", b"space and quote'", b"line\nbreak", b"\xff"]
+            for action in (
+                "export PKG_CONFIG_PATH=/inert/startup/lib/pkgconfig",
+                "unset PKG_CONFIG_PATH",
+            ):
+                with self.subTest(action=action):
+                    startup.write_text(
+                        action + "\n"
+                        "export AEG_FIXTURE_STARTUPS=$((AEG_FIXTURE_STARTUPS + 1))\n"
+                        "export AEG_FIXTURE_VALUE=ordinary-startup\n"
+                    )
+                    environment = os.environ.copy()
+                    environment.update(BASH_ENV=str(startup), AEG_FIXTURE_STARTUPS="0")
+                    observed = subprocess.run(
+                        [os.fsencode(bash), os.fsencode(dispatch), *arguments],
+                        env=environment,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(observed.returncode, 0, observed.stderr)
+                    self.assertEqual(
+                        observed.stdout.split(b"\0"),
+                        [
+                            b"/inert/pinned/lib/pkgconfig",
+                            os.fsencode(script),
+                            *arguments,
+                            b"1",
+                            b"ordinary-startup",
+                            b"unset",
+                            b"",
+                        ],
+                    )
+                    self.assertEqual(observed.stderr, b"")
+
     def test_actual_flake_program_matches_installed_wrapper_destination(self) -> None:
         nix = shutil.which("nix")
         if nix is None:

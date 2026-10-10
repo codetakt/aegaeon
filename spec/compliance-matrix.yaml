@@ -5309,6 +5309,26 @@ openid_federation_rp:
   - Generic Federation core may accept those ordinary extension claims and cache such a chain; cache storage does not constitute OIDC authorization.
   - Existing resolved discovery issuer/endpoint/JWKS matching remains required; repository and web admission tests are not live HTTP or browser evidence.
 
+- id: fed-rp-005
+  section: '3.2, 8.1, 9, 10.2, 10.4, 11.1, 16'
+  requirement: MUST
+  description: Individual Entity Statements MUST match their requested identities and current temporal context
+  module: crates/server/src/federation/admission.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/admission.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/federation_entity_cache_handlers/refresh/workflow/tests.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/admission.rs
+  notes:
+  - HTTP C/S, exported individual cache acceptance, and management entity refresh reconstruct signed raw, compare exact decoded identities, and use current temporal checks with existing skew policy.
+  - Authority discovery configurations are checked before and after subordinate acquisition; separately supplied issuer keys remain independent of self-published discovery keys.
+  - Cache hits check environment/key/expiry, fresh callbacks require raw, and stored lifetimes are capped by canonical signed exp. Awaited operations resample the clock; no stale-success fallback.
+  - PostgreSQL tests exercise the actual management workflow with only acquisition/clock injection, including role/environment gates and update/audit rollback; they require the isolated ignored-test lane.
+  - A forward migration removes only the individual cache expiry-after-fetch CHECK so skew-admitted administrative rows preserve signed exp and accurate fetched_at. Predecessor rejection, unchanged existing rows, desired-schema parity, expired-read refusal and cleanup are tested.
+  - Generic signature/profile verifiers and explicit-now complete-chain APIs retain their limited contracts. This is finite implementation coverage, not full NumericDate, trust-chain, edition or product assurance.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

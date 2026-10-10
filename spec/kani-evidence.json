@@ -210,6 +210,12 @@
           "name": "upstream_refresh::freshness_full_numeric_domain",
           "file": "crates/kani-harness/src/upstream_refresh.rs",
           "domain": "Direct production lower-bound freshness predicate over all i64 iat and u64 request-start/leeway values, checked against independent i128 subtraction. Clock accuracy, request timestamp capture, upper-time/expiry checks, signatures, DB concurrency and replay-freedom excluded."
+        },
+        {
+          "name": "bounded_federation_cache::proof_entity_cache_retains_expired_acquisition",
+          "file": "crates/kani-harness/src/bounded_federation_cache.rs",
+          "domain": "Initialized four-slot/64-byte-identifier non-DB model with one fixed six-byte natural key; all i64 insertion/replacement timestamps with expires_at <= fetched_at. Exact timestamp retention, uniqueness, strict GET refusal at acquisition/expiry and cleanup; no SQL, JWS, clocks or product correspondence.",
+          "unwind": 70
         }
       ]
     },
