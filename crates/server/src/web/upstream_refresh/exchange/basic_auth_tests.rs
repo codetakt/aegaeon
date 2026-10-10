@@ -24,6 +24,7 @@ fn fixture(
     Ok(UpstreamRefreshLink {
         account_link_id: uuid::Uuid::nil(),
         link_env_id: uuid::Uuid::nil(),
+        configuration_version_id: uuid::Uuid::nil(),
         upstream_issuer: "https://upstream.example".into(),
         upstream_sub_hash: subject_hash,
         original_authentication,

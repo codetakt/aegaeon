@@ -78,6 +78,9 @@ pub(super) fn read_upstream_client_from_row(
     issuer_base: &str,
 ) -> Result<UpstreamClient, Response> {
     Ok(UpstreamClient {
+        configuration_version_id: row
+            .try_get("configuration_version_id")
+            .map_err(|_| corrupted_upstream_client_row_error(issuer_base))?,
         connection_id: row
             .try_get("connection_id")
             .map_err(|_| corrupted_upstream_client_row_error(issuer_base))?,

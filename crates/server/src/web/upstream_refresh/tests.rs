@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 type ResultTest<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
+mod configuration_currentness;
 mod currentness;
 mod freshness;
 mod last_use;

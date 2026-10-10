@@ -22,6 +22,7 @@ pub(super) struct UpstreamRefreshCaller {
 pub(super) struct UpstreamRefreshLink {
     pub(super) account_link_id: uuid::Uuid,
     pub(super) link_env_id: uuid::Uuid,
+    pub(super) configuration_version_id: uuid::Uuid,
     pub(super) upstream_issuer: String,
     pub(super) upstream_sub_hash: String,
     pub(super) upstream_refresh_token_generation: i64,
@@ -46,6 +47,7 @@ struct AccountLinkIdentity {
 
 struct UpstreamClient {
     connection_id: uuid::Uuid,
+    configuration_version_id: uuid::Uuid,
     connection_identifier: String,
     client_id: String,
     auth_method: String,
@@ -76,6 +78,7 @@ pub(super) async fn load_upstream_refresh_link(
     Ok(UpstreamRefreshLink {
         account_link_id: identity.account_link_id,
         link_env_id: identity.environment_id,
+        configuration_version_id: client.configuration_version_id,
         upstream_issuer: identity.upstream_issuer,
         upstream_sub_hash: identity.upstream_sub_hash,
         upstream_refresh_token_generation: identity.refresh_token_generation,

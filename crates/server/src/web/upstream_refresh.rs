@@ -29,6 +29,7 @@ use crate::util;
 mod exchange;
 mod persistence;
 mod profile;
+mod runtime_version;
 use aegaeon_pure::upstream_refresh as freshness;
 use exchange::{perform_upstream_refresh_exchange, UpstreamRefreshExchange};
 use persistence::persist_upstream_refresh_exchange;
@@ -184,6 +185,11 @@ pub(super) async fn upstream_refresh(
         Ok(link) => link,
         Err(resp) => return resp,
     };
+    if let Err(response) =
+        runtime_version::validate_loaded_runtime_version(&state, &link, issuer_base)
+    {
+        return response;
+    }
     let profile = match resolve_upstream_refresh_profile(&state, issuer_base, &link).await {
         Ok(profile) => profile,
         Err(resp) => return resp,

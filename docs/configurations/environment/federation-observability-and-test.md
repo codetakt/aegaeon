@@ -210,6 +210,10 @@ ID, connection identifier, authentication method, encrypted credential snapshot
 and resolved policy before applying the account-link generation CAS. Explicit
 profile reassignment, default-profile replacement, expired/inactive profiles and
 changes to the policy used for the request also reject the response.
+The link load captures the active configuration version and checks it against
+the loaded runtime authority before exchange. Persistence requires
+that exact version to remain active, even when activation carries the same
+connection and profile rows into a newer version with unchanged fields.
 The locks remain until commit; no lock is held during the network exchange.
 Refresh updates retain the greater of the stored last-use timestamp and the
 transaction timestamp, so concurrent non-rotating refreshes cannot move it back.

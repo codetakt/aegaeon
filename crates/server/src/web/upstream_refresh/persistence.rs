@@ -25,9 +25,10 @@ pub(super) async fn lock_current_connection(
     // work occurs in this transaction. FOR KEY SHARE would not block client changes.
     let version = sqlx::query_scalar::<_, Uuid>(
         "SELECT configuration_version_id FROM aegaeon.active_runtime_environments \
-         WHERE environment_id = $1 FOR SHARE",
+         WHERE environment_id = $1 AND configuration_version_id = $2 FOR SHARE",
     )
     .bind(link.link_env_id)
+    .bind(link.configuration_version_id)
     .fetch_optional(&mut **tx)
     .await
     .map_err(|_| persistence_error(issuer_base))?;
