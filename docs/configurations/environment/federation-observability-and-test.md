@@ -211,6 +211,8 @@ and resolved policy before applying the account-link generation CAS. Explicit
 profile reassignment, default-profile replacement, expired/inactive profiles and
 changes to the policy used for the request also reject the response.
 The locks remain until commit; no lock is held during the network exchange.
+Refresh updates retain the greater of the stored last-use timestamp and the
+transaction timestamp, so concurrent non-rotating refreshes cannot move it back.
 If a conflicting management change commits first, refresh returns a generic
 no-cache `409 invalid_grant` without returning new tokens or changing the grant
 or last-use metadata. If refresh obtains the locks first, it may commit before

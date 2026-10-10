@@ -16,6 +16,7 @@ type ResultTest<T = ()> = Result<T, Box<dyn Error>>;
 mod cases;
 mod currentness;
 mod freshness;
+mod last_use;
 mod policy_currentness;
 
 struct Fixture {

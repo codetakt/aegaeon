@@ -119,7 +119,7 @@ pub(super) async fn persist_locked_upstream_refresh_exchange(
              SET upstream_refresh_token_encrypted = $1, \
                  upstream_refresh_token_connection_id = $2, \
                  upstream_refresh_token_generation = $3, \
-                 last_used_at = now() \
+                 last_used_at = GREATEST(last_used_at, now()) \
              WHERE id = $4 \
                AND environment_id = $5 \
                AND upstream_issuer = $6 \
@@ -157,7 +157,7 @@ pub(super) async fn persist_locked_upstream_refresh_exchange(
         return Ok(());
     }
     let result = sqlx::query(
-        "UPDATE aegaeon.account_links SET last_used_at = now() \
+        "UPDATE aegaeon.account_links SET last_used_at = GREATEST(last_used_at, now()) \
          WHERE id = $1 \
            AND environment_id = $2 \
            AND upstream_issuer = $3 \
