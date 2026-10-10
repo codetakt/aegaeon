@@ -264,7 +264,8 @@ fn upstream_refresh_v3_strict_plaintext_decode_rejects_extra_fields_and_identity
             "nonce" | "client_id" => value["original"][field] = serde_json::json!(""),
             _ => value["original"][field] = serde_json::json!("wrong"),
         }
-        let nonce = [7; 12];
+        let mut nonce = [0u8; 12];
+        aegaeon_crypto::rand::fill_random(&mut nonce).map_err(|e| format!("{e:?}"))?;
         let aad = upstream_refresh_token_aad_v3(env, &token.claims.iss, &hash, conn, 1);
         let sealed =
             aegaeon_crypto::jwe::encrypt_a256gcm(&key, &nonce, &serde_json::to_vec(&value)?, &aad)
