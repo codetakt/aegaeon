@@ -42,6 +42,7 @@ const FORBIDDEN_PRODUCTION_PROCESS_LOCAL_BACKEND_LABELS: &[&str] =
     &["backend: in-memory", "\"in-memory\""];
 
 const TEST_ONLY_HELPER_API_CFG: &str = "#[cfg(test)]";
+const FUZZ_HELPER_API_CFG: &str = "#[cfg(any(test, fuzzing))]";
 const RETIRED_INTEGRATION_FIXTURE_MARKERS: &[&str] = &[
     "aegaeon_integration_test_fixtures",
     "AEGAEON_ENABLE_INTEGRATION_TEST_FIXTURES",
@@ -107,7 +108,11 @@ fn process_local_test_helper_apis_are_not_exposed_in_release_builds() -> TestRes
         let mut previous_lines = Vec::<&str>::new();
         for (line_index, line) in source.lines().enumerate() {
             if public_test_helper_api_requires_cfg_gate(line)
-                && !has_test_cfg_gate(previous_lines.iter().rev().take(8).copied())
+                && !has_process_local_helper_gate(
+                    &path,
+                    line,
+                    previous_lines.iter().rev().take(8).copied(),
+                )
             {
                 findings.push(format!(
                     "{}:{}: test helper API must have `{}`",
@@ -125,6 +130,85 @@ fn process_local_test_helper_apis_are_not_exposed_in_release_builds() -> TestRes
         "process-local test helper APIs must be cfg-gated out of release builds:\n{}",
         findings.join("\n")
     );
+    Ok(())
+}
+
+#[test]
+fn fuzz_helper_gate_is_limited_to_adopted_process_local_constructors() {
+    let signature = "pub fn new_process_local_for_tests() -> Self {";
+    for path in ["src/par.rs", "src/middleware/dpop.rs"] {
+        assert!(has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            [FUZZ_HELPER_API_CFG]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            "pub fn new_process_local_other() -> Self {",
+            [FUZZ_HELPER_API_CFG]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            ["#[cfg(debug_assertions)]"]
+        ));
+        assert!(!has_process_local_helper_gate(
+            Path::new(path),
+            signature,
+            []
+        ));
+    }
+    assert!(!has_process_local_helper_gate(
+        Path::new("src/authcode/store.rs"),
+        signature,
+        [FUZZ_HELPER_API_CFG]
+    ));
+    assert!(!has_test_cfg_gate([FUZZ_HELPER_API_CFG]));
+}
+
+#[test]
+fn actual_fuzz_process_local_constructor_gates_are_preserved() -> TestResult {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let signature = "pub fn new_process_local_for_tests() -> Self {";
+    for relative_path in ["src/par.rs", "src/middleware/dpop.rs"] {
+        let path = manifest_dir.join(relative_path);
+        let source = fs::read_to_string(&path).test_context(&format!(
+            "constructor source should be readable: {}",
+            path.display()
+        ))?;
+        let lines = source.lines().collect::<Vec<_>>();
+        let matches = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.trim() == signature)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            matches.len(),
+            1,
+            "{relative_path} must retain exactly one process-local fuzz constructor"
+        );
+        let attributes = lines[..matches[0]]
+            .iter()
+            .rev()
+            .map(|line| line.trim())
+            .take_while(|line| line.starts_with("#[") || line.starts_with("///") || line.is_empty())
+            .collect::<Vec<_>>();
+        let cfg_attributes = attributes
+            .iter()
+            .copied()
+            .filter(|line| line.starts_with("#[cfg(") || line.starts_with("#[cfg_attr("))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            cfg_attributes,
+            [FUZZ_HELPER_API_CFG],
+            "{relative_path} constructor must retain its exact test-or-fuzzing gate"
+        );
+        assert!(
+            has_process_local_helper_gate(&path, signature, attributes.iter().copied()),
+            "{relative_path} real constructor gate must satisfy the limited-path guard"
+        );
+    }
     Ok(())
 }
 
@@ -553,6 +637,20 @@ fn has_test_cfg_gate<'a>(lines: impl IntoIterator<Item = &'a str>) -> bool {
     lines
         .into_iter()
         .any(|candidate| candidate.trim() == TEST_ONLY_HELPER_API_CFG)
+}
+
+fn has_process_local_helper_gate<'a>(
+    path: &Path,
+    signature: &str,
+    lines: impl IntoIterator<Item = &'a str>,
+) -> bool {
+    let adopted_constructor = (path.ends_with("src/par.rs")
+        || path.ends_with("src/middleware/dpop.rs"))
+        && signature.trim() == "pub fn new_process_local_for_tests() -> Self {";
+    lines.into_iter().any(|candidate| {
+        candidate.trim() == TEST_ONLY_HELPER_API_CFG
+            || (adopted_constructor && candidate.trim() == FUZZ_HELPER_API_CFG)
+    })
 }
 
 const fn is_identifier_char(ch: char) -> bool {

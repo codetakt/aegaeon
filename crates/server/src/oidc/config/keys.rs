@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(feature = "kms-aws")]
 use crate::oidc::aws_kms_signer::OidcAwsKmsSigner;
 
-use super::{OidcConfigError, OidcSigningError};
+use super::{OidcConfigError, OidcJwtPurpose, OidcSigningError};
 
 mod additional_jwks;
 mod rsa;
@@ -214,49 +214,93 @@ impl OidcSigningKey {
         }
     }
 
-    /// # Errors
-    ///
     /// Returns an error when the JWT cannot be serialized or signed.
     pub(crate) fn sign_rs256_jwt<T: serde::Serialize>(
         &self,
         claims: &T,
     ) -> Result<String, OidcSigningError> {
+        self.sign_rs256_with_purpose(claims, OidcJwtPurpose::Standard)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sign_logout_token<T: serde::Serialize>(
+        &self,
+        claims: &T,
+    ) -> Result<String, OidcSigningError> {
+        self.sign_rs256_with_purpose(claims, OidcJwtPurpose::Logout)
+    }
+
+    fn sign_rs256_with_purpose<T: serde::Serialize>(
+        &self,
+        claims: &T,
+        purpose: OidcJwtPurpose,
+    ) -> Result<String, OidcSigningError> {
         match &self.backend {
             OidcSigningBackend::LocalPem { encoding_key } => {
-                let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
-                header.typ = Some("JWT".to_string());
-                header.kid = Some(self.kid.clone());
-                jsonwebtoken::encode(&header, claims, encoding_key.as_ref()).map_err(Into::into)
+                jsonwebtoken::encode(&purpose.header(&self.kid), claims, encoding_key.as_ref())
+                    .map_err(Into::into)
             }
-
             #[cfg(feature = "kms-aws")]
             OidcSigningBackend::AwsKms { signer } => signer
-                .sign_rs256_jwt(claims)
+                .sign_rs256_jwt(claims, purpose)
                 .map_err(|err| OidcSigningError::AwsKms(err.to_string())),
         }
     }
 
-    /// # Errors
-    ///
     /// Returns an error when the JWT cannot be serialized or signed.
     pub(crate) async fn sign_rs256_jwt_async<T: serde::Serialize>(
         &self,
         claims: &T,
     ) -> Result<String, OidcSigningError> {
+        self.sign_rs256_with_purpose_async(claims, OidcJwtPurpose::Standard)
+            .await
+    }
+
+    pub(crate) async fn sign_logout_token_async<T: serde::Serialize>(
+        &self,
+        claims: &T,
+    ) -> Result<String, OidcSigningError> {
+        self.sign_rs256_with_purpose_async(claims, OidcJwtPurpose::Logout)
+            .await
+    }
+
+    async fn sign_rs256_with_purpose_async<T: serde::Serialize>(
+        &self,
+        claims: &T,
+        purpose: OidcJwtPurpose,
+    ) -> Result<String, OidcSigningError> {
         match &self.backend {
             OidcSigningBackend::LocalPem { encoding_key } => {
-                let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
-                header.typ = Some("JWT".to_string());
-                header.kid = Some(self.kid.clone());
-                jsonwebtoken::encode(&header, claims, encoding_key.as_ref()).map_err(Into::into)
+                jsonwebtoken::encode(&purpose.header(&self.kid), claims, encoding_key.as_ref())
+                    .map_err(Into::into)
             }
-
             #[cfg(feature = "kms-aws")]
             OidcSigningBackend::AwsKms { signer } => signer
-                .sign_rs256_jwt_async(claims)
+                .sign_rs256_jwt_async(claims, purpose)
                 .await
                 .map_err(|err| OidcSigningError::AwsKms(err.to_string())),
         }
+    }
+
+    #[cfg(all(test, feature = "kms-aws"))]
+    pub(crate) async fn from_test_kms_client(
+        client: aws_sdk_kms::Client,
+        key_id: String,
+        kid: String,
+    ) -> Result<Self, OidcConfigError> {
+        validate_kid(&kid)?;
+        let signer = OidcAwsKmsSigner::from_test_client(client, key_id, kid.clone())
+            .await
+            .map_err(|err| OidcConfigError::AwsKmsSigningInit(err.to_string()))?;
+        let public_jwk = signer.public_jwk().clone();
+        Ok(Self {
+            kid,
+            backend: OidcSigningBackend::AwsKms {
+                signer: Arc::new(signer),
+            },
+            public_jwk,
+            additional_public_jwks: Vec::new(),
+        })
     }
 
     #[must_use]

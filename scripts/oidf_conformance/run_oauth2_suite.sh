@@ -169,6 +169,7 @@ SUITE_STDOUT_LOG="${BOOTSTRAP_DIR}/suite_stdout_${RUN_ID}.log"
 	--server.port="${SUITE_PORT}" \
 	--server.forward-headers-strategy=native \
 	--spring.profiles.active=dev \
+	--spring.mongodb.uri="${MONGO_URI}" \
 	--spring.data.mongodb.uri="${MONGO_URI}" \
 	--fintechlabs.base_url="${SUITE_URL}" \
 	--fintechlabs.devmode=true) >"${SUITE_STDOUT_LOG}" 2>&1 &

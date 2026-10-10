@@ -14,6 +14,28 @@ use runtime_keys::{
     oidc_key_material_from_runtime_keys, oidc_key_material_from_runtime_keys_async,
 };
 
+/// Internal JWT purposes keep Logout Tokens distinct from generic OIDC JWTs.
+#[derive(Clone, Copy)]
+pub(crate) enum OidcJwtPurpose {
+    Standard,
+    Logout,
+}
+
+impl OidcJwtPurpose {
+    pub(crate) fn header(self, kid: &str) -> jsonwebtoken::Header {
+        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
+        header.typ = Some(
+            match self {
+                Self::Standard => "JWT",
+                Self::Logout => "logout+jwt",
+            }
+            .to_string(),
+        );
+        header.kid = Some(kid.to_string());
+        header
+    }
+}
+
 pub const MAX_ID_TOKEN_TTL_SECS: u64 = crate::config::MAX_ACCESS_TOKEN_TTL_SECS;
 pub const MAX_BACKCHANNEL_LOGOUT_TIMEOUT_SECS: u64 = 60;
 

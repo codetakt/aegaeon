@@ -2,12 +2,8 @@ use super::super::{
     validate_entity_statement, EntityStatement, FederationError, FederationFetcher,
     ResolvedTrustChain, TrustAnchor, TrustChain, MAX_CHAIN_DEPTH,
 };
-use super::anchor_resolution::{
-    try_resolve_via_trust_anchor, try_resolve_via_trust_anchor_with_jwts,
-};
-use super::intermediate_resolution::{
-    try_resolve_via_intermediate, try_resolve_via_intermediate_with_jwts,
-};
+use super::anchor_resolution::try_resolve_via_trust_anchor_with_jwts;
+use super::intermediate_resolution::try_resolve_via_intermediate_with_jwts;
 use super::link::validate_entity_configuration_link;
 use super::path_constraints::{enforce_authority_hint_timeout, leaf_entity_types};
 use std::collections::{BTreeSet, HashMap};
@@ -149,10 +145,8 @@ impl<'a> ChainResolutionContext<'a> {
 /// 3. At each level, fetch the subordinate statement + authority's config
 /// 4. Stop when a configured trust anchor is reached
 ///
-/// Enforces Tamarin properties:
-/// - `chain_to_trust_anchor`: chain terminates at a configured trust anchor
-/// - `intermediate_chain_key_authenticity`: all signatures verified by fetcher
-/// - `no_trust_without_chain`: only returns after successful chain resolution
+/// Requires retained compact JWS artifacts from the fetcher. Signatures are checked
+/// through superior-endorsed keys to the current configured trust anchor.
 ///
 /// # Errors
 ///
@@ -164,34 +158,9 @@ pub async fn resolve_trust_chain(
     fetcher: &dyn FederationFetcher,
     now: i64,
 ) -> Result<TrustChain, FederationError> {
-    let anchor_map: HashMap<&str, &TrustAnchor> = trust_anchors
-        .iter()
-        .map(|ta| (ta.entity_id.as_str(), ta))
-        .collect();
-
-    let leaf_config = fetcher.fetch_entity_configuration(leaf_entity_id).await?;
-    validate_entity_statement(&leaf_config, now)?;
-    validate_entity_configuration_link(&leaf_config, leaf_entity_id)?;
-    let leaf_entity_types = leaf_entity_types(&leaf_config);
-
-    let authority_hints = leaf_config
-        .authority_hints
-        .clone()
-        .ok_or(FederationError::MissingField("authority_hints"))?;
-
-    let mut chain = vec![leaf_config];
-    let ctx = ChainResolutionContext::new(&anchor_map, fetcher, now, leaf_entity_types);
-
-    let anchor = resolve_chain_up(
-        &mut chain,
-        leaf_entity_id.to_string(),
-        authority_hints,
-        &ctx,
-        0,
-    )
-    .await?;
-
-    Ok(TrustChain { chain, anchor })
+    resolve_trust_chain_with_jwts(leaf_entity_id, trust_anchors, fetcher, now)
+        .await
+        .map(ResolvedTrustChain::into_trust_chain)
 }
 
 /// Resolve a trust chain and retain the compact JWS artifacts that were actually verified.
@@ -251,61 +220,6 @@ pub async fn resolve_trust_chain_with_jwts(
         TrustChain { chain, anchor },
         chain_jwts,
     ))
-}
-
-pub(super) fn resolve_chain_up<'a>(
-    chain: &'a mut Vec<EntityStatement>,
-    current_entity_id: String,
-    authority_hints: Vec<String>,
-    ctx: &'a ChainResolutionContext<'a>,
-    depth: usize,
-) -> TrustChainResolutionFuture<'a, Result<TrustAnchor, FederationError>> {
-    Box::pin(async move {
-        if depth >= MAX_CHAIN_DEPTH {
-            return Err(FederationError::ChainTooDeep);
-        }
-        ctx.enforce_authority_hints_budget(&current_entity_id, &authority_hints, depth)?;
-
-        let start = Instant::now();
-
-        for authority_id in authority_hints {
-            ctx.record_authority_hint_attempt(&current_entity_id, &authority_id, depth)?;
-            if ctx.authority_hint_revisits_path(chain, &current_entity_id, &authority_id, depth) {
-                continue;
-            }
-            enforce_authority_hint_timeout(start, &current_entity_id, depth)?;
-            let resolved = match ctx.anchor_map.get(authority_id.as_str()) {
-                Some(anchor) => {
-                    try_resolve_via_trust_anchor(
-                        chain,
-                        &current_entity_id,
-                        &authority_id,
-                        anchor,
-                        ctx,
-                        depth,
-                    )
-                    .await
-                }
-                None => {
-                    try_resolve_via_intermediate(
-                        chain,
-                        &current_entity_id,
-                        &authority_id,
-                        ctx,
-                        depth,
-                    )
-                    .await
-                }
-            };
-            if let Some(anchor) = resolved {
-                return Ok(anchor);
-            }
-        }
-
-        Err(FederationError::ChainResolution(format!(
-            "no path from {current_entity_id} to any trust anchor"
-        )))
-    })
 }
 
 pub(super) fn resolve_chain_up_with_jwts<'a>(

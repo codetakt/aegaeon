@@ -144,12 +144,12 @@ impl AuthCodeStore {
             .map_err(|err| format!("authorization code store worker failed: {err}"))?
     }
 
-    /// Store an authorization code with state/nonce uniqueness enforcement.
+    /// Store a distinct authorization code and refresh state/nonce observations.
     ///
     /// # Errors
     ///
-    /// Returns an error when the supplied `state` or `nonce` was already
-    /// observed within the configured TTL window.
+    /// Returns an error for code collisions, expired codes or backend failures.
+    /// Repeated RP state/nonce values do not reject issuance.
     pub(in crate::authcode) fn store_code_typed(
         &self,
         code: AuthorizationCode,
@@ -281,7 +281,7 @@ impl AuthCodeStore {
         })
     }
 
-    /// Get the current count of tracked states (for monitoring)
+    /// Count distinct state values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn state_count(&self) -> usize {
@@ -289,7 +289,7 @@ impl AuthCodeStore {
             .expect("test authorization code state count should succeed")
     }
 
-    /// Get the current count of tracked states (for monitoring), reporting backend failures.
+    /// Count distinct state observations, reporting backend failures.
     pub fn try_state_count(&self) -> Result<usize, String> {
         self.backend.state_count().map_err(|error| {
             let message = error.to_string();
@@ -298,7 +298,7 @@ impl AuthCodeStore {
         })
     }
 
-    /// Get the current count of tracked nonces (for monitoring)
+    /// Count distinct nonce values retained since their last observation, not transactions.
     #[must_use]
     #[cfg(test)]
     pub fn nonce_count(&self) -> usize {
@@ -306,7 +306,7 @@ impl AuthCodeStore {
             .expect("test authorization code nonce count should succeed")
     }
 
-    /// Get the current count of tracked nonces (for monitoring), reporting backend failures.
+    /// Count distinct nonce observations, reporting backend failures.
     pub fn try_nonce_count(&self) -> Result<usize, String> {
         self.backend.nonce_count().map_err(|error| {
             let message = error.to_string();

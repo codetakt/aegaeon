@@ -10,6 +10,8 @@ tamarin = "tamarin"
 activ = "activ"
 
 [default.extend-identifiers]
+# Compiler include option in the preserved legacy invocation.
+Iinclude = "Iinclude"
 environment_policies_federation_entity_cache_ttl_secon_not_null = "environment_policies_federation_entity_cache_ttl_secon_not_null"
 
 [files]

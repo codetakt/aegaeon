@@ -6,6 +6,7 @@ fn resolve_trust_chain_for_test(
     fetcher: &dyn FederationFetcher,
     now: i64,
 ) -> Result<TrustChain, FederationError> {
+    let _guard = raw_json_env_guard();
     block_on_test_future(crate::federation::resolve_trust_chain(
         leaf_entity_id,
         trust_anchors,
@@ -136,7 +137,9 @@ fn allowed_leaf_entity_types_accepts_matching_leaf_metadata() {
     });
 
     let mut fetcher = MockFetcher::new();
-    fetcher.add_entity_config(leaf_id, sample_entity_config(leaf_id, now));
+    let mut leaf = sample_entity_config(leaf_id, now);
+    must_some(leaf.metadata.as_mut()).remove("federation_entity");
+    fetcher.add_entity_config(leaf_id, leaf);
     fetcher.add_entity_config(ta_id, sample_entity_config(ta_id, now));
     fetcher.add_subordinate_stmt(ta_id, leaf_id, sub_stmt);
 

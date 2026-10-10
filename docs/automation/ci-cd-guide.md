@@ -174,7 +174,7 @@ If you touch any F*/EverParse inputs:
 
 ```bash
 scripts/extraction/run_everparse_batch.sh
-scripts/extraction/run_jose_lowstar.sh
+nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
 git diff -- generated/everparse generated/lowstar
 ```
 
@@ -182,13 +182,19 @@ Commit regenerated output when it changes.
 
 ## Fuzzing notes (security suite)
 
-- Default smoke settings are intentionally short (≈30s/target). Outputs land under `artifacts/security/latest/fuzz/` and roll up history under `artifacts/security/history/`.
-- For longer local runs, use `--fuzz-long` (5m/target, 600s total by default):
-  - `nix run .#security-suite -- --fuzz-long`
-- Override fuzz parameters (local runs):
-  - Targets: `FUZZ_TARGETS="fuzz_bearer_token fuzz_dpop_proof ..."`
-  - Smoke budgets: `FUZZ_TIMEOUT=1m FUZZ_MAX_TOTAL=30`
-  - Long-run budgets: `FUZZ_TIMEOUT_OVERRIDE=10m FUZZ_MAX_TOTAL_OVERRIDE=600 FUZZ_TOTAL_TIMEOUT_OVERRIDE=1200s`
+- Fuzz execution is required: all seven configured targets must build and complete normally. A crash, watchdog, missing execution or evidence, or cleanup failure fails the stage. Per-target commands, statuses, executable/log digests and separate corpus/crash archives are retained under `artifacts/security/latest/fuzz/`, with corpus history under `artifacts/security/history/`.
+- Fuzz-enabled invocations validate every evidence path component and raw root before invalidating previous collection, execution and summary receipts or setting up Cargo home, logs or stage directories. Symlink components and evidence routes overlapping source, raw inputs or Git metadata are rejected without changing prior receipts. Cleanup removes the current receipt-bound `$CARGO_TARGET_DIR/fuzz` cache and retains unrelated legacy caches. Cache paths overlapping source, raw inputs or security evidence/recovery are rejected; workspace and fuzz workspace roots and their ancestors are forbidden.
+- Cleanup prepares a verified, run-ID-bound copy of raw corpus, crashes and corpus archives under `artifacts/security/latest/fuzz/cleanup-recovery/`. It binds the parent routes, root presence and nested output identities before deletion. Copies and pre-cleanup receipts remain as execution evidence. A removal or final receipt-writing failure restores missing raw inputs when possible and fails the stage; restoration failure retains the recovery evidence. Recovery checks all remaining raw roots before writing, preserves existing entries and literal symlinks, and refuses substituted roots or changed contents. Build targets and caches are excluded from recovery copies.
+- Compiler receipts bind the effective native `cc`, `c++`, linker and archiver selected by the tracked Cargo configuration. Mismatched native overrides and unmodeled Cargo compiler configuration fail before receipt invalidation; inherited Rust compiler/wrapper overrides, including the `CARGO_BUILD_RUSTC*` aliases and empty values, are rejected. Validated nested cache directories are created before the source snapshot, so newly created ancestors remain part of the source identity.
+- Uploads contain only the regular `artifacts/security-upload/security-evidence.tar.gz` and `manifest.json` files. The required packager preserves complete evidence, history, raw inputs, recovery copies, SBOMs and status, records absent roots and stage outcome, and keeps nested symlinks as literal archive entries. Aliased roots, special entries, unsafe output paths or packaging failures fail the job; original evidence remains available locally.
+- Corpus, crash and upload archives are hashed as compression writes them. Their retained descriptors must match those bytes after complete tar/gzip readback and publication. The CLI loads its `scripts/fuzz/fuzz_support/` modules relative to the physical script; those modules are required source inputs in execution receipts.
+- Default smoke budgets are 30 internal libFuzzer seconds and a 60-second external watchdog per target. Watchdog termination is a failure; it is distinct from normal libFuzzer completion.
+- For longer local runs, use `nix run .#security-suite -- --fuzz-long`. Its default 600-second aggregate internal allocation divides across seven targets into 85 seconds each, with a 115-second watchdog each.
+- `FUZZ_TOTAL_TIMEOUT` and long-mode `FUZZ_TOTAL_TIMEOUT_OVERRIDE` specify aggregate **internal fuzz seconds**. Compilation, watchdog grace and artifact collection are excluded. Division never exceeds that allocation and must allow at least 30 seconds per selected target. The workflow job timeout bounds overall wall time.
+- Local overrides:
+  - `FUZZ_TARGETS="fuzz_bearer_token fuzz_dpop_proof"` selects an explicitly reported local subset. CI requires all seven targets; empty, duplicate and unknown selections fail.
+  - Smoke: `FUZZ_TIMEOUT=1m FUZZ_MAX_TOTAL=30`.
+  - Long: `FUZZ_TOTAL_TIMEOUT_OVERRIDE=1200s`; optional `FUZZ_MAX_TOTAL_OVERRIDE=120` caps each target's internal allocation, and `FUZZ_TIMEOUT_OVERRIDE=3m` sets a watchdog with at least 30 seconds of grace. Empty, malformed or insufficient budgets fail. Long mode requires a nonempty aggregate allocation even with explicit per-target and watchdog overrides.
 
 ## OIDF conformance (local-only for now)
 

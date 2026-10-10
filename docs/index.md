@@ -46,7 +46,7 @@ Audience: contributors, maintainers
 | `docs/specs/openid-federation-spec.md` | spec | OpenID Connect Federation 1.0 Runtime Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-local-credential-plane.md` | spec | Primary Authority Local Credential Plane Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/primary-authority-user-management.md` | spec | Primary Authority User Management Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
-| `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot（v1） | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
+| `docs/specs/verified-core-abi.md` | spec | Verified Core ABI Snapshot (v1) | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/verified-core-wasm.md` | spec | Verified Core WASM Extraction | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 
 ## Design
@@ -103,7 +103,7 @@ Audience: contributors, maintainers
 | `docs/automation/ci-cd-guide.md` | automation | Automation & CI/CD (GitHub Actions + Nix flake) | current implementation baseline | 2026-09-07 | CI / Automation | CI maintainers, contributors |
 | `docs/automation/ci-diagnostics.md` | automation | CI Diagnostics and Evidence | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers, CI maintainers |
 | `docs/automation/flakehub-preview.md` | automation | Private FlakeHub server preview | current implementation baseline | 2026-09-09 | CI / Automation | maintainer using Aegaeon in internal development projects |
-| `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-09-30 | CI / Automation | contributors, reviewers, repository administrators |
+| `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-10-05 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/security-analysis.md` | automation | Security Analysis Execution | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers |
 
 ## Program Management
@@ -157,7 +157,7 @@ Audience: contributors, maintainers
 | `docs/program-management/roadmaps/active/current-execution-plan.md` | roadmap | Current Execution Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/enterprise-readiness-certification-ui-claim-plan.md` | roadmap | Enterprise Readiness, Certification, and Verified UI Claim Plan | active plan | 2026-05-20 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/management-platform-follow-on-plan.md` | roadmap | Management Platform Follow-on Plan | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
-| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-09-07 | Program Management | maintainers, planning contributors |
+| `docs/program-management/roadmaps/active/oauth-rfc-coverage-roadmap.md` | roadmap | OAuth RFC Coverage Roadmap (AS/OP + OAuth Client) | active plan | 2026-10-01 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/oidc-spec-coverage-roadmap.md` | roadmap | OIDC Spec Coverage Roadmap (OP + OIDC RP) | active plan | 2026-03-30 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/proofs-roadmap.md` | roadmap | Proofs Roadmap | active plan | 2026-07-07 | Program Management | maintainers, planning contributors |
 | `docs/program-management/roadmaps/active/verified-oidc-server-client-backlog.md` | roadmap | Verified OIDC Server / Client Implementation Backlog | active plan | 2026-03-16 | Program Management | maintainers, planning contributors |
@@ -315,14 +315,14 @@ Audience: contributors, maintainers
 | `docs/verification/runbooks/ffi-contracts.md` | runbook | FFI Contract Register | current implementation baseline | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/hacl-integration.md` | runbook | HACL* Integration Documentation | current implementation baseline | 2026-03-08 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/runtime-linkage.md` | runbook | Runtime Linkage — Proof-to-Implementation Traceability | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
-| `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-07-07 | Verification | verification contributors, maintainers |
+| `docs/verification/runbooks/sanitizers.md` | runbook | Sanitizers - Developer Guide | current implementation baseline | 2026-10-04 | Verification | verification contributors, maintainers |
 | `docs/verification/runbooks/tamarin-evidence-admission.md` | runbook | Tamarin Evidence Admission | current implementation baseline | 2026-09-08 | Verification | verification reviewers, contributors |
 | `docs/verification/runbooks/verification-ops.md` | runbook | Verification Ops Guide | current implementation baseline | 2026-10-01 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/README.md` | index | Verification Workplans Overview | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/README.md` | index | Verification Workplan Analysis | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/analysis/blockers.md` | verification | Verification blockers and upstream dependency analysis | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
-| `docs/verification/workplans/analysis/karamel-warning15-analysis.md` | verification | KaRaMeL Warning 15 (2026-01-14 時点) 分析メモ | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
-| `docs/verification/workplans/crypto-extraction-roadmap.md` | verification | Crypto Extraction Roadmap (指示書1) | active plan | 2026-07-24 | Verification | verification contributors, maintainers |
+| `docs/verification/workplans/analysis/karamel-warning15-analysis.md` | verification | KaRaMeL Warning 15 Analysis Memo (as of 2026-01-14) | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
+| `docs/verification/workplans/crypto-extraction-roadmap.md` | verification | Crypto Extraction Roadmap (Instruction Document 1) | active plan | 2026-07-24 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/lemma-hardening-plan.md` | verification | Lemma Hardening Plan | active plan | 2026-07-07 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/phase-d/README.md` | index | Phase D Workplan Details | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
 | `docs/verification/workplans/phase-d/abi-sdk-and-tests.md` | verification | Phase D ABI, SDK, And Test Strategy | active plan | 2026-07-08 | Verification | verification contributors, maintainers |
@@ -343,10 +343,11 @@ Audience: contributors, maintainers
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/operations/README.md` | index | Operations Overview | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
-| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-09-30 | Operations | operators, maintainers, OAuth client developers |
+| `docs/operations/authorization-code-refresh-recovery.md` | runbook | Authorization-code and refresh state transitions | current implementation baseline | 2026-10-01 | Operations | operators, maintainers, OAuth client developers |
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
+| `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Token profile | current implementation baseline | 2026-10-03 | Operations | operators, maintainers, relying party implementers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
-| `docs/operations/dpop-replay-store.md` | runbook | DPoP リプレイストア運用ガイド | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
+| `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
@@ -358,9 +359,10 @@ Audience: contributors, maintainers
 | `docs/operations/monitoring/alertmanager.md` | runbook | Alertmanager (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/grafana-dashboard.md` | runbook | Grafana Dashboard (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/monitoring/prometheus-rules.md` | runbook | Prometheus Rules (Sample) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
-| `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-09-11 | Operations | operators, maintainers |
+| `docs/operations/oauth-conformance.md` | runbook | OAuth sender binding and unsupported authorization details | current implementation baseline | 2026-10-03 | Operations | operators, maintainers |
 | `docs/operations/oauth21-migration-runbook.md` | runbook | OAuth Modern Flow Runbook | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/oidc-kms-signing.md` | runbook | OIDC KMS/HSM Signing Operations | current implementation baseline | 2026-06-30 | Operations | operators, maintainers |
+| `docs/operations/oidc-subject-format.md` | runbook | OpenID subject format and existing identities | current implementation baseline | 2026-10-02 | Operations | operators, maintainers |
 | `docs/operations/private-key-jwt.md` | runbook | private_key_jwt Operations (jwks_uri / RSA n,e) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/runtime-configuration.md` | runbook | Runtime Configuration Operations | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/schema-guarded-launch.md` | runbook | Launch against a matching migration inventory | current implementation baseline | 2026-09-16 | Operations | operators, maintainers |
@@ -389,4 +391,6 @@ Audience: contributors, maintainers
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
+| `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-10 | Engineering | contributors, maintainers |
+| `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-10-02 | Engineering | maintainers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |

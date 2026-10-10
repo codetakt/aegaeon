@@ -1,7 +1,9 @@
 //! Consent acquisition tests use real `PostgreSQL` and the public HTTP routes.
 mod admission;
 mod availability;
+mod browser_continuation;
 mod reauthentication;
+mod repeated_values;
 mod repetition;
 mod request_objects;
 mod retention;
@@ -147,21 +149,30 @@ async fn send(
     if status == StatusCode::TOO_MANY_REQUESTS {
         assert_eq!(response.headers()[header::RETRY_AFTER], "60");
     }
-    if response
+    let is_html = response
         .headers()
         .get(header::CONTENT_TYPE)
-        .is_some_and(|v| v.as_bytes().starts_with(b"text/html"))
-    {
+        .is_some_and(|v| v.as_bytes().starts_with(b"text/html"));
+    let referrer_policy = response.headers().get(header::REFERRER_POLICY).cloned();
+    if is_html {
         assert_eq!(response.headers()[header::X_FRAME_OPTIONS], "DENY");
-        assert_eq!(response.headers()[header::REFERRER_POLICY], "no-referrer");
         assert!(response.headers()[header::CONTENT_SECURITY_POLICY]
             .to_str()?
             .contains("frame-ancestors 'none'"));
     }
-    Ok((
-        status,
-        String::from_utf8(to_bytes(response.into_body(), 1024 * 1024).await?.to_vec())?,
-    ))
+    let body = String::from_utf8(to_bytes(response.into_body(), 1024 * 1024).await?.to_vec())?;
+    if is_html {
+        let expected = if body.contains("<form method=\"post\" action=\"/auth/consent\">") {
+            "same-origin"
+        } else {
+            "no-referrer"
+        };
+        assert_eq!(
+            referrer_policy.as_ref().ok_or("missing referrer policy")?,
+            expected
+        );
+    }
+    Ok((status, body))
 }
 
 fn authorize_uri(state: &AppState, prompt: Option<&str>) -> TestResult<String> {
@@ -194,6 +205,20 @@ fn transaction(html: &str) -> TestResult<&str> {
         .nth(1)
         .and_then(|s| s.split('"').next())
         .ok_or("expected a consent form, not an issued code".into())
+}
+
+fn continuation_destination(html: &str) -> TestResult<String> {
+    let target = html
+        .split("id=\"aegaeon-continuation\" href=\"")
+        .nth(1)
+        .and_then(|value| value.split('"').next())
+        .ok_or("expected a continuation anchor")?;
+    Ok(target
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&"))
 }
 
 async fn redeem(state: &AppState, sid: &str, body: &str) -> TestResult<Value> {

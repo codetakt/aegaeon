@@ -13,6 +13,7 @@ import base64
 import hashlib
 import html
 import json
+import math
 import os
 import secrets
 import sys
@@ -55,7 +56,10 @@ def _bootstrap():
     print(f"[rp] Fetching discovery from {disco_url}")
     resp = requests.get(disco_url, timeout=10)
     resp.raise_for_status()
-    _discovery = resp.json()
+    discovery = resp.json()
+    if not isinstance(discovery, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    _discovery = discovery
     print(f"[rp] Discovery OK — issuer={_discovery.get('issuer')}")
 
     reg_endpoint = _discovery.get("registration_endpoint")
@@ -71,8 +75,14 @@ def _bootstrap():
     print(f"[rp] Registering client at {reg_endpoint}")
     resp = requests.post(reg_endpoint, json=reg_body, timeout=10)
     resp.raise_for_status()
-    _client = resp.json()
-    print(f"[rp] Registered client_id={_client['client_id']}")
+    client = resp.json()
+    if not isinstance(client, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    client_id = client.get("client_id")
+    if not isinstance(client_id, str) or not client_id:
+        raise ValueError
+    _client = client
+    print(f"[rp] Registered client_id={client_id}")
 
 
 # Routes
@@ -120,71 +130,109 @@ def login():
     return redirect(f"{authz_url}?{qs}")
 
 
-@app.route("/callback")
-def callback():
-    """Handle the authorization callback — exchange code for tokens."""
-    error = request.args.get("error")
-    if error:
-        desc = request.args.get("error_description", "")
-        return f"<h1>Error</h1><p>{html.escape(error)}: {html.escape(desc)}</p>", 400
-
-    code = request.args.get("code")
-    state = request.args.get("state")
-
-    if not code:
-        return "<h1>Error</h1><p>Missing authorization code</p>", 400
-
-    expected_state = session.pop("oauth_state", None)
-    if state != expected_state:
-        return "<h1>Error</h1><p>State mismatch (possible CSRF)</p>", 400
-
-    verifier = session.pop("pkce_verifier", None)
-    if not verifier:
-        return "<h1>Error</h1><p>Missing PKCE verifier in session</p>", 400
-
-    # Exchange code for tokens
-    token_data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": RP_REDIRECT_URI,
-        "client_id": _client["client_id"],
-        "client_secret": _client.get("client_secret", ""),
-        "code_verifier": verifier,
-    }
+def _exchange_code(code, verifier):  # noqa: PLR0912 - explicit fail-closed response and claim validation
+    """Return decoded claims without exposing token endpoint bodies on failure."""
+    if not isinstance(_discovery, dict) or not isinstance(_client, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    issuer, client_id = _discovery.get("issuer"), _client.get("client_id")
+    token_endpoint = _discovery.get("token_endpoint")
+    if any(
+        not isinstance(value, str) or not value for value in (issuer, client_id, token_endpoint)
+    ):
+        raise ValueError
     resp = requests.post(
-        _discovery["token_endpoint"],
-        data=token_data,
+        token_endpoint,
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": RP_REDIRECT_URI,
+            "client_id": client_id,
+            "client_secret": _client.get("client_secret", ""),
+            "code_verifier": verifier,
+        },
         timeout=10,
     )
     if resp.status_code != 200:
-        detail = html.escape(resp.text[:500])
-        return f"<h1>Token Error</h1><pre>{detail}</pre>", 400
-
+        raise ValueError
     tokens = resp.json()
+    if not isinstance(tokens, dict):
+        raise ValueError  # noqa: TRY004 - invalid protocol response
+    id_token_raw = tokens.get("id_token")
+    if not isinstance(id_token_raw, str) or not id_token_raw.strip():
+        raise ValueError
 
     # WARNING: This demo skips ID token signature verification for simplicity.
     # Production RPs MUST fetch the provider's JWKS and verify the signature.
     # See: https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
-    id_token_raw = tokens.get("id_token")
-    if id_token_raw:
-        claims = jwt.decode(
-            id_token_raw,
-            options={"verify_signature": False},
-            algorithms=["RS256", "ES256"],
-        )
+    if jwt.get_unverified_header(id_token_raw).get("alg") not in ("RS256", "ES256"):
+        raise ValueError
+    claims = jwt.decode(
+        id_token_raw,
+        issuer=issuer,
+        audience=client_id,
+        options={
+            "verify_signature": False,
+            "verify_iss": True,
+            "verify_aud": True,
+            "verify_sub": True,
+            "verify_exp": True,
+            "verify_iat": True,
+            "verify_nbf": True,
+            "require": ["iss", "sub", "aud", "exp", "iat", "nonce"],
+        },
+        algorithms=["RS256", "ES256"],
+    )
+    if not isinstance(claims["sub"], str) or not claims["sub"]:
+        raise ValueError
+    if any(
+        name in claims
+        and (type(claims[name]) not in (int, float) or not math.isfinite(claims[name]))
+        for name in ("exp", "iat", "nbf")
+    ):
+        raise ValueError
+    if ("azp" in claims and claims["azp"] != client_id) or (
+        isinstance(claims["aud"], list) and len(claims["aud"]) > 1 and "azp" not in claims
+    ):
+        raise ValueError
+    return claims
 
-        # Validate nonce to prevent replay attacks
-        expected_nonce = session.pop("nonce", None)
-        if claims.get("nonce") != expected_nonce:
-            return "<h1>Error</h1><p>Nonce mismatch (possible replay)</p>", 400
 
-        session["id_token_claims"] = claims
-    else:
-        session["id_token_claims"] = {"note": "No id_token in response"}
+@app.route("/callback")
+def callback():
+    """Consume one pending OpenID login, including on unsuccessful callbacks."""
+    expected_state = session.pop("oauth_state", None)
+    verifier = session.pop("pkce_verifier", None)
+    expected_nonce = session.pop("nonce", None)
+    session.pop("id_token_claims", None)
+
+    if request.args.get("error") is not None:
+        # Provider error descriptions may contain credentials or tokens.
+        return "<h1>Error</h1><p>Authorization request failed</p>", 400
+    code = request.args.get("code")
+    if not code:
+        return "<h1>Error</h1><p>Missing authorization code</p>", 400
+    if (
+        not isinstance(expected_state, str)
+        or not expected_state
+        or request.args.get("state") != expected_state
+    ):
+        return "<h1>Error</h1><p>State mismatch (possible CSRF)</p>", 400
+    if not isinstance(verifier, str) or not verifier:
+        return "<h1>Error</h1><p>Missing PKCE verifier in session</p>", 400
+    if not isinstance(expected_nonce, str) or not expected_nonce:
+        return "<h1>Error</h1><p>Missing nonce in session</p>", 400
+
+    try:
+        claims = _exchange_code(code, verifier)
+    except (requests.RequestException, ValueError, TypeError, OverflowError, jwt.PyJWTError):
+        # Do not echo response bodies, token strings or transport exception details.
+        return "<h1>Token Error</h1><p>Invalid token response</p>", 400
+    if not isinstance(claims, dict) or claims.get("nonce") != expected_nonce:
+        return "<h1>Error</h1><p>Nonce mismatch (possible replay)</p>", 400
+    session["id_token_claims"] = claims
 
     # Note: access_token is intentionally not stored in the session cookie.
     # Production RPs should use server-side storage for tokens.
-
     return redirect("/")
 
 

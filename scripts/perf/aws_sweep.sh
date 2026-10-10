@@ -17,6 +17,7 @@
 #   RPS_LIST="200,500,1000" WORKERS=50 RUN_TIME=60s WARMUP=10 SCENARIO=mixed ./scripts/perf/aws_sweep.sh
 
 set -euo pipefail
+umask 077
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
@@ -33,7 +34,6 @@ if [[ -z $AWS_REGION ]]; then
 fi
 
 TOFU_DIR="${TOFU_DIR:-infra/tofu/perf-aws-ec2}"
-SERVER_IMAGE="${SERVER_IMAGE:-ghcr.io/cariandrum22/aegaeon/aegaeon-server:latest}"
 WORKERS="${WORKERS:-50}"
 RUN_TIME="${RUN_TIME:-60s}"
 WARMUP="${WARMUP:-10}"
@@ -45,8 +45,15 @@ OUT_ROOT="${OUT_ROOT:-artifacts/perf/aws-sweep/${TS}}"
 mkdir -p "$OUT_ROOT"
 
 tofu_out_json="$(AWS_PROFILE=$AWS_PROFILE tofu -chdir="$TOFU_DIR" output -json)"
+server_port="$(jq -er '.server_port.value | select(type == "number" and floor == . and . >= 1 and . <= 65535)' <<<"$tofu_out_json")" || {
+	echo "[perf/aws] server_port output must be an integer from 1 to 65535" >&2
+	exit 2
+}
 server_instance_id="$(jq -r '.server_instance_id.value' <<<"$tofu_out_json")"
 loadgen_instance_id="$(jq -r '.loadgen_instance_id.value' <<<"$tofu_out_json")"
+SERVER_IMAGE="$(jq -r '.loadgen_image.value' <<<"$tofu_out_json")"
+LOADTEST_BIN="$(jq -r '.loadgen_entrypoint.value' <<<"$tofu_out_json")"
+artifact_config="$(jq -c '.loadgen_artifact.value' <<<"$tofu_out_json")"
 server_url="$(jq -r '.server_url.value' <<<"$tofu_out_json")"
 artifact_bucket="$(jq -r '.artifact_bucket_name.value' <<<"$tofu_out_json")"
 artifact_prefix="$(jq -r '.artifact_prefix.value' <<<"$tofu_out_json")"
@@ -63,7 +70,9 @@ tofu_dir=${TOFU_DIR}
 server_instance_id=${server_instance_id}
 loadgen_instance_id=${loadgen_instance_id}
 server_url=${server_url}
-server_image=${SERVER_IMAGE}
+server_port=${server_port}
+loadgen_image=${SERVER_IMAGE}
+loadgen_entrypoint=${LOADTEST_BIN}
 artifact_bucket=${artifact_bucket}
 artifact_prefix=${artifact_prefix}
 workers=${WORKERS}
@@ -80,115 +89,152 @@ AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ec2 describe-instances \
 
 SUMMARY_CSV="$OUT_ROOT/summary.csv"
 cat >"$SUMMARY_CSV" <<'CSV'
-rps_target,workers,run_time,warmup,scenario,run_id,exit_code,total_requests,successful_requests,failed_requests,throughput,attempted_throughput,error_rate,p99_latency_ms,max_latency_ms,peak_memory_mb,server_cpu_ns,server_cpu_s,server_mem_current_bytes,server_mem_peak_bytes,token_post_count,authorize_get_count,introspect_post_count,revoke_post_count,par_post_count
+rps_target,workers,run_time,warmup,scenario,run_id,exit_code,total_requests,successful_requests,failed_requests,throughput,attempted_throughput,error_rate,p99_latency_ms,max_latency_ms,peak_memory_mb,server_cpu_ns,server_cpu_s,server_mem_current_bytes,server_mem_peak_bytes,token_post_count,authorize_get_count,introspect_post_count,revoke_post_count,par_post_count,metrics_status
 CSV
 
 ssm_run() {
-	local instance_id="$1"
-	local comment="$2"
-	local script="$3"
-
-	local params_json cmd_id resp status
-	params_json="$(python3 -c 'import json,sys; print(json.dumps({"commands":[sys.stdin.read()]}))' <<<"$script")"
-
-	cmd_id="$(AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm send-command \
-		--instance-ids "$instance_id" \
-		--document-name AWS-RunShellScript \
-		--comment "$comment" \
-		--parameters "$params_json" \
-		--query 'Command.CommandId' \
-		--output text)"
-
-	AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm wait command-executed \
-		--command-id "$cmd_id" \
-		--instance-id "$instance_id"
-
-	resp="$(AWS_PROFILE=$AWS_PROFILE aws --region "$AWS_REGION" ssm get-command-invocation \
-		--command-id "$cmd_id" \
-		--instance-id "$instance_id" \
-		--output json)"
-
-	status="$(jq -r '.Status' <<<"$resp")"
-	if [[ $status != "Success" ]]; then
-		echo "[perf/aws] SSM command failed (instance=$instance_id comment=$comment status=$status)" >&2
-		echo "$resp" >&2
-		exit 1
-	fi
-
-	printf '%s' "$resp"
+	local instance_id="$1" comment="$2" script="$3" evidence="$4"
+	python3 "$REPO_ROOT/scripts/perf/ssm_sweep.py" command "$instance_id" "$comment" "$evidence" <<<"$script"
 }
 
-restart_server_script=$'set -euo pipefail\nsudo systemctl restart aegaeon-server\nfor i in $(seq 1 60); do\n  if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then\n    echo \"SERVER_HEALTH=OK\"\n    exit 0\n  fi\n  sleep 1\ndone\necho \"SERVER_HEALTH=FAIL\" >&2\nsudo systemctl status aegaeon-server --no-pager -l || true\nexit 1\n'
+restart_server_script="$(
+	cat <<'AEGAEON_RESTART'
+set -euo pipefail
+overall_deadline=$((SECONDS + 115))
+previous_invocation="$(timeout --kill-after=1 2 sudo systemctl show aegaeon-server -p InvocationID --value)"
+[[ -z "$previous_invocation" || "$previous_invocation" =~ ^[0-9a-f]{32}$ ]] || exit 1
+restart_exit=0
+timeout --kill-after=1 30 sudo systemctl restart aegaeon-server || restart_exit=$?
+if [[ "$restart_exit" -ne 0 && "$restart_exit" -ne 124 ]]; then
+  exit "$restart_exit"
+fi
+deadline=$((SECONDS + 75))
+if ((deadline > overall_deadline - 6)); then
+  deadline=$((overall_deadline - 6))
+fi
+while ((SECONDS < deadline)); do
+  remaining=$((deadline - SECONDS))
+  ((remaining > 1)) || break
+  probe_timeout=$((remaining > 3 ? 2 : remaining - 1))
+  snapshot="$(timeout --kill-after=1 "$probe_timeout" sudo systemctl show aegaeon-server --all -p Job -p ActiveState -p InvocationID)"
+  declare -A properties=()
+  while IFS='=' read -r name value; do
+    case "$name" in
+      Job|ActiveState|InvocationID) ;;
+      *) exit 1 ;;
+    esac
+    [[ ! -v "properties[$name]" ]] || exit 1
+    properties["$name"]="$value"
+  done <<<"$snapshot"
+  [[ "${#properties[@]}" -eq 3 ]] || exit 1
+  [[ -z "${properties[Job]}" || "${properties[Job]}" =~ ^[1-9][0-9]*$ ]] || exit 1
+  [[ "${properties[ActiveState]}" =~ ^[a-z-]+$ ]] || exit 1
+  invocation="${properties[InvocationID]}"
+  [[ -z "$invocation" || "$invocation" =~ ^[0-9a-f]{32}$ ]] || exit 1
+  if [[ -z "${properties[Job]}" && "${properties[ActiveState]}" == active &&
+        -n "$invocation" && "$invocation" != "$previous_invocation" ]]; then
+    remaining=$((deadline - SECONDS))
+    ((remaining > 0)) || break
+    curl_timeout=$((remaining > 3 ? 3 : remaining))
+    if curl --noproxy '*' --connect-timeout 2 --max-time "$curl_timeout" -fsS "http://127.0.0.1:${server_port}/health" >/dev/null 2>&1 &&
+       ((SECONDS < deadline)); then
+      echo "SERVER_HEALTH=OK"
+      exit 0
+    fi
+  fi
+  ((SECONDS < deadline)) && sleep 1
+done
+echo "SERVER_HEALTH=FAIL" >&2
+timeout --kill-after=1 5 sudo systemctl status aegaeon-server --no-pager -l || true
+exit 1
+AEGAEON_RESTART
+)"
+printf -v restart_server_script 'readonly server_port=%s\n%s' "$server_port" "$restart_server_script"
 
 server_stats_script=$'set -euo pipefail\nsudo systemctl show aegaeon-server \\\n  -p CPUUsageNSec \\\n  -p MemoryCurrent \\\n  -p MemoryPeak \\\n  -p TasksCurrent \\\n  -p NRestarts \\\n  --no-pager\n'
 
-IFS=',' read -r -a rps_values <<<"$RPS_LIST"
+SWEEP_EXIT_CODE=0
 
+IFS=',' read -r -d '' -a rps_values < <(printf '%s\0' "$RPS_LIST")
+
+invocation_index=0
 for rps in "${rps_values[@]}"; do
-	rps="$(echo "$rps" | tr -d '[:space:]')"
+	rps="${rps#"${rps%%[![:space:]]*}"}"
+	rps="${rps%"${rps##*[![:space:]]}"}"
 	if [[ -z $rps ]]; then
 		continue
 	fi
 
+	invocation_index=$((invocation_index + 1))
+	run_dir="$(mktemp -d "$OUT_ROOT/invocation-${invocation_index}-XXXXXXXX")"
+	printf 'rps_target=%s\n' "$rps" >"$run_dir/metadata.txt"
 	echo "[perf/aws] === rps=${rps} ==="
 
-	ssm_run "$server_instance_id" "aegaeon: restart server for sweep rps=${rps}" "$restart_server_script" >/dev/null
+	ssm_run "$server_instance_id" "aegaeon: restart server for sweep invocation=${invocation_index}" "$restart_server_script" "$run_dir/ssm-restart" >/dev/null
 
-	loadgen_script=$(
-		cat <<SCRIPT
-set -euo pipefail
-cat >/etc/aegaeon/loadtest.env <<EOF
-SERVER_IMAGE=${SERVER_IMAGE}
-SERVER_URL=${server_url}
-ARTIFACT_BUCKET=${artifact_bucket}
-ARTIFACT_PREFIX=${artifact_prefix}
-WORKERS=${WORKERS}
-RPS=${rps}
-RUN_TIME=${RUN_TIME}
-WARMUP=${WARMUP}
-SCENARIO=${SCENARIO}
-EOF
+	# JSON/base64 carries values as data; no remote shell interpolation of user values.
+	config_payload="$(
+		python3 - "$server_url" "$SERVER_IMAGE" "$artifact_bucket" "$artifact_prefix" "$WORKERS" "$rps" "$RUN_TIME" "$WARMUP" "$SCENARIO" "$LOADTEST_BIN" "$artifact_config" <<'PY'
+import base64
+import json
+import sys
+names = ["SERVER_URL", "SERVER_IMAGE", "ARTIFACT_BUCKET", "ARTIFACT_PREFIX", "WORKERS", "RPS", "RUN_TIME", "WARMUP", "SCENARIO", "LOADTEST_BIN"]
+config = dict(zip(names, sys.argv[1:11], strict=True))
+config["artifact"] = json.loads(sys.argv[11])
+print(base64.b64encode(json.dumps(config).encode()).decode())
+PY
+	)"
+	transport_failed=0
+	lg_resp="$(python3 "$REPO_ROOT/scripts/perf/ssm_sweep.py" loadtest "$loadgen_instance_id" \
+		"aegaeon: run loadtest invocation=${invocation_index}" "$run_dir/ssm-loadgen" <<<"$config_payload")" || transport_failed=1
 
-/usr/local/bin/aegaeon-run-loadtest
-LATEST="\$(ls -1dt /opt/aegaeon/results/* | head -1)"
-RUN_ID="\$(basename "\$LATEST")"
-EXIT_CODE=""
-if [[ -f "\$LATEST/exit_code.txt" ]]; then
-  EXIT_CODE="\$(cat "\$LATEST/exit_code.txt" | tr -d '\n' || true)"
-fi
-
-echo "RUN_ID=\$RUN_ID"
-echo "EXIT_CODE=\$EXIT_CODE"
-echo "OUT_DIR=\$LATEST"
-
-if [[ -f "\$LATEST/report.json" ]]; then
-  curl -fsS "${server_url%/}/metrics" >"\$LATEST/server.metrics.prom" || true
-  if [[ -n "${artifact_bucket}" ]]; then
-    DEST_PREFIX="s3://${artifact_bucket}/${artifact_prefix}\$RUN_ID/"
-    aws s3 cp "\$LATEST/server.metrics.prom" "\$DEST_PREFIX""server.metrics.prom" || true
-  fi
-fi
-SCRIPT
-	)
-
-	lg_resp="$(ssm_run "$loadgen_instance_id" "aegaeon: run loadtest rps=${rps}" "$loadgen_script")"
 	lg_stdout="$(jq -r '.StandardOutputContent' <<<"$lg_resp")"
 	lg_stderr="$(jq -r '.StandardErrorContent' <<<"$lg_resp")"
 
 	run_id="$(printf '%s\n' "$lg_stdout" | sed -n 's/^RUN_ID=//p' | tail -n 1)"
 	exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^EXIT_CODE=//p' | tail -n 1)"
-	if [[ -z $run_id ]]; then
-		echo "[perf/aws] failed to detect RUN_ID in loadgen output" >&2
-		echo "$lg_stdout" >&2
-		exit 1
-	fi
-
-	run_dir="$OUT_ROOT/rps-${rps}"
-	mkdir -p "$run_dir"
+	driver_exit_code="$(printf '%s\n' "$lg_stdout" | sed -n 's/^DRIVER_EXIT_CODE=//p' | tail -n 1)"
 	printf '%s' "$lg_stdout" >"$run_dir/ssm_loadgen.stdout.log"
 	printf '%s' "$lg_stderr" >"$run_dir/ssm_loadgen.stderr.log"
+	if [[ ! $run_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+		echo "[perf/aws] failed to detect RUN_ID in loadgen output" >&2
+		echo "$lg_stdout" >&2
+		SWEEP_EXIT_CODE=1
+		continue
+	fi
 
-	stats_resp="$(ssm_run "$server_instance_id" "aegaeon: collect server stats rps=${rps}" "$server_stats_script")"
+	RUN_FAILED=$transport_failed
+	if [[ ! $exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $exit_code -gt 255 ||
+		! $driver_exit_code =~ ^(0|[1-9][0-9]{0,2})$ || $driver_exit_code -gt 255 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^EXIT_CODE=/p' | wc -l) -ne 1 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^DRIVER_EXIT_CODE=/p' | wc -l) -ne 1 ||
+		$(printf '%s\n' "$lg_stdout" | sed -n '/^RUN_ID=/p' | wc -l) -ne 1 ]]; then
+		echo "[perf/aws] missing or ambiguous driver outcome" >&2
+		RUN_FAILED=1
+	elif [[ $exit_code -ne 0 || $driver_exit_code -ne 0 ]]; then
+		RUN_FAILED=1
+	fi
+
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/report.json" \
+		"$run_dir/report.json" || RUN_FAILED=1
+	for artifact in loadtest.stdout.log loadtest.stderr.log exit_code.txt run-receipt.json client.version.json driver-config.json artifact-receipt.json SOURCE-MANIFEST.json; do
+		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+			"s3://${artifact_bucket}/${artifact_prefix}${run_id}/${artifact}" \
+			"$run_dir/${artifact}" || RUN_FAILED=1
+	done
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/server.metrics.prom" \
+		"$run_dir/server.metrics.prom" ||
+		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+			"s3://${artifact_bucket}/${artifact_prefix}${run_id}//server.metrics.prom" \
+			"$run_dir/server.metrics.prom" || true
+
+	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
+		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/metrics-status.json" \
+		"$run_dir/metrics-status.json" || RUN_FAILED=1
+
+	stats_resp="$(ssm_run "$server_instance_id" "aegaeon: collect server stats invocation=${invocation_index}" "$server_stats_script" "$run_dir/ssm-stats")" || RUN_FAILED=1
 	stats_stdout="$(jq -r '.StandardOutputContent' <<<"$stats_resp")"
 	printf '%s' "$stats_stdout" >"$run_dir/server.systemd.txt"
 
@@ -201,24 +247,10 @@ SCRIPT
 
 	server_cpu_s="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1e9)' "$server_cpu_ns")"
 
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/report.json" \
-		"$run_dir/report.json"
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/loadtest.stdout.log" \
-		"$run_dir/loadtest.stdout.log" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/loadtest.stderr.log" \
-		"$run_dir/loadtest.stderr.log" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/exit_code.txt" \
-		"$run_dir/exit_code.txt" || true
-	AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-		"s3://${artifact_bucket}/${artifact_prefix}${run_id}/server.metrics.prom" \
-		"$run_dir/server.metrics.prom" ||
-		AWS_PROFILE=$AWS_PROFILE aws s3 cp \
-			"s3://${artifact_bucket}/${artifact_prefix}${run_id}//server.metrics.prom" \
-			"$run_dir/server.metrics.prom" || true
+	if [[ $RUN_FAILED -ne 0 ]]; then
+		SWEEP_EXIT_CODE=1
+		continue
+	fi
 
 	export PERF_RPS_TARGET="$rps"
 	export PERF_WORKERS="$WORKERS"
@@ -236,14 +268,24 @@ SCRIPT
 
 	python3 - <<'PY' >>"$SUMMARY_CSV"
 import json
+import math
 import os
 import re
 from pathlib import Path
 
-rps_target = int(os.environ["PERF_RPS_TARGET"])
+rps_target = os.environ["PERF_RPS_TARGET"]
+if not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e[+-]?(?:0|[1-9][0-9]*))?", rps_target):
+    raise ValueError("canonical positive decimal RPS required")
+rps_value = float(rps_target)
+if not math.isfinite(rps_value) or rps_value <= 0:
+    raise ValueError("finite positive f64 RPS required")
 workers = int(os.environ["PERF_WORKERS"])
 run_time = os.environ["PERF_RUN_TIME"]
-warmup = int(os.environ["PERF_WARMUP"])
+warmup_raw = os.environ["PERF_WARMUP"]
+match = re.fullmatch(r"(0|[1-9][0-9]*)([smh]?)", warmup_raw)
+if match is None:
+    raise ValueError("invalid warmup duration")
+warmup = int(match[1]) * {"": 1, "s": 1, "m": 60, "h": 3600}[match[2]]
 scenario = os.environ["PERF_SCENARIO"]
 run_id = os.environ["PERF_RUN_ID"]
 exit_code = os.environ.get("PERF_EXIT_CODE", "")
@@ -274,7 +316,12 @@ counts = {
 }
 
 metrics_path = Path(os.environ.get("PERF_METRICS_PATH", ""))
-if metrics_path.exists():
+metrics_status = json.loads(metrics_path.with_name("metrics-status.json").read_text())["status"]
+if metrics_status not in {"absent", "complete"}:
+    raise ValueError("metrics collection incomplete")
+if metrics_status == "complete" and not metrics_path.is_file():
+    raise ValueError("complete metrics artifact missing")
+if metrics_status == "complete":
     for line in metrics_path.read_text().splitlines():
         if not line.startswith("oauth_request_latency_seconds_count"):
             continue
@@ -310,11 +357,12 @@ row = [
     f"{server_cpu_s:.6f}",
     server_mem_cur,
     server_mem_peak,
-    counts[("/token", "POST")],
-    counts[("/authorize", "GET")],
-    counts[("/introspect", "POST")],
-    counts[("/revoke", "POST")],
-    counts[("/par", "POST")],
+    counts[("/token", "POST")] if metrics_status == "complete" else "",
+    counts[("/authorize", "GET")] if metrics_status == "complete" else "",
+    counts[("/introspect", "POST")] if metrics_status == "complete" else "",
+    counts[("/revoke", "POST")] if metrics_status == "complete" else "",
+    counts[("/par", "POST")] if metrics_status == "complete" else "",
+    metrics_status,
 ]
 
 print(",".join(str(v) for v in row))
@@ -322,3 +370,5 @@ PY
 done
 
 echo "[perf/aws] sweep done: $OUT_ROOT"
+
+exit "$SWEEP_EXIT_CODE"

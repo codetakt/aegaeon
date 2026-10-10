@@ -35,8 +35,8 @@ Use the 8-slide version as the default.
 
 ### Title options
 
-- `認証認可を、実装だけでなく運用まで壊れにくくする`
-- `高保証コアと運用統制を備えた OAuth/OIDC 基盤`
+- `Make authentication and authorization more resilient, from implementation through operations`
+- `An OAuth/OIDC platform with a high-assurance core and operational controls`
 
 ### Subtitle
 
@@ -54,7 +54,7 @@ Use the 8-slide version as the default.
 
 ### Key message
 
-- `OAuth/OIDC は実装したあとに、例外設定、鍵運用、変更管理、監査のところで崩れやすい。`
+- `After implementation, OAuth/OIDC is often fragile around exception settings, key operations, change management, and audits.`
 
 ### Suggested bullets
 
@@ -71,7 +71,7 @@ Use the 8-slide version as the default.
 
 ### Key message
 
-- `Aegaeon は、既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤です。`
+- `Aegaeon is an OAuth/OIDC platform that can be embedded in existing services and enterprise infrastructure.`
 
 ### Suggested bullets
 
@@ -110,7 +110,7 @@ Use the 8-slide version as the default.
 
 ### Speaker note
 
-- `主張の中心はサーバ側です。Admin Console は first-party control-plane UI です。`
+- `The claim centers on the server side. Admin Console is a first-party control-plane UI.`
 
 ## Slide 6: What ships now
 
@@ -127,7 +127,7 @@ Use the 8-slide version as the default.
 
 ### Boundary note
 
-- `高保証に関する現在の対外表現はサーバ側の security-critical な OAuth/OIDC コアを対象とします。`
+- `Current public wording about high assurance concerns the security-critical server-side OAuth/OIDC core.`
 
 ## Slide 7: Example use cases
 
@@ -155,7 +155,7 @@ Use the 8-slide version as the default.
 
 ### Closing line
 
-- `まずは資料をご覧いただき、具体的な導入前提があれば PoC の相談につなげてください。`
+- `Start by reviewing the materials, then discuss a PoC if you have concrete adoption requirements.`
 
 ## Optional slide 9: Technical credibility
 

@@ -42,6 +42,7 @@ async fn request(
         State(state.clone()),
         ConnectInfo("127.0.0.1:9000".parse()?),
         OriginalUri("/resource".parse()?),
+        http::Method::GET,
         headers,
     )
     .await;

@@ -23,7 +23,6 @@
 
   outputs =
     inputs@{
-      self,
       nixpkgs,
       verification-nixpkgs,
       flake-utils,
@@ -40,7 +39,7 @@
       let
         overlays = [
           (import rust-overlay)
-          (final: prev: {
+          (final: _: {
             cargo-audit = final.rustPlatform.buildRustPackage rec {
               pname = "cargo-audit";
               version = "0.22.0";
@@ -250,6 +249,7 @@
                 "^artifacts/kani/run_[0-9T]+\\.log$"
                 "^generated/openapi/aegaeon-management-api\\.v1\\.json$"
                 "^spec/compliance-matrix\\.yaml$"
+                "\\Aci/ci-expected-inventory\\.json\\Z"
                 # Shared finite-state fixtures and their generated proof cases.
                 "^tests/fixtures/authcode-redis-grant\\.json$"
                 "^tests/fstar/property/TestAuthCodeRedisGrant\\.fst$"
@@ -263,7 +263,6 @@
             };
             check-symlinks = {
               enable = true;
-              excludes = [ "^crates/kani-harness/kani$" ];
             };
             check-vcs-permalinks.enable = true;
             forbid-new-submodules.enable = true;
@@ -533,18 +532,34 @@
         devTools = [ rustToolchain ] ++ devToolsCommon;
         asanDevTools = [ asanRustToolchain ] ++ devToolsCommon;
 
-        commonShellHook = ''
+        extractionShellHook =
+          assert lib.assertMsg (
+            haclStar.src == evercryptLib.src
+          ) "Extraction requires HACL* and EverCrypt from the same pinned source";
+          ''
+            export FSTAR=${verificationFstar}/bin/fstar.exe
+            export FSTAR_HOME=${verificationFstar}
+            export KAMEL=${karamel}/bin/krml
+            export KARAMEL_HOME=${karamel}
+            export EVERPARSE=${everparse}/bin/everparse
+            export EVERPARSE_PREFIX=${everparse}
+            export EVERPARSE_SOURCE_ROOT=${everparse}
+            export HACL_PREFIX=${haclStar}
+            export EVERCRYPT_PREFIX=${evercryptLib}
+            export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
+            export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
+          '';
+
+        commonShellHook = extractionShellHook + ''
           export PATH=${rustToolchain}/bin:$PATH
           export AEGAEON_DEV_SHELL=1
-          export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
           export STEEL_PATH=${steel}
-          export EVERCRYPT_SRC_DIR=${evercryptLib}/share/evercrypt
           export WASI_CLANG=${wasiClangBin}
           export WASI_SYSROOT=${wasiSysroot}
           export AEG_HOST_CC=${llvmPackages.clang}/bin/clang
           export AEG_HOST_CXX=${llvmPackages.clang}/bin/clang++
           export AEG_HOST_BIN="$(dirname "$AEG_HOST_CC")"
-          export AEG_HOST_AR=${pkgs.binutils}/bin/ar
+          export AEG_HOST_AR=${llvmPackages.bintools}/bin/ar
           export AEG_HOST_LD=${llvmPackages.bintools}/bin/ld.lld
           export PATH="${karamel}/bin:${verificationFstar}/bin:${everparse}/bin:${verificationZ3}/bin:${llvmPackages.bintools}/bin:$AEG_HOST_BIN:$PATH"
           if [[ "${"CC:-"}" == *"wasm32-unknown-wasi"* ]]; then
@@ -563,6 +578,9 @@
           export CXX="$AEG_HOST_CXX"
           export AR="$AEG_HOST_AR"
           export LD="$AEG_HOST_LD"
+          export CC_FOR_BUILD="$AEG_HOST_CC"
+          export CXX_FOR_BUILD="$AEG_HOST_CXX"
+          export AR_FOR_BUILD="$AEG_HOST_AR"
           export CC_x86_64_unknown_linux_gnu="$AEG_HOST_CC"
           export CXX_x86_64_unknown_linux_gnu="$AEG_HOST_CXX"
           export AR_x86_64_unknown_linux_gnu="$AEG_HOST_AR"
@@ -646,11 +664,28 @@
           };
 
         mkAppFromSpec =
-          _appId: spec:
-          mkShellApp {
-            name = spec.binName;
-            inherit (spec) description runtimeInputs script;
-          };
+          appId: spec:
+          if appId == "perf-load" then
+            mkApp perfLoadSupplier.controller spec.description
+          else if appId == "security-suite" then
+            mkApp (import ./nix/flake/security-launcher.nix {
+              inherit lib pkgs;
+              name = spec.binName;
+              inherit (spec) runtimeInputs script;
+            }) spec.description
+          else if appId == "verify-lowstar" then
+            mkShellApp {
+              name = spec.binName;
+              inherit (spec) description runtimeInputs;
+              text = extractionShellHook + ''
+                exec ${pkgs.bash}/bin/bash ${spec.script} "$@"
+              '';
+            }
+          else
+            mkShellApp {
+              name = spec.binName;
+              inherit (spec) description runtimeInputs script;
+            };
 
         appSpecs = import ./nix/flake/app-specs.nix {
           inherit
@@ -720,11 +755,26 @@
           source = src;
         };
 
+        perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
+          inherit
+            lib
+            pkgs
+            craneLib
+            stdenv
+            rustToolchain
+            llvmPackages
+            cargoArtifacts
+            buildSrc
+            ;
+          source = inputs.self.outPath;
+          runtimeInputs = appSpecs.perf-load.runtimeInputs;
+        };
+
         cargoArtifacts = craneLib.buildDepsOnly {
           pname = "aegaeon-cargo-artifacts";
           version = "0.0.0";
           src = buildSrc;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
           cargoHash = "sha256-hWQWYH4GbZD5aT+Dr592uzsYP8NdLuggu9EzToA9I3w=";
@@ -854,7 +904,7 @@
           pname = "verify-jose";
           version = "0.0.0";
           inherit src cargoArtifacts;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           cargoToml = ./Cargo.toml;
           cargoLock = ./Cargo.lock;
           nativeBuildInputs = verificationRuntimeInputs;
@@ -885,7 +935,7 @@
               pname = "verify-kani";
               version = "0.0.0";
               inherit src cargoArtifacts;
-              stdenv = p: stdenv;
+              stdenv = _: stdenv;
               cargoToml = ./Cargo.toml;
               cargoLock = ./Cargo.lock;
               nativeBuildInputs = [
@@ -916,7 +966,7 @@
         aegaeon-workspace = craneLib.buildPackage {
           inherit cargoArtifacts;
           src = buildSrc;
-          stdenv = p: stdenv;
+          stdenv = _: stdenv;
           pname = "aegaeon-workspace";
           version = "0.0.0";
           cargoToml = ./Cargo.toml;
@@ -1069,7 +1119,10 @@
 
       in
       {
-        packages = flakePackages;
+        packages = flakePackages // {
+          perf-load-supplier = perfLoadSupplier.package;
+          ci-controller-python = import ./nix/ci-controller-python.nix { inherit pkgs; };
+        };
 
         apps = lib.mapAttrs mkAppFromSpec (
           lib.removeAttrs appSpecs (lib.optional (!isLinux) "verify-kani")

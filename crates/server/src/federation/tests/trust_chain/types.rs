@@ -32,7 +32,7 @@ fn entity_statement_parse_jwks() {
     let stmt = sample_entity_config("https://rp.example.com", now);
     let jwks = must_ok(stmt.parse_jwks());
     assert_eq!(jwks.keys().len(), 1);
-    assert_eq!(jwks.keys()[0].kid(), Some("test-key-1"));
+    assert_eq!(jwks.keys()[0].kid(), sample_jwks().keys()[0].kid());
 }
 
 #[test]

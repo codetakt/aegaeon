@@ -12,7 +12,7 @@ use http::{header::AUTHORIZATION, Method, Request, Uri};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use super::replay_store::InMemoryReplayStore;
 use super::replay_store::{
     replay_key_material, RedisReplayStore, ReplayEntry, ReplayStore, ReplayStoreError,
@@ -22,7 +22,7 @@ use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateN
 mod nonce;
 pub use nonce::DpopNonceStore;
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 const DEFAULT_REPLAY_TTL_SECS: u64 = 360; // 5 minutes + 60s skew
 const DEFAULT_IAT_WINDOW_SECS: u64 = 300;
 pub const DPOP_HEADER: &str = "DPoP";
@@ -172,7 +172,7 @@ impl DpopMiddleware {
     /// Production code must use [`Self::try_from_shared_store_env`] so the replay store is the
     /// supported shared Redis runtime boundary.
     #[doc(hidden)]
-    #[cfg(test)]
+    #[cfg(any(test, fuzzing))]
     #[must_use]
     pub fn new_process_local_for_tests() -> Self {
         Self::new(
@@ -313,7 +313,6 @@ impl DpopMiddleware {
     ) -> Result<DpopBinding, DpopError> {
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
             .ok_or(DpopError::InvalidProof)?;
-        let method_upper = method.as_str().to_ascii_uppercase();
         let uri_string = expected_htu(&self.origin, uri.path());
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -326,7 +325,7 @@ impl DpopMiddleware {
 
         let verified_proof = verify_dpop_with_iat_window(
             proof,
-            &method_upper,
+            method.as_str(),
             &uri_string,
             now,
             expected_ath.as_deref(),

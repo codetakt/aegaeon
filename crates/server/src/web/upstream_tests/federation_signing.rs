@@ -1,3 +1,8 @@
+fn federation_test_subject_jwks() -> Value {
+    let key = crate::kms::InMemoryKeyManager::new();
+    json!({"keys": [crate::kms::FederationKeyManager::federation_public_jwk(&key).expect("subject public key")]})
+}
+
 // -----------------------------------------------------------------------
 // S-FED-3: Federation signing with ES256
 // -----------------------------------------------------------------------
@@ -20,7 +25,10 @@ fn federation_test_registered_client(client_id: &str) -> crate::client_registry:
         jwks_uri: Some("https://rp.example/jwks.json".to_string()),
         token_endpoint_auth_signing_alg: Some("RS256".to_string()),
         allowed_scopes: vec!["openid".to_string(), "profile".to_string()],
-        allowed_grant_types: vec!["authorization_code".to_string(), "refresh_token".to_string()],
+        allowed_grant_types: vec![
+            "authorization_code".to_string(),
+            "refresh_token".to_string(),
+        ],
         registration_access_token: None,
         client_id_issued_at: Some(1),
     }
@@ -196,6 +204,7 @@ fn build_subordinate_statement_uses_es256() {
         "https://op.example",
         "https://rp.example",
         &client,
+        &federation_test_subject_jwks(),
         86400,
         &km,
     );
@@ -277,7 +286,15 @@ fn build_subordinate_statement_rejects_invalid_or_self_subjects() {
     ] {
         let client = federation_test_registered_client(subject);
         assert!(
-            build_subordinate_statement(issuer, subject, &client, 86400, &km).is_err(),
+            build_subordinate_statement(
+                issuer,
+                subject,
+                &client,
+                &federation_test_subject_jwks(),
+                86400,
+                &km
+            )
+            .is_err(),
             "invalid subordinate statement subject must be rejected: {subject}"
         );
     }
@@ -356,6 +373,7 @@ fn federation_statements_require_public_jwk_kid() {
             "https://op.example",
             "https://rp.example",
             &client,
+            &federation_test_subject_jwks(),
             86400,
             &missing_public_jwk,
         )
@@ -457,4 +475,121 @@ fn entity_configuration_signature_verifies() {
         verify_result.is_ok(),
         "entity config ES256 signature must verify against embedded JWKS"
     );
+}
+
+#[test]
+fn federation_builders_preserve_distinct_subject_rotation_keys_and_omit_empty_hints() {
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .expect("raw JSON guard");
+    let issuer = crate::kms::InMemoryKeyManager::new();
+    let mut subject_keys = federation_test_subject_jwks();
+    subject_keys["keys"]
+        .as_array_mut()
+        .expect("keys")
+        .push(federation_test_subject_jwks()["keys"][0].clone());
+    let oauth_keys = federation_test_subject_jwks();
+    let mut client = federation_test_registered_client("https://rp.example");
+    client.jwks_uri = None;
+    client.inline_jwks = Some(
+        crate::client_registry::RegisteredClientJwks::from_value(oauth_keys.clone(), true)
+            .expect("OAuth public keys"),
+    );
+    let configuration = build_entity_configuration(
+        "https://op.example",
+        "https://op.example",
+        &[],
+        86400,
+        &issuer,
+    )
+    .expect("configuration");
+    let verified_config = crate::federation::verify_entity_configuration(&configuration)
+        .expect("verified configuration");
+    let parsed =
+        aegaeon_jose::jws::Jws::from_compact(&configuration).expect("compact configuration");
+    let raw: Value = serde_json::from_slice(&parsed.payload).expect("configuration JSON");
+    assert!(raw.get("authority_hints").is_none());
+    let subordinate = build_subordinate_statement(
+        "https://op.example",
+        "https://rp.example",
+        &client,
+        &subject_keys,
+        86400,
+        &issuer,
+    )
+    .expect("subordinate");
+    let verified = crate::federation::verify_entity_statement(
+        &subordinate,
+        &verified_config.parse_jwks().expect("issuer JWKS"),
+    )
+    .expect("verified subordinate");
+    assert_eq!(verified.jwks.as_ref(), Some(&subject_keys));
+    assert_ne!(verified.jwks, verified_config.jwks);
+    assert_ne!(verified.jwks.as_ref(), Some(&oauth_keys));
+    assert_eq!(
+        verified.metadata.expect("RP metadata")["openid_relying_party"]["jwks"],
+        oauth_keys
+    );
+    let now = crate::util::now_unix_epoch_secs()
+        .expect("clock")
+        .cast_signed();
+    crate::federation::validate_entity_statement(&verified_config, now)
+        .expect("configuration profile and time");
+}
+
+#[test]
+fn federation_subordinate_builder_rejects_invalid_or_private_subject_keys() {
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .expect("raw JSON guard");
+    let issuer = crate::kms::InMemoryKeyManager::new();
+    let client = federation_test_registered_client("https://rp.example");
+    let public = federation_test_subject_jwks();
+    let mut cases = vec![
+        Value::Null,
+        json!([]),
+        json!({}),
+        json!({"keys":[]}),
+        json!({"keys":[null]}),
+        json!({"keys":[{"kty":"EC"}]}),
+    ];
+    for field in ["d", "p", "q", "dp", "dq", "qi", "oth", "k"] {
+        let mut keys = public.clone();
+        keys["keys"][0][field] = Value::Null;
+        cases.push(keys);
+    }
+    let mut missing_kid = public.clone();
+    missing_kid["keys"][0]
+        .as_object_mut()
+        .expect("JWK")
+        .remove("kid");
+    cases.push(missing_kid);
+    let mut duplicate = public.clone();
+    duplicate["keys"]
+        .as_array_mut()
+        .expect("keys")
+        .push(public["keys"][0].clone());
+    cases.push(duplicate);
+    for (field, value) in [
+        ("use", json!("enc")),
+        ("x", json!("AA")),
+        ("y", json!("!")),
+        ("alg", json!("RS256")),
+        ("kid", Value::Null),
+    ] {
+        let mut keys = public.clone();
+        keys["keys"][0][field] = value;
+        cases.push(keys);
+    }
+    for keys in cases {
+        assert!(build_subordinate_statement(
+            "https://op.example",
+            "https://rp.example",
+            &client,
+            &keys,
+            86400,
+            &issuer
+        )
+        .is_err());
+    }
 }

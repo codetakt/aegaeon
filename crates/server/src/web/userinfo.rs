@@ -11,7 +11,8 @@ use super::{
 use crate::middleware::dpop::DpopEndpointRole;
 use crate::web::token_sender_binding::dpop_error_response;
 use axum::{
-    extract::{ConnectInfo, OriginalUri, State},
+    body::Bytes,
+    extract::{rejection::BytesRejection, ConnectInfo, OriginalUri, State},
     http::{HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
     Json,
@@ -24,6 +25,7 @@ pub(super) async fn userinfo_get(
     State(state): State<AppState>,
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
+    method: http::Method,
     headers: HeaderMap,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
@@ -70,7 +72,7 @@ pub(super) async fn userinfo_get(
     let binding = match dpop_binding_from_request(
         state.dpop.as_ref(),
         DpopEndpointRole::ResourceServer,
-        &http::Method::GET,
+        &method,
         &uri_for_dpop,
         &headers,
     ) {
@@ -123,6 +125,23 @@ pub(super) fn parse_userinfo_form(
     Ok(UserinfoForm {
         access_token: singleton_form_field(&params, "access_token", issuer_base)?,
     })
+}
+
+fn userinfo_form_from_body(
+    headers: &HeaderMap,
+    body: Result<Bytes, BytesRejection>,
+    issuer_base: &str,
+) -> Result<UserinfoForm, Response> {
+    // Bytes honors the router's DefaultBodyLimit without requiring a media type
+    // for an empty, header-authenticated request (OIDC Core section 5.3.1).
+    let body = body.map_err(|_| form_parse_error_response(issuer_base))?;
+    if body.is_empty() {
+        return Ok(UserinfoForm::default());
+    }
+    enforce_content_type(headers, "application/x-www-form-urlencoded", issuer_base)?;
+    let params = serde_urlencoded::from_bytes::<Vec<(String, String)>>(&body)
+        .map_err(|_| form_parse_error_response(issuer_base))?;
+    parse_userinfo_form(Ok(axum::extract::Form(params)), issuer_base)
 }
 
 fn userinfo_auth_header(
@@ -217,10 +236,7 @@ pub(super) async fn userinfo_post(
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
-    form: Result<
-        axum::extract::Form<Vec<(String, String)>>,
-        axum::extract::rejection::FormRejection,
-    >,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     let issuer_base = state.issuer.as_str();
     let endpoint = match state.oidc.userinfo_endpoint.as_ref() {
@@ -241,14 +257,9 @@ pub(super) async fn userinfo_post(
     if let Err(resp) = enforce_no_credentials_in_uri(&uri, issuer_base) {
         return resp;
     }
-    if let Err(resp) =
-        enforce_content_type(&headers, "application/x-www-form-urlencoded", issuer_base)
-    {
-        return resp;
-    }
-    let form = match parse_userinfo_form(form, issuer_base) {
+    let form = match userinfo_form_from_body(&headers, body, issuer_base) {
         Ok(form) => form,
-        Err(resp) => return resp,
+        Err(response) => return response,
     };
 
     let auth_header = match userinfo_auth_header(&headers, &form, issuer_base) {

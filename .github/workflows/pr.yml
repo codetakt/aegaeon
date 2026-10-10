@@ -3,13 +3,16 @@ name: PR Validation
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    branches: [main]
+    types: [checks_requested]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-validation-${{ github.event.pull_request.number }}
+  group: pr-validation-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -19,63 +22,220 @@ jobs:
   plan:
     name: Select checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       scope: ${{ steps.plan.outputs.scope }}
+      base: ${{ steps.plan.outputs.base }}
+      source_head: ${{ steps.plan.outputs.source_head }}
+      test_sha: ${{ steps.plan.outputs.test_sha }}
+      component_targets: ${{ steps.transport.outputs.component_targets }}
+      component_plan_sha256: ${{ steps.transport.outputs.component_plan_sha256 }}
+      component_plan_provenance: ${{ steps.transport.outputs.component_plan_provenance }}
+      transport_version: ${{ steps.transport.outputs.transport_version }}
+      plan_artifact_id: ${{ steps.evidence.outputs.artifact-id }}
     steps:
+      - name: Set up the initial component controller runtime
+        id: component_bootstrap
+        uses: codetakt/aegaeon/.github/actions/setup-component-controller@924f45ef248955acf4467ac2ce5d63e132d9462c
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Classify using the base revision
+      - name: Validate event, signatures and protected base policy
         id: plan
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CONTROLLER_PYTHON: ${{ steps.component_bootstrap.outputs.interpreter }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          trusted="$RUNNER_TEMP/pr-policy"
-          mkdir -p "$trusted"
-          if git cat-file -e "$PR_BASE_SHA:scripts/ci/pr_plan.py" &&
-             git cat-file -e "$PR_BASE_SHA:ci/pr-policy.json"; then
-            git show "$PR_BASE_SHA:scripts/ci/pr_plan.py" > "$trusted/pr_plan.py"
-            git show "$PR_BASE_SHA:ci/pr-policy.json" > "$trusted/policy.json"
-            python3 "$trusted/pr_plan.py" --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" \
-              --policy "$trusted/policy.json" --output ci-plan.json
+          [[ "$CONTROLLER_PYTHON" == /nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14 ]] || exit 1
+          "$CONTROLLER_PYTHON" -I -B - <<'PY'
+          from pathlib import Path
+          for name in ('ci-plan.json', 'ci-validation.json', 'ci-input-union.json', 'ci-transport-admission.json'):
+              try:
+                  Path(name).lstat()
+              except FileNotFoundError:
+                  continue
+              raise ValueError('reserved CI artifact already exists: ' + name)
+          PY
+          [[ "$EVENT_BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then
+            # Event base may be a speculative parent; only real main is authority.
+            TRUSTED_BASE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          elif [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            TRUSTED_BASE_SHA="$EVENT_BASE_SHA"
           else
-            echo 'scope=full' >> "$GITHUB_OUTPUT"
-            python3 - <<'PY'
+            exit 1
+          fi
+          [[ "$TRUSTED_BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
+          export TRUSTED_BASE_SHA
+          git fetch --no-tags origin "$TRUSTED_BASE_SHA"
+          git merge-base --is-ancestor "$TRUSTED_BASE_SHA" "$GITHUB_SHA"
+          trusted="$RUNNER_TEMP/validate_change.py"
+          if git cat-file -e "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py"; then
+            git show "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py" > "$trusted"
+            "$CONTROLLER_PYTHON" -I -B "$trusted"
+          else
+            # Installation only: exact base and same-repository branch are checked.
+            # Maintainers must also perform the mandatory manual signature gate.
+            [[ "$GITHUB_EVENT_NAME" == pull_request ]]
+            "$CONTROLLER_PYTHON" -I -B scripts/ci/validate_change.py --bootstrap
+          fi
+      - name: Admit protected transport or conservative legacy installation
+        id: transport
+        env:
+          CONTROLLER_PYTHON: ${{ steps.component_bootstrap.outputs.interpreter }}
+          COMPONENT_TARGETS: ${{ steps.plan.outputs.component_targets }}
+          COMPONENT_PLAN_SHA256: ${{ steps.plan.outputs.component_plan_sha256 }}
+          COMPONENT_PLAN_PROVENANCE: ${{ steps.plan.outputs.component_plan_provenance }}
+          VALIDATED_BASE: ${{ steps.plan.outputs.base }}
+          VALIDATED_HEAD: ${{ steps.plan.outputs.source_head }}
+          VALIDATED_TEST: ${{ steps.plan.outputs.test_sha }}
+        run: |
+          [[ "$CONTROLLER_PYTHON" == /nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14 ]] || exit 1
+          "$CONTROLLER_PYTHON" -I -B - <<'PY'
+          import hashlib
           import json
           import os
+          import subprocess
+          import sys
+          import tempfile
           from pathlib import Path
-          Path('ci-plan.json').write_text(json.dumps({
-              'scope': 'full', 'fallback': 'base revision has no PR classification policy',
-              'base': os.environ['PR_BASE_SHA'], 'head': os.environ['PR_HEAD_SHA'],
-          }, indent=2) + '\n')
+          def unique(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError('duplicate transport key')
+                  result[key] = value
+              return result
+          def load(data):
+              return json.loads(data.decode('utf-8'), object_pairs_hook=unique)
+          def git(*args):
+              return subprocess.check_output(['git', '--no-replace-objects', *args])
+          data = Path('ci-plan.json').read_bytes()
+          plan = load(data)
+          validation = load(Path('ci-validation.json').read_bytes())
+          keys = ('event', 'event_base', 'base', 'source_head', 'test_sha', 'test_tree')
+          bound = {key: validation[key] for key in keys}
+          if (bound['base'] != os.environ['VALIDATED_BASE'] or
+              bound['source_head'] != os.environ['VALIDATED_HEAD'] or
+              bound['test_sha'] != os.environ['VALIDATED_TEST'] or
+              validation.get('signatures_valid') is not True or
+              any(plan.get(key) != value for key, value in bound.items())):
+              raise ValueError('transport differs from validated event context')
+          if validation.get('verifier_sha256') != hashlib.sha256(git('show', bound['base'] + ':scripts/ci/validate_change.py')).hexdigest():
+              raise ValueError('protected verifier source mismatch')
+          commits = git('rev-list', '--reverse', bound['base'] + '..' + bound['source_head']).decode().splitlines()
+          expected = [{'sha': sha, 'verified': True, 'reason': 'valid'} for sha in commits]
+          if not commits or validation.get('signatures') != expected:
+              raise ValueError('exact signature inventory mismatch')
+          policy = load(git('show', bound['base'] + ':ci/pr-policy.json'))
+          if policy.get('plan_envelope_version') == 2:
+              paths = ('scripts/ci/verify_ci_plan.py', 'ci/pr-policy.json',
+                       'ci/ci-plan.schema.json', 'ci/ci-input-union.schema.json',
+                       'ci/ci-input-authority.json', 'ci/ci-expected-inventory.json',
+                       'ci/ci-result-contract.json')
+              outputs = {'component_targets': load(os.environ['COMPONENT_TARGETS'].encode()),
+                         'component_plan_sha256': os.environ['COMPONENT_PLAN_SHA256'],
+                         'component_plan_provenance': load(os.environ['COMPONENT_PLAN_PROVENANCE'].encode())}
+              producer = {'repository': os.environ['GITHUB_REPOSITORY'],
+                          'run_id': os.environ['GITHUB_RUN_ID'],
+                          'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']), 'job': 'plan',
+                          'event_payload_sha256': hashlib.sha256(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes()).hexdigest()}
+              with tempfile.TemporaryDirectory() as temporary:
+                  authority = Path(temporary)
+                  for path in paths:
+                      dest = authority / path
+                      dest.parent.mkdir(parents=True, exist_ok=True)
+                      dest.write_bytes(git('show', bound['base'] + ':' + path))
+                  for name, value in [('context', bound), ('producer', producer), ('outputs', outputs)]:
+                      (authority / (name + '.json')).write_text(json.dumps(value))
+                  receipt = subprocess.check_output([
+                      sys.executable, '-I', str(authority / paths[0]), '--records', str(authority),
+                      '--context', str(authority / 'context.json'),
+                      '--producer', str(authority / 'producer.json'),
+                      '--outputs', str(authority / 'outputs.json')])
+              Path('ci-transport-admission.json').write_bytes(receipt)
+              version = '2'
+          else:
+              # The integrated v1 verifier governs installation. Its exact
+              # artifact is retained; absent projections never mean no work.
+              if 'plan_envelope_version' in policy:
+                  raise ValueError('unknown protected transport version')
+              allowed = {'version', 'base', 'head', 'merge_base', 'scope', 'selected',
+                         'changes', 'fallback', 'classifier_sha256', 'policy_sha256',
+                         'component_plan', 'component_plan_provenance', *keys}
+              if (set(plan) - allowed or type(plan.get('version')) is not int or
+                  plan['version'] != 1 or plan.get('scope') != 'full' or
+                  plan.get('selected') != policy['scopes']['full'] or
+                  plan.get('head') != bound['source_head']):
+                  raise ValueError('legacy installation requires a valid full plan')
+              for field, path in [('classifier_sha256', 'scripts/ci/pr_plan.py'),
+                                  ('policy_sha256', 'ci/pr-policy.json')]:
+                  if plan.get(field) != hashlib.sha256(git('show', bound['base'] + ':' + path)).hexdigest():
+                      raise ValueError('legacy artifact source digest mismatch')
+              # Recreate the legacy artifact with protected source; the retained
+              # file must equal its complete context-bound result.
+              with tempfile.TemporaryDirectory() as temporary:
+                  authority = Path(temporary)
+                  script, config, expected_file = (authority / name for name in ('pr_plan.py', 'policy.json', 'expected.json'))
+                  script.write_bytes(git('show', bound['base'] + ':scripts/ci/pr_plan.py'))
+                  config.write_bytes(git('show', bound['base'] + ':ci/pr-policy.json'))
+                  subprocess.run([sys.executable, '-I', str(script), '--repo',
+                                  git('rev-parse', '--show-toplevel').decode().strip(),
+                                  '--base', bound['base'], '--head', bound['source_head'],
+                                  '--policy', str(config), '--output', str(expected_file)],
+                                 check=True, capture_output=True,
+                                 env={key: value for key, value in os.environ.items() if key != 'GITHUB_OUTPUT'})
+                  expected_plan = load(expected_file.read_bytes())
+              if 'component_plan_version' in policy:
+                  expected_plan['component_plan_provenance'] = {**bound,
+                      'classifier_sha256': expected_plan['classifier_sha256'],
+                      'policy_sha256': expected_plan['policy_sha256']}
+              expected_plan.update(bound)
+              if plan != expected_plan:
+                  raise ValueError('legacy artifact differs from exact protected result')
+              outputs = {'component_targets': {'version': 1,
+                         'components': ['conformance', 'development-tools', 'infrastructure', 'python-example'],
+                         'infrastructure_modules': ['aegaeon-aws-staging', 'oidc-aws-kms-parity', 'perf-aws-ec2'],
+                         'fallback': 'validated legacy full installation; conservative all components'},
+                         'component_plan_sha256': hashlib.sha256(data).hexdigest(),
+                         'component_plan_provenance': {**bound,
+                             'classifier_sha256': plan['classifier_sha256'],
+                             'policy_sha256': plan['policy_sha256']}}
+              Path('ci-transport-admission.json').write_text(json.dumps({
+                  'version': 1, 'admission': 'legacy-full-installation', **bound,
+                  'component_plan_sha256': outputs['component_plan_sha256'],
+                  'component_targets': outputs['component_targets']}) + '\n')
+              version = '1'
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as stream:
+              for key, value in outputs.items():
+                  stream.write(key + '=' + (value if isinstance(value, str) else json.dumps(value, separators=(',', ':'))) + '\n')
+              stream.write('transport_version=' + version + '\n')
           PY
-          fi
-      - name: Preserve classification evidence
+      - name: Preserve validation evidence
+        id: evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-ci-plan
-          path: ci-plan.json
+          path: |
+            ci-plan.json
+            ci-validation.json
+            ci-input-union.json
+            ci-transport-admission.json
           if-no-files-found: error
 
   docs:
     name: Documentation
     needs: plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup-nix-ci
-      - name: Check documentation and PR metadata
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: nix develop .#docs --command bash scripts/ci/run_docs.sh
+    uses: ./.github/workflows/documentation.yml
+    with:
+      base: ${{ needs.plan.outputs.base }}
+      source-head: ${{ needs.plan.outputs.source_head }}
+      test-sha: ${{ needs.plan.outputs.test_sha }}
+      pr-title: ${{ github.event.pull_request.title || '' }}
+      pr-author: ${{ github.event.pull_request.user.login || '' }}
 
   integrity:
     name: Assurance integrity
@@ -100,6 +260,9 @@ jobs:
         run: |
           nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py
           nix develop .#integrity --command mypy scripts/validation scripts/ci ci/validate_slos.py
+      - name: Check component package-source admission
+        run: |
+          nix develop .#integrity --command python3 -m unittest discover -s tests/ci -p test_component_bootstrap_origin.py -v
 
   core:
     needs: plan
@@ -171,9 +334,16 @@ jobs:
     needs: [plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
     steps:
+      - name: Require a validated protected base
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          BASE_SHA: ${{ needs.plan.outputs.base }}
+        run: |
+          [[ "$PLAN_RESULT" == success ]]
+          [[ "$BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ needs.plan.outputs.base }}
           persist-credentials: false
       - name: Require success of every selected check
         env:
