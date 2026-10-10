@@ -2,6 +2,9 @@
 #![cfg_attr(not(kani), allow(dead_code))]
 
 #[cfg(kani)]
+mod upstream_deadline;
+
+#[cfg(kani)]
 mod bounded_device_authz;
 #[cfg(kani)]
 mod bounded_entity_config;

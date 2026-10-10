@@ -2117,7 +2117,7 @@ rfc_9700:
   notes:
   - "Applies to Aegaeon's upstream OAuth client role: per-transaction Secure/HttpOnly host cookies bind both success and error callbacks to the initiating browser, saved state, callback route and deadline."
   - "Rust validates the record before Redis atomically consumes the unchanged snapshot; wrong bindings and routes preserve the transaction, while matching consumption is single-use."
-  - "DB/Redis-gated tests also run in the container integration lane. Finite tests do not establish a complete healthy-provider exchange/session round trip or formal CSRF/timing assurance."
+  - "DB/Redis-gated tests also run in the container integration lane. Scoped Tamarin/F* callback models and direct-production Kani deadline harnesses are described in docs/specs/oidc-rp-brokering-spec.md; their assumptions and implementation correspondence remain explicit. This row remains implemented, not verified. Neither finite tests nor these narrow checks establish a complete provider exchange/session round trip, timing or deployed-system assurance."
   - "The upstream-auth:v2 rollout requires coordinated writers and consumers; legacy unbound flows restart. The runtime-link manifest only hashes verified rows, so this implemented row does not add a formal drift claim."
 rfc_6755:
 - id: 6755-001

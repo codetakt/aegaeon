@@ -1,0 +1,206 @@
+theory UpstreamBrowserBinding
+begin
+
+builtins: hashing
+
+/* See upstream_browser_binding.md for the abstraction and source correspondence.
+   No trace restrictions encode safety conclusions. The network learns state;
+   only the private browser cookie channel carries the independent secret.
+   Deadline_Open is a logical, monotone freshness interval, not a wall clock. */
+
+rule New_Browser:
+  [ Fr(~browser) ]
+  --> [ !Browser(~browser), Out(~browser) ]
+
+rule Initiate:
+  [ !Browser(browser), In(route), Fr(~state), Fr(~secret), Fr(~raw) ]
+  --[ Initiated(~state, browser, route), Secret(~state, ~secret) ]->
+  [ !Cookie(browser, ~state, ~secret),
+    !Flow(~state, h(~secret), route),
+    !Decoded(~state, ~raw, h(~secret), route),
+    Store(~state, ~raw), Deadline_Open(~state),
+    Out(<~state, route>) ]
+
+/* The attacker chooses callback parameters and can send any cookie already
+   held by this browser, even one for a different state. Cookie-name parsing
+   would reject some such requests; this overapproximates browser delivery. */
+rule Browser_Submit:
+  [ !Cookie(browser, cookie_state, secret),
+    In(<browser, state, cookie_state, route, kind>), Fr(~worker) ]
+  --[ Submitted(state, ~worker, browser, route, kind) ]->
+  [ Request(state, ~worker, browser, h(secret), route, kind) ]
+
+rule Attacker_Submit:
+  [ In(<browser, state, secret, route, kind>), Fr(~worker) ]
+  --[ Submitted(state, ~worker, browser, route, kind), Forged(state, ~worker) ]->
+  [ Request(state, ~worker, browser, h(secret), route, kind) ]
+
+/* A historical snapshot remains readable after replacement or consumption.
+   This includes overlapping workers and overapproximates delayed GET replies. */
+rule Read_Snapshot:
+  [ Request(state, worker, browser, digest, route, kind),
+    !Decoded(state, raw, expected_digest, expected_route) ]
+  --[ Read(state, worker, raw) ]->
+  [ Snapshot(state, worker, raw, browser, digest, route, kind,
+             expected_digest, expected_route) ]
+
+rule Validate_Snapshot:
+  [ Snapshot(state, worker, raw, browser, digest, route, kind, digest, route),
+    Deadline_Open(state) ]
+  --[ Freshness_Checked(state), Validated(state, worker, raw, browser, route, kind) ]->
+  [ Ready(state, worker, raw, browser, route, kind), Deadline_Open(state) ]
+
+/* Trusted replacement is a race fault injection: only raw bytes change.
+   Any number of fresh replacements is allowed; old bytes are never restored. */
+rule Replace_Stored_Value:
+  [ Store(state, old_raw), !Flow(state, digest, route), Fr(~new_raw) ]
+  --[ Store_Touched(state), Replaced(state, old_raw, ~new_raw) ]->
+  [ Store(state, ~new_raw), !Decoded(state, ~new_raw, digest, route),
+    !Superseded(state, old_raw) ]
+
+rule Atomic_Consume:
+  [ Ready(state, worker, raw, browser, route, kind), Store(state, raw),
+    Deadline_Open(state) ]
+  --[ Freshness_Checked(state), Store_Touched(state), State_Consumed(state), Consumed(state, worker, raw, browser, route, kind) ]->
+  [ Returning(state, worker, raw, browser, route, kind), Deadline_Open(state) ]
+
+rule Return_Fresh_Context:
+  [ Returning(state, worker, raw, browser, route, kind), Deadline_Open(state) ]
+  --[ Freshness_Checked(state), Accepted(state, worker, raw, browser, route, kind) ]->
+  [ Context(state, kind), Deadline_Open(state) ]
+
+/* These events mean dispatch to the code or error branch after bound context
+   acceptance. They do not assert token validation or session creation. */
+rule Dispatch_Code:
+  [ Context(state, 'code') ] --[ Code_Callback(state) ]-> [ ]
+
+rule Dispatch_Error:
+  [ Context(state, 'error') ] --[ Error_Callback(state) ]-> [ ]
+
+rule Deadline_Passes:
+  [ Deadline_Open(state) ]
+  --[ Expired(state) ]-> [ !Deadline_Closed(state) ]
+
+rule Reject_Expired_Return:
+  [ Returning(state, worker, raw, browser, route, kind), !Deadline_Closed(state) ]
+  --[ Restart_Required(state, worker) ]-> [ ]
+
+rule Reject_Expired_Worker:
+  [ Ready(state, worker, raw, browser, route, kind), !Deadline_Closed(state) ]
+  --[ Expired_Rejected(state, worker) ]-> [ ]
+
+rule Reject_Stale_Worker:
+  [ Ready(state, worker, raw, browser, route, kind), !Superseded(state, raw) ]
+  --[ Stale_Rejected(state, worker, raw) ]-> [ ]
+
+lemma store_lifecycle [reuse, use_induction]:
+  "All state #i #j. State_Consumed(state) @ i & Store_Touched(state) @ j
+    ==> not (i < j)"
+
+lemma deadline_lifecycle [reuse, use_induction]:
+  "All state #i #j. Expired(state) @ i & Freshness_Checked(state) @ j
+    ==> j < i"
+
+lemma browser_secret_secrecy:
+  "All state secret #i. Secret(state, secret) @ i
+    ==> not (Ex #j. K(secret) @ j)"
+
+lemma consume_browser_and_route_binding:
+  "All state worker raw browser route kind #i.
+    Consumed(state, worker, raw, browser, route, kind) @ i
+    ==> (Ex #j. Initiated(state, browser, route) @ j & j < i)"
+
+lemma accepted_browser_and_route_binding:
+  "All state worker raw browser route kind #i.
+    Accepted(state, worker, raw, browser, route, kind) @ i
+    ==> (Ex #j. Initiated(state, browser, route) @ j & j < i)"
+
+lemma single_consumption:
+  "All state w1 w2 raw1 raw2 b1 b2 r1 r2 k1 k2 #i #j.
+    Consumed(state, w1, raw1, b1, r1, k1) @ i
+    & Consumed(state, w2, raw2, b2, r2, k2) @ j ==> #i = #j"
+
+lemma validated_snapshot_consumed:
+  "All state worker raw browser route kind #i.
+    Consumed(state, worker, raw, browser, route, kind) @ i
+    ==> (Ex #j. Validated(state, worker, raw, browser, route, kind) @ j & j < i)"
+
+lemma no_stale_snapshot_consumed [use_induction]:
+  "All state worker raw newer browser route kind #i #j.
+    Replaced(state, raw, newer) @ i
+    & Consumed(state, worker, raw, browser, route, kind) @ j ==> j < i"
+
+lemma no_expired_consumption:
+  "All state worker raw browser route kind #i #j.
+    Expired(state) @ i
+    & Consumed(state, worker, raw, browser, route, kind) @ j ==> j < i"
+
+lemma no_expired_acceptance:
+  "All state worker raw browser route kind #i #j.
+    Expired(state) @ i
+    & Accepted(state, worker, raw, browser, route, kind) @ j ==> j < i"
+
+lemma code_callback_reachable: exists-trace
+  "Ex state #i. Code_Callback(state) @ i"
+
+lemma error_callback_reachable: exists-trace
+  "Ex state #i. Error_Callback(state) @ i"
+
+lemma concurrent_validation_reachable: exists-trace
+  "Ex state w1 w2 raw browser route kind #i #j #k.
+    Validated(state, w1, raw, browser, route, kind) @ i
+    & Validated(state, w2, raw, browser, route, kind) @ j
+    & Consumed(state, w1, raw, browser, route, kind) @ k
+    & not (w1 = w2) & i < j & j < k"
+
+lemma stale_rejection_reachable: exists-trace
+  "Ex state worker raw newer browser route kind #i #j #k.
+    Validated(state, worker, raw, browser, route, kind) @ i
+    & Replaced(state, raw, newer) @ j
+    & Stale_Rejected(state, worker, raw) @ k & i < j & j < k"
+
+lemma expiry_rejection_reachable: exists-trace
+  "Ex state worker raw browser route kind #i #j #k.
+    Validated(state, worker, raw, browser, route, kind) @ i
+    & Expired(state) @ j & Expired_Rejected(state, worker) @ k
+    & i < j & j < k"
+
+lemma delayed_return_restarts: exists-trace
+  "Ex state worker raw browser route kind #i #j #k.
+    Consumed(state, worker, raw, browser, route, kind) @ i
+    & Expired(state) @ j & Restart_Required(state, worker) @ k
+    & i < j & j < k"
+
+lemma wrong_browser_submission_reachable: exists-trace
+  "Ex state worker browser other route kind raw #i #j #k.
+    Initiated(state, browser, route) @ i
+    & Submitted(state, worker, other, route, kind) @ j
+    & Read(state, worker, raw) @ k & not (browser = other)"
+
+lemma wrong_route_submission_reachable: exists-trace
+  "Ex state worker browser route other kind raw #i #j #k.
+    Initiated(state, browser, route) @ i
+    & Submitted(state, worker, browser, other, kind) @ j
+    & Read(state, worker, raw) @ k & not (route = other)"
+
+lemma forged_cookie_submission_reachable: exists-trace
+  "Ex state worker raw #i #j.
+    Forged(state, worker) @ i & Read(state, worker, raw) @ j"
+
+lemma wrong_browser_preserves_legitimate_callback: exists-trace
+  "Ex state worker legitimate raw browser other route kind #i #j #k #l.
+    Initiated(state, browser, route) @ i
+    & Submitted(state, worker, other, route, kind) @ j
+    & Read(state, worker, raw) @ k
+    & Accepted(state, legitimate, raw, browser, route, kind) @ l
+    & not (browser = other) & j < k & k < l"
+
+lemma wrong_route_preserves_legitimate_callback: exists-trace
+  "Ex state worker legitimate raw browser route other kind #i #j #k #l.
+    Initiated(state, browser, route) @ i
+    & Submitted(state, worker, browser, other, kind) @ j
+    & Read(state, worker, raw) @ k
+    & Accepted(state, legitimate, raw, browser, route, kind) @ l
+    & not (route = other) & j < k & k < l"
+
+end

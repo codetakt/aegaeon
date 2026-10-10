@@ -389,3 +389,30 @@ See [revision bounds](../kani/authorization-revision-bounds.md).
 `tests/fstar/property`, outside the `fstar/` model-fidelity catalog. It runs in
 a separate required control gate, not an additional admitted proof pass. Its
 source hashes and output are retained.
+
+## Upstream callback browser binding and consumption
+
+`OidcRp.BrowserBinding` and `OidcRp.BrowserBindingWitnesses` are `simplified`
+functional models of decoded snapshot admission, exact callback route/digest
+binding, byte-equality CAS, strict freshness at three clock observations, and
+consumption before code/error continuation. Decoder and cookie admission are
+supplier boundaries; the arbitrary hash function has no injectivity premise.
+The symbolic timestamps cover post-Unix seconds through u64 maximum and valid
+fractions; they do not model all platform `SystemTime` values or Lua encoding.
+The normal/error and final-fraction witnesses prevent vacuous reject-all models.
+A same-byte reinsertion witness records the absence of generation/tombstone
+protection. Single consumption requires no intervening insertion. See the
+[model/source contract](../oidc/upstream-browser-binding-fstar.md).
+
+The older `OidcRp.Transitions` and `OidcRp.Properties` are `simplified` as well.
+Their callback returns an authenticated record without updating the store;
+the single-use lemma applies to a separate update with uniqueness and session-ID
+preconditions. They omit browser digest and callback route checks, byte-CAS,
+independent clock observations, and production consumption before issuer/error
+handling. Their successful verification does not establish these runtime
+properties. `UpstreamRefresh` concerns account-link generation and connection
+currentness, a separate resource from authorization-state consumption.
+
+These classifications and model results do not establish Rust/Lua refinement,
+cryptographic entropy/collision resistance, Redis supplier behavior, browser
+cookie semantics, or released-artifact/full-system assurance.

@@ -1,4 +1,8 @@
 #![forbid(unsafe_code)]
+
+// Production arithmetic; this module is identical with and without cfg(kani).
+pub mod upstream_deadline;
+
 #[cfg(not(kani))]
 mod standard {
     use std::collections::{HashMap, HashSet};

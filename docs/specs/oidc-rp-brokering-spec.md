@@ -248,6 +248,24 @@ This implements Aegaeon's browser binding for the OAuth client CSRF protections 
 [RFC 6749 section 10.12](https://www.rfc-editor.org/rfc/rfc6749#section-10.12) and
 [RFC 9700 section 4.7](https://www.rfc-editor.org/rfc/rfc9700#section-4.7).
 
+### Verification Scope
+
+The browser-binding checks have complementary verification boundaries:
+
+| Check | Covered boundary | Remaining implementation dependencies |
+| --- | --- | --- |
+| [Tamarin callback model](../../proofs/tamarin/federation/upstream_browser_binding.md) | Symbolic browser/route binding, concurrent consumption and stale snapshots, with normal and error traces | Fresh unpredictable values, protected cookies, ideal hash, trusted storage and a coherent logical deadline |
+| [F* callback contract](../verification/oidc/upstream-browser-binding-fstar.md) | Decoded-snapshot admission, state changes, independent clock observations and code/error outcomes | Cookie parsing, decoding, hashing, Redis execution and correspondence to Rust/Lua |
+| `crates/kani-harness/src/upstream_deadline.rs` | The production `aegaeon-pure::upstream_deadline` functions over their declared machine domains: fraction validation, checked reconstruction, strict expiry and exact millisecond ceiling | Pinned Linux `SystemTime` representation; actual clocks, serialization and Redis/Lua behavior |
+
+Single consumption applies to a stored transaction without intervening reinsertion.
+Exact byte comparison detects different replacement values; it cannot detect restoration
+of identical bytes. Protocol-level uniqueness relies on fresh random state and a trusted
+store that does not restore consumed records. Transport failure after Redis execution can
+leave a transaction consumed even when the caller receives an error. These dependencies
+and the complete token/session flow remain outside the narrow models. Passing these
+checks does not establish a release-artifact or full-product assurance claim.
+
 ### Upgrade And API Compatibility
 
 Upstream authorization keys now use storage version `upstream-auth:v2`. Deploy authorization

@@ -134,30 +134,16 @@ fn system_time_from_epoch_parts(
     secs: u64,
     nanos: u32,
 ) -> Result<SystemTime, UpstreamAuthStorageError> {
-    if nanos >= 1_000_000_000 {
-        return Err(UpstreamAuthStorageError::Codec(
-            "invalid expiry nanoseconds".into(),
-        ));
-    }
-    SystemTime::UNIX_EPOCH
-        .checked_add(Duration::new(secs, nanos))
-        .ok_or_else(|| UpstreamAuthStorageError::Codec("expiry timestamp overflow".into()))
+    aegaeon_pure::upstream_deadline::system_time_from_epoch_parts(secs, nanos)
+        .map_err(|err| UpstreamAuthStorageError::Codec(err.message().into()))
 }
 
 fn redis_ttl_millis_at(
     expires_at: SystemTime,
     now: SystemTime,
 ) -> Result<u64, UpstreamAuthStorageError> {
-    let ttl = expires_at
-        .duration_since(now)
-        .ok()
-        .filter(|ttl| !ttl.is_zero())
-        .ok_or_else(|| {
-            UpstreamAuthStorageError::Codec("upstream auth state is already expired".into())
-        })?;
-    let millis = ttl.as_millis() + u128::from(ttl.subsec_nanos() % 1_000_000 != 0);
-    u64::try_from(millis)
-        .map_err(|_| UpstreamAuthStorageError::Codec("upstream auth ttl overflow".into()))
+    aegaeon_pure::upstream_deadline::redis_ttl_millis_at(expires_at, now)
+        .map_err(|err| UpstreamAuthStorageError::Codec(err.message().into()))
 }
 
 fn redis_ttl_millis_until(expires_at: SystemTime) -> Result<u64, UpstreamAuthStorageError> {

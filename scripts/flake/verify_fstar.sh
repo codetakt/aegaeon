@@ -428,7 +428,9 @@ MODULES="$MODULES \
 MODULES="$MODULES \
 	federation/OidcRp.Types.fst \
 	federation/OidcRp.Transitions.fst \
-	federation/OidcRp.Properties.fst"
+	federation/OidcRp.Properties.fst \
+	federation/OidcRp.BrowserBinding.fst \
+	federation/OidcRp.BrowserBindingWitnesses.fst"
 # Management (Phase 4-5)
 MODULES="$MODULES \
 	management/Management.ClientLifecycle.fst \
