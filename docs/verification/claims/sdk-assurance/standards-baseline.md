@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-09-30
+Last updated: 2026-10-11
 
-Document revision: **2026-09-30-r2**.
+Document revision: **2026-10-11-r1**.
 
 Status: current implementation baseline
 
@@ -113,6 +113,22 @@ No arbitrary provider-interoperability claim follows from first-party RS256 test
 
 ## Maintenance and handoff
 
+The 2026-10-11 management OpenAPI snapshot constrains the optional
+`CreateFederationTrustAnchorRequest.metadataPolicy` to three nonempty object
+levels: entity type, metadata parameter and operator. Omission remains valid;
+explicit null, scalars, arrays and empty objects at those levels are rejected.
+Operator operand, combination and scope-token semantics remain server runtime
+validations and are not all expressed by this schema. The response schema stays
+permissive so historical malformed rows remain inspectable and removable.
+
+This revision updates only the `management-openapi` project-source pin and this
+baseline's revision pin after reviewing the regenerated interface diff. The
+previous OpenAPI bytes and pin remain in version history. Contract guarantees,
+profiles, external specification pins and the client-credentials and bounded
+revision contracts remain unchanged. This records Aegaeon's management interface;
+it does not attest generated-client conformance, activate a profile or discharge
+product obligations. See the [Federation runtime contract](../../../specs/openid-federation-spec.md#optional-local-anchor-pins-and-complete-chain-admission).
+
 The 2026-09-30 management OpenAPI snapshot adds `ClientCredentialsPolicy`,
 `ClientCredentialsResourceServer` and `ClientCredentialsRule`, and an optional
 `clientCredentials` field to policy documents and patches. The management-client
@@ -124,7 +140,7 @@ security-downgrade checks. The declarations' `version: 1` type and the OpenAPI
 integer bounds of `minimum: 1` and `maximum: 1` match the server's supported
 policy version.
 
-This revision updates the `management-openapi` project-source pin and records
+The 2026-09-30 revision updated the `management-openapi` project-source pin and records
 those inputs under the existing management API group. The prior snapshot is
 retained in version history. It preserves the bounded authorization-revision
 contract, guarantee IDs, profiles and external source pins. It does not activate
