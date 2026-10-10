@@ -27,13 +27,15 @@ impl Drop for KeyGuard {
 }
 
 fn token() -> Result<IdToken, Box<dyn std::error::Error>> {
+    let mut nonce = [0u8; 32];
+    aegaeon_crypto::rand::fill_random(&mut nonce).map_err(|e| format!("{e:?}"))?;
     Ok(IdTokenBuilder::try_new(
         "https://issuer.example".into(),
         "private-subject".into(),
         "client".into(),
     )
     .map_err(std::io::Error::other)?
-    .nonce("private-original-nonce".into())
+    .nonce(URL_SAFE_NO_PAD.encode(nonce))
     .auth_time(1_700_000_000)
     .build())
 }
@@ -74,7 +76,11 @@ fn upstream_refresh_v3_envelope_round_trips_original_context_without_plaintext()
     for secret in [
         "private-refresh-token",
         "private-subject",
-        "private-original-nonce",
+        original_token
+            .claims
+            .nonce
+            .as_deref()
+            .ok_or("original nonce")?,
         issuer,
     ] {
         assert!(!text.contains(secret));
@@ -185,6 +191,7 @@ fn upstream_refresh_original_context_preserves_semantic_audience_and_optional_cl
     let original = context(&original_token)?;
     for audience in [vec!["client", "other"], vec!["other", "client", "client"]] {
         let mut refreshed = token()?;
+        refreshed.claims.nonce = original_token.claims.nonce.clone();
         refreshed.claims.aud =
             Audience::Multiple(audience.into_iter().map(str::to_owned).collect());
         assert!(original.validate_refreshed_id_token(&refreshed).is_ok());
@@ -210,6 +217,7 @@ fn upstream_refresh_original_context_preserves_semantic_audience_and_optional_cl
     }
     let mut singleton = token()?;
     let original = context(&singleton)?;
+    let original_nonce = singleton.claims.nonce.clone();
     singleton.claims.aud = Audience::Multiple(vec!["client".into()]);
     assert!(original.validate_refreshed_id_token(&singleton).is_ok());
     singleton.claims.nonce = None;
@@ -217,6 +225,7 @@ fn upstream_refresh_original_context_preserves_semantic_audience_and_optional_cl
     let absent = context(&singleton)?;
     assert!(absent.validate_refreshed_id_token(&token()?).is_err());
     let mut nonce_only = token()?;
+    nonce_only.claims.nonce = original_nonce;
     nonce_only.claims.auth_time = None;
     assert!(absent.validate_refreshed_id_token(&nonce_only).is_err());
     let mut auth_time_only = token()?;
