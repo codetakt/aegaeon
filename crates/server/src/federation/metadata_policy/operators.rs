@@ -69,9 +69,15 @@ impl FieldPolicy {
 
     fn validate(&self) -> Result<(), FederationError> {
         let ops = &self.0;
+        let mut set_kind = None;
         for name in ["add", "one_of", "subset_of", "superset_of"] {
             if let Some(value) = ops.get(name) {
-                array(value)?;
+                if let Some(value_kind) = array(value)?.first().and_then(kind) {
+                    if set_kind.is_some_and(|expected| expected != value_kind) {
+                        return Err(error("set operators require compatible element types"));
+                    }
+                    set_kind = Some(value_kind);
+                }
             }
         }
         if ops.get("default").is_some_and(Value::is_null) {

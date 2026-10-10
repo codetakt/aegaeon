@@ -92,6 +92,46 @@ fn policy_resolution_pair_conditions_independent_of_presence() {
 }
 
 #[test]
+fn policy_resolution_rejects_incompatible_set_domains_before_application() {
+    let domains = [json!(["a"]), json!([1]), json!([{"a":1}])];
+    for (left_index, left) in domains.iter().enumerate() {
+        for (right_index, right) in domains.iter().enumerate() {
+            if left_index == right_index {
+                continue;
+            }
+            let operators = json!({"add":left,"superset_of":right});
+            for metadata in [None, Some(json!({})), Some(json!({"x":left}))] {
+                assert!(policy_chain(wrapped(operators.clone()), Value::Null, metadata)
+                    .resolved_metadata()
+                    .is_err());
+            }
+            // The same conflict may appear only after merging ancestors.
+            assert!(policy_chain(
+                wrapped(json!({"add":left})),
+                wrapped(json!({"superset_of":right})),
+                None,
+            )
+            .resolved_metadata()
+            .is_err());
+            let mut undeclared = policy_chain(wrapped(operators), Value::Null, None);
+            undeclared.chain[0].metadata =
+                Some(HashMap::from([("openid_provider".into(), json!({}))]));
+            assert!(undeclared.resolved_metadata().is_err());
+        }
+        for operators in [
+            json!({"add":left,"superset_of":left}),
+            json!({"add":left,"superset_of":[]}),
+            json!({"add":[],"superset_of":left}),
+        ] {
+            assert!(policy_chain(wrapped(operators.clone()), Value::Null, None)
+                .resolved_metadata()
+                .is_ok());
+            assert!(apply_field(json!({"x":left}), operators).is_ok());
+        }
+    }
+}
+
+#[test]
 fn policy_resolution_set_domains_and_exact_equality() {
     for op in ["add", "one_of", "subset_of", "superset_of", "intersect"] {
         for unsupported in [

@@ -73,7 +73,9 @@ not a standard operator. When both occur, their operands are intersected before
 combination validation. Previously accepted contradictory alias combinations may fail.
 
 Set operators support homogeneous arrays of strings, objects or numbers, including
-empty arrays. one_of accepts string/object/number metadata. value/default also
+empty arrays. Nonempty set operands within one parameter policy must use the same
+element type, even for undeclared entity types; empty operands impose no element type.
+This check also applies after each ancestor merge. one_of accepts string/object/number metadata. value/default also
 support objects and arbitrary arrays; essential supports objects. Structural equality
 ignores object key order and retains array order. Decimal comparison uses Number's
 representation without converting integers to floating point. Precision already lost
