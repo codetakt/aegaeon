@@ -1,3 +1,43 @@
+/// Immutable issuer policy shared by grant issuance and device-code admission.
+/// A selected resource is already authorized by the grant-specific boundary.
+#[derive(Clone)]
+pub(crate) struct AccessTokenAudiencePolicy {
+    jwt_required: bool,
+    userinfo_audience: Option<String>,
+}
+
+impl AccessTokenAudiencePolicy {
+    pub(crate) fn new(jwt_required: bool, userinfo_audience: Option<String>) -> Self {
+        Self {
+            jwt_required,
+            userinfo_audience,
+        }
+    }
+
+    pub(crate) fn resolve(
+        &self,
+        client_id: &str,
+        scope: Option<&str>,
+        selected_resource: Option<&str>,
+    ) -> Result<String, &'static str> {
+        if let Some(resource) = selected_resource {
+            return Ok(resource.to_string());
+        }
+        if let Some(audience) = self
+            .userinfo_audience
+            .as_ref()
+            .filter(|_| super::scope_contains(scope, "openid"))
+        {
+            return Ok(audience.clone());
+        }
+        // RFC 9068 section 3: a client identifier is not a resource default.
+        if self.jwt_required {
+            return Err("JWT access tokens require a resource or an approved resource default");
+        }
+        Ok(client_id.to_string())
+    }
+}
+
 /// Select from an already-approved single-resource grant (RFC 8707 section 2.2).
 /// Inputs have passed protocol parsing. An absent grant resource retains the
 /// default; it does not authorize adding an explicit resource at redemption.

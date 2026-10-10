@@ -16,6 +16,9 @@ use super::{
 #[cfg(test)]
 mod sender_contract_tests;
 
+#[cfg(test)]
+mod resource_tests;
+
 struct ApprovedDeviceGrant {
     user_id: String,
     scope: Option<String>,
@@ -126,10 +129,16 @@ async fn approved_device_grant_response(
         Ok(timing) => timing,
         Err(response) => return response,
     };
-    let audience = grant
-        .resource
-        .clone()
-        .unwrap_or_else(|| grant.client_id.clone());
+    let audience = match state.tokens.issuer.access_token_audience(
+        &grant.client_id,
+        grant.scope.as_deref(),
+        grant.resource.as_deref(),
+    ) {
+        Ok(audience) => audience,
+        Err(error) => {
+            return token_error_response(StatusCode::BAD_REQUEST, "invalid_target", Some(error));
+        }
+    };
     let access_token = match state
         .tokens
         .issuer
@@ -231,11 +240,12 @@ pub(super) async fn handle_token_device_code_grant(
     let poll = match state
         .device
         .code_store
-        .try_poll_async(
+        .try_poll_for_token_async(
             device_code,
             ctx.client_id.clone(),
             None,
             ctx.resource.clone(),
+            state.tokens.issuer.access_token_audience_policy(),
         )
         .await
     {

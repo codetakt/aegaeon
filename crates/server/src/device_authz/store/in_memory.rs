@@ -1,3 +1,4 @@
+use crate::authcode::token::AccessTokenAudiencePolicy;
 use crate::device_authz::codes::normalize_user_code;
 use crate::device_authz::types::DeviceCodeEntry;
 use crate::device_authz::{
@@ -58,6 +59,7 @@ impl InMemoryDeviceCodeStore {
         client_id: &str,
         environment_id: Option<&str>,
         requested_resource: Option<&str>,
+        audience_policy: Option<&AccessTokenAudiencePolicy>,
     ) -> DevicePollResult {
         let Ok(mut map) = write_lock(&self.by_hash, "poll") else {
             return DevicePollResult::ExpiredToken;
@@ -110,6 +112,17 @@ impl InMemoryDeviceCodeStore {
             DeviceAuthzStatus::Approved { user_id, scope } => {
                 if entry.consumed {
                     return DevicePollResult::ExpiredToken;
+                }
+                if audience_policy.is_some_and(|policy| {
+                    policy
+                        .resolve(
+                            &entry.client_id,
+                            scope.as_deref(),
+                            entry.resource.as_deref(),
+                        )
+                        .is_err()
+                }) {
+                    return DevicePollResult::InvalidTarget;
                 }
                 entry.consumed = true;
                 let result = DevicePollResult::Approved {

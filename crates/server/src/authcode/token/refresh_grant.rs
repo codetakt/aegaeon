@@ -286,6 +286,18 @@ impl TokenIssuer {
                 "refresh target context changed; authorize again",
             ));
         }
+        if self.jwt_access_tokens_enabled && refresh.resource.is_none() {
+            // Resolve the original grant's default, before any scope narrowing.
+            // A legacy client-ID snapshot alone does not authorize a resource.
+            let approved_default = self
+                .access_token_audience(&refresh.client_id, refresh.scope.as_deref(), None)
+                .map_err(invalid_target)?;
+            if context.audience != approved_default {
+                return Err(invalid_target(
+                    "refresh token has no approved JWT resource default; authorize again",
+                ));
+            }
+        }
         let selected_resource = select_refresh_resource(&context.audience, requested_resource)?;
 
         let access_scope = select_refresh_scope(refresh.scope.as_deref(), requested_scope)?;
@@ -328,8 +340,9 @@ impl TokenIssuer {
                 ));
             }
         };
-        let audience =
-            self.access_token_audience(&refresh.client_id, access_scope, selected_resource);
+        let audience = self
+            .access_token_audience(&refresh.client_id, access_scope, selected_resource)
+            .map_err(invalid_target)?;
         let access_token_str = match self.issue_access_token_value(BearerAccessTokenMint {
             application_grant: refresh.application_grant.as_ref(),
             subject: &refresh.user_id,

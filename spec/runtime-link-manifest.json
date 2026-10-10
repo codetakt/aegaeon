@@ -131,7 +131,7 @@
       "critical": false
     },
     "crates/server/src/authcode/token.rs": {
-      "sha256": "03ae60322f2b516eee9469928320a34f0d4b421a1c852d6afaf7f30780998e74",
+      "sha256": "6d76e745665bad8be27c94cf1a5d4d20893ff9b8bc29debbe7a2049e53103cb5",
       "entries": [
         "6749-008",
         "7636-006",
