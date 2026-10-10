@@ -25,7 +25,11 @@ pub struct FederationTrustAnchor {
 pub struct CreateFederationTrustAnchorRequest {
     pub entity_id: String,
     pub jwks: serde_json::Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_metadata_policy"
+    )]
     pub metadata_policy: Option<serde_json::Value>,
 }
 
@@ -145,4 +149,12 @@ pub struct ListFederationLogoutRecoveryIncidentsResponse {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ClearFederationLogoutRecoveryIncidentRequest {
     pub reason: String,
+}
+
+// Missing means no local pin; an explicitly supplied JSON null must reach
+// validation as invalid Some(null), rather than silently becoming absence.
+fn present_metadata_policy<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error> {
+    serde_json::Value::deserialize(deserializer).map(Some)
 }

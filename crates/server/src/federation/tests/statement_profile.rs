@@ -335,7 +335,7 @@ fn artifacts_repository_wrapper_preserves_anchor_order_and_cached_fallback() {
         let repo = InMemoryTrustAnchorRepo::new();
         let env_id = Uuid::new_v4();
         let first = "https://first-anchor.example";
-        must_ok(repo.upsert(env_id, first, &sample_jwks_value(), Some(&json!({}))));
+        must_ok(repo.upsert(env_id, first, &sample_jwks_value(), None));
         must_ok(repo.upsert(
             env_id,
             &fixture.anchor.entity_id,

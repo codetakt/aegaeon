@@ -11,4 +11,4 @@ pub(in crate::federation) use path_constraints::{leaf_entity_types, validate_pat
 pub use resolution::{resolve_trust_chain, resolve_trust_chain_with_jwts};
 
 mod verification;
-pub(in crate::federation) use verification::verify_signed_path;
+pub(crate) use verification::verify_signed_path;

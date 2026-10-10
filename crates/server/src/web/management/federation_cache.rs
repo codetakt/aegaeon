@@ -17,5 +17,5 @@ pub(super) use trust_anchors::{
 pub(super) use trust_chains::{
     delete_federation_trust_chain_row, load_federation_trust_chain_entry,
     load_resolvable_trust_anchors, resolve_refreshed_trust_chain_payload,
-    store_refreshed_federation_trust_chain,
+    store_refreshed_federation_trust_chain, validate_refreshed_trust_chain,
 };

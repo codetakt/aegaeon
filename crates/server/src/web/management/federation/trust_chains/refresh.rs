@@ -1,4 +1,4 @@
-mod workflow;
+pub(in crate::web::management) mod workflow;
 
 use crate::web::management::{
     management_db_pool, require_management_session_async, AppState, RequestContext,
