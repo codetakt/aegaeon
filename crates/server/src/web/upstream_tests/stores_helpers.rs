@@ -2,7 +2,7 @@
 // UpstreamAuthStore round-trip tests
 // -----------------------------------------------------------------------
 
-fn make_auth_request(
+pub(in crate::web) fn make_auth_request(
     state: &str,
     ttl: std::time::Duration,
 ) -> crate::upstream::UpstreamAuthRequest {

@@ -168,6 +168,22 @@ pub async fn resolve_upstream_profile(
     resolved_profile_from_effective_row(&row)
 }
 
+/// Resolve upstream policy using the caller's locked persistence transaction.
+pub(crate) async fn resolve_upstream_profile_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issuer: &str,
+    connection_identifier: &str,
+) -> Result<ResolvedProfile, ProfileError> {
+    let issuer_host = issuer_host_from_url(issuer)?;
+    let row = sqlx::query(UPSTREAM_PROFILE_QUERY)
+        .bind(issuer_host)
+        .bind(connection_identifier)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(ProfileError::MissingProfile)?;
+    resolved_profile_from_effective_row(&row)
+}
+
 /// # Errors
 ///
 /// Returns [`ProfileError::InvalidIssuer`] when the issuer URL cannot be

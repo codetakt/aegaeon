@@ -22,15 +22,19 @@ pub(super) struct UpstreamRefreshCaller {
 pub(super) struct UpstreamRefreshLink {
     pub(super) account_link_id: uuid::Uuid,
     pub(super) link_env_id: uuid::Uuid,
+    pub(super) configuration_version_id: uuid::Uuid,
     pub(super) upstream_issuer: String,
     pub(super) upstream_sub_hash: String,
     pub(super) upstream_refresh_token_generation: i64,
     pub(super) upstream_refresh_token: String,
+    pub(super) original_authentication:
+        super::upstream_refresh_token_envelope::UpstreamRefreshAuthenticationContext,
     pub(super) upstream_connection_id: uuid::Uuid,
     pub(super) upstream_connection_identifier: String,
     pub(super) upstream_client_id: String,
     pub(super) upstream_auth_method: String,
     pub(super) upstream_client_secret: Option<String>,
+    pub(super) upstream_client_secret_encrypted: Option<Vec<u8>>,
 }
 
 struct AccountLinkIdentity {
@@ -43,6 +47,7 @@ struct AccountLinkIdentity {
 
 struct UpstreamClient {
     connection_id: uuid::Uuid,
+    configuration_version_id: uuid::Uuid,
     connection_identifier: String,
     client_id: String,
     auth_method: String,
@@ -66,20 +71,35 @@ pub(super) async fn load_upstream_refresh_link(
     let identity = rows::read_link_identity_from_row(&row, issuer_base)?;
     let upstream_refresh_token = rows::open_refresh_token_from_row(&row, &identity, issuer_base)?;
     let client = rows::read_upstream_client_from_row(&row, issuer_base)?;
+    let upstream_client_secret_encrypted = rows::read_encrypted_client_secret(&row, issuer_base)?;
     let upstream_client_secret =
         rows::open_optional_upstream_client_secret(&row, &identity, &client, issuer_base)?;
 
     Ok(UpstreamRefreshLink {
         account_link_id: identity.account_link_id,
         link_env_id: identity.environment_id,
+        configuration_version_id: client.configuration_version_id,
         upstream_issuer: identity.upstream_issuer,
         upstream_sub_hash: identity.upstream_sub_hash,
         upstream_refresh_token_generation: identity.refresh_token_generation,
-        upstream_refresh_token,
+        original_authentication: upstream_refresh_token.original,
+        upstream_refresh_token: upstream_refresh_token.refresh_token,
         upstream_connection_id: client.connection_id,
         upstream_connection_identifier: client.connection_identifier,
         upstream_client_id: client.client_id,
         upstream_auth_method: client.auth_method,
         upstream_client_secret,
+        upstream_client_secret_encrypted,
     })
+}
+
+#[cfg(test)]
+pub(in crate::web) fn fixture_upstream_refresh_caller(
+    user_id: String,
+    caller_client_id: String,
+) -> UpstreamRefreshCaller {
+    UpstreamRefreshCaller {
+        user_id,
+        caller_client_id,
+    }
 }

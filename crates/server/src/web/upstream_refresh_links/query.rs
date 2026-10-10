@@ -8,6 +8,7 @@ use sqlx::{postgres::PgRow, PgPool};
 const UPSTREAM_REFRESH_LINK_QUERY_ENV_AND_ISSUER: &str = r"
 SELECT al.id AS account_link_id,
        al.environment_id,
+       rt.configuration_version_id,
        al.upstream_issuer,
        al.upstream_sub_hash,
        al.upstream_refresh_token_generation,
@@ -32,6 +33,7 @@ LIMIT 2
 const UPSTREAM_REFRESH_LINK_QUERY_ENV_ONLY: &str = r"
 SELECT al.id AS account_link_id,
        al.environment_id,
+       rt.configuration_version_id,
        al.upstream_issuer,
        al.upstream_sub_hash,
        al.upstream_refresh_token_generation,

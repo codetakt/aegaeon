@@ -29,6 +29,24 @@ fn upstream_callback_database_mutations_use_one_transaction() -> TestResult {
     .test_context("bound callback persistence helper should exist")?;
 
     assert_ordered_markers(
+        callback_body,
+        &[
+            "consume_upstream_callback_context(",
+            "complete_bound_upstream_callback(",
+        ],
+        "upstream callback must consume the browser-bound context before completing authentication",
+    )?;
+    assert_ordered_markers(
+        completion_body,
+        &[
+            "validate_upstream_callback_issuer(",
+            "validate_and_hydrate_upstream_callback_connection(",
+            "perform_upstream_callback_exchange(",
+            "persist_bound_upstream_callback(",
+        ],
+        "upstream callback must validate the issuer, active connection and exchange before persistence",
+    )?;
+    assert_ordered_markers(
         persistence_body,
         &[
             "state.db_pool.begin().await",

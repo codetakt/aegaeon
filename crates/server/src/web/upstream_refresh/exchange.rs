@@ -17,6 +17,7 @@ use http::StatusCode;
 use reqwest::{Client, RequestBuilder, Response as ReqwestResponse};
 
 pub(super) struct UpstreamRefreshExchange {
+    pub(super) request_started_at: u64,
     pub(super) client: Client,
     pub(super) discovery: OidcDiscovery,
     pub(super) token_response: UpstreamTokenResponse,
@@ -239,11 +240,19 @@ pub(super) async fn perform_upstream_refresh_exchange(
             upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
         })?;
     let token_req = build_refresh_token_request(&client, &discovery, link, &auth_method, &form);
+    let request_started_at = super::super::now_epoch_secs().map_err(|_| {
+        upstream_exchange_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            issuer_base,
+            "refresh clock unavailable",
+        )
+    })?;
     let upstream_response = send_refresh_token_request(token_req, link, issuer_base).await?;
     let body = read_refresh_token_response_body(upstream_response, issuer_base).await?;
     let token_response = parse_validated_refresh_response(&body, issuer_base)?;
 
     Ok(UpstreamRefreshExchange {
+        request_started_at,
         client,
         discovery,
         token_response,

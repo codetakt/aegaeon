@@ -3,6 +3,7 @@
 // Production arithmetic; this module is identical with and without cfg(kani).
 pub mod upstream_deadline;
 pub mod upstream_issuer;
+pub mod upstream_refresh;
 
 #[cfg(not(kani))]
 mod standard {
