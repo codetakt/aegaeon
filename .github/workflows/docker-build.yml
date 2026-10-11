@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: docker-build-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -50,7 +52,9 @@ jobs:
           gzip -dc result | docker load
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -70,7 +74,9 @@ jobs:
             type=sha
 
       - name: Tag and push OCI image
-        if: github.event_name != 'pull_request'
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         run: |
           set -euo pipefail
           SRC_IMAGE="aegaeon:latest"
@@ -87,7 +93,9 @@ jobs:
           done <<<"${tags}"
 
       - name: Output image info
-        if: github.event_name != 'pull_request'
+        if: >-
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         run: |
           echo "Image pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/aegaeon-server"
           echo "Tags: ${{ steps.meta.outputs.tags }}"

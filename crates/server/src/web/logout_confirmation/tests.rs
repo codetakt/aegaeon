@@ -1,4 +1,5 @@
 mod browser;
+mod cookie_slot;
 mod fixture;
 mod rejection;
 mod retention;
@@ -15,6 +16,7 @@ async fn scenario(name: &str) -> TestResult {
     let result = async {
         let fixture = Fixture::new(&pool, &env).await?;
         match name {
+            "cookie_slot" => cookie_slot::replacement(&fixture).await,
             "browser" => browser::sessions(&fixture).await,
             "bindings" => rejection::bindings(&fixture).await,
             "admission" => rejection::admission(&fixture).await,
@@ -29,31 +31,41 @@ async fn scenario(name: &str) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_real_router_session_scope_and_get_post_parity() -> TestResult {
+async fn shared_redis_logout_confirmation_real_router_session_scope_and_get_post_parity(
+) -> TestResult {
     scenario("browser").await
 }
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_real_router_binding_expiry_replay_and_races() -> TestResult {
+async fn shared_redis_logout_confirmation_real_router_binding_expiry_replay_and_races() -> TestResult
+{
     scenario("bindings").await
 }
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_real_router_input_and_client_admission() -> TestResult {
+async fn shared_redis_logout_confirmation_real_router_input_and_client_admission() -> TestResult {
     scenario("admission").await
 }
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_bounded_admission_retains_decisions_and_prunes_expiry() -> TestResult {
+async fn shared_redis_logout_confirmation_bounded_admission_retains_decisions_and_prunes_expiry(
+) -> TestResult {
     scenario("retention").await
 }
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_fail_closed_storage_and_policy_changes() -> TestResult {
+async fn shared_redis_logout_confirmation_fail_closed_storage_and_policy_changes() -> TestResult {
     scenario("failures").await
 }
 #[tokio::test]
 #[ignore = "requires private PostgreSQL and Redis"]
-async fn logout_confirmation_preserves_upstream_relay_and_cookie_headers() -> TestResult {
+async fn shared_redis_logout_confirmation_preserves_upstream_relay_and_cookie_headers() -> TestResult
+{
     scenario("upstream").await
+}
+
+#[tokio::test]
+#[ignore = "requires private PostgreSQL and Redis"]
+async fn shared_redis_logout_confirmation_bounded_cookie_and_neutral_requester() -> TestResult {
+    scenario("cookie_slot").await
 }

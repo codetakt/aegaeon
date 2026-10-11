@@ -120,6 +120,8 @@ force-single-line = false
 known-first-party = ["aegaeon"]
 
 [tool.ruff.lint.per-file-ignores]
+# Fixed helpers load under source-specific package names; imports stay within that package.
+"scripts/perf/perf_source/*.py" = ["TID252"]
 "tests/**/*.py" = [
   "S101",     # assert — needed in tests
   "ANN",      # annotations — relaxed in tests

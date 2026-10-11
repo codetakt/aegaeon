@@ -37,6 +37,9 @@ impl IdToken {
             Error::InvalidRequest("ID token clock skew is outside representable time".into())
         })?;
 
+        if !crate::oidc::subject::is_valid_subject(&self.claims.sub) {
+            return Err(Error::InvalidToken);
+        }
         if self.claims.iss != ctx.issuer {
             return Err(Error::InvalidRequest("Invalid issuer".into()));
         }

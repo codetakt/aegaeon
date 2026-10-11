@@ -171,10 +171,19 @@ pub(super) fn finalize_introspection_response(
     body: Value,
     requesting_client: Option<&str>,
 ) -> Response {
-    if wants_jwt_introspection(headers) && state.cfg.jwt_runtime().introspection_enabled() {
-        return build_jwt_introspection_response(state, &body, requesting_client);
+    let active = body.get("active").and_then(Value::as_bool).unwrap_or(false);
+    let response =
+        if wants_jwt_introspection(headers) && state.cfg.jwt_runtime().introspection_enabled() {
+            build_jwt_introspection_response(state, &body, requesting_client)
+        } else {
+            let mut response = (StatusCode::OK, Json(body)).into_response();
+            util::apply_no_cache_headers(&mut response);
+            response
+        };
+    if response.status().is_success() {
+        crate::metrics_integration::MetricsIntegration::with_global(|metrics| {
+            metrics.record_introspection("access_token", active);
+        });
     }
-    let mut response = (StatusCode::OK, Json(body)).into_response();
-    util::apply_no_cache_headers(&mut response);
     response
 }

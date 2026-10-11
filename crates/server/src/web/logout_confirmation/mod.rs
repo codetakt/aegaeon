@@ -115,7 +115,7 @@ async fn initiate(
         HeaderValue::from_str(&format!("/logout/confirm?transaction={token}"))
             .map_err(|_| unavailable("continuation"))?,
     );
-    input::set_cookie(&mut response, &token, Some(&secret))?;
+    input::set_cookie(&mut response, Some(&secret))?;
     crate::util::apply_no_cache_headers(&mut response);
     response.headers_mut().insert(
         header::REFERRER_POLICY,
@@ -154,12 +154,12 @@ async fn show(
     }
     let secret = input::binding(&headers, token)?;
     let pending = storage::load(state, token, &secret).await?;
-    let client = validate(state, &pending.query)?;
+    validate(state, &pending.query)?;
     let browser = input::browser(state, &headers).await?;
     if !head {
         storage::present(state, &pending, &browser).await?;
     }
-    Ok(rendering::form(token, &browser, client.as_deref()))
+    Ok(rendering::form(token, &browser))
 }
 
 pub(super) async fn present(
@@ -226,7 +226,7 @@ async fn process_decision(
             Ok(response) | Err(response) => response,
         }
     };
-    input::set_cookie(&mut response, &fields.transaction, None)?;
+    input::set_cookie(&mut response, None)?;
     Ok(response)
 }
 

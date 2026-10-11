@@ -28,6 +28,10 @@ let
   '';
 in
 {
+  typescript = pkgs.mkShellNoCC {
+    packages = [ pkgs.nodejs_24 ];
+  };
+
   docs = pkgs.mkShellNoCC {
     packages = [
       (pkgs.python3.withPackages (pythonPackages: [
@@ -161,6 +165,9 @@ in
     packages = lib.unique (
       verificationTools
       ++ [
+        pkgs.openssl
+        pkgs.mbedtls
+        pkgs.pkg-config
         rustToolchain
         haclStar
         karamel

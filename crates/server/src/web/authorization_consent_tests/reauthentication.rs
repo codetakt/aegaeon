@@ -2,6 +2,7 @@
 use super::*;
 use std::collections::BTreeMap;
 mod negative;
+mod recovery;
 
 const PASSWORD: &str = "local-reauthentication-test-password";
 
@@ -175,8 +176,13 @@ async fn scenario(state: &AppState, sid: &str, mode: &str, existing: bool) -> Te
             ]),
         )
         .await?;
-    assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
-    let resume = page.location.ok_or("authorize return missing")?;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.body);
+    assert!(
+        page.location.is_none(),
+        "POST continuation must terminate the redirect chain"
+    );
+    let resume = continuation_destination(&page.body)?;
+    assert_eq!(resume, return_to, "the validated request must remain exact");
     if mode.starts_with("direct-expired-positive") {
         let req: crate::authcode::types::AuthorizationRequest =
             serde_urlencoded::from_str(resume.split_once('?').ok_or("query missing")?.1)?;

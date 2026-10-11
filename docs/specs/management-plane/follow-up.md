@@ -27,11 +27,11 @@ issuer immutability). The items below must be resolved before implementation rea
 
 ## Cryptography posture and future FIPS track (Phase 1 guidance)
 
-- Phase 1 の管理プレーンおよびデータプレーンは、既存の Verified Core と同じく EverCrypt/HACL\* を暗号基盤として採用する。実装は F\*/Low\*/KaRaMeL から抽出されたコンポーネントと EverCrypt の C 実装を前提とし、TLS/ハードウェア境界については運用レイヤーで制御する。
-- 実装上の暗号プロバイダ差し替えは抽象化レイヤーを通して設計しておくこと（例: keystore プラグインで OpenSSL FIPS Provider や AWS-LC FIPS ビルドに切り替えられるようにする）。
-- 現段階では FIPS 140-3 認証を取得していないため、FIPS が契約要件になった場合に備えて以下を検討課題として記録する:
-  1. FIPS モード用の暗号プロバイダ実装（OpenSSL FIPS Provider / AWS-LC FIPS 等）の評価と、EverCrypt からの切り替え条件整理。
-  2. 自己テスト (KAT)、ランダム生成器の初期化、禁止アルゴリズムの無効化など FIPS 動作要件を満たす初期化フローの追加。
-  3. FIPS モードをオンにした場合の Verified Core との整合性（証明済みコードが FIPS プロバイダをラップできるか、あるいは FIPS 時のみ別コードパスを使用するか）の検証。
-- これらの検討結果は `docs/program-management/initiatives/sdk/client-sdk-architecture.md` に反映し、FIPS 対応を将来課題として
-  `docs/program-management/roadmaps/future/future-projects.md` で追跡する。
+- The Phase 1 management plane and data plane adopt EverCrypt/HACL\* as their cryptographic foundation, as does the existing Verified Core. The implementation assumes components extracted from F\*/Low\*/KaRaMeL and the EverCrypt C implementation; the operational layer controls TLS and hardware boundaries.
+- Design cryptographic provider replacement through an abstraction layer (for example, allow a keystore plugin to switch to the OpenSSL FIPS Provider or an AWS-LC FIPS build).
+- FIPS 140-3 certification has not been obtained at this stage. Record the following topics for consideration in case FIPS becomes a contractual requirement:
+  1. Evaluate cryptographic provider implementations for FIPS mode (OpenSSL FIPS Provider / AWS-LC FIPS, etc.) and define the conditions for switching from EverCrypt.
+  2. Add an initialization flow that satisfies FIPS operating requirements, including self-tests (KAT), random generator initialization, and disabling prohibited algorithms.
+  3. Verify consistency with Verified Core when FIPS mode is enabled (whether proved code can wrap the FIPS provider or a separate code path is used only in FIPS mode).
+- Reflect the results in `docs/program-management/initiatives/sdk/client-sdk-architecture.md` and track FIPS support as future work in
+  `docs/program-management/roadmaps/future/future-projects.md`.

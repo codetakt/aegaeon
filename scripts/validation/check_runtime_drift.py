@@ -32,7 +32,6 @@ import json
 import pathlib
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
 from typing import Any, cast
 
 import yaml
@@ -154,7 +153,6 @@ def generate(data: dict[str, object]) -> ManifestRecord:
         }
 
     manifest: ManifestRecord = {
-        "generated": datetime.now(UTC).isoformat(),
         "files": files,
         "monitored_files": monitored_files,
     }

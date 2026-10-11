@@ -113,3 +113,67 @@ fn test_openid_scope_rejected_without_auth_session_context() -> TestResult {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn oidc_subject_format_refusal_preserves_authorization_code() -> TestResult {
+    let issuer = TokenIssuer::new_process_local_for_tests(Arc::new(InMemoryKeyManager::new()))
+        .with_oidc(Some(enabled_oidc_config()?));
+
+    let auth_req = AuthorizationRequest {
+        response_type: "code".to_string(),
+        client_id: "test_client".to_string(),
+        iss: None,
+        redirect_uri: Some("https://example.com/callback".to_string()),
+        resource: None,
+        authorization_details: None,
+        scope: Some("openid profile".to_string()),
+        state: Some("xyz".to_string()),
+        nonce: Some("nonce-123".to_string()),
+        code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string()),
+        code_challenge_method: Some("S256".to_string()),
+        request_uri: None,
+        request_object: None,
+        request_object_claims: None,
+        acr_values: None,
+        max_age: None,
+    };
+
+    let (code, _) = must_ok!(
+        issuer.issue_authorization_code_with_local_profile(AuthorizationCodeIssueInput {
+            auth_session_id: Some("auth-session-id-token-emission".to_string()),
+            ..AuthorizationCodeIssueInput::new(auth_req, "é".to_string(), true, 0)
+        }),
+        "authorization code",
+    );
+
+    let token_req = TokenRequest {
+        grant_type: "authorization_code".to_string(),
+        code: Some(code.clone()),
+        redirect_uri: Some("https://example.com/callback".to_string()),
+        client_id: "test_client".to_string(),
+        client_secret: Some("secret".to_string()),
+        refresh_token: None,
+        code_verifier: Some("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk".to_string()),
+        resource: None,
+        request_object_claims: None,
+    };
+
+    for asynchronous in [false, true] {
+        let response = if asynchronous {
+            issuer
+                .exchange_code_for_tokens_bound_with_grant_policy_async(
+                    token_req.clone(),
+                    None,
+                    None,
+                    true,
+                    true,
+                )
+                .await?
+        } else {
+            issuer.exchange_code_for_tokens(token_req.clone(), None)?
+        };
+        assert!(matches!(response, TokenResponse::Error { error, .. } if error == "server_error"));
+        assert!(issuer.code_store.try_get_code(&code)?.is_some());
+    }
+    Ok(())
+}

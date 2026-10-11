@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-01
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -119,7 +119,7 @@ Missing Origin does not assert that a stored transaction is expired or already u
 Each consent submission receives a server-generated `x-request-id`; structured warning events carry
 that identifier and a stable reason for Origin, session, snapshot, or transaction admission failures.
 Storage failures remain `503 temporarily_unavailable`. Authorization-code refusals log a stable
-reason including `state_reused` or `nonce_reused` with the authorization request identifier.
+reason with the authorization request identifier.
 Events do not include raw state, nonce, code, consent token, Request Object, or database payloads.
 The public OAuth error categories and redirect validation remain unchanged.
 
@@ -229,6 +229,106 @@ Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
 
+## OAuth Basic credential encoding
+
+RFC 6749 section 2.3.1 and Appendix B require each logical client ID and secret
+to be independently encoded with `application/x-www-form-urlencoded` before
+joining them with a colon and applying Basic base64 encoding. A space becomes
+`+`; a literal plus becomes `%2B`, a colon `%3A`, and a percent sign `%25`.
+UTF-8 bytes use percent encoding. For example, client ID `client+id` and secret
+`s: %` produce the pre-base64 value `client%2Bid:s%3A+%25`.
+
+Aegaeon's Basic authentication consumers split the decoded Basic payload at its
+first literal colon and decode each component exactly once. Malformed percent
+escapes and invalid UTF-8 fail authentication. Neither a decoding failure nor an
+authentication failure triggers a retry using raw credentials. Registrations
+continue to store logical credentials; do not rename clients or rewrite stored
+secrets to their encoded wire representation.
+
+Clients that previously sent raw reserved characters must switch to this RFC
+encoding. Ordinary generated credentials using ASCII letters, digits, hyphens
+and underscores continue to work unchanged. Aegaeon also encodes its configured
+logical credentials for Basic authentication on both upstream authorization-code
+and refresh-token requests. `client_secret_post` continues to use the request's
+normal form serialization. No storage migration or new configuration is needed.
+
+## PAR authentication and stored credentials
+
+Under RFC 9126 section 2.1, clients registered with `client_secret_basic`,
+`client_secret_post`, or `private_key_jwt` must authenticate at `/par` with their
+registered method. Disabling `requireClientAuthPar` or `requireClientAuthToken`
+does not waive that requirement. A client registered with `none` can push a
+request only when the PAR policy and downstream profile allow unauthenticated
+clients. Unknown clients and incorrect or multiple authentication methods fail
+before a request URI is stored.
+
+New PAR records contain the validated authorization request and the internal
+authentication outcome, without the plaintext `client_secret`. Later
+reservation and login continuation use this outcome without carrying a password
+forward; authorization still applies current client policy. This credential
+minimization does not redefine signed Request Object contents.
+
+Upgrade all PAR writers together. Older writers can still put plaintext secrets
+in Redis during a mixed-version rollout. Readers accept legacy records but
+discard their `client_secret`; reads and reservations do not scrub the existing
+Redis bytes. Existing records expire within their original configured
+`policy.parExpiresInSeconds` lifetime (default 90 seconds, maximum 600 seconds),
+measured from the last old-writer insertion. This change does not establish that
+an existing deployment has purged old secrets. Include retained Redis backups
+and snapshots in the deployment's credential-retention review. No key rotation,
+configuration change, or persistent schema migration is required by the format
+change itself.
+
+## RP state and nonce observations
+
+Distinct authorization transactions may carry the same admissible RP-supplied
+`state` or `nonce`, including requests from the same client. Aegaeon preserves
+both decoded values in their own authorization-code context, echoes `state` in
+the authorization response, and includes `nonce` in the ID Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
+sections 4.1.1, 4.1.2 and 10.12 and OpenID Connect Core sections 3.1.2.1 and
+3.1.3.7 leave the RP responsible for its state/nonce validation and
+unpredictability obligations. Existing required-presence, encoding, length and
+profile checks still apply.
+
+Redis and the process-local test backend retain distinct recently observed
+state/nonce markers. Successful repeated values refresh the existing marker's
+last-observation TTL and Redis sorted-index expiry. The TTL continues to derive
+from `policy.authorizationCodeTimeToLiveSeconds`. `try_state_count`,
+`try_nonce_count` and the historical `AuthCodeSnapshot.used_states`/`used_nonces`
+fields describe retained observations, not transaction totals, accepted code
+counts or prevented attacks. Membership never authorizes or rejects issuance.
+The public `AuthorizationCodeIssueError::StateUsed` and `NonceUsed` variants
+remain for source compatibility; normal issuance no longer emits them.
+
+Authorization codes remain distinct and single-use, bound to their original
+client, redirect URI and PKCE verifier. Repeating state/nonce does not permit
+reuse of a PAR handle or a signed Request Object's `jti`. The existing Redis
+code/PAR/JTI commit preflights version-counter and index errors before mutation.
+No extra replay store or configuration variable is introduced.
+
+Stored codes and the Redis keyspace remain readable without a flush, backfill
+or identifier change. Update every authorization-serving instance for consistent
+repeat acceptance: older instances still reject repeated values. Finite router
+and Redis regressions cover repeated values and transaction isolation; older
+proof-model assumptions of globally unique RP values are not evidence for this
+behavior and require separate reassessment.
+
+## Encrypted Request Object headers
+
+When Request Object encryption is configured, `/authorize` and `/par` accept a
+single RSA-OAEP/A256GCM compact JWE containing a signed compact Request Object.
+Its protected header must explicitly contain `alg: "RSA-OAEP"`,
+`enc: "A256GCM"`, and `cty: "JWT"`. The JWT content type also accepts
+`application/jwt` and ASCII case variants; no whitespace or media-type parameters
+are accepted. The inner signed Request Object still undergoes all normal client,
+key, signature, claims, redirect and PKCE validation before authorization.
+
+Clients with missing algorithm or content-type metadata must send a newly
+signed/encrypted valid request. Editing a protected header invalidates its
+authentication tag. This correction requires no database or key migration.
+See the [JOSE header policy](../policies/jose-header-policy.md#jwe-and-encrypted-request-objects)
+for library compatibility and generic non-JWT JWE behavior.
+
 ## RP-initiated logout confirmation
 
 Aegaeon policy always requests explicit browser confirmation for both GET and
@@ -248,10 +348,16 @@ A registered `client_id` alone can identify an exact registered
 A valid initial request responds with a 303 to `/logout/confirm`. It does not
 end sessions, create an upstream relay, send logout notifications or redirect to
 the RP. This extra top-level GET permits a browser returning from a cross-site
-POST to send its ordinary SameSite session cookie. A separate per-transaction
-`__Host-` cookie is Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain.
+POST to send its ordinary SameSite session cookie. A single fixed-name
+`__Host-aegaeon-logout` cookie is Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain.
 The transaction and cookie secrets are independent 32-byte random values; only
-their digests are stored. The continuation expires after five minutes.
+their digests are stored. The continuation expires after five minutes. Each accepted start replaces the
+cookie secret; only the transaction matching the browser's current cookie can
+proceed. Older tabs must restart. Concurrent responses can replace or clear the
+cookie and require a fresh request, but cannot approve a different transaction.
+This bounds confirmation-cookie storage to one slot. The page uses neutral
+requester wording: a public `client_id`, or possession of an ID Token hint,
+does not authenticate the party that initiated the browser request.
 
 The confirmation page binds its first display to the current browser session
 and subject, or explicitly to no active session. A changed session requires a
@@ -273,7 +379,7 @@ completed. Start a fresh logout request after recovery; the consumed decision
 cannot be replayed. This flow does not promise atomic remote logout or delivery
 retries. Only the relevant browser and confirmation cookies are cleared.
 
-Apply `20261001130000_logout_confirmations.sql` before running the updated
+Apply `20261012000000_logout_confirmations.sql` before running the updated
 server. Existing direct logout callers will now encounter confirmation. Replace
 all serving instances that can handle logout together: old instances retain
 the previous behavior, so the migration alone does not make a mixed deployment

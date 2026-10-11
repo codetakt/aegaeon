@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-ASAN_DIR=${ASAN_DIR:-$($(command -v clang) --print-resource-dir 2>/dev/null)/lib/linux}
-if [[ ! -d ${ASAN_DIR} ]]; then
-	echo "[FAIL] Unable to locate ASan runtime dir at ${ASAN_DIR}" >&2
-	exit 1
+# Special builtins precede imported functions in POSIX mode. Prove builtin is
+# unshadowed before using it to resolve the delegate; the main runner performs
+# the full inherited-function admission before invoking tools or helpers.
+POSIXLY_CORRECT=1
+if readonly -f builtin 2>/dev/null; then
+	sanitizer_entry_error=""
+	"${sanitizer_entry_error:?[FAIL] sanitizer execution requires external Python and no inherited shell functions}"
 fi
-
-export RUSTFLAGS="-Z sanitizer=address -C link-self-contained=no -C prefer-dynamic -C link-arg=-Wl,-rpath,${ASAN_DIR} -L native=${ASAN_DIR} -C target-feature=-avx2,-avx512ifma,-avx512vl,-avx512f,-avx512bw,-avx512dq --cfg curve25519_dalek_backend=\"serial\" ${RUSTFLAGS:-}"
-export RUSTDOCFLAGS="${RUSTFLAGS}"
-export SANITIZER_BUILD_EXTRA_ARGS="-Zbuild-std=std"
-export SANITIZER_FORCE_PRELOAD=0
-export SANITIZER_ADD_DYNAMIC_RT=1
-export SANITIZER_TARGET_DIR=${SANITIZER_TARGET_DIR:-target/sanitizers/build-std}
-
-exec "$(dirname "$0")/run_sanitizers.sh" "$@"
+# Reject lexical file aliases before they can select an unrelated sibling.
+if [[ -L ${BASH_SOURCE[0]} ]]; then
+	sanitizer_entry_error=""
+	"${sanitizer_entry_error:?[FAIL] Sanitizer script entrypoint must not be a file symlink}"
+fi
+sanitizer_script_dir=${BASH_SOURCE[0]%/*}
+[[ ${BASH_SOURCE[0]} == */* ]] || sanitizer_script_dir=.
+sanitizer_script_dir=$(builtin cd -- "$sanitizer_script_dir" && builtin pwd -P && builtin printf .) || exit 1
+sanitizer_script_dir=${sanitizer_script_dir%$'\n'.}
+if [[ -L $sanitizer_script_dir/run_sanitizers.sh ]]; then
+	sanitizer_entry_error=""
+	"${sanitizer_entry_error:?[FAIL] Sanitizer script entrypoint must not be a file symlink}"
+fi
+# The main runner supplies sanitizer flags; this route selects build-std only.
+SANITIZER_BUILD_EXTRA_ARGS="-Zbuild-std=std" \
+	SANITIZER_ADD_DYNAMIC_RT=1 \
+	SANITIZER_TARGET_DIR="${SANITIZER_TARGET_DIR:-target/sanitizers/build-std}" \
+	exec "$sanitizer_script_dir/run_sanitizers.sh" "$@"

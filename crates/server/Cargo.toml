@@ -18,7 +18,7 @@ openapi = ["dep:utoipa"]
 verified-claim = ["ffi/verified-claim", "aegaeon-jose/verified-claim"]
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(fuzzing)'] }
 
 [dependencies]
 ffi = { path = "../ffi", version = "0.9.0-beta", features = ["everparse_idtoken"] }

@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: oidc-kms-parity-${{ github.event.pull_request.number || github.ref }}
+  group: oidc-kms-parity-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -37,11 +37,14 @@ jobs:
           EAGER_SERVICE_LOADING: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Run OIDC AWS KMS parity lane
@@ -55,3 +58,10 @@ jobs:
           name: oidc-kms-parity
           path: artifacts/oidc-kms/
           if-no-files-found: warn
+
+      - name: Observe final disk capacity
+        if: always()
+        run: |
+          echo "Final disk capacity; peak usage was not measured."
+          df -h "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
+

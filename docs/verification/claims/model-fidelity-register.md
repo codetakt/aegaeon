@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-09-14
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -33,7 +33,7 @@ modules as grounding for `status: verified` entries.
 | `fstar/jose/Jose.Hmac_verification.fst` | `simplified` | Only the independent `ct_eq` comparison is cited by `7518-001`. The module's `verify` calls the placeholder `EverCrypt.HMAC.compute` and cannot ground HMAC or JWS signature verification. |
 | `fstar/par/Client_auth.fst` | `toy-stub` | Lines 5-14 define a toy in-memory registry for `client_a`; partial rows `9126-002` and `9700-004` may reference it, but verified rows must not. |
 | `fstar/par/Request_uri.fst` | `simplified` | Lines 62-72 model request URI issuance as a sequential counter; this preserves uniqueness reasoning but does not model RFC 9126 entropy. Runtime entropy remains evidenced by tests and runtime code. |
-| `fstar/dpop/Dpop.Htu_validation.fst` | `simplified` | `validate_htu` models only the final exact string comparison; the runtime (`crates/ffi/src/lib.rs` DPoP checks) additionally rejects `?`/`#` in the proof `htu` and strips query/fragment from the request URI before the modeled comparison. The trace for `9449-006` claims the comparison step; the normalization prefix remains evidenced by runtime tests. |
+| `fstar/dpop/Dpop.Htu_validation.fst` | `simplified` | `validate_htu` and `validate_dpop_htu_for_spec_oracle` model exact-string equality. Production DPoP checks call `crates/ffi/src/dpop_uri.rs` to parse and validate HTTP(S) URIs and apply RFC 3986 normalization before comparison, rejecting proof query/fragment and excluding valid request query/fragment. The `9449-006` trace covers only the exact-string oracle; it does not establish correspondence with runtime parsing, normalization, or signature-verification composition. Signed FFI regression tests exercise finite runtime examples. |
 | `fstar/stepup/StepUp.fst` | `simplified` | The F* module is a small pure model that binds a challenge to one immutable `session`. It does not model the runtime successor transfer during login session rotation (`crates/server/src/web/local_auth/post.rs` `complete_stepup_for_local_login`) or authorize-endpoint error responses. Its four lemmas are shallow properties discharged by definition unfolding with `()` proofs. |
 
 ## HMAC placeholder and comparison boundaries
@@ -111,6 +111,29 @@ on the foreign declarations. The `bytes_prefix_of_buffer` heap effects, copied
 contents and ownership, functional SHA-2 results, allocation/failure behavior,
 provider evidence and correspondence to production remain open. Both foreign
 entries remain `specified-not-attested` in `spec/assumption-register.json`.
+
+## Federation metadata policy correspondence
+
+`Jose.Federation.Policy.{Types,Merge,Order,Lemmas}` and their consumer
+`Jose.Federation` are classified as `simplified`. They remain historical policy
+algebra models, not a refinement of the current Rust metadata resolver.
+In particular, the model selects a descendant default instead of rejecting
+unequal defaults, uses `essential=true` without `value` as a conflict sentinel,
+and omits null deletion, JSON object/number set domains, operator-combination
+admission, immediate-superior metadata overlays and client scope conversion.
+Its restrictiveness lemmas do not establish the Rust application's behavior.
+The historical `Jose.Federation` anchor model also requires a nonoptional policy
+and an exact subordinate-policy match. Rust accepts an absent local pin while
+still resolving all signed policies; the model does not establish that admission
+behavior or PostgreSQL refresh revalidation under current anchor row locks.
+
+The runtime contract is recorded in the
+[Federation specification](../../specs/openid-federation-spec.md#metadata-policy-resolution)
+and the implemented `fed-rp-006` matrix row. That row cites implementation tests
+and no formal proof. Existing solver success remains evidence only for the
+identified models. Full-domain model/implementation correspondence and their
+composition obligations remain open; these classification corrections do not
+change a product requirement or discharge it.
 
 ## Review Rule
 
@@ -389,3 +412,63 @@ See [revision bounds](../kani/authorization-revision-bounds.md).
 `tests/fstar/property`, outside the `fstar/` model-fidelity catalog. It runs in
 a separate required control gate, not an additional admitted proof pass. Its
 source hashes and output are retained.
+
+## Upstream callback browser binding and consumption
+
+`OidcRp.BrowserBinding` and `OidcRp.BrowserBindingWitnesses` are `simplified`
+functional models of decoded snapshot admission, exact callback route/digest
+binding, byte-equality CAS, strict freshness at three clock observations, and
+consumption before code/error continuation. Decoder and cookie admission are
+supplier boundaries; the arbitrary hash function has no injectivity premise.
+The symbolic timestamps cover post-Unix seconds through u64 maximum and valid
+fractions; they do not model all platform `SystemTime` values or Lua encoding.
+The normal/error and final-fraction witnesses prevent vacuous reject-all models.
+A same-byte reinsertion witness records the absence of generation/tombstone
+protection. Single consumption requires no intervening insertion. See the
+[model/source contract](../oidc/upstream-browser-binding-fstar.md).
+
+The older `OidcRp.Transitions` and `OidcRp.Properties` are `simplified` as well.
+Their callback returns an authenticated record without updating the store;
+the single-use lemma applies to a separate update with uniqueness and session-ID
+preconditions. They omit browser digest and callback route checks, byte-CAS,
+independent clock observations, and production consumption before issuer/error
+handling. Their successful verification does not establish these runtime
+properties. `UpstreamRefresh` concerns account-link generation and connection
+currentness, a separate resource from authorization-state consumption.
+
+These classifications and model results do not establish Rust/Lua refinement,
+cryptographic entropy/collision resistance, Redis supplier behavior, browser
+cookie semantics, or released-artifact/full-system assurance.
+
+## Upstream issuer policy
+
+`fstar/federation/OidcRp.IssuerPolicy.fst` is `simplified`. It models exact string
+identity, profile/discovery policy freezing and versioned record admission.
+Its all-string functional lemmas are not a Rust, serde, URL parser, Redis or
+network refinement. See [scope and correspondence](../oidc/upstream-issuer-policy.md).
+The existing browser-binding model still receives issuer validation as a supplier;
+this module does not establish composition with that model or a release artifact.
+
+## Individual Federation cache timestamp ordering
+
+`Federation.PgRepo` remains `simplified`. The forward individual-cache migration
+removes the obsolete expiration-after-acquisition CHECK. Its model now permits
+retained rows with expiration at or before acquisition without changing either
+timestamp; uniqueness remains the entity-store invariant. Retrieval still
+requires `now < expires_at`, and cleanup removes expired rows. The existing six
+property families and the independent chain expiration/staleness contract remain.
+A focused lemma specifies exact single-row retention and non-reuse at acquisition.
+The theorem and harness require successful scoped tool runs before their
+statements may be treated as checked evidence for a particular revision.
+
+The F* timestamps are `nat`, while product repository timestamps use signed
+`i64` values and database timestamp precision. The companion Kani array store
+is bounded to four rows and 64-byte identifiers; it is a non-DB model. Its added
+`proof_entity_cache_retains_expired_acquisition` expresses insert/replacement, exact
+signed timestamps, uniqueness, strict non-reuse and cleanup for expiration at or
+before acquisition. Native model tests also exercise equal, earlier and extreme
+integer timestamps and tenant preservation. These checks do not prove SQL,
+transactions, clock conversion, JWS admission or production correspondence.
+Signed expiration caps are validated externally by statement admission and the
+refresh/cache wrappers. No matrix row is promoted and no product assurance
+obligation is discharged by this model alignment.

@@ -202,20 +202,6 @@ fn test_compute_hash() -> TestResult {
 }
 
 #[test]
-fn ps_algorithms_remain_disabled_before_runtime_dispatch() -> TestResult {
-    let err = require_err(
-        compute_hash("sample-access-token", "PS256"),
-        "PS256 should remain rejected by policy",
-    )?;
-
-    assert!(matches!(
-        err,
-        Error::InvalidRequest(ref msg) if msg.contains("temporarily disabled")
-    ));
-    Ok(())
-}
-
-#[test]
 fn finalize_hash_result_maps_invalid_algorithm_to_invalid_request() -> TestResult {
     let err = require_err(
         finalize_hash_result(
@@ -346,3 +332,6 @@ fn verified_claim_profile_rejects_null_digest_hash_runtime() -> TestResult {
     ));
     Ok(())
 }
+
+#[path = "tests/pss_hash.rs"]
+mod pss_hash_tests;

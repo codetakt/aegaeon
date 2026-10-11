@@ -200,13 +200,17 @@ impl IdTokenBuilder {
         }
     }
 
-    /// Create new ID token builder, reporting issuer or host-clock failures.
+    /// Create a new ID token builder, validating issuer, subject and host clock.
     ///
     /// # Errors
     ///
-    /// Returns an error when `issuer` is not an HTTPS issuer URL or the host
-    /// clock cannot be represented as a Unix timestamp.
+    /// Returns an error when `issuer` is not an HTTPS issuer URL, `subject` is
+    /// empty, non-ASCII or longer than 255 bytes, or the host clock cannot be
+    /// represented as a Unix timestamp.
     pub fn try_new(issuer: String, subject: String, client_id: String) -> Result<Self> {
+        if !super::subject::is_valid_subject(&subject) {
+            return Err(Error::ServerError("Invalid OIDC subject".to_string()));
+        }
         if !is_https_url(&issuer) {
             return Err(Error::ServerError(
                 "OIDC ID token builder requires an https issuer".to_string(),

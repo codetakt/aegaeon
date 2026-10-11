@@ -1,0 +1,49 @@
+name: Python Example Validation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  minimal-rp:
+    name: Minimal RP (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10.20", "3.13.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check validation failure controls
+        env:
+          PYTHONPATH: scripts/ci
+        run: >-
+          python -m unittest discover -s tests/ci
+          -p test_python_example_validation.py -v
+      - name: Validate installed example dependencies
+        run: >-
+          python scripts/ci/validate_python_example.py
+          --output "$RUNNER_TEMP/python-example-${{ matrix.python }}"
+      - name: Preserve dependency and validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-example-${{ matrix.python }}
+          path: |
+            ${{ runner.temp }}/python-example-${{ matrix.python }}/*.json
+            ${{ runner.temp }}/python-example-${{ matrix.python }}/*.log
+            ${{ runner.temp }}/python-example-${{ matrix.python }}/*.lock
+            ${{ runner.temp }}/python-example-${{ matrix.python }}/*.txt
+          if-no-files-found: error

@@ -1,4 +1,4 @@
-use super::{invalid, storage, unavailable, Browser};
+use super::{invalid, unavailable, Browser};
 use crate::web::{
     oidc_request_input::{admit_oidc_form, admit_oidc_query, OidcEndpoint, OidcParameters},
     request_admission::{enforce_content_type, DEFAULT_QUERY_LIMITS},
@@ -64,28 +64,24 @@ fn cookie(headers: &HeaderMap, name: &str) -> Result<Option<String>, Response> {
     Ok(found)
 }
 
-fn cookie_name(token: &str) -> String {
-    format!("__Host-aegaeon-logout-{}", storage::digest(token))
-}
+// A single cookie slot bounds browser storage even across repeated starts.
+// Replacing the secret makes older forms fail with the current browser cookie.
+const COOKIE_NAME: &str = "__Host-aegaeon-logout";
 
 pub(super) fn binding(headers: &HeaderMap, token: &str) -> Result<String, Response> {
     if !valid_token(token) {
         return Err(invalid());
     }
-    cookie(headers, &cookie_name(token))?
+    cookie(headers, COOKIE_NAME)?
         .filter(|v| valid_token(v))
         .ok_or_else(invalid)
 }
 
-pub(super) fn set_cookie(
-    response: &mut Response,
-    token: &str,
-    secret: Option<&str>,
-) -> Result<(), Response> {
+pub(super) fn set_cookie(response: &mut Response, secret: Option<&str>) -> Result<(), Response> {
     let max_age = if secret.is_some() { 300 } else { 0 };
     let value = format!(
         "{}={}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age={max_age}",
-        cookie_name(token),
+        COOKIE_NAME,
         secret.unwrap_or("")
     );
     response.headers_mut().append(

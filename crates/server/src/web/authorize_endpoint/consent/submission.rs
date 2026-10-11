@@ -92,15 +92,19 @@ async fn process(
     }
     let session = resolve_authorize_session_state(&decision, &state.issuer).await?;
     storage::decide(state, &session, &pending, choice).await?;
-    if choice == "deny" {
-        return Ok(super::error(
+    let response = if choice == "deny" {
+        super::error(
             state,
             &ctx,
             "access_denied",
             "the user denied this authorization",
-        ));
-    }
-    Ok(super::super::finish_authorization(state, ctx, &session).await)
+        )
+    } else {
+        super::super::finish_authorization(state, ctx, &session).await
+    };
+    Ok(crate::web::browser_continuation::authorization_response(
+        response,
+    ))
 }
 
 pub(in crate::web) async fn submit(

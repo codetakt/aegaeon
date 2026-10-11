@@ -9,3 +9,5 @@ pub use resolution::{
 };
 
 pub(crate) use resolution::{observe_downstream_profile_in_tx, resolve_downstream_profile_in_tx};
+
+pub(crate) use resolution::resolve_upstream_profile_in_tx;
