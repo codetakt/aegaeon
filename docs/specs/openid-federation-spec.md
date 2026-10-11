@@ -302,8 +302,9 @@ Refresh requests add no scope parameter or new granted-scope lineage check.
 Required `jwks_uri` plus optional inline signature-key consistency remains the
 key-source contract. Inline-only or `signed_jwks_uri` support, unconsumed
 UserInfo/registration fields, broader logout behavior, unsupported payload
-extensions, naming constraints, and the full numeric and cache-time domains
-remain separate obligations.
+extensions, and the full numeric and cache-time domains remain separate
+obligations. Naming constraints are enforced by the shared path check described
+in [Naming constraints](#naming-constraints).
 Key retrieval for an unfamiliar `kid` uses this same selected metadata context;
 the final fetched set must satisfy its retained inline-key constraint before
 signature and claim verification. These checks do not establish whole-product
