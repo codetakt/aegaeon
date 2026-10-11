@@ -21,7 +21,6 @@ fn federation_metadata_string<'a>(metadata: &'a Value, key: &str) -> Result<&'a 
     metadata
         .get(key)
         .and_then(Value::as_str)
-        .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!("federation openid_provider metadata missing {key}"))
 }
@@ -100,77 +99,99 @@ fn jwks_signature_key_identities(jwks: &JwkSet) -> HashSet<String> {
         .collect()
 }
 
-pub(in crate::web) fn validate_upstream_jwks_matches_federation_metadata(
-    fetched_jwks: &JwkSet,
-    metadata: &Value,
-) -> Result<(), String> {
+/// Parse the optional constraint before any operation can send credentials.
+/// Store identities from this selected context; later cache changes cannot
+/// replace the constraint used by an in-progress token exchange.
+fn parse_inline_signing_keys(metadata: &Value) -> Result<Option<HashSet<String>>, String> {
     let Some(inline_jwks) = metadata.get("jwks").filter(|value| !value.is_null()) else {
-        return Ok(());
+        return Ok(None);
     };
-
-    let metadata_jwks = JwkSet::from_value(inline_jwks.clone())
+    let metadata_jwks = super::jwks::parse_upstream_jwks_value(inline_jwks.clone())
         .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
     metadata_jwks
         .ensure_unique_kid()
         .map_err(|err| format!("federation openid_provider jwks invalid: {err}"))?;
-    fetched_jwks
-        .ensure_unique_kid()
-        .map_err(|err| format!("upstream jwks invalid: {err}"))?;
     let expected = jwks_signature_key_identities(&metadata_jwks);
     if expected.is_empty() {
         return Err("federation openid_provider jwks has no signature keys".to_string());
     }
-    let fetched = jwks_signature_key_identities(fetched_jwks);
-    if fetched == expected {
+    Ok(Some(expected))
+}
+
+fn validate_signing_key_constraint(
+    fetched_jwks: &JwkSet,
+    expected: &HashSet<String>,
+) -> Result<(), String> {
+    fetched_jwks
+        .ensure_unique_kid()
+        .map_err(|err| format!("upstream jwks invalid: {err}"))?;
+    if jwks_signature_key_identities(fetched_jwks) == *expected {
         Ok(())
     } else {
         Err("upstream JWKS does not match federation openid_provider metadata".to_string())
     }
 }
 
-async fn resolve_upstream_federation_metadata(
+#[cfg(test)]
+pub(in crate::web) fn validate_upstream_jwks_matches_federation_metadata(
+    fetched_jwks: &JwkSet,
+    metadata: &Value,
+) -> Result<(), String> {
+    if let Some(expected) = parse_inline_signing_keys(metadata)? {
+        validate_signing_key_constraint(fetched_jwks, &expected)?;
+    }
+    Ok(())
+}
+
+async fn resolve_upstream_federation_metadata<F, Fut>(
     state: &AppState,
     upstream_issuer: &str,
     environment_id: uuid::Uuid,
     issuer_base: &str,
-) -> Result<Option<Value>, Response> {
+    mut acquire: F,
+) -> Result<Option<Value>, Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
     let anchor_repo = state.federation.trust_anchors.as_ref();
     let chain_cache = state.federation.chain_cache.as_ref();
+    let stored = anchor_repo
+        .list_for_environment(environment_id)
+        .await
+        .map_err(|_| {
+            upstream_federation_gateway_error(
+                issuer_base,
+                "failed to load federation trust anchors",
+            )
+        })?;
+    // Only an actual empty repository result permits ordinary Discovery.
+    // A downstream error with similar wording is never an absence signal.
+    if stored.is_empty() {
+        return Ok(None);
+    }
+    let anchors = stored
+        .iter()
+        .map(crate::federation::StoredTrustAnchor::to_trust_anchor)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| {
+            upstream_federation_gateway_error(issuer_base, "invalid federation trust anchor")
+        })?;
 
     let now_epoch_secs = now_epoch_secs().map_err(|_| {
         upstream_federation_gateway_error(issuer_base, "failed to read system clock")
     })?;
-    let leaf_entity_id = upstream_issuer.to_string();
     let now_epoch = now_epoch_secs.cast_signed();
-    let outbound_allowed_domains = state
-        .federation
-        .cache_config
-        .outbound_allowed_domains
-        .clone();
-    let chain_result = crate::federation::resolve_trust_chain_artifacts_cached_with(
+    let chain_result = crate::federation::resolve_trust_chain_jwts_cached_with(
         upstream_issuer,
         environment_id,
-        anchor_repo,
+        anchors,
         chain_cache,
         &state.federation.cache_config,
         now_epoch,
-        move |trust_anchors| {
-            let outbound_allowed_domains = outbound_allowed_domains.clone();
-            let leaf_entity_id = leaf_entity_id.clone();
-            async move {
-                let fetcher =
-                    crate::federation::HttpFederationFetcher::try_with_optional_allowed_domains(
-                        &outbound_allowed_domains,
-                    )?;
-                crate::federation::resolve_trust_chain_with_jwts(
-                    &leaf_entity_id,
-                    &trust_anchors,
-                    &fetcher,
-                    now_epoch,
-                )
-                .await
-            }
-        },
+        |anchors| acquire(anchors, now_epoch),
     )
     .await;
     admit_upstream_federation_metadata(chain_result, issuer_base)
@@ -182,11 +203,6 @@ pub(crate) fn admit_upstream_federation_metadata(
 ) -> Result<Option<Value>, Response> {
     let chain = match chain_result {
         Ok(chain) => chain,
-        Err(crate::federation::FederationError::ChainResolution(reason))
-            if reason == "no trust anchors configured for this environment" =>
-        {
-            return Ok(None);
-        }
         Err(_) => {
             return Err(upstream_federation_gateway_error(
                 issuer_base,
@@ -227,56 +243,90 @@ pub(crate) fn admit_upstream_federation_metadata(
     }
 }
 
-pub(in crate::web) async fn verify_upstream_federation_metadata(
+/// Selected metadata and its inline-key constraint belong to one operation.
+/// Construction is private; raw signed chain admission remains the authority.
+pub(in crate::web) struct EffectiveUpstreamMetadata {
+    pub(in crate::web) discovery: OidcDiscovery,
+    inline_signing_keys: Option<HashSet<String>>,
+}
+
+impl EffectiveUpstreamMetadata {
+    pub(in crate::web) fn validate_signing_keys(
+        &self,
+        jwks: &JwkSet,
+        issuer_base: &str,
+    ) -> Result<(), Response> {
+        if let Some(expected) = self.inline_signing_keys.as_ref() {
+            validate_signing_key_constraint(jwks, expected).map_err(|_| {
+                upstream_federation_gateway_error(
+                    issuer_base,
+                    "upstream JWKS does not match federation metadata",
+                )
+            })?;
+        }
+        Ok(())
+    }
+}
+
+pub(in crate::web) async fn resolve_upstream_metadata_with<F, Fut>(
     state: &AppState,
     upstream_issuer: &str,
     environment_id: uuid::Uuid,
-    discovery: &OidcDiscovery,
-    jwks: Option<&JwkSet>,
+    discovery: OidcDiscovery,
     issuer_base: &str,
-) -> Result<(), Response> {
-    let Some(metadata) =
-        resolve_upstream_federation_metadata(state, upstream_issuer, environment_id, issuer_base)
-            .await?
-    else {
-        return Ok(());
+    acquire: F,
+) -> Result<EffectiveUpstreamMetadata, Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
+    let metadata = resolve_upstream_federation_metadata(
+        state,
+        upstream_issuer,
+        environment_id,
+        issuer_base,
+        acquire,
+    )
+    .await?;
+    let Some(metadata) = metadata else {
+        return Ok(EffectiveUpstreamMetadata {
+            discovery,
+            inline_signing_keys: None,
+        });
     };
-
-    validate_upstream_discovery_matches_federation_metadata(discovery, upstream_issuer, &metadata)
+    validate_upstream_discovery_matches_federation_metadata(&discovery, upstream_issuer, &metadata)
         .map_err(|_| {
             upstream_federation_gateway_error(
                 issuer_base,
                 "upstream discovery does not match federation metadata",
             )
         })?;
-
-    if let Some(jwks) = jwks {
-        validate_upstream_jwks_matches_federation_metadata(jwks, &metadata).map_err(|_| {
-            upstream_federation_gateway_error(
-                issuer_base,
-                "upstream JWKS does not match federation metadata",
-            )
-        })?;
-    }
-
-    Ok(())
+    // Deserialize only the resolved signed OP object: missing/deleted fields are
+    // not restored from independently fetched Discovery.
+    let effective: OidcDiscovery = serde_json::from_value(metadata.clone()).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "resolved federation OP metadata invalid")
+    })?;
+    let inline_signing_keys = parse_inline_signing_keys(&metadata).map_err(|_| {
+        upstream_federation_gateway_error(issuer_base, "federation openid_provider jwks invalid")
+    })?;
+    Ok(EffectiveUpstreamMetadata {
+        discovery: effective,
+        inline_signing_keys,
+    })
 }
 
-pub(in crate::web) async fn verify_upstream_federation_metadata_blocking(
-    state: AppState,
-    upstream_issuer: String,
-    environment_id: uuid::Uuid,
-    discovery: OidcDiscovery,
-    jwks: Option<JwkSet>,
-    issuer_base: String,
-) -> Result<(), Response> {
-    verify_upstream_federation_metadata(
-        &state,
-        &upstream_issuer,
-        environment_id,
-        &discovery,
-        jwks.as_ref(),
-        &issuer_base,
-    )
-    .await
+/// Only transport acquisition is replaceable. The common cache boundary still
+/// checks every raw signed path independently before effective metadata exists.
+pub(in crate::web) async fn acquire_upstream_federation_chain(
+    state: &AppState,
+    issuer: &str,
+    anchors: Vec<crate::federation::TrustAnchor>,
+    now: i64,
+) -> Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError> {
+    let fetcher = crate::federation::HttpFederationFetcher::try_with_optional_allowed_domains(
+        &state.federation.cache_config.outbound_allowed_domains,
+    )?;
+    crate::federation::resolve_trust_chain_with_jwts(issuer, &anchors, &fetcher, now).await
 }

@@ -5,9 +5,7 @@ use super::upstream_id_token::{
     admit_upstream_id_token_header, refreshed_upstream_id_token_signature_failure,
     validate_upstream_id_token, verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
 };
-use super::upstream_metadata::{
-    fetch_upstream_jwks_cached, verify_upstream_federation_metadata_blocking,
-};
+use super::upstream_metadata::fetch_upstream_jwks_cached;
 use super::upstream_refresh_links::{
     authenticate_upstream_refresh_caller, load_upstream_refresh_link, UpstreamRefreshLink,
     UpstreamRefreshQuery,
@@ -26,7 +24,7 @@ use std::net::SocketAddr;
 use crate::oidc::IdToken;
 use crate::util;
 
-mod exchange;
+pub(super) mod exchange;
 mod persistence;
 mod profile;
 mod runtime_version;
@@ -39,14 +37,13 @@ pub(super) use profile::validate_upstream_refresh_profile_policy;
 
 async fn fetch_upstream_refresh_jwks(
     state: &AppState,
-    link: &UpstreamRefreshLink,
     issuer_base: &str,
     exchange: &UpstreamRefreshExchange,
     id_token_str: &str,
 ) -> Result<aegaeon_jose::jwk::JwkSet, Response> {
     let header = admit_upstream_id_token_header(
         id_token_str,
-        &exchange.discovery,
+        &exchange.metadata.discovery,
         state.cfg.jose_header_max_len,
     )
     .map_err(refreshed_upstream_id_token_signature_failure)
@@ -60,22 +57,16 @@ async fn fetch_upstream_refresh_jwks(
     })?;
     let jwks = fetch_upstream_jwks_cached(
         &exchange.client,
-        &exchange.discovery.jwks_uri,
+        &exchange.metadata.discovery.jwks_uri,
         &state.upstream.jwks_cache,
         &state.upstream.jwks_fetches,
         &header,
         state.cfg.upstream().outbound_allowed_domains(),
         |candidate| async move {
-            verify_upstream_federation_metadata_blocking(
-                state.clone(),
-                link.upstream_issuer.clone(),
-                link.link_env_id,
-                exchange.discovery.clone(),
-                Some(candidate),
-                issuer_base.to_string(),
-            )
-            .await
-            .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
+            exchange
+                .metadata
+                .validate_signing_keys(&candidate, issuer_base)
+                .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
         },
     )
     .await
@@ -90,7 +81,7 @@ async fn fetch_upstream_refresh_jwks(
     Ok(jwks)
 }
 
-async fn validate_upstream_refresh_exchange(
+pub(super) async fn validate_upstream_refresh_exchange(
     state: &AppState,
     issuer_base: &str,
     link: &UpstreamRefreshLink,
@@ -99,21 +90,14 @@ async fn validate_upstream_refresh_exchange(
     let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
         return Ok(());
     };
-    let jwks =
-        fetch_upstream_refresh_jwks(state, link, issuer_base, exchange, id_token_str).await?;
-    verify_upstream_federation_metadata_blocking(
-        state.clone(),
-        link.upstream_issuer.clone(),
-        link.link_env_id,
-        exchange.discovery.clone(),
-        Some(jwks.clone()),
-        issuer_base.to_string(),
-    )
-    .await?;
+    let jwks = fetch_upstream_refresh_jwks(state, issuer_base, exchange, id_token_str).await?;
+    exchange
+        .metadata
+        .validate_signing_keys(&jwks, issuer_base)?;
     let (claims, alg_name) = verify_upstream_id_token_claims(
         id_token_str,
         &jwks,
-        &exchange.discovery,
+        &exchange.metadata.discovery,
         state.cfg.jose_header_max_len,
     )
     .map_err(|error| {

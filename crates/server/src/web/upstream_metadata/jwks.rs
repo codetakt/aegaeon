@@ -24,6 +24,10 @@ pub(in crate::web) fn parse_upstream_jwks_body(body: &[u8]) -> Result<JwkSet, St
     })?;
     let value = serde_json::from_slice::<Value>(body)
         .map_err(|_| "upstream jwks response invalid".to_string())?;
+    parse_upstream_jwks_value(value)
+}
+
+pub(super) fn parse_upstream_jwks_value(value: Value) -> Result<JwkSet, String> {
     let jwks = JwkSet::from_value(value).map_err(|_| "upstream jwks invalid".to_string())?;
     jwks.ensure_unique_kid()
         .map_err(|_| "upstream jwks invalid".to_string())?;

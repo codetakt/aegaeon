@@ -5374,6 +5374,26 @@ openid_federation_rp:
   - Management refresh targets the cached anchor and revalidates current keys, pin and time under anchor row locks before renewal and success audit; regression controls change or remove the anchor during acquisition.
   - Live OIDC authority, complete critical/constraint processing, original numeric precision and full-chain cache temporal domains remain separate obligations; no formal proof or product assurance is claimed.
 
+- id: fed-rp-008
+  section: '5.1.3 (Federation 1.0), 5.1.2 (Connect 1.1), 6.1.4, 10.2'
+  requirement: MUST
+  description: Upstream OIDC operations consume resolved OP metadata before credentials and retain one metadata context through token verification
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/authorize.rs
+  - crates/server/src/web/management/tests/upstream_metadata/callback.rs
+  - crates/server/src/web/management/tests/upstream_metadata/refresh.rs
+  - crates/server/src/web/management/tests/upstream_metadata/inline_jwks.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Current configured anchors never downgrade after errors. Derived metadata does not replace raw evidence or ordinary Discovery cache entries.
+  - Exact required issuer/endpoint agreement with independent Discovery and the retained refresh code/provider guard are local Aegaeon restrictions.
+  - Tests use signed direct and multiple-superior acquisition plus cache paths and real loopback token calls; acquisition seams retain raw signature/policy admission. DB lifecycle, external HTTPS transport and sibling composition are not newly executed by these tests.
+  - Inline JWKS schema, unique present kid values, signature-key availability and canonical public-key encodings are checked before credentials; the selected key identities constrain later fetched keys, including unfamiliar-kid refresh.
+  - Captured callback requirements are preserved; no fresh local-profile query, atomic revocation, granted-scope lineage, new OP key-source feature, full Federation conformance or formal proof claim.
+
 openid_federation_op:
 - id: fed-op-001
   section: '3.1'

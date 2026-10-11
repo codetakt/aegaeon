@@ -85,6 +85,24 @@ pub(in crate::web) fn validate_upstream_discovery(
     upstream_auth_method: &str,
     allowed_domains: &[String],
 ) -> Result<(), String> {
+    validate_upstream_discovery_requirements(
+        discovery,
+        issuer,
+        profile.require_pkce,
+        profile.require_iss_parameter,
+        upstream_auth_method,
+        allowed_domains,
+    )
+}
+
+pub(in crate::web) fn validate_upstream_discovery_requirements(
+    discovery: &OidcDiscovery,
+    issuer: &str,
+    require_pkce: bool,
+    require_iss_parameter: bool,
+    upstream_auth_method: &str,
+    allowed_domains: &[String],
+) -> Result<(), String> {
     validate_discovery_issuer(discovery, issuer)?;
     validate_upstream_metadata_endpoint(
         &discovery.authorization_endpoint,
@@ -104,14 +122,14 @@ pub(in crate::web) fn validate_upstream_discovery(
     let response_type_supported = discovery
         .response_types_supported
         .iter()
-        .any(|value| oauth_profile::normalize_response_type(value).as_str() == "code");
+        .any(|value| value == "code");
     if !response_type_supported {
         return Err("upstream discovery does not support response_type=code".to_string());
     }
     if let Some(grant_types) = discovery.grant_types_supported.as_ref() {
         let supported = grant_types
             .iter()
-            .any(|value| value.eq_ignore_ascii_case("authorization_code"));
+            .any(|value| value == "authorization_code");
         if !supported {
             return Err("upstream discovery missing authorization_code grant".to_string());
         }
@@ -119,26 +137,23 @@ pub(in crate::web) fn validate_upstream_discovery(
     // Validate that the upstream IdP supports the connection's auth method.
     // Per RFC 8414 Section 2, the default when absent is ["client_secret_basic"].
     if let Some(methods) = discovery.token_endpoint_auth_methods_supported.as_ref() {
-        if !methods
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case(upstream_auth_method))
-        {
+        if !methods.iter().any(|value| value == upstream_auth_method) {
             return Err(format!(
                 "upstream discovery does not support {upstream_auth_method} auth"
             ));
         }
-    } else if !upstream_auth_method.eq_ignore_ascii_case("client_secret_basic") {
+    } else if upstream_auth_method != "client_secret_basic" {
         // Absent means only client_secret_basic (RFC 8414 default).
         return Err(format!(
             "upstream discovery does not support {upstream_auth_method} auth (default is client_secret_basic)"
         ));
     }
-    if profile.require_iss_parameter
+    if require_iss_parameter
         && discovery.authorization_response_iss_parameter_supported != Some(true)
     {
         return Err("upstream discovery does not support iss parameter".to_string());
     }
-    if profile.require_pkce
+    if require_pkce
         && !discovery
             .code_challenge_methods_supported
             .as_ref()
