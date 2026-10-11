@@ -391,3 +391,20 @@ impl Fixture {
         Ok(())
     }
 }
+
+impl Fixture {
+    pub fn set_allowed_entity_types(
+        &self,
+        chain: &mut ResolvedTrustChain,
+        subordinate: usize,
+        allowed: &[&str],
+    ) {
+        let index = subordinate * 2 + 1;
+        chain.trust_chain.chain[index].constraints = Some(crate::federation::Constraints {
+            allowed_entity_types: Some(allowed.iter().map(|value| (*value).into()).collect()),
+            ..crate::federation::Constraints::default()
+        });
+        let value = serde_json::to_value(&chain.trust_chain.chain[index]).unwrap();
+        chain.chain_jwts[index] = signed(&self.keys[subordinate + 1], &value);
+    }
+}
