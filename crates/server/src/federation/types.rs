@@ -64,14 +64,33 @@ impl EntityStatement {
 }
 
 /// Trust chain constraints.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Constraints {
     /// Maximum path length from this entity to the leaf.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_path_length: Option<u32>,
-    /// Allowed leaf entity types.
+    /// Standard metadata type filter. `federation_entity` is always retained
+    /// and must not occur in this list. An empty list excludes all other types.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_entity_types: Option<Vec<String>>,
+    /// Local any-match restriction on the original leaf-declared types.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_leaf_entity_types: Option<Vec<String>>,
+}
+
+impl Constraints {
+    pub(in crate::federation) fn validate(&self) -> Result<(), FederationError> {
+        if self.allowed_entity_types.as_ref().is_some_and(|types| {
+            types
+                .iter()
+                .any(|entity_type| entity_type == "federation_entity")
+        }) {
+            return Err(FederationError::Validation(
+                "allowed_entity_types must not include federation_entity".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Trust mark reference.
@@ -195,7 +214,7 @@ impl TrustChain {
             .ok_or_else(|| FederationError::Validation("trust chain is empty".into()))
     }
 
-    /// Resolve policies, overlay immediate-superior metadata, then apply once.
+    /// Resolve policies, overlay superior metadata, filter entity types, then apply.
     ///
     /// Requires a cryptographically verified canonical alternating C/S/C path.
     /// Typed construction alone does not authenticate statements. This method
@@ -206,6 +225,16 @@ impl TrustChain {
     /// Returns an error for malformed layout, policy or resulting metadata.
     pub fn resolved_metadata(&self) -> Result<Option<HashMap<String, Value>>, FederationError> {
         self.validate_metadata_layout()?;
+        let constraints: Vec<_> = self
+            .chain
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .filter_map(|statement| statement.constraints.as_ref())
+            .collect();
+        for constraint in &constraints {
+            constraint.validate()?;
+        }
         let policies = self
             .chain
             .iter()
@@ -237,6 +266,17 @@ impl TrustChain {
                 }
             }
         }
+        // Restrict the derived view only, after the immediate-S overlay and
+        // before policy application. Every original policy was validated above.
+        resolved.retain(|entity_type, _| {
+            entity_type == "federation_entity"
+                || constraints.iter().all(|constraint| {
+                    constraint
+                        .allowed_entity_types
+                        .as_ref()
+                        .is_none_or(|allowed| allowed.contains(entity_type))
+                })
+        });
         for (entity_type, metadata) in &mut resolved {
             *metadata = apply_resolved(
                 metadata,

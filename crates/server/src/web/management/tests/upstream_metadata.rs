@@ -52,3 +52,5 @@ fn fail_acquisition(
         "unexpected fresh acquisition".into(),
     )))
 }
+
+mod entity_types;

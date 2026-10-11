@@ -467,3 +467,42 @@ fn signed_profile_header_bans_do_not_depend_on_generic_unknown_header_rejection(
         br#"{"ordinary_extension":null}"#,
     ));
 }
+
+#[test]
+fn signed_constraint_shapes_and_entity_types_roundtrip() {
+    let _guard = raw_json_env_guard();
+    let mut claims = payload(false);
+    for allowed in [json!([]), json!(["Custom", "custom", "Custom"])] {
+        claims["constraints"] = json!({"allowed_entity_types": allowed, "unknown_extension": null});
+        let jwt = signed(&claims);
+        let parsed = must_ok(parse_entity_statement_unverified(&jwt));
+        let verified = accept(&claims);
+        for statement in [parsed, verified] {
+            let roundtrip = must_ok(serde_json::to_value(statement));
+            assert_eq!(roundtrip["constraints"]["allowed_entity_types"], allowed);
+        }
+    }
+    for field in [
+        "allowed_entity_types",
+        "allowed_leaf_entity_types",
+        "max_path_length",
+    ] {
+        for value in [Value::Null, json!(true), json!({}), json!("wrong")] {
+            claims["constraints"] = json!({field:value});
+            reject(&claims);
+        }
+    }
+    for value in [
+        json!([1]),
+        json!(["custom", null]),
+        json!(["federation_entity"]),
+    ] {
+        claims["constraints"] = json!({"allowed_entity_types":value});
+        reject(&claims);
+    }
+    claims["constraints"] = json!({"allowed_leaf_entity_types":[1]});
+    reject(&claims);
+    claims["constraints"] =
+        json!({"max_path_length":0,"allowed_entity_types":[],"allowed_leaf_entity_types":[]});
+    accept(&claims);
+}
