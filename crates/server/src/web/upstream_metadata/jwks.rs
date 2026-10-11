@@ -70,14 +70,19 @@ async fn fetch_upstream_jwks(
     parse_upstream_jwks_body(&body)
 }
 
-pub(in crate::web) async fn fetch_upstream_jwks_cached(
+pub(in crate::web) async fn fetch_upstream_jwks_cached<F, Fut>(
     client: &Client,
     jwks_uri: &str,
     cache: &NonAuthoritativeMetadataCache<JwkSet>,
     coordinator: &UpstreamJwksFetchCoordinator,
     header: &AdmittedUpstreamIdTokenHeader,
     allowed_domains: &[String],
-) -> Result<JwkSet, String> {
+    validate_fetched: F,
+) -> Result<JwkSet, String>
+where
+    F: FnOnce(JwkSet) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
     // Policy is checked even on cache hits, and the JWT never supplies a retrieval URL.
     validate_upstream_outbound_url(jwks_uri, "upstream jwks_uri", allowed_domains)?;
     if let Some(cached) = cache.try_get(jwks_uri)? {
@@ -106,6 +111,10 @@ pub(in crate::web) async fn fetch_upstream_jwks_cached(
     // releases in-flight ownership; the map keeps the cooldown until it is eligible to prune.
     *last_attempt = Some(now);
     let jwks = fetch_upstream_jwks(client, jwks_uri, allowed_domains).await?;
+    // Keep the candidate private while the caller checks its Federation binding.
+    // Rejection or cancellation preserves the previous set and its original TTL.
+    // The URL slot remains locked so waiters cannot observe an unadmitted set.
+    validate_fetched(jwks.clone()).await?;
     cache.try_insert(jwks_uri, jwks.clone())?;
     Ok(jwks)
 }

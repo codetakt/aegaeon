@@ -216,6 +216,11 @@ async fn fetch_upstream_callback_jwks(
         &state.upstream.jwks_fetches,
         &header,
         allowed_domains,
+        |candidate| async move {
+            verify_upstream_callback_federation(state, request, discovery, &candidate, issuer_base)
+                .await
+                .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
+        },
     )
     .await
     .map_err(|message| {

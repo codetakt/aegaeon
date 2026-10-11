@@ -39,6 +39,7 @@ pub(super) use profile::validate_upstream_refresh_profile_policy;
 
 async fn fetch_upstream_refresh_jwks(
     state: &AppState,
+    link: &UpstreamRefreshLink,
     issuer_base: &str,
     exchange: &UpstreamRefreshExchange,
     id_token_str: &str,
@@ -64,6 +65,18 @@ async fn fetch_upstream_refresh_jwks(
         &state.upstream.jwks_fetches,
         &header,
         state.cfg.upstream().outbound_allowed_domains(),
+        |candidate| async move {
+            verify_upstream_federation_metadata_blocking(
+                state.clone(),
+                link.upstream_issuer.clone(),
+                link.link_env_id,
+                exchange.discovery.clone(),
+                Some(candidate),
+                issuer_base.to_string(),
+            )
+            .await
+            .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
+        },
     )
     .await
     .map_err(|message| {
@@ -86,7 +99,8 @@ async fn validate_upstream_refresh_exchange(
     let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
         return Ok(());
     };
-    let jwks = fetch_upstream_refresh_jwks(state, issuer_base, exchange, id_token_str).await?;
+    let jwks =
+        fetch_upstream_refresh_jwks(state, link, issuer_base, exchange, id_token_str).await?;
     verify_upstream_federation_metadata_blocking(
         state.clone(),
         link.upstream_issuer.clone(),

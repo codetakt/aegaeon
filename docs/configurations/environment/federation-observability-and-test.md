@@ -69,8 +69,10 @@ It does not evict an in-flight or cooling-down slot to admit another URL. At
 capacity it rejects new retrievals while allowing compatible cache hits; idle
 slots become eligible for removal when their cooldown expires. The existing
 `policy.upstreamJwksCacheTtlSeconds` controls key-set freshness. Successful
-retrieval replaces the set, without retaining withdrawn keys. Invalid responses
-leave a still-fresh previous set intact without renewing its TTL. RSA `n`/`e` and
+retrieval replaces the set only after caller-specific Federation binding succeeds,
+without retaining withdrawn keys. Invalid or unendorsed responses leave a still-fresh
+previous set intact without renewing its TTL. Candidates remain private during
+validation; concurrent cache hits can continue using the previous set. RSA `n`/`e` and
 EC `x`/`y` must be nonempty canonical unpadded base64url before cache replacement.
 This representation check does not replace algorithm, curve or cryptographic
 validation of the selected key.

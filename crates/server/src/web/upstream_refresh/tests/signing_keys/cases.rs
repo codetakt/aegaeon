@@ -284,7 +284,20 @@ fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> Resul
             );
             assert_eq!(flow.keys.hits(), 1);
             flow.assert_no_effects(f, &stored, 0).await?;
-            flow.cache_keys(serde_json::to_value(f.signing_key.jwks())?)?;
+            let retained = flow
+                .state
+                .upstream
+                .jwks_cache
+                .try_get(&flow.discovery.jwks_uri)?
+                .ok_or("previous keys displaced")?;
+            assert!(retained
+                .keys()
+                .iter()
+                .any(|key| key.kid.as_deref() == Some(f.signing_key.kid())));
+            assert!(!retained
+                .keys()
+                .iter()
+                .any(|key| key.kid.as_deref() == Some(flow.new_key.kid())));
             flow.clock.advance(30_000);
             let refresh = flow.refresh(f).await.expect_err("unendorsed refreshed key");
             assert_eq!(refresh.status(), StatusCode::BAD_GATEWAY);
@@ -296,13 +309,30 @@ fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> Resul
             );
             assert_eq!(flow.keys.hits(), 2);
             flow.assert_no_effects(f, &stored, 0).await?;
-            federation::bind(&flow, f, serde_json::to_value(flow.new_key.jwks())?).await?;
+            // Rejected replacements must not break a valid token using the endorsed old key.
+            flow.token(f.signed(&f.claims()?)?);
             assert_eq!(
                 flow.refresh(f).await.map_err(error)?.status(),
                 StatusCode::OK
             );
             assert_eq!(flow.keys.hits(), 2);
-            assert_eq!(flow.tokens.hits(), 3);
+            flow.token(flow.signed(&f.claims()?)?);
+            federation::bind(&flow, f, serde_json::to_value(flow.new_key.jwks())?).await?;
+            assert_eq!(
+                flow.refresh(f)
+                    .await
+                    .expect_err("candidate not cached")
+                    .status(),
+                StatusCode::BAD_GATEWAY
+            );
+            assert_eq!(flow.keys.hits(), 2);
+            flow.clock.advance(30_000);
+            assert_eq!(
+                flow.refresh(f).await.map_err(error)?.status(),
+                StatusCode::OK
+            );
+            assert_eq!(flow.keys.hits(), 3);
+            assert_eq!(flow.tokens.hits(), 5);
             Ok(())
         })
     })

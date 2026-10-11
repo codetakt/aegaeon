@@ -49,6 +49,7 @@ impl Harness {
             &self.coordinator,
             &header(kid),
             &[],
+            |_| std::future::ready(Ok(())),
         )
         .await
     }
@@ -251,7 +252,8 @@ async fn upstream_jwks_refresh_rechecks_cached_endpoint_policy() -> TestResult {
         &h.cache,
         &h.coordinator,
         &header(Some("known")),
-        &["allowed.example".into()]
+        &["allowed.example".into()],
+        |_| std::future::ready(Ok(())),
     )
     .await
     .is_err());
@@ -362,5 +364,138 @@ async fn upstream_jwks_refresh_material_admission_preserves_old_set_on_cold_and_
         json!({"keys":[{"kty":"EC","kid":"ec","crv":"P-256","x":"AQAB","y":"AQAB"}]}).to_string(),
     );
     assert!(!header(Some("ec")).unfamiliar_kid(&cold.get(&server.url, Some("ec")).await?));
+    Ok(())
+}
+
+#[tokio::test]
+async fn upstream_jwks_refresh_federation_admission_keeps_candidate_private() -> TestResult {
+    let server = HttpFixture::new(keyset("candidate")).await?;
+    let clock = ManualClock::new();
+    let h = Harness::new(&clock, 1, 60);
+    h.cache.try_insert(
+        &server.url,
+        parse_upstream_jwks_body(keyset("old").as_bytes())?,
+    )?;
+    // Both rejection and acceptance must leave the old set visible until validation ends.
+    for accept in [false, true] {
+        let entered = Arc::new(tokio::sync::Semaphore::new(0));
+        let release = Arc::new(tokio::sync::Semaphore::new(0));
+        let task = {
+            let h = h.clone();
+            let url = server.url.clone();
+            let entered = entered.clone();
+            let release = release.clone();
+            tokio::spawn(async move {
+                fetch_upstream_jwks_cached(
+                    &h.client,
+                    &url,
+                    &h.cache,
+                    &h.coordinator,
+                    &header(Some("candidate")),
+                    &[],
+                    |candidate| async move {
+                        assert!(!header(Some("candidate")).unfamiliar_kid(&candidate));
+                        entered.add_permits(1);
+                        release.acquire().await.expect("release").forget();
+                        if accept {
+                            Ok(())
+                        } else {
+                            Err("unendorsed candidate".into())
+                        }
+                    },
+                )
+                .await
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(5), entered.acquire())
+            .await??
+            .forget();
+        let old =
+            tokio::time::timeout(Duration::from_secs(1), h.get(&server.url, Some("old"))).await??;
+        assert!(!header(Some("old")).unfamiliar_kid(&old));
+        assert!(header(Some("candidate")).unfamiliar_kid(&old));
+        let waiter = h.spawn(server.url.clone(), "candidate".into());
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            !waiter.is_finished(),
+            "unadmitted candidate escaped to a concurrent caller"
+        );
+        let cached = h.cache.try_get(&server.url)?.ok_or("old cache missing")?;
+        assert!(!header(Some("old")).unfamiliar_kid(&cached));
+        release.add_permits(1);
+        let result = task.await?;
+        let waiting_result = waiter.await??;
+        assert_eq!(result.is_ok(), accept);
+        assert_eq!(
+            header(Some("candidate")).unfamiliar_kid(&waiting_result),
+            !accept
+        );
+        let cached = h.cache.try_get(&server.url)?.ok_or("cache missing")?;
+        assert_eq!(header(Some("candidate")).unfamiliar_kid(&cached), !accept);
+        assert_eq!(header(Some("old")).unfamiliar_kid(&cached), accept);
+        clock.advance(30_000);
+    }
+    assert_eq!(server.hits(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn upstream_jwks_refresh_cold_admission_rejection_and_cancellation_do_not_publish(
+) -> TestResult {
+    let server = HttpFixture::new(keyset("candidate")).await?;
+    let clock = ManualClock::new();
+    let h = Harness::new(&clock, 1, 60);
+    let rejected = fetch_upstream_jwks_cached(
+        &h.client,
+        &server.url,
+        &h.cache,
+        &h.coordinator,
+        &header(Some("candidate")),
+        &[],
+        |_| std::future::ready(Err("unendorsed candidate".into())),
+    )
+    .await;
+    assert_eq!(
+        rejected.expect_err("candidate rejected"),
+        "unendorsed candidate"
+    );
+    assert!(h.cache.try_get(&server.url)?.is_none());
+    assert!(h.get(&server.url, Some("candidate")).await.is_err());
+    assert_eq!(server.hits(), 1);
+    clock.advance(30_000);
+    let entered = Arc::new(tokio::sync::Semaphore::new(0));
+    let task = {
+        let h = h.clone();
+        let url = server.url.clone();
+        let entered = entered.clone();
+        tokio::spawn(async move {
+            fetch_upstream_jwks_cached(
+                &h.client,
+                &url,
+                &h.cache,
+                &h.coordinator,
+                &header(Some("candidate")),
+                &[],
+                |_| async move {
+                    entered.add_permits(1);
+                    std::future::pending::<Result<(), String>>().await
+                },
+            )
+            .await
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(5), entered.acquire())
+        .await??
+        .forget();
+    task.abort();
+    assert!(task.await.expect_err("cancelled validation").is_cancelled());
+    assert!(h.cache.try_get(&server.url)?.is_none());
+    assert!(h.get(&server.url, Some("candidate")).await.is_err());
+    assert_eq!(server.hits(), 2);
+    clock.advance(30_000);
+    assert!(h.get(&server.url, Some("candidate")).await.is_ok());
+    assert_eq!(server.hits(), 3);
     Ok(())
 }
