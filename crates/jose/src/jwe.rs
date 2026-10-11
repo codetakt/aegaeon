@@ -79,7 +79,13 @@ impl JweHeader {
 }
 
 fn parse_header_pairs(data: &[u8]) -> Result<Vec<(String, String)>, JweError> {
-    crate::json::parse_json_header(data).map_err(JweError::from)
+    crate::protected_header::admit_protected_header(
+        data,
+        crate::protected_header::ProtectedHeaderKind::Jwe,
+    )
+    .map_err(|err| JweError::JsonLowStar(err.into_json_error()))?
+    .normalize_pairs()
+    .map_err(JweError::from)
 }
 
 #[cfg(test)]
