@@ -1,3 +1,5 @@
+//! These fixtures require PostgreSQL and shared Redis stores. The `shared_redis_`
+//! test names select the CI runner that supplies both services and store URLs.
 use super::*;
 use redis::Commands;
 use simple_asn1::{to_der, ASN1Block, BigInt, BigUint};
@@ -183,19 +185,20 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_authorize_redeems_code() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_authorize_redeems_code() -> TestResult {
     valid_encrypted_requests(false).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_par_redeems_code() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_par_redeems_code() -> TestResult {
     valid_encrypted_requests(true).await
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL and Redis"]
-async fn encrypted_request_object_headers_refuse_without_grant_effects() -> TestResult {
+async fn shared_redis_encrypted_request_object_headers_refuse_without_grant_effects() -> TestResult
+{
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
