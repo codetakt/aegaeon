@@ -1,6 +1,7 @@
 use super::*;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde_json::json;
+mod encrypted_headers;
 mod prompt_validation;
 mod protected_header;
 mod substitution;

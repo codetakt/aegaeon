@@ -312,3 +312,19 @@ repeat acceptance: older instances still reject repeated values. Finite router
 and Redis regressions cover repeated values and transaction isolation; older
 proof-model assumptions of globally unique RP values are not evidence for this
 behavior and require separate reassessment.
+
+## Encrypted Request Object headers
+
+When Request Object encryption is configured, `/authorize` and `/par` accept a
+single RSA-OAEP/A256GCM compact JWE containing a signed compact Request Object.
+Its protected header must explicitly contain `alg: "RSA-OAEP"`,
+`enc: "A256GCM"`, and `cty: "JWT"`. The JWT content type also accepts
+`application/jwt` and ASCII case variants; no whitespace or media-type parameters
+are accepted. The inner signed Request Object still undergoes all normal client,
+key, signature, claims, redirect and PKCE validation before authorization.
+
+Clients with missing algorithm or content-type metadata must send a newly
+signed/encrypted valid request. Editing a protected header invalidates its
+authentication tag. This correction requires no database or key migration.
+See the [JOSE header policy](../policies/jose-header-policy.md#jwe-and-encrypted-request-objects)
+for library compatibility and generic non-JWT JWE behavior.

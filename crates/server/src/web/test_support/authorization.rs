@@ -37,6 +37,35 @@ pub(crate) async fn seed_oidc_configuration(
     Ok(())
 }
 
+/// Add a real managed encryption key to the active fixture configuration.
+pub(crate) async fn seed_request_object_encryption_key(
+    state: &mut AppState,
+    kid: &str,
+    private_der: &[u8],
+) -> TestResult {
+    let key = crate::oidc::config::OidcRequestObjectEncryptionKey::from_rsa_pkcs8_der(
+        kid.to_string(),
+        private_der,
+    )?;
+    let encrypted = crate::key_encryption::encrypt_key_handle(
+        &URL_SAFE_NO_PAD.encode(private_der),
+        &FIXTURE_KEK,
+        crate::key_encryption::KeyHandleEncryptionContext::new(
+            state.environment_id,
+            "OIDC_REQUEST_OBJECT_DECRYPTION",
+            "databaseEncrypted",
+            "RSA-OAEP+A256GCM",
+            kid,
+        ),
+    )?;
+    sqlx::query("INSERT INTO aegaeon.runtime_keys(environment_id,configuration_version_id,usage,kid,algorithm,provider,status,public_jwk,key_handle)
+        SELECT environment_id,id,'OIDC_REQUEST_OBJECT_DECRYPTION',$2,'RSA-OAEP+A256GCM','databaseEncrypted','ACTIVE',$3,$4
+        FROM aegaeon.configuration_versions WHERE environment_id=$1 AND status='ACTIVE'")
+        .bind(state.environment_id).bind(kid).bind(serde_json::to_value(key.public_jwk())?)
+        .bind(encrypted).execute(&state.db_pool).await.map_err(|_| "managed encryption key fixture insert failed")?;
+    reload_authorization_runtime(state).await
+}
+
 struct KeyEnvironment(Option<std::ffi::OsString>);
 impl KeyEnvironment {
     fn install() -> Self {

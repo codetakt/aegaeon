@@ -39,7 +39,7 @@
       "critical": false
     },
     "crates/jose/src/jwe.rs": {
-      "sha256": "69801126861190f074507886c1235f8e378343778695ac644c6b87b1097750d8",
+      "sha256": "8058116199be97d8f36dfe464cff8e203d6e95316cb5d346e94f05e0250dfed1",
       "entries": [
         "7515-CRIT-NOT-SUPPORTED",
         "7516-001"
@@ -381,8 +381,7 @@
     "crates/server/src/web/token_exchange_tests/request_object_retention.rs": {
       "sha256": "3822faff032f5cdefd097e6ef649ea89f0e26d3b459a9ce0a6b8e3eb2e32b68b",
       "entries": [
-        "9101-002",
-        "OIDC-5-001"
+        "9101-002"
       ],
       "critical": false
     },

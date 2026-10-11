@@ -7,6 +7,10 @@ use crate::policy::JoseContext;
 pub enum JweError {
     #[error("invalid compact serialization")]
     InvalidSerialization,
+    #[error("missing alg header parameter")]
+    MissingAlg,
+    #[error("protected content type does not identify a nested JWT")]
+    InvalidJwtContentType,
     #[error("missing enc header parameter")]
     MissingEnc,
     #[error("unsupported enc algorithm {0}")]
@@ -38,6 +42,7 @@ pub enum JweError {
 struct JweHeader {
     alg: Option<String>,
     enc: Option<String>,
+    cty: Option<String>,
 }
 
 impl JweHeader {
@@ -45,21 +50,22 @@ impl JweHeader {
         let pairs = parse_header_pairs(data)?;
         let mut alg: Option<String> = None;
         let mut enc: Option<String> = None;
+        let mut cty: Option<String> = None;
 
         for (key, value) in pairs {
             match key.as_str() {
                 "alg" => alg = Some(value),
                 "enc" => enc = Some(value),
-                // Allow-listed but ignored in this minimal JWE decryptor.
-                // (Key allow-listing and critical extensions are enforced by Low*/C.)
-                "kid" | "typ" | "cty" => {}
+                "cty" => cty = Some(value),
+                // Complete admission has already checked types and extensions.
+                "kid" | "typ" => {}
                 // Fail closed if the upstream policy ever allows these to surface.
                 "crit" | "zip" => return Err(JweError::UnsupportedHeader(key)),
                 other => return Err(JweError::UnsupportedHeader(other.to_string())),
             }
         }
 
-        let header = Self { alg, enc };
+        let header = Self { alg, enc, cty };
         header.validate()?;
         Ok(header)
     }
@@ -69,10 +75,9 @@ impl JweHeader {
         if enc != "A256GCM" {
             return Err(JweError::UnsupportedEnc(enc.to_string()));
         }
-        if let Some(alg) = self.alg.as_deref() {
-            if alg != "RSA-OAEP" {
-                return Err(JweError::UnsupportedAlg(alg.to_string()));
-            }
+        let alg = self.alg.as_deref().ok_or(JweError::MissingAlg)?;
+        if alg != "RSA-OAEP" {
+            return Err(JweError::UnsupportedAlg(alg.to_string()));
         }
         Ok(())
     }
@@ -116,16 +121,34 @@ pub fn decrypt_rsa_oaep_a256gcm_pkcs8_with_context(
     pkcs8_private_key: &[u8],
     context: JoseContext,
 ) -> Result<Vec<u8>, JweError> {
-    // Perform cheap input validation (header length check) before expensive key parsing
-    // This helps prevent DoS attacks via malformed inputs
-    let segments: Vec<&str> = jwe.split('.').collect();
-    if segments.len() != 5 {
-        return Err(JweError::InvalidSerialization);
-    }
-    if segments[0].len() > context.header_max_length() {
-        return Err(JweError::HeaderTooLong);
-    }
+    decrypt_pkcs8(jwe, pkcs8_private_key, context, false)
+}
 
+/// Decrypt a JWE whose protected content type identifies a nested JWT.
+///
+/// Accepts `JWT` or `application/jwt`, compared ASCII case-insensitively.
+/// Header admission and content type refusal precede key unwrap. Plaintext is
+/// returned only after authentication with the exact original protected segment.
+/// The caller must still parse and verify the inner signed JWT and its claims.
+///
+/// # Errors
+///
+/// Returns the generic decryptor's errors or [`JweError::InvalidJwtContentType`]
+/// when the protected content type does not identify a JWT.
+pub fn decrypt_nested_jwt_rsa_oaep_a256gcm_pkcs8_with_context(
+    jwe: &str,
+    pkcs8_private_key: &[u8],
+    context: JoseContext,
+) -> Result<Vec<u8>, JweError> {
+    decrypt_pkcs8(jwe, pkcs8_private_key, context, true)
+}
+
+fn decrypt_pkcs8(
+    jwe: &str,
+    pkcs8_private_key: &[u8],
+    context: JoseContext,
+    require_jwt: bool,
+) -> Result<Vec<u8>, JweError> {
     decrypt_with_key_unwrapper_with_context(
         jwe,
         |encrypted_key| {
@@ -133,6 +156,7 @@ pub fn decrypt_rsa_oaep_a256gcm_pkcs8_with_context(
                 .map_err(|_| JweError::KeyUnwrap)
         },
         context,
+        require_jwt,
     )
 }
 
@@ -162,6 +186,7 @@ fn decrypt_with_key_unwrapper_with_context<F>(
     jwe: &str,
     unwrap: F,
     context: JoseContext,
+    require_jwt: bool,
 ) -> Result<Vec<u8>, JweError>
 where
     F: Fn(&[u8]) -> Result<Vec<u8>, JweError>,
@@ -182,7 +207,14 @@ where
     let header_bytes = URL_SAFE_NO_PAD
         .decode(protected_header)
         .map_err(|_| JweError::Base64)?;
-    JweHeader::from_slice(&header_bytes)?;
+    let header = JweHeader::from_slice(&header_bytes)?;
+    if require_jwt
+        && !header.cty.as_deref().is_some_and(|cty| {
+            cty.eq_ignore_ascii_case("JWT") || cty.eq_ignore_ascii_case("application/jwt")
+        })
+    {
+        return Err(JweError::InvalidJwtContentType);
+    }
 
     let encrypted_key = URL_SAFE_NO_PAD
         .decode(encrypted_key_b64)
@@ -226,6 +258,38 @@ fn decrypt_a256gcm(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn required_jwe_headers_refuse_before_key_unwrap() {
+        for header in [
+            r#"{"enc":"A256GCM"}"#,
+            r#"{"alg":"rsa-oaep","enc":"A256GCM"}"#,
+            r#"{"alg":"RSA-OAEP"}"#,
+            r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"text/plain"}"#,
+        ] {
+            let token = format!(
+                "{}.AA.{}.AA.{}",
+                URL_SAFE_NO_PAD.encode(header),
+                URL_SAFE_NO_PAD.encode([0; 12]),
+                URL_SAFE_NO_PAD.encode([0; 16])
+            );
+            let called = std::cell::Cell::new(false);
+            let result = decrypt_with_key_unwrapper_with_context(
+                &token,
+                |_| {
+                    called.set(true);
+                    Err(JweError::KeyUnwrap)
+                },
+                JoseContext::default(),
+                true,
+            );
+            assert!(result.is_err());
+            assert!(
+                !called.get(),
+                "invalid header must precede private-key work"
+            );
+        }
+    }
 
     #[test]
     fn jwe_header_rejects_zip() -> Result<(), Box<dyn std::error::Error>> {
