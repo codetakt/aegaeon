@@ -707,67 +707,38 @@ fn scan_json_number_end(
     Ok(idx)
 }
 
+// The broader value scanner is Rust-owned and outside the extracted parser's
+// proof domain. One state per open container avoids recursion on untrusted JSON.
 #[cfg(all(not(test), not(kani), not(no_mbedtls)))]
-fn scan_json_object_end(
-    input: &[u8],
-    start_idx: usize,
-) -> Result<usize, RawJsonStructuralParseError> {
-    let mut idx = start_idx + 1;
-
-    loop {
-        idx = skip_ascii_json_whitespace(input, idx);
-        let Some(byte) = input.get(idx).copied() else {
-            return Err(RawJsonStructuralParseError::InvalidJson);
-        };
-
-        if byte == b'}' {
-            return Ok(idx + 1);
-        }
-        if byte != b'"' {
-            return Err(RawJsonStructuralParseError::InvalidJson);
-        }
-
-        let (key_closing_idx, _) = scan_json_string_end(input, idx + 1)?;
-        idx = skip_ascii_json_whitespace(input, key_closing_idx + 1);
-        if input.get(idx) != Some(&b':') {
-            return Err(RawJsonStructuralParseError::InvalidJson);
-        }
-
-        let (_, value_end) =
-            scan_json_value_end(input, skip_ascii_json_whitespace(input, idx + 1))?;
-        idx = skip_ascii_json_whitespace(input, value_end);
-        match input.get(idx).copied() {
-            Some(b',') => idx += 1,
-            Some(b'}') => return Ok(idx + 1),
-            _ => return Err(RawJsonStructuralParseError::InvalidJson),
-        }
-    }
+#[derive(Clone, Copy)]
+enum ContainerState {
+    ObjectKey { allow_end: bool },
+    ObjectColon,
+    ObjectValue,
+    ObjectSeparator,
+    ArrayValue { allow_end: bool },
+    ArraySeparator,
 }
 
 #[cfg(all(not(test), not(kani), not(no_mbedtls)))]
-fn scan_json_array_end(
+fn scan_json_scalar_end(
     input: &[u8],
-    start_idx: usize,
-) -> Result<usize, RawJsonStructuralParseError> {
-    let mut idx = start_idx + 1;
-
-    loop {
-        idx = skip_ascii_json_whitespace(input, idx);
-        let Some(byte) = input.get(idx).copied() else {
-            return Err(RawJsonStructuralParseError::InvalidJson);
-        };
-
-        if byte == b']' {
-            return Ok(idx + 1);
+    value_offset: usize,
+) -> Result<(RawJsonStructuralValueKind, usize), RawJsonStructuralParseError> {
+    match input.get(value_offset).copied() {
+        Some(b'"') => {
+            let (closing_quote_idx, _) = scan_json_string_end(input, value_offset + 1)?;
+            Ok((RawJsonStructuralValueKind::String, closing_quote_idx + 1))
         }
-
-        let (_, value_end) = scan_json_value_end(input, idx)?;
-        idx = skip_ascii_json_whitespace(input, value_end);
-        match input.get(idx).copied() {
-            Some(b',') => idx += 1,
-            Some(b']') => return Ok(idx + 1),
-            _ => return Err(RawJsonStructuralParseError::InvalidJson),
-        }
+        Some(b'n') => consume_json_literal(input, value_offset, b"null")
+            .map(|end| (RawJsonStructuralValueKind::Null, end)),
+        Some(b't') => consume_json_literal(input, value_offset, b"true")
+            .map(|end| (RawJsonStructuralValueKind::Bool, end)),
+        Some(b'f') => consume_json_literal(input, value_offset, b"false")
+            .map(|end| (RawJsonStructuralValueKind::Bool, end)),
+        Some(b'-' | b'0'..=b'9') => scan_json_number_end(input, value_offset)
+            .map(|end| (RawJsonStructuralValueKind::Number, end)),
+        _ => Err(RawJsonStructuralParseError::InvalidJson),
     }
 }
 
@@ -776,29 +747,109 @@ fn scan_json_value_end(
     input: &[u8],
     value_offset: usize,
 ) -> Result<(RawJsonStructuralValueKind, usize), RawJsonStructuralParseError> {
-    let Some(first) = input.get(value_offset).copied() else {
-        return Err(RawJsonStructuralParseError::InvalidJson);
+    use ContainerState::{
+        ArraySeparator, ArrayValue, ObjectColon, ObjectKey, ObjectSeparator, ObjectValue,
     };
-
-    match first {
-        b'"' => {
-            let (closing_quote_idx, _) = scan_json_string_end(input, value_offset + 1)?;
-            Ok((RawJsonStructuralValueKind::String, closing_quote_idx + 1))
+    let (kind, state) = match input.get(value_offset) {
+        Some(b'{') => (
+            RawJsonStructuralValueKind::Object,
+            ObjectKey { allow_end: true },
+        ),
+        Some(b'[') => (
+            RawJsonStructuralValueKind::Array,
+            ArrayValue { allow_end: true },
+        ),
+        _ => return scan_json_scalar_end(input, value_offset),
+    };
+    let mut stack = vec![state];
+    let mut idx = value_offset + 1;
+    while let Some(state) = stack.last().copied() {
+        idx = skip_ascii_json_whitespace(input, idx);
+        let byte = input
+            .get(idx)
+            .copied()
+            .ok_or(RawJsonStructuralParseError::InvalidJson)?;
+        match state {
+            ObjectKey { allow_end } => {
+                if byte == b'}' && allow_end {
+                    stack.pop();
+                    idx += 1;
+                } else if byte == b'"' {
+                    idx = scan_json_string_end(input, idx + 1)?.0 + 1;
+                    *stack
+                        .last_mut()
+                        .ok_or(RawJsonStructuralParseError::Internal)? = ObjectColon;
+                } else {
+                    return Err(RawJsonStructuralParseError::InvalidJson);
+                }
+            }
+            ObjectColon => {
+                if byte != b':' {
+                    return Err(RawJsonStructuralParseError::InvalidJson);
+                }
+                *stack
+                    .last_mut()
+                    .ok_or(RawJsonStructuralParseError::Internal)? = ObjectValue;
+                idx += 1;
+            }
+            ArrayValue { allow_end: true } if byte == b']' => {
+                stack.pop();
+                idx += 1;
+            }
+            ObjectValue | ArrayValue { .. } => {
+                *stack
+                    .last_mut()
+                    .ok_or(RawJsonStructuralParseError::Internal)? = if matches!(state, ObjectValue)
+                {
+                    ObjectSeparator
+                } else {
+                    ArraySeparator
+                };
+                match byte {
+                    b'{' => {
+                        stack.push(ObjectKey { allow_end: true });
+                        idx += 1;
+                    }
+                    b'[' => {
+                        stack.push(ArrayValue { allow_end: true });
+                        idx += 1;
+                    }
+                    _ => idx = scan_json_scalar_end(input, idx)?.1,
+                }
+            }
+            ObjectSeparator | ArraySeparator => {
+                let object = matches!(state, ObjectSeparator);
+                if byte == if object { b'}' } else { b']' } {
+                    stack.pop();
+                } else if byte == b',' {
+                    *stack
+                        .last_mut()
+                        .ok_or(RawJsonStructuralParseError::Internal)? = if object {
+                        ObjectKey { allow_end: false }
+                    } else {
+                        ArrayValue { allow_end: false }
+                    };
+                } else {
+                    return Err(RawJsonStructuralParseError::InvalidJson);
+                }
+                idx += 1;
+            }
         }
-        b'n' => consume_json_literal(input, value_offset, b"null")
-            .map(|end| (RawJsonStructuralValueKind::Null, end)),
-        b't' => consume_json_literal(input, value_offset, b"true")
-            .map(|end| (RawJsonStructuralValueKind::Bool, end)),
-        b'f' => consume_json_literal(input, value_offset, b"false")
-            .map(|end| (RawJsonStructuralValueKind::Bool, end)),
-        b'-' | b'0'..=b'9' => scan_json_number_end(input, value_offset)
-            .map(|end| (RawJsonStructuralValueKind::Number, end)),
-        b'{' => scan_json_object_end(input, value_offset)
-            .map(|end| (RawJsonStructuralValueKind::Object, end)),
-        b'[' => scan_json_array_end(input, value_offset)
-            .map(|end| (RawJsonStructuralValueKind::Array, end)),
-        _ => Err(RawJsonStructuralParseError::InvalidJson),
     }
+    Ok((kind, idx))
+}
+
+#[cfg(all(not(test), not(kani), not(no_mbedtls)))]
+fn validate_complete_object_syntax(input: &[u8]) -> Result<(), RawJsonStructuralParseError> {
+    let start = skip_ascii_json_whitespace(input, 0);
+    if input.get(start) != Some(&b'{') {
+        return Err(RawJsonStructuralParseError::InvalidShape);
+    }
+    let (_, end) = scan_json_value_end(input, start)?;
+    if skip_ascii_json_whitespace(input, end) != input.len() {
+        return Err(RawJsonStructuralParseError::TrailingBytes);
+    }
+    Ok(())
 }
 
 #[cfg(all(not(test), not(kani), not(no_mbedtls)))]
@@ -822,6 +873,9 @@ fn try_parse_supported_structural_subset(
         };
 
         if byte == b'}' {
+            if !members.is_empty() {
+                return Err(RawJsonStructuralParseError::InvalidJson);
+            }
             idx += 1;
             break;
         }
@@ -915,12 +969,23 @@ pub extern "C" fn aegaeon_parse_raw_json_structural(
 
     #[cfg(all(not(test), not(kani), not(no_mbedtls)))]
     {
+        // Check the complete input, including ignored strings and member names.
+        // Unavailable builds keep their distinct refusal below.
+        if std::str::from_utf8(input).is_err() {
+            out.error_code = RAW_JSON_STRUCTURAL_PARSE_ERROR_INVALID_JSON;
+            return RAW_JSON_STRUCTURAL_PARSE_ERROR_INVALID_JSON;
+        }
         // SAFETY: the caller supplies a valid input buffer for `len` bytes.
         let mut generated = unsafe {
             Jose_LowStar_Json_Structural_raw_json_structural_parse_to_c(bytes.cast_mut(), len32)
         };
         let status = if generated.error == GENERATED_RAW_JSON_STRUCTURAL_PARSE_OK {
-            match build_reserved_result_from_generated_success(&generated, input) {
+            // Generated success alone does not establish complete JSON syntax.
+            // Keep its exact member spans, but require the Rust syntax guard too.
+            // All branches below still reach the matching generated free routine.
+            match validate_complete_object_syntax(input)
+                .and_then(|()| build_reserved_result_from_generated_success(&generated, input))
+            {
                 Ok(result) => {
                     *out = result;
                     RAW_JSON_STRUCTURAL_PARSE_OK
