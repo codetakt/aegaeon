@@ -12,6 +12,7 @@ use tower::ServiceExt;
 
 mod cases;
 mod federation;
+mod protected_header;
 
 struct Flow {
     state: AppState,
