@@ -145,6 +145,11 @@ decisions and platform context. Nix package imports require exact current source
 hashes; cached binaries with different inputs are rejected. Runtime still executes
 when the matching build is reused. The validator independently checks the retained
 bundle, raw output and final status against the report and current source.
+Retained packages and run directories must contain only regular files and
+directories: the validator rejects symbolic links and special files, including
+metadata and intermediate directories, before reading the tree. Keep the evidence
+unchanged throughout validation; this check does not protect against concurrent
+replacement by another writer.
 
 The prior report is archived before building. A unique build directory prevents
 stale executable reuse. Only a complete admitted suite atomically replaces

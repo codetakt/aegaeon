@@ -15,7 +15,15 @@ from typing import Any
 from dudect_candidate import COLLECTION_COMPLETE
 from dudect_contract import CONTRACT_COMPLETE, assess_collection, contract_roles
 from dudect_diagnostics import validate_diagnostics
-from dudect_package import build_package, checked_package, expected_bindings, import_package
+from dudect_package import (
+    build_package,
+    checked_package,
+    expected_bindings,
+    import_package,
+    require_regular_directory,
+    require_regular_file,
+    require_retained_tree,
+)
 from dudect_process import NativeError, load_json
 from dudect_results import PROFILES
 from dudect_summary import summarize_collection
@@ -111,6 +119,7 @@ def validate_envelope(report: dict[str, Any]) -> None:
 
 def validate_bundle(root: Path, evidence: Path, report: dict[str, Any]) -> None:
     validate_envelope(report)
+    require_retained_tree(evidence)
     index = checked_package(evidence / "package", current_sources(root), report["suite"])
     collection = report["collection"]
     require(isinstance(collection, dict), "Missing observation collection")
@@ -161,13 +170,18 @@ def validate_bundle(root: Path, evidence: Path, report: dict[str, Any]) -> None:
 
 
 def validate_report_file(root: Path, report_path: Path) -> None:
+    require_regular_directory(report_path.parent)
+    if report_path.parent.parent.name == "runs":
+        require_regular_directory(report_path.parent.parent)
+    require_regular_file(report_path)
     report = load_json(report_path.read_bytes())
     validate_envelope(report)
     relative = Path(report["evidence_directory"])
     evidence = report_path.parent / relative
     if report_path.parent.name == relative.name and report_path.parent.parent.name == "runs":
         evidence = report_path.parent
-    require(not evidence.is_symlink(), "Retained evidence directory is a symlink")
+    require_regular_directory(evidence.parent)
+    require_retained_tree(evidence)
     status = load_json((evidence / "status.json").read_bytes())
     require(
         isinstance(status, dict)

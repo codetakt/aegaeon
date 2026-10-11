@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -14,6 +15,7 @@ from dudect_fixture import ROOT, NativeFixture
 sys.path.insert(0, str(ROOT / "tests/constant_time"))
 from dudect_candidate import CANDIDATE_CASES, CandidateAdmission
 from dudect_contract import ObservationError, assess_case, contract_roles
+from dudect_package import checked_package
 from run_contract import contract_at, validate_report_file
 from test_dudect_candidate import observation, support
 
@@ -245,6 +247,74 @@ class ContractTests(unittest.TestCase):
             target.chmod(mode)
         validate_report_file(fixture.root, path)
         self.assert_clock_summary_is_bound(fixture, evidence, path)
+
+    def test_retained_evidence_cannot_depend_on_symlinks_or_special_files(self):
+        fixture = NativeFixture(self)
+        result = fixture.invoke("--suite", "nix")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        path = fixture.report_path()
+        evidence = fixture.evidence()[-1]
+        targets = [
+            path,
+            evidence / "report.json",
+            evidence / "status.json",
+            evidence / "collection.json",
+            evidence / "diagnostics.json",
+            evidence / "package/package.json",
+            evidence / "package/native/dudect_harness/build-manifest.json",
+            evidence / "executions/dudect_harness/process.json",
+            evidence / "executions/dudect_harness/observations.json",
+            evidence / "executions/dudect_harness/native.stdout",
+            evidence / "executions/dudect_harness/native.timing",
+            evidence / "executions/dudect_harness/native.samples",
+            evidence / "executions/dudect_harness/runtime.jsonl",
+            evidence / "package/sources/c/dudect.h",
+            evidence / "package/native/dudect_harness/dudect_harness",
+            evidence / "package/sources",
+            evidence / "package/native",
+            evidence / "package",
+            evidence / "executions/dudect_harness",
+            evidence / "executions",
+            evidence,
+            evidence.parent,
+        ]
+        sources = json.loads((evidence / "package/package.json").read_text())["sources"]
+        for target in targets:
+            with self.subTest(target=target):
+                external = fixture.directory / "external-evidence"
+                target.rename(external)
+                target.symlink_to(external, target_is_directory=external.is_dir())
+                try:
+                    if target.is_relative_to(evidence / "package"):
+                        with self.assertRaisesRegex(ValueError, "regular retained"):
+                            checked_package(evidence / "package", sources, "nix")
+                    # Identical bytes outside the retained tree still fail.
+                    with self.assertRaisesRegex(ValueError, "regular retained"):
+                        validate_report_file(fixture.root, path)
+                    if target != path:
+                        with self.assertRaisesRegex(ValueError, "regular retained"):
+                            validate_report_file(fixture.root, evidence / "report.json")
+                finally:
+                    target.unlink()
+                    external.rename(target)
+        self.assert_special_files_rejected(fixture, evidence, path)
+        validate_report_file(fixture.root, path)
+        validate_report_file(fixture.root, evidence / "report.json")
+
+    def assert_special_files_rejected(self, fixture, evidence, path):
+        for target in (evidence / "status.json", evidence / "executions/extra.pipe"):
+            with self.subTest(fifo=target):
+                original = target.read_bytes() if target.exists() else None
+                target.unlink(missing_ok=True)
+                os.mkfifo(target)
+                try:
+                    # A special file must be rejected before any blocking read.
+                    with self.assertRaisesRegex(ValueError, "regular retained"):
+                        validate_report_file(fixture.root, path)
+                finally:
+                    target.unlink()
+                    if original is not None:
+                        target.write_bytes(original)
 
     def assert_clock_summary_is_bound(self, fixture, evidence, path):
         validate_report_file(fixture.root, evidence / "report.json")

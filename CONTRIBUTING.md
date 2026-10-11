@@ -86,8 +86,12 @@ Kani arguments are forwarded to the evidence runner; no arguments select its ful
 scope. The shell and xtask dudect helpers share the 11-case legacy runner;
 `--profile pr` (default) and `--profile periodic` select bounded measurement
 budgets. Both require actual observation counts and complete finite statistics.
-Leakage, insufficient measurements, native failures and evidence-write failures
-return nonzero. Raw observations and failed attempts are retained under
+An unsatisfied per-case requirement returns nonzero: protected-input or negative
+control detection, missing required positive-control detection, or insufficient
+eligible statistics. Native and evidence-write failures also return nonzero.
+Public-fixture and authentication-result characterization cases can complete with
+detected timing differences; completion does not imply nondetection.
+Raw observations and failed attempts are retained under
 `artifacts/ct/dudect/runs/`.
 
 For the 10-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select

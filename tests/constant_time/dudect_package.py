@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 from typing import TYPE_CHECKING, Any
 
 from dudect_candidate import CANDIDATE_CASES, CONTROL_CASES, NUMERICAL_SHA256, canonical, digest
@@ -68,7 +69,29 @@ def build_package(root: Path, output: Path, suite: str, adapter: Adapter) -> dic
     return index
 
 
+def require_regular_file(path: Path) -> None:
+    require(stat.S_ISREG(path.lstat().st_mode), f"Expected regular retained file: {path}")
+
+
+def require_regular_directory(path: Path) -> None:
+    require(stat.S_ISDIR(path.lstat().st_mode), f"Expected regular retained directory: {path}")
+
+
+def require_retained_tree(root: Path) -> None:
+    """Reject links and special files before reading a quiescent evidence tree."""
+    require_regular_directory(root)
+    pending = [root]
+    while pending:
+        for path in pending.pop().iterdir():
+            mode = path.lstat().st_mode
+            if stat.S_ISDIR(mode):
+                pending.append(path)
+            else:
+                require(stat.S_ISREG(mode), f"Expected regular retained file: {path}")
+
+
 def checked_package(package: Path, expected_sources: dict[str, Any], suite: str) -> dict[str, Any]:
+    require_retained_tree(package)
     index: dict[str, Any] = load_json((package / "package.json").read_bytes())
     require(
         isinstance(index, dict)
