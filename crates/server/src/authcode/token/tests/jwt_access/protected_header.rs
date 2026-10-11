@@ -11,6 +11,7 @@ fn protected_header_stored_jwt_access_token_validation() -> TestResult {
         "exp":unix_epoch_now_secs()+300,"jti":"header-admission"})
     .to_string();
     for (extra, accepted) in [
+        (r#""extension":"flat""#, true),
         (
             r#""extension":{"nested":[null,true,5]},"\u2603":"ignored","jku":"https://keys.example/jwks""#,
             true,
@@ -23,7 +24,7 @@ fn protected_header_stored_jwt_access_token_validation() -> TestResult {
         (r#""extension":null,"\u0065xtension":true"#, false),
     ] {
         let header = format!(
-            "{{\"alg\":\"HS256\",\"typ\":\"at+jwt\",\"kid\":\"{}\",{extra}}}",
+            " \t\r\n{{\"alg\":\"HS256\",\"typ\":\"at+jwt\",\"kid\":\"{}\",{extra}}} \t\r\n",
             key_manager.key_id()
         );
         let token = sign_raw_jwt_parts(&header, &payload, key_manager.as_ref())?;

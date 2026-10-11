@@ -101,6 +101,27 @@ fn protected_header_unknown_values_and_names_verify_original_bytes() -> TestResu
 }
 
 #[test]
+fn protected_header_json_whitespace_verifies_and_roundtrips_original_bytes() -> TestResult {
+    for extension in ["\"value\"", "null", "true", "42", "[]", "{}"] {
+        for whitespace in [" ", "\t", "\r", "\n", " \t\r\n"] {
+            let header =
+                format!("{whitespace}{{\"alg\":\"HS256\",\"extension\":{extension}}}{whitespace}");
+            let token = hs_token(&header, PAYLOAD);
+            assert_eq!(
+                verify_compact_with_context(
+                    &token,
+                    VerificationKey::HmacSha256(SECRET),
+                    &JoseContext::default(),
+                )?,
+                PAYLOAD
+            );
+            assert_eq!(Jws::from_compact(&token)?.to_compact()?, token);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn protected_header_all_unsupported_processing_and_wrong_types_refuse() {
     let mut headers = Vec::new();
     for field in ["crit", "b64", "zip"] {
@@ -369,6 +390,7 @@ fn protected_header_jwe_authenticated_decryption_keeps_original_aad() -> TestRes
     )?;
     let cek = aegaeon_crypto::jwe::rsa_oaep_unwrap(&pkcs8, &encrypted)?;
     for (extra, accepted) in [
+        (r#""extension":"flat""#, true),
         (r#""extension":{"nested":[false,null]},"\u2603":7"#, true),
         (r#""extension":[1,]"#, false),
         (r#""extension":{"x":1,}"#, false),
@@ -382,7 +404,7 @@ fn protected_header_jwe_authenticated_decryption_keeps_original_aad() -> TestRes
         } else {
             format!("{{\"alg\":\"RSA-OAEP\",\"enc\":\"A256GCM\",{extra}}}")
         };
-        let protected = URL_SAFE_NO_PAD.encode(header);
+        let protected = URL_SAFE_NO_PAD.encode(format!(" \t\r\n{header} \t\r\n"));
         let mut iv = [0; 12];
         getrandom::getrandom(&mut iv).map_err(|error| std::io::Error::other(error.to_string()))?;
         let sealed =

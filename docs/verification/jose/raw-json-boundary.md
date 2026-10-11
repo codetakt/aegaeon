@@ -95,8 +95,12 @@ The configured structural wrapper includes a source-managed Rust scanner for
 value shapes unsupported by the extracted parser. The scanner checks delimiters,
 scalar syntax and original spans with an explicit container stack; the production
 wrapper checks the complete input for UTF-8. Even generated success must pass
-the same iterative scanner's complete syntax guard before its original result
-is returned. In particular, the wrapper rejects root trailing commas accepted
+the same iterative scanner's complete syntax guard before its original members
+are returned. After successful complete-input validation, the wrapper reports
+the full input length as consumed, including trailing JSON whitespace; generated
+member spans and signed bytes remain unchanged. Both generated-success and
+Rust-fallback paths therefore accept the same trailing whitespace. In particular,
+the wrapper rejects root trailing commas accepted
 by the standalone generated supplier. The supplier itself remains unchanged.
 This Rust code is outside the extracted parser's proof domain; avoiding Rust
 recursion does not establish a bound on generated C recursion. Backend names and `RawBytes` classifications do

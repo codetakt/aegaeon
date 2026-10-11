@@ -988,6 +988,9 @@ pub extern "C" fn aegaeon_parse_raw_json_structural(
             {
                 Ok(result) => {
                     *out = result;
+                    // The guard consumed the full JSON text, including trailing
+                    // JSON whitespace. Keep the generated member spans intact.
+                    out.consumed_len = len32;
                     RAW_JSON_STRUCTURAL_PARSE_OK
                 }
                 Err(error) => {
