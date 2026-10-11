@@ -2,10 +2,10 @@
 // (Ed25519 via HACL*/EverCrypt). This is inherently within the verified
 // crypto allowlist — no CryptoProfile check is needed.
 #[cfg(not(test))]
-use ffi::verify_dpop_with_iat_window;
+use ffi::verify_dpop_with_iat_window_and_issued_at;
 
 #[cfg(test)]
-use crate::test_utils::mock_dpop::verify_dpop_with_iat_window;
+use crate::test_utils::mock_dpop::verify_dpop_with_iat_window_and_issued_at;
 use crate::util::{self, compute_dpop_jkt_from_proof_with_max_len};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use http::{header::AUTHORIZATION, Method, Request, Uri};
@@ -17,14 +17,16 @@ use super::replay_store::InMemoryReplayStore;
 use super::replay_store::{
     replay_key_material, RedisReplayStore, ReplayEntry, ReplayStore, ReplayStoreError,
 };
-use crate::config::{require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace};
+use crate::config::{
+    require_shared_runtime_store_url, ConfigError, RuntimeStateNamespace, MAX_DPOP_IAT_WINDOW_SECS,
+};
 
 mod nonce;
 pub use nonce::DpopNonceStore;
 
 #[cfg(any(test, fuzzing))]
-const DEFAULT_REPLAY_TTL_SECS: u64 = 360; // 5 minutes + 60s skew
-const DEFAULT_IAT_WINDOW_SECS: u64 = 300;
+const DEFAULT_REPLAY_TTL_SECS: u64 = 2 * MAX_DPOP_IAT_WINDOW_SECS + 1;
+const DEFAULT_IAT_WINDOW_SECS: u64 = MAX_DPOP_IAT_WINDOW_SECS;
 pub const DPOP_HEADER: &str = "DPoP";
 
 /// Expose the production DPoP `typ` predicate for spec-oracle differential tests.
@@ -124,6 +126,24 @@ impl Clone for DpopMiddleware {
 }
 
 impl DpopMiddleware {
+    /// Minimum retention covering inclusive freshness and supported window changes.
+    ///
+    /// Both the selected window and the maximum supported production window are
+    /// covered. The extra second covers whole-second validation and insertion time.
+    ///
+    /// # Errors
+    /// Returns [`DpopError::BackendUnavailable`] if the horizon overflows.
+    pub fn minimum_replay_ttl(iat_window_secs: u64) -> Result<Duration, DpopError> {
+        iat_window_secs
+            .max(MAX_DPOP_IAT_WINDOW_SECS)
+            .checked_mul(2)
+            .and_then(|seconds| seconds.checked_add(1))
+            .map(Duration::from_secs)
+            .ok_or_else(|| {
+                DpopError::BackendUnavailable("DPoP replay retention overflow".to_string())
+            })
+    }
+
     /// Construct a new middleware instance.
     pub(crate) fn new(
         namespace: impl Into<String>,
@@ -311,19 +331,33 @@ impl DpopMiddleware {
         proof: &str,
         authorization: Option<&str>,
     ) -> Result<DpopBinding, DpopError> {
+        self.verify_components_with_clock(role, method, uri, proof, authorization, || {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|time| time.as_secs())
+                .map_err(|_| DpopError::InvalidProof)
+        })
+    }
+
+    fn verify_components_with_clock(
+        &self,
+        role: DpopEndpointRole,
+        method: &Method,
+        uri: &Uri,
+        proof: &str,
+        authorization: Option<&str>,
+        clock: impl Fn() -> Result<u64, DpopError>,
+    ) -> Result<DpopBinding, DpopError> {
+        let now = clock()?;
+        let replay_ttl = Self::minimum_replay_ttl(self.iat_window_secs)?.max(self.replay_ttl);
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
             .ok_or(DpopError::InvalidProof)?;
         let uri_string = expected_htu(&self.origin, uri.path());
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| DpopError::InvalidProof)?
-            .as_secs();
-
         let expected_ath = authorization
             .and_then(extract_access_token)
             .map(compute_ath);
 
-        let verified_proof = verify_dpop_with_iat_window(
+        let (verified_proof, issued_at) = verify_dpop_with_iat_window_and_issued_at(
             proof,
             method.as_str(),
             &uri_string,
@@ -353,11 +387,24 @@ impl DpopMiddleware {
             }
         }
 
+        // Nonce handling may block long enough to exhaust freshness.
+        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
+            return Err(DpopError::InvalidProof);
+        }
+
         let material = Self::replay_material(&verified_proof.jti, &jkt);
-        let entry = ReplayEntry::new(&self.namespace, &material, self.replay_ttl);
+        let entry = ReplayEntry::new(&self.namespace, &material, replay_ttl);
         self.replay_store
             .check_and_store(entry)
             .map_err(Self::map_store_error)?;
+
+        // A duplicate may reach SET NX only after the old record expires.
+        // Recheck after the atomic operation, including connection/Redis delay.
+        // Leave the inserted record intact if the proof is now stale or the
+        // clock is unavailable; deleting it could release a concurrent replay.
+        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
+            return Err(DpopError::InvalidProof);
+        }
 
         Ok(DpopBinding { jkt })
     }
@@ -399,3 +446,7 @@ pub fn validate_dpop_ath_for_spec_oracle(token: &str, claim: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "dpop/retention_tests.rs"]
+mod retention_tests;

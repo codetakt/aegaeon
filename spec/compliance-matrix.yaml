@@ -1806,9 +1806,9 @@ rfc_9449:
     rust: crates/server/src/middleware/dpop.rs#validate_dpop_ath_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
 - id: 9449-009
-  section: '5'
+  section: '4.3, 11.1'
   requirement: MUST
-  description: Server MUST reject DPoP proof with duplicate jti
+  description: (Aegaeon profile) Server MUST reject DPoP proof with duplicate jti
   module: fstar/dpop/Dpop.Replay.fst
   proof:
   - type: fstar
@@ -1819,7 +1819,8 @@ rfc_9449:
   tests:
   - tests/fstar/property/TestDpopJtiReuse.fst
   - crates/server/src/middleware/dpop/tests.rs
-  - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/middleware/dpop/retention_tests.rs
+  - crates/ffi/tests/dpop_proof_test.rs
   ci_check: dpop-replay-prevention
   status: verified
   runtime_link: crates/server/src/middleware/replay_store.rs
@@ -1828,6 +1829,11 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Replay.fst#make_ticket
     rust: crates/server/src/middleware/replay_store.rs#check_and_store
     test: crates/server/src/middleware/dpop/tests.rs
+  notes:
+  - "This row records Aegaeon's selected single-use policy; RFC 9449 sections 4.3/11.1 do not impose an unconditional replay-store MUST on every deployment."
+  - "Runtime retention covers twice the maximum supported iat window plus one second (currently 601), the direct middleware window bound, and any longer requested TTL. Nonce enforcement does not shorten retention."
+  - "Admission rechecks authenticated iat before and after atomic replay storage, rejecting in-flight expiry or clock failure without deleting an inserted record."
+  - "Controlled-time middleware tests use a claims-only double; separate FFI tests exercise real signatures and inclusive freshness. These finite tests do not re-attest the formal proof blocks or establish trusted-clock/shared-store premises."
 - id: 9449-010
   section: '6'
   requirement: MUST

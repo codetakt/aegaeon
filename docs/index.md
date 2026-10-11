@@ -35,7 +35,7 @@ Audience: contributors, maintainers
 | `docs/specs/federation-logout-recovery-spec.md` | spec | Federation Logout Recovery Specification | current implementation baseline | 2026-07-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/README.md` | index | Management Plane Specification Overview | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/api-auth.md` | spec | Management Plane API and Authorization | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
-| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-09-15 | Product / Engineering | implementers, reviewers |
+| `docs/specs/management-plane/configuration.md` | spec | Management Plane Configuration Model | current implementation baseline | 2026-10-11 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/database.md` | spec | Management Plane Database Schema | current implementation baseline | 2026-07-08 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/endpoint-reference.md` | spec | Management Plane Endpoint Reference | current implementation baseline | 2026-09-07 | Product / Engineering | implementers, reviewers |
 | `docs/specs/management-plane/follow-up.md` | spec | Management Plane Follow-up Items | future plan | 2026-07-08 | Product / Engineering | implementers, reviewers |
@@ -349,7 +349,7 @@ Audience: contributors, maintainers
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Token profile | current implementation baseline | 2026-10-03 | Operations | operators, maintainers, relying party implementers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
-| `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-07-01 | Operations | operators, maintainers |
+| `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-10-11 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |

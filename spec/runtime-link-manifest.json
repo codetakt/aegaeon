@@ -22,7 +22,7 @@
       "critical": true
     },
     "crates/ffi/src/lib.rs": {
-      "sha256": "2aa7ef63dc927a64bd22e973156431df77f9dc049721d103e208a7f1796ad7c8",
+      "sha256": "a528ffd71f3de0f7f008c0762d2e1b25ccbc10db070a3b998a8e1ec3c2235be8",
       "entries": [
         "9449-001",
         "9449-002"
@@ -237,7 +237,7 @@
       "critical": false
     },
     "crates/server/src/middleware/dpop.rs": {
-      "sha256": "9160a4821f9d9556e7e88ee80e0d5249ff5e1c437eb84495189b3f26aadb9930",
+      "sha256": "84133e5d848c287eb297bd3ab6d5f4adb47156280615f432b492035a1082dc85",
       "entries": [
         "9449-004",
         "9449-005",

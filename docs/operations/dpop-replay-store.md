@@ -1,6 +1,6 @@
 # DPoP Replay Store Operations Guide
 
-Last updated: 2026-07-01
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -8,7 +8,7 @@ Owner: Operations
 
 Audience: operators, maintainers
 
-This document describes procedures and recommended settings for operating Redis-backed replay protection for DPoP sender constraints. Verified Core (F*/Low*/WASM) only returns a `replay_ticket` and does not manage storage, so the host must ensure that the application fails closed.
+This guide describes Redis-backed replay protection for DPoP sender constraints. Rust FFI checks signatures and freshness and returns the `jti` and optional nonce. Rust middleware applies replay storage and nonce policy, failing closed if storage fails.
 
 ## 1. Environment variables
 
@@ -28,12 +28,51 @@ If Redis is unavailable, the application returns **503 (temporarily_unavailable)
 
 ## 2. Key design and TTL
 
-1. Verified Core returns a `replay_ticket` containing fields such as `method`/`uri`/`jti`/`jkt`/`ath`.
-2. The Rust middleware concatenates the following values, hashes them with SHA-256, and uses the base64url-encoded result in the key.
-   ```text
-   dpop:v1:{namespace}:{base64url(SHA256(method || uri || jti || jkt || ath-or-'-'))}
-   ```
-3. The TTL is `dpopIatWindowSeconds + jwtLeewaySeconds` from the active policy (360 seconds by default). Store the record with `SET <key> 1 NX PX <ttl_ms>` and reject the request as a replay if the key already exists.
+1. After FFI proof validation, Rust middleware applies nonce policy. FFI itself does not check `jti` reuse.
+2. Replay keys are derived from the existing environment namespace and length-delimited `jkt` / `jti` inputs. The shared Redis namespace and key format remain unchanged.
+3. Before storing a successful proof, raise retention to the maximum of:
+   - `2 * MAX_DPOP_IAT_WINDOW_SECS + 1` seconds (currently `2 * 300 + 1 = 601` seconds);
+   - `2 * iat_window_secs + 1` seconds for directly constructed middleware;
+   - any longer caller-supplied retention.
+4. Store atomically with `SET <key> 1 NX PX <ttl_ms>` and reject an existing key as a replay. Reject arithmetic overflow or storage failure before admission; never truncate the TTL.
+
+The FFI verifier also exposes the authenticated `iat` through an additive Rust
+API; existing verifier return values remain compatible. Middleware checks this
+time again before and after atomic replay storage, so nonce handling, scheduling
+or Redis delays cannot turn an expired in-flight proof into a successful
+admission. A post-insertion freshness or clock failure rejects the request and
+leaves its record intact until expiry; it never deletes a record to undo rejection.
+
+Freshness uses whole seconds and `abs(now - iat) <= window`. A proof accepted at
+the future edge can remain acceptable for twice the window, so adding one window
+to JWT leeway is insufficient. JWT leeway is not added to DPoP freshness. The
+extra second covers the inclusive final second and fractional insertion time.
+The production maximum also covers supported window increases between instances
+sharing the store. Revisit this derivation if NumericDate semantics change.
+
+Apply the same minimum with nonce enforcement enabled or disabled. Do not shorten
+replay retention to the nonce lifetime or assume a nonce is single-use. Production
+checks `iat` freshness even when a nonce is enabled. This is Aegaeon's chosen
+single-use policy under RFC 9449 sections 4.3 and 11.1, rather than an unconditional
+replay-store requirement for every DPoP deployment.
+
+At R accepted unique proofs per second, estimate at least `601 * R` retained keys,
+before expiration processing and memory overhead. Provision capacity for the
+increase from the previous 360-second default while preserving `noeviction`.
+All replicas must share the store, records must survive the acceptance interval,
+and clocks must be trusted. Finite relative TTL cannot protect against arbitrary
+backward clock changes; this change does not establish those premises.
+
+### Suspend admission during upgrade
+
+New instances cannot restore or extend expired short-lived records from old
+instances. If uninterrupted strict replay exclusion is required, suspend DPoP
+admission before the final old instance stops. Wait the maximum prior acceptance
+horizon after the last old acceptance, then resume only patched instances.
+For the currently supported maximum, wait 601 seconds under the clock premises
+above. Existing namespaces preserve surviving records but do not restore expired
+records. A rolling deployment alone cannot immediately update prior replay
+history. No new configuration or storage schema is required.
 
 ## 3. Recommended Redis settings
 
@@ -54,24 +93,27 @@ If Redis is unavailable, the application returns **503 (temporarily_unavailable)
 ### Local validation procedure
 
 1. Validate the in-memory implementation only through direct store or middleware unit tests, or fuzz/protocol harnesses, rather than server startup.
-2. Start Redis using Docker or a similar tool, set `AEGAEON_DPOP_REDIS_URL=redis://127.0.0.1:6379`, and run:
+2. Start a dedicated Redis instance and run the retention test, including its normally ignored service-dependent case:
    ```bash
-   AEGAEON_DPOP_REDIS_URL=redis://127.0.0.1:6379 \
-   cargo test -p aegaeon-server dpop_middleware_integration_test::test_protected_endpoint_detects_replay
+   AEGAEON_TEST_REDIS_URL=redis://127.0.0.1:6379 \
+     nix develop -c cargo test -p aegaeon-server --lib \
+     middleware::dpop::retention_tests:: -- --include-ignored --test-threads=1
    ```
-   Verify that sending the same JTI twice results in 401/invalid_token.
-3. Stop Redis and run the same test. Verify that it returns 503 / temporarily_unavailable and fails closed.
+   The Redis case checks actual PTTL, duplicate rejection, and backend failure
+   using an owned endpoint that closes its connection. Keep Redis running for
+   this test. Controlled-time middleware fixtures use a claims-only verifier;
+   real-signature freshness checks are separate FFI tests.
 
 ### CI integration examples
 
-- Start Redis with `docker compose` and add a `cargo test -p aegaeon-server dpop_*` target with `AEGAEON_DPOP_REDIS_URL` set.
+- Run the retention command above with `AEGAEON_TEST_REDIS_URL` set; Cargo test filters are substrings, not shell globs.
 - For regression tests that start a server process, provide `AEGAEON_TEST_REDIS_URL` with a loopback `redis://` or `rediss://` URL, or the complete set of `AEGAEON_*_REDIS_URL` runtime-store environment variables. The legacy `REDIS_URL` is outside the supported server configuration. Tests that fall back to a process-local store when configuration is absent are also outside the supported server configuration.
 
 ## 6. Notes on future extensions
 
 - Expose detailed Redis outcomes (such as success, replay, and failure) as metrics and monitor trends on a dashboard.
 - If multiple `AEGAEON_DPOP_REDIS_URL` values are supported in the future for replica redundancy (Redis Cluster/Active-Active), consider atomic multi-writes using Lua scripts or a similar mechanism.
-- For cross-region redundancy, include region information in the `namespace` to avoid hash collisions between regions.
+- Replicas admitting proofs for the same environment must share its replay namespace and atomic history, including across regions. Region-specific namespaces would permit cross-region replay.
 
 ---
 
