@@ -6,6 +6,7 @@ from __future__ import annotations
 import errno
 import io
 import json
+import os
 import struct
 import sys
 import tempfile
@@ -16,7 +17,14 @@ from unittest.mock import patch
 from test_dudect_candidate import binding
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "constant_time"))
-from dudect_diagnostics import FRAME, RuntimeCapture, msr, speculation_policy, validate_trace
+from dudect_diagnostics import (
+    FRAME,
+    RuntimeCapture,
+    memory_layout,
+    msr,
+    speculation_policy,
+    validate_trace,
+)
 from dudect_process import ObservationStream
 from dudect_timing import BATCH, CASE, validate_timing
 
@@ -136,6 +144,84 @@ class DiagnosticTests(unittest.TestCase):
             stream.consume(b"{}\n", ack)
         self.assertEqual(ack.getvalue(), b"")
 
+    def test_memory_layout_retains_offsets_and_identity_without_pathnames(self):
+        source = (
+            "1000-2000 r--p 00000000 08:01 42 /private/space name\\012binary\n"
+            "2000-3000 r-xp 00001000 08:01 42 /private/space name\\012binary\n"
+            "4000-5000 rw-p 00000000 00:00 0 [heap]\n"
+            "5000-6000 rw-p 00000000 00:00 0 [anon:private label]\n"
+            "6000-7000 rw-p 00000000 00:00 0\n"
+            "8000-9000 rw-p 00000000 00:00 0 [stack]\n"
+        )
+        executable = os.stat_result((0, 42, os.makedev(8, 1), 0, 0, 0, 0, 0, 0, 0))
+        with (
+            patch("dudect_diagnostics.read_optional", return_value={"value": source}) as read,
+            patch("dudect_diagnostics.Path.stat", return_value=executable) as stat,
+        ):
+            result = memory_layout(1234)
+        read.assert_called_once_with("/proc/1234/maps")
+        stat.assert_called_once_with()
+        self.assertEqual(result["executable_identity"], {"device": [8, 1], "inode": 42})
+        text = json.dumps(result)
+        self.assertNotIn("private", text)
+        self.assertNotIn("binary", text)
+        self.assertEqual(result["mappings"][1]["file_offset"], 4096)
+        self.assertEqual(result["mappings"][1]["start"], 8192)
+        self.assertEqual(
+            [row["reported_kind"] for row in result["mappings"]],
+            [
+                "file_or_named_mapping",
+                "file_or_named_mapping",
+                "heap",
+                "file_or_named_mapping",
+                "anonymous",
+                "stack",
+            ],
+        )
+
+    def test_bad_or_partial_layout_is_unavailable_without_echoing_input(self):
+        valid = "1000-2000 r-xp 0000 08:01 42 /private/binary"
+        sources = [
+            "",
+            "private invalid text",
+            valid + "\npartial",
+            valid.replace("1000-2000", "2000-1000"),
+            valid.replace("1000-2000", "1000-1000"),
+            valid.replace("r-xp", "r-xz"),
+            valid.replace("42", str(2**64)),
+            valid + "\n" + valid,
+            valid + "\n" + valid.replace("1000-2000", "0800-0900"),
+            "\n".join([valid] * 1025),
+        ]
+        for source in sources:
+            with (
+                self.subTest(source=source[:80]),
+                patch("dudect_diagnostics.read_optional", return_value={"value": source}),
+                patch("dudect_diagnostics.Path.stat") as stat,
+            ):
+                result = memory_layout(1234)
+            self.assertIn("unavailable", result)
+            self.assertNotIn("private", json.dumps(result))
+            self.assertNotIn("mappings", result)
+            stat.assert_not_called()
+
+    def test_layout_read_and_executable_identity_failures_stay_explicit(self):
+        for source in ({"unavailable_errno": 13}, {"unavailable": "size limit"}):
+            with patch("dudect_diagnostics.read_optional", return_value=source):
+                self.assertEqual(memory_layout(1234), source)
+        with patch("dudect_diagnostics.read_optional", side_effect=UnicodeError):
+            self.assertEqual(memory_layout(1234), {"unavailable": "mapping encoding"})
+        with (
+            patch(
+                "dudect_diagnostics.read_optional",
+                return_value={"value": "1000-2000 r-xp 0000 08:01 42 /private/binary"},
+            ),
+            patch("dudect_diagnostics.Path.stat", side_effect=OSError(errno.ESRCH, "gone")),
+        ):
+            result = memory_layout(1234)
+        self.assertEqual(result["executable_identity"], {"unavailable_errno": errno.ESRCH})
+        self.assertEqual(len(result["mappings"]), 1)
+
     def test_native_scheduler_context_uses_only_owned_process(self):
         output = io.BytesIO()
         with (
@@ -148,12 +234,30 @@ class DiagnosticTests(unittest.TestCase):
             RuntimeCapture(output).snapshot("observation", 1234, case="sha256", look=1)
         row = json.loads(output.getvalue())
         self.assertEqual(
-            set(row["native_process"]), {"stat", "sched", "schedstat", "speculation_policy"}
+            set(row["native_process"]),
+            {"stat", "sched", "schedstat", "speculation_policy", "memory_layout"},
         )
-        for name in ("stat", "sched", "schedstat", "status"):
+        for name in ("stat", "sched", "schedstat", "status", "maps"):
             read.assert_any_call(f"/proc/1234/{name}")
         self.assertEqual(row["native_process"]["speculation_policy"], {"unavailable_errno": 2})
+        self.assertEqual(row["native_process"]["memory_layout"], {"unavailable_errno": 2})
         self.assertGreaterEqual(row["capture_finished_monotonic_ns"], row["monotonic_ns"])
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process mappings")
+    def test_actual_owned_process_identifies_its_executable_mapping(self):
+        result = memory_layout(os.getpid())
+        self.assertIn("mappings", result)
+        identity = result["executable_identity"]
+        self.assertIn("inode", identity)
+        self.assertTrue(
+            any(
+                mapping["inode"] == identity["inode"]
+                and mapping["device"] == identity["device"]
+                and "x" in mapping["permissions"]
+                for mapping in result["mappings"]
+            )
+        )
+        self.assertEqual(result["pathnames"], "excluded")
 
     def timing_fixture(self):
         self.enterContext(patch("dudect_timing.BATCH_SIZE", 2))

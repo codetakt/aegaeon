@@ -6,6 +6,7 @@ import errno
 import hashlib
 import os
 import platform
+import re
 import struct
 import time
 from pathlib import Path
@@ -112,6 +113,65 @@ def speculation_policy(pid: int) -> dict[str, Any]:
     return {"fields": fields, "missing_fields": [key for key in allowed if key not in fields]}
 
 
+def mapping_fields(line: str) -> dict[str, Any] | None:
+    """Keep address relationships without retaining paths or named-map labels."""
+    match = re.fullmatch(
+        r"([0-9a-fA-F]{1,16})-([0-9a-fA-F]{1,16}) ([r-][w-][x-][ps]) "
+        r"([0-9a-fA-F]{1,16}) ([0-9a-fA-F]{1,8}):([0-9a-fA-F]{1,8}) "
+        r"([0-9]{1,20})(?:\s+(.*))?",
+        line,
+    )
+    if match is None:
+        return None
+    start, end, permissions, offset, major, minor, inode, label = match.groups()
+    begin, limit, identity = int(start, 16), int(end, 16), int(inode)
+    if begin >= limit or identity >= 2**64:
+        return None
+    kinds = {f"[{name}]": name for name in ("heap", "stack", "vdso", "vvar", "vsyscall")}
+    return {
+        "start": begin,
+        "end": limit,
+        "permissions": permissions,
+        "file_offset": int(offset, 16),
+        "device": [int(major, 16), int(minor, 16)],
+        "inode": identity,
+        "reported_kind": kinds.get(label, "file_or_named_mapping" if label else "anonymous"),
+    }
+
+
+def layout_fields(value: str) -> dict[str, Any]:
+    lines = value.splitlines()
+    if not 0 < len(lines) <= 1024:
+        return {"unavailable": "mapping count"}
+    mappings = [mapping_fields(line) for line in lines]
+    end = 0
+    for mapping in mappings:
+        if mapping is None or mapping["start"] < end:
+            return {"unavailable": "invalid or overlapping mappings"}
+        end = mapping["end"]
+    return {"mappings": mappings, "pathnames": "excluded"}
+
+
+def memory_layout(pid: int) -> dict[str, Any]:
+    """Read only the owned waiting task; malformed/denied telemetry stays explicit."""
+    try:
+        source = read_optional(f"/proc/{pid}/maps")
+    except UnicodeError:
+        return {"unavailable": "mapping encoding"}
+    if "value" in source:
+        source = layout_fields(source["value"])
+    if "mappings" in source:
+        try:
+            executable = Path(f"/proc/{pid}/exe").stat()
+            source["executable_identity"] = {
+                "device": [os.major(executable.st_dev), os.minor(executable.st_dev)],
+                "inode": executable.st_ino,
+            }
+        except OSError as error:
+            source["executable_identity"] = {"unavailable_errno": error.errno}
+    return source
+
+
 def cpu_identity() -> dict[str, Any]:
     try:
         with Path("/proc/cpuinfo").open() as source:
@@ -202,6 +262,7 @@ class RuntimeCapture:
                 for name in ("stat", "sched", "schedstat")
             }
             record["native_process"]["speculation_policy"] = speculation_policy(pid)
+            record["native_process"]["memory_layout"] = memory_layout(pid)
         record["capture_finished_monotonic_ns"] = time.monotonic_ns()
         self.output.write(canonical(record) + b"\n")
         self.output.flush()

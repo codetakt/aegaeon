@@ -186,6 +186,17 @@ establish a speculation policy. The collector makes no speculation-control
 changes. As with other boundary telemetry, capture work can affect the following
 batch; it is not performed inside the timed computation.
 
+The same waiting-task snapshot retains virtual mapping ranges, permissions,
+file offsets, device/inode identities and fixed kernel labels such as `stack`
+and `heap`. Pathnames and arbitrary mapping labels are excluded. The task's
+executable device/inode identity allows its mappings to be identified alongside
+the retained binary. The read is bounded to 65,536 characters and 1,024 mappings;
+denied, oversized, malformed or overlapping input remains explicitly unavailable.
+This records process layout without changing address randomization. It does not
+locate individual allocations within a mapping, reveal physical addresses, or
+establish a cause for a timing difference. The original page-offset diagnostics
+and numerical decisions remain unchanged.
+
 Within each validation, identical consecutive sample payloads may reuse the last
 parsed summary, keyed by the complete bytes, case and input width. Every frame's
 bytes, ordering and context are still read and checked. File identities are
