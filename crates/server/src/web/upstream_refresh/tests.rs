@@ -19,6 +19,7 @@ mod currentness;
 mod freshness;
 mod last_use;
 mod policy_currentness;
+mod signing_keys;
 
 struct Fixture {
     pool: PgPool,
@@ -74,7 +75,9 @@ impl Fixture {
             env.environment_id,
             version,
         );
-        let discovery = upstream_tests::base_discovery(&request.issuer)?;
+        let mut discovery = upstream_tests::base_discovery(&request.issuer)?;
+        // Cached keys still undergo current outbound URL admission.
+        discovery.jwks_uri = "http://127.0.0.1:9/jwks".into();
         let signing_key = crate::oidc::OidcSigningKey::from_rsa_pem(
             "refresh-context".into(),
             include_str!("../../../tests/fixtures/rsa2048-private.pk8.pem"),
@@ -106,8 +109,16 @@ impl Fixture {
 
     fn claims(&self) -> ResultTest<Value> {
         let now = crate::web::now_epoch_secs()?;
+        // Refresh preserves the original authentication time even when key
+        // generation or HTTP/DB work crosses a wall-clock second boundary.
+        let auth_time = self
+            .request
+            .issued_at
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .saturating_sub(60);
         Ok(
-            json!({"iss":self.request.issuer,"sub":"private-subject","aud":"client","iat":now,"exp":now+3600,"auth_time":now-60,"nonce":"nonce"}),
+            json!({"iss":self.request.issuer,"sub":"private-subject","aud":"client","iat":now,"exp":now+3600,"auth_time":auth_time,"nonce":"nonce"}),
         )
     }
     fn signed(&self, claims: &Value) -> ResultTest<String> {

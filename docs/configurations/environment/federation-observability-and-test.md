@@ -41,6 +41,48 @@ any public endpoint or compliance claim is activated.
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_TTL_SECS` | _removed_ | `environment` | Removed startup-environment fallback TTL (seconds, valid range 1-86400) for upstream logout relay state. In the supported PostgreSQL-backed runtime, `policy.upstreamLogoutRelayTtlSeconds` is authoritative. |
 | `AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL` | _unset_ | `system` | Redis URL for shared upstream logout relay state. Required by the supported server runtime so upstream logout callbacks can land on any node. |
 
+### Upstream signing-key refresh
+
+For callback and refresh ID Tokens, an admitted nonempty `kid` absent from the
+cached JWK Set can trigger retrieval from the configured `jwks_uri` (OIDC Core
+1.0 errata set 2, section 10.1.1). Header bounds, duplicate-key rejection and
+algorithm admission run before retrieval. Compact payload and signature segments
+must be nonempty canonical base64url, and the token stays within the existing
+upstream response-byte bound; preflight does not allocate a decoded payload.
+Missing or empty `kid`, a known but
+unusable key, a bad signature with a known key, and rejected claims do not
+trigger an additional fetch. Token-supplied URLs and embedded keys are never
+retrieval authorities. Token exchange is not repeated.
+
+Cold, expired-cache and unfamiliar-key requests share one in-flight retrieval
+per exact admitted URL within each process. Retrieval attempts are at least
+30 seconds apart, measured from attempt start using a monotonic clock; failures,
+timeouts and cancellation also start this cooldown. A key published just after
+a retrieval may therefore wait for the remainder of that interval. During the
+cooldown an unexpired cached set can still validate a compatible token; absent
+or incompatible keys fail closed. Network, trust and capacity failures can
+continue to prevent validation after the interval. Replicas have independent
+coordinators and multiply the retrieval ceiling.
+
+The coordinator uses the existing `policy.upstreamJwksCacheMaxEntries` bound.
+It does not evict an in-flight or cooling-down slot to admit another URL. At
+capacity it rejects new retrievals while allowing compatible cache hits; idle
+slots become eligible for removal when their cooldown expires. The existing
+`policy.upstreamJwksCacheTtlSeconds` controls key-set freshness. Successful
+retrieval replaces the set, without retaining withdrawn keys. Invalid responses
+leave a still-fresh previous set intact without renewing its TTL. RSA `n`/`e` and
+EC `x`/`y` must be nonempty canonical unpadded base64url before cache replacement.
+This representation check does not replace algorithm, curve or cryptographic
+validation of the selected key.
+
+Every selection rechecks the configured endpoint against current outbound
+policy, including cache hits. Retrieved keys remain non-authoritative: the
+exact final set must pass Federation metadata binding when Federation applies,
+then signature and all existing claim checks. Refresh also preserves and checks
+the original authentication context described below. A provider's retention of
+recently decommissioned signing keys is separate from this consumer behavior.
+No new environment variable or management setting is required.
+
 ### Refresh grant continuity and upgrade
 
 Upstream refresh tokens are stored in a version 3 encrypted envelope together

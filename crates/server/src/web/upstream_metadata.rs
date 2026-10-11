@@ -7,6 +7,8 @@ use url::Url;
 mod discovery;
 mod federation;
 mod jwks;
+#[cfg(test)]
+pub(in crate::web) mod test_support;
 
 #[cfg(test)]
 pub(super) use discovery::parse_upstream_discovery_body;
