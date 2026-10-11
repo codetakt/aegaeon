@@ -254,8 +254,27 @@ jobs:
         with:
           enable-flakehub-cache: "true"
       - name: Validate proof references, claims and FFI contracts
+        id: integrity-nix
         run: |
-          nix build .#verified-reqs .#ffi-contracts --no-link -L
+          output="$(nix eval --raw .#verified-reqs.outPath)"
+          printf 'store-output=%s\n' "$output" >> "$GITHUB_OUTPUT"
+          nix build .#verified-reqs .#ffi-contracts --keep-failed --no-link -L
+      - name: Collect attempted integrity timing gate output
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.integrity-nix.outcome) }}
+        env:
+          DUDECT_NIX_OUTPUT: ${{ steps.integrity-nix.outputs.store-output }}
+          DUDECT_NIX_OUTCOME: ${{ steps.integrity-nix.outcome }}
+        run: >-
+          python3 scripts/ci/collect_dudect_nix_output.py
+          --store-output "$DUDECT_NIX_OUTPUT" --outcome "$DUDECT_NIX_OUTCOME"
+          --output artifacts/ct/dudect-integrity-gate
+      - name: Preserve attempted integrity timing gate output
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.integrity-nix.outcome) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-integrity-gate-output
+          path: artifacts/ct/dudect-integrity-gate/
+          if-no-files-found: error
       - name: Check Python validators
         run: |
           nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py

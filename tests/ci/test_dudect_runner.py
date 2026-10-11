@@ -418,6 +418,26 @@ class DudectNixRetentionTests(unittest.TestCase):
         self.assertEqual(upload["with"]["path"], "artifacts/ct/dudect-nix-gate/")
         self.assertEqual(upload["with"]["if-no-files-found"], "error")
 
+    def test_pr_integrity_caller_preserves_failed_timing_output(self):
+        document = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        steps = document["jobs"]["integrity"]["steps"]
+        build = next(i for i, row in enumerate(steps) if row.get("id") == "integrity-nix")
+        self.assertIn("nix eval --raw .#verified-reqs.outPath", steps[build]["run"])
+        self.assertIn("--keep-failed", steps[build]["run"])
+        self.assertIn(".#ffi-contracts", steps[build]["run"])
+        collect, upload = steps[build + 1 : build + 3]
+        self.assertIn("collect_dudect_nix_output.py", collect["run"])
+        self.assertIn("always()", collect["if"])
+        self.assertIn('["success", "failure", "cancelled"]', collect["if"])
+        self.assertEqual(collect["if"], upload["if"])
+        self.assertIn(
+            "steps.integrity-nix.outputs.store-output", collect["env"]["DUDECT_NIX_OUTPUT"]
+        )
+        self.assertIn("steps.integrity-nix.outcome", collect["env"]["DUDECT_NIX_OUTCOME"])
+        self.assertEqual(upload["with"]["name"], "dudect-integrity-gate-output")
+        self.assertEqual(upload["with"]["path"], "artifacts/ct/dudect-integrity-gate/")
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+
     def core_outputs(self, outcomes):
         rows = {
             name: {

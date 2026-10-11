@@ -318,6 +318,8 @@ failure uploads include these files with the rest of the run directory.
 
 The VerifiedReqs workflow also copies the requested Nix store output after an
 attempted build, including failed builds, before uploading `dudect-nix-gate-output`.
+The PR workflow's Assurance integrity caller uses the same retention flow and
+uploads `dudect-integrity-gate-output`, including in an integrity-only PR run.
 It records the build step outcome and missing or incomplete collection explicitly.
 A copied or cached Nix output is not asserted to be a fresh timing execution;
 the separate runtime step remains required. Failed outputs must be copied before

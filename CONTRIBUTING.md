@@ -83,14 +83,14 @@ cargo xtask dudect
 ```
 
 Kani arguments are forwarded to the evidence runner; no arguments select its full
-scope. The shell and xtask dudect helpers share the five-case legacy runner;
+scope. The shell and xtask dudect helpers share the 11-case legacy runner;
 `--profile pr` (default) and `--profile periodic` select bounded measurement
 budgets. Both require actual observation counts and complete finite statistics.
 Leakage, insufficient measurements, native failures and evidence-write failures
 return nonzero. Raw observations and failed attempts are retained under
 `artifacts/ct/dudect/runs/`.
 
-For the six-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select
+For the 10-case Nix suite, run `bash scripts/ci/dudect_check.sh pr` or select
 `periodic`. Building `.#dudect-check` alone supplies the executable; CI collects
 fresh observations after that build. See the [timing profile contract](docs/verification/dudect.md)
 for numerical assumptions, evidence format and limitations.
