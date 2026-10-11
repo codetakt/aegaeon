@@ -6,7 +6,9 @@ import math
 import re
 from typing import Any
 
-from dudect_results import STATISTICS, integer, invalid, number
+from dudect_results import BATCH_SIZE, PROFILES, STATISTICS, integer, invalid, number
+
+MAX_SUPPORT_COUNT = (BATCH_SIZE - 11) * max(profile[0][-1] for profile in PROFILES.values())
 
 
 def require(condition: bool, message: str) -> None:
@@ -34,10 +36,46 @@ def binary64(value: Any) -> float:
     return result
 
 
+def moment_bounds(count: int, minimum: float, maximum: float, mean: float, m2: float) -> None:
+    """Necessary support bounds, padded for the native binary64 Welford update.
+
+    See dudect-case-contract.md for the forward-error budget and its scope.
+    This checks consistency; it never changes moments or computes a p-value.
+    """
+    span = math.nextafter(maximum - minimum, math.inf)
+    unit = math.ulp(maximum)
+    mean_error = 4 * count * unit
+    delta_error = mean_error + unit
+    expanded = span + delta_error
+    error = math.nextafter(
+        8
+        * count
+        * (
+            span * delta_error
+            + delta_error * delta_error
+            + count * 2**-53 * expanded * expanded
+            + math.ulp(0.0)
+        ),
+        math.inf,
+    )
+    require(math.isfinite(error), "Unbounded native moment rounding error")
+    lower_mean = math.nextafter(minimum + span / count - mean_error, -math.inf)
+    upper_mean = math.nextafter(maximum - span / count + mean_error, math.inf)
+    require(lower_mean <= mean <= upper_mean, "Mean contradicts attained extrema")
+    below, above = mean - minimum, maximum - mean
+    lower = max(0.0, below - mean_error) ** 2 + max(0.0, above - mean_error) ** 2
+    upper = count * (below + mean_error) * (above + mean_error)
+    require(
+        math.nextafter(lower - error, -math.inf) <= m2 <= math.nextafter(upper + error, math.inf),
+        "Squared deviations contradict native support",
+    )
+
+
 def class_support(support: Any, count: int, mean: float, m2: float) -> None:
     keys = {"count", "tick_min", "tick_max", "value_min_hex", "value_max_hex"}
     require(isinstance(support, dict) and set(support) == keys, "Invalid native support")
     require(integer(support["count"]) == count, "Support count mismatch")
+    require(count <= MAX_SUPPORT_COUNT, "Support count exceeds measurement budget")
     if not count:
         require(all(support[k] is None for k in keys - {"count"}), "Empty support has extrema")
         require(mean == 0 and m2 == 0, "Empty class has moments")
@@ -50,6 +88,7 @@ def class_support(support: Any, count: int, mean: float, m2: float) -> None:
         require(mean == minimum and m2 == 0, "Singleton support contradicts moments")
     else:
         require(m2 > 0 and count >= 2, "Distinct support contradicts moments")
+        moment_bounds(count, minimum, maximum, mean, m2)
 
 
 def transformed_support(

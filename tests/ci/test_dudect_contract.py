@@ -64,6 +64,9 @@ class ContractTests(unittest.TestCase):
         for row in rows["hmac_key_reject"]["pr"]:
             count = row["look"] * 300
             row["statistics"][1][:2] = [count, count]
+            # Keep variance consistent with the reduced sample, so this is a
+            # valid sparse observation rather than malformed native moments.
+            row["statistics"][1][4:] = [(count - 1) * 9] * 2
             for pair in row["support"][1]:
                 pair["count"] = count
         for row in rows["compare_product_32"]["pr"]:

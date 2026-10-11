@@ -101,6 +101,53 @@ crop/second-order ranges and moment/support mismatches. Binary64 equality above
 the exact-integer range does not certify native equality. Numerical controls and
 finite native calibration do not prove all timing-test assumptions.
 
+### Necessary moment bounds and rounding
+
+Before Welch inference, each nonconstant class must have moments consistent
+with its attained binary64 minimum `a`, maximum `b`, and count `n`. For an exact
+mean `mu` and squared-deviation sum `M2`, necessary bounds are:
+
+```text
+a + (b-a)/n <= mu <= b - (b-a)/n
+(mu-a)^2 + (b-mu)^2 <= M2 <= n*(mu-a)*(b-mu)
+```
+
+The mean bounds account for at least one occurrence of each distinct extremum.
+The lower M2 bound retains those two contributions. For the upper bound, sum
+`(x-a)*(b-x) >= 0` and use `sum(x) = n*mu`. These are necessary conditions,
+not a complete reconstruction of the sample distribution.
+
+The native `t_push` uses binary64 Welford updates, so exact bounds are padded;
+the observed moments are never clamped, replaced or used to relax a p-value
+threshold. Let `R` be `b-a` rounded upward, `q = ulp(b)`, `u = 2^-53`, and
+`eta = 2^-1074`. Counts cannot exceed the largest configured retained-sample
+budget. For the existing profiles this is fewer than 6.5 million samples and
+`n*u < 10^-9`. The consistency check uses:
+
+```text
+E = 4*n*q
+D = E + q
+B = 8*n*(R*D + D^2 + n*u*(R+D)^2 + eta)
+```
+
+`E` conservatively bounds accumulated mean roundoff: each convex mean update
+adds at most a few ulps on the nonnegative support scale. Each computed delta
+then differs from the exact-mean delta by at most `D`, so a product's deviation
+is bounded by `2*R*D + D^2`. Product and nonnegative-sum rounding contributes
+less than `4*n^2*u*(R+D)^2` at these counts, with an absolute allowance for
+underflow. The factor eight covers these terms and evaluation roundoff in the
+budget itself. The budget and final comparison endpoints are rounded outward;
+nonfinite budgets are rejected. This assumes the existing native binary64
+round-to-nearest arithmetic without unsafe floating-point reassociation.
+
+The mean interval is widened by `E`. The M2 lower endpoint uses
+`max(0, mean-a-E)^2 + max(0, b-mean-E)^2 - B`; its upper endpoint uses
+`n*(mean-a+E)*(b-mean+E) + B`. Large offsets and tiny spreads can make these
+necessary checks loose; passing them is not a floating-point accuracy proof.
+Singleton and empty-support checks, numerical inference, eligibility, sample
+floors and original statistical outcomes retain their existing rules. The
+consumer source digest binds this additional fail-closed validation.
+
 ## Artifact and migration boundary
 
 The active entry point is `tests/constant_time/run_contract.py`. Nix caches a
