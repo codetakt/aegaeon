@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import functools
 import itertools
 import math
 import struct
@@ -14,7 +16,6 @@ from dudect_support import require
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import BinaryIO
 
 TIMING_NAME = "native.timing"
 TIMING_ENV = "AEGAEON_DUDECT_TIMING_FD"
@@ -58,18 +59,20 @@ def summarize_ticks(ticks: tuple[int, ...], deltas: tuple[int, ...]) -> dict[str
 
 
 def validate_samples(
-    source: BinaryIO, name: str, width: int
+    payload: bytes, name: str, width: int
 ) -> tuple[dict[str, int | None], dict[str, Any]]:
-    ticks = struct.unpack(f"<{BATCH_SIZE}q", source.read(BATCH_SIZE * 8))
+    require(len(payload) == BATCH_SIZE * (9 + width), "Incomplete timing sample payload")
+    ticks = struct.unpack_from(f"<{BATCH_SIZE}q", payload)
     deltas = tuple(after - before for before, after in itertools.pairwise(ticks))
     clock = summarize_ticks(ticks, deltas)
-    classes = source.read(BATCH_SIZE)
+    classes = payload[BATCH_SIZE * 8 : BATCH_SIZE * 9]
     require(set(classes) <= {0, 1}, "Invalid timing sample class")
     if width:
-        inputs = source.read(BATCH_SIZE * width)
+        inputs = payload[BATCH_SIZE * 9 :]
+        fixed = bytes([INPUTS[name]]) * width
         require(
             all(
-                inputs[i * width : (i + 1) * width] == bytes([INPUTS[name]]) * width
+                inputs[i * width : (i + 1) * width] == fixed
                 for i, label in enumerate(classes)
                 if label == 0
             ),
@@ -115,6 +118,10 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
         all(all(binding[key] == first[key] for key in keys) for binding in bindings.values()),
         "Timing file spans different native bindings",
     )
+    # Repeated synthetic batches can have identical payloads. Read every byte,
+    # but reuse only the last exact (payload, case, width) summary within this
+    # validation. Context/order checks always run; no file identity is cached.
+    summarize_samples = functools.lru_cache(maxsize=1)(validate_samples)
     with path.open("rb") as source:
         require(
             source.read(HEADER_SIZE)
@@ -136,17 +143,20 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
             )
             require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
             layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
-            clocks[name] = []
-            distributions[name] = []
+            clocks[name], distributions[name] = [], []
             for batch in range(frames):
                 values = BATCH.unpack(source.read(BATCH.size))
                 validate_context(values, batch, previous_end, previous_counters)
                 context = summarize_context(values, previous_end)
                 previous_end = values[3]
                 previous_counters = list(values[7::2])
-                clock, distribution = validate_samples(source, name, width)
+                clock, distribution = summarize_samples(
+                    source.read(BATCH_SIZE * (9 + width)), name, width
+                )
                 clocks[name].append({"batch": batch, **clock})
-                distributions[name].append({"batch": batch, "context": context, **distribution})
+                distributions[name].append(
+                    {"batch": batch, "context": context, **copy.deepcopy(distribution)}
+                )
         require(source.read(1) == b"", "Trailing all-case timing evidence")
     return {
         **identity,

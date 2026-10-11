@@ -191,6 +191,65 @@ class DiagnosticTests(unittest.TestCase):
                 self.assertEqual(clock["timestamp_residue_mod_gcd"], 0)
                 self.assertEqual(clock["backward_deltas"], 0)
 
+    def repeated_timing_fixture(self, names=("sha256",)):
+        self.enterContext(patch("dudect_timing.BATCH_SIZE", 16))
+        self.enterContext(patch.dict("dudect_timing.PROFILES", {"pr": ((1,), 1, 1)}))
+        bindings = {name: binding(name, suite="nix") for name in names}
+        data = b"AEGTIM03" + self.header[8:]
+        offsets = []
+        for case, name in enumerate(names):
+            data += CASE.pack(name.encode(), 32, 32, 16, 32, 48)
+            for batch in range(2):
+                stamp = 1 + case * 4 + batch * 2
+                data += BATCH.pack(batch, 16, stamp, stamp + 1, *([0] * 14))
+                offsets.append(len(data))
+                data += struct.pack("<16q", *range(0, 160, 10))
+                data += bytes(16) + bytes([0xAA]) * (16 * 32)
+        return bindings, data, offsets
+
+    def test_identical_payloads_keep_independent_context_and_results(self):
+        bindings, data, _ = self.repeated_timing_fixture()
+        self.path.write_bytes(data)
+        result = validate_timing(self.path, bindings, "pr")
+        first, second = result["distribution_batches"]["sha256"]
+        self.assertIsNone(first["context"]["gap_before_ns"])
+        self.assertEqual(second["context"]["gap_before_ns"], 1)
+        self.assertEqual(first["classes"][0]["count"], 5)
+        first["classes"][0]["order_statistics"]["min"] = -1
+        self.assertEqual(second["classes"][0]["order_statistics"]["min"], 10)
+        fresh = validate_timing(self.path, bindings, "pr")
+        self.assertEqual(
+            fresh["distribution_batches"]["sha256"][0]["classes"][0]["order_statistics"]["min"],
+            10,
+        )
+
+    def test_later_timestamp_and_class_changes_are_recomputed(self):
+        bindings, data, offsets = self.repeated_timing_fixture()
+        changed = bytearray(data)
+        changed[offsets[1] + 16 * 8 + 12] = 1
+        struct.pack_into("<q", changed, offsets[1] + 14 * 8, 151)
+        self.path.write_bytes(changed)
+        result = validate_timing(self.path, bindings, "pr")
+        first, second = result["distribution_batches"]["sha256"]
+        self.assertEqual([group["count"] for group in first["classes"]], [5, 0])
+        self.assertEqual([group["count"] for group in second["classes"]], [3, 1])
+        self.assertEqual(second["negative_deltas"], 1)
+        self.assertEqual(result["clock_batches"]["sha256"][1]["backward_deltas"], 1)
+
+    def test_later_fixed_input_corruption_cannot_reuse_a_summary(self):
+        bindings, data, offsets = self.repeated_timing_fixture()
+        changed = bytearray(data)
+        changed[offsets[1] + 16 * 9 + 12 * 32] ^= 1
+        self.path.write_bytes(changed)
+        with self.assertRaisesRegex(ValueError, "fixed-class"):
+            validate_timing(self.path, bindings, "pr")
+
+    def test_identical_payload_for_another_case_rechecks_its_fixed_input(self):
+        bindings, data, _ = self.repeated_timing_fixture(("sha256", "hmac_sha256"))
+        self.path.write_bytes(data)
+        with self.assertRaisesRegex(ValueError, "fixed-class"):
+            validate_timing(self.path, bindings, "pr")
+
     def test_all_case_trace_rejects_bad_context_layout_classes_and_inputs(self):
         bindings, data = self.timing_fixture()
         changes = [data[:-1], data + b"x", b"AEGTIM02" + data[8:]]

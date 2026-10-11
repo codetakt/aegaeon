@@ -186,6 +186,11 @@ establish a speculation policy. The collector makes no speculation-control
 changes. As with other boundary telemetry, capture work can affect the following
 batch; it is not performed inside the timed computation.
 
+Within each validation, identical consecutive sample payloads may reuse the last
+parsed summary, keyed by the complete bytes, case and input width. Every frame's
+bytes, ordering and context are still read and checked. File identities are
+recomputed on every validation, and returned batch summaries remain independent.
+
 Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse
