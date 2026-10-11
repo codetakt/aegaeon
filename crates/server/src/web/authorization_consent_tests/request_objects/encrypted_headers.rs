@@ -44,13 +44,13 @@ fn rsa_fixture() -> Result<RsaFixture, Box<dyn std::error::Error>> {
     Ok((case, pkcs1, pkcs8))
 }
 
-struct EnvelopeFixture {
-    key: Vec<u8>,
+pub(in crate::web) struct EnvelopeFixture {
+    pub(in crate::web) key: Vec<u8>,
     encrypted_key: Vec<u8>,
     cek: Vec<u8>,
 }
 impl EnvelopeFixture {
-    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub(in crate::web) fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let (case, _, key) = rsa_fixture()?;
         let encrypted_key = URL_SAFE_NO_PAD.decode(
             case["output"]["encrypted_key"]
@@ -64,7 +64,26 @@ impl EnvelopeFixture {
             cek,
         })
     }
-    fn seal(&self, header: &str, plaintext: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    pub(in crate::web) fn second_key() -> Result<Self, Box<dyn std::error::Error>> {
+        // Independent OpenSSL RSA-OAEP/SHA-1 wrapping of a synthetic 32-byte CEK.
+        // The private key is the existing public test fixture, distinct from RFC7520.
+        let key = pem::parse(include_str!(
+            "../../../../tests/fixtures/rsa2048-private.pk8.pem"
+        ))?
+        .into_contents();
+        let encrypted_key =
+            include_bytes!("../../../../tests/fixtures/request-object-wrapped-cek.bin").to_vec();
+        Ok(Self {
+            key,
+            encrypted_key,
+            cek: vec![0x42; 32],
+        })
+    }
+    pub(in crate::web) fn seal(
+        &self,
+        header: &str,
+        plaintext: &[u8],
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let protected = URL_SAFE_NO_PAD.encode(header);
         let iv = aegaeon_crypto::rand::random_array::<12>();
         let sealed =
@@ -160,7 +179,7 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
         for cty in ["JWT","jwt","jWt","application/jwt","APPLICATION/JWT","Application/JwT"] {
             for escaped in [false, true] {
             let inner=signed_request(&state,"approve")?;
-            let header=format!(r#"{{ "alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}","extension":{{"ignored":[false,null]}},"\u2603":7 }}"#);
+            let header=format!(r#"{{ "alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}","kid":"request-encryption-test","extension":{{"ignored":[false,null]}},"\u2603":7 }}"#);
             let header = if escaped {
                 format!("{}\r\n\t ", header.replace("\"alg\"", r#""\u0061lg""#).replace("\"cty\"", r#""\u0063ty""#))
             } else {
@@ -230,7 +249,8 @@ async fn shared_redis_encrypted_request_object_headers_refuse_without_grant_effe
                 )
                 .await?;
             }
-            let header = r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT"}"#;
+            let header =
+                r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":"request-encryption-test"}"#;
             for mode in ["bad-signature", "wrong-client", "wrong-audience", "expired"] {
                 let inner = signed_request(&state, mode)?;
                 refuse(
@@ -253,6 +273,49 @@ async fn shared_redis_encrypted_request_object_headers_refuse_without_grant_effe
                 segments[part] = URL_SAFE_NO_PAD.encode(bytes);
                 refuse(&state, &sid, &segments.join("."), par).await?;
             }
+        }
+        Ok(())
+    }
+    .await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL and Redis"]
+async fn shared_redis_request_object_keyring_protected_kid_refusals_through_authorize_and_par(
+) -> TestResult {
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("isolated PostgreSQL required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let (mut state, sid) = fixture(&pool, &env).await?;
+        let encryption = EnvelopeFixture::new()?;
+        configure_encryption(&mut state, &encryption).await?;
+        for par in [false, true] {
+            for extra in [
+                "",
+                r#", "kid":"""#,
+                r#", "kid":"unknown""#,
+                r#", "kid":"REQUEST-ENCRYPTION-TEST""#,
+                r#", "kid":"consent-test""#,
+                r#", "kid":"request-encryption-test", "kid":"request-encryption-test""#,
+            ] {
+                let header = format!(r#"{{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT"{extra}}}"#);
+                let token =
+                    encryption.seal(&header, signed_request(&state, "approve")?.as_bytes())?;
+                refuse(&state, &sid, &token, par).await?;
+            }
+            let header =
+                r#"{"alg":"RSA-OAEP","enc":"A256GCM","cty":"JWT","kid":"request-encryption-test"}"#;
+            let token =
+                encryption.seal(header, signed_request(&state, "bad-signature")?.as_bytes())?;
+            refuse(&state, &sid, &token, par).await?;
+            let token = encryption.seal(header, signed_request(&state, "approve")?.as_bytes())?;
+            let mut segments: Vec<_> = token.split('.').map(str::to_owned).collect();
+            segments[0] =
+                URL_SAFE_NO_PAD.encode(header.replace("request-encryption-test", "unknown"));
+            refuse(&state, &sid, &segments.join("."), par).await?;
         }
         Ok(())
     }

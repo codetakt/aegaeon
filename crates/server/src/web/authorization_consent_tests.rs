@@ -5,7 +5,7 @@ mod browser_continuation;
 mod reauthentication;
 mod repeated_values;
 mod repetition;
-mod request_objects;
+pub(in crate::web) mod request_objects;
 mod retention;
 mod snapshot;
 use super::test_support::{
@@ -31,7 +31,10 @@ const CLIENT: &str = "consent-client";
 const SCOPE: &str = "openid profile email offline_access";
 const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 
-async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, String)> {
+pub(in crate::web) async fn fixture(
+    pool: &PgPool,
+    env: &TestEnvironment,
+) -> TestResult<(AppState, String)> {
     fixture_with_auth_method(pool, env, "none").await
 }
 
