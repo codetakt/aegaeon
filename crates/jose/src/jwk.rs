@@ -2,6 +2,9 @@ use serde_json::{Map, Value};
 use std::collections::HashSet;
 use thiserror::Error;
 
+mod usage;
+pub use usage::verification_usage_allowed;
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum JwkError {
     #[error("JWK must be a JSON object")]
@@ -14,6 +17,10 @@ pub enum JwkError {
     FieldNotStringArray { field: &'static str },
     #[error("unsupported key type `{0}`")]
     UnsupportedKeyType(String),
+    #[error("duplicate key operation `{0}`")]
+    DuplicateKeyOperation(String),
+    #[error("use and key_ops contain contradictory known values")]
+    InconsistentKeyUsage,
     #[error("duplicate kid `{0}`")]
     DuplicateKid(String),
     #[error("kid required but missing")]
@@ -29,7 +36,7 @@ pub enum KeyUse {
 
 impl KeyUse {
     fn from_str(value: &str) -> Self {
-        match value.to_ascii_lowercase().as_str() {
+        match value {
             "sig" => KeyUse::Signature,
             "enc" => KeyUse::Encryption,
             other => KeyUse::Other(other.to_string()),
@@ -70,7 +77,11 @@ impl Jwk {
         let kty = expect_string(&mut obj, "kty")?.ok_or(JwkError::MissingField("kty"))?;
         let kid = expect_string(&mut obj, "kid")?;
         let alg = expect_string(&mut obj, "alg")?;
-        let use_param = expect_string(&mut obj, "use")?;
+        let use_param = match obj.remove("use") {
+            None => None,
+            Some(Value::String(value)) => Some(value),
+            Some(_) => return Err(JwkError::FieldNotString { field: "use" }),
+        };
         let key_use = use_param.as_deref().map(KeyUse::from_str);
 
         let key_ops = match obj.remove("key_ops") {
@@ -85,12 +96,14 @@ impl Jwk {
                 }
                 Some(ops)
             }
-            Some(Value::Null) | None => None,
+            None => None,
             Some(other) => {
                 obj.insert("key_ops".into(), other);
                 return Err(JwkError::FieldNotStringArray { field: "key_ops" });
             }
         };
+
+        usage::validate_key_usage(use_param.as_deref(), key_ops.as_deref())?;
 
         let material = match kty.as_str() {
             "RSA" => {
@@ -123,21 +136,19 @@ impl Jwk {
         self.kid.as_deref()
     }
 
+    /// Whether this key's usage metadata permits signature verification.
+    ///
+    /// An absent use or exact `sig` is required. Present operations must be
+    /// unique, contain `verify`, and contain only `sign` and/or `verify`.
+    /// Algorithm and key-material validation remain the verifier's responsibility.
     #[must_use]
     pub fn is_signature_capable(&self) -> bool {
-        if matches!(self.key_use, Some(KeyUse::Encryption)) {
-            return false;
-        }
-        if let Some(ref ops) = self.key_ops {
-            if ops.iter().any(|op| {
-                matches_ignore_ascii(op.as_str(), "sign")
-                    || matches_ignore_ascii(op.as_str(), "verify")
-            }) {
-                return true;
-            }
-            return false;
-        }
-        true
+        let key_use = match self.key_use {
+            None => None,
+            Some(KeyUse::Signature) => Some("sig"),
+            Some(KeyUse::Encryption | KeyUse::Other(_)) => return false,
+        };
+        verification_usage_allowed(key_use, self.key_ops.as_deref())
     }
 }
 
@@ -223,8 +234,4 @@ fn expect_string(
             Err(JwkError::FieldNotString { field: key })
         }
     }
-}
-
-fn matches_ignore_ascii(value: &str, expected: &str) -> bool {
-    value.eq_ignore_ascii_case(expected)
 }

@@ -1,8 +1,36 @@
-use aegaeon_jose::jwk::{Jwk, KeyMaterial};
-use aegaeon_jose::jws::VerificationKey;
+use aegaeon_jose::jwk::{Jwk, JwkSet, KeyMaterial};
+use aegaeon_jose::jws::{JwsHeader, VerificationKey};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
+use serde_json::Value;
+
 use super::FederationError;
+
+/// Preserve exact named-key uniqueness at Federation admission boundaries.
+fn validate_federation_jwks(jwks: &JwkSet) -> Result<(), FederationError> {
+    jwks.ensure_unique_kid()?;
+    Ok(())
+}
+
+/// Parse Federation key sets without changing generic JOSE parsing policy.
+pub(super) fn parse_federation_jwks(value: Value) -> Result<JwkSet, FederationError> {
+    let jwks = JwkSet::from_value(value)?;
+    validate_federation_jwks(&jwks)?;
+    Ok(jwks)
+}
+
+/// Admit directly supplied Federation key sets before selecting one signing key.
+pub(super) fn select_federation_signing_key<'a>(
+    jwks: &'a JwkSet,
+    header: &JwsHeader,
+    expected_typ: &str,
+) -> Result<&'a Jwk, FederationError> {
+    let kid = super::headers::required_signing_kid(header, expected_typ)?;
+    validate_federation_jwks(jwks)?;
+    jwks.signature_keys()
+        .find(|key| key.kid.as_deref() == Some(kid))
+        .ok_or(FederationError::NoSuitableKey)
+}
 
 /// Decoded key material from a JWK, owning the raw bytes.
 #[derive(Debug)]

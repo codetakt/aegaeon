@@ -1,7 +1,9 @@
 use super::*;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde_json::json;
+mod encrypted_headers;
 mod prompt_validation;
+mod protected_header;
 mod substitution;
 
 pub(super) fn signed_request(state: &AppState, mode: &str) -> TestResult<String> {
@@ -247,7 +249,7 @@ async fn legacy_pushed_target(state: &AppState, sid: &str, jwt: &str) -> TestRes
     Ok(())
 }
 
-fn shared_protocol_stores(state: &mut AppState) -> TestResult {
+pub(super) fn shared_protocol_stores(state: &mut AppState) -> TestResult {
     let namespace = crate::config::RuntimeStateNamespace::from_environment_id(state.environment_id);
     let par_store = Arc::new(
         crate::par::ParStore::try_new_from_shared_store_env_with_expires_in(90, &namespace)?,

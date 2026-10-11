@@ -165,6 +165,9 @@ in
     packages = lib.unique (
       verificationTools
       ++ [
+        pkgs.openssl
+        pkgs.mbedtls
+        pkgs.pkg-config
         rustToolchain
         haclStar
         karamel

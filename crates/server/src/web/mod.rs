@@ -14,6 +14,7 @@ mod authorize_reauthentication;
 mod authorize_request;
 mod authorize_validation;
 mod backchannel_logout;
+mod browser_continuation;
 mod client_credentials_authorization;
 mod dcr_client_build;
 mod dcr_configuration;
@@ -66,6 +67,7 @@ mod token_response;
 mod token_sender_binding;
 mod transport_boundary;
 mod upstream_authorize;
+mod upstream_browser_binding;
 mod upstream_callback;
 mod upstream_callback_connection;
 mod upstream_callback_exchange;
@@ -120,8 +122,8 @@ use resource_endpoint::resource;
 use runtime_authority_guard::runtime_authority_guard_middleware;
 use shared::{
     build_upstream_logout_callback_uri, clock_error_response, issuer_host_from_url,
-    no_cache_redirect_response, normalize_issuer, now_epoch_secs, parse_acr_values,
-    select_supported_acr, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
+    no_cache_redirect_response, now_epoch_secs, parse_acr_values, select_supported_acr,
+    validate_upstream_issuer, AUTH_SESSION_COOKIE_NAME, CLIENT_ASSERTION_TYPE_JWT_BEARER,
     CSRF_COOKIE_MAX_AGE_SECS, DEVICE_CODE_GRANT_TYPE, LOCAL_AUTH_CSRF_COOKIE_NAME,
     OAUTH_PROFILE_TYPE_DOWNSTREAM, OAUTH_PROFILE_TYPE_UPSTREAM, OAUTH_TOKEN_TYPE_ACCESS_TOKEN,
     RESOURCE_SCOPES, TOKEN_EXCHANGE_GRANT_TYPE, UPSTREAM_MAX_BODY_BYTES,
@@ -171,3 +173,6 @@ mod upstream_tests;
 
 #[cfg(test)]
 mod oauth_conformance_tests;
+
+#[cfg(test)]
+pub(crate) use upstream_metadata::admit_upstream_federation_metadata;

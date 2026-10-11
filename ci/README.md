@@ -20,6 +20,7 @@ local-only helpers or deprecated entry points preserved for reference.
 | `ci/run-with-environment.sh` | Run a command under Nix if available | ❌ | Local helper. |
 | `ci/detect-environment.sh` | Detect `nix` vs `local` | ❌ | Local helper. |
 | `ci/tamarin.sh` | Legacy wrapper delegating to `proofs/tamarin/run_tamarin.sh` | ❌ | Deprecated. |
+| `ci/karamel.sh` | Extract JOSE and archive the output | ❌ | Requires the pinned Nix verification shell; writes `artifacts/karamel.log` and `artifacts/karamel/jose-lowstar.tar.gz`. |
 | `ci/*.sh` (others) | Historical/local helpers (Docker-based or ad-hoc checks) | ❌ | Not wired into current GitHub Actions. |
 
 ## Toolchain pins

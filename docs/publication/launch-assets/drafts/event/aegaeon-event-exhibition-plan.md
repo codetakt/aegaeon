@@ -49,11 +49,11 @@ At any event, Aegaeon should be described in this order:
 
 Short booth message:
 
-- `認証認可を、実装だけでなく運用まで壊れにくくする OAuth/OIDC 基盤`
+- `An OAuth/OIDC platform that makes authentication and authorization more resilient, from implementation through operations`
 
 Expanded booth message:
 
-- `Aegaeon は、サーバ側の高保証コア、Secure Defaults、運用統制を一体で整備した OAuth/OIDC 基盤です。`
+- `Aegaeon is an OAuth/OIDC platform that brings together a high-assurance server-side core, Secure Defaults, and operational controls.`
 
 ## Boundary guardrails
 
@@ -65,8 +65,8 @@ At event booths, staff and printed materials must not imply:
 
 Safe wording:
 
-- `サーバ側の security-critical な OAuth/OIDC コアに高保証アプローチを適用`
-- `Aegaeon Admin Console は first-party control-plane UI`
+- `Applying a high-assurance approach to the security-critical server-side OAuth/OIDC core`
+- `Aegaeon Admin Console is a first-party control-plane UI`
 
 ## Exhibition formats
 
@@ -131,7 +131,7 @@ For visitors who stop for 10 to 20 seconds:
 
 Recommended visible line:
 
-- `高保証コアと運用統制を備えた OAuth/OIDC 基盤`
+- `An OAuth/OIDC platform with a high-assurance core and operational controls`
 
 ### Layer 2: Technical differentiation
 

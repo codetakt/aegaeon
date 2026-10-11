@@ -1,6 +1,6 @@
 # Pull Request Validation
 
-Last updated: 2026-09-30
+Last updated: 2026-10-05
 
 Status: current implementation baseline
 
@@ -31,14 +31,34 @@ established. File type alone does not establish independence from executable cod
 
 The highest applicable scope wins. Empty or unreadable diffs select `full`.
 Draft status does not reduce the selected checks. Validation runs on PR creation,
-reopening and commit updates. Editing a title or body, or marking a draft ready,
-does not rerun it. Title validation therefore covers the title at the last run;
+reopening, commit updates and title/body edits. Marking a draft ready alone does
+not rerun it. Title validation therefore covers the title at the last run;
 maintainers must check the final PR title and any merge or squash commit message
 before merging. Main pushes, schedules and manual runs retain their existing
 checks and trigger conditions. Compliance's PR invocation
 continues to run its RFC MUST lane; its other lanes retain their original non-PR
 conditions. Performance checks retain their main/scheduled/manual triggers.
 Container publication remains disabled for PR events, including reusable calls.
+
+## Documentation and CI helper execution
+
+The Documentation lane calls `documentation.yml`. Document and PR metadata
+checks run alongside three whole-module CI-helper groups: sanitizer,
+security-fuzz and other. Each job has a 30-minute limit. The matrix keeps all
+three groups enabled and does not cancel other groups when one fails.
+
+Every worker performs the original complete unittest discovery before selecting
+its modules. The final job requires successful metadata and worker jobs, matching
+source/run/configuration identities, and coverage of every original occurrence.
+Genuine class/module fixture skips retain unittest's skip events and actual test
+count; they account only for the cases suppressed by that fixture. Missing,
+duplicated, inconsistent or incomplete receipts fail the gate. Unsupported
+discovery retains the complete suite or fails before partitioned execution;
+the time limit still applies. No test is omitted based on changed paths.
+
+`scripts/ci/run_docs.sh` retains the complete serial entrypoint. Local correction
+checks should execute only the affected methods; hosted CI owns the complete
+suite. Parallel job limits do not guarantee a particular hosted completion time.
 
 ## Classification and aggregate gate
 
@@ -79,9 +99,9 @@ their full check execution.
 ## Local reproduction
 
 ```bash
-# CI policy regression tests; no Rust development shell required.
+# Targeted controls when changing the documentation/helper gate.
 nix develop .#docs --command bash -c \
-  'PYTHONPATH="scripts/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest discover -s tests/ci -p "test_*.py"'
+  'PYTHONPATH="scripts/ci:tests/ci${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest test_ci_helper_shards test_pr_validation.WiringTests.test_workflow_selection_and_dependencies_match_policy test_merge_queue.WorkflowTests.test_group_docs_lints_range_without_fabricating_title'
 nix develop .#docs --command python3 scripts/validation/check_docs_structure.py
 nix develop .#docs --command bash scripts/lint/lint_markdown.sh
 

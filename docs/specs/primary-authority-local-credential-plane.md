@@ -186,6 +186,22 @@ Rules:
 - `POST /auth/login` authenticates against local credential state for `end_users`
 - successful authentication issues the existing issuer-plane auth session cookie
   (`aegaeon_auth_session`)
+- successful login, activation, or password-reset POST with a validated `return_to`
+  returns a `200` HTML continuation page instead of a `303` redirect. A fresh
+  nonce authorizes a static script to navigate to the exact escaped destination;
+  the Continue link also works with JavaScript disabled. HTTP clients must follow
+  that link rather than expect a `Location` header. Without `return_to`, the
+  existing success page remains.
+- a successful consent POST with a query-mode authorization redirect likewise
+  returns a `200` continuation page. The registered OAuth client destination and
+  authorization result remain unchanged. Direct authorization GET redirects and
+  `form_post` responses retain their existing behavior. Authentication forms
+  continue to enforce `form-action 'self'` and `script-src 'none'`.
+- the consent form alone uses `Referrer-Policy: same-origin` so its browser POST
+  supplies the exact issuer Origin required by consent validation. Cross-origin
+  referrers remain suppressed. Continuation pages and other authentication forms
+  retain `Referrer-Policy: no-referrer`; null, missing, foreign, or ambiguous
+  consent Origins remain rejected.
 - activation and reset redemption are one-time and server-terminated
 - `/auth/activate` and `/auth/password/reset` are the only local credential routes allowed to
   accept the `token` query parameter; all other credential-like query keys remain rejected by the

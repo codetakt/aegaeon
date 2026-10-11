@@ -156,6 +156,66 @@
           "name": "harnesses::proof_option_string_minimal",
           "file": "crates/kani-harness/src/lib.rs",
           "domain": "toolchain regression (Option<String>); no production domain"
+        },
+        {
+          "name": "upstream_deadline::epoch_fraction_full_domain",
+          "file": "crates/kani-harness/src/upstream_deadline.rs",
+          "domain": "Actual production epoch_duration, every u64 second and u32 fraction including invalid fractions; exact representation or rejection. No assumptions or stubs."
+        },
+        {
+          "name": "upstream_deadline::epoch_reconstruction_linux",
+          "file": "crates/kani-harness/src/upstream_deadline.rs",
+          "domain": "Actual production checked SystemTime reconstruction, every u64 second and u32 fraction; invalid fractions and Linux i64 second overflow rejected, canonical accepted values exact. Pinned x86_64 Linux std implementation; other OS representations external."
+        },
+        {
+          "name": "upstream_deadline::positive_ttl_ceiling_full_domain",
+          "file": "crates/kani-harness/src/upstream_deadline.rs",
+          "domain": "Actual production positive_ttl_millis, every u64 second and canonical u32 nanosecond (less than 1e9). Independent u128 seconds*1000 plus numerator-ceiling oracle; auxiliary fraction_ceiling_is_minimal establishes minimal non-early rounding. Exact zero and u64 millisecond overflow rejection; no stubs."
+        },
+        {
+          "name": "upstream_deadline::strict_deadline_linux",
+          "file": "crates/kani-harness/src/upstream_deadline.rs",
+          "domain": "Actual production redis_ttl_millis_at and unmodified std SystemTime, all i64 seconds and canonical nanoseconds for both times. Independent i128 signed-seconds/borrow and fraction-ceiling oracle proves strict expiry, exact ceiling, overflow. Pinned x86_64 Linux representation; real clocks, serde, Redis/Lua behavior, atomicity and constant time are external."
+        },
+        {
+          "name": "upstream_deadline::fraction_ceiling_is_minimal",
+          "file": "crates/kani-harness/src/upstream_deadline.rs",
+          "domain": "Auxiliary oracle lemma, every canonical u32 nanosecond fraction: numerator-based ceiling is the minimal integer milliseconds covering the fraction, zero iff zero. Composed by ordinary arithmetic with an integer seconds*1000 term in the production TTL and strict-deadline harnesses; not independently a production claim."
+        },
+        {
+          "name": "upstream_issuer::policy_version_full_domain",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production version admission across every u32; serde missing/type rejection and Redis atomicity excluded.",
+          "rows": [
+            "9207-001"
+          ]
+        },
+        {
+          "name": "upstream_issuer::frozen_requirement_all_metadata_states",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production freeze across every boolean profile and all three discovery Option<bool> values; trusted discovery excluded.",
+          "rows": [
+            "9207-001"
+          ]
+        },
+        {
+          "name": "upstream_issuer::exact_issuer_bytes_bounded",
+          "file": "crates/kani-harness/src/upstream_issuer.rs",
+          "domain": "Production byte equality for arbitrary byte arrays with independent lengths 0..=8; no UTF-8, URL parser, network or full-string-domain proof.",
+          "rows": [
+            "9207-001"
+          ]
+        },
+        {
+          "name": "upstream_refresh::freshness_full_numeric_domain",
+          "file": "crates/kani-harness/src/upstream_refresh.rs",
+          "domain": "Direct production lower-bound freshness predicate over all i64 iat and u64 request-start/leeway values, checked against independent i128 subtraction. Clock accuracy, request timestamp capture, upper-time/expiry checks, signatures, DB concurrency and replay-freedom excluded."
+        },
+        {
+          "name": "bounded_federation_cache::proof_entity_cache_retains_expired_acquisition",
+          "file": "crates/kani-harness/src/bounded_federation_cache.rs",
+          "domain": "Initialized four-slot/64-byte-identifier non-DB model with one fixed six-byte natural key; all i64 insertion/replacement timestamps with expires_at <= fetched_at. Exact timestamp retention, uniqueness, strict GET refusal at acquisition/expiry and cleanup; no SQL, JWS, clocks or product correspondence.",
+          "unwind": 70
         }
       ]
     },

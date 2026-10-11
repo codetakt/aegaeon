@@ -42,9 +42,15 @@ modules:
   fstar/dpop/Dpop.Validation.fst: faithful
   fstar/dpop/Dpop.fst: faithful
   fstar/federation/Federation.EntityConfig.fst: simplified
+  # Individual cache storage admits either timestamp order; GET remains strict.
+  # F* nat time differs from product i64; bounded Kani is not a DB model.
+  # Signed expiration caps are validated outside these repository models.
   fstar/federation/Federation.PgRepo.fst: simplified
-  fstar/federation/OidcRp.Properties.fst: faithful
-  fstar/federation/OidcRp.Transitions.fst: faithful
+  fstar/federation/OidcRp.IssuerPolicy.fst: simplified
+  fstar/federation/OidcRp.BrowserBinding.fst: simplified
+  fstar/federation/OidcRp.BrowserBindingWitnesses.fst: simplified
+  fstar/federation/OidcRp.Properties.fst: simplified
+  fstar/federation/OidcRp.Transitions.fst: simplified
   fstar/federation/OidcRp.Types.fst: simplified
   fstar/federation/OpEntityConfiguration.fst: faithful
   fstar/federation/OpSubordinateStatement.fst: faithful
@@ -59,11 +65,11 @@ modules:
   fstar/jose/Jose.Context.fst: faithful
   fstar/jose/Jose.Dcr.fst: faithful
   fstar/jose/Jose.False.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Lemmas.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Merge.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Order.fst: faithful
-  fstar/jose/Jose.Federation.Policy.Types.fst: faithful
-  fstar/jose/Jose.Federation.fst: faithful
+  fstar/jose/Jose.Federation.Policy.Lemmas.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Merge.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Order.fst: simplified
+  fstar/jose/Jose.Federation.Policy.Types.fst: simplified
+  fstar/jose/Jose.Federation.fst: simplified
   fstar/jose/Jose.HeaderKeyLemmas.fst: faithful
   fstar/jose/Jose.HeaderMicro.fst: faithful
   fstar/jose/Jose.HeaderParser.Assumptions.fst: faithful

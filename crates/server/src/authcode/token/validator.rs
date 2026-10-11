@@ -24,6 +24,7 @@ pub struct TokenValidator {
     policy: SecurityPolicy,
     jwt_access_tokens_enabled: bool,
     jwt_leeway_secs: u64,
+    jose_header_max_len: usize,
     issuer: Option<String>,
 }
 
@@ -43,6 +44,7 @@ impl TokenValidator {
             policy,
             jwt_access_tokens_enabled: false,
             jwt_leeway_secs: 60,
+            jose_header_max_len: aegaeon_jose::policy::DEFAULT_HEADER_MAX_LEN,
             issuer: None,
         }
     }
@@ -56,6 +58,12 @@ impl TokenValidator {
     #[must_use]
     pub const fn with_jwt_leeway_secs(mut self, leeway_secs: u64) -> Self {
         self.jwt_leeway_secs = leeway_secs;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_jose_header_max_len(mut self, max_len: usize) -> Self {
+        self.jose_header_max_len = max_len;
         self
     }
 
@@ -89,7 +97,7 @@ impl TokenValidator {
             })?;
 
         let verified = if self.jwt_access_tokens_enabled {
-            let verified = verify_jwt(&token, self.key_manager.as_ref())
+            let verified = verify_jwt(&token, self.key_manager.as_ref(), self.jose_header_max_len)
                 .map_err(|err| match err {
                     JwtAccessTokenVerificationError::KeyManager(err) => {
                         BearerTokenValidationError::internal(format!(
@@ -178,7 +186,7 @@ impl TokenValidator {
         )?;
 
         let verified = if self.jwt_access_tokens_enabled {
-            let verified = verify_jwt(&token, self.key_manager.as_ref())
+            let verified = verify_jwt(&token, self.key_manager.as_ref(), self.jose_header_max_len)
                 .map_err(|err| match err {
                     JwtAccessTokenVerificationError::KeyManager(err) => {
                         BearerTokenValidationError::internal(format!(

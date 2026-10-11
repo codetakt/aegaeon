@@ -2,23 +2,28 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from copy import deepcopy
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
 from check_doc_links import broken_links, local_links, snapshot
 from check_pr_results import check_results
-from pr_plan import build_plan, classify, path_scope
+from pr_plan import build_plan, classify, path_scope, unique_json_object, validate_policy
 from validate_change import classify as classify_change
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -155,6 +160,191 @@ class AggregateTests(unittest.TestCase):
                 check_results(needs, POLICY)
 
 
+class SupplementalAggregateTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(redirect_stdout(io.StringIO()))
+
+    def test_pending_and_required_presence_for_every_scope(self):
+        for scope in POLICY["scopes"]:
+            for state in ["pending", "required"]:
+                policy = deepcopy(POLICY)
+                policy["supplemental_lanes"] = {"components": state}
+                needs = results(scope)
+                if state == "pending":
+                    check_results(needs, policy)
+                else:
+                    with pytest.raises(ValueError, match="missing required supplemental"):
+                        check_results(needs, policy)
+                needs["components"] = {"result": "success"}
+                check_results(needs, policy)
+                for outcome in ["failure", "skipped", "cancelled", "neutral", "", None, [], {}]:
+                    needs["components"] = {"result": outcome}
+                    with (
+                        self.subTest(scope=scope, state=state, outcome=outcome),
+                        pytest.raises(ValueError, match="supplemental check must succeed"),
+                    ):
+                        check_results(needs, policy)
+                needs["components"] = {}
+                with pytest.raises(ValueError, match="supplemental check must succeed"):
+                    check_results(needs, policy)
+
+    def test_supplemental_success_cannot_replace_any_original_check(self):
+        for scope in POLICY["scopes"]:
+            for state in ["pending", "required"]:
+                policy = deepcopy(POLICY)
+                policy["supplemental_lanes"] = {"components": state}
+                for lane in POLICY["scopes"]["full"]:
+                    needs = results(scope)
+                    needs["components"] = {"result": "success"}
+                    del needs[lane]
+                    with pytest.raises(ValueError, match="check inventory"):
+                        check_results(needs, policy)
+                    for outcome in ["failure", "cancelled", None]:
+                        needs[lane] = {"result": outcome}
+                        with pytest.raises(ValueError, match=rf"^{lane}:"):
+                            check_results(needs, policy)
+                    needs[lane] = {"result": "skipped"}
+                    if lane in policy["scopes"][scope]:
+                        with pytest.raises(ValueError, match=rf"^{lane}:"):
+                            check_results(needs, policy)
+                    else:
+                        check_results(needs, policy)
+
+    def test_legacy_policy_does_not_authorize_an_unregistered_lane(self):
+        policy = deepcopy(POLICY)
+        del policy["supplemental_lanes"]
+        for scope in POLICY["scopes"]:
+            needs = results(scope)
+            check_results(needs, policy)
+            needs["components"] = {"result": "success"}
+            with pytest.raises(ValueError, match="check inventory"):
+                check_results(needs, policy)
+
+    def test_unknown_needs_and_malformed_result_shapes_reject(self):
+        needs = results("docs")
+        needs["other"] = {"result": "success"}
+        with pytest.raises(ValueError, match="check inventory"):
+            check_results(needs, POLICY)
+        for value in [None, [], "success", 1]:
+            with pytest.raises(ValueError, match="JSON object"):
+                check_results(value, POLICY)
+            for lane in ["plan", "docs", "components"]:
+                needs = results("docs")
+                needs[lane] = value
+                with pytest.raises(ValueError, match="result object"):
+                    check_results(needs, POLICY)
+        for outputs in [None, [], "docs", {"scope": []}, {"scope": None}]:
+            needs = results("docs")
+            needs["plan"]["outputs"] = outputs
+            with pytest.raises(ValueError, match=r"classification|Classification"):
+                check_results(needs, POLICY)
+
+    def test_policy_rejects_unknown_overlap_duplicate_and_invalid_state(self):
+        for supplemental in [
+            None,
+            [],
+            "pending",
+            {"components": "optional"},
+            {"components": None},
+            {"components": []},
+            {"components": True},
+            {"other": "pending"},
+            {"docs": "pending"},
+            {"plan": "pending"},
+        ]:
+            policy = deepcopy(POLICY)
+            policy["supplemental_lanes"] = supplemental
+            with pytest.raises(ValueError, match="supplemental"):
+                validate_policy(policy)
+            with pytest.raises(ValueError, match="supplemental"):
+                check_results(results("full"), policy)
+        for full in [
+            [],
+            ["docs", "integrity"],
+            [*POLICY["scopes"]["full"], "components"],
+            [*POLICY["scopes"]["full"], "core"],
+            "full",
+            None,
+        ]:
+            policy = deepcopy(POLICY)
+            policy["scopes"]["full"] = full
+            with pytest.raises(ValueError, match="original full-check inventory"):
+                validate_policy(policy)
+        for policy in [
+            None,
+            [],
+            {"version": True, "scopes": POLICY["scopes"]},
+            {"version": 1, "scopes": []},
+        ]:
+            with pytest.raises(ValueError, match=r"policy|scopes"):
+                validate_policy(policy)
+        for raw in [
+            '{"components":"pending","components":"required"}',
+            '{"docs":{"result":"failure"},"docs":{"result":"success"}}',
+            '{"version":1,"version":1}',
+        ]:
+            with pytest.raises(ValueError, match="duplicate JSON key"):
+                json.loads(raw, object_pairs_hook=unique_json_object)
+
+    def test_classification_and_workflow_inventory_remain_original(self):
+        expected = [
+            "docs",
+            "integrity",
+            "core",
+            "lint",
+            "security",
+            "verification",
+            "compliance",
+            "kms",
+            "container",
+        ]
+        assert POLICY["scopes"] == {
+            "docs": ["docs"],
+            "integrity": ["docs", "integrity"],
+            "full": expected,
+        }
+        assert POLICY["supplemental_lanes"] == {"components": "pending"}
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        assert set(workflow["jobs"]["required"]["needs"]) == {"plan", *expected}
+        assert "components" not in workflow["jobs"]
+        for path, scope in [
+            ("SECURITY.md", "docs"),
+            ("spec/compliance-matrix.yaml", "integrity"),
+            ("examples/minimal-rp/requirements.txt", "full"),
+        ]:
+            plan = classify([change(path)], POLICY)
+            assert plan["scope"] == scope
+            assert plan["selected"] == POLICY["scopes"][scope]
+
+    def test_cli_malformed_json_reports_a_clear_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy_path = Path(temporary) / "policy.json"
+            policy_path.write_text(json.dumps(POLICY))
+            cases = [
+                "not-json",
+                "[]",
+                '{"plan":null}',
+                '{"plan":{"result":"success","outputs":{"scope":[]}}}',
+                '{"plan":{},"plan":{}}',
+            ]
+            for raw in cases:
+                result = subprocess.run(  # noqa: S603 - fixed checker and isolated JSON input
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts/ci/check_pr_results.py"),
+                        "--policy",
+                        str(policy_path),
+                    ],
+                    env={**os.environ, "PR_NEEDS_JSON": raw},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert result.returncode == 1
+                assert "PR validation failed:" in result.stdout
+                assert "Traceback" not in result.stderr
+
+
 class GitTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -167,7 +357,10 @@ class GitTests(unittest.TestCase):
         self.git("config", "user.email", "fixture@example.invalid")
         self.write("SECURITY.md", "[existing debt](absent.md)\n")
         self.write("implementation.rs", "fn main() {}\n")
-        self.base = self.commit()
+        if self._testMethodName != (
+            "test_group_delta_uses_protected_policy_and_includes_earlier_runtime_change"
+        ):
+            self.base = self.commit()
 
     def git(self, *args):
         # Fixed executable and fixture argv; no shell evaluation.
@@ -248,49 +441,183 @@ class GitTests(unittest.TestCase):
         updated_base = self.commit()
         assert build_plan(self.repo, updated_base, head, POLICY)["scope"] == "docs"
 
-    def test_group_delta_uses_protected_policy_and_includes_earlier_runtime_change(self):
-        classifier = (ROOT / "scripts/ci/pr_plan.py").read_text()
-        policy = (ROOT / "ci/pr-policy.json").read_text()
-        self.write("scripts/ci/pr_plan.py", classifier)
-        self.write("ci/pr-policy.json", policy)
-        self.write(
-            "scripts/ci/validate_change.py", (ROOT / "scripts/ci/validate_change.py").read_text()
-        )
-        protected_base = self.commit()
-        self.write("implementation.rs", "fn main() { todo!() }\n")
-        self.write("scripts/ci/pr_plan.py", "raise RuntimeError('speculative policy executed')\n")
-        self.write("ci/pr-policy.json", "{}\n")
-        self.write(
-            "scripts/ci/validate_change.py", "raise RuntimeError('candidate verifier executed')\n"
-        )
-        speculative_parent = self.commit()
-        self.write("docs/queued.md", "Later queued documentation\n")
-        group_head = self.commit()
-        assert build_plan(self.repo, speculative_parent, group_head, POLICY)["scope"] == "docs"
-        previous = Path.cwd()
-        os.chdir(self.repo)
-        try:
-            plan = classify_change(
-                {"base": protected_base, "source_head": group_head}, self.repo / "group-plan.json"
-            )
-        finally:
-            os.chdir(previous)
-        assert plan["scope"] == "full"
-        assert {change["path"] for change in plan["changes"]} == {
-            "implementation.rs",
-            "docs/queued.md",
+    def test_group_delta_uses_protected_policy_and_includes_earlier_runtime_change(self):  # noqa: PLR0915
+        # Real index, blobs, trees and NUL diffs; only ancestry/commit identities
+        # are modeled. No fixture commit objects or signature evidence are created.
+        protected_paths = (
             "scripts/ci/pr_plan.py",
-            "ci/pr-policy.json",
             "scripts/ci/validate_change.py",
-        }
-        assert plan["classifier_sha256"] == hashlib.sha256(classifier.encode()).hexdigest()
-        assert plan["policy_sha256"] == hashlib.sha256(policy.encode()).hexdigest()
+            "scripts/ci/verify_ci_plan.py",
+            "ci/pr-policy.json",
+            "ci/ci-plan.schema.json",
+            "ci/ci-input-union.schema.json",
+            "ci/ci-input-authority.json",
+            "ci/ci-expected-inventory.json",
+            "ci/ci-result-contract.json",
+        )
+        for path in protected_paths:
+            self.write(path, (ROOT / path).read_text())
+        classifier = (ROOT / "scripts/ci/pr_plan.py").read_bytes()
+        policy = (ROOT / "ci/pr-policy.json").read_bytes()
+        identities = [character * 40 for character in "abc"]
+        trees = {}
 
-        self.check_group_workflow(protected_base, speculative_parent, group_head)
+        def capture_tree(identity):
+            self.git("add", "--force", ".")
+            trees[identity] = self.git("write-tree")
+            return identity
+
+        protected_base = capture_tree(identities[0])
+        self.write("implementation.rs", "fn main() { todo!() }\n")
+        for path in protected_paths:
+            self.write(path, "raise RuntimeError('candidate authority executed')\n")
+        speculative_parent = capture_tree(identities[1])
+        self.write("docs/queued.md", "Later queued documentation\n")
+        group_head = capture_tree(identities[2])
+        tools = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)  # noqa: PT009 - active under Python -O
+        wrapper = tools / "git"
+        wrapper.write_text(
+            f"#!{sys.executable}\n"
+            "import os, sys\n"
+            f"real_git = {real_git!r}\n"
+            f"trees = {trees!r}\n"
+            f"identities = {identities!r}\n"
+            "args = sys.argv[1:]\n"
+            "start = 0\n"
+            "while start < len(args):\n"
+            "    if args[start] == '--no-replace-objects': start += 1\n"
+            "    elif args[start] in ('-C', '-c'): start += 2\n"
+            "    else: break\n"
+            "operation = args[start:]\n"
+            "if operation[0] == 'merge-base':\n"
+            "    pair = operation[-2:]\n"
+            "    if any(value not in identities for value in pair): sys.exit(91)\n"
+            "    if operation[1] == '--is-ancestor':\n"
+            "        sys.exit(0 if identities.index(pair[0]) <= identities.index(pair[1]) else 1)\n"
+            "    print(min(pair, key=identities.index)); sys.exit(0)\n"
+            "if operation[0] == 'fetch':\n"
+            "    expected = ['fetch', '--no-tags', 'origin', identities[0]]\n"
+            "    sys.exit(0 if operation == expected else 92)\n"
+            "if operation == ['rev-parse', 'HEAD']:\n"
+            "    print(identities[-1]); sys.exit(0)\n"
+            "if operation[0] == 'rev-list':\n"
+            "    expected = ['rev-list', '--reverse', identities[0] + '..' + identities[-1]]\n"
+            "    if operation != expected: sys.exit(93)\n"
+            "    print('\\n'.join(identities[1:])); sys.exit(0)\n"
+            "if (operation[:2] == ['cat-file', '-t']\n"
+            "        and len(operation) == 3 and operation[2] in trees):\n"
+            "    print('commit'); sys.exit(0)\n"
+            "def resolve(value):\n"
+            "    if value == 'HEAD^{tree}': return trees[identities[-1]]\n"
+            "    if value.endswith('^{tree}') and value[:-7] in trees: return trees[value[:-7]]\n"
+            "    if ':' in value and value.split(':', 1)[0] in trees:\n"
+            "        identity, path = value.split(':', 1); return trees[identity] + ':' + path\n"
+            "    return trees.get(value, value)\n"
+            "args[start + 1:] = [resolve(value) for value in operation[1:]]\n"
+            "os.execv(real_git, [real_git, *args])\n"
+        )
+        wrapper.chmod(0o755)
+        event = self.repo / "event.json"
+        event.write_text("{}\n")
+        with patch.dict(
+            os.environ,
+            {
+                "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+                "GITHUB_EVENT_PATH": str(event),
+                "GITHUB_REPOSITORY": "codetakt/aegaeon",
+                "GITHUB_RUN_ID": "1",
+                "GITHUB_RUN_ATTEMPT": "1",
+            },
+        ):
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                build_plan(self.repo, speculative_parent, group_head, POLICY)["scope"], "docs"
+            )
+            previous = Path.cwd()
+            os.chdir(self.repo)
+            try:
+                plan = classify_change(
+                    {
+                        "event": "merge_group",
+                        "event_base": speculative_parent,
+                        "base": protected_base,
+                        "source_head": group_head,
+                        "test_sha": group_head,
+                        "test_tree": trees[group_head],
+                    },
+                    self.repo / "group-plan.json",
+                )
+            finally:
+                os.chdir(previous)
+            self.assertEqual(plan["scope"], "full")  # noqa: PT009 - active under Python -O
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                {record["path"] for record in plan["changes"]},
+                {"implementation.rs", "docs/queued.md", *protected_paths},
+            )
+            self.assertEqual(plan["classifier_sha256"], hashlib.sha256(classifier).hexdigest())  # noqa: PT009 - active under Python -O
+            self.assertEqual(plan["policy_sha256"], hashlib.sha256(policy).hexdigest())  # noqa: PT009 - active under Python -O
+            union = json.loads((self.repo / "ci-input-union.json").read_text())
+            self.assertEqual(union["test_tree"], trees[group_head])  # noqa: PT009 - active under Python -O
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                plan["input_union"]["sha256"],
+                hashlib.sha256((self.repo / "ci-input-union.json").read_bytes()).hexdigest(),
+            )
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                {entry["decoded_path"] for entry in union["entries"]},
+                {"SECURITY.md", "implementation.rs", "docs/queued.md", *protected_paths},
+            )
+            raw = subprocess.check_output(  # noqa: S603 - fixed literal Git tree diff
+                [
+                    real_git,
+                    "-C",
+                    str(self.repo),
+                    "diff",
+                    "--raw",
+                    "-z",
+                    "--no-abbrev",
+                    "--no-renames",
+                    "--ignore-submodules=none",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    trees[protected_base],
+                    trees[group_head],
+                    "--",
+                ]
+            )
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                base64.b64decode(union["raw_diff"]["raw_base64"]), raw
+            )
+            self.assertEqual(  # noqa: PT009 - active under Python -O
+                union["raw_diff"]["sha256"], hashlib.sha256(raw).hexdigest()
+            )
+            for entry in union["entries"]:
+                for side, identity in (
+                    ("base", protected_base),
+                    ("head", group_head),
+                    ("tested", group_head),
+                ):
+                    self.assertEqual(entry[side]["tree"], trees[identity])  # noqa: PT009
+                    if entry[side]["present"]:
+                        content = subprocess.check_output(  # noqa: S603 - actual tree bytes
+                            [
+                                real_git,
+                                "-C",
+                                str(self.repo),
+                                "show",
+                                trees[identity] + ":" + entry["decoded_path"],
+                            ]
+                        )
+                        self.assertEqual(  # noqa: PT009 - active under Python -O
+                            entry[side]["sha256"], hashlib.sha256(content).hexdigest()
+                        )
+            # The actual workflow rejects reserved outputs, so start it clean.
+            (self.repo / "ci-input-union.json").unlink()
+            self.check_group_workflow(protected_base, speculative_parent, group_head)
 
     def check_group_workflow(self, protected_base, speculative_parent, group_head):
-        # Execute the actual workflow shell and protected verifier. Only the API
-        # is synthetic: disposable fixture commits are not signature evidence.
+        # Execute the actual workflow and protected reader. API signatures and
+        # commit ancestry are synthetic; tree/blob/diff operations remain real.
         tools = self.repo / "fake-tools"
         tools.mkdir()
         gh = tools / "gh"
@@ -326,17 +653,27 @@ class GitTests(unittest.TestCase):
         command = next(
             step["run"] for step in workflow["jobs"]["plan"]["steps"] if step.get("id") == "plan"
         )
+        # Model the checked runtime with this interpreter; production stays pinned.
+        controller_guard, command = command.split("\n", 1)
+        self.assertRegex(  # noqa: PT009 - active under Python -O
+            controller_guard,
+            r'^\[\[ "\$CONTROLLER_PYTHON" == /nix/store/[^ ]+/bin/python[^ ]+ \]\] \|\| exit 1$',
+        )
+        command = (
+            f'[[ "$CONTROLLER_PYTHON" == {shlex.quote(sys.executable)} ]] || exit 1\n' + command
+        )
         output = self.repo / "github-output"
         env = {
             **os.environ,
             "PATH": str(tools) + os.pathsep + os.environ["PATH"],
             "GITHUB_EVENT_NAME": "merge_group",
             "GITHUB_SHA": group_head,
-            "GITHUB_REPOSITORY": "owner/repo",
+            "GITHUB_REPOSITORY": "codetakt/aegaeon",
             "GITHUB_EVENT_PATH": str(event_path),
             "GITHUB_OUTPUT": str(output),
             "RUNNER_TEMP": str(tools),
             "EVENT_BASE_SHA": speculative_parent,
+            "CONTROLLER_PYTHON": sys.executable,
         }
         result = subprocess.run(  # noqa: S603 - fixed workflow with synthetic API and Git fixture
             ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],  # noqa: S607
@@ -346,18 +683,22 @@ class GitTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        assert result.returncode == 0, result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, result.stderr)  # noqa: PT009
         evidence = json.loads((self.repo / "ci-validation.json").read_text())
-        assert evidence["base"] == protected_base
-        assert evidence["event_base"] == speculative_parent
-        assert evidence["test_tree"] == self.git("rev-parse", "HEAD^{tree}")
-        assert {record["sha"] for record in evidence["signatures"]} == {
-            speculative_parent,
-            group_head,
-        }
-        assert output.read_text().startswith(f"scope=full\nbase={protected_base}\n")
+        self.assertEqual(evidence["base"], protected_base)  # noqa: PT009
+        self.assertEqual(evidence["event_base"], speculative_parent)  # noqa: PT009
+        self.assertEqual(evidence["test_tree"], self.git("rev-parse", "HEAD^{tree}"))  # noqa: PT009
+        self.assertEqual(  # noqa: PT009
+            {record["sha"] for record in evidence["signatures"]},
+            {speculative_parent, group_head},
+        )
+        self.assertTrue(  # noqa: PT009
+            output.read_text().startswith(f"scope=full\nbase={protected_base}\n")
+        )
         for failure in ["network", "missing-main", "unsigned"]:
             output.unlink(missing_ok=True)
+            for artifact in ("ci-plan.json", "ci-validation.json", "ci-input-union.json"):
+                (self.repo / artifact).unlink(missing_ok=True)
             failed = subprocess.run(  # noqa: S603 - same isolated workflow/API fixture
                 ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command],  # noqa: S607
                 cwd=self.repo,
@@ -366,8 +707,8 @@ class GitTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            assert failed.returncode != 0, failure
-            assert not output.exists(), failure
+            self.assertNotEqual(failed.returncode, 0, failure)  # noqa: PT009
+            self.assertFalse(output.exists(), failure)  # noqa: PT009
 
     def test_link_baseline_and_removed_target(self):
         self.write("docs/page.md", "[source](../implementation.rs)\n")
@@ -457,3 +798,42 @@ class WiringTests(unittest.TestCase):
             assert "workflow_call" in events
             assert "pull_request" not in events
             assert "draft" not in str(child)
+
+    def test_documentation_parallel_workers_keep_complete_gate(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
+        jobs = workflow["jobs"]
+        assert jobs["docs"]["needs"] == "plan"
+        assert "if" not in jobs["docs"]
+        assert jobs["docs"]["uses"] == "./.github/workflows/documentation.yml"
+        assert jobs["docs"]["with"] == {
+            "base": "${{ needs.plan.outputs.base }}",
+            "source-head": "${{ needs.plan.outputs.source_head }}",
+            "test-sha": "${{ needs.plan.outputs.test_sha }}",
+            "pr-title": "${{ github.event.pull_request.title || '' }}",
+            "pr-author": "${{ github.event.pull_request.user.login || '' }}",
+        }
+        docs = yaml.safe_load((ROOT / jobs["docs"]["uses"]).read_text())
+        assert set(docs["jobs"]) == {"metadata", "helpers", "complete"}
+        assert set(docs.get("on", docs.get(True))) == {"workflow_call"}
+        assert docs["permissions"] == {"contents": "read"}
+        assert docs["jobs"]["helpers"]["strategy"]["matrix"]["group"] == [
+            "sanitizer",
+            "security-fuzz",
+            "other",
+        ]
+        assert docs["jobs"]["helpers"]["strategy"]["fail-fast"] is False
+        assert docs["jobs"]["helpers"]["strategy"]["max-parallel"] == 3
+        for job in ("helpers", "complete"):
+            command = next(step["run"] for step in docs["jobs"][job]["steps"] if "run" in step)
+            assert command.index("nix develop .#docs --command bash -c") < command.index(
+                "PYTHONPATH="
+            )
+        assert "if" not in docs["jobs"]["metadata"]
+        assert "if" not in docs["jobs"]["helpers"]
+        assert "always()" in docs["jobs"]["complete"]["if"]
+        assert set(docs["jobs"]["complete"]["needs"]) == {"metadata", "helpers"}
+        for job in docs["jobs"].values():
+            assert job["timeout-minutes"] == 30
+            checkout = job["steps"][0]["with"]
+            assert checkout["persist-credentials"] is False
+            assert checkout["ref"] == "${{ inputs.test-sha }}"

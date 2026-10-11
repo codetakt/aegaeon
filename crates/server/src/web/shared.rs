@@ -61,7 +61,21 @@ pub(super) fn issuer_host_from_url(issuer: &str) -> Option<String> {
     util::canonical_url_host_port(&url)
 }
 
-pub(super) fn normalize_issuer(issuer: &str) -> Option<String> {
+/// Validate the identifier without applying URL transport canonicalization.
+pub(super) fn validate_upstream_issuer(issuer: &str) -> Option<String> {
+    if issuer
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control() || c == '\\')
+        || !issuer
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+    {
+        return None;
+    }
+    let authority = issuer.get(8..)?.split('/').next()?;
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
     let url = Url::parse(issuer).ok()?;
     if url.scheme() != "https" || url.host_str().is_none() {
         return None;
@@ -72,12 +86,7 @@ pub(super) fn normalize_issuer(issuer: &str) -> Option<String> {
     if !url.username().is_empty() || url.password().is_some() {
         return None;
     }
-    let host_port = util::canonical_url_host_port(&url)?;
-    let mut path = url.path().to_string();
-    if path.ends_with('/') && path.len() > 1 {
-        path.pop();
-    }
-    Some(format!("{}://{}{}", url.scheme(), host_port, path))
+    Some(issuer.to_string())
 }
 
 pub(super) fn build_upstream_logout_callback_uri(base_url: &str) -> String {

@@ -10805,7 +10805,20 @@
             "type": "string"
           },
           "jwks": {},
-          "metadataPolicy": {}
+          "metadataPolicy": {
+            "type": "object",
+            "description": "Optional local equality pin for the anchor-issued metadata policy. Omit to apply no local pin. When present, entity types, metadata parameters and operator maps must each be nonempty objects; null is invalid. Operator operands and combinations also undergo Federation policy validation, including scope token rules. This schema describes the object structure, not every semantic constraint.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": true,
+                "minProperties": 1
+              },
+              "minProperties": 1
+            },
+            "minProperties": 1
+          }
         },
         "additionalProperties": false
       },
