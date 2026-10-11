@@ -424,7 +424,12 @@ class DudectNixRetentionTests(unittest.TestCase):
         build = next(i for i, row in enumerate(steps) if row.get("id") == "integrity-nix")
         self.assertIn("nix eval --raw .#verified-reqs.outPath", steps[build]["run"])
         self.assertIn("--keep-failed", steps[build]["run"])
-        self.assertIn(".#ffi-contracts", steps[build]["run"])
+        self.assertNotIn(".#ffi-contracts", steps[build]["run"])
+        ffi = steps[build - 1]
+        self.assertEqual(ffi["run"], "nix build .#ffi-contracts --no-link -L")
+        self.assertNotIn("continue-on-error", ffi)
+        self.assertEqual(set(steps[build]), {"name", "id", "run"})
+        self.assertEqual(set(ffi), {"name", "run"})
         collect, upload = steps[build + 1 : build + 3]
         self.assertIn("collect_dudect_nix_output.py", collect["run"])
         self.assertIn("always()", collect["if"])
