@@ -101,6 +101,9 @@ pub(super) fn validate(claims: &Map<String, Value>) -> Result<(), FederationErro
             return Err(invalid("subordinate object claims"));
         }
     }
+    if let Some(value) = claims.get("constraints") {
+        validate_constraints(value)?;
+    }
     if let Some(value) = claims.get("source_endpoint") {
         validate_endpoint(value.as_str().ok_or_else(|| invalid("source_endpoint"))?)?;
     }
@@ -153,4 +156,26 @@ fn validate_metadata(value: &Value, configuration: bool) -> Result<(), Federatio
         }
     }
     Ok(())
+}
+
+fn validate_constraints(value: &Value) -> Result<(), FederationError> {
+    let object = value.as_object().ok_or_else(|| invalid("constraints"))?;
+    if object.get("max_path_length").is_some_and(|value| {
+        value
+            .as_u64()
+            .is_none_or(|number| u32::try_from(number).is_err())
+    }) {
+        return Err(invalid("max_path_length"));
+    }
+    for field in ["allowed_entity_types", "allowed_leaf_entity_types"] {
+        if let Some(value) = object.get(field) {
+            let types = value.as_array().ok_or_else(|| invalid(field))?;
+            if types.iter().any(|value| !value.is_string()) {
+                return Err(invalid(field));
+            }
+        }
+    }
+    let constraints: super::super::Constraints =
+        serde_json::from_value(value.clone()).map_err(|_| invalid("constraints"))?;
+    constraints.validate()
 }
