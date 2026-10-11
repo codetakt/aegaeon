@@ -325,7 +325,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "7f9a19ecc93cf128c3d7ace25ccbdcfb0a7c4a44c2fb559b81e34a5e83c25c39",
+      "sha256": "81bd5564a1a1d0671ad4e2e110b79d5d047dc66064869a6cd4ef1e254c39ac93",
       "entries": [
         "6749-014",
         "7521-201",

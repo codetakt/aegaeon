@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-10-03
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -328,3 +328,78 @@ signed/encrypted valid request. Editing a protected header invalidates its
 authentication tag. This correction requires no database or key migration.
 See the [JOSE header policy](../policies/jose-header-policy.md#jwe-and-encrypted-request-objects)
 for library compatibility and generic non-JWT JWE behavior.
+
+## RP-initiated logout confirmation
+
+Aegaeon policy always requests explicit browser confirmation for both GET and
+`application/x-www-form-urlencoded` POST requests at `/logout`.
+[RP-Initiated Logout 1.0 section 2](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout)
+requires asking when no hint is provided or when the hint does not belong to the
+current OP/RP session and/or current End-User, and generally recommends asking.
+The unconditional confirmation policy also covers a matching hint.
+
+POST parameters belong exclusively in the body; a nonempty query on POST is rejected. Input is strictly decoded and bounded
+before use, including malformed encoding and duplicate singleton rejection.
+`id_token_hint` retains the current signature, own-issuer and time checks.
+If `client_id` is also supplied, it must match the client identified by the hint.
+A registered `client_id` alone can identify an exact registered
+`post_logout_redirect_uri`. A redirect without any client identity is rejected.
+
+A valid initial request responds with a 303 to `/logout/confirm`. It does not
+end sessions, create an upstream relay, send logout notifications or redirect to
+the RP. This extra top-level GET permits a browser returning from a cross-site
+POST to send its ordinary SameSite session cookie. A single fixed-name
+`__Host-aegaeon-logout` cookie is Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain.
+The transaction and cookie secrets are independent 32-byte random values; only
+their digests are stored. The continuation expires after five minutes. Each accepted start replaces the
+cookie secret; only the transaction matching the browser's current cookie can
+proceed. Older tabs must restart. Concurrent responses can replace or clear the
+cookie and require a fresh request, but cannot approve a different transaction.
+This bounds confirmation-cookie storage to one slot. The page uses neutral
+requester wording: a public `client_id`, or possession of an ID Token hint,
+does not authenticate the party that initiated the browser request.
+
+The confirmation page binds its first display to the current browser session
+and subject, or explicitly to no active session. A changed session requires a
+fresh logout request. Confirm and Cancel require the same browser binding and
+an exact same-origin POST, and only one decision can consume the transaction.
+The form uses `Referrer-Policy: same-origin` so browser POSTs retain their
+Origin while cross-origin referrers remain suppressed. Missing, null, foreign
+and duplicate Origin headers are rejected.
+Cancel leaves the sessions unchanged and returns a local cancellation page.
+Confirm ends only the presented browser session and its associated OIDC session
+and RP set. A hint for another subject cannot select that subject's sessions.
+No current session means an idempotent no-op; it never triggers user-wide logout.
+HEAD does not end a session or create a new confirmation transaction.
+
+The server revalidates current policy, registration, redirect and any supplied
+hint before consuming the decision. After confirmation, return-target and
+upstream-relay preparation precede OIDC session termination and browser-session
+deletion. Existing backchannel dispatch remains best-effort before the success
+redirect. These stores and remote recipients do not share a transaction: a
+backend error after approval returns unavailable, and some local steps may have
+completed. Start a fresh logout request after recovery; the consumed decision
+cannot be replayed. This flow does not promise atomic remote logout or delivery
+retries. Only the relevant browser and confirmation cookies are cleared.
+
+Apply `20261012000000_logout_confirmations.sql` before running the updated
+server. Existing direct logout callers will now encounter confirmation. Replace
+all serving instances that can handle logout together: old instances retain
+the previous behavior, so the migration alone does not make a mixed deployment
+safe. No client or session identifiers are renamed.
+
+The new PostgreSQL table uses the existing per-environment, per-table
+`AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` and
+`AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` limits. Completed decisions remain
+counted until expiry. Admission and bounded expiry pruning use the same
+transaction/advisory-lock pattern as login and consent; background cleanup also
+prunes expired logout confirmations in batches of 512. Initial logout requests
+share `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` with authorization
+requests using the transport-validated source and shared Redis bucket. There is
+no new environment setting.
+
+Expiry cleanup for login, consent and logout materializes each batch of at most
+512 candidate IDs before deletion. Without that fixed candidate set, PostgreSQL
+can rescan a locking subquery in a nested-loop plan and delete more rows than
+its `LIMIT` specifies. Cleanup continues to skip rows locked by other requests
+and preserves live records and other environments.

@@ -18,12 +18,14 @@ use super::request_admission::{BoundedQueryLimits, DEFAULT_QUERY_LIMITS};
 pub(in crate::web) enum OidcEndpoint {
     Authorize,
     Logout,
+    LogoutConfirmation,
 }
 
 impl OidcEndpoint {
     fn recognizes(self, name: &str) -> bool {
         match self {
             Self::Authorize => RawAuthzQuery::recognizes_parameter(name),
+            Self::LogoutConfirmation => matches!(name, "transaction" | "decision"),
             Self::Logout => matches!(
                 name,
                 "id_token_hint"
@@ -105,6 +107,14 @@ pub(in crate::web) fn admit_oidc_query(
     )
 }
 
+/// The caller must bound body buffering and validate form content type first.
+pub(in crate::web) fn admit_oidc_form(
+    endpoint: OidcEndpoint,
+    raw: &[u8],
+) -> Result<OidcParameters, OidcInputError> {
+    admit_pairs(endpoint, raw, DEFAULT_QUERY_LIMITS)
+}
+
 fn admit_pairs(
     endpoint: OidcEndpoint,
     raw: &[u8],
@@ -137,6 +147,11 @@ fn admit_pairs(
             limits.max_value_bytes(),
             OidcInputError::ParameterValueTooLarge,
         )?;
+        if endpoint == OidcEndpoint::LogoutConfirmation
+            && (value.is_empty() || !endpoint.recognizes(&key))
+        {
+            return Err(OidcInputError::InvalidParameterValue);
+        }
         // RFC 6749 section 3.1: valueless parameters are treated as omitted.
         if value.is_empty() || !endpoint.recognizes(&key) {
             continue;
