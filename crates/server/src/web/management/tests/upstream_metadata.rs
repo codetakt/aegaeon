@@ -56,3 +56,5 @@ fn fail_acquisition(
 mod entity_types;
 
 mod critical_policy;
+
+mod naming_constraints;
