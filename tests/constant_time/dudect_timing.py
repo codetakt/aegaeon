@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 TIMING_NAME = "native.timing"
 TIMING_ENV = "AEGAEON_DUDECT_TIMING_FD"
 CASE = struct.Struct("<64s5Q")
+CASE_V4 = struct.Struct("<64s6Q")
 BATCH = struct.Struct("<18Q")
 INPUTS = {"sha256": 0xAA, "hmac_sha256": 0xBB, "hmac_sha256_key": 0x42}
 STRIDES = {
@@ -103,38 +104,50 @@ def validate_context(
     )
 
 
-def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
-    """Reject missing cases, pilot, batches, order, context or binding."""
-    identity = file_identity(path)
-    frames = PROFILES[profile][0][-1] + 1
-    size = HEADER_SIZE + sum(
-        CASE.size + frames * (BATCH.size + BATCH_SIZE * (41 if name in INPUTS else 9))
-        for name in bindings
-    )
-    require(identity["bytes"] == size, "Incomplete or extra all-case timing evidence")
+def validate_header(
+    header: bytes, bindings: dict[str, Any], frames: int, size: int
+) -> tuple[bytes, struct.Struct]:
     first = next(iter(bindings.values()))
     keys = ("build_sha256", "contract_sha256", "numerical_sha256")
     require(
         all(all(binding[key] == first[key] for key in keys) for binding in bindings.values()),
         "Timing file spans different native bindings",
     )
+    magic = header[:8]
+    require(magic in (b"AEGTIM03", b"AEGTIM04"), "Unknown all-case timing format")
+    case_frame = CASE_V4 if magic == b"AEGTIM04" else CASE
+    expected_size = HEADER_SIZE + sum(
+        case_frame.size + frames * (BATCH.size + BATCH_SIZE * (41 if name in INPUTS else 9))
+        for name in bindings
+    )
+    require(size == expected_size, "Incomplete or extra all-case timing evidence")
+    require(
+        header == magic + b"".join(first[key].encode("ascii") for key in keys),
+        "All-case timing binding mismatch",
+    )
+    return magic, case_frame
+
+
+def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
+    """Reject missing cases, pilot, batches, order, context or binding."""
+    identity = file_identity(path)
+    frames = PROFILES[profile][0][-1] + 1
     # Repeated synthetic batches can have identical payloads. Read every byte,
     # but reuse only the last exact (payload, case, width) summary within this
     # validation. Context/order checks always run; no file identity is cached.
     summarize_samples = functools.lru_cache(maxsize=1)(validate_samples)
     with path.open("rb") as source:
-        require(
-            source.read(HEADER_SIZE)
-            == b"AEGTIM03" + b"".join(first[key].encode("ascii") for key in keys),
-            "All-case timing binding mismatch",
+        magic, case_frame = validate_header(
+            source.read(HEADER_SIZE), bindings, frames, identity["bytes"]
         )
         previous_end = None
         previous_counters = [0] * 6
         layouts = {}
+        case_context_offsets = {}
         clocks: dict[str, list[dict[str, int | None]]] = {}
         distributions: dict[str, list[dict[str, Any]]] = {}
         for name in bindings:
-            native_name, stride, width, *offsets = CASE.unpack(source.read(CASE.size))
+            native_name, stride, width, *offsets = case_frame.unpack(source.read(case_frame.size))
             require(
                 native_name == name.encode("ascii").ljust(64, b"\0")
                 and stride == STRIDES[name]
@@ -142,6 +155,8 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
                 "Timing case identity, stride or input width mismatch",
             )
             require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
+            if magic == b"AEGTIM04":
+                case_context_offsets[name] = offsets.pop()
             layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
             clocks[name], distributions[name] = [], []
             for batch in range(frames):
@@ -160,7 +175,8 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
         require(source.read(1) == b"", "Trailing all-case timing evidence")
     return {
         **identity,
-        "format": "AEGTIM03",
+        "format": magic.decode("ascii"),
+        **({"case_context_offsets_mod4096": case_context_offsets} if case_context_offsets else {}),
         "cases": list(bindings),
         "input_cases": [name for name in bindings if name in INPUTS],
         "buffer_offsets_mod4096": layouts,

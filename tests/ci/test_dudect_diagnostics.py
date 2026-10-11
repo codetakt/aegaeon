@@ -26,7 +26,7 @@ from dudect_diagnostics import (
     validate_trace,
 )
 from dudect_process import ObservationStream
-from dudect_timing import BATCH, CASE, validate_timing
+from dudect_timing import BATCH, CASE, CASE_V4, validate_timing
 
 
 class DiagnosticTests(unittest.TestCase):
@@ -260,17 +260,19 @@ class DiagnosticTests(unittest.TestCase):
         )
         self.assertEqual(result["pathnames"], "excluded")
 
-    def timing_fixture(self):
+    def timing_fixture(self, *, context_offsets=None):
         self.enterContext(patch("dudect_timing.BATCH_SIZE", 2))
         self.enterContext(patch.dict("dudect_timing.PROFILES", {"pr": ((1,), 1, 1)}))
         names = ("ct_eq_64", "sha256", "hmac_sha256_key")
         bindings = {name: binding(name, suite="nix") for name in names}
-        data = b"AEGTIM03" + self.header[8:]
+        frame = CASE if context_offsets is None else CASE_V4
+        data = (b"AEGTIM03" if context_offsets is None else b"AEGTIM04") + self.header[8:]
         stamp = 1
-        for name in names:
+        for index, name in enumerate(names):
             stride = 64 if name == "ct_eq_64" else 32
             width = 0 if name == "ct_eq_64" else 32
-            data += CASE.pack(name.encode(), stride, width, 16, 32, 48)
+            extra = () if context_offsets is None else (context_offsets[index],)
+            data += frame.pack(name.encode(), stride, width, 16, 32, 48, *extra)
             for batch in range(2):
                 data += BATCH.pack(batch, 2, stamp, stamp + 1, *([0] * 14))
                 stamp += 2
@@ -285,6 +287,8 @@ class DiagnosticTests(unittest.TestCase):
         validated = validate_timing(self.path, bindings, "pr")
         self.assertEqual(validated["cases"], list(bindings))
         self.assertEqual(validated["input_cases"], ["sha256", "hmac_sha256_key"])
+        self.assertEqual(validated["format"], "AEGTIM03")
+        self.assertNotIn("case_context_offsets_mod4096", validated)
         self.assertEqual(
             validated["buffer_offsets_mod4096"]["sha256"],
             {"inputs": 16, "ticks": 32, "classes": 48},
@@ -295,6 +299,30 @@ class DiagnosticTests(unittest.TestCase):
                 self.assertEqual(clock["delta_gcd"], 10)
                 self.assertEqual(clock["timestamp_residue_mod_gcd"], 0)
                 self.assertEqual(clock["backward_deltas"], 0)
+
+    def test_case_context_offsets_preserve_zero_and_page_end_without_inference(self):
+        bindings, data = self.timing_fixture(context_offsets=(0, 64, 4095))
+        self.path.write_bytes(data)
+        result = validate_timing(self.path, bindings, "pr")
+        self.assertEqual(result["format"], "AEGTIM04")
+        self.assertEqual(
+            result["case_context_offsets_mod4096"],
+            {"ct_eq_64": 0, "sha256": 64, "hmac_sha256_key": 4095},
+        )
+        self.assertEqual(
+            result["buffer_offsets_mod4096"]["sha256"],
+            {"inputs": 16, "ticks": 32, "classes": 48},
+        )
+
+    def test_case_context_offset_requires_complete_matching_versioned_framing(self):
+        bindings, data = self.timing_fixture(context_offsets=(0, 64, 4095))
+        bad_offset = bytearray(data)
+        struct.pack_into("<Q", bad_offset, 200 + CASE_V4.size - 8, 4096)
+        missing_offset = data[: 200 + CASE.size] + data[200 + CASE_V4.size :]
+        for bad in (bad_offset, missing_offset, b"AEGTIM03" + data[8:], data[:-1], data + b"x"):
+            with self.subTest(size=len(bad)), self.assertRaises(ValueError):
+                self.path.write_bytes(bad)
+                validate_timing(self.path, bindings, "pr")
 
     def repeated_timing_fixture(self, names=("sha256",)):
         self.enterContext(patch("dudect_timing.BATCH_SIZE", 16))

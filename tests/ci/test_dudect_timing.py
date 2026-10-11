@@ -20,7 +20,7 @@ from test_dudect_candidate import binding
 
 sys.path.insert(0, str(ROOT / "tests/constant_time"))
 from dudect_diagnostics import FRAME, TRACE_ENV, validate_trace
-from dudect_timing import BATCH, CASE, INPUTS, TIMING_ENV, summarize_ticks, validate_timing
+from dudect_timing import BATCH, CASE_V4, INPUTS, TIMING_ENV, summarize_ticks, validate_timing
 
 PROBE = r"""
 #include <string.h>
@@ -57,9 +57,9 @@ int main(void) {
             for (size_t i = 0; i < 128; ++i)
                 for (size_t j = 0; j < config.chunk_size; ++j)
                     printf("%02x", ctx.input_data[i * config.chunk_size + j]);
-            printf("\",\"layout\":[%" PRIuPTR ",%" PRIuPTR ",%" PRIuPTR "]}\n",
+            printf("\",\"layout\":[%" PRIuPTR ",%" PRIuPTR ",%" PRIuPTR ",%" PRIuPTR "]}\n",
                    (uintptr_t)ctx.input_data % 4096, (uintptr_t)ctx.ticks % 4096,
-                   (uintptr_t)ctx.classes % 4096);
+                   (uintptr_t)ctx.classes % 4096, (uintptr_t)&ctx % 4096);
         }
         dudect_trace_end(&trace); dudect_free(&ctx);
     }
@@ -119,11 +119,20 @@ class NativeTimingTests(unittest.TestCase):
                         patch("dudect_diagnostics.BATCH_SIZE", 128),
                         patch.dict("dudect_diagnostics.PROFILES", {"pr": ((1,), 1, 1)}),
                     ):
-                        self.assertTrue(validate_timing(trace, bindings, "pr")["complete"])
+                        summary = validate_timing(trace, bindings, "pr")
+                        self.assertTrue(summary["complete"])
+                        self.assertEqual(summary["format"], "AEGTIM04")
                         self.assertTrue(
                             validate_trace(samples, bindings["ct_eq_128"], "pr")["complete"]
                         )
                     original = [json.loads(line) for line in result.stdout.splitlines()]
+                    self.assertEqual(
+                        summary["case_context_offsets_mod4096"],
+                        {
+                            name: original[index * 2]["layout"][3]
+                            for index, name in enumerate(names)
+                        },
+                    )
                     self.assert_frames(trace, names, original)
                     self.assert_full_sample_frames(samples, original[2:4])
                     # Existing bytes must never be silently appended as a fresh run.
@@ -159,9 +168,10 @@ class NativeTimingTests(unittest.TestCase):
 
     def assert_frames(self, trace, names, original):
         with trace.open("rb") as data:
+            self.assertEqual(data.read(8), b"AEGTIM04")
             data.seek(200)
             for case, name in enumerate(names):
-                recorded_name, stride, width, *layout = CASE.unpack(data.read(CASE.size))
+                recorded_name, stride, width, *layout = CASE_V4.unpack(data.read(CASE_V4.size))
                 self.assertEqual(recorded_name.rstrip(b"\0"), name.encode())
                 self.assertEqual(stride, 128 if name == "ct_eq_128" else 32)
                 self.assertEqual(width, 32 if case >= 2 else 0)

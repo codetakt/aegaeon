@@ -212,11 +212,19 @@ Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse
 crops or one-class zero variance in the original failing execution. Its
-`AEGTIM03` framing binds the native build, contract, numerical identity, case
+`AEGTIM04` framing binds the native build, contract, numerical identity, case
 order, input stride and full profile. Each case also records the input, timestamp
 and class-buffer addresses modulo 4096, so cache-line position need not be
 guessed from sample index. These offsets do not reveal full addresses or establish
-physical cache placement. Each batch includes monotonic timestamps,
+physical cache placement. The case header also records the caller's
+`dudect_ctx_t` address modulo 4096. Each current harness places this context on
+its stack; the `case_context_offsets_mod4096` summary retains its position
+separately from the three buffer offsets. This locates the case context within
+its page, not a provider's internal frame, physical page, or CPU cache set.
+It helps compare failing layouts without inferring a cause from a mapping range.
+The offset is written once before the pilot, with no extra sample allocation or
+operation inside the timed loop. Changing this instrumentation can itself change
+layout; evidence remains bound to the actual executable. Each batch includes monotonic timestamps,
 actual CPUs and cumulative process resource counters before and after the
 measurement function. CPU lookup failure is recorded as `UINT64_MAX`;
 clock/resource lookup failure aborts collection. Boundary CPUs do not exclude
@@ -233,8 +241,12 @@ message remains the source-bound fixed 32-byte `0x5a` fixture. These keys belong
 only to the synthetic test and are unrelated to runtime credentials.
 Earlier `AEGTIM01` evidence did not retain these messages or buffer offsets;
 `AEGTIM02` added SHA/HMAC messages but omitted HMAC-key inputs. Missing original
-bytes cannot be reconstructed. Historical packets stay unchanged and must be
-read with their bound source version; the current consumer requires `AEGTIM03`.
+bytes cannot be reconstructed. `AEGTIM03` retains all current input bytes but
+omits the case-context offset. The consumer accepts both `AEGTIM03` and
+`AEGTIM04`, validating each version's exact framing; an older trace has no
+`case_context_offsets_mod4096` field, rather than an invented zero offset.
+Historical packets and source bindings stay unchanged. Formats 01/02 and older
+report summaries still require their corresponding source-version consumers.
 
 After the native process exits, the consumer derives `clock_batches` in
 `process.json` from every original timestamp array. Each pilot and measured batch

@@ -49,7 +49,7 @@ static int dudect_timing_begin(const char *name, dudect_ctx_t *ctx) {
     if (initialized < 0) {
         dudect_require(info.st_size == 0 && lseek((int)fd, 0, SEEK_CUR) == 0,
                        "empty timing evidence file");
-        dudect_trace_write((int)fd, "AEGTIM03", 8);
+        dudect_trace_write((int)fd, "AEGTIM04", 8);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_BUILD_SHA256, 64);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_CONTRACT_SHA256, 64);
         dudect_trace_write((int)fd, AEGAEON_DUDECT_NUMERICAL_SHA256, 64);
@@ -61,11 +61,15 @@ static int dudect_timing_begin(const char *name, dudect_ctx_t *ctx) {
     size_t width = dudect_timing_input_width(name);
     dudect_require(!width || ctx->config->chunk_size == width,
                    "contiguous synthetic timing inputs");
-    uint64_t layout[5] = {
+    uint64_t layout[6] = {
         ctx->config->chunk_size, width,
         (uintptr_t)ctx->input_data % 4096,
         (uintptr_t)ctx->ticks % 4096,
-        (uintptr_t)ctx->classes % 4096
+        (uintptr_t)ctx->classes % 4096,
+        /* The caller's case context is stack-allocated in each harness.
+         * Capture its position before the pilot, without another allocation
+         * or any additional operation in the timed computation. */
+        (uintptr_t)ctx % 4096
     };
     dudect_trace_write((int)fd, case_name, sizeof case_name);
     dudect_trace_write((int)fd, layout, sizeof layout);
