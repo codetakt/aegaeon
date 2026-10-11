@@ -5385,6 +5385,7 @@ openid_federation_rp:
   - crates/server/src/web/management/tests/upstream_metadata/callback.rs
   - crates/server/src/web/management/tests/upstream_metadata/refresh.rs
   - crates/server/src/web/management/tests/upstream_metadata/inline_jwks.rs
+  - crates/server/src/web/management/tests/upstream_metadata/algorithms.rs
   status: implemented
   runtime_link: crates/server/src/web/upstream_metadata/federation.rs
   notes:

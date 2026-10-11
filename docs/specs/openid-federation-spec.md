@@ -189,7 +189,12 @@ The captured iss requirement is the profile requirement OR advertised support.
 Absent supported scopes retain unknown-advertisement behavior; an explicit empty
 list rejects requested scopes. Absent token authentication metadata defaults to
 `client_secret_basic`. Policy-selected capability and algorithm identifiers are
-compared exactly, without case or whitespace normalization.
+compared exactly, without case or whitespace normalization. In both ordinary
+Discovery and resolved Federation metadata, `rs256` does not authorize an `RS256`
+ID Token; providers relying on the former case-insensitive comparison must publish
+the registered spelling. An exact matching member still permits the algorithm
+when other, unsupported identifiers are also advertised. This follows the
+case-sensitive JWA identifiers in [RFC 7518 §7.1.1](https://www.rfc-editor.org/rfc/rfc7518.html#section-7.1.1).
 
 Callback selects and validates current signed metadata before sending the code
 or client credentials. It retains captured token/JWKS endpoints, authentication
