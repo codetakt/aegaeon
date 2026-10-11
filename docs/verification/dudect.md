@@ -250,6 +250,23 @@ median, 95th percentile and maximum, using zero-based `floor(n * p)` ranks witho
 interpolation. Empty classes have null order statistics. These are descriptive
 quantiles, not replacements for the frozen pilot cutoffs or statistical tests.
 
+Every class summary also retains exact integer `sum_ticks` and
+`sum_squared_ticks`. With count `n`, sum `S` and squared sum `Q`, the sample
+variance can be reconstructed as `(n*Q - S*S) / (n*(n-1))` when `n > 1`.
+Consumers must preserve arbitrary-precision integers; converting the stored
+moments to floating point first can erase a small variance. Empty classes use
+zero sums and null order statistics.
+
+Both the whole batch and each block include `label_transitions`, four summaries
+in previous/current label order `00`, `01`, `10`, `11`. The preceding label is
+from the original sample sequence, including index 9 for the first retained
+duration and the preceding block at block boundaries. A discarded negative
+duration does not reconnect the surrounding labels. There is no transition
+across batches. Repeated class-1 labels do not imply identical random inputs.
+These summaries expose changes in class contrasts over time and associations
+with preceding labels; they do not establish a cause, a stationary distribution,
+or a new statistical test. All original observations and outcomes remain retained.
+
 Each batch summary also exposes its original monotonic interval, time since the
 previous batch ended (including across cases in the same executable), boundary
 CPUs and resource-counter differences. The first gap is null; unavailable CPU

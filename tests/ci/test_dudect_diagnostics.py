@@ -321,7 +321,9 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(second["context"]["gap_before_ns"], 1)
         self.assertEqual(first["classes"][0]["count"], 5)
         first["classes"][0]["order_statistics"]["min"] = -1
+        first["label_transitions"][0]["sum_ticks"] = -1
         self.assertEqual(second["classes"][0]["order_statistics"]["min"], 10)
+        self.assertEqual(second["label_transitions"][0]["sum_ticks"], 50)
         fresh = validate_timing(self.path, bindings, "pr")
         self.assertEqual(
             fresh["distribution_batches"]["sha256"][0]["classes"][0]["order_statistics"]["min"],
@@ -339,6 +341,10 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual([group["count"] for group in first["classes"]], [5, 0])
         self.assertEqual([group["count"] for group in second["classes"]], [3, 1])
         self.assertEqual(second["negative_deltas"], 1)
+        self.assertEqual([group["count"] for group in second["label_transitions"]], [2, 1, 1, 0])
+        # Original class-0 intervals are 10, 10, 21; the final -11 is excluded.
+        self.assertEqual(second["classes"][0]["sum_ticks"], 41)
+        self.assertEqual(second["classes"][0]["sum_squared_ticks"], 641)
         self.assertEqual(result["clock_batches"]["sha256"][1]["backward_deltas"], 1)
 
     def test_later_fixed_input_corruption_cannot_reuse_a_summary(self):

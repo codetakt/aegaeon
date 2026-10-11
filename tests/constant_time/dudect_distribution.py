@@ -12,6 +12,8 @@ def describe(values: list[int]) -> dict[str, Any]:
     count = len(values)
     return {
         "count": count,
+        "sum_ticks": sum(values),
+        "sum_squared_ticks": sum(value * value for value in values),
         "order_statistics": (
             dict(
                 zip(
@@ -32,11 +34,13 @@ def summarize_distribution(deltas: tuple[int, ...], classes: bytes) -> dict[str,
     start = min(10, len(deltas))
     size = len(deltas) - start
     whole: list[list[int]] = [[], []]
+    transitions: list[list[int]] = [[], [], [], []]
     blocks = []
     for index in range(BLOCKS):
         lo = start + index * size // BLOCKS
         hi = start + (index + 1) * size // BLOCKS
         groups: list[list[int]] = [[], []]
+        preceding: list[list[int]] = [[], [], [], []]
         negative = 0
         for sample in range(lo, hi):
             value = deltas[sample]
@@ -44,19 +48,26 @@ def summarize_distribution(deltas: tuple[int, ...], classes: bytes) -> dict[str,
                 negative += 1
             else:
                 groups[classes[sample]].append(value)
+                # The preceding label is from the original sequence, including
+                # index 9 or the prior block; filtering must not reconnect it.
+                preceding[2 * classes[sample - 1] + classes[sample]].append(value)
         for group in (0, 1):
             whole[group].extend(groups[group])
+        for pair in range(4):
+            transitions[pair].extend(preceding[pair])
         blocks.append(
             {
                 "indices": [lo, hi],
                 "negative_deltas": negative,
                 "classes": [describe(values) for values in groups],
+                "label_transitions": [describe(values) for values in preceding],
             }
         )
     return {
         "indices": [start, len(deltas)],
         "negative_deltas": sum(block["negative_deltas"] for block in blocks),
         "classes": [describe(values) for values in whole],
+        "label_transitions": [describe(values) for values in transitions],
         "blocks": blocks,
     }
 
