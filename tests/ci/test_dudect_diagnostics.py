@@ -34,27 +34,28 @@ class DiagnosticTests(unittest.TestCase):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.path = self.root / "trace"
         self.binding = binding("ct_eq_128", suite="nix")
-        self.header = b"AEGTRC01" + b"".join(
+        self.header = b"AEGTRC02" + b"".join(
             self.binding[k].encode()
             for k in ("build_sha256", "contract_sha256", "numerical_sha256")
         )
         # Small structural fixture; native batch size remains fixed in production.
         self.enterContext(patch("dudect_diagnostics.BATCH_SIZE", 2))
         self.enterContext(patch.dict("dudect_diagnostics.PROFILES", {"pr": ((1,), 1, 1)}))
-        self.frame = FRAME.pack(0, 2, 128, 32) + struct.pack("<2q", 100, 120)
-        self.frame += bytes([0, 1]) + bytes(32) + bytes([7]) * 32
-        self.good = self.header + self.frame + FRAME.pack(1, 2, 128, 32) + self.frame[32:]
+        self.frame = FRAME.pack(0, 2, 128, 128) + struct.pack("<2q", 100, 120)
+        self.frame += bytes([0, 1]) + bytes(128) + bytes([7]) * 128
+        self.good = self.header + self.frame + FRAME.pack(1, 2, 128, 128) + self.frame[32:]
         self.path.write_bytes(self.good)
 
     def test_complete_trace_binds_original_order_and_identity(self):
         result = validate_trace(self.path, self.binding, "pr")
         self.assertEqual(result["frames"], 2)
         self.assertEqual(result["bytes"], len(self.good))
+        self.assertEqual(result["format"], "AEGTRC02")
         self.assertTrue(result["complete"])
 
     def test_truncation_append_binding_sequence_class_and_input_rejected(self):
-        changes = [self.good[:-1], self.good + b"x"]
-        for offset in (0, 8, 200, 200 + 48, 200 + 50):
+        changes = [self.good[:-1], self.good + b"x", b"AEGTRC01" + self.good[8:]]
+        for offset in (0, 8, 200, 200 + 24, 200 + 48, 200 + 50, 200 + 50 + 96):
             bad = bytearray(self.good)
             bad[offset] = 9
             changes.append(bytes(bad))

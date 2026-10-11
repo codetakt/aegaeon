@@ -34,33 +34,33 @@ def validate_trace(path: Path, binding: dict[str, Any], profile: str) -> dict[st
     """Validate complete framing and binding, without changing the inference."""
     identity = file_identity(path)
     frames = PROFILES[profile][0][-1] + 1  # Includes the independent pilot.
-    size = HEADER_SIZE + frames * (FRAME.size + BATCH_SIZE * 41)
+    size = HEADER_SIZE + frames * (FRAME.size + BATCH_SIZE * 137)
     require(identity["bytes"] == size, "Incomplete or extra ordered sample evidence")
     with path.open("rb") as source:
-        header = b"AEGTRC01" + b"".join(
+        header = b"AEGTRC02" + b"".join(
             binding[key].encode("ascii")
             for key in ("build_sha256", "contract_sha256", "numerical_sha256")
         )
         require(source.read(HEADER_SIZE) == header, "Ordered sample binding mismatch")
         for batch in range(frames):
             require(
-                source.read(FRAME.size) == FRAME.pack(batch, BATCH_SIZE, 128, 32),
+                source.read(FRAME.size) == FRAME.pack(batch, BATCH_SIZE, 128, 128),
                 "Ordered sample dimensions or sequence mismatch",
             )
             source.seek(BATCH_SIZE * 8, os.SEEK_CUR)  # Original int64 timestamp order.
             classes = source.read(BATCH_SIZE)
-            inputs = source.read(BATCH_SIZE * 32)
+            inputs = source.read(BATCH_SIZE * 128)
             require(set(classes) <= {0, 1}, "Invalid ordered sample class")
             require(
                 all(
-                    inputs[i * 32 : (i + 1) * 32] == bytes(32)
+                    inputs[i * 128 : (i + 1) * 128] == bytes(128)
                     for i, label in enumerate(classes)
                     if label == 0
                 ),
                 "Invalid fixed-class comparison input",
             )
         require(source.read(1) == b"", "Trailing ordered sample evidence")
-    return {**identity, "format": "AEGTRC01", "frames": frames, "complete": True}
+    return {**identity, "format": "AEGTRC02", "frames": frames, "complete": True}
 
 
 def read_optional(path: str) -> dict[str, Any]:

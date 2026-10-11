@@ -51,11 +51,11 @@ if 'AEGAEON_DUDECT_TIMING_FD' in os.environ and not options.get('omit_timing'):
 if 'AEGAEON_DUDECT_TRACE_FD' in os.environ and not options.get('omit_trace'):
     binding = next(row['binding'] for row in rows[sys.argv[1]] if row['case'] == 'ct_eq_128')
     with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TRACE_FD'])), 'wb') as trace:
-        trace.write(b'AEGTRC01' + b''.join(binding[key].encode() for key in
+        trace.write(b'AEGTRC02' + b''.join(binding[key].encode() for key in
                     ('build_sha256', 'contract_sha256', 'numerical_sha256')))
         for batch in range(99 if sys.argv[1] == 'periodic' else 8):
-            trace.write(struct.pack('<4Q', batch, 65536, 128, 32))
-            trace.seek(65536 * 41 - 1, 1)
+            trace.write(struct.pack('<4Q', batch, 65536, 128, 128))
+            trace.seek(65536 * 137 - 1, 1)
             trace.write(b'\x00')
         if options.get('truncate_trace'): trace.truncate(trace.tell() - 1)
 for row in rows[sys.argv[1]]:

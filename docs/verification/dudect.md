@@ -278,12 +278,14 @@ physical invisibility.
 For the local `ct_eq_128` negative control, `native.samples` preserves **every**
 batch in the same execution, including the pilot. The name denotes a 128-byte
 input stride; the comparison itself reads 32 bytes. Each batch records the
-original timestamp order, class labels, and the actual 32-byte synthetic inputs.
-The unused 96 bytes of stride padding are omitted. Writes occur after a batch's
+original timestamp order, class labels, and the entire 128-byte synthetic input
+region, including the 96 bytes outside the comparison. Writes occur after a batch's
 measurements and statistical updates, before its observation/acknowledgment.
 They can affect the conditions of later batches; instrumentation is not assumed
-to be physically invisible. The allocation is 2 MiB plus bounded framing;
-files are about 21 MiB for PR and 254 MiB for periodic. The SHA/HMAC messages
+to be physically invisible. Capture uses the existing input buffer directly;
+removing the former 2 MiB compact-copy allocation changes instrumentation and
+can change memory layout. Files are about 68.5 MiB for PR and 848 MiB for periodic.
+The SHA/HMAC messages
 and HMAC test keys are retained in `native.timing`; remaining cases retain
 ordered timing/class evidence without their synthetic input bytes.
 
@@ -326,12 +328,16 @@ claim cached observations are fresh. The dedicated runtime jobs still collect
 fresh observations. A CI inconclusive result without retained observations
 cannot be diagnosed from the summary line alone.
 
-The binary format is little endian. Its 200-byte header is ASCII `AEGTRC01`,
+The binary format is little endian. Its 200-byte header is ASCII `AEGTRC02`,
 then three 64-byte ASCII SHA-256 values: build, contract, numerical policy. Each
 frame starts with four unsigned 64-bit integers: zero-based batch index, sample
-count (65,536), stride (128), captured input width (32). These are followed by
+count (65,536), stride (128), captured input width (128). These are followed by
 65,536 signed 64-bit timestamps, 65,536 byte class labels, and 65,536 contiguous
-32-byte inputs. Batch zero is the pilot. To reconstruct durations, subtract
+128-byte inputs. Batch zero is the pilot. Historical `AEGTRC01` files retain only
+32 bytes per input and require their original source-version consumer; they
+cannot reconstruct the omitted 96 bytes. The current validator rejects that
+older format rather than claiming complete input coverage.
+To reconstruct durations, subtract
 adjacent timestamps and apply the documented exclusions; the last timestamp
 has no following measured duration. Stored observations preserve the pilot
 cutoffs/center needed to replay all 102 statistics. Keep all files from the
@@ -339,9 +345,9 @@ failed attempt before any new experiment, and record interventions separately.
 
 A retained historical periodic `ct_eq_128` detection remains causally unresolved.
 Subsequent isolated and shared-host diagnostic nondetections do not invalidate
-it or establish a repair. This capture closes the missing-data gap for future
-runs; it cannot reconstruct the absent ordered samples and CPU history of that
-old attempt. Further diagnosis must distinguish input association, temporal
+it or establish a repair. This capture retains ordered samples and complete
+input regions for future runs; it cannot reconstruct the absent ordered samples,
+input tails and CPU history of that old attempt. Further diagnosis must distinguish input association, temporal
 structure, processor state, artifact changes, and collector effects without
 weakening the contract or discarding the original failure.
 

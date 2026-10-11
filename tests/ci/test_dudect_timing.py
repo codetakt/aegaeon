@@ -9,14 +9,18 @@ import os
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from dudect_fixture import ROOT
-from dudect_timing import BATCH, CASE, INPUTS, TIMING_ENV, summarize_ticks, validate_timing
 from test_dudect_candidate import binding
+
+sys.path.insert(0, str(ROOT / "tests/constant_time"))
+from dudect_diagnostics import FRAME, TRACE_ENV, validate_trace
+from dudect_timing import BATCH, CASE, INPUTS, TIMING_ENV, summarize_ticks, validate_timing
 
 PROBE = r"""
 #include <string.h>
@@ -51,7 +55,7 @@ int main(void) {
                 printf("%s%" PRId64, i ? "," : "", ctx.ticks[i]);
             printf("],\"inputs\":\"");
             for (size_t i = 0; i < 128; ++i)
-                for (size_t j = 0; j < 32; ++j)
+                for (size_t j = 0; j < config.chunk_size; ++j)
                     printf("%02x", ctx.input_data[i * config.chunk_size + j]);
             printf("\",\"layout\":[%" PRIuPTR ",%" PRIuPTR ",%" PRIuPTR "]}\n",
                    (uintptr_t)ctx.input_data % 4096, (uintptr_t)ctx.ticks % 4096,
@@ -72,6 +76,7 @@ class NativeTimingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source, binary, trace = root / "probe.c", root / "probe", root / "timing"
+            samples = root / "samples"
             source.write_text(PROBE)
             for compiler in ("clang", "gcc"):
                 with self.subTest(compiler=compiler):
@@ -94,13 +99,16 @@ class NativeTimingTests(unittest.TestCase):
                         ],
                     ]
                     subprocess.run(command, capture_output=True, check=True, timeout=30)
-                    with trace.open("wb") as output:
-                        env = {**os.environ, TIMING_ENV: str(output.fileno())}
-                        env.pop("AEGAEON_DUDECT_TRACE_FD", None)
+                    with trace.open("wb") as output, samples.open("wb") as ordered:
+                        env = {
+                            **os.environ,
+                            TIMING_ENV: str(output.fileno()),
+                            TRACE_ENV: str(ordered.fileno()),
+                        }
                         result = subprocess.run(
                             [str(binary)],
                             env=env,
-                            pass_fds=(output.fileno(),),
+                            pass_fds=(output.fileno(), ordered.fileno()),
                             capture_output=True,
                             check=True,
                             timeout=30,
@@ -108,12 +116,19 @@ class NativeTimingTests(unittest.TestCase):
                     with (
                         patch("dudect_timing.BATCH_SIZE", 128),
                         patch.dict("dudect_timing.PROFILES", {"pr": ((1,), 1, 1)}),
+                        patch("dudect_diagnostics.BATCH_SIZE", 128),
+                        patch.dict("dudect_diagnostics.PROFILES", {"pr": ((1,), 1, 1)}),
                     ):
                         self.assertTrue(validate_timing(trace, bindings, "pr")["complete"])
+                        self.assertTrue(
+                            validate_trace(samples, bindings["ct_eq_128"], "pr")["complete"]
+                        )
                     original = [json.loads(line) for line in result.stdout.splitlines()]
                     self.assert_frames(trace, names, original)
+                    self.assert_full_sample_frames(samples, original[2:4])
                     # Existing bytes must never be silently appended as a fresh run.
                     with trace.open("ab") as output:
+                        env.pop(TRACE_ENV, None)
                         rejected = subprocess.run(
                             [str(binary)],
                             env={**env, TIMING_ENV: str(output.fileno())},
@@ -124,6 +139,23 @@ class NativeTimingTests(unittest.TestCase):
                         )
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn(b"empty timing evidence file", rejected.stderr)
+
+    def assert_full_sample_frames(self, samples, original):
+        with samples.open("rb") as data:
+            self.assertEqual(data.read(8), b"AEGTRC02")
+            data.seek(200)
+            for batch, expected in enumerate(original):
+                self.assertEqual(FRAME.unpack(data.read(FRAME.size)), (batch, 128, 128, 128))
+                self.assertEqual(
+                    list(struct.unpack("<128q", data.read(128 * 8))), expected["ticks"]
+                )
+                self.assertEqual(data.read(128), bytes([0, 1] * 64))
+                inputs = data.read(128 * 128)
+                self.assertEqual(inputs, bytes.fromhex(expected["inputs"]))
+                for i in range(128):
+                    wanted = bytes((i + j) % 256 for j in range(128)) if i % 2 else bytes(128)
+                    self.assertEqual(inputs[i * 128 : (i + 1) * 128], wanted)
+            self.assertEqual(data.read(1), b"")
 
     def assert_frames(self, trace, names, original):
         with trace.open("rb") as data:

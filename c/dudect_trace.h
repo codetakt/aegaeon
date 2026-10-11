@@ -14,7 +14,6 @@
 
 typedef struct {
     int fd;
-    uint8_t *inputs;
     int timing_fd;
     size_t timing_input_width;
 } dudect_trace_t;
@@ -97,7 +96,7 @@ static void dudect_timing_batch(int fd, dudect_ctx_t *ctx, size_t batch, size_t 
 
 static dudect_trace_t dudect_trace_begin(const char *name, dudect_ctx_t *ctx) {
     dudect_trace_t trace = {
-        -1, NULL, dudect_timing_begin(name, ctx), dudect_timing_input_width(name)
+        -1, dudect_timing_begin(name, ctx), dudect_timing_input_width(name)
     };
     const char *value = getenv("AEGAEON_DUDECT_TRACE_FD");
     if (!value || strcmp(name, "ct_eq_128")) return trace;
@@ -110,12 +109,10 @@ static dudect_trace_t dudect_trace_begin(const char *name, dudect_ctx_t *ctx) {
     dudect_require(!fstat((int)fd, &info) && S_ISREG(info.st_mode) && info.st_size == 0,
                    "empty regular sample evidence file");
     dudect_require(ctx->config->chunk_size == 128 &&
-                   ctx->config->number_measurements <= SIZE_MAX / 32,
+                   ctx->config->number_measurements <= SIZE_MAX / 128,
                    "sample evidence dimensions");
-    trace.inputs = malloc(ctx->config->number_measurements * 32);
-    dudect_require(trace.inputs != NULL, "sample evidence buffer");
     trace.fd = (int)fd;
-    dudect_trace_write(trace.fd, "AEGTRC01", 8);
+    dudect_trace_write(trace.fd, "AEGTRC02", 8);
     dudect_trace_write(trace.fd, AEGAEON_DUDECT_BUILD_SHA256, 64);
     dudect_trace_write(trace.fd, AEGAEON_DUDECT_CONTRACT_SHA256, 64);
     dudect_trace_write(trace.fd, AEGAEON_DUDECT_NUMERICAL_SHA256, 64);
@@ -126,19 +123,17 @@ static void dudect_trace_batch(dudect_trace_t *trace, dudect_ctx_t *ctx, size_t 
     dudect_timing_batch(trace->timing_fd, ctx, batch, trace->timing_input_width);
     if (trace->fd < 0) return;
     size_t count = ctx->config->number_measurements;
-    uint64_t header[4] = {batch, count, ctx->config->chunk_size, 32};
-    /* Keep the actual 32-byte comparison inputs, not the unused stride padding.
+    uint64_t header[4] = {batch, count, ctx->config->chunk_size, 128};
+    /* Retain the entire original input region, including bytes outside the
+     * 32-byte comparison. Their omission prevented exact input reconstruction.
      * ticks preserve sample order even after the pilot sorts exec_times. */
-    for (size_t i = 0; i < count; ++i)
-        memcpy(trace->inputs + i * 32, ctx->input_data + i * ctx->config->chunk_size, 32);
     dudect_trace_write(trace->fd, header, sizeof header);
     dudect_trace_write(trace->fd, ctx->ticks, count * sizeof(int64_t));
     dudect_trace_write(trace->fd, ctx->classes, count);
-    dudect_trace_write(trace->fd, trace->inputs, count * 32);
+    dudect_trace_write(trace->fd, ctx->input_data, count * 128);
 }
 
 static void dudect_trace_end(dudect_trace_t *trace) {
-    free(trace->inputs);
     if (trace->fd >= 0)
         dudect_require(!close(trace->fd), "close sample evidence descriptor");
 }
