@@ -12,12 +12,17 @@ type TestResult = Result<(), String>;
 #[derive(Default)]
 struct ControlledStore {
     millis: AtomicU64,
+    advance_on_store: AtomicU64,
     entries: Mutex<HashMap<String, u64>>,
     retained: Mutex<Vec<Duration>>,
 }
 
 impl ReplayStore for ControlledStore {
     fn check_and_store(&self, entry: ReplayEntry<'_>) -> Result<(), ReplayStoreError> {
+        let advanced = self.advance_on_store.swap(0, Ordering::SeqCst);
+        if advanced != 0 {
+            self.millis.store(advanced, Ordering::SeqCst);
+        }
         let now = self.millis.load(Ordering::SeqCst);
         let ttl: u64 = entry
             .ttl
@@ -61,13 +66,13 @@ fn verify_at(
     proof: &str,
     millis: u64,
 ) -> Result<DpopBinding, DpopError> {
-    middleware.verify_components_at(
+    middleware.verify_components_with_clock(
         DpopEndpointRole::AuthorizationServer,
         &Method::GET,
         &Uri::from_static("/resource"),
         proof,
         None,
-        millis / 1000,
+        || Ok(millis / 1000),
     )
 }
 
@@ -195,3 +200,122 @@ fn dpop_retention_overflow_fails_before_replay_insertion() -> TestResult {
 
 #[path = "retention_redis_tests.rs"]
 mod redis;
+
+#[test]
+fn dpop_retention_rejects_duplicate_delayed_past_original_record_expiry() {
+    let start = 1_700_000_000_000u64;
+    let store = Arc::new(ControlledStore::default());
+    store.millis.store(start, Ordering::SeqCst);
+    let middleware = DpopMiddleware::new(
+        "in-flight",
+        "https://issuer.example",
+        store.clone(),
+        Duration::from_secs(1),
+    );
+    let token = proof(start / 1000 + 300, None);
+    assert!(verify_at(&middleware, &token, start).is_ok());
+    store.millis.store(start + 600_000, Ordering::SeqCst);
+    // Fresh at validation, but the original record expires during store I/O.
+    store
+        .advance_on_store
+        .store(start + 601_000, Ordering::SeqCst);
+    let result = middleware.verify_components_with_clock(
+        DpopEndpointRole::AuthorizationServer,
+        &Method::GET,
+        &Uri::from_static("/resource"),
+        &token,
+        None,
+        || Ok(store.millis.load(Ordering::SeqCst) / 1000),
+    );
+    assert_eq!(result, Err(DpopError::InvalidProof));
+}
+
+#[test]
+fn dpop_retention_rechecks_freshness_before_insertion() -> TestResult {
+    let start = 1_700_000_000u64;
+    let store = Arc::new(ControlledStore::default());
+    let middleware = DpopMiddleware::new(
+        "before-store",
+        "https://issuer.example",
+        store.clone(),
+        Duration::from_secs(1),
+    );
+    let reads = AtomicU64::new(0);
+    let result = middleware.verify_components_with_clock(
+        DpopEndpointRole::AuthorizationServer,
+        &Method::GET,
+        &Uri::from_static("/resource"),
+        &proof(start + 300, None),
+        None,
+        || {
+            Ok(if reads.fetch_add(1, Ordering::SeqCst) == 0 {
+                start
+            } else {
+                start + 601
+            })
+        },
+    );
+    assert_eq!(result, Err(DpopError::InvalidProof));
+    assert!(store.entries.lock().map_err(|e| e.to_string())?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn dpop_retention_accepts_inclusive_boundary_after_store_delay() {
+    let start = 1_700_000_000_000u64;
+    let store = Arc::new(ControlledStore::default());
+    store.millis.store(start, Ordering::SeqCst);
+    store
+        .advance_on_store
+        .store(start + 600_000, Ordering::SeqCst);
+    let middleware = DpopMiddleware::new(
+        "inclusive-delay",
+        "https://issuer.example",
+        store.clone(),
+        Duration::from_secs(1),
+    );
+    let result = middleware.verify_components_with_clock(
+        DpopEndpointRole::AuthorizationServer,
+        &Method::GET,
+        &Uri::from_static("/resource"),
+        &proof(start / 1000 + 300, None),
+        None,
+        || Ok(store.millis.load(Ordering::SeqCst) / 1000),
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn dpop_retention_post_store_clock_failure_keeps_record_and_rejects() -> TestResult {
+    let start = 1_700_000_000u64;
+    let store = Arc::new(ControlledStore::default());
+    store.millis.store(start * 1000, Ordering::SeqCst);
+    let middleware = DpopMiddleware::new(
+        "clock-failure",
+        "https://issuer.example",
+        store.clone(),
+        Duration::from_secs(1),
+    );
+    let reads = AtomicU64::new(0);
+    let result = middleware.verify_components_with_clock(
+        DpopEndpointRole::AuthorizationServer,
+        &Method::GET,
+        &Uri::from_static("/resource"),
+        &proof(start, None),
+        None,
+        || {
+            if reads.fetch_add(1, Ordering::SeqCst) < 2 {
+                Ok(start)
+            } else {
+                Err(DpopError::InvalidProof)
+            }
+        },
+    );
+    assert_eq!(result, Err(DpopError::InvalidProof));
+    assert_eq!(store.entries.lock().map_err(|e| e.to_string())?.len(), 1);
+    assert_eq!(
+        verify_at(&middleware, &proof(start, None), start * 1000),
+        Err(DpopError::Replay)
+    );
+    Ok(())
+}

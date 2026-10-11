@@ -2,10 +2,10 @@
 // (Ed25519 via HACL*/EverCrypt). This is inherently within the verified
 // crypto allowlist — no CryptoProfile check is needed.
 #[cfg(not(test))]
-use ffi::verify_dpop_with_iat_window;
+use ffi::verify_dpop_with_iat_window_and_issued_at;
 
 #[cfg(test)]
-use crate::test_utils::mock_dpop::verify_dpop_with_iat_window;
+use crate::test_utils::mock_dpop::verify_dpop_with_iat_window_and_issued_at;
 use crate::util::{self, compute_dpop_jkt_from_proof_with_max_len};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use http::{header::AUTHORIZATION, Method, Request, Uri};
@@ -331,22 +331,24 @@ impl DpopMiddleware {
         proof: &str,
         authorization: Option<&str>,
     ) -> Result<DpopBinding, DpopError> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| DpopError::InvalidProof)?
-            .as_secs();
-        self.verify_components_at(role, method, uri, proof, authorization, now)
+        self.verify_components_with_clock(role, method, uri, proof, authorization, || {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|time| time.as_secs())
+                .map_err(|_| DpopError::InvalidProof)
+        })
     }
 
-    fn verify_components_at(
+    fn verify_components_with_clock(
         &self,
         role: DpopEndpointRole,
         method: &Method,
         uri: &Uri,
         proof: &str,
         authorization: Option<&str>,
-        now: u64,
+        clock: impl Fn() -> Result<u64, DpopError>,
     ) -> Result<DpopBinding, DpopError> {
+        let now = clock()?;
         let replay_ttl = Self::minimum_replay_ttl(self.iat_window_secs)?.max(self.replay_ttl);
         let jkt = compute_dpop_jkt_from_proof_with_max_len(proof, self.jose_header_max_len)
             .ok_or(DpopError::InvalidProof)?;
@@ -355,7 +357,7 @@ impl DpopMiddleware {
             .and_then(extract_access_token)
             .map(compute_ath);
 
-        let verified_proof = verify_dpop_with_iat_window(
+        let (verified_proof, issued_at) = verify_dpop_with_iat_window_and_issued_at(
             proof,
             method.as_str(),
             &uri_string,
@@ -385,11 +387,24 @@ impl DpopMiddleware {
             }
         }
 
+        // Nonce handling may block long enough to exhaust freshness.
+        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
+            return Err(DpopError::InvalidProof);
+        }
+
         let material = Self::replay_material(&verified_proof.jti, &jkt);
         let entry = ReplayEntry::new(&self.namespace, &material, replay_ttl);
         self.replay_store
             .check_and_store(entry)
             .map_err(Self::map_store_error)?;
+
+        // A duplicate may reach SET NX only after the old record expires.
+        // Recheck after the atomic operation, including connection/Redis delay.
+        // Leave the inserted record intact if the proof is now stale or the
+        // clock is unavailable; deleting it could release a concurrent replay.
+        if clock()?.abs_diff(issued_at) > self.iat_window_secs {
+            return Err(DpopError::InvalidProof);
+        }
 
         Ok(DpopBinding { jkt })
     }

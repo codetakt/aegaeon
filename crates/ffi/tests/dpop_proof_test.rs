@@ -422,6 +422,17 @@ fn signed_dpop_future_edge_remains_fresh_through_inclusive_final_second() {
             .expect("real signed proof at freshness boundary");
             assert_eq!(verified.jti, "retention-boundary");
             assert_eq!(verified.nonce.as_deref(), nonce);
+            assert_eq!(
+                ffi::verify_dpop_with_iat_window_and_issued_at(
+                    &token,
+                    "GET",
+                    "https://issuer.example/resource",
+                    now,
+                    None,
+                    window,
+                ),
+                Some((verified, first + window))
+            );
         }
         assert!(verify_dpop_with_iat_window(
             &token,

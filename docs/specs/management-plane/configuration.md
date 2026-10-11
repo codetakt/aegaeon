@@ -120,6 +120,9 @@ not guarantee persistence.
   the `iat` window. Retention covers the inclusive interval from the future edge
   to the final acceptable second. One window plus JWT leeway is insufficient;
   JWT leeway is not added to DPoP freshness.
+- Recheck the authenticated `iat` using the current clock before and after
+  atomic replay insertion. Reject expired in-flight proofs or clock failures;
+  preserve any record already inserted until its TTL expires.
 - Apply the same minimum with nonce enforcement enabled or disabled. Do not
   shorten it to nonce TTL or assume nonces are single-use.
 - Server runtime requires shared Redis through `AEGAEON_DPOP_REDIS_URL` and

@@ -36,6 +36,13 @@ If Redis is unavailable, the application returns **503 (temporarily_unavailable)
    - any longer caller-supplied retention.
 4. Store atomically with `SET <key> 1 NX PX <ttl_ms>` and reject an existing key as a replay. Reject arithmetic overflow or storage failure before admission; never truncate the TTL.
 
+The FFI verifier also exposes the authenticated `iat` through an additive Rust
+API; existing verifier return values remain compatible. Middleware checks this
+time again before and after atomic replay storage, so nonce handling, scheduling
+or Redis delays cannot turn an expired in-flight proof into a successful
+admission. A post-insertion freshness or clock failure rejects the request and
+leaves its record intact until expiry; it never deletes a record to undo rejection.
+
 Freshness uses whole seconds and `abs(now - iat) <= window`. A proof accepted at
 the future edge can remain acceptable for twice the window, so adding one window
 to JWT leeway is insufficient. JWT leeway is not added to DPoP freshness. The

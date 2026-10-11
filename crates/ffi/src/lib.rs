@@ -1426,6 +1426,31 @@ pub fn verify_dpop_with_iat_window(
     expected_ath: Option<&str>,
     iat_window_secs: u64,
 ) -> Option<DpopVerification> {
+    verify_dpop_with_iat_window_and_issued_at(
+        proof,
+        method,
+        uri,
+        now,
+        expected_ath,
+        iat_window_secs,
+    )
+    .map(|(verification, _)| verification)
+}
+
+/// Verify a DPoP proof and return its authenticated integer `iat` alongside the
+/// existing proof material. Callers can recheck freshness after blocking nonce
+/// or replay-store operations without parsing unverified claims or repeating
+/// signature verification. This function does not perform replay storage.
+#[cfg(not(kani))]
+#[must_use]
+pub fn verify_dpop_with_iat_window_and_issued_at(
+    proof: &str,
+    method: &str,
+    uri: &str,
+    now: u64,
+    expected_ath: Option<&str>,
+    iat_window_secs: u64,
+) -> Option<(DpopVerification, u64)> {
     // Split into the three JWT components
     let parts: Vec<&str> = proof.split('.').collect();
     if parts.len() != 3 {
@@ -1493,10 +1518,13 @@ pub fn verify_dpop_with_iat_window(
         return None;
     }
 
-    Some(DpopVerification {
-        jti: claims.jti,
-        nonce: claims.nonce,
-    })
+    Some((
+        DpopVerification {
+            jti: claims.jti,
+            nonce: claims.nonce,
+        },
+        iat,
+    ))
 }
 
 #[cfg(kani)]
@@ -1529,6 +1557,23 @@ pub fn verify_dpop_with_iat_window(
             nonce: None,
         })
     }
+}
+
+// Match the existing Kani verifier stub's interface only. This substitute does
+// not authenticate claims or model real NumericDate/clock behavior; `now` is a
+// model timestamp, not evidence of the concrete proof's issued-at value.
+#[cfg(kani)]
+#[must_use]
+pub fn verify_dpop_with_iat_window_and_issued_at(
+    proof: &str,
+    method: &str,
+    uri: &str,
+    now: u64,
+    expected_ath: Option<&str>,
+    iat_window_secs: u64,
+) -> Option<(DpopVerification, u64)> {
+    verify_dpop_with_iat_window(proof, method, uri, now, expected_ath, iat_window_secs)
+        .map(|verification| (verification, now))
 }
 
 /// Verify a PKCE `code_verifier` against a `code_challenge` using S256.
