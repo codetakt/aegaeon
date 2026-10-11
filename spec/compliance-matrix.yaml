@@ -1806,9 +1806,9 @@ rfc_9449:
     rust: crates/server/src/middleware/dpop.rs#validate_dpop_ath_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
 - id: 9449-009
-  section: '5'
+  section: '4.3, 11.1'
   requirement: MUST
-  description: Server MUST reject DPoP proof with duplicate jti
+  description: (Aegaeon profile) Server MUST reject DPoP proof with duplicate jti
   module: fstar/dpop/Dpop.Replay.fst
   proof:
   - type: fstar
