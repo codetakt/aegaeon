@@ -3,6 +3,7 @@
 #include <math.h>
 #define DUDECT_IMPLEMENTATION
 #include "dudect.h"
+#include "dudect_report.h"
 #include <openssl/rand.h>
 #include "jwe.h"
 
@@ -17,42 +18,6 @@ static uint8_t plaintext[PT_LEN];
 static uint8_t ciphertext[PT_LEN];
 static uint8_t good_tag[TAG_LEN];
 static uint8_t output[PT_LEN];
-
-// Approximate normal CDF using error function approximation
-static double normal_cdf(double x) {
-    double a1 = 0.254829592;
-    double a2 = -0.284496736;
-    double a3 = 1.421413741;
-    double a4 = -1.453152027;
-    double a5 = 1.061405429;
-    double p = 0.3275911;
-
-    int sign = 1;
-    if (x < 0) {
-        sign = -1;
-        x = -x;
-    }
-
-    double t = 1.0 / (1.0 + p * x);
-    double t2 = t * t;
-    double t3 = t2 * t;
-    double t4 = t3 * t;
-    double t5 = t4 * t;
-
-    double y = 1.0 - (((((a5 * t5 + a4 * t4) + a3 * t3) + a2 * t2) + a1 * t) * t * exp(-x * x));
-    return 0.5 * (1.0 + sign * y);
-}
-
-static double t_cdf_approx(double t, size_t df) {
-    if (df > 1000) {
-        return normal_cdf(t);
-    }
-    if (df > 2) {
-        double adjustment = sqrt((double)df / ((double)df - 2.0));
-        return normal_cdf(t / adjustment);
-    }
-    return normal_cdf(t / 2.0);
-}
 
 uint8_t do_one_computation(uint8_t *data) {
     jwe_buf key_buf = { key };
@@ -89,10 +54,10 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
     }
 }
 
-int main(void) {
-    RAND_bytes(key, KEY_LEN);
-    RAND_bytes(nonce, NONCE_LEN);
-    RAND_bytes(plaintext, PT_LEN);
+int main(int argc, char **argv) {
+    dudect_require(RAND_bytes(key, KEY_LEN) == 1, "random input");
+    dudect_require(RAND_bytes(nonce, NONCE_LEN) == 1, "random input");
+    dudect_require(RAND_bytes(plaintext, PT_LEN) == 1, "random input");
 
     jwe_buf key_buf = { key };
     jwe_buf nonce_buf = { nonce };
@@ -100,7 +65,7 @@ int main(void) {
     jwe_buf pt_buf = { plaintext };
     jwe_buf ct_buf = { ciphertext };
     jwe_buf tag_buf = { good_tag };
-    Jose_Jwe_chacha20poly1305_encrypt(
+    dudect_require(Jose_Jwe_chacha20poly1305_encrypt(
         key_buf,
         KEY_LEN,
         nonce_buf,
@@ -111,29 +76,12 @@ int main(void) {
         PT_LEN,
         ct_buf,
         tag_buf
-    );
+    ) == JWE_OK, "JWE encryption");
 
-    dudect_config_t config = {
-        .chunk_size = TAG_LEN,
-        .number_measurements = 100000,
-    };
-    dudect_ctx_t ctx;
-    dudect_init(&ctx, &config);
-    dudect_state_t state = dudect_main(&ctx);
-
-    double t_stat = dudect_get_max_t(&ctx);
-    size_t df = dudect_get_degrees_of_freedom(&ctx);
-    double p;
-    if (df > 0 && t_stat >= 0) {
-        double cdf = t_cdf_approx(t_stat, df);
-        p = 2.0 * (1.0 - cdf);
-        if (p < 0.0) p = 0.0;
-        if (p > 1.0) p = 1.0;
-    } else {
-        p = 0.999;
-    }
-
-    dudect_free(&ctx);
-    printf("{\"state\":%d,\"p\":%f}\n", state, p);
-    return 0;
+    dudect_require(do_one_computation(good_tag) != 0, "jwe valid class");
+    uint8_t invalid[TAG_LEN];
+    memcpy(invalid, good_tag, TAG_LEN);
+    invalid[0] ^= 1;
+    dudect_require(do_one_computation(invalid) == 0, "jwe invalid class");
+    return dudect_run_case("jwe", TAG_LEN, argc, argv);
 }

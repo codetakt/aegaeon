@@ -5,7 +5,7 @@
  * for the verified crypto path.
  *
  * Build (recommended):
- *   nix build .#dudect-check
+ *   bash scripts/ci/dudect_check.sh pr
  */
 
 #include <math.h>
@@ -13,6 +13,7 @@
 #include <string.h>
 #define DUDECT_IMPLEMENTATION
 #include "dudect.h"
+#include "dudect_report.h"
 
 #include "Hacl_Ed25519.h"
 #include "Hacl_HMAC.h"
@@ -24,12 +25,12 @@ typedef enum {
     TEST_SHA256,
     TEST_HMAC_SHA256,
     TEST_ED25519_VERIFY,
+#ifdef AEGAEON_DUDECT_CANDIDATE
+    TEST_HMAC_SHA256_KEY,
+#endif
     TEST_COUNT
 } test_id_t;
 
-static const char *test_names[] = {
-    "ct_eq", "sha256", "hmac_sha256", "ed25519_verify"
-};
 
 static test_id_t current_test = TEST_CT_EQ;
 
@@ -44,6 +45,9 @@ static test_id_t current_test = TEST_CT_EQ;
 
 static uint8_t secret[CHUNK_LEN] = {0};
 static uint8_t hmac_key[HMAC_KEY_LEN] = {0};
+#ifdef AEGAEON_DUDECT_CANDIDATE
+static uint8_t key_test_message[CHUNK_LEN];
+#endif
 
 /* ── Ed25519 test vectors (fixed) ── */
 
@@ -128,6 +132,12 @@ uint8_t do_one_computation(uint8_t *data) {
     switch (current_test) {
     case TEST_CT_EQ:
         for (int i = 0; i < 1000; i++) {
+#ifdef AEGAEON_DUDECT_CANDIDATE
+            /* Each repetition must read and compare both operands. Without
+             * this compiler barrier, Clang hoists the comparison and leaves
+             * only 1000 ORs of its cached result. This emits no CPU fence. */
+            __asm__ __volatile__("" : : "r"(data), "r"(secret) : "memory");
+#endif
             result |= ct_eq(data, secret, CHUNK_LEN);
         }
         /* ct_eq always compares CHUNK_LEN (32) bytes; main() restricts
@@ -149,6 +159,14 @@ uint8_t do_one_computation(uint8_t *data) {
         }
         break;
     }
+#ifdef AEGAEON_DUDECT_CANDIDATE
+    case TEST_HMAC_SHA256_KEY: {
+        uint8_t mac[32];
+        real_hmac_sha256(data, HMAC_KEY_LEN, key_test_message, CHUNK_LEN, mac);
+        result = mac[0];
+        break;
+    }
+#endif
     case TEST_ED25519_VERIFY: {
         const uint8_t *pubkey = data;
         const uint8_t *sig = data + ED25519_PUBKEY_LEN;
@@ -183,6 +201,11 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
                 /* Class 0: fixed message (key is always hmac_key) */
                 memset(chunk, 0xBB, c->chunk_size);
                 break;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+            case TEST_HMAC_SHA256_KEY:
+                memset(chunk, 0x42, HMAC_KEY_LEN);
+                break;
+#endif
             case TEST_ED25519_VERIFY:
                 /* Class 0: valid (pk, sig0, msg0) */
                 memcpy(chunk, ed25519_pk, ED25519_PUBKEY_LEN);
@@ -207,126 +230,37 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
     }
 }
 
-/* ── Run one test across sample counts ── */
-
-static int run_test(test_id_t test, int chunk_size,
-                    int *sample_counts, int num_sc,
-                    int num_iterations,
-                    double *out_worst_max_t, double *out_worst_tau) {
-    current_test = test;
-    int all_passed = 1;
-    *out_worst_max_t = 0.0;
-    *out_worst_tau = 0.0;
-
-    for (int iteration = 0; iteration < num_iterations; iteration++) {
-        for (int sc_idx = 0; sc_idx < num_sc; sc_idx++) {
-            dudect_config_t config = {
-                .chunk_size = chunk_size,
-                .number_measurements = sample_counts[sc_idx],
-            };
-
-            dudect_ctx_t ctx;
-            dudect_init(&ctx, &config);
-            dudect_state_t state = dudect_main(&ctx);
-            double max_t = dudect_get_max_t(&ctx);
-            double dof = (double)dudect_get_degrees_of_freedom(&ctx);
-            double tau = (dof > 0.0 && !isnan(max_t)) ? max_t / sqrt(dof) : 0.0;
-            if (isnan(max_t)) {
-                max_t = 0.0;
-            }
-            if (max_t > *out_worst_max_t) {
-                *out_worst_max_t = max_t;
-                *out_worst_tau = tau;
-            }
-
-            if (iteration == 0) {
-                printf("{\"test\":\"%s\", \"iter\":%d, \"chunk\":%d, \"samples\":%d, "
-                       "\"state\":%d, \"max_t\":%.6f, \"tau\":%.6f}\n",
-                       test_names[test], iteration, chunk_size,
-                       sample_counts[sc_idx], state, max_t, tau);
-            }
-
-            if (state == DUDECT_LEAKAGE_FOUND) {
-                all_passed = 0;
-            }
-
-            dudect_free(&ctx);
-        }
-    }
-    return all_passed;
-}
-
-int main(void) {
-    int sample_counts[] = {1000, 2000, 4000, 8000, 16000};
-    int num_sc = 5;
-    int num_iterations = 3;
-    int all_passed = 1;
-    double global_worst_max_t = 0.0;
-    double global_worst_tau = 0.0;
-
-    /* Initialize HMAC key with fixed value */
+int main(int argc, char **argv) {
+    dudect_require(real_ed25519_verify(ed25519_pk, ed25519_msg0, ED25519_MSG_LEN,
+                                       ed25519_sig0), "Ed25519 class 0 vector");
+    dudect_require(real_ed25519_verify(ed25519_pk, ed25519_msg1, ED25519_MSG_LEN,
+                                       ed25519_sig1), "Ed25519 class 1 vector");
     memset(hmac_key, 0x42, HMAC_KEY_LEN);
-
-    /* ── Test 1: ct_eq (multiple chunk sizes) ── */
-    /* ct_eq always compares CHUNK_LEN (32) bytes, so chunk_size must be >= 32
-     * to avoid reading past the per-measurement chunk boundary. */
-    {
-        int chunk_sizes[] = {32, 64, 128};
-        for (int cs_idx = 0; cs_idx < 3; cs_idx++) {
-            double worst_t = 0.0, worst_tau = 0.0;
-            int passed = run_test(TEST_CT_EQ, chunk_sizes[cs_idx],
-                                  sample_counts, num_sc, num_iterations,
-                                  &worst_t, &worst_tau);
-            if (!passed) all_passed = 0;
-            if (worst_t > global_worst_max_t) {
-                global_worst_max_t = worst_t;
-                global_worst_tau = worst_tau;
-            }
-        }
+    const size_t chunks[] = {32, 64, 128, CHUNK_LEN, CHUNK_LEN, ED25519_CHUNK_LEN};
+    const test_id_t tests[] = {TEST_CT_EQ, TEST_CT_EQ, TEST_CT_EQ,
+                               TEST_SHA256, TEST_HMAC_SHA256, TEST_ED25519_VERIFY};
+    const char *names[] = {"ct_eq_32", "ct_eq_64", "ct_eq_128", "sha256",
+                           "hmac_sha256", "ed25519_verify"};
+    for (size_t i = 0; i < 6; ++i) {
+        current_test = tests[i];
+        int status = dudect_run_case(names[i], chunks[i], argc, argv);
+        if (status) return status;
     }
-
-    /* ── Test 2: SHA-256 (HACL*) ── */
-    {
-        double worst_t = 0.0, worst_tau = 0.0;
-        int passed = run_test(TEST_SHA256, CHUNK_LEN,
-                              sample_counts, num_sc, num_iterations,
-                              &worst_t, &worst_tau);
-        if (!passed) all_passed = 0;
-        if (worst_t > global_worst_max_t) {
-            global_worst_max_t = worst_t;
-            global_worst_tau = worst_tau;
-        }
-    }
-
-    /* ── Test 3: HMAC-SHA256 (HACL*, constant key, varying message) ── */
-    {
-        double worst_t = 0.0, worst_tau = 0.0;
-        int passed = run_test(TEST_HMAC_SHA256, CHUNK_LEN,
-                              sample_counts, num_sc, num_iterations,
-                              &worst_t, &worst_tau);
-        if (!passed) all_passed = 0;
-        if (worst_t > global_worst_max_t) {
-            global_worst_max_t = worst_t;
-            global_worst_tau = worst_tau;
-        }
-    }
-
-    /* ── Test 4: Ed25519 verify (valid vs valid) ── */
-    {
-        double worst_t = 0.0, worst_tau = 0.0;
-        int passed = run_test(TEST_ED25519_VERIFY, ED25519_CHUNK_LEN,
-                              sample_counts, num_sc, num_iterations,
-                              &worst_t, &worst_tau);
-        if (!passed) all_passed = 0;
-        if (worst_t > global_worst_max_t) {
-            global_worst_max_t = worst_t;
-            global_worst_tau = worst_tau;
-        }
-    }
-
-    printf("{\"summary\":{\"worst_max_t\":%.6f, \"worst_tau\":%.6f}}\n",
-           global_worst_max_t, global_worst_tau);
-    printf("{\"overall_result\":\"%s\"}\n", all_passed ? "PASS" : "FAIL");
-
-    return all_passed ? 0 : 1;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+    memset(key_test_message, 0x5a, sizeof key_test_message);
+    /* Independently calculated HMAC-SHA256 for key=42*32, message=5a*32. */
+    const uint8_t expected_mac[32] = {
+        0xd8, 0xcf, 0x2a, 0xad, 0xbc, 0x0e, 0x9e, 0x55,
+        0xc9, 0xa7, 0x5e, 0x67, 0x19, 0xd0, 0xc5, 0xe4,
+        0x05, 0xee, 0x2b, 0x79, 0x4f, 0x4f, 0x74, 0xed,
+        0x11, 0x1d, 0x9e, 0x1d, 0xec, 0x0a, 0xb6, 0x1c
+    };
+    uint8_t mac[32];
+    real_hmac_sha256(hmac_key, HMAC_KEY_LEN, key_test_message, CHUNK_LEN, mac);
+    dudect_require(!memcmp(mac, expected_mac, sizeof mac), "HMAC key fixture vector");
+    current_test = TEST_HMAC_SHA256_KEY;
+    return dudect_run_case("hmac_sha256_key", HMAC_KEY_LEN, argc, argv);
+#else
+    return 0;
+#endif
 }

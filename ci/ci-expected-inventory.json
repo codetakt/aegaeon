@@ -211,7 +211,11 @@
       "guard": "crates/server/tests/process_local_runtime_state_guard_test.rs::retired_integration_fixture_surface_is_absent; preserve supported management activation, no fixture-seed restoration"
     },
     "dudect": {
-      "configured_iterations": 3,
+      "batch_size": 65536,
+      "family_alpha": 0.01,
+      "family_cases": 21,
+      "fresh_observations": "scripts/ci/dudect_check.sh",
+      "maximum_looks": 8,
       "primitive_chunks": [
         {
           "chunks": [
@@ -238,15 +242,83 @@
             128
           ],
           "primitive": "ed25519_verify"
+        },
+        {
+          "chunks": [
+            32
+          ],
+          "primitive": "hmac_sha256_key"
         }
       ],
-      "sample_counts": [
-        1000,
-        2000,
-        4000,
-        8000,
-        16000
-      ]
+      "profiles": {
+        "periodic": {
+          "looks": [
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            98
+          ],
+          "minimum_raw_per_class": 3200000
+        },
+        "pr": {
+          "looks": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "minimum_raw_per_class": 200000
+        }
+      },
+      "retired_schedule": {
+        "configured_iterations": 3,
+        "limitation": "Each recreated context only collected warm-up; nominal counts were not observed evidence.",
+        "sample_counts": [
+          1000,
+          2000,
+          4000,
+          8000,
+          16000
+        ]
+      },
+      "schema_version": 4,
+      "statistics_per_case": 102,
+      "warmup_batches": 1,
+      "cases_by_suite": {
+        "legacy": [
+          "compare",
+          "hmac",
+          "ed25519",
+          "rsa",
+          "jwe",
+          "compare_product_32",
+          "hmac_key_reject",
+          "jwe_key_reject",
+          "control_independent",
+          "control_mean_shift",
+          "control_variance_shift"
+        ],
+        "nix": [
+          "ct_eq_32",
+          "ct_eq_64",
+          "ct_eq_128",
+          "sha256",
+          "hmac_sha256",
+          "ed25519_verify",
+          "hmac_sha256_key",
+          "control_independent",
+          "control_mean_shift",
+          "control_variance_shift"
+        ]
+      },
+      "primitive_chunks_scope": "Nix provider target strides; all controls and legacy cases are enumerated in cases_by_suite."
     },
     "fstar": {
       "required_passes": [

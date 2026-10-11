@@ -1,0 +1,174 @@
+"""Bounded framing of every original pilot and measured batch."""
+
+from __future__ import annotations
+
+import copy
+import functools
+import itertools
+import math
+import struct
+from typing import TYPE_CHECKING, Any
+
+from dudect_diagnostics import HEADER_SIZE, file_identity
+from dudect_distribution import summarize_context, summarize_distribution
+from dudect_results import BATCH_SIZE, PROFILES
+from dudect_support import require
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+TIMING_NAME = "native.timing"
+TIMING_ENV = "AEGAEON_DUDECT_TIMING_FD"
+CASE = struct.Struct("<64s5Q")
+BATCH = struct.Struct("<18Q")
+INPUTS = {"sha256": 0xAA, "hmac_sha256": 0xBB, "hmac_sha256_key": 0x42}
+STRIDES = {
+    "compare": 32,
+    "compare_product_32": 32,
+    "hmac": 32,
+    "rsa": 256,
+    "jwe": 16,
+    "ed25519": 64,
+    "hmac_key_reject": 16,
+    "jwe_key_reject": 64,
+    "ct_eq_32": 32,
+    "ct_eq_64": 64,
+    "ct_eq_128": 128,
+    "sha256": 32,
+    "hmac_sha256": 32,
+    "hmac_sha256_key": 32,
+    "ed25519_verify": 128,
+    "control_independent": 4,
+    "control_mean_shift": 4,
+    "control_variance_shift": 4,
+}
+
+
+def summarize_ticks(ticks: tuple[int, ...], deltas: tuple[int, ...]) -> dict[str, int | None]:
+    """Describe every adjacent timestamp; never filter or admit samples."""
+    divisor = math.gcd(*deltas)
+    return {
+        "adjacent_pairs": len(ticks) - 1,
+        "delta_min": min(deltas),
+        "delta_max": max(deltas),
+        "delta_gcd": divisor,
+        "timestamp_residue_mod_gcd": ticks[0] % divisor if divisor else None,
+        "zero_deltas": deltas.count(0),
+        "backward_deltas": sum(delta < 0 for delta in deltas),
+    }
+
+
+def validate_samples(
+    payload: bytes, name: str, width: int
+) -> tuple[dict[str, int | None], dict[str, Any]]:
+    require(len(payload) == BATCH_SIZE * (9 + width), "Incomplete timing sample payload")
+    ticks = struct.unpack_from(f"<{BATCH_SIZE}q", payload)
+    deltas = tuple(after - before for before, after in itertools.pairwise(ticks))
+    clock = summarize_ticks(ticks, deltas)
+    classes = payload[BATCH_SIZE * 8 : BATCH_SIZE * 9]
+    require(set(classes) <= {0, 1}, "Invalid timing sample class")
+    if width:
+        inputs = payload[BATCH_SIZE * 9 :]
+        fixed = bytes([INPUTS[name]]) * width
+        require(
+            all(
+                inputs[i * width : (i + 1) * width] == fixed
+                for i, label in enumerate(classes)
+                if label == 0
+            ),
+            "Invalid fixed-class synthetic timing input",
+        )
+    return clock, summarize_distribution(deltas, classes)
+
+
+def validate_context(
+    values: tuple[int, ...], batch: int, previous_end: int | None, counters: list[int]
+) -> None:
+    require(values[:2] == (batch, BATCH_SIZE), "Timing batch order or size mismatch")
+    begin, end = values[2:4]
+    require(
+        0 < begin <= end and (previous_end is None or previous_end <= begin),
+        "Invalid native batch clock",
+    )
+    require(
+        all(cpu <= 2**31 - 1 or cpu == 2**64 - 1 for cpu in values[4:6]),
+        "Invalid native batch CPU",
+    )
+    require(
+        all(
+            previous <= before <= after
+            for previous, before, after in zip(counters, values[6::2], values[7::2], strict=True)
+        ),
+        "Regressed native batch counters",
+    )
+
+
+def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
+    """Reject missing cases, pilot, batches, order, context or binding."""
+    identity = file_identity(path)
+    frames = PROFILES[profile][0][-1] + 1
+    size = HEADER_SIZE + sum(
+        CASE.size + frames * (BATCH.size + BATCH_SIZE * (41 if name in INPUTS else 9))
+        for name in bindings
+    )
+    require(identity["bytes"] == size, "Incomplete or extra all-case timing evidence")
+    first = next(iter(bindings.values()))
+    keys = ("build_sha256", "contract_sha256", "numerical_sha256")
+    require(
+        all(all(binding[key] == first[key] for key in keys) for binding in bindings.values()),
+        "Timing file spans different native bindings",
+    )
+    # Repeated synthetic batches can have identical payloads. Read every byte,
+    # but reuse only the last exact (payload, case, width) summary within this
+    # validation. Context/order checks always run; no file identity is cached.
+    summarize_samples = functools.lru_cache(maxsize=1)(validate_samples)
+    with path.open("rb") as source:
+        require(
+            source.read(HEADER_SIZE)
+            == b"AEGTIM03" + b"".join(first[key].encode("ascii") for key in keys),
+            "All-case timing binding mismatch",
+        )
+        previous_end = None
+        previous_counters = [0] * 6
+        layouts = {}
+        clocks: dict[str, list[dict[str, int | None]]] = {}
+        distributions: dict[str, list[dict[str, Any]]] = {}
+        for name in bindings:
+            native_name, stride, width, *offsets = CASE.unpack(source.read(CASE.size))
+            require(
+                native_name == name.encode("ascii").ljust(64, b"\0")
+                and stride == STRIDES[name]
+                and width == (32 if name in INPUTS else 0),
+                "Timing case identity, stride or input width mismatch",
+            )
+            require(all(offset < 4096 for offset in offsets), "Invalid timing buffer offset")
+            layouts[name] = dict(zip(("inputs", "ticks", "classes"), offsets, strict=True))
+            clocks[name], distributions[name] = [], []
+            for batch in range(frames):
+                values = BATCH.unpack(source.read(BATCH.size))
+                validate_context(values, batch, previous_end, previous_counters)
+                context = summarize_context(values, previous_end)
+                previous_end = values[3]
+                previous_counters = list(values[7::2])
+                clock, distribution = summarize_samples(
+                    source.read(BATCH_SIZE * (9 + width)), name, width
+                )
+                clocks[name].append({"batch": batch, **clock})
+                distributions[name].append(
+                    {"batch": batch, "context": context, **copy.deepcopy(distribution)}
+                )
+        require(source.read(1) == b"", "Trailing all-case timing evidence")
+    return {
+        **identity,
+        "format": "AEGTIM03",
+        "cases": list(bindings),
+        "input_cases": [name for name in bindings if name in INPUTS],
+        "buffer_offsets_mod4096": layouts,
+        "clock_scope": "all_adjacent_timestamps_including_discarded_samples",
+        "clock_batches": clocks,
+        "distribution_scope": "native_indices_10_through_penultimate_nonnegative_deltas",
+        "distribution_quantiles": "zero_based_floor_n_times_p_no_interpolation",
+        "distribution_batches": distributions,
+        "frames_per_case": frames,
+        "complete": True,
+    }

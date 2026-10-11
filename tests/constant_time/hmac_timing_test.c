@@ -3,6 +3,7 @@
 #include <math.h>
 #define DUDECT_IMPLEMENTATION
 #include "dudect.h"
+#include "dudect_report.h"
 #include "jws.h"
 #include "EverCrypt_HMAC.h"
 
@@ -11,42 +12,6 @@
 static uint8_t key[16];
 static uint8_t msg[32];
 static uint8_t good_sig[CHUNK_LEN];
-
-// Approximate normal CDF using error function approximation
-static double normal_cdf(double x) {
-    double a1 = 0.254829592;
-    double a2 = -0.284496736;
-    double a3 = 1.421413741;
-    double a4 = -1.453152027;
-    double a5 = 1.061405429;
-    double p = 0.3275911;
-
-    int sign = 1;
-    if (x < 0) {
-        sign = -1;
-        x = -x;
-    }
-
-    double t = 1.0 / (1.0 + p * x);
-    double t2 = t * t;
-    double t3 = t2 * t;
-    double t4 = t3 * t;
-    double t5 = t4 * t;
-
-    double y = 1.0 - (((((a5 * t5 + a4 * t4) + a3 * t3) + a2 * t2) + a1 * t) * t * exp(-x * x));
-    return 0.5 * (1.0 + sign * y);
-}
-
-static double t_cdf_approx(double t, size_t df) {
-    if (df > 1000) {
-        return normal_cdf(t);
-    }
-    if (df > 2) {
-        double adjustment = sqrt((double)df / ((double)df - 2.0));
-        return normal_cdf(t / adjustment);
-    }
-    return normal_cdf(t / 2.0);
-}
 
 uint8_t do_one_computation(uint8_t *data) {
     jws_buf key_buf = { key };
@@ -60,7 +25,7 @@ uint8_t do_one_computation(uint8_t *data) {
         sizeof(msg),
         sig_buf,
         CHUNK_LEN
-    );
+    ) == JWS_OK;
 }
 
 void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
@@ -74,7 +39,7 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     randombytes(key, sizeof(key));
     randombytes(msg, sizeof(msg));
     EverCrypt_HMAC_compute(
@@ -86,29 +51,10 @@ int main(void) {
         sizeof(msg)
     );
 
-    // Use a moderate measurement count that keeps runtime reasonable while
-    // providing a stable p-value for CI purposes.
-    dudect_config_t config = {
-        .chunk_size = CHUNK_LEN,
-        .number_measurements = 200000,
-    };
-    dudect_ctx_t ctx;
-    dudect_init(&ctx, &config);
-    dudect_state_t state = dudect_main(&ctx);
-
-    double t_stat = dudect_get_max_t(&ctx);
-    size_t df = dudect_get_degrees_of_freedom(&ctx);
-    double p;
-    if (df > 0 && t_stat >= 0) {
-        double cdf = t_cdf_approx(t_stat, df);
-        p = 2.0 * (1.0 - cdf);
-        if (p < 0.0) p = 0.0;
-        if (p > 1.0) p = 1.0;
-    } else {
-        p = 0.999;
-    }
-
-    dudect_free(&ctx);
-    printf("{\"state\":%d,\"p\":%f}\n", state, p);
-    return 0;
+    dudect_require(do_one_computation(good_sig) != 0, "hmac valid class");
+    uint8_t invalid[CHUNK_LEN];
+    memcpy(invalid, good_sig, CHUNK_LEN);
+    invalid[0] ^= 1;
+    dudect_require(do_one_computation(invalid) == 0, "hmac invalid class");
+    return dudect_run_case("hmac", CHUNK_LEN, argc, argv);
 }

@@ -5871,11 +5871,18 @@ openid_core:
   - tests/constant_time/ed25519_timing_test.c
   - tests/constant_time/rsa_timing_test.c
   - tests/constant_time/jwe_timing_test.c
+  - tests/constant_time/compare_product_timing_test.c
+  - tests/constant_time/hmac_key_reject_timing_test.c
+  - tests/constant_time/jwe_key_reject_timing_test.c
+  - tests/constant_time/calibration_timing_test.c
+  - tests/constant_time/run_contract.py
+  - c/dudect_harness.c
   ci_check: verify-dudect
   status: implemented
   notes:
-  - The OIDC server claim relies on the project-wide dudect suite for comparison, HMAC, Ed25519, RSA, and JWE timing posture.
-  - The promoted `RS256 Required Slice`, `RS256 Interop Slice`, and JWKS overlap invariants do not add new secret-dependent primitives beyond the existing dudect coverage.
+  - Version4 binds per-case fixture observations to sources, native artifacts, controls and complete profiles; historical detected differences remain visible.
+  - Protected-input nondetection is bounded empirical evidence. Public/authentication fixture characterization does not establish secret independence or authorize production timing declassification.
+  - Full secret domains, valid-result strata, caller composition and product assurance remain separate obligations; see docs/verification/dudect-case-contract.md.
 - id: OIDC-1-009
   section: OIDC RP upstream token refresh
   requirement: SHOULD

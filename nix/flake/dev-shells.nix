@@ -34,6 +34,16 @@ in
 
   docs = pkgs.mkShellNoCC {
     packages = [
+      # Expose the pinned compiler without its setup hook changing the compiler
+      # environment used by unrelated CI helper fixtures.
+      (pkgs.runCommand "ci-helper-native-tools" { } ''
+        mkdir -p "$out/bin"
+        ln -s ${pkgs.stdenv.cc}/bin/cc "$out/bin/cc"
+        ln -s ${pkgs.stdenv.cc}/bin/gcc "$out/bin/gcc"
+        ln -s ${llvmPackages.clang}/bin/clang "$out/bin/clang"
+        ln -s ${pkgs.stdenv.cc}/bin/c++ "$out/bin/c++"
+        ln -s ${pkgs.stdenv.cc.bintools}/bin/ar "$out/bin/ar"
+      '')
       (pkgs.python3.withPackages (pythonPackages: [
         pythonPackages.pyyaml
         pythonPackages.jsonschema

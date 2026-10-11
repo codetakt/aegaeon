@@ -280,6 +280,8 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status/fresh-evidence.md` | claim | Verification Maturity Fresh Evidence | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status/gaps-and-promotion-work.md` | claim | Verification Maturity Gaps And Promotion Work | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
+| `docs/verification/dudect-case-contract.md` | verification | Per-case timing observation contract | current implementation baseline | 2026-10-10 | Engineering | verification tooling maintainers |
+| `docs/verification/dudect.md` | verification | Timing observation profiles | current implementation baseline | 2026-10-11 | Engineering | contributors |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/assumption-graph.md` | verification | F\* Effective-Assumption Graph | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, contributors |

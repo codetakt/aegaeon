@@ -1,0 +1,581 @@
+{
+  "schema": "dudect-case-contract-candidate/2",
+  "date": "2026-10-10",
+  "status": "Local implementation contract; final-source runtime validation and publication review required",
+  "product_authority": "A-OBSERVE remains unchanged; fixture classification does not declare every production message public or discharge product obligations",
+  "cases": [
+    {
+      "suite": "legacy",
+      "case": "compare",
+      "target": "Local ct_eq copy in compare_timing_test.c",
+      "class_change": "Equal vs first-byte mismatch",
+      "fixed_inputs": "32-byte zero secret, length32",
+      "class_outputs": "true / false",
+      "remaining_interpretation": "Not production ct_eq; timer quantization makes first3 crops degenerate",
+      "stable_id": "legacy/compare",
+      "existing_id_preserved": true,
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [
+        "comparison content (test-designated)"
+      ],
+      "public_inputs": [
+        "length",
+        "stride"
+      ],
+      "allowed_value_observations": [
+        "boolean value only"
+      ],
+      "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "legacy",
+      "case": "hmac",
+      "target": "jws_hmac_verify -> EverCrypt_HMAC_compute + c/jws.c ct_eq",
+      "class_change": "Valid vs first-byte-mutated tag",
+      "fixed_inputs": "One generated key and message",
+      "class_outputs": "success / invalid signature",
+      "remaining_interpretation": "Fixed-secret tag validity comparison does not test variation across secrets; output declassification undefined",
+      "stable_id": "legacy/hmac",
+      "existing_id_preserved": true,
+      "proposed_role": "authentication_result_characterization",
+      "protected_inputs": [
+        "fixed test key"
+      ],
+      "public_inputs": [
+        "fixture message/ciphertext",
+        "fixture candidate tag",
+        "lengths"
+      ],
+      "allowed_value_observations": [
+        "documented authentication result"
+      ],
+      "proposed_timing_decision": "Preserve valid/invalid timing observations and failures as characterization. They are insufficient for same-public-input secret independence; activation requires the successor secret-key rejection stratum and explicit residual coverage.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "legacy",
+      "case": "ed25519",
+      "target": "Jose_Rsa_signatures_verify_ed25519 -> EverCrypt -> HACL verify",
+      "class_change": "Valid vs last-byte-mutated signature",
+      "fixed_inputs": "One generated message/public key",
+      "class_outputs": "true / false",
+      "remaining_interpretation": "No signing-secret argument; classify signature/message exposure and expected public-dependent behavior",
+      "stable_id": "legacy/ed25519",
+      "existing_id_preserved": true,
+      "proposed_role": "public_fixture_characterization",
+      "protected_inputs": [],
+      "public_inputs": [
+        "fixture public key",
+        "fixture message",
+        "fixture signature",
+        "lengths"
+      ],
+      "allowed_value_observations": [
+        "verification result",
+        "timing of these explicitly public fixture inputs"
+      ],
+      "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "legacy",
+      "case": "rsa",
+      "target": "Jose_Rsa_signatures_verify_rsa_pss -> Hacl_RSAPSS_rsapss_pkey_verify",
+      "class_change": "Valid vs last-byte-mutated signature",
+      "fixed_inputs": "Public modulus/exponent, fixed message",
+      "class_outputs": "true / false",
+      "remaining_interpretation": "No private-key argument; classify public validity-dependent work separately before changing acceptance",
+      "stable_id": "legacy/rsa",
+      "existing_id_preserved": true,
+      "proposed_role": "public_fixture_characterization",
+      "protected_inputs": [],
+      "public_inputs": [
+        "fixture public key",
+        "fixture message",
+        "fixture signature",
+        "lengths"
+      ],
+      "allowed_value_observations": [
+        "verification result",
+        "timing of these explicitly public fixture inputs"
+      ],
+      "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "legacy",
+      "case": "jwe",
+      "target": "Jose_Jwe_chacha20poly1305_decrypt -> EverCrypt AEAD decrypt",
+      "class_change": "Valid vs first-byte-mutated tag",
+      "fixed_inputs": "One generated secret key/nonce/ciphertext",
+      "class_outputs": "success / decrypt error",
+      "remaining_interpretation": "Authentication result changes output and can change decryption/write path; preserve failure pending declassification contract",
+      "stable_id": "legacy/jwe",
+      "existing_id_preserved": true,
+      "proposed_role": "authentication_result_characterization",
+      "protected_inputs": [
+        "fixed test key"
+      ],
+      "public_inputs": [
+        "fixture message/ciphertext",
+        "fixture candidate tag",
+        "lengths"
+      ],
+      "allowed_value_observations": [
+        "documented authentication result"
+      ],
+      "proposed_timing_decision": "Preserve valid/invalid timing observations and failures as characterization. They are insufficient for same-public-input secret independence; activation requires the successor secret-key rejection stratum and explicit residual coverage.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "ct_eq_32",
+      "target": "Local ct_eq copy in c/dudect_harness.c",
+      "class_change": "Fixed zero vs random data",
+      "fixed_inputs": "Zero comparison secret; compare length32; input stride32",
+      "class_outputs": "equal vs mostly unequal",
+      "remaining_interpretation": "1000 full comparisons with a compiler memory barrier on both operands; target is local helper, not product FFI; stride is not comparison length. The inspected Clang 20.1.8 artifact hoisted the comparison; retain its actual emitted-work scope.",
+      "stable_id": "nix/ct_eq_32",
+      "existing_id_preserved": true,
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [
+        "comparison content (test-designated)"
+      ],
+      "public_inputs": [
+        "length",
+        "stride"
+      ],
+      "allowed_value_observations": [
+        "boolean value only"
+      ],
+      "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "ct_eq_64",
+      "target": "Local ct_eq copy in c/dudect_harness.c",
+      "class_change": "Fixed zero vs random data",
+      "fixed_inputs": "Zero comparison secret; compare length32; input stride64",
+      "class_outputs": "equal vs mostly unequal",
+      "remaining_interpretation": "1000 full comparisons with a compiler memory barrier on both operands; target is local helper, not product FFI; stride is not comparison length. The inspected Clang 20.1.8 artifact hoisted the comparison; retain its actual emitted-work scope.",
+      "stable_id": "nix/ct_eq_64",
+      "existing_id_preserved": true,
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [
+        "comparison content (test-designated)"
+      ],
+      "public_inputs": [
+        "length",
+        "stride"
+      ],
+      "allowed_value_observations": [
+        "boolean value only"
+      ],
+      "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "ct_eq_128",
+      "target": "Local ct_eq copy in c/dudect_harness.c",
+      "class_change": "Fixed zero vs random data",
+      "fixed_inputs": "Zero comparison secret; compare length32; input stride128",
+      "class_outputs": "equal vs mostly unequal",
+      "remaining_interpretation": "1000 full comparisons with a compiler memory barrier on both operands; target is local helper, not product FFI; stride is not comparison length. The inspected Clang 20.1.8 artifact hoisted the comparison; retain its actual emitted-work scope.",
+      "stable_id": "nix/ct_eq_128",
+      "existing_id_preserved": true,
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [
+        "comparison content (test-designated)"
+      ],
+      "public_inputs": [
+        "length",
+        "stride"
+      ],
+      "allowed_value_observations": [
+        "boolean value only"
+      ],
+      "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "sha256",
+      "target": "Hacl_Hash_SHA2_hash_256",
+      "class_change": "Fixed0xAA vs random32-byte message",
+      "fixed_inputs": "Message length32",
+      "class_outputs": "digest varies",
+      "remaining_interpretation": "No keyed secret input; must state whether message is treated as secret for this observation",
+      "stable_id": "nix/sha256",
+      "existing_id_preserved": true,
+      "proposed_role": "protected_input_observation",
+      "protected_inputs": [
+        "message bytes (test-designated)"
+      ],
+      "public_inputs": [
+        "input lengths"
+      ],
+      "allowed_value_observations": [
+        "digest/MAC output value"
+      ],
+      "proposed_timing_decision": "Require full scheduled nondetection for protected message variation, accounting and numerical eligibility. Fixed-key observations do not cover secret-key variation.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "hmac_sha256",
+      "target": "Hacl_HMAC_compute_sha2_256",
+      "class_change": "Fixed0xBB vs random32-byte message",
+      "fixed_inputs": "Key is fixed0x42 (32 bytes)",
+      "class_outputs": "MAC varies",
+      "remaining_interpretation": "Does not vary secret key; input confidentiality/observation contract unspecified",
+      "stable_id": "nix/hmac_sha256",
+      "existing_id_preserved": true,
+      "proposed_role": "protected_input_observation",
+      "protected_inputs": [
+        "message bytes (test-designated)",
+        "fixed test key"
+      ],
+      "public_inputs": [
+        "input lengths"
+      ],
+      "allowed_value_observations": [
+        "digest/MAC output value"
+      ],
+      "proposed_timing_decision": "Require full scheduled nondetection for protected message variation, accounting and numerical eligibility. Fixed-key observations do not cover secret-key variation.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "suite": "nix",
+      "case": "ed25519_verify",
+      "target": "Hacl_Ed25519_verify",
+      "class_change": "Two fixed valid signatures and messages",
+      "fixed_inputs": "Same fixed public key and message length32",
+      "class_outputs": "true / true",
+      "remaining_interpretation": "Trace differs in99/104 table indices; all selectors predictable from the fixture public inputs; exact old timing cause remains unisolated",
+      "stable_id": "nix/ed25519_verify",
+      "existing_id_preserved": true,
+      "proposed_role": "public_fixture_characterization",
+      "protected_inputs": [],
+      "public_inputs": [
+        "fixture public key",
+        "fixture message",
+        "fixture signature",
+        "lengths"
+      ],
+      "allowed_value_observations": [
+        "verification result",
+        "timing of these explicitly public fixture inputs"
+      ],
+      "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+    },
+    {
+      "stable_id": "legacy/compare_product_32",
+      "target": "c/jws.c::ct_eq compiled from the actual product source, not a helper copy",
+      "protected_inputs": [
+        "comparison content (test-designated)"
+      ],
+      "public_inputs": [
+        "both lengths=32"
+      ],
+      "classes": "Existing equal/unequal and mismatch-position controls applied to the actual product implementation; source/artifact binding mandatory.",
+      "allowed_value_observations": [
+        "boolean result"
+      ],
+      "remaining_interpretation": "32-byte empirical coverage only; other lengths and caller composition remain outstanding.",
+      "existing_id_preserved": false,
+      "proposed_role": "protected_input_observation",
+      "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "implemented_fixture": {
+        "class0": "Zero32 reference equal to zero32 candidate",
+        "class1": "One bit flipped at a uniformly chosen byte in zero32; position chosen before timing",
+        "preflight": "Equal and all 32 mismatch positions against actual c/jws.c static ct_eq"
+      }
+    },
+    {
+      "stable_id": "legacy/hmac_key_reject",
+      "target": "c/jws.c::jws_hmac_verify -> EverCrypt_HMAC_compute + product comparison",
+      "protected_inputs": [
+        "16-byte key contents"
+      ],
+      "public_inputs": [
+        "one fixed 32-byte message",
+        "one fixed 32-byte candidate tag",
+        "HS256 and lengths"
+      ],
+      "classes": "Fixed test key vs independently generated keys, with fixed public inputs and identical invalid-signature result verified before timing. Conditional key-domain membership and any rejected draws recorded.",
+      "allowed_value_observations": [
+        "same invalid-signature result in both classes"
+      ],
+      "remaining_interpretation": "Covers the sampled rejection stratum only; valid-result and all-key-domain obligations are not discharged.",
+      "existing_id_preserved": false,
+      "proposed_role": "protected_input_observation",
+      "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "implemented_fixture": {
+        "class0": "16 bytes 0x42",
+        "class1": "Independent random16 key conditioned on JWS_ERR_INVALID_SIGNATURE",
+        "public_fixture": "32 bytes 0x5a; tag=HS256(fixed key, message) with first bit flipped",
+        "preflight": "Verify valid fixed tag first; check each sampled rejection before timing; at most128 draws/input, record valid excluded draws"
+      }
+    },
+    {
+      "stable_id": "legacy/jwe_key_reject",
+      "target": "c/jwe.c::Jose_Jwe_chacha20poly1305_decrypt -> EverCrypt AEAD",
+      "protected_inputs": [
+        "32-byte key contents"
+      ],
+      "public_inputs": [
+        "one nonce",
+        "one ciphertext",
+        "one tag",
+        "AAD and all lengths"
+      ],
+      "classes": "Fixed test key vs independently generated keys under the same public fixture, preflight verifies rejection for both classes. Destination initialization and failure-write semantics identical. Record class construction and excluded draws.",
+      "allowed_value_observations": [
+        "same decryption-error result in both classes"
+      ],
+      "remaining_interpretation": "Valid decryption, plaintext release, all keys and caller composition remain separate obligations.",
+      "existing_id_preserved": false,
+      "proposed_role": "protected_input_observation",
+      "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "implemented_fixture": {
+        "class0": "32 bytes 0x42",
+        "class1": "Independent random32 key conditioned on JWE_ERR_DECRYPT_FAILED",
+        "public_fixture": "Nonce12 bytes0x24; ciphertext of message32 bytes0x5a under fixed key; empty AAD; first tag bit flipped",
+        "preflight": "Verify encryption/valid decryption; check every key rejects with same32 destination bytes as fixed-key failure; reinitialize destination0xa5 before timing; at most128 draws/input, record valid excluded draws"
+      }
+    },
+    {
+      "stable_id": "nix/hmac_sha256_key",
+      "target": "Hacl_HMAC_compute_sha2_256 in the same pinned provider",
+      "protected_inputs": [
+        "32-byte key contents"
+      ],
+      "public_inputs": [
+        "fixed 32-byte message",
+        "lengths"
+      ],
+      "classes": "Fixed test key vs independently generated keys; key bytes are the measured input chunk, input preparation is outside timing.",
+      "allowed_value_observations": [
+        "MAC value"
+      ],
+      "remaining_interpretation": "Finite key observations do not establish universal key/input constant time; artifact and observation-model restrictions remain.",
+      "existing_id_preserved": false,
+      "proposed_role": "protected_input_observation",
+      "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
+      "all_previous_outcomes_unchanged": true,
+      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "implemented_fixture": {
+        "class0": "32 bytes 0x42",
+        "class1": "Independent random32 key",
+        "public_fixture": "Message32 bytes0x5a, lengths32",
+        "preflight": "Independently calculated fixed-key/message HMAC-SHA256 vector; one provider operation per timing sample"
+      }
+    },
+    {
+      "stable_id": "legacy/control_independent",
+      "suite": "legacy",
+      "case": "control_independent",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Independent uniformly randomized operation count256..287 in both classes; class assignment independent of operation count.",
+      "proposed_timing_decision": "Full-schedule eligible nondetection required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    },
+    {
+      "stable_id": "legacy/control_mean_shift",
+      "suite": "legacy",
+      "case": "control_mean_shift",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_positive_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Class1 adds64 volatile dependent integer operations.",
+      "proposed_timing_decision": "A raw-statistic difference must be detected within the full schedule; all raw floors required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    },
+    {
+      "stable_id": "legacy/control_variance_shift",
+      "suite": "legacy",
+      "case": "control_variance_shift",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_positive_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Common uniformly randomized operation count2048..2079; class1 adds an independent equally likely -1024/+1024 operation offset. Strong second-order pipeline control; smaller variance changes are not certified.",
+      "proposed_timing_decision": "A second-order-statistic difference must be detected within the full schedule; all raw floors required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    },
+    {
+      "stable_id": "nix/control_independent",
+      "suite": "nix",
+      "case": "control_independent",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_negative_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Independent uniformly randomized operation count256..287 in both classes; class assignment independent of operation count.",
+      "proposed_timing_decision": "Full-schedule eligible nondetection required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    },
+    {
+      "stable_id": "nix/control_mean_shift",
+      "suite": "nix",
+      "case": "control_mean_shift",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_positive_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Class1 adds64 volatile dependent integer operations.",
+      "proposed_timing_decision": "A raw-statistic difference must be detected within the full schedule; all raw floors required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    },
+    {
+      "stable_id": "nix/control_variance_shift",
+      "suite": "nix",
+      "case": "control_variance_shift",
+      "target": "Synthetic volatile integer-loop control in calibration_timing_test.c; no product coverage",
+      "proposed_role": "measurement_positive_control",
+      "protected_inputs": [],
+      "public_inputs": [
+        "test control class",
+        "randomized synthetic workload"
+      ],
+      "allowed_value_observations": [
+        "synthetic accumulated byte"
+      ],
+      "classes": "Common uniformly randomized operation count2048..2079; class1 adds an independent equally likely -1024/+1024 operation offset. Strong second-order pipeline control; smaller variance changes are not certified.",
+      "proposed_timing_decision": "A second-order-statistic difference must be detected within the full schedule; all raw floors required.",
+      "existing_id_preserved": false,
+      "all_previous_outcomes_unchanged": true,
+      "remaining_interpretation": "Finite measurement-path calibration only; not cryptographic or universal power evidence."
+    }
+  ],
+  "numerical_candidate": {
+    "measured_case_count": 21,
+    "preserved_original_case_count": 11,
+    "new_required_case_count": 4,
+    "statistics": 102,
+    "max_looks": 8,
+    "family_alpha": 0.01,
+    "per_inspection_alpha": 5.835667600373483e-07,
+    "batch": 65536,
+    "PR_measured_batches": 7,
+    "periodic_measured_batches": 98,
+    "raw_per_class_floors": {
+      "pr": 200000,
+      "periodic": 3200000
+    },
+    "normal_planning_samples_per_class_at_90pct": {
+      "0.02": 197075,
+      "0.005": 3153193
+    },
+    "planning_limits": "Independent equal-variance raw-mean approximation only. Family counts all15 targets and all6 control executions across the two CI suites. Native calibration determines actual sensitivity; no universal power guarantee.",
+    "degenerate_rule_candidate": "For the reviewed local experiment, only validated identical pooled native integer support with both counts>10000 uses the exact absolute-mean permutation upper-tail p=1. Equal-distribution/exchangeability null and class-independent measurement assumptions remain explicit. Unequal constants, floating aliases, one-class variance zero and sparse samples remain ineligible.",
+    "continuous_rule": "Existing Welch fractional-df calculation retained for sufficiently populated positive-variance statistics, subject to its assumptions.",
+    "eligibility": "All 102 records and full schedule remain mandatory; insufficient counts, invalid support, numerical failure or absent controls remain non-admissible.",
+    "crop_membership": "tick <= frozen empirical pilot quantile; include complete integer ties, with all100 statistics and observed-count floors retained",
+    "target_case_count": 15,
+    "runtime_control_executions": 6,
+    "implementation_sha256": "c076277da6117ef7254e7e4a6dfa48f49c96e075d88f8c6c493c0c8e40d43b69"
+  },
+  "schema_migration": {
+    "candidate_version": 4,
+    "reason": "Bind each observation to case-contract/profile identities, roles, exact target and discrete support; keep statistical outcome separate from suite contract completion.",
+    "historical_reports": "Version2 and archived version3 retain original interpretations; the version4 consumer rejects both. No replay of historical failed/inconclusive evidence as successor success.",
+    "suite_outcome": "An observation-contract completion label cannot be named or interpreted as all-case constant time or product assurance.",
+    "producer_consumer": "Atomic migration of both runners, validation consumers, tests, docs and CI wiring in the same PR"
+  },
+  "activation_conditions": [
+    "Explicit per-case fixture roles and allowed observation contract reviewed",
+    "Actual target/source/supplier/artifact bindings preserved",
+    "New required secret/input cases implemented; all eleven original cases still collected",
+    "Degenerate-support inference reviewed with native support evidence and positive/negative calibration controls",
+    "Full PR and periodic schedules demonstrated on the actual candidate, including failed artifacts",
+    "All consumers reject old or mismatched contract/schema evidence",
+    "Full relevant CI and source review; no unresolved condition silently accepted"
+  ],
+  "unchanged_until_activation": [
+    "Every historical sealed result retains its original interpretation",
+    "All eleven original case identities and native repetition counts remain",
+    "Product claims and paused Task3 work remain unchanged"
+  ],
+  "implementation_candidate": {
+    "status": "Implemented local version4 candidate; execution evidence and review disposition are recorded separately",
+    "entry_point": "tests/constant_time/run_contract.py",
+    "diagnostic_collector": "tests/constant_time/run_candidate.py remains collection-only and cannot publish accepted evidence",
+    "native_compile_flag": "AEGAEON_DUDECT_CANDIDATE",
+    "native_support": "Per-class exact int64 tick extrema/count and binary64 transformed extrema for all102 statistics",
+    "binding": "Expected case/profile/contract/numerical/build identities; exact source and executable SHA256; retained native stdout, observations and process completion",
+    "input_audit": "Prepared class counts and bounded conditional key draws/exclusions, including pilot inputs",
+    "outcome": "observation_contract_satisfied records per-case monitoring completion. Characterization differences remain visible; no universal nondetection or product assurance is claimed.",
+    "degenerate_inference": "Only certified identical native support with sufficient counts uses exact conditional p=1. Equal-distribution/exchangeability null required.",
+    "provider_collection": "Nix derivation builds an immutable source-bound native package. CI imports that package only when its sources match and always executes fresh full observations.",
+    "historical_consumers": "Version2 numerical/stream modules retained for historical replay and regression; default CLI consumers require version4 bound evidence",
+    "timer": "MFENCE;LFENCE;RDTSC;LFENCE, requiring host LFENCE execution serialization; preserve target call counts. Historical native mode retains MFENCE-only timing. Ordering and native evidence are processor/compiler specific.",
+    "comparison_repetitions": "Candidate provider comparison reads both 32-byte operands on every one of 1000 iterations. Empty compiler memory barrier prevents hoisting and outer-loop vectorization; no CPU fence or inference change. Validate emitted workload for the actual compiler/artifact. Historical native mode retains original behavior."
+  },
+  "source_basis_head": "1dca327f1aff2d987a8ccead3a9ad52738c24971"
+}

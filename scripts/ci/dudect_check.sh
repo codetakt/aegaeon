@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-# dudect CI gate — compile and run the constant-time verification harness.
-# Exit 0 = ct_eq is constant-time (PASS), non-zero = leakage detected (FAIL).
-
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-
-if ! command -v nix >/dev/null 2>&1; then
-	echo "[dudect] ERROR: nix is required for HACL*/EverCrypt-backed dudect" >&2
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repo_root"
+if [[ $# -gt 1 || (${1:-pr} != pr && ${1:-pr} != periodic) ]]; then
+	echo "usage: dudect_check.sh [pr|periodic]" >&2
+	exit 2
+fi
+binary_package="$(nix build .#dudect-check --no-link --print-out-paths -L)"
+if [[ ! -f "$binary_package/package.json" ]]; then
+	echo "Missing native dudect package" >&2
 	exit 1
 fi
-
-echo "[dudect] Running HACL*/EverCrypt dudect via Nix ..."
-cd "$REPO_ROOT"
-nix build .#dudect-check -L
-echo "[dudect] PASS -- no timing leakage detected"
+# A cached build can supply the executable, never the runtime decision.
+exec nix develop .#verification --command python3 tests/constant_time/run_contract.py \
+	--suite nix --native-package "$binary_package" --profile "${1:-pr}"

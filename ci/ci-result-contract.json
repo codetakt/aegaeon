@@ -1,11 +1,11 @@
 {
-  "dynamic_core_ownership": "Evaluate complete actual checks; delegate only verifyFstar, verifyTamarin and verifyKani; every new nondelegated check remains owned.",
+  "dynamic_core_ownership": "Evaluate complete actual checks; full PR/group validation delegates only verifyFstar, verifyTamarin and verifyKani; other events own all checks. Every new nondelegated check remains owned. Build verifyDudect and verified-reqs sequentially after all other core checks, retaining original output and attempted/not-started state without retry or fresh-timing claims from cached outputs.",
   "families": {
     "conformance_component": {
       "admission": "both configured plans and all required parameter variants/modules; suite available-plan/module discovery and canonical Java result identities may not be replaced by current reduced results; dynamic external inventories remain held"
     },
     "dudect": {
-      "admission": "preserve complete configured schedule and prior admitted nonempty primitive/chunk/sample inventory; observed early termination/30 reports is finite evidence, not 90-measurement execution or universal constant-time assurance"
+      "admission": "Version 4 per-case observation contract: all ten Nix or eleven legacy executions, including three synthetic controls in each suite; complete PR/periodic schedule, disjoint pilot, observed raw/statistic counts, native support, and unchanged 21-case/102-statistic/eight-look multiplicity allocation. Protected-input observations and negative controls require eligible nondetection; designated positive statistics must detect; public/authentication fixture characterization retains differences without secret-independence claims. Source/artifact-bound raw output, successful process exit and complete original-run diagnostics are required, including bound ordered timestamps/classes for every pilot and measured batch, native batch context and the ct_eq_128 synthetic input trace. Missing or partial evidence cannot publish success; original failures remain retained without statistical retry. Nix build reuse supplies executables only; CI executes afresh. Historical failures and full product-assurance obligations remain unchanged."
     },
     "fstar": {
       "admission": "each scheduled module admitted against invocation digests and actual load/dependency records; full imported libraries/include order/checked files and solver identity retained; source module listing not proof of actual verifier closure"
