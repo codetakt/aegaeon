@@ -5897,6 +5897,8 @@ openid_core:
   - crates/server/src/web/management/connections/preparation/update.rs
   - crates/server/src/web/upstream_refresh/tests/cases.rs
   - crates/server/src/web/upstream_refresh_token_envelope/tests.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests.rs
+  - crates/server/src/web/upstream_refresh/tests/signing_keys/cases.rs
   ci_check: oidc-rp-upstream-refresh
   status: verified
   runtime_link: crates/server/src/web/upstream_refresh.rs
@@ -5917,6 +5919,9 @@ openid_core:
   - "Original authentication context is encrypted with the refresh token in a version 3 envelope and retained through generation-CAS rotations. Legacy version 2 requires reauthentication before exchange. The cited F* model does not establish encrypted storage, original-authentication continuity, database concurrency, RNG/AEAD or complete callback/refresh composition; finite signed/PG tests are separate implementation evidence."
   - "Post-exchange persistence holds shared active-runtime and connection locks through generation-CAS commit; client/issuer/identifier/auth-method, encrypted credentials, effective explicit/default profile or lifecycle/configuration mismatches reject both rotation and last-use updates before token response publication. Current-state equality is not historical revision/ABA detection."
   - "Local RP freshness policy requires nonnegative refreshed iat at or after HTTP request-start minus configured leeway, alongside existing future/expiry validation. This supports the OP issuance-time requirement; it does not prove replay-freedom within clock skew. The direct production lower-bound helper has a separately registered full numeric-domain Kani harness; actual SQL and clock/HTTP integration remain outside that harness."
+  - "OIDC Core 1.0 errata set 2 section 10.1.1 describes re-retrieval for unfamiliar kid. Shared strict header admission permits one configured-URL retrieval for an absent nonempty kid; known-key signature/claim failures never trigger a forced retry. The provider SHOULD retain recently decommissioned keys; that is separate from consumer retrieval."
+  - "All upstream key retrievals share a bounded per-process coordinator with one in-flight request per exact URL and a 30-second monotonic attempt-start cooldown, including failure/cancellation. Protected slots cannot be evicted for new URLs. Successful fetches replace sets; failed fetches do not renew old TTL. Upstream RSA n/e and EC x/y require nonempty canonical unpadded base64url before replacement, without changing generic key-size, curve or algorithm policy. Current endpoint policy and final-set Federation checks remain mandatory."
+  - "Real HTTP, signed token/Federation, PostgreSQL callback/rotation and injected-clock concurrency tests are finite runtime observations. They do not prove scheduler fairness, fleet-wide rate limits, cryptographic assumptions, database isolation, supply or complete deployment composition; the existing F* model does not cover this coordinator."
 - id: OIDC-1-010
   section: Verification boundary
   requirement: MUST

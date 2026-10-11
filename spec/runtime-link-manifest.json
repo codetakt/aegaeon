@@ -401,7 +401,7 @@
       "critical": false
     },
     "crates/server/src/web/upstream_refresh.rs": {
-      "sha256": "4abd6d1614a4edaf848512dc8403e156c1189c6f47226d94d93d8985790da190",
+      "sha256": "9d51ac69d163314d72d56e99d0839947754fad84843b60fb89c4aeddcfe1f786",
       "entries": [
         "OIDC-1-009"
       ],
