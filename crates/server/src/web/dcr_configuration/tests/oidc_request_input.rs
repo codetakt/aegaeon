@@ -75,8 +75,8 @@ async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
         .oneshot(browser_request(Method::HEAD, &uri)?)
         .await?;
     assert_eq!(head.status(), StatusCode::FOUND);
-    // Each request has its own login continuation; the protocol input is stable.
-    let return_to_pairs = |value: &str| -> TestResult<Vec<(String, String)>> {
+    // GET and HEAD both return only one opaque server-side continuation.
+    let assert_opaque_return = |value: &str| -> TestResult {
         let login = url::Url::parse(&format!("https://issuer.example{value}"))?;
         let return_to = login
             .query_pairs()
@@ -84,20 +84,17 @@ async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
             .ok_or_else(|| io::Error::other("return_to missing"))?
             .1
             .into_owned();
-        let authorize = url::Url::parse(&format!("https://issuer.example{return_to}"))?;
-        assert!(authorize
-            .query_pairs()
-            .any(|(key, value)| key == "aeg_login_continue" && !value.is_empty()));
-        Ok(authorize
-            .query_pairs()
-            .filter(|(key, _)| key != "aeg_login_continue")
-            .map(|(key, value)| (key.into_owned(), value.into_owned()))
-            .collect())
+        let token = return_to
+            .strip_prefix("/authorize?aeg_login_continue=")
+            .ok_or_else(|| io::Error::other("opaque return missing"))?;
+        assert_eq!(token.len(), 43);
+        assert!(token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'));
+        Ok(())
     };
-    assert_eq!(
-        return_to_pairs(head.headers()[header::LOCATION].to_str()?)?,
-        return_to_pairs(location.to_str()?)?
-    );
+    assert_opaque_return(head.headers()[header::LOCATION].to_str()?)?;
+    assert_opaque_return(location.to_str()?)?;
     assert_no_cache(&head);
     assert!(body::to_bytes(head.into_body(), 4096).await?.is_empty());
 
@@ -180,16 +177,11 @@ async fn scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult {
         );
         assert_no_cache(&response);
     }
-    for uri in ["/authorize"] {
-        let response = app
-            .clone()
-            .oneshot(browser_request(Method::POST, uri)?)
-            .await?;
-        assert_eq!(
-            response.status(),
-            StatusCode::METHOD_NOT_ALLOWED,
-            "POST routing remains unchanged"
-        );
-    }
+    // POST is routed, but an empty request without its form media type is invalid.
+    let response = app
+        .oneshot(browser_request(Method::POST, "/authorize")?)
+        .await?;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_no_cache(&response);
     Ok(())
 }

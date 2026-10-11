@@ -19,6 +19,7 @@ URL_KEYS = [
         "PAR",
         "AUTH_CODE",
         "AUTH_SESSION",
+        "STEPUP",
         "OIDC_LOGOUT_SESSION",
         "TOKEN_STORE",
         "REQUEST_OBJECT_JTI",
