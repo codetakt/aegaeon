@@ -189,6 +189,20 @@ class DudectRunnerTests(unittest.TestCase):
         self.assertIn("Another dudect run", result.stderr)
         self.assertEqual(self.fixture.report_path().read_text(), "previous report")
 
+    def test_existing_runs_link_is_rejected_before_writing_outside_output(self):
+        output = self.fixture.report_path().parent
+        output.mkdir()
+        self.fixture.report_path().write_text("previous report")
+        outside = self.fixture.directory / "outside"
+        outside.mkdir()
+        (output / "runs").symlink_to(outside, target_is_directory=True)
+        result = self.fixture.invoke("--suite", "nix")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("regular retained directory", result.stderr)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual(self.fixture.report_path().read_text(), "previous report")
+        self.assertFalse(self.fixture.events.exists())
+
     def test_actual_workflow_collects_current_source_bound_legacy_evidence(self):
         document = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())
         step = next(
@@ -403,6 +417,21 @@ class DudectNixRetentionTests(unittest.TestCase):
         (source / "redirect").symlink_to(self.root / "outside")
         with self.assertRaises(ValueError):
             collect_output(source, "failure", self.root / "rejected")
+
+    def test_special_nix_output_is_rejected_before_any_copy(self):
+        source = self.root / "special"
+        source.mkdir()
+        os.mkfifo(source / "pipe")
+        destination = self.root / "rejected-special"
+        with (
+            patch("collect_dudect_nix_output.shutil.copytree") as copy,
+            self.assertRaisesRegex(ValueError, "regular file or directory"),
+        ):
+            collect_output(source, "failure", destination)
+        copy.assert_not_called()
+        record = json.loads((destination / "collection.json").read_text())
+        self.assertFalse(record["output_retained"])
+        self.assertIn("regular file or directory", record["collection_error"])
 
     def test_workflow_collects_and_uploads_after_attempted_nix_build(self):
         document = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())

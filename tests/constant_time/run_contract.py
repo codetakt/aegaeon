@@ -208,7 +208,8 @@ def execute(root: Path, args: argparse.Namespace, output: Path) -> int:
 def execute_locked(root: Path, args: argparse.Namespace, output: Path) -> int:
     runs = output / "runs"
     runs.mkdir(exist_ok=True)
-    evidence = Path(tempfile.mkdtemp(prefix="run-", dir=runs)).resolve()
+    require_regular_directory(runs)
+    evidence = Path(tempfile.mkdtemp(prefix="run-", dir=runs)).absolute()
     print(f"Dudect evidence: {evidence}", flush=True)
     status = {"suite": args.suite, "profile": args.profile, "accepted": False}
     try:

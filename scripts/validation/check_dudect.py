@@ -18,7 +18,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        validate_report_file(Path(__file__).resolve().parents[2], args.report.resolve())
+        validate_report_file(Path(__file__).resolve().parents[2], args.report.absolute())
     except (OSError, ValueError) as error:
         print(f"Dudect evidence rejected: {error}", file=sys.stderr)
         return 1

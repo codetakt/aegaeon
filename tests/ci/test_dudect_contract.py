@@ -301,6 +301,39 @@ class ContractTests(unittest.TestCase):
         validate_report_file(fixture.root, path)
         validate_report_file(fixture.root, evidence / "report.json")
 
+    def test_cli_preserves_report_and_directory_links_for_rejection(self):
+        fixture = NativeFixture(self)
+        result = fixture.invoke("--suite", "nix")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        path = fixture.report_path()
+        evidence = fixture.evidence()[-1]
+        for target in (path, evidence.parent):
+            with self.subTest(target=target):
+                backup = fixture.directory / target.name
+                target.rename(backup)
+                target.symlink_to(
+                    evidence / "report.json" if target == path else backup,
+                    target_is_directory=backup.is_dir(),
+                )
+                try:
+                    report = path if target == path else evidence / "report.json"
+                    cli = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "scripts/validation/check_dudect.py"),
+                            str(report),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertNotEqual(cli.returncode, 0, cli.stdout + cli.stderr)
+                    self.assertIn("regular retained", cli.stderr)
+                finally:
+                    target.unlink()
+                    backup.rename(target)
+        validate_report_file(fixture.root, path)
+
     def assert_special_files_rejected(self, fixture, evidence, path):
         for target in (evidence / "status.json", evidence / "executions/extra.pipe"):
             with self.subTest(fifo=target):

@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import shutil
+import stat
 from pathlib import Path
 
 CORE_TIMING_CHECKS = {"verifyDudect": "verify-dudect", "verified-reqs": "verify-reqs"}
@@ -28,8 +29,10 @@ def copy_output(source: Path | None, outcome: str, destination: Path) -> bool:
         return False
     if source.is_symlink() or not source.is_dir():
         raise ValueError("Expected a regular Nix output directory")
-    if any(path.is_symlink() for path in source.rglob("*")):
-        raise ValueError("Unexpected symlink in Dudect Nix output")
+    for path in source.rglob("*"):
+        mode = path.lstat().st_mode
+        if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+            raise ValueError("Expected regular file or directory in Dudect Nix output")
     shutil.copytree(source, destination / "nix-output")
     return True
 

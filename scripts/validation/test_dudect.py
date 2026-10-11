@@ -30,7 +30,7 @@ class DudectAdmissionTests(unittest.TestCase):
             with patch.object(validator, "validate_report_file") as validate:
                 status, output = self.evaluate_path(path)
             self.assertEqual(status, 0, output)
-            validate.assert_called_once_with(Path(__file__).resolve().parents[2], path.resolve())
+            validate.assert_called_once_with(Path(__file__).resolve().parents[2], path.absolute())
             self.assertIn("observation contract satisfied", output)
             self.assertIn("product assurance not established", output)
 
