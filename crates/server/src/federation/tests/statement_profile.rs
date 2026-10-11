@@ -318,11 +318,13 @@ fn artifacts_repository_wrapper_preserves_missing_and_invalid_anchor_failures() 
             .await;
             assert!(result.is_err());
             assert_eq!(calls.load(Ordering::SeqCst), 0);
-            assert_eq!(
-                crate::web::admit_upstream_federation_metadata(result, "https://local.example")
-                    .is_err(),
-                invalid
-            );
+            // The web boundary may only skip Federation after its own empty
+            // anchor-list observation, never by interpreting an error string.
+            assert!(crate::web::admit_upstream_federation_metadata(
+                result,
+                "https://local.example"
+            )
+            .is_err());
         }
     });
 }

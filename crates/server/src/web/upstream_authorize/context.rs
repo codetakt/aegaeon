@@ -10,12 +10,13 @@ use sqlx::PgPool;
 
 use crate::oauth_profile;
 
-pub(super) struct UpstreamAuthorizeContext {
-    pub(super) connection: UpstreamConnection,
-    pub(super) issuer: String,
-    pub(super) auth_method: String,
-    pub(super) profile: oauth_profile::ResolvedProfile,
-    pub(super) active_logout_recovery_policy: Option<crate::upstream::UpstreamLogoutRecoveryPolicy>,
+pub(in crate::web) struct UpstreamAuthorizeContext {
+    pub(in crate::web) connection: UpstreamConnection,
+    pub(in crate::web) issuer: String,
+    pub(in crate::web) auth_method: String,
+    pub(in crate::web) profile: oauth_profile::ResolvedProfile,
+    pub(in crate::web) active_logout_recovery_policy:
+        Option<crate::upstream::UpstreamLogoutRecoveryPolicy>,
 }
 
 pub(super) async fn load_upstream_authorize_context(

@@ -102,9 +102,9 @@ Unknown noncritical operators are ignored after structural validation. Critical
 declarations remain rejected by raw statement admission; these helpers cannot validate
 critical declarations or recover duplicate members discarded during JSON parsing.
 Fresh and cached chain APIs now require policy resolution before returning success.
-Authoritative use of resolved metadata by every OIDC consumer remains a separate
-integration boundary; successful chain admission does not establish full Federation
-conformance.
+The upstream OIDC authorize, callback and refresh workflows consume resolved OP
+metadata as described below. Successful chain admission and these consumer checks
+do not establish full Federation conformance.
 
 ## Optional Local Anchor Pins and Complete-Chain Admission
 
@@ -158,6 +158,73 @@ remain for inspection but is not renewed or
 accepted. Existing role/environment checks, explicit-now behavior and cache write
 failure semantics remain. Complete-chain cache TTL versus signed time remains a
 separate temporal obligation; this change does not alter it.
+
+## Resolved OP Metadata in Upstream OIDC Operations
+
+Each authorize, callback and refresh operation selects one effective typed
+Discovery object. With configured trust anchors, it comes entirely from the
+resolved signed `openid_provider` metadata after common raw chain and ordinary
+OIDC-context admission. Missing required fields fail; optional fields removed by
+policy remain absent. Only an actually empty configured-anchor list permits
+ordinary Discovery. Repository, chain or policy failures never trigger fallback.
+Raw signed statements and the ordinary Discovery cache are not overwritten with
+policy-derived metadata. Every non-null inline `jwks` is parsed at this selection
+boundary, with unique present `kid` values, canonical public-key encodings and at
+least one signature-capable key.
+Malformed inline sets fail before authorize redirects or callback/refresh
+credential exchange, including refresh responses without an ID Token. The parsed
+signature-key identities are retained for the later fetched-key comparison.
+
+Aegaeon retains a local consistency guard: the selected issuer and required
+authorization, token and JWKS endpoint strings must match independently fetched
+Discovery exactly. This is an Aegaeon restriction, not a Federation requirement.
+Policy replacements for those endpoints work when Discovery agrees. Selected
+endpoints retain the existing outbound allowlist, SSRF, redirect, timeout and
+body-size checks. Optional logout replacement or deletion is captured from the
+selected object when a callback creates a session; older sessions are unchanged.
+
+Authorize uses selected response/grant/auth support, profile-required S256 and
+iss support, scopes and ACR before storing a transaction or returning a redirect.
+The captured iss requirement is the profile requirement OR advertised support.
+Absent supported scopes retain unknown-advertisement behavior; an explicit empty
+list rejects requested scopes. Absent token authentication metadata defaults to
+`client_secret_basic`. Policy-selected capability and algorithm identifiers are
+compared exactly, without case or whitespace normalization. In both ordinary
+Discovery and resolved Federation metadata, `rs256` does not authorize an `RS256`
+ID Token; providers relying on the former case-insensitive comparison must publish
+the registered spelling. An exact matching member still permits the algorithm
+when other, unsupported identifiers are also advertised. This follows the
+case-sensitive JWA identifiers in [RFC 7518 §7.1.1](https://www.rfc-editor.org/rfc/rfc7518.html#section-7.1.1).
+
+Callback selects and validates current signed metadata before sending the code
+or client credentials. It retains captured token/JWKS endpoints, authentication
+method, verifier-implied PKCE, iss and ACR requirements. A newly excluding policy
+can therefore refuse an in-flight transaction before exchange. The selected
+algorithms and optional inline-JWKS consistency constraint then govern ID Token
+verification without resolving another chain after exchange. The existing managed
+connection/configuration-currentness, state and single-use checks are unchanged.
+The browser binding and exact issuer checks remain enforced. This change adds no
+fresh DB OAuth-profile query and claims no atomic concurrent revocation barrier.
+
+Refresh validates actual `refresh_token` support before sending credentials.
+Absent grant metadata defaults to `authorization_code` and `implicit`, so it
+does not advertise refresh support. Aegaeon also retains its existing local
+provider/profile admission guard: code response, authorization-code support in
+a present grant list, selected authentication and profile-required iss/S256.
+This is not a normative assertion that every refresh performs an authorization
+code flow. A refresh-only provider is refused by that existing local guard.
+A valid response without an ID Token remains supported after metadata admission;
+a returned ID Token uses the same selected algorithms and inline-key constraint.
+Refresh requests add no scope parameter or new granted-scope lineage check.
+
+Required `jwks_uri` plus optional inline signature-key consistency remains the
+key-source contract. Inline-only or `signed_jwks_uri` support, unconsumed
+UserInfo/registration fields, broader logout behavior and full Federation
+critical/constraint/numeric/cache-time domains remain separate obligations.
+Key retrieval for an unfamiliar `kid` uses this same selected metadata context;
+the final fetched set must satisfy its retained inline-key constraint before
+signature and claim verification. These checks do not establish whole-product
+assurance.
 
 ## Entity Fetch
 

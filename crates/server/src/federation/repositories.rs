@@ -51,6 +51,7 @@ mod postgres;
 mod traits;
 mod types;
 
+#[cfg(test)]
 pub(crate) use cache::resolve_trust_chain_artifacts_cached_with;
 
 #[cfg(test)]

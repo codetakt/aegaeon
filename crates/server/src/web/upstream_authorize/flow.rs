@@ -21,7 +21,7 @@ pub(in crate::web) fn build_upstream_redirect_uri(base_url: &str, connection: &s
     )
 }
 
-pub(super) struct UpstreamAuthorizeFlowState {
+pub(in crate::web) struct UpstreamAuthorizeFlowState {
     redirect_uri: String,
     state_token: String,
     nonce: String,
@@ -31,7 +31,7 @@ pub(super) struct UpstreamAuthorizeFlowState {
     ttl_secs: u64,
 }
 
-pub(super) async fn store_upstream_authorize_request(
+pub(in crate::web) async fn store_upstream_authorize_request(
     state: &AppState,
     connection_id: &str,
     input: &UpstreamAuthorizeInput,
@@ -115,7 +115,7 @@ pub(super) async fn store_upstream_authorize_request(
     })
 }
 
-pub(super) fn build_upstream_authorize_redirect_response(
+pub(in crate::web) fn build_upstream_authorize_redirect_response(
     issuer_base: &str,
     discovery: &OidcDiscovery,
     client_id: &str,

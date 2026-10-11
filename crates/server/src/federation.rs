@@ -61,6 +61,7 @@ pub use metadata_policy::{apply_metadata_policy, apply_metadata_policy_for_entit
 #[cfg(test)]
 pub(crate) use profile::validate_federation_jwks;
 pub(crate) use profile::validate_oidc_upstream_chain;
+#[cfg(test)]
 pub(crate) use repositories::resolve_trust_chain_artifacts_cached_with;
 pub use repositories::{
     resolve_trust_chain_cached, resolve_trust_chain_cached_with,

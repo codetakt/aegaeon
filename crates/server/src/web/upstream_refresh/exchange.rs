@@ -1,7 +1,8 @@
 use super::super::oauth_errors::json_error_with_iss;
 use super::super::upstream_metadata::{
-    build_upstream_http_client, fetch_upstream_discovery_cached, validate_upstream_discovery,
-    validate_upstream_outbound_url, verify_upstream_federation_metadata_blocking,
+    acquire_upstream_federation_chain, build_upstream_http_client, fetch_upstream_discovery_cached,
+    resolve_upstream_metadata_with, validate_upstream_discovery, validate_upstream_outbound_url,
+    EffectiveUpstreamMetadata,
 };
 use super::super::upstream_refresh_links::UpstreamRefreshLink;
 use super::super::upstream_token_response::{
@@ -16,11 +17,11 @@ use axum::response::Response;
 use http::StatusCode;
 use reqwest::{Client, RequestBuilder, Response as ReqwestResponse};
 
-pub(super) struct UpstreamRefreshExchange {
-    pub(super) request_started_at: u64,
-    pub(super) client: Client,
-    pub(super) discovery: OidcDiscovery,
-    pub(super) token_response: UpstreamTokenResponse,
+pub(in crate::web) struct UpstreamRefreshExchange {
+    pub(in crate::web) request_started_at: u64,
+    pub(in crate::web) client: Client,
+    pub(in crate::web) metadata: EffectiveUpstreamMetadata,
+    pub(in crate::web) token_response: UpstreamTokenResponse,
 }
 
 fn upstream_exchange_error(status: StatusCode, issuer_base: &str, message: &str) -> Response {
@@ -51,14 +52,21 @@ fn invalidate_cached_discovery(state: &AppState, issuer: &str) {
     }
 }
 
-async fn fetch_verified_discovery(
+async fn fetch_verified_discovery<F, Fut>(
     state: &AppState,
     client: &Client,
     link: &UpstreamRefreshLink,
     profile: &oauth_profile::ResolvedProfile,
     auth_method: &str,
     issuer_base: &str,
-) -> Result<OidcDiscovery, Response> {
+    acquire: F,
+) -> Result<EffectiveUpstreamMetadata, Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
     let discovery = fetch_upstream_discovery_cached(
         client,
         &link.upstream_issuer,
@@ -75,8 +83,18 @@ async fn fetch_verified_discovery(
         )
     })?;
 
+    let metadata = resolve_upstream_metadata_with(
+        state,
+        &link.upstream_issuer,
+        link.link_env_id,
+        discovery,
+        issuer_base,
+        acquire,
+    )
+    .await
+    .inspect_err(|_| invalidate_cached_discovery(state, &link.upstream_issuer))?;
     if let Err(message) = validate_upstream_discovery(
-        &discovery,
+        &metadata.discovery,
         &link.upstream_issuer,
         profile,
         auth_method,
@@ -91,20 +109,21 @@ async fn fetch_verified_discovery(
         ));
     }
 
-    if let Err(response) = verify_upstream_federation_metadata_blocking(
-        state.clone(),
-        link.upstream_issuer.clone(),
-        link.link_env_id,
-        discovery.clone(),
-        None,
-        issuer_base.to_string(),
-    )
-    .await
+    // Retain the existing code/provider guard above, then check the actual
+    // refresh grant. Absent grant metadata defaults to code + implicit.
+    if !metadata
+        .discovery
+        .grant_types_supported
+        .as_ref()
+        .is_some_and(|grants| grants.iter().any(|grant| grant == "refresh_token"))
     {
-        invalidate_cached_discovery(state, &link.upstream_issuer);
-        return Err(response);
+        return Err(upstream_exchange_error(
+            StatusCode::BAD_GATEWAY,
+            issuer_base,
+            "upstream discovery missing refresh_token grant",
+        ));
     }
-    Ok(discovery)
+    Ok(metadata)
 }
 
 fn resolve_refresh_auth_method(
@@ -229,17 +248,46 @@ pub(super) async fn perform_upstream_refresh_exchange(
     link: &UpstreamRefreshLink,
     profile: &oauth_profile::ResolvedProfile,
 ) -> Result<UpstreamRefreshExchange, Response> {
+    perform_upstream_refresh_exchange_with(state, issuer_base, link, profile, |anchors, now| {
+        acquire_upstream_federation_chain(state, &link.upstream_issuer, anchors, now)
+    })
+    .await
+}
+
+pub(in crate::web) async fn perform_upstream_refresh_exchange_with<F, Fut>(
+    state: &AppState,
+    issuer_base: &str,
+    link: &UpstreamRefreshLink,
+    profile: &oauth_profile::ResolvedProfile,
+    acquire: F,
+) -> Result<UpstreamRefreshExchange, Response>
+where
+    F: FnMut(Vec<crate::federation::TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<
+        Output = Result<crate::federation::ResolvedTrustChain, crate::federation::FederationError>,
+    >,
+{
     let allowed_domains = state.cfg.upstream().outbound_allowed_domains();
     let client = build_refresh_http_client(issuer_base, allowed_domains)?;
     let auth_method = resolve_refresh_auth_method(link, issuer_base)?;
-    let discovery =
-        fetch_verified_discovery(state, &client, link, profile, &auth_method, issuer_base).await?;
+    let metadata = fetch_verified_discovery(
+        state,
+        &client,
+        link,
+        profile,
+        &auth_method,
+        issuer_base,
+        acquire,
+    )
+    .await
+    .inspect_err(|_| invalidate_cached_discovery(state, &link.upstream_issuer))?;
+    let discovery = &metadata.discovery;
     let form = build_refresh_form(link, &auth_method);
     validate_upstream_outbound_url(&discovery.token_endpoint, "token_endpoint", allowed_domains)
         .map_err(|message| {
             upstream_exchange_error(StatusCode::BAD_GATEWAY, issuer_base, &message)
         })?;
-    let token_req = build_refresh_token_request(&client, &discovery, link, &auth_method, &form);
+    let token_req = build_refresh_token_request(&client, discovery, link, &auth_method, &form);
     let request_started_at = super::super::now_epoch_secs().map_err(|_| {
         upstream_exchange_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -254,7 +302,7 @@ pub(super) async fn perform_upstream_refresh_exchange(
     Ok(UpstreamRefreshExchange {
         request_started_at,
         client,
-        discovery,
+        metadata,
         token_response,
     })
 }

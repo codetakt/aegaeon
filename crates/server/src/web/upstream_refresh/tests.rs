@@ -244,7 +244,15 @@ impl Fixture {
                 )
             })?,
             client: reqwest::Client::new(),
-            discovery: self.discovery.clone(),
+            metadata: crate::web::upstream_metadata::resolve_upstream_metadata_with(
+                &self.state,
+                &link.upstream_issuer,
+                link.link_env_id,
+                self.discovery.clone(),
+                &self.env.issuer_url,
+                |_, _| async { panic!("ordinary Discovery requires no Federation acquisition") },
+            )
+            .await?,
             token_response: Self::response(id_token, refresh),
         };
         validate_upstream_refresh_exchange(&self.state, &self.env.issuer_url, link, &exchange)

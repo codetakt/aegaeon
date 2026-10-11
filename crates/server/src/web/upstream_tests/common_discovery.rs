@@ -253,10 +253,10 @@ fn validate_upstream_discovery_matches_federation_metadata_rejects_endpoint_mism
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_different_material(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "00", "AQAB")])?;
+    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "AA", "AQAB")])?;
     let metadata = json!({
         "jwks": {
-            "keys": [rsa_key_with_material("k1", "01", "AQAB")]
+            "keys": [rsa_key_with_material("k1", "AQ", "AQAB")]
         }
     });
 
@@ -272,8 +272,8 @@ fn validate_upstream_jwks_matches_federation_metadata_rejects_kid_reuse_with_dif
 #[test]
 fn validate_upstream_jwks_matches_federation_metadata_accepts_same_material_without_alg(
 ) -> TestResult {
-    let fetched = jwks_from_keys(&[rsa_key("k1")])?;
-    let mut metadata_key = rsa_key("k1");
+    let fetched = jwks_from_keys(&[rsa_key_with_material("k1", "AA", "AQAB")])?;
+    let mut metadata_key = rsa_key_with_material("k1", "AA", "AQAB");
     metadata_key
         .as_object_mut()
         .ok_or_else(|| "test key must be an object".to_string())?
