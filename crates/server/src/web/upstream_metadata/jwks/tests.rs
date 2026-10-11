@@ -499,3 +499,4 @@ async fn upstream_jwks_refresh_cold_admission_rejection_and_cancellation_do_not_
     assert_eq!(server.hits(), 3);
     Ok(())
 }
+mod usage_metadata;

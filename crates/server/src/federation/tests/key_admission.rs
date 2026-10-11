@@ -81,6 +81,7 @@ fn duplicate_named_keys_reject_before_filtering_or_signature_trials() {
     let mut encryption = named.clone();
     encryption["use"] = json!("enc");
     let mut encryption_ops = named.clone();
+    encryption_ops["use"] = json!("enc");
     encryption_ops["key_ops"] = json!(["encrypt"]);
     for (keys, duplicate) in [
         (vec![named.clone(), named.clone()], kid),
@@ -162,10 +163,104 @@ fn unique_keys_still_enforce_algorithm_use_and_key_operations() {
         ("key_ops", json!(["encrypt"])),
     ] {
         let mut restricted = named.clone();
+        // Keep this fixture structurally consistent so selection is exercised.
+        if member == "key_ops" {
+            restricted["use"] = json!("enc");
+        }
         restricted[member] = value;
         for result in verify_consumers(&key, json!({"keys": [restricted]}), kid) {
             assert!(matches!(must_err(result), FederationError::NoSuitableKey));
         }
+    }
+}
+
+#[test]
+fn jwk_usage_federation_rechecks_identical_signed_statements_and_marks() {
+    let _guard = raw_json_env_guard();
+    let key = InMemoryKeyManager::new();
+    let mut named = must_some(FederationKeyManager::federation_public_jwk(&key));
+    must_some(named.as_object_mut()).remove("use");
+    let kid = must_some(named["kid"].as_str());
+    let mut entity = sample_entity_config(LEAF, NOW);
+    entity.jwks = Some(json!({"keys": [named]}));
+    let mut header = json!({"alg": FederationKeyManager::federation_alg(&key),
+        "typ": "entity-statement+jwt", "kid": kid});
+    let statement = purpose::sign_with_header(
+        &key,
+        &header,
+        &must_ok(serde_json::to_value(entity)),
+    );
+    header["typ"] = json!("trust-mark+jwt");
+    let mark = TrustMark {
+        id: MARK_ID.into(),
+        trust_mark: purpose::sign_with_header(
+            &key,
+            &header,
+            &json!({"iss": ANCHOR, "sub": LEAF, "trust_mark_type": MARK_ID,
+                "iat": NOW - 100, "exp": NOW + 3600}),
+        ),
+    };
+    for (metadata, expected) in crate::test_utils::jwk_usage::cases() {
+        let keys = crate::test_utils::jwk_usage::keyset(&named, &metadata);
+        let jwks = must_ok(JwkSet::from_value(keys.clone()));
+        // The token bytes and key material are unchanged across all cases.
+        // A second eligible key must not bypass the selected key's usage.
+        for result in [
+            verify_entity_statement(&statement, &jwks).map(|_| ()),
+            verify_trust_mark(&mark, LEAF, &jwks, NOW).map(|_| ()),
+        ] {
+            if expected {
+                must_ok(result);
+            } else {
+                assert!(matches!(must_err(result), FederationError::NoSuitableKey));
+            }
+        }
+        // Self-signed configurations carry their own metadata in the payload.
+        for result in verify_consumers(&key, keys, kid) {
+            if expected {
+                must_ok(result);
+            } else {
+                assert!(matches!(must_err(result), FederationError::NoSuitableKey));
+            }
+        }
+    }
+}
+
+#[test]
+fn jwk_usage_federation_rejects_malformed_metadata_at_admission() {
+    let _guard = raw_json_env_guard();
+    let key = InMemoryKeyManager::new();
+    let mut named = must_some(FederationKeyManager::federation_public_jwk(&key));
+    must_some(named.as_object_mut()).remove("use");
+    let header = json!({"alg": FederationKeyManager::federation_alg(&key),
+        "typ": "entity-statement+jwt", "kid": named["kid"]});
+    for metadata in [
+        json!({"use": null}),
+        json!({"use": 1}),
+        json!({"key_ops": null}),
+        json!({"key_ops": "verify"}),
+        json!({"key_ops": ["verify", null]}),
+        json!({"key_ops": ["verify", "verify"]}),
+        json!({"use": "sig", "key_ops": ["encrypt"]}),
+        json!({"use": "enc", "key_ops": ["verify"]}),
+    ] {
+        let keys = crate::test_utils::jwk_usage::keyset(&named, &metadata);
+        let mut entity = sample_entity_config(LEAF, NOW);
+        entity.jwks = Some(keys.clone());
+        assert!(matches!(entity.parse_jwks(), Err(FederationError::Jwk(_))));
+        assert!(matches!(
+            stored_anchor(keys).to_trust_anchor(),
+            Err(FederationError::Jwk(_))
+        ));
+        let jwt = purpose::sign_with_header(
+            &key,
+            &header,
+            &must_ok(serde_json::to_value(entity)),
+        );
+        assert!(matches!(
+            verify_entity_configuration(&jwt),
+            Err(FederationError::Jwk(_))
+        ));
     }
 }
 
