@@ -94,8 +94,10 @@ def build_checks(checks: dict[str, str], outputs: dict[str, dict[str, str]]) -> 
             check=True,
         )
     # Aliases of a timing derivation stay here too, never in the parallel build.
-    # Both gates remain required. A failed gate stops admission without a retry.
-    for row in outputs.values():
+    # Keep each independent gate's evidence, even after another gate rejects.
+    # Builds stay sequential and run once; any failed gate prevents admission.
+    failures = []
+    for name, row in outputs.items():
         row["build_step_outcome"] = "in_progress"
         save_timing_outputs(outputs)
         try:
@@ -110,12 +112,21 @@ def build_checks(checks: dict[str, str], outputs: dict[str, dict[str, str]]) -> 
                 ],
                 check=True,
             )
-        except (OSError, subprocess.CalledProcessError):
+        except subprocess.CalledProcessError as error:
+            row["build_step_outcome"] = "failure"
+            if error.returncode < 0:
+                save_timing_outputs(outputs)
+                raise
+            failures.append(f"{name} (exit {error.returncode})")
+        except OSError:
             row["build_step_outcome"] = "failure"
             save_timing_outputs(outputs)
             raise
-        row["build_step_outcome"] = "success"
+        else:
+            row["build_step_outcome"] = "success"
         save_timing_outputs(outputs)
+    if failures:
+        raise ValueError("Timing checks failed: " + ", ".join(failures))
 
 
 def run(*, all_checks: bool = False) -> None:

@@ -320,7 +320,13 @@ checks before building `verifyDudect` and `verified-reqs` one at a time. This
 avoids concurrent Rust builds/tests and overlapping timing gates on that runner;
 it does not establish physical CPU isolation or explain earlier timing failures.
 Both gates remain required, including in push/manual runs that also own the
-formal checks. Their exact derivations and output paths are recorded before
+formal checks. A completed nonzero timing build does not prevent the next
+independent gate from running. Each gate runs once, sequentially, and the job
+still fails if either gate fails. This preserves both outcomes on the same
+runner without selecting a successful retry. Earlier ordinary-check failures,
+tool-launch errors, record-write failures and interruptions still stop execution;
+any remaining gates stay explicitly unstarted. Their exact derivations and
+output paths are recorded before
 building, failed builds use `--keep-failed`, and an always-run collector uploads
 the original available outputs even when a gate fails. Unstarted gates and
 interrupted builds remain explicit; collection does not rerun measurements or

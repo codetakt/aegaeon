@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -19,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts/ci"))
 from run_core_pr_checks import (  # noqa: E402 - standalone Nix tests
     CORE_TIMING_CHECKS,
     FORMAL_PACKAGES,
+    build_checks,
     partition,
 )
 
@@ -59,6 +61,8 @@ if args[0] == "build":
         state = pathlib.Path("artifacts/ci-dudect-outputs.json").read_text()
         out.write(state.replace("\\n", "") + "\\n")
     if os.environ.get("FAKE_FAILED_TARGET", "not-a-target") in args:
+        sys.exit(23)
+    if any(target in args for target in json.loads(os.environ.get("FAKE_FAILED_TARGETS", "[]"))):
         sys.exit(23)
     sys.exit(int(os.environ.get("FAKE_BUILD_EXIT", "0")))
 if args[:2] == ["--query", "--outputs"]:
@@ -142,21 +146,72 @@ sys.exit(2)
         assert self.invoke("--all-checks", GITHUB_EVENT_NAME="workflow_dispatch").returncode == 0
 
     def test_failed_timing_gate_remains_failed_and_is_not_retried(self):
-        result = self.invoke(FAKE_FAILED_TARGET=self.timing["verifyDudect"] + "^*")
-        assert result.returncode != 0
-        builds = [command for command in self.commands() if command[0] == "build"]
-        assert len(builds) == 2
-        rows = json.loads((self.root / "artifacts/ci-dudect-outputs.json").read_text())
-        assert [row["build_step_outcome"] for row in rows.values()] == ["failure", "not_started"]
-        assert rows["verifyDudect"]["store_output"] == self.timing["verifyDudect"].removesuffix(
-            ".drv"
-        )
+        for failed in ({"verifyDudect"}, {"verified-reqs"}, set(self.timing)):
+            with self.subTest(failed=sorted(failed)):
+                before = len(self.commands())
+                result = self.invoke(
+                    FAKE_FAILED_TARGETS=json.dumps([self.timing[name] + "^*" for name in failed])
+                )
+                assert result.returncode != 0
+                builds = [c for c in self.commands()[before:] if c[0] == "build"]
+                assert len(builds) == 3
+                assert [c[-1] for c in builds[1:]] == [d + "^*" for d in self.timing.values()]
+                rows = json.loads((self.root / "artifacts/ci-dudect-outputs.json").read_text())
+                for name, row in rows.items():
+                    assert row["build_step_outcome"] == ("failure" if name in failed else "success")
+                    assert row["store_output"] == self.timing[name].removesuffix(".drv")
+                    if name in failed:
+                        assert f"{name} (exit 23)" in result.stderr
+                states = [
+                    json.loads(line)
+                    for line in (self.root / "build-states.jsonl").read_text().splitlines()
+                ]
+                assert states[-1]["verified-reqs"]["build_step_outcome"] == "in_progress"
+                assert states[-1]["verifyDudect"]["build_step_outcome"] == (
+                    "failure" if "verifyDudect" in failed else "success"
+                )
+
+    def test_spawn_or_record_failure_aborts_remaining_gates(self):
+        for failure in ("spawn", "record"):
+            with self.subTest(failure=failure):
+                outputs = {
+                    name: {"derivation": derivation, "build_step_outcome": "not_started"}
+                    for name, derivation in self.timing.items()
+                }
+                with (
+                    patch("run_core_pr_checks.subprocess.run") as execute,
+                    patch("run_core_pr_checks.save_timing_outputs") as save,
+                ):
+                    (execute if failure == "spawn" else save).side_effect = OSError(failure)
+                    with pytest.raises(OSError, match=failure):
+                        build_checks({}, outputs)
+                    assert execute.call_count == (1 if failure == "spawn" else 0)
+                    assert outputs["verified-reqs"]["build_step_outcome"] == "not_started"
+                    if failure == "spawn":
+                        assert outputs["verifyDudect"]["build_step_outcome"] == "failure"
 
     def test_prior_failure_keeps_both_timing_gates_unstarted(self):
         assert self.invoke(FAKE_BUILD_EXIT="23").returncode != 0
         rows = json.loads((self.root / "artifacts/ci-dudect-outputs.json").read_text())
         assert [row["build_step_outcome"] for row in rows.values()] == ["not_started"] * 2
         assert len([command for command in self.commands() if command[0] == "build"]) == 1
+
+    def test_signalled_build_aborts_remaining_gates(self):
+        outputs = {
+            name: {"derivation": derivation, "build_step_outcome": "not_started"}
+            for name, derivation in self.timing.items()
+        }
+        with (
+            patch("run_core_pr_checks.subprocess.run") as execute,
+            patch("run_core_pr_checks.save_timing_outputs"),
+        ):
+            execute.side_effect = subprocess.CalledProcessError(-15, ["nix", "build"])
+            with pytest.raises(subprocess.CalledProcessError) as error:
+                build_checks({}, outputs)
+            assert error.value.returncode == -15
+            assert execute.call_count == 1
+            assert outputs["verifyDudect"]["build_step_outcome"] == "failure"
+            assert outputs["verified-reqs"]["build_step_outcome"] == "not_started"
 
     def test_bad_timing_output_or_missing_gate_fails_before_build(self):
         assert self.invoke(FAKE_BAD_OUTPUT="1").returncode != 0
