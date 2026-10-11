@@ -91,6 +91,27 @@ def msr(cpu: int) -> dict[str, Any]:
         return {"unavailable_errno": error.errno}
 
 
+def speculation_policy(pid: int) -> dict[str, Any]:
+    """Retain the owned task's reported policy, without changing or inferring it."""
+    status = read_optional(f"/proc/{pid}/status")
+    if "value" not in status:
+        return status
+    allowed = (
+        "Speculation_Store_Bypass",
+        "SpeculationIndirectBranch",
+        "NoNewPrivs",
+        "Seccomp",
+    )
+    fields = {
+        key.strip(): value.strip()
+        for line in status["value"].splitlines()
+        if ":" in line
+        for key, value in (line.split(":", 1),)
+        if key.strip() in allowed
+    }
+    return {"fields": fields, "missing_fields": [key for key in allowed if key not in fields]}
+
+
 def cpu_identity() -> dict[str, Any]:
     try:
         with Path("/proc/cpuinfo").open() as source:
@@ -171,12 +192,16 @@ class RuntimeCapture:
                 "clocksource": read_optional(
                     "/sys/devices/system/clocksource/clocksource0/current_clocksource"
                 ),
+                "spec_store_bypass": read_optional(
+                    "/sys/devices/system/cpu/vulnerabilities/spec_store_bypass"
+                ),
             }
         if pid is not None:
             record["native_process"] = {
                 name: read_optional(f"/proc/{pid}/{name}")
                 for name in ("stat", "sched", "schedstat")
             }
+            record["native_process"]["speculation_policy"] = speculation_policy(pid)
         record["capture_finished_monotonic_ns"] = time.monotonic_ns()
         self.output.write(canonical(record) + b"\n")
         self.output.flush()

@@ -176,6 +176,16 @@ At acknowledgment boundaries the owned native process's `/proc/PID/stat`,
 The capture's finishing timestamp makes its duration visible. These snapshots
 do not prove the CPU stayed unchanged between observations.
 
+The startup snapshot also retains the kernel's `spec_store_bypass` vulnerability
+report. At existing acknowledgment boundaries, a bounded read of the owned
+native task's `/proc/PID/status` retains only `Speculation_Store_Bypass`,
+`SpeculationIndirectBranch`, `NoNewPrivs` and `Seccomp`. Missing fields and
+unavailable reads remain explicit. These are kernel-reported policies, not
+proof of physical enforcement on a virtualized host; seccomp alone does not
+establish a speculation policy. The collector makes no speculation-control
+changes. As with other boundary telemetry, capture work can affect the following
+batch; it is not performed inside the timed computation.
+
 Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse

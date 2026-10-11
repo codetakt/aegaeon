@@ -16,7 +16,7 @@ from unittest.mock import patch
 from test_dudect_candidate import binding
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "constant_time"))
-from dudect_diagnostics import FRAME, RuntimeCapture, msr, validate_trace
+from dudect_diagnostics import FRAME, RuntimeCapture, msr, speculation_policy, validate_trace
 from dudect_process import ObservationStream
 from dudect_timing import BATCH, CASE, validate_timing
 
@@ -82,6 +82,51 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(row["native_affinity"], [3])
         self.assertEqual(row["cpus"]["3"]["msr"]["unavailable_errno"], 13)
         self.assertNotIn("environment", row)
+        self.assertEqual(row["platform"]["spec_store_bypass"], {"unavailable_errno": 2})
+
+    def test_speculation_policy_filters_unrelated_process_fields(self):
+        status = (
+            "Name:\tprivate-process\nUid:\t1000\n"
+            "Speculation_Store_Bypass:\tthread mitigated\n"
+            "SpeculationIndirectBranch:\tconditional enabled\n"
+            "NoNewPrivs:\t0\nSeccomp:\t2\nUnknown:\tprivate value\n"
+        )
+        with patch("dudect_diagnostics.read_optional", return_value={"value": status}) as read:
+            result = speculation_policy(1234)
+        read.assert_called_once_with("/proc/1234/status")
+        self.assertEqual(
+            result,
+            {
+                "fields": {
+                    "Speculation_Store_Bypass": "thread mitigated",
+                    "SpeculationIndirectBranch": "conditional enabled",
+                    "NoNewPrivs": "0",
+                    "Seccomp": "2",
+                },
+                "missing_fields": [],
+            },
+        )
+
+    def test_missing_policy_is_explicit_and_not_inferred_from_seccomp(self):
+        with patch("dudect_diagnostics.read_optional", return_value={"value": "Seccomp: 2"}):
+            result = speculation_policy(1234)
+        self.assertEqual(result["fields"], {"Seccomp": "2"})
+        self.assertEqual(
+            result["missing_fields"],
+            ["Speculation_Store_Bypass", "SpeculationIndirectBranch", "NoNewPrivs"],
+        )
+
+    def test_policy_read_failures_and_size_limit_remain_unavailable(self):
+        for result in (
+            {"unavailable_errno": errno.ENOENT},
+            {"unavailable_errno": errno.EACCES},
+            {"unavailable": "size limit"},
+        ):
+            with (
+                self.subTest(result=result),
+                patch("dudect_diagnostics.read_optional", return_value=result),
+            ):
+                self.assertEqual(speculation_policy(1234), result)
 
     def test_failed_capture_cannot_acknowledge_next_native_batch(self):
         stream = ObservationStream(("compare",), "pr")
@@ -102,9 +147,12 @@ class DiagnosticTests(unittest.TestCase):
         ):
             RuntimeCapture(output).snapshot("observation", 1234, case="sha256", look=1)
         row = json.loads(output.getvalue())
-        self.assertEqual(set(row["native_process"]), {"stat", "sched", "schedstat"})
-        for name in row["native_process"]:
+        self.assertEqual(
+            set(row["native_process"]), {"stat", "sched", "schedstat", "speculation_policy"}
+        )
+        for name in ("stat", "sched", "schedstat", "status"):
             read.assert_any_call(f"/proc/1234/{name}")
+        self.assertEqual(row["native_process"]["speculation_policy"], {"unavailable_errno": 2})
         self.assertGreaterEqual(row["capture_finished_monotonic_ns"], row["monotonic_ns"])
 
     def timing_fixture(self):
