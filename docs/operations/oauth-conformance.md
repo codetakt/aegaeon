@@ -363,6 +363,9 @@ The confirmation page binds its first display to the current browser session
 and subject, or explicitly to no active session. A changed session requires a
 fresh logout request. Confirm and Cancel require the same browser binding and
 an exact same-origin POST, and only one decision can consume the transaction.
+The form uses `Referrer-Policy: same-origin` so browser POSTs retain their
+Origin while cross-origin referrers remain suppressed. Missing, null, foreign
+and duplicate Origin headers are rejected.
 Cancel leaves the sessions unchanged and returns a local cancellation page.
 Confirm ends only the presented browser session and its associated OIDC session
 and RP set. A hint for another subject cannot select that subject's sessions.

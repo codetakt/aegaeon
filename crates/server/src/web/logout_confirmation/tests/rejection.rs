@@ -115,6 +115,24 @@ pub(super) async fn bindings(f: &Fixture) -> TestResult {
             StatusCode::BAD_REQUEST
         );
     }
+    for origins in [
+        vec![f.state.issuer.as_str(), f.state.issuer.as_str()],
+        vec![f.state.issuer.as_str(), "https://foreign.example"],
+    ] {
+        let mut request = axum::http::Request::post("/logout/confirm")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(header::COOKIE, tx.cookies(Some(&a.id)))
+            .body(axum::body::Body::from(body.clone()))?;
+        for origin in origins {
+            request
+                .headers_mut()
+                .append(header::ORIGIN, origin.parse()?);
+        }
+        assert_eq!(
+            send_request(&f.state, request).await?.status,
+            StatusCode::BAD_REQUEST
+        );
+    }
     f.intact(&a).await?;
     f.intact(&b).await?;
     let (first, second) = tokio::join!(

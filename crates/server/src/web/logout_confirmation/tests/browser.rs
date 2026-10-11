@@ -28,7 +28,7 @@ pub(super) async fn sessions(f: &Fixture) -> TestResult {
     assert!(page.body.contains("current&lt;user&gt;"));
     assert!(!page.body.contains("foreign-secret-subject"));
     assert!(!page.body.contains(&hint));
-    assert_eq!(page.headers[header::REFERRER_POLICY], "no-referrer");
+    assert_eq!(page.headers[header::REFERRER_POLICY], "same-origin");
     assert_eq!(page.headers[header::X_FRAME_OPTIONS], "DENY");
     assert!(page.headers[header::CONTENT_SECURITY_POLICY]
         .to_str()?

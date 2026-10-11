@@ -1,6 +1,9 @@
 use super::Browser;
 use crate::web::local_auth_support::local_auth_response;
-use axum::{http::StatusCode, response::Response};
+use axum::{
+    http::{header::REFERRER_POLICY, HeaderValue, StatusCode},
+    response::Response,
+};
 
 fn escape(value: &str) -> String {
     value
@@ -16,7 +19,7 @@ pub(super) fn form(token: &str, browser: &Browser) -> Response {
         || "There is no active sign-in in this browser.".to_string(),
         |subject| format!("You are signed in as <strong>{}</strong>.", escape(subject)),
     );
-    local_auth_response(
+    let mut response = local_auth_response(
         StatusCode::OK,
         format!(
             r#"<!doctype html>
@@ -27,7 +30,13 @@ pub(super) fn form(token: &str, browser: &Browser) -> Response {
 <button type="submit" name="decision" value="cancel">Cancel</button></form></main></html>"#,
             token = escape(token)
         ),
-    )
+    );
+    // Keep the real browser's same-origin form Origin while suppressing
+    // cross-origin referrers. `no-referrer` produces Origin: null in Chromium.
+    response
+        .headers_mut()
+        .insert(REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+    response
 }
 
 pub(super) fn result(cancelled: bool) -> Response {
