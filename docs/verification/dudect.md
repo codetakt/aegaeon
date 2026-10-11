@@ -25,8 +25,9 @@ public-fixture timing differences and requires nondetection for protected-input
 observations. It does not establish universal constant time or product assurance.
 
 The verification workflow uses `pr` for both suites. The weekly/manual workflow
-uses `periodic` for Nix; the legacy helper supports that profile too. Both retain
-failed and inconclusive attempts. There is no automatic statistical retry.
+uses `periodic` for both suites in independent jobs with matrix fail-fast disabled;
+a rejected suite does not cancel the other. Each job retains its own evidence,
+including failed and inconclusive attempts. There is no automatic statistical retry.
 
 ```sh
 bash scripts/ci/dudect_check.sh pr

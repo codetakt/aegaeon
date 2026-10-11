@@ -472,6 +472,41 @@ class DudectNixRetentionTests(unittest.TestCase):
         self.assertEqual(upload["with"]["path"], "artifacts/ct/dudect-integrity-gate/")
         self.assertEqual(upload["with"]["if-no-files-found"], "error")
 
+    def test_periodic_workflow_runs_both_suites_without_failure_cancellation(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/dudect-periodic.yml").read_text())
+        job = workflow["jobs"]["dudect"]
+        self.assertFalse(job["strategy"]["fail-fast"])
+        self.assertEqual(
+            job["strategy"]["matrix"]["include"],
+            [
+                {"suite": "nix", "output": "artifacts/ct/dudect-nix/"},
+                {"suite": "legacy", "output": "artifacts/ct/dudect/"},
+            ],
+        )
+        nix, legacy, upload = job["steps"][-3:]
+        self.assertEqual(nix["if"], "${{ matrix.suite == 'nix' }}")
+        self.assertEqual(nix["run"], "bash scripts/ci/dudect_check.sh periodic")
+        self.assertEqual(legacy["if"], "${{ matrix.suite == 'legacy' }}")
+        self.assertEqual(
+            shlex.split(legacy["run"]),
+            [
+                "nix",
+                "develop",
+                ".#verification",
+                "--command",
+                "bash",
+                "tests/constant_time/run.sh",
+                "--profile",
+                "periodic",
+            ],
+        )
+        self.assertEqual(upload["if"], "${{ always() }}")
+        self.assertIn("${{ matrix.suite }}", upload["with"]["name"])
+        self.assertEqual(upload["with"]["path"], "${{ matrix.output }}")
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        for node in (job, nix, legacy):
+            self.assertNotIn("continue-on-error", node)
+
     def core_outputs(self, outcomes):
         rows = {
             name: {

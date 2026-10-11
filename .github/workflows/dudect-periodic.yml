@@ -17,9 +17,17 @@ env:
 
 jobs:
   dudect:
-    name: High-sensitivity timing observations
+    name: High-sensitivity timing observations (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: nix
+            output: artifacts/ct/dudect-nix/
+          - suite: legacy
+            output: artifacts/ct/dudect/
     permissions:
       contents: read
       id-token: write
@@ -30,12 +38,16 @@ jobs:
       - uses: ./.github/actions/setup-nix-ci
         with:
           enable-flakehub-cache: "true"
-      - name: Run fresh periodic observations
+      - name: Run fresh periodic Nix observations
+        if: ${{ matrix.suite == 'nix' }}
         run: bash scripts/ci/dudect_check.sh periodic
+      - name: Run fresh periodic legacy observations
+        if: ${{ matrix.suite == 'legacy' }}
+        run: nix develop .#verification --command bash tests/constant_time/run.sh --profile periodic
       - name: Preserve timing observations
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: dudect-periodic-observations
-          path: artifacts/ct/dudect-nix/
+          name: dudect-periodic-${{ matrix.suite }}-observations
+          path: ${{ matrix.output }}
           if-no-files-found: error
