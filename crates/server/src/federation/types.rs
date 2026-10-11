@@ -72,6 +72,9 @@ pub struct Constraints {
     /// Maximum path length from this entity to the leaf.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_path_length: Option<u32>,
+    /// Standard restrictions on all subordinate Entity Identifier hosts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub naming_constraints: Option<NamingConstraints>,
     /// Standard metadata type filter. `federation_entity` is always retained
     /// and must not occur in this list. An empty list excludes all other types.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -81,8 +84,22 @@ pub struct Constraints {
     pub allowed_leaf_entity_types: Option<Vec<String>>,
 }
 
+/// URI host namespaces permitted or excluded by a superior.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NamingConstraints {
+    /// Omission is unrestricted; a present empty list permits no names.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permitted: Option<Vec<String>>,
+    /// Any matching exclusion takes precedence over permission.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excluded: Option<Vec<String>>,
+}
+
 impl Constraints {
     pub(in crate::federation) fn validate(&self) -> Result<(), FederationError> {
+        if let Some(naming) = &self.naming_constraints {
+            naming.validate()?;
+        }
         if self.allowed_entity_types.as_ref().is_some_and(|types| {
             types
                 .iter()
@@ -228,6 +245,7 @@ impl TrustChain {
     /// Returns an error for malformed layout, policy or resulting metadata.
     pub fn resolved_metadata(&self) -> Result<Option<HashMap<String, Value>>, FederationError> {
         self.validate_metadata_layout()?;
+        super::naming_constraints::validate_chain_names(&self.chain)?;
         // Collect and validate every declaration before any policy is processed,
         // including declarations on types that will be absent or filtered out.
         let mut critical = std::collections::BTreeSet::new();

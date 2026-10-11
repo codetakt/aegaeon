@@ -606,3 +606,8 @@ mod critical_policy {
     use super::*;
     include!("critical_policy.rs");
 }
+
+mod naming_constraints {
+    use super::*;
+    include!("naming_constraints.rs");
+}

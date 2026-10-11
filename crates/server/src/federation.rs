@@ -42,6 +42,7 @@ mod fetcher;
 mod headers;
 mod keys;
 mod metadata_policy;
+mod naming_constraints;
 mod profile;
 mod raw_payload;
 mod repositories;
@@ -83,8 +84,8 @@ pub use trust_chain::{resolve_trust_chain, resolve_trust_chain_with_jwts};
 use trust_marks::validate_trust_mark_claims;
 pub use trust_marks::verify_trust_mark;
 pub use types::{
-    Constraints, EntityStatement, ResolvedTrustChain, TrustAnchor, TrustChain, TrustMark,
-    TrustMarkClaims,
+    Constraints, EntityStatement, NamingConstraints, ResolvedTrustChain, TrustAnchor, TrustChain,
+    TrustMark, TrustMarkClaims,
 };
 
 /// Maximum trust chain depth to prevent infinite loops.

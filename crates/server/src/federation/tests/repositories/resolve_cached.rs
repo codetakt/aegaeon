@@ -317,6 +317,7 @@ fn resolve_cached_rejects_cached_allowed_leaf_entity_types_violation() {
         leaf_id,
         now,
         Some(Constraints {
+            naming_constraints: None,
             allowed_entity_types: None,
             max_path_length: None,
             allowed_leaf_entity_types: Some(vec!["openid_provider".to_string()]),
