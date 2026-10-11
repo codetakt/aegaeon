@@ -28,6 +28,9 @@ pub struct EntityStatement {
     /// Metadata policy constraints.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata_policy: Option<HashMap<String, Value>>,
+    /// Critical additional metadata policy operators declared by a Subordinate Statement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_policy_crit: Option<Vec<String>>,
     /// Trust chain constraints.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constraints: Option<Constraints>,
@@ -225,6 +228,20 @@ impl TrustChain {
     /// Returns an error for malformed layout, policy or resulting metadata.
     pub fn resolved_metadata(&self) -> Result<Option<HashMap<String, Value>>, FederationError> {
         self.validate_metadata_layout()?;
+        // Collect and validate every declaration before any policy is processed,
+        // including declarations on types that will be absent or filtered out.
+        let mut critical = std::collections::BTreeSet::new();
+        for statement in &self.chain {
+            if let Some(names) = &statement.metadata_policy_crit {
+                if statement.is_self_signed() {
+                    return Err(FederationError::Validation(
+                        "metadata_policy_crit is subordinate-only".into(),
+                    ));
+                }
+                super::metadata_policy::validate_critical_names(names)?;
+                critical.extend(names.iter().map(String::as_str));
+            }
+        }
         let constraints: Vec<_> = self
             .chain
             .iter()
@@ -242,7 +259,7 @@ impl TrustChain {
             .step_by(2)
             .rev()
             .filter_map(|statement| statement.metadata_policy.as_ref());
-        let policies = resolve_policies(policies)?;
+        let policies = resolve_policies(policies, &critical)?;
         let Some(mut resolved) = self.leaf()?.metadata.clone() else {
             return Ok(None);
         };

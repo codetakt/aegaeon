@@ -506,3 +506,103 @@ fn signed_constraint_shapes_and_entity_types_roundtrip() {
         json!({"max_path_length":0,"allowed_entity_types":[],"allowed_leaf_entity_types":[]});
     accept(&claims);
 }
+
+#[test]
+fn signed_critical_policy_admission_preserves_supported_names_without_occurrence() {
+    let _guard = raw_json_env_guard();
+    for names in [json!(["intersect"]), json!(["intersect", "intersect"])] {
+        let mut claims = payload(false);
+        claims["metadata_policy_crit"] = names.clone();
+        for statement in [
+            accept(&claims),
+            must_ok(parse_entity_statement_unverified(&signed(&claims))),
+        ] {
+            must_ok(validate_entity_statement(&statement, 1_700_000_000));
+            let serialized = must_ok(serde_json::to_value(&statement));
+            assert_eq!(serialized["metadata_policy_crit"], names);
+            let roundtrip: EntityStatement = must_ok(serde_json::from_value(serialized));
+            assert_eq!(
+                roundtrip.metadata_policy_crit,
+                statement.metadata_policy_crit
+            );
+        }
+        claims["iss"] = claims["sub"].clone();
+        reject(&claims);
+        let typed: EntityStatement = must_ok(serde_json::from_value(claims));
+        assert!(validate_entity_statement(&typed, 1_700_000_000).is_err());
+    }
+    for value in [
+        Value::Null,
+        json!([]),
+        json!({}),
+        json!("intersect"),
+        json!(true),
+        json!([1]),
+        json!(["intersect", null]),
+        json!([""]),
+        json!(["Intersect"]),
+        json!(["INTERSECT"]),
+        json!(["custom"]),
+        json!(["value"]),
+        json!(["add"]),
+        json!(["default"]),
+        json!(["one_of"]),
+        json!(["subset_of"]),
+        json!(["superset_of"]),
+        json!(["essential"]),
+    ] {
+        let mut claims = payload(false);
+        claims["metadata_policy_crit"] = value;
+        reject(&claims);
+        if let Ok(typed) = serde_json::from_value::<EntityStatement>(claims.clone()) {
+            // Direct serde cannot distinguish null from omission; only test
+            // representable presence here. Raw admission above rejects null.
+            if typed.metadata_policy_crit.is_some() {
+                assert!(validate_entity_statement(&typed, 1_700_000_000).is_err());
+            }
+        }
+    }
+    assert!(accept(&payload(false)).metadata_policy_crit.is_none());
+}
+
+#[test]
+fn signed_critical_policy_duplicate_json_member_is_rejected() {
+    let _guard = raw_json_env_guard();
+    let base = must_ok(serde_json::to_string(&payload(false)));
+    let raw = format!(
+        "{},\"metadata_policy_crit\":[\"intersect\"],\"metadata_policy_crit\":[\"intersect\"]}}",
+        must_some(base.strip_suffix('}'))
+    );
+    let key = sample_signing_key();
+    let jwk = must_some(FederationKeyManager::federation_public_jwk(key));
+    let header =
+        encode_json_value(&json!({"alg":"ES256","typ":"entity-statement+jwt","kid":jwk["kid"]}));
+    let input = format!("{}.{}", header, URL_SAFE_NO_PAD.encode(raw.as_bytes()));
+    let jwt = format!(
+        "{}.{}",
+        input,
+        URL_SAFE_NO_PAD.encode(must_ok(FederationKeyManager::sign_federation(
+            key,
+            input.as_bytes()
+        )))
+    );
+    assert_federation_signature_only(&jwt, key);
+    assert!(verify_entity_statement(&jwt, &sample_jwks()).is_err());
+}
+
+#[test]
+fn supported_metadata_critical_name_does_not_enable_payload_or_header_extensions() {
+    let _guard = raw_json_env_guard();
+    let mut claims = payload(false);
+    claims["metadata_policy_crit"] = json!(["intersect"]);
+    claims["crit"] = json!(["intersect"]);
+    claims["intersect"] = json!({});
+    reject(&claims);
+    must_some(claims.as_object_mut()).remove("crit");
+    let key = sample_signing_key();
+    let jwk = must_some(FederationKeyManager::federation_public_jwk(key));
+    let header = json!({"alg":"ES256","typ":"entity-statement+jwt","kid":jwk["kid"],"crit":["intersect"],"intersect":true});
+    let jwt = super::purpose::sign_with_header(key, &header, &claims);
+    assert_federation_signature_only(&jwt, key);
+    assert!(verify_entity_statement(&jwt, &sample_jwks()).is_err());
+}

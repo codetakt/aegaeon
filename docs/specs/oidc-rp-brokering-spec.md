@@ -161,8 +161,13 @@ immediate parameters non-null; null inside structured parameter values remains s
 
 Trust Mark envelopes require the exact `trust_mark_type` and a signed compact JWT whose raw type
 matches the envelope. Owner and issuer maps receive shape and identifier checks. This does not
-verify Trust Mark accreditation, issuer trust, or delegation. Any present payload `crit` or
-`metadata_policy_crit` is refused because no corresponding critical extension is implemented.
+verify Trust Mark accreditation, issuer trust, or delegation. Any present payload `crit`
+is refused because no payload critical extension is implemented. Subordinate Statements may
+use `metadata_policy_crit` to declare the supported additional `intersect` operator. The
+complete chain collects these declarations before validating every policy; unsupported names,
+malformed or empty lists, and declarations on Entity Configurations are rejected. See
+[critical metadata policy operators](openid-federation-spec.md#critical-metadata-policy-operators)
+for the signed-input, cache, and policy-resolution contract.
 Entity Statements explicitly prohibit `trust_chain` and `peer_trust_chain` protected headers.
 
 Every known superior in a selected chain must publish its own signed `federation_entity` metadata

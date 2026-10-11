@@ -266,6 +266,7 @@ fn sample_entity_config(entity_id: &str, now: i64) -> EntityStatement {
         trust_marks: None,
         authority_hints: Some(vec!["https://ta.example.com".to_string()]),
         source_endpoint: None,
+        metadata_policy_crit: None,
     }
 }
 
@@ -282,6 +283,7 @@ fn sample_subordinate_statement(issuer: &str, subject: &str, now: i64) -> Entity
         trust_marks: None,
         authority_hints: None,
         source_endpoint: None,
+        metadata_policy_crit: None,
     }
 }
 

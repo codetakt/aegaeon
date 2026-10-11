@@ -47,8 +47,13 @@ pub(super) fn validate(claims: &Map<String, Value>) -> Result<(), FederationErro
     if forbidden.iter().any(|name| claims.contains_key(*name)) {
         return Err(invalid("statement-kind claims"));
     }
-    if claims.contains_key("crit") || claims.contains_key("metadata_policy_crit") {
+    if claims.contains_key("crit") {
         return Err(invalid("unsupported critical claims"));
+    }
+    if let Some(value) = claims.get("metadata_policy_crit") {
+        let names: Vec<String> =
+            serde_json::from_value(value.clone()).map_err(|_| invalid("metadata_policy_crit"))?;
+        super::super::metadata_policy::validate_critical_names(&names)?;
     }
     validate_federation_jwks(
         claims
