@@ -47,7 +47,7 @@
       "critical": false
     },
     "crates/jose/src/jwk.rs": {
-      "sha256": "14b1051ce04cf6af7658c863fae2a4ff8d56f5e9620ad35d172a4aca4ef537b8",
+      "sha256": "5e6f61867860bdb781ceaa7a85b7dd1555594dc5a53fff0f1c550c4c08811d35",
       "entries": [
         "7517-001",
         "7517-003",

@@ -156,8 +156,14 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
         let encryption=EnvelopeFixture::new()?;
         configure_encryption(&mut state,&encryption).await?;
         for cty in ["JWT","jwt","jWt","application/jwt","APPLICATION/JWT","Application/JwT"] {
+            for escaped in [false, true] {
             let inner=signed_request(&state,"approve")?;
             let header=format!(r#"{{ "alg":"RSA-OAEP","enc":"A256GCM","cty":"{cty}","extension":{{"ignored":[false,null]}},"\u2603":7 }}"#);
+            let header = if escaped {
+                format!("{}\r\n\t ", header.replace("\"alg\"", r#""\u0061lg""#).replace("\"cty\"", r#""\u0063ty""#))
+            } else {
+                header
+            };
             let token=encryption.seal(&header,inner.as_bytes())?;
             let uri=authorization_uri(&state,&sid,&token,if par {"par-approve"} else {"jar-approve"}).await?;
             let (status,body)=send(&state,&sid,&uri,None,None).await?;
@@ -168,6 +174,7 @@ async fn valid_encrypted_requests(par: bool) -> TestResult {
             assert!(tokens["access_token"].is_string());
             assert!(tokens["id_token"].is_string());
             assert!(tokens["refresh_token"].is_string());
+            }
         }
         Ok(())
     }.await;
