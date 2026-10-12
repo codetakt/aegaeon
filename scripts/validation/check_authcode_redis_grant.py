@@ -22,9 +22,11 @@ from typing import Any, BinaryIO
 from authcode_redis_fixtures import (
     FIXTURE,
     GENERATED,
+    GRANT_SOURCE,
     LUA_SOURCE,
     MODEL,
     canonical,
+    expired_in_window,
     load_cases,
     lua_script,
     render,
@@ -231,6 +233,14 @@ def lose_reply(port: int, command: list[Any], identity: tuple[str, str]) -> dict
     return evidence
 
 
+def validate_clock_window(request: dict[str, Any], before: list[str], after: list[str]) -> None:
+    expired_in_window(request)
+    low, high = request["clock_window_ns"]
+    start, end = (int(t[0]) * 1_000_000_000 + int(t[1]) * 1000 for t in (before, after))
+    if not low <= start <= end <= high:
+        raise ValueError("Redis clock outside the finite correspondence premise")
+
+
 def run_cases(
     port: int, script: str, out: Path, cases: list[dict[str, Any]], identity: tuple[str, str]
 ) -> list[dict[str, Any]]:
@@ -251,10 +261,11 @@ def run_cases(
             observations = []
             replies = []
             for index, request in enumerate(case["requests"]):
-                command = ["EVAL", script, 18, *request["keys"], *request["args"]]
+                command = ["EVAL", script, len(request["keys"]), *request["keys"], *request["args"]]
                 event: dict[str, Any] = {
                     "invocation_sha256": hashlib.sha256(frame(command)).hexdigest()
                 }
+                clock_before = conn.command("TIME")
                 if case.get("drop_first_reply") and index == 0:
                     event["reply_loss"] = lose_reply(port, command, identity)
                     reply = event["reply_loss"]["server_reply"]
@@ -264,6 +275,9 @@ def run_cases(
                     except RedisError as error:
                         event["raw_error"] = str(error)
                         reply = normalize_reply(error)
+                clock_after = conn.command("TIME")
+                validate_clock_window(request, clock_before, clock_after)
+                event["clock_bracket"] = [clock_before, clock_after]
                 raw_json: dict[str, str] = {}
                 state, expiry = snapshot(conn, json_keys, raw_json)
                 event["raw_json_values"] = raw_json
@@ -306,8 +320,10 @@ def main() -> None:
     sources = [
         FIXTURE,
         GENERATED,
+        GRANT_SOURCE,
         MODEL,
         LUA_SOURCE,
+        GRANT_SOURCE,
         Path(__file__),
         Path(__file__).with_name("authcode_redis_fixtures.py"),
     ]
@@ -321,7 +337,9 @@ def main() -> None:
         raise RuntimeError("redis-server is required")
     executable = str(Path(executable).resolve(strict=True))
     redis_digest = hashlib.sha256(Path(executable).read_bytes()).hexdigest()
-    script = lua_script(source_bytes[str(LUA_SOURCE)].decode())
+    script = lua_script(
+        source_bytes[str(LUA_SOURCE)].decode(), source_bytes[str(GRANT_SOURCE)].decode()
+    )
     with tempfile.TemporaryDirectory(prefix="aegaeon-lua-correspondence-") as temporary:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
