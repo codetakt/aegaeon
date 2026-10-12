@@ -198,6 +198,7 @@ known-first-party = ["aegaeon"]
 # ---------------------------------------------------------------------------
 
 [tool.mypy]
+mypy_path = ["tests/constant_time"]
 python_version = "3.13"
 strict = true
 files = ["scripts/validation", "scripts/ci", "ci/validate_slos.py"]

@@ -937,6 +937,22 @@ class CiPlanTransportTests(unittest.TestCase):
         ):
             transport.authoritative_raw_diff(self.repo, BOUND)
 
+    def before_timing_retention(self, actual_job, parent_job):
+        # DudectNixRetentionTests checks the intentional FFI/timing split and
+        # failure uploads. Preserve all other planner/publication fields here.
+        actual = deepcopy(actual_job)
+        self.assertEqual(
+            [step["name"] for step in actual["steps"][2:6]],
+            [
+                "Validate FFI contracts",
+                "Validate proof references, claims and timing observations",
+                "Collect attempted integrity timing gate output",
+                "Preserve attempted integrity timing gate output",
+            ],
+        )
+        actual["steps"][2:6] = parent_job["steps"][2:3]
+        return actual
+
     def test_workflow_preparation_preserves_all_jobs_conditions_and_publication(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
         parent_bytes = transport.git(
@@ -979,7 +995,12 @@ class CiPlanTransportTests(unittest.TestCase):
                 if job == "integrity"
                 else expected
             )
-            self.assertEqual(workflow["jobs"][job], expected)
+            self.assertEqual(
+                self.before_timing_retention(workflow["jobs"][job], parent["jobs"][job])
+                if job == "integrity"
+                else workflow["jobs"][job],
+                expected,
+            )
         documentation = yaml.safe_load((ROOT / ".github/workflows/documentation.yml").read_text())
         self.assertEqual(set(documentation["jobs"]), {"metadata", "helpers", "complete"})
         for job in documentation["jobs"].values():

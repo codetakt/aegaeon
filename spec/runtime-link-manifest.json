@@ -1,7 +1,7 @@
 {
   "files": {
     "crates/ffi/build.rs": {
-      "sha256": "4dc3f82dbf8a1520194c4859b5445ccf715875487d3f697f09286096bd3ea445",
+      "sha256": "ffb6fd73ec18b66094dd01cc36eeaae631379fb7258bb9405b2b6f35366b000c",
       "entries": [
         "global-004-everparse"
       ],

@@ -106,28 +106,41 @@ jobs:
           fi
           nix develop .#ci --command cargo run --locked --package xtask --bin xtask --features openapi -- openapi --check
 
-      - name: nix flake check
-        if: ${{ !inputs.delegate-formal-checks }}
+      - name: Evaluate all flake outputs and build core-owned checks
+        id: core-checks
+        env:
+          DELEGATE_FORMAL_CHECKS: ${{ inputs.delegate-formal-checks || false }}
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo rm -rf /homeless-shelter || true
           else
             rm -rf /homeless-shelter || true
           fi
-          nix flake check --print-build-logs
+          if [ "$DELEGATE_FORMAL_CHECKS" = "true" ]; then
+            python3 scripts/ci/run_core_pr_checks.py
+          else
+            python3 scripts/ci/run_core_pr_checks.py --all-checks
+          fi
 
-      - name: Evaluate all flake outputs and build core-owned PR checks
-        if: ${{ inputs.delegate-formal-checks }}
-        run: |
-          if command -v sudo >/dev/null 2>&1; then
-            sudo rm -rf /homeless-shelter || true
-          else
-            rm -rf /homeless-shelter || true
-          fi
-          python3 scripts/ci/run_core_pr_checks.py
+      - name: Collect original core Dudect gate outputs
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.core-checks.outcome) }}
+        run: >-
+          python3 scripts/ci/collect_dudect_nix_output.py
+          --core-record artifacts/ci-dudect-outputs.json
+          --output artifacts/ct/dudect-core-gates
+
+      - name: Preserve core Dudect gate outputs
+        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.core-checks.outcome) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-core-gate-outputs
+          path: |
+            artifacts/ci-dudect-outputs.json
+            artifacts/ct/dudect-core-gates/
+          if-no-files-found: error
 
       - name: Preserve PR check ownership
-        if: ${{ always() && inputs.delegate-formal-checks }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: core-check-ownership

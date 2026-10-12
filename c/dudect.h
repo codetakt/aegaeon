@@ -100,7 +100,15 @@ typedef struct {
   size_t number_measurements;
 } dudect_config_t;
 
+#ifdef AEGAEON_DUDECT_CANDIDATE
+#include "dudect_support.h"
+#include "dudect_context.h"
+#endif
+
 typedef struct {
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  dudect_support_t support[2];
+#endif
   double mean[2];
   double m2[2];
   double n[2];
@@ -114,7 +122,15 @@ typedef struct {
   dudect_config_t *config;
   ttest_ctx_t *ttest_ctxs[DUDECT_TESTS];
   int64_t *percentiles;
-  double p_value;  // Added to track p-value
+  size_t batches;
+  size_t rejected;
+  double pilot_center;
+  size_t pilot_count;
+  volatile uint8_t sink;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  int timing_enabled;
+  dudect_context_t timing_before, timing_after;
+#endif
 } dudect_ctx_t;
 
 typedef enum {
@@ -125,12 +141,11 @@ typedef enum {
 /* Public API */
 
 DUDECT_VISIBILITY int dudect_init(dudect_ctx_t *ctx, dudect_config_t *conf);
-DUDECT_VISIBILITY dudect_state_t dudect_main(dudect_ctx_t *c);
+DUDECT_VISIBILITY void dudect_collect(dudect_ctx_t *c);
 DUDECT_VISIBILITY int dudect_free(dudect_ctx_t *ctx);
 DUDECT_VISIBILITY void randombytes(uint8_t *x, size_t how_much);
 DUDECT_VISIBILITY uint8_t randombit(void);
-DUDECT_VISIBILITY double dudect_get_max_t(dudect_ctx_t *ctx);
-DUDECT_VISIBILITY size_t dudect_get_degrees_of_freedom(dudect_ctx_t *ctx);
+
 
 /* Public configuration */
 
@@ -185,21 +200,24 @@ static void t_push(ttest_ctx_t *ctx, double x, uint8_t clazz) {
   ctx->m2[clazz] = ctx->m2[clazz] + delta * (x - ctx->mean[clazz]);
 }
 
-static double t_compute(ttest_ctx_t *ctx) {
-  double var[2] = {0.0, 0.0};
-  var[0] = ctx->m2[0] / (ctx->n[0] - 1);
-  var[1] = ctx->m2[1] / (ctx->n[1] - 1);
-  double num = (ctx->mean[0] - ctx->mean[1]);
-  double den = sqrt(var[0] / ctx->n[0] + var[1] / ctx->n[1]);
-  double t_value = num / den;
-  return t_value;
-}
+#ifdef AEGAEON_DUDECT_CANDIDATE
+#define DUDECT_PUSH(ctx, id, tick, value, group) do { \
+  dudect_support_push(&(ctx)->ttest_ctxs[id]->support[group], tick, value); \
+  t_push((ctx)->ttest_ctxs[id], value, group); \
+} while (0)
+#else
+#define DUDECT_PUSH(ctx, id, tick, value, group) \
+  t_push((ctx)->ttest_ctxs[id], value, group)
+#endif
 
 static void t_init(ttest_ctx_t *ctx) {
   for (int clazz = 0; clazz < 2; clazz ++) {
     ctx->mean[clazz] = 0.0;
     ctx->m2[clazz] = 0.0;
     ctx->n[clazz] = 0.0;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+    ctx->support[clazz] = (dudect_support_t){0};
+#endif
   }
 }
 
@@ -222,11 +240,16 @@ static int64_t percentile(int64_t *a_sorted, double which, size_t size) {
  than that.
 */
 static void prepare_percentiles(dudect_ctx_t *ctx) {
-  qsort(ctx->exec_times, ctx->config->number_measurements, sizeof(int64_t), (int (*)(const void *, const void *))cmp);
+  size_t count = 0;
+  for (size_t i = 10; i + 1 < ctx->config->number_measurements; ++i) {
+    if (ctx->exec_times[i] >= 0) ctx->exec_times[count++] = ctx->exec_times[i];
+  }
+  ctx->pilot_count = count;
+  if (!count) return;
+  qsort(ctx->exec_times, count, sizeof(int64_t), (int (*)(const void *, const void *))cmp);
   for (size_t i = 0; i < DUDECT_NUMBER_PERCENTILES; i++) {
-    ctx->percentiles[i] = percentile(
-        ctx->exec_times, 1 - (pow(0.5, 10 * (double)(i + 1) / DUDECT_NUMBER_PERCENTILES)),
-        ctx->config->number_measurements);
+    ctx->percentiles[i] = percentile(ctx->exec_times,
+        1 - pow(0.5, 10 * (double)(i + 1) / DUDECT_NUMBER_PERCENTILES), count);
   }
 }
 
@@ -272,31 +295,34 @@ uint8_t randombit(void) {
 /*
  Returns current CPU tick count from *T*ime *S*tamp *C*ounter.
 
- To enforce CPU to issue RDTSC instruction where we want it to, we put a `mfence` instruction before
- issuing `rdtsc`, which should make all memory load/ store operations, prior to RDTSC, globally visible.
-
- See https://github.com/oreparaz/dudect/issues/32
- See RDTSC documentation @ https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.htm#text=rdtsc&ig_expand=4395,5273
- See MFENCE documentation @ https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.htm#text=mfence&ig_expand=4395,5273,4395
-
- Also see https://stackoverflow.com/a/12634857
+ The candidate follows Intel SDM volume 2, RDTSC: MFENCE;LFENCE orders
+ earlier instructions/loads/stores before the timestamp, and the trailing
+ LFENCE orders following instructions after it. MFENCE alone is insufficient.
+ https://cdrdv2-public.intel.com/671110/325383-sdm-vol-2abcd.pdf
+ This requires the host's LFENCE execution-serialization semantics; it is
+ not a portable clock or a guarantee about a different processor/compiler.
+ Historical mode preserves its original timer for explicit legacy replay.
 */
 static inline int64_t cpucycles(void) {
   _mm_mfence();
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  _mm_lfence();
+  int64_t ticks = (int64_t)__rdtsc();
+  _mm_lfence();
+  return ticks;
+#else
   return (int64_t)__rdtsc();
+#endif
 }
 
-// threshold values for Welch's t-test
-#define t_threshold_bananas 500 // test failed, with overwhelming probability
-#define t_threshold_moderate                                                   \
-  10 // test failed. Pankaj likes 4.5 but let's be more lenient
-
 static void measure(dudect_ctx_t *ctx) {
+  uint8_t result = 0;
   for (size_t i = 0; i < ctx->config->number_measurements; i++) {
     ctx->ticks[i] = cpucycles();
-    do_one_computation(ctx->input_data + i * ctx->config->chunk_size);
+    result ^= do_one_computation(ctx->input_data + i * ctx->config->chunk_size);
   }
 
+  ctx->sink = result; /* Keep the measured work observable under optimization. */
   for (size_t i = 0; i < ctx->config->number_measurements-1; i++) {
     ctx->exec_times[i] = ctx->ticks[i+1] - ctx->ticks[i];
   }
@@ -307,144 +333,78 @@ static void update_statistics(dudect_ctx_t *ctx) {
     int64_t difference = ctx->exec_times[i];
 
     if (difference < 0) {
-      continue; // the cpu cycle counter overflowed, just throw away the measurement
+      ctx->rejected++;
+      continue; // Record invalid deltas; never count them as observations.
     }
 
     // t-test on the execution time
-    t_push(ctx->ttest_ctxs[0], difference, ctx->classes[i]);
+    DUDECT_PUSH(ctx, 0, difference, (double)difference, ctx->classes[i]);
 
     // t-test on cropped execution times, for several cropping thresholds.
     for (size_t crop_index = 0; crop_index < DUDECT_NUMBER_PERCENTILES; crop_index++) {
+#ifdef AEGAEON_DUDECT_CANDIDATE
+      /* Integer timer quantiles include the complete tied boundary. */
+      if (difference <= ctx->percentiles[crop_index]) {
+#else
       if (difference < ctx->percentiles[crop_index]) {
-        t_push(ctx->ttest_ctxs[crop_index + 1], difference, ctx->classes[i]);
+#endif
+        DUDECT_PUSH(ctx, crop_index + 1, difference, (double)difference, ctx->classes[i]);
       }
     }
 
-    // second-order test (only if we have more than 10000 measurements).
-    // Centered product pre-processing.
-    if (ctx->ttest_ctxs[0]->n[0] > 10000) {
-      double centered = (double)difference - ctx->ttest_ctxs[0]->mean[ctx->classes[i]];
-      t_push(ctx->ttest_ctxs[1 + DUDECT_NUMBER_PERCENTILES], centered * centered, ctx->classes[i]);
-    }
+    // Freeze a common centering value from the disjoint calibration batch.
+    double centered = (double)difference - ctx->pilot_center;
+    DUDECT_PUSH(ctx, 1 + DUDECT_NUMBER_PERCENTILES, difference, centered * centered, ctx->classes[i]);
   }
 }
 
-#if DUDECT_TRACE
-static void report_test(ttest_ctx_t *x) {
-  if (x->n[0] > DUDECT_ENOUGH_MEASUREMENTS) {
-    double tval = t_compute(x);
-    printf(" abs(t): %4.2f, number measurements: %f\n", tval, x->n[0]+x->n[1]);
-  } else {
-    printf(" (not enough measurements: %f + %f)\n", x->n[0], x->n[1]);
-  }
-}
-#endif /* DUDECT_TRACE */
-
-static ttest_ctx_t *max_test(dudect_ctx_t *ctx) {
-  size_t ret = 0;
-  double max = 0;
-  for (size_t i = 0; i < DUDECT_TESTS; i++) {
-    if (ctx->ttest_ctxs[i]->n[0] > DUDECT_ENOUGH_MEASUREMENTS) {
-      double x = fabs(t_compute(ctx->ttest_ctxs[i]));
-      if (max < x) {
-        max = x;
-        ret = i;
-      }
-    }
-  }
-  return ctx->ttest_ctxs[ret];
-}
-
-static dudect_state_t report(dudect_ctx_t *ctx) {
-
-  #if DUDECT_TRACE
-  for (size_t i = 0; i < DUDECT_TESTS; i++) {
-    printf(" bucket %zu has %f measurements\n", i, ctx->ttest_ctxs[i]->n[0] +  ctx->ttest_ctxs[i]->n[1]);
-  }
-
-  printf("t-test on raw measurements\n");
-  report_test(ctx->ttest_ctxs[0]);
-
-  printf("t-test on cropped measurements\n");
-  for (size_t i = 0; i < DUDECT_NUMBER_PERCENTILES; i++) {
-    report_test(ctx->ttest_ctxs[i + 1]);
-  }
-
-  printf("t-test for second order leakage\n");
-  report_test(ctx->ttest_ctxs[1 + DUDECT_NUMBER_PERCENTILES]);
-  #endif /* DUDECT_TRACE */
-
-  ttest_ctx_t *t = max_test(ctx);
-  double max_t = fabs(t_compute(t));
-  double number_traces_max_t = t->n[0] +  t->n[1];
-  double max_tau = max_t / sqrt(number_traces_max_t);
-
-  // print the number of measurements of the test that yielded max t.
-  // sometimes you can see this number go down - this can be confusing
-  // but can happen (different test)
-  printf("meas: %7.2lf M, ", (number_traces_max_t / 1e6));
-  if (number_traces_max_t < DUDECT_ENOUGH_MEASUREMENTS) {
-    printf("not enough measurements (%.0f still to go).\n", DUDECT_ENOUGH_MEASUREMENTS-number_traces_max_t);
-    return DUDECT_NO_LEAKAGE_EVIDENCE_YET;
-  }
-
-  /*
-   * We report the following statistics:
-   *
-   * max_t: the t value
-   * max_tau: a t value normalized by sqrt(number of measurements).
-   *          this way we can compare max_tau taken with different
-   *          number of measurements. This is sort of "distance
-   *          between distributions", independent of number of
-   *          measurements.
-   * (5/tau)^2: how many measurements we would need to barely
-   *            detect the leak, if present. "barely detect the
-   *            leak" here means have a t value greater than 5.
-   *
-   * The first metric is standard; the other two aren't (but
-   * pretty sensible imho)
-   */
-  printf("max t: %+7.2f, max tau: %.2e, (5/tau)^2: %.2e.",
-    max_t,
-    max_tau,
-    (double)(5*5)/(double)(max_tau*max_tau));
-
-  if (max_t > t_threshold_bananas) {
-    printf(" Definitely not constant time.\n");
-    return DUDECT_LEAKAGE_FOUND;
-  }
-  if (max_t > t_threshold_moderate) {
-    printf(" Probably not constant time.\n");
-    return DUDECT_LEAKAGE_FOUND;
-  }
-  if (max_t < t_threshold_moderate) {
-    printf(" For the moment, maybe constant time.\n");
-  }
-  return DUDECT_NO_LEAKAGE_EVIDENCE_YET;
-}
-
-dudect_state_t dudect_main(dudect_ctx_t *ctx) {
+/* Collection and inference are separate. Only the strict runner can admit a
+ * complete profile; an empty/warm-up context is never a successful test. */
+void dudect_collect(dudect_ctx_t *ctx) {
   prepare_inputs(ctx->config, ctx->input_data, ctx->classes);
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  for (size_t i = 0; i < ctx->config->number_measurements; ++i) {
+    if (ctx->classes[i] > 1) abort();
+    dudect_input_classes[ctx->classes[i]]++;
+  }
+#endif
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  if (ctx->timing_enabled) ctx->timing_before = dudect_context();
+#endif
   measure(ctx);
-
-  bool first_time = ctx->percentiles[DUDECT_NUMBER_PERCENTILES - 1] == 0;
-
-  dudect_state_t ret = DUDECT_NO_LEAKAGE_EVIDENCE_YET;
-  if (first_time) {
-    // throw away the first batch of measurements.
-    // this helps warming things up.
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  if (ctx->timing_enabled) ctx->timing_after = dudect_context();
+#endif
+  if (ctx->batches == 0) {
+    double total = 0.0;
+    size_t count = 0;
+    for (size_t i = 10; i + 1 < ctx->config->number_measurements; ++i) {
+      if (ctx->exec_times[i] >= 0) {
+        total += (double)ctx->exec_times[i];
+        count++;
+      }
+    }
+    ctx->pilot_center = count ? total / (double)count : NAN;
     prepare_percentiles(ctx);
   } else {
     update_statistics(ctx);
-    ret = report(ctx);
   }
-
-  return ret;
+  ctx->batches++;
 }
 
 int dudect_init(dudect_ctx_t *ctx, dudect_config_t *conf)
 {
+  ctx->batches = 0;
+  ctx->rejected = 0;
+  ctx->pilot_center = 0;
+  ctx->pilot_count = 0;
+  ctx->sink = 0;
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  ctx->timing_enabled = 0;
+#endif
   ctx->config = (dudect_config_t*) calloc(1, sizeof(*conf));
+  assert(ctx->config);
+  assert(conf->number_measurements > 11);
   ctx->config->number_measurements = conf->number_measurements;
   ctx->config->chunk_size = conf->chunk_size;
   ctx->ticks = (int64_t*) calloc(ctx->config->number_measurements, sizeof(int64_t));
@@ -481,23 +441,6 @@ int dudect_free(dudect_ctx_t *ctx)
   free(ctx->ticks);
   free(ctx->config);
   return 0;
-}
-
-double dudect_get_max_t(dudect_ctx_t *ctx) {
-  ttest_ctx_t *t = max_test(ctx);
-  return fabs(t_compute(t));
-}
-
-size_t dudect_get_degrees_of_freedom(dudect_ctx_t *ctx) {
-  ttest_ctx_t *t = max_test(ctx);
-  // Welch's t-test degrees of freedom approximation (Welch-Satterthwaite equation)
-  double var0 = t->m2[0] / (t->n[0] - 1);
-  double var1 = t->m2[1] / (t->n[1] - 1);
-  double s0_sq_n = var0 / t->n[0];
-  double s1_sq_n = var1 / t->n[1];
-  double num = (s0_sq_n + s1_sq_n) * (s0_sq_n + s1_sq_n);
-  double den = (s0_sq_n * s0_sq_n) / (t->n[0] - 1) + (s1_sq_n * s1_sq_n) / (t->n[1] - 1);
-  return (size_t)(num / den);
 }
 
 #endif /* DUDECT_IMPLEMENTATION */
