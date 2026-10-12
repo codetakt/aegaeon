@@ -289,7 +289,7 @@
           16000
         ]
       },
-      "schema_version": 4,
+      "schema_version": 5,
       "statistics_per_case": 102,
       "warmup_batches": 1,
       "cases_by_suite": {

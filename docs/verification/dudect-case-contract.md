@@ -8,7 +8,7 @@ Owner: Engineering
 
 Audience: verification tooling maintainers
 
-Version 4 preserves all eleven original case identifiers and historical outcomes,
+Version 5 preserves all eleven original case identifiers and historical outcomes,
 adds four target-bound observations and executes three synthetic controls in each
 suite. This contract governs bounded empirical monitoring. It does not change
 product claims, declare production messages public or discharge product assurance
@@ -90,28 +90,63 @@ Native integer crops include every tick equal to the frozen pilot cutoff. This
 preserves whole ties without removing any of the 100 crop statistics. Sparse
 crops remain inconclusive even if raw counts meet their floors.
 
-Only certified identical pooled native integer support, with both counts greater
+Certified identical pooled native integer support, with both counts greater
 than 10,000, uses the exact absolute-mean-difference permutation upper tail:
 every relabeling yields zero, hence p=1. The null is equality of distributions
 with exchangeable class assignment and class-independent measurement behavior.
 It is stronger than equality of means under arbitrary unequal distributions.
-No general replacement for undefined Welch values is adopted. Unequal constants,
-one-class zero variance, floating aliases, sparse samples and distinct ticks with
-the same centered square remain ineligible. Positive finite variances retain
-fractional-df Welch inference and its assumptions.
+Positive finite variances retain fractional-df Welch inference and its assumptions.
 
-Every statistic carries per-class native int64 extrema/count and binary64
-transformed extrema. Validation rejects impossible or shrinking support, incorrect
-crop/second-order ranges and moment/support mismatches. Binary64 equality above
-the exact-integer range does not certify native equality. Numerical controls and
-finite native calibration do not prove all timing-test assumptions.
+The single-outlier amendment, adopted on 2026-10-12, adds one prospective case:
+the pooled native integer multiset has exactly two values, with multiplicities
+1 and N-1. Selection depends on the pooled values, independently of the label
+of the exceptional sample. Both class counts must exceed 10,000; both native
+values must be exactly representable in binary64 and their actual transformed
+values finite and distinct. All original cases, 102 statistics, fixed inspection
+schedules, raw floors, alpha allocation and absorbing detections remain required.
+
+Condition on the pooled values and retained class sizes n0,n1 under the same
+exchangeability null. If the transformed values differ by D>0, putting the
+exceptional value in class j has probability nj/N and absolute mean difference
+D/nj. For its observed class g, the inclusive upper tail is therefore exactly:
+
+```text
+p = sum(nj for j in {0,1} if nj <= ng) / (n0+n1)
+```
+
+The recorded numerator and denominator and the threshold comparison use integer
+arithmetic; the decimal p-value is descriptive. This is p=1 for tied class sizes
+or an exceptional sample in the larger class, and ng/N otherwise. The method
+does not estimate multiplicities from rounded means or M2. Multiple exceptional
+samples, wider support, floating aliases, centered-square collisions, sparse
+classes and all other unsupported zero-variance configurations remain ineligible.
+No general replacement for undefined Welch values is adopted.
+
+Every statistic carries per-class native int64 extrema/count, exact endpoint
+multiplicities and binary64 transformed extrema. Coincident endpoints each carry
+the full class count; they are counted only once when pooling the multiset.
+Validation rejects impossible or shrinking support, incorrect crop/second-order
+ranges and moment/support mismatches. For every look using the new method, the
+collector and admission replay additionally reconstruct counts and endpoint
+multiplicities from the original timing frames, using native sample indices,
+labels, nonnegative deltas and inclusive frozen cutoffs. Missing, truncated or
+mismatched evidence fails admission. This check keeps bounded per-cutoff summaries
+and does not retain all samples in memory. Existing inference remains unchanged.
+
+Schema 5 and a new numerical/contract identity bind this amendment. Versions 2–4
+and their frozen validators retain their original outcomes; old failed or
+inconclusive evidence cannot be converted into success. The amendment does not
+resolve observed SHA/HMAC differences or the historical periodic ct_eq_128 cause.
+Finite numerical controls and native calibration do not prove the null assumptions.
 
 When the frozen pilot center is outside or at an endpoint of the attained tick
 interval, the centered-square transform is monotone on that interval. Its minimum
 and maximum must therefore equal the transformed endpoints. In particular, a
 singleton tick cannot claim nonconstant squared support before the exact-tail
 shortcut is considered. A center strictly inside the interval can instead have
-its squared minimum at an attained interior tick.
+its squared minimum at an attained interior tick. When exact endpoint counts
+cover the whole class, no interior tick exists, so the squared minimum must
+also equal the smaller transformed endpoint even with an interior center.
 
 ### Necessary moment bounds and rounding
 
@@ -169,7 +204,7 @@ contract, numerical policy and compiler-manifest digests. Retained binary hashes
 process status, observations and stdout must agree with the final report.
 
 Current consumers reject schemas 2 and 3. Old failures retain their original
-meaning; replay cannot convert them into version4 success. Statistical outcome
+meaning; replay cannot convert them into version5 success. Statistical outcome
 and `observation_contract_satisfied` are distinct. The diagnostic
 `run_candidate.py` remains collection-only and cannot publish accepted evidence.
 
@@ -202,6 +237,6 @@ confidentiality for every production caller.
 
 The [SciPy permutation-test definition](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.permutation_test.html)
 describes the equal-distribution/random-label null and exact tail interpretation.
-Our identical-support special case fixes the absolute difference statistic and
+Our identical-support and single-outlier special cases fix the absolute difference statistic and
 its upper tail explicitly. Finite numerical controls do not certify every
 continuous, cropped or second-order test, nor the full product observation claim.

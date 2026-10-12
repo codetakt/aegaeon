@@ -49,6 +49,8 @@ def binding(name="compare", profile="pr", suite="legacy"):
 def support(count, low, high, vmin, vmax):
     return {
         "count": count,
+        "tick_min_count": count if low == high else 1,
+        "tick_max_count": count if low == high else 1,
         "tick_min": low,
         "tick_max": high,
         "value_min_hex": float(vmin).hex(),
@@ -76,7 +78,7 @@ def observation(name="compare", profile="pr", look=1, *, effect=False, constant=
     ]
     prepared = (batches + 1) * BATCH_SIZE // 2
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "case": name,
         "profile": profile,
         "binding": binding(name, profile, suite),
@@ -107,7 +109,7 @@ def report(profile="pr", suite="legacy"):
         },
     }
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "suite": suite,
         "profile": profile,
         "outcome": COLLECTION_COMPLETE,
@@ -192,7 +194,7 @@ class CandidateTests(unittest.TestCase):
                 count = final_count if look == 8 else look * 1000
                 row["statistics"][1][:2] = [count, count]
                 for item in row["support"][1]:
-                    item["count"] = count
+                    item.update(count=count, tick_min_count=count, tick_max_count=count)
                 result = admission.admit(row)
             self.assertEqual(
                 result["candidate_statistical_outcome"],
@@ -252,7 +254,7 @@ class CandidateTests(unittest.TestCase):
         for index in range(1, 101):
             data["statistics"][index][:2] = [10000, 10000]
             for item in data["support"][index]:
-                item["count"] = 10000
+                item.update(count=10000, tick_min_count=10000, tick_max_count=10000)
         result = CandidateAdmission("compare", "pr", binding=binding()).admit(data)
         self.assertTrue(all(not t["eligible"] for t in result["tests"][1:101]))
 

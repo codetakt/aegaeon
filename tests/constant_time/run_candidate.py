@@ -128,7 +128,7 @@ def check_contract(snapshot: Path) -> str:
     ids = [case["stable_id"] for case in contract["cases"]]
     require(len(ids) == 21 and set(ids) == expected, "Candidate contract inventory mismatch")
     require(
-        contract["schema_migration"]["candidate_version"] == 4,
+        contract["schema_migration"]["candidate_version"] == 5,
         "Candidate contract version mismatch",
     )
     numerical = contract["numerical_candidate"]
@@ -268,7 +268,9 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
             finally:
                 status["exit"] = terminate(process)
                 capture.snapshot("end")
-            diagnostics["timing"] = validate_timing(evidence / TIMING_NAME, bindings, profile)
+            diagnostics["timing"] = validate_timing(
+                evidence / TIMING_NAME, bindings, profile, stream.histories
+            )
             if "ct_eq_128" in bindings:
                 diagnostics["samples"] = validate_trace(
                     evidence / TRACE_NAME, bindings["ct_eq_128"], profile
@@ -348,7 +350,7 @@ def execute_suite(
     if not args.self_test_only:
         expected = {"bindings": bindings, "binaries": binaries}
         report = {
-            "schema_version": 4,
+            "schema_version": 5,
             "suite": suite,
             "profile": args.profile,
             "outcome": COLLECTION_COMPLETE,

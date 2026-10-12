@@ -67,7 +67,7 @@ def collect_package(
         summary = summarize_collection(cases, expected["bindings"], roles)
         write_json(evidence / "diagnostics.json", summary)
     collection = {
-        "schema_version": 4,
+        "schema_version": 5,
         "suite": index["suite"],
         "profile": profile,
         "outcome": COLLECTION_COMPLETE,
@@ -99,7 +99,7 @@ def validate_envelope(report: dict[str, Any]) -> None:
         "Complete observation-contract report required",
     )
     require(
-        type(report["schema_version"]) is int and report["schema_version"] == 4,
+        type(report["schema_version"]) is int and report["schema_version"] == 5,
         "Historical reports cannot admit the current observation contract",
     )
     require(
@@ -245,7 +245,7 @@ def execute_locked(root: Path, args: argparse.Namespace, output: Path) -> int:
         checked_package(evidence / "package", hashes, args.suite)
         collection = collect_package(evidence, index, args.profile, contract_at(root))
         report = {
-            "schema_version": 4,
+            "schema_version": 5,
             "kind": KIND,
             "suite": args.suite,
             "profile": args.profile,

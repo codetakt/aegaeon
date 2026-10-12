@@ -17,7 +17,7 @@
 static void dudect_print_candidate(const char *name, const char *profile,
                                    dudect_ctx_t *ctx, size_t batch, size_t look) {
     size_t size = ctx->config->number_measurements;
-    printf("{\"schema_version\":4,\"case\":\"%s\",\"profile\":\"%s\","
+    printf("{\"schema_version\":5,\"case\":\"%s\",\"profile\":\"%s\","
            "\"binding\":{\"case_id\":\"%s/%s\",\"profile\":\"%s\","
            "\"contract_sha256\":\"%s\",\"build_sha256\":\"%s\",\"numerical_sha256\":\"%s\"},"
            "\"batch_size\":%zu,\"batches\":%zu,\"look\":%zu,"

@@ -79,17 +79,39 @@ def moment_bounds(count: int, minimum: float, maximum: float, mean: float, m2: f
 
 
 def class_support(support: Any, count: int, mean: float, m2: float) -> None:
-    keys = {"count", "tick_min", "tick_max", "value_min_hex", "value_max_hex"}
+    keys = {
+        "count",
+        "tick_min",
+        "tick_max",
+        "tick_min_count",
+        "tick_max_count",
+        "value_min_hex",
+        "value_max_hex",
+    }
     require(isinstance(support, dict) and set(support) == keys, "Invalid native support")
     require(integer(support["count"]) == count, "Support count mismatch")
     require(count <= MAX_SUPPORT_COUNT, "Support count exceeds measurement budget")
+    minimum_count, maximum_count = (
+        integer(support[k]) for k in ("tick_min_count", "tick_max_count")
+    )
     if not count:
-        require(all(support[k] is None for k in keys - {"count"}), "Empty support has extrema")
+        require(minimum_count == maximum_count == 0, "Empty support has endpoint counts")
+        require(
+            all(support[k] is None for k in keys - {"count", "tick_min_count", "tick_max_count"}),
+            "Empty support has extrema",
+        )
         require(mean == 0 and m2 == 0, "Empty class has moments")
         return
     low, high = tick(support["tick_min"]), tick(support["tick_max"])
     minimum, maximum = binary64(support["value_min_hex"]), binary64(support["value_max_hex"])
     require(low <= high and minimum <= maximum, "Reversed support")
+    if low == high:
+        require(minimum_count == maximum_count == count, "Singleton endpoint count mismatch")
+    else:
+        require(
+            minimum_count > 0 and maximum_count > 0 and minimum_count + maximum_count <= count,
+            "Invalid endpoint multiplicities",
+        )
     require(minimum <= mean <= maximum, "Mean outside native support")
     if minimum == maximum:
         require(mean == minimum and m2 == 0, "Singleton support contradicts moments")
@@ -109,9 +131,13 @@ def transformed_support(
         center = data["pilot"]["center"]
         ends = [(float(t) - center) * (float(t) - center) for t in (low, high)]
         require(maximum == max(ends) and minimum <= min(ends), "Square support mismatch")
-        if center <= float(low) or center >= float(high):
-            # The transform is monotone on this interval, including singleton
-            # ticks: both transformed extrema must be attained endpoints.
+        if (
+            center <= float(low)
+            or center >= float(high)
+            or (support["tick_min_count"] + support["tick_max_count"] == support["count"])
+        ):
+            # Monotonicity, or a certificate with no interior samples, forces
+            # both transformed extrema to be attained native endpoints.
             require(minimum == min(ends), "Square support minimum contradicts endpoints")
     if 0 < index < STATISTICS - 1:
         require(high <= data["pilot"]["cutoffs"][index - 1], "Crop includes excluded tick")
@@ -123,6 +149,12 @@ def transformed_support(
 def cumulative_support(current: dict[str, Any], previous: dict[str, Any]) -> None:
     require(current["count"] >= previous["count"], "Support count regressed")
     if previous["count"]:
+        for endpoint in ("tick_min", "tick_max"):
+            if current[endpoint] == previous[endpoint]:
+                require(
+                    current[endpoint + "_count"] >= previous[endpoint + "_count"],
+                    "Endpoint multiplicity regressed",
+                )
         require(current["tick_min"] <= previous["tick_min"], "Native minimum increased")
         require(current["tick_max"] >= previous["tick_max"], "Native maximum decreased")
         require(
@@ -153,7 +185,7 @@ def validate_support(data: dict[str, Any], previous: dict[str, Any] | None = Non
             if previous:
                 cumulative_support(support, previous["support"][index][group])
             if index == STATISTICS - 1:
-                for key in ("count", "tick_min", "tick_max"):
+                for key in ("count", "tick_min", "tick_max", "tick_min_count", "tick_max_count"):
                     require(
                         support[key] == supports[0][group][key], "Square/native support mismatch"
                     )
@@ -165,3 +197,58 @@ def validate_support(data: dict[str, Any], previous: dict[str, Any] | None = Non
         if min(counts) > 10000 and len(set(ticks)) == 1 and ticks[0] is not None:
             singleton_candidates.append(index)
     return singleton_candidates
+
+
+def single_outlier(data: dict[str, Any], index: int) -> tuple[int, int] | None:
+    """Exact inclusive absolute-mean permutation tail, selected from pooled ticks.
+
+    Call only after validate_support. Native certificates must also be checked
+    against original timing frames before collection completion or admission.
+    """
+    pair = data["support"][index]
+    counts = [s["count"] for s in pair]
+    histogram = pooled_endpoints(pair) if min(counts) > 10000 else {}
+    if len(histogram) != 2 or sorted(histogram.values()) != [1, sum(counts) - 1]:
+        return None
+    # Distinct native ticks can alias in binary64 or under centered squaring.
+    exact_ticks = all(int(float(value)) == value for value in histogram)
+    transformed = [float(value) for value in histogram]
+    if index == STATISTICS - 1:
+        transformed = [
+            (value - data["pilot"]["center"]) * (value - data["pilot"]["center"])
+            for value in transformed
+        ]
+    if (
+        not exact_ticks
+        or not all(math.isfinite(value) for value in transformed)
+        or transformed[0] == transformed[1]
+    ):
+        return None
+    exceptional = next(value for value, count in histogram.items() if count == 1)
+    group = next(
+        i
+        for i, support in enumerate(pair)
+        if exceptional in (support["tick_min"], support["tick_max"])
+    )
+    return single_outlier_tail(counts, group)
+
+
+def single_outlier_tail(counts: list[int], group: int) -> tuple[int, int]:
+    """Inclusive absolute-mean tail, conditional on one exceptional pooled value."""
+    return sum(count for count in counts if count <= counts[group]), sum(counts)
+
+
+def pooled_endpoints(pair: list[dict[str, Any]]) -> dict[int, int]:
+    """Empty when native extrema cannot certify the complete pooled multiset."""
+    histogram: dict[int, int] = {}
+    for support in pair:
+        low, high = support["tick_min"], support["tick_max"]
+        if low == high:
+            histogram[low] = histogram.get(low, 0) + support["count"]
+        elif support["tick_min_count"] + support["tick_max_count"] == support["count"]:
+            for endpoint in ("tick_min", "tick_max"):
+                value = support[endpoint]
+                histogram[value] = histogram.get(value, 0) + support[endpoint + "_count"]
+        else:
+            return {}
+    return histogram

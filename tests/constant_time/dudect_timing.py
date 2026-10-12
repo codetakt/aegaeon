@@ -9,6 +9,7 @@ import math
 import struct
 from typing import TYPE_CHECKING, Any
 
+from dudect_certificates import Certificates
 from dudect_diagnostics import HEADER_SIZE, file_identity
 from dudect_distribution import summarize_context, summarize_distribution
 from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES as PROFILES
@@ -128,9 +129,17 @@ def validate_header(
     return magic, case_frame
 
 
-def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[str, Any]:
+def validate_timing(  # noqa: PLR0915 - sequential framing and context checks
+    path: Path,
+    bindings: dict[str, Any],
+    profile: str,
+    histories: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     """Reject missing cases, pilot, batches, order, context or binding."""
     identity = file_identity(path)
+    if histories is not None:
+        require(set(histories) == set(bindings), "Timing/certificate case mismatch")
+    certificates_checked = 0
     frames = PROFILES[profile][0][-1] + 1
     # Repeated synthetic batches can have identical payloads. Read every byte,
     # but reuse only the last exact (payload, case, width) summary within this
@@ -147,6 +156,7 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
         clocks: dict[str, list[dict[str, int | None]]] = {}
         distributions: dict[str, list[dict[str, Any]]] = {}
         for name in bindings:
+            certificates = Certificates(histories[name]) if histories is not None else None
             native_name, stride, width, *offsets = case_frame.unpack(source.read(case_frame.size))
             require(
                 native_name == name.encode("ascii").ljust(64, b"\0")
@@ -165,16 +175,24 @@ def validate_timing(path: Path, bindings: dict[str, Any], profile: str) -> dict[
                 context = summarize_context(values, previous_end)
                 previous_end = values[3]
                 previous_counters = list(values[7::2])
-                clock, distribution = summarize_samples(
-                    source.read(BATCH_SIZE * (9 + width)), name, width
-                )
+                payload = source.read(BATCH_SIZE * (9 + width))
+                clock, distribution = summarize_samples(payload, name, width)
+                if certificates is not None:
+                    certificates.push(payload, batch, BATCH_SIZE)
                 clocks[name].append({"batch": batch, **clock})
                 distributions[name].append(
                     {"batch": batch, "context": context, **copy.deepcopy(distribution)}
                 )
+            if certificates is not None:
+                certificates_checked += certificates.finish()
         require(source.read(1) == b"", "Trailing all-case timing evidence")
     return {
         **identity,
+        **(
+            {"single_outlier_certificates_checked": certificates_checked}
+            if histories is not None
+            else {}
+        ),
         "format": magic.decode("ascii"),
         **({"case_context_offsets_mod4096": case_context_offsets} if case_context_offsets else {}),
         "cases": list(bindings),

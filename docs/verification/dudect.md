@@ -182,7 +182,7 @@ stale executable reuse. Only a complete admitted suite atomically replaces
 run after failure and require evidence. Shared-output locking prevents concurrent
 runs from replacing one another's reports.
 
-Schema version 4 binds case/profile, contract, numerical policy and build identities.
+Schema version 5 binds case/profile, contract, numerical policy and build identities.
 Current consumers reject historical versions 2 and 3 and nominal summaries. The
 historical numerical and stream modules remain for regression and replay with
 their original outcomes. `run_candidate.py` remains a diagnostic collector: its

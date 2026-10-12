@@ -272,6 +272,7 @@ def validate_diagnostics(
     output: Path, process: dict[str, Any], bindings: dict[str, Any], profile: str
 ) -> None:
     # Avoid a module cycle: timing shares the immutable diagnostic file helper.
+    from dudect_process import load_json  # noqa: PLC0415
     from dudect_timing import TIMING_NAME, validate_timing  # noqa: PLC0415
 
     diagnostics = process.get("diagnostics")
@@ -282,7 +283,13 @@ def validate_diagnostics(
         "Runtime diagnostic identity mismatch",
     )
     require(
-        diagnostics.get("timing") == validate_timing(output / TIMING_NAME, bindings, profile),
+        diagnostics.get("timing")
+        == validate_timing(
+            output / TIMING_NAME,
+            bindings,
+            profile,
+            load_json((output / "observations.json").read_bytes()),
+        ),
         "All-case timing diagnostic identity mismatch",
     )
     if "ct_eq_128" in bindings:

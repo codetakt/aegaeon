@@ -109,7 +109,7 @@ class ContractTests(unittest.TestCase):
     def test_ci_inventory_matches_active_observation_contract(self):
         inventory = json.loads((ROOT / "ci/ci-expected-inventory.json").read_text())
         recorded = inventory["families"]["dudect"]
-        self.assertEqual(recorded["schema_version"], 4)
+        self.assertEqual(recorded["schema_version"], 5)
         self.assertEqual(
             recorded["profiles"],
             {

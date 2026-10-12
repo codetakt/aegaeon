@@ -1,4 +1,4 @@
-"""Version 4 candidate collection with explicit discrete-support inference."""
+"""Version 5 candidate collection with explicit discrete-support inference."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from dudect_results import (
     CaseAdmission,
     integer,
 )
-from dudect_support import require, validate_support
+from dudect_support import require, single_outlier, validate_support
 
 CONTROL_CASES = ("control_independent", "control_mean_shift", "control_variance_shift")
 CANDIDATE_CASES = {
@@ -46,7 +46,7 @@ def canonical(value: Any) -> bytes:
 
 
 NUMERICAL_PARAMETERS = {
-    "schema": 4,
+    "schema": 5,
     "case_executions": 21,
     "statistics": STATISTICS,
     "alpha": ALPHA,
@@ -54,6 +54,12 @@ NUMERICAL_PARAMETERS = {
     "profiles": PROFILES,
     "crop": "tick <= disjoint_pilot_quantile",
     "degenerate": "exact_absolute_mean_permutation_identical_native_ticks_counts_gt10000",
+    "single_outlier": (
+        "pooled_exact_two_native_ticks_multiplicities_1_Nminus1_"
+        "binary64_exact_distinct_transform_counts_gt10000"
+    ),
+    "single_outlier_tail": "sum_nj_where_nj_le_observed_ng_over_N_exact_rational",
+    "single_outlier_certificate": "native_endpoint_counts_crosschecked_original_timing_frames",
     "continuous": "fractional_df_welch_positive_variance",
     "timer": "mfence_lfence_rdtsc_lfence_requires_execution_serialization",
 }
@@ -120,13 +126,13 @@ class CandidateAdmission(CaseAdmission):
     def admit(self, data: Any) -> dict[str, Any]:
         require(isinstance(data, dict), "Candidate observation required")
         require(
-            type(data.get("schema_version")) is int and data["schema_version"] == 4,
-            "Version 4 candidate required; historical reports are not convertible",
+            type(data.get("schema_version")) is int and data["schema_version"] == 5,
+            "Version 5 candidate required; historical reports are not convertible",
         )
         validate_binding(self.binding, self.name, self.profile)
         require(data.get("binding") == self.binding, "Candidate identity mismatch")
         require({"support", "input_audit"} <= set(data), "Native support and input audit required")
-        # Reuse arithmetic checks only after authenticating the version4 envelope.
+        # Reuse arithmetic checks only after authenticating the version5 envelope.
         counters = {k: v for k, v in data.items() if k not in ("binding", "support", "input_audit")}
         counters["schema_version"] = 2
         self.validate_header(counters)
@@ -144,12 +150,25 @@ class CandidateAdmission(CaseAdmission):
                 "n0": counters["statistics"][index][0],
                 "n1": counters["statistics"][index][1],
             }
+        for index in range(STATISTICS):
+            tail = single_outlier(data, index)
+            if tail is not None:
+                numerator, denominator = tail
+                decisions[index] = {
+                    "id": index,
+                    "eligible": True,
+                    "p": numerator / denominator,
+                    "p_exact": [numerator, denominator],
+                    "method": "exact_absolute_mean_permutation_single_native_outlier",
+                    "n0": counters["statistics"][index][0],
+                    "n1": counters["statistics"][index][1],
+                }
         raw_count = self.accounting(counters)
         input_audit(data, self.previous)
         for decision in decisions:
             if decision["eligible"]:
                 decision["alpha"] = ALPHA
-        self.detected |= any(d["eligible"] and d["p"] < ALPHA for d in decisions)
+        self.detected |= any(significant(d) for d in decisions)
         self.next_look += 1
         final = self.next_look == len(PROFILES[self.profile][0])
         outcome = "collecting"
@@ -172,7 +191,7 @@ class CandidateAdmission(CaseAdmission):
             "raw_class_counts": counters["statistics"][0][:2],
             "tests": decisions,
             "identical_native_tick_candidates": singleton,
-            "degenerate_inference": "certified_identical_native_support_only",
+            "degenerate_inference": "certified_identical_or_single_outlier_native_support",
         }
 
 
@@ -220,7 +239,7 @@ def validate_candidate_report(report: Any, expected: dict[str, Any]) -> list[dic
         "Complete candidate report required",
     )
     require(
-        type(report["schema_version"]) is int and report["schema_version"] == 4,
+        type(report["schema_version"]) is int and report["schema_version"] == 5,
         "Wrong candidate version",
     )
     suite, profile = report["suite"], report["profile"]
@@ -266,3 +285,12 @@ def validate_artifacts(expected: dict[str, Any], suite: str, profile: str) -> No
         require(isinstance(binary["path"], str) and bool(binary["path"]), "Missing binary path")
         sha256(binary["sha256"])
         require(binary["build_sha256"] == binding["build_sha256"], "Wrong binary build binding")
+
+
+def significant(decision: dict[str, Any]) -> bool:
+    if not decision["eligible"]:
+        return False
+    if "p_exact" in decision:
+        numerator, denominator = ALPHA.as_integer_ratio()
+        return bool(decision["p_exact"][0] * denominator < numerator * decision["p_exact"][1])
+    return bool(decision["p"] < ALPHA)

@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 typedef struct {
-    uint64_t count;
+    uint64_t count, tick_min_count, tick_max_count;
     int64_t tick_min, tick_max;
     double value_min, value_max;
 } dudect_support_t;
@@ -20,10 +20,15 @@ static void dudect_support_push(dudect_support_t *s, int64_t tick, double value)
     if (tick < 0 || !isfinite(value) || value < 0 || s->count == UINT64_MAX) abort();
     if (!s->count) {
         s->tick_min = s->tick_max = tick;
+        s->tick_min_count = s->tick_max_count = 1;
         s->value_min = s->value_max = value;
     } else {
-        if (tick < s->tick_min) s->tick_min = tick;
-        if (tick > s->tick_max) s->tick_max = tick;
+        if (tick < s->tick_min) {
+            s->tick_min = tick; s->tick_min_count = 1;
+        } else if (tick == s->tick_min) ++s->tick_min_count;
+        if (tick > s->tick_max) {
+            s->tick_max = tick; s->tick_max_count = 1;
+        } else if (tick == s->tick_max) ++s->tick_max_count;
         if (value < s->value_min) s->value_min = value;
         if (value > s->value_max) s->value_max = value;
     }
@@ -31,7 +36,9 @@ static void dudect_support_push(dudect_support_t *s, int64_t tick, double value)
 }
 
 static void dudect_print_support(const dudect_support_t *s) {
-    printf("{\"count\":%" PRIu64 ",\"tick_min\":", s->count);
+    printf("{\"count\":%" PRIu64 ",\"tick_min_count\":%" PRIu64
+           ",\"tick_max_count\":%" PRIu64 ",\"tick_min\":",
+           s->count, s->tick_min_count, s->tick_max_count);
     if (!s->count) {
         printf("null,\"tick_max\":null,\"value_min_hex\":null,\"value_max_hex\":null}");
     } else {

@@ -533,18 +533,25 @@
       "0.005": 3153193
     },
     "planning_limits": "Independent equal-variance raw-mean approximation only. Family counts all15 targets and all6 control executions across the two CI suites. Native calibration determines actual sensitivity; no universal power guarantee.",
-    "degenerate_rule_candidate": "For the reviewed local experiment, only validated identical pooled native integer support with both counts>10000 uses the exact absolute-mean permutation upper-tail p=1. Equal-distribution/exchangeability null and class-independent measurement assumptions remain explicit. Unequal constants, floating aliases, one-class variance zero and sparse samples remain ineligible.",
+    "degenerate_rule_candidate": "Certified identical pooled native ticks use exact p=1. The adopted single_outlier_amendment adds only the exact pooled single-outlier tail. Other one-class-zero-variance cases, unequal constants, aliases, square collisions and sparse samples remain ineligible.",
     "continuous_rule": "Existing Welch fractional-df calculation retained for sufficiently populated positive-variance statistics, subject to its assumptions.",
     "eligibility": "All 102 records and full schedule remain mandatory; insufficient counts, invalid support, numerical failure or absent controls remain non-admissible.",
     "crop_membership": "tick <= frozen empirical pilot quantile; include complete integer ties, with all100 statistics and observed-count floors retained",
     "target_case_count": 15,
     "runtime_control_executions": 6,
-    "implementation_sha256": "ff0c53a9b2fd02566e98390011dc131bb834ec66033892def3217658492c1340"
+    "implementation_sha256": "594123236e82350f69e907ae16825028201cd06a31f5df820b6ec46d1e77f279",
+    "single_outlier_amendment": {
+      "adopted": "2026-10-12",
+      "scope": "Prospective only; exactly two pooled native integer values with multiplicities 1 and N-1. Both counts>10000, exactly representable native values and distinct finite transformed values required. Native endpoint counts must agree with original timing frames.",
+      "tail": "sum(nj for nj<=ng)/(n0+n1), exact integer/rational comparison; g contains the exceptional value",
+      "selection": "Pooled class-blind multiset, conditional on retained class sizes and exchangeable assignment/class-independent measurement null",
+      "preserved": "All cases, statistics, schedules, floors, alpha, absorbing detections and historical failures; no claim of causal repair."
+    }
   },
   "schema_migration": {
-    "candidate_version": 4,
+    "candidate_version": 5,
     "reason": "Bind each observation to case-contract/profile identities, roles, exact target and discrete support; keep statistical outcome separate from suite contract completion.",
-    "historical_reports": "Version2 and archived version3 retain original interpretations; the version4 consumer rejects both. No replay of historical failed/inconclusive evidence as successor success.",
+    "historical_reports": "Versions2,3,4 retain original interpretations and frozen validators; the version5 consumer rejects them. Historical failures/inconclusive outcomes cannot be converted to successor success.",
     "suite_outcome": "An observation-contract completion label cannot be named or interpreted as all-case constant time or product assurance.",
     "producer_consumer": "Atomic migration of both runners, validation consumers, tests, docs and CI wiring in the same PR"
   },
@@ -563,17 +570,17 @@
     "Product claims and paused Task3 work remain unchanged"
   ],
   "implementation_candidate": {
-    "status": "Implemented local version4 candidate; execution evidence and review disposition are recorded separately",
+    "status": "Implemented version5 single-outlier amendment; fresh verification and review dispositions recorded separately",
     "entry_point": "tests/constant_time/run_contract.py",
     "diagnostic_collector": "tests/constant_time/run_candidate.py remains collection-only and cannot publish accepted evidence",
     "native_compile_flag": "AEGAEON_DUDECT_CANDIDATE",
-    "native_support": "Per-class exact int64 tick extrema/count and binary64 transformed extrema for all102 statistics",
+    "native_support": "Per-class exact int64 extrema/count and endpoint multiplicities, with binary64 transformed extrema for all102 statistics",
     "binding": "Expected case/profile/contract/numerical/build identities; exact source and executable SHA256; retained native stdout, observations and process completion",
     "input_audit": "Prepared class counts and bounded conditional key draws/exclusions, including pilot inputs",
     "outcome": "observation_contract_satisfied records per-case monitoring completion. Characterization differences remain visible; no universal nondetection or product assurance is claimed.",
-    "degenerate_inference": "Only certified identical native support with sufficient counts uses exact conditional p=1. Equal-distribution/exchangeability null required.",
+    "degenerate_inference": "Certified identical pooled native ticks use exact p=1. The adopted single_outlier_amendment adds only the exact pooled single-outlier tail. Other one-class-zero-variance cases, unequal constants, aliases, square collisions and sparse samples remain ineligible.",
     "provider_collection": "Nix derivation builds an immutable source-bound native package. CI imports that package only when its sources match and always executes fresh full observations.",
-    "historical_consumers": "Version2 numerical/stream modules retained for historical replay and regression; default CLI consumers require version4 bound evidence",
+    "historical_consumers": "Historical frozen consumers retained with evidence; default CLI requires version5 bound evidence",
     "timer": "MFENCE;LFENCE;RDTSC;LFENCE, requiring host LFENCE execution serialization; preserve target call counts. Historical native mode retains MFENCE-only timing. Ordering and native evidence are processor/compiler specific.",
     "comparison_repetitions": "Candidate provider comparison reads both 32-byte operands on every one of 1000 iterations. Empty compiler memory barrier prevents hoisting and outer-loop vectorization; no CPU fence or inference change. Validate emitted workload for the actual compiler/artifact. Historical native mode retains original behavior."
   },
