@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dudect_affinity import collector_placement
 from dudect_candidate import (
     ALPHA,
     CANDIDATE_CASES,
@@ -244,11 +245,13 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
     status["diagnostics"] = diagnostics
     try:
         with (
+            collector_placement() as placement,
             (evidence / "native.stdout").open("wb") as output,
             (evidence / "native.stderr").open("wb") as errors,
             (evidence / CONTEXT_NAME).open("xb") as runtime,
             contextlib.ExitStack() as files,
         ):
+            status["cpu_placement"] = placement
             capture = RuntimeCapture(runtime)
             capture.snapshot("start")
             environment = dict(os.environ)
@@ -261,8 +264,16 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
                 samples = files.enter_context((evidence / TRACE_NAME).open("xb"))
                 descriptors = (*descriptors, samples.fileno())
                 environment[TRACE_ENV] = str(samples.fileno())
+            launcher = [
+                sys.executable,
+                str(snapshot / "tests/constant_time/dudect_affinity.py"),
+                str(placement["native"][0]),
+                str(evidence / "affinity.json"),
+                *argv,
+            ]
+            status["launcher_argv"] = launcher
             process = subprocess.Popen(
-                argv,
+                launcher,
                 cwd=snapshot,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -283,6 +294,12 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
             finally:
                 status["exit"] = terminate(process)
                 capture.snapshot("end")
+            affinity = load_json((evidence / "affinity.json").read_bytes())
+            require(
+                affinity == {"pid": process.pid, "native": placement["native"], "argv": argv},
+                "Native affinity receipt mismatch",
+            )
+            diagnostics["affinity"] = file_identity(evidence / "affinity.json")
             diagnostics["timing"] = validate_timing(
                 evidence / TIMING_NAME, bindings, profile, stream.histories
             )
@@ -296,6 +313,7 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
             status["exit"] = terminate(process)
         status["elapsed_seconds"] = time.monotonic() - started
         for name, filename in (
+            ("affinity", "affinity.json"),
             ("runtime", CONTEXT_NAME),
             ("samples", TRACE_NAME),
             ("timing", TIMING_NAME),

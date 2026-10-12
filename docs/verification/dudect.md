@@ -1,6 +1,6 @@
 # Timing observation profiles
 
-Last updated: 2026-10-12
+Last updated: 2026-10-13
 
 Status: current implementation baseline
 
@@ -42,6 +42,33 @@ The shell and xtask adapters share `run_contract.py`, retaining their `cc` and
 `_DEFAULT_SOURCE`. RSA setup uses the verifier ABI. Input classes and operation
 results are checked before measuring. Unix process groups and file locking are
 required. Evidence from one suite cannot replace the other.
+
+## Measurement and collector CPUs
+
+Fresh collection requires Linux affinity support and at least two allowed CPU
+cores, identified through `thread_siblings_list`. Before launching each native
+executable, the collector selects the highest eligible allowed CPU and moves
+itself off that CPU and all its SMT siblings. A source-bound launcher sets and
+checks the native affinity before `exec`, preserving its PID, process group and
+inherited evidence descriptors. Missing topology, insufficient cores or an
+affinity failure rejects the run; there is no shared-CPU fallback. The collector
+restores its original affinity on success and failure. Native packages finish
+building before contract collection begins, and core CI runs timing gates after
+its other builds, sequentially.
+
+`process.json` retains the original, native, sibling and collector CPU sets;
+`affinity.json` records the pre-exec readback. Runtime snapshots retain both
+process affinities at existing acknowledgment boundaries. Report validation
+checks their agreement. These observations concern the owned processes only.
+They do not reserve a physical host, move unrelated tasks or interrupts, or
+prove uninterrupted execution. Linux documents those separate mechanisms in
+its [CPU isolation guide](https://docs.kernel.org/admin-guide/cpu-isolation.html).
+
+The variance control requires statistic 101 even when a cropped statistic detects
+a difference. Very long measurements can dominate its error term. CPU separation
+reduces one source of competing work; it neither changes that decision nor removes
+samples. Retain failures and assess a fixed comparison schedule before claiming
+an improvement. Shared-runner success does not establish immunity to host noise.
 
 ## Native SHA dispatch and initialization
 
@@ -95,8 +122,9 @@ observations. The numerical digest changes: previous seven-batch reports remain
 historical evidence and cannot satisfy the extended profile. Version 2 replay
 keeps its original schedule; the periodic profile is unchanged.
 
-Batch allocations stay fixed. Capturing the pilot and 16 measured batches uses
-17/8 of the previous raw trace storage; a traced Nix suite produces about 343 MiB
+Batch allocations stay fixed. For unchanged frame widths, capturing the pilot
+and 16 measured batches uses 17/8 of the previous raw trace storage. With the
+additional control inputs, a traced Nix suite produces about 356 MiB
 of timing and full `ct_eq_128` input records, before metadata and copied evidence.
 The slowest case in the [retained failed CI](https://github.com/codetakt/aegaeon/actions/runs/38181712184)
 projects to about 670 seconds versus
@@ -270,7 +298,7 @@ Every native executable also writes `native.timing`: ordered timestamp and
 class arrays for **every case and every batch**, including the independent
 pilot. This preserves distribution shifts and the observations behind sparse
 crops or one-class zero variance in the original failing execution. Its
-`AEGTIM04` framing binds the native build, contract, numerical identity, case
+`AEGTIM05` framing binds the native build, contract, numerical identity, case
 order, input stride and full profile. Each case also records the input, timestamp
 and class-buffer addresses modulo 4096, so cache-line position need not be
 guessed from sample index. These offsets do not reveal full addresses or establish
@@ -297,14 +325,34 @@ For `hmac_sha256_key`, the same file retains each original 32-byte synthetic key
 class 0 must contain `0x42` bytes and class 1 preserves its random bytes. The
 message remains the source-bound fixed 32-byte `0x5a` fixture. These keys belong
 only to the synthetic test and are unrelated to runtime credentials.
+The three synthetic controls also retain their original little-endian `uint32_t`
+iteration inputs, including pilot, warm-up and final untimed input. The consumer
+checks each value against its original class domain: independent 256–287;
+mean shift 256–287 / 320–351; variance shift 2048–2079 / 1024–1055 or 3072–3103.
+These bytes are written after the measured loop, using the existing input buffer.
+There are no additional calls inside the timed computation. Instrumentation can
+still affect layout and between-batch state; compare its observer effect on bound
+binaries rather than assuming it has none.
+This diagnostic format change leaves the schema 5 numerical and case contracts
+unchanged.
+
 Earlier `AEGTIM01` evidence did not retain these messages or buffer offsets;
 `AEGTIM02` added SHA/HMAC messages but omitted HMAC-key inputs. Missing original
-bytes cannot be reconstructed. `AEGTIM03` retains all current input bytes but
-omits the case-context offset. The consumer accepts both `AEGTIM03` and
-`AEGTIM04`, validating each version's exact framing; an older trace has no
+bytes cannot be reconstructed. `AEGTIM03` retains the SHA/HMAC inputs but
+omits the case-context offset; `AEGTIM04` adds that offset. Neither records control
+iteration inputs. The consumer accepts `AEGTIM03`, `AEGTIM04` and `AEGTIM05`,
+validating each version's exact framing; an older trace has no
 `case_context_offsets_mod4096` field, rather than an invented zero offset.
 Historical packets and source bindings stay unchanged. Formats 01/02 and older
 report summaries still require their corresponding source-version consumers.
+
+Batch resource counters cannot associate a scheduler or IRQ event with an exact
+sample. If separation does not provide sufficient control sensitivity, freeze a
+separate diagnostic campaign with scheduler/IRQ tracepoints, verified timestamp
+clock correlation and lost-event accounting. Keep tracing-on and tracing-off
+results distinct: tracing itself perturbs execution, and batch endpoint clocks
+alone cannot map every TSC sample to an event. Do not filter a gate's samples using
+that trace or substitute a traced success for its original verdict.
 
 After the native process exits, the consumer derives `clock_batches` in
 `process.json` from every original timestamp array. Each pilot and measured batch

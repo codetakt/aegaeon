@@ -88,7 +88,9 @@ class DiagnosticTests(unittest.TestCase):
         ):
             RuntimeCapture(output).snapshot("start")
         row = json.loads(output.getvalue())
-        self.assertEqual(row["native_affinity"], [3])
+        self.assertIsNone(row["native_affinity"])
+        self.assertIsNone(row["native_pid"])
+        self.assertEqual(row["collector_affinity"], [3])
         self.assertEqual(row["cpus"]["3"]["msr"]["unavailable_errno"], 13)
         self.assertNotIn("environment", row)
         self.assertEqual(row["platform"]["spec_store_bypass"], {"unavailable_errno": 2})
