@@ -25,6 +25,47 @@ impl RedisTokenStoreBackend {
     pub(in crate::authcode::store::redis_backend) fn apply_token_mutation(
         &self,
         conn: &mut redis::Connection,
+        mut mutation: RedisTokenMutation,
+        increment_version: bool,
+    ) -> Result<(), TokenStoreStorageError> {
+        let observed = std::mem::take(&mut mutation.observed_records);
+        let mut watched: Vec<_> = observed.keys().cloned().collect();
+        watched.extend(
+            mutation
+                .revoked_until
+                .keys()
+                .map(|token| self.keyspace.revoked_key(token)),
+        );
+        if watched.is_empty() {
+            return self.apply_prepared_token_mutation(conn, mutation, increment_version);
+        }
+        redis::cmd("WATCH")
+            .arg(watched)
+            .query::<()>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
+        let outcome = (|| {
+            for (key, expected) in observed {
+                let current = redis::cmd("GET")
+                    .arg(key)
+                    .query::<Option<String>>(conn)
+                    .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
+                if current != expected {
+                    return Err(TokenStoreStorageError::InvariantViolation(
+                        "token cleanup observation changed".into(),
+                    ));
+                }
+            }
+            self.apply_prepared_token_mutation(conn, mutation, increment_version)
+        })();
+        let unwatch = redis::cmd("UNWATCH")
+            .query::<()>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()));
+        outcome.and(unwatch)
+    }
+
+    fn apply_prepared_token_mutation(
+        &self,
+        conn: &mut redis::Connection,
         mutation: RedisTokenMutation,
         increment_version: bool,
     ) -> Result<(), TokenStoreStorageError> {
@@ -124,7 +165,15 @@ impl RedisTokenStoreBackend {
         if increment_version {
             Self::increment_version(&mut pipe, &self.keyspace);
         }
-        pipe.query::<()>(conn)
-            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+        pipe.query::<Option<()>>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?
+            .ok_or_else(|| {
+                TokenStoreStorageError::InvariantViolation(
+                    "token cleanup transaction invalidated".into(),
+                )
+            })
     }
 }
+
+#[cfg(test)]
+mod tests;

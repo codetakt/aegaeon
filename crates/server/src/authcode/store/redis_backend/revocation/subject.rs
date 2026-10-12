@@ -57,35 +57,52 @@ impl RedisTokenStoreBackend {
         &self,
         conn: &mut redis::Connection,
         subject: &str,
+        mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
         for token in self.subject_refresh_tokens(conn, subject)? {
-            if let Some(refresh) =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
+            let record_key = self.keyspace.refresh_key(&token);
+            if let Some((raw, record)) = Self::inventory_record::<RefreshToken>(conn, &record_key)?
             {
-                if refresh.user_id == subject {
-                    self.revoke_refresh_grant(
+                if record.user_id != subject || record.token != token {
+                    self.prune_observed_subject_member(
                         conn,
-                        refresh.refresh_grant.as_ref(),
-                        &refresh.client_id,
-                        &refresh.user_id,
+                        &record_key,
+                        &self.keyspace.subject_refresh_key(subject),
+                        &token,
+                        Some(&raw),
                     )?;
-                    self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
+                    continue;
                 }
+                mutation.observe_record(record_key, Some(raw))?;
+                self.revoke_refresh_grant(
+                    conn,
+                    record.refresh_grant.as_ref(),
+                    &record.client_id,
+                    &record.user_id,
+                )?;
+                self.revoke_exchange_root(conn, record.exchange_grant.as_ref())?;
             }
         }
-        // Access descendants can remain live after refresh records/indexes expire.
         for token in self.subject_access_tokens(conn, subject)? {
-            if let Some(access) =
-                Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
-            {
-                if access.user_id == subject {
-                    self.revoke_refresh_grant(
+            let record_key = self.keyspace.access_key(&token);
+            if let Some((raw, record)) = Self::inventory_record::<AccessToken>(conn, &record_key)? {
+                if record.user_id != subject || record.token != token {
+                    self.prune_observed_subject_member(
                         conn,
-                        access.refresh_grant.as_ref(),
-                        &access.client_id,
-                        &access.user_id,
+                        &record_key,
+                        &self.keyspace.subject_access_key(subject),
+                        &token,
+                        Some(&raw),
                     )?;
+                    continue;
                 }
+                mutation.observe_record(record_key, Some(raw))?;
+                self.revoke_refresh_grant(
+                    conn,
+                    record.refresh_grant.as_ref(),
+                    &record.client_id,
+                    &record.user_id,
+                )?;
             }
         }
         Ok(())
@@ -110,7 +127,7 @@ impl RedisTokenStoreBackend {
                 )?;
                 continue;
             };
-            if access.user_id != subject {
+            if access.user_id != subject || access.token != token {
                 self.prune_observed_subject_member(
                     conn,
                     &self.keyspace.access_key(&token),
@@ -120,13 +137,24 @@ impl RedisTokenStoreBackend {
                 )?;
                 continue;
             }
+            mutation.observe_record(self.keyspace.access_key(&token), Some(raw))?;
             mutation.delete_access_token(access.token.clone());
             mutation.revoke_access_until(access.token.clone(), &access, now);
-            if let Some(meta) =
-                Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&access.token))?
-            {
-                mutation.delete_bearer_token(access.token.clone());
-                mutation.revoke_until(access.token, meta.expires_at, now);
+            let meta_key = self.keyspace.bearer_key(&access.token);
+            if let Some((raw, meta)) = Self::inventory_record::<BearerTokenMeta>(conn, &meta_key)? {
+                if meta.user_id == subject && meta.token_id == access.token {
+                    mutation.observe_record(meta_key, Some(raw))?;
+                    mutation.delete_bearer_token(access.token.clone());
+                    mutation.revoke_until(access.token, meta.expires_at, now);
+                } else {
+                    self.prune_observed_subject_member(
+                        conn,
+                        &meta_key,
+                        &self.keyspace.subject_bearer_key(subject),
+                        &access.token,
+                        Some(&raw),
+                    )?;
+                }
             }
         }
         Ok(())
@@ -141,7 +169,7 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
-            self.revoke_subject_grant_authority(conn, subject)?;
+            self.revoke_subject_grant_authority(conn, subject, &mut mutation)?;
 
             self.revoke_subject_access_records(conn, subject, now, &mut mutation)?;
 
@@ -163,7 +191,7 @@ impl RedisTokenStoreBackend {
                     )?;
                     continue;
                 };
-                if refresh.user_id != subject {
+                if refresh.user_id != subject || refresh.token != token {
                     self.prune_observed_subject_member(
                         conn,
                         &self.keyspace.refresh_key(&token),
@@ -173,6 +201,7 @@ impl RedisTokenStoreBackend {
                     )?;
                     continue;
                 }
+                mutation.observe_record(self.keyspace.refresh_key(&token), Some(raw))?;
                 self.revoke_refresh_family_direct_with_budget(
                     conn,
                     &refresh.token,
@@ -199,7 +228,7 @@ impl RedisTokenStoreBackend {
                     )?;
                     continue;
                 };
-                if meta.user_id != subject {
+                if meta.user_id != subject || meta.token_id != token {
                     self.prune_observed_subject_member(
                         conn,
                         &self.keyspace.bearer_key(&token),
@@ -209,6 +238,12 @@ impl RedisTokenStoreBackend {
                     )?;
                     continue;
                 }
+                mutation.observe_record(self.keyspace.bearer_key(&token), Some(raw))?;
+                Self::get_observed_json::<AccessToken>(
+                    conn,
+                    self.keyspace.access_key(&token),
+                    &mut mutation,
+                )?;
                 mutation.delete_bearer_token(meta.token_id.clone());
                 mutation.revoke_until(meta.token_id, meta.expires_at, now);
             }

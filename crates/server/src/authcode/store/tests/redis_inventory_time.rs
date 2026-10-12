@@ -535,3 +535,77 @@ fn redis_subject_revocation_preserves_records_owned_by_another_subject() {
     assert!(store.try_verify_access_token("access").unwrap().is_some());
     assert!(!store.try_is_refresh_revoked("refresh").unwrap());
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_subject_mismatched_ids_cannot_revoke_unindexed_grant_authority() {
+    for kind in ["access", "refresh", "bearer"] {
+        let (store, mut conn) = fixture();
+        store
+            .store_issued_grant(
+                make_access_token("target-access"),
+                Some(make_refresh_token("target-refresh")),
+                make_bearer_meta("target-access", Some("target-refresh")),
+            )
+            .unwrap();
+        let keys = backend(&store).keyspace_for_tests();
+        for (index, token) in [
+            (keys.subject_access_key("user"), "target-access"),
+            (keys.subject_refresh_key("user"), "target-refresh"),
+            (keys.subject_bearer_key("user"), "target-access"),
+        ] {
+            redis::cmd("SREM")
+                .arg(index)
+                .arg(token)
+                .query::<()>(&mut conn)
+                .unwrap();
+        }
+        let (source, alias, index) = match kind {
+            "access" => (
+                keys.access_key("target-access"),
+                keys.access_key("alias"),
+                keys.subject_access_key("user"),
+            ),
+            "refresh" => (
+                keys.refresh_key("target-refresh"),
+                keys.refresh_key("alias"),
+                keys.subject_refresh_key("user"),
+            ),
+            _ => (
+                keys.bearer_key("target-access"),
+                keys.bearer_key("alias"),
+                keys.subject_bearer_key("user"),
+            ),
+        };
+        let payload = raw(&mut conn, &source).unwrap();
+        redis::cmd("SET")
+            .arg(&alias)
+            .arg(&payload)
+            .query::<()>(&mut conn)
+            .unwrap();
+        redis::cmd("SADD")
+            .arg(&index)
+            .arg("alias")
+            .query::<()>(&mut conn)
+            .unwrap();
+        assert_eq!(
+            store.try_revoke_tokens_by_subject("user").unwrap(),
+            0,
+            "{kind}"
+        );
+        assert_eq!(raw(&mut conn, &alias).as_deref(), Some(payload.as_str()));
+        assert_eq!(raw(&mut conn, &source).as_deref(), Some(payload.as_str()));
+        assert!(!member(&mut conn, &index, "alias"));
+        assert!(
+            store
+                .try_verify_access_token("target-access")
+                .unwrap()
+                .is_some(),
+            "{kind}"
+        );
+        assert!(
+            !store.try_is_refresh_revoked("target-refresh").unwrap(),
+            "{kind}"
+        );
+    }
+}

@@ -1,11 +1,11 @@
 use super::super::redis_support::decode_redis_json;
 #[cfg(test)]
 use super::super::redis_support::encode_redis_json;
-use super::super::redis_support::RedisTokenStoreKeyspace;
 #[cfg(test)]
 use super::super::redis_support::{
     RedisRefreshChildrenRecord, RedisRefreshSuccessorRecord, RedisRevokedTokenRecord,
 };
+use super::super::redis_support::{RedisTokenMutation, RedisTokenStoreKeyspace};
 use super::RedisTokenStoreBackend;
 #[cfg(test)]
 use crate::authcode::store::TokenStoreState;
@@ -74,6 +74,19 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?
             .map(|payload| decode_redis_json::<T>(&payload))
             .transpose()
+    }
+
+    pub(super) fn get_observed_json<T: serde::de::DeserializeOwned>(
+        conn: &mut redis::Connection,
+        key: String,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<T>, TokenStoreStorageError> {
+        let raw = redis::cmd("GET")
+            .arg(&key)
+            .query::<Option<String>>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
+        mutation.observe_record(key, raw.clone())?;
+        raw.map(|payload| decode_redis_json(&payload)).transpose()
     }
 
     pub(super) fn increment_version(

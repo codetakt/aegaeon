@@ -1,5 +1,6 @@
 use super::super::super::redis_support::{
-    RedisRefreshSuccessorRecord, RedisTokenMutation, MAX_REFRESH_FAMILY_REVOCATION_CHILD_TOKENS,
+    RedisRefreshChildrenRecord, RedisRefreshPredecessorRecord, RedisRefreshSuccessorRecord,
+    RedisTokenMutation, MAX_REFRESH_FAMILY_REVOCATION_CHILD_TOKENS,
     MAX_REFRESH_FAMILY_REVOCATION_REFRESH_VISITS,
 };
 use super::super::RedisTokenStoreBackend;
@@ -69,14 +70,27 @@ impl RedisTokenStoreBackend {
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
-        if let Some(access) = Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
+        if let Some(access) =
+            Self::get_observed_json::<AccessToken>(conn, self.keyspace.access_key(token), mutation)?
         {
+            if access.token != token {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "access cleanup token identity mismatch".into(),
+                ));
+            }
             mutation.delete_access_token(token.to_string());
             mutation.revoke_access_until(token.to_string(), &access, now);
         }
-        if let Some(meta) =
-            Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?
-        {
+        if let Some(meta) = Self::get_observed_json::<BearerTokenMeta>(
+            conn,
+            self.keyspace.bearer_key(token),
+            mutation,
+        )? {
+            if meta.token_id != token {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "bearer cleanup token identity mismatch".into(),
+                ));
+            }
             mutation.delete_bearer_token(token.to_string());
             mutation.revoke_until(token.to_string(), meta.expires_at, now);
         }
@@ -100,6 +114,73 @@ impl RedisTokenStoreBackend {
         )
     }
 
+    fn collect_refresh_predecessor(
+        &self,
+        conn: &mut redis::Connection,
+        refresh: &str,
+        parent: Option<&str>,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<(), TokenStoreStorageError> {
+        let key = self.keyspace.refresh_predecessor_key(refresh);
+        if let Some(record) =
+            Self::get_observed_json::<RedisRefreshPredecessorRecord>(conn, key.clone(), mutation)?
+        {
+            if record.refresh_token != refresh
+                || parent.is_some_and(|expected| record.predecessor_refresh != expected)
+            {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "refresh predecessor identity mismatch".into(),
+                ));
+            }
+        }
+        mutation.delete_key(key);
+        Ok(())
+    }
+
+    fn collect_refresh_successor(
+        &self,
+        conn: &mut redis::Connection,
+        refresh: &str,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<String>, TokenStoreStorageError> {
+        let key = self.keyspace.refresh_successor_key(refresh);
+        let Some(record) =
+            Self::get_observed_json::<RedisRefreshSuccessorRecord>(conn, key.clone(), mutation)?
+        else {
+            return Ok(None);
+        };
+        if record.previous_refresh != refresh {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "refresh successor identity mismatch".into(),
+            ));
+        }
+        self.collect_refresh_predecessor(conn, &record.successor_refresh, Some(refresh), mutation)?;
+        mutation.delete_key(key);
+        Ok(Some(record.successor_refresh))
+    }
+
+    fn observed_refresh_children(
+        &self,
+        conn: &mut redis::Connection,
+        refresh: &str,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<HashSet<String>, TokenStoreStorageError> {
+        let record = Self::get_observed_json::<RedisRefreshChildrenRecord>(
+            conn,
+            self.keyspace.refresh_children_key(refresh),
+            mutation,
+        )?;
+        if record
+            .as_ref()
+            .is_some_and(|value| value.refresh_token != refresh)
+        {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "refresh child index identity mismatch".into(),
+            ));
+        }
+        Ok(record.map_or_else(HashSet::new, |value| value.access_tokens))
+    }
+
     pub(in crate::authcode::store::redis_backend::revocation) fn revoke_refresh_family_direct_with_budget(
         &self,
         conn: &mut redis::Connection,
@@ -108,9 +189,16 @@ impl RedisTokenStoreBackend {
         mutation: &mut RedisTokenMutation,
         budget: &mut RefreshFamilyRevocationBudget,
     ) -> Result<usize, TokenStoreStorageError> {
-        if let Some(root) =
-            Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(root_refresh))?
-        {
+        if let Some(root) = Self::get_observed_json::<RefreshToken>(
+            conn,
+            self.keyspace.refresh_key(root_refresh),
+            mutation,
+        )? {
+            if root.token != root_refresh {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "refresh cleanup token identity mismatch".into(),
+                ));
+            }
             self.revoke_refresh_grant(
                 conn,
                 root.refresh_grant.as_ref(),
@@ -129,22 +217,22 @@ impl RedisTokenStoreBackend {
             }
             budget.consume_refresh_visit(&refresh)?;
 
-            if let Some(successor) = Self::get_json::<RedisRefreshSuccessorRecord>(
-                conn,
-                self.keyspace.refresh_successor_key(&refresh),
-            )? {
-                mutation.delete_key(self.keyspace.refresh_successor_key(&refresh));
-                mutation.delete_key(
-                    self.keyspace
-                        .refresh_predecessor_key(&successor.successor_refresh),
-                );
-                stack.push(successor.successor_refresh);
+            if let Some(successor) = self.collect_refresh_successor(conn, &refresh, mutation)? {
+                stack.push(successor);
             }
 
-            let refresh_token =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&refresh))?;
+            let refresh_token = Self::get_observed_json::<RefreshToken>(
+                conn,
+                self.keyspace.refresh_key(&refresh),
+                mutation,
+            )?;
             let refresh_exists = refresh_token.is_some();
             if let Some(token) = refresh_token {
+                if token.token != refresh {
+                    return Err(TokenStoreStorageError::InvariantViolation(
+                        "refresh cleanup token identity mismatch".into(),
+                    ));
+                }
                 self.revoke_refresh_grant(
                     conn,
                     token.refresh_grant.as_ref(),
@@ -155,17 +243,24 @@ impl RedisTokenStoreBackend {
                 mutation.delete_refresh_token(refresh.clone());
                 mutation.revoke_until(refresh.clone(), token.expires_at, now);
             }
-            mutation.delete_key(self.keyspace.refresh_predecessor_key(&refresh));
+            self.collect_refresh_predecessor(conn, &refresh, None, mutation)?;
 
-            if let Some(meta) =
-                Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&refresh))?
-            {
+            if let Some(meta) = Self::get_observed_json::<BearerTokenMeta>(
+                conn,
+                self.keyspace.bearer_key(&refresh),
+                mutation,
+            )? {
+                if meta.token_id != refresh {
+                    return Err(TokenStoreStorageError::InvariantViolation(
+                        "bearer cleanup token identity mismatch".into(),
+                    ));
+                }
                 mutation.delete_bearer_token(refresh.clone());
                 mutation.revoke_until(refresh.clone(), meta.expires_at, now);
             }
 
             if refresh_exists {
-                let child_tokens = self.refresh_children(conn, &refresh)?;
+                let child_tokens = self.observed_refresh_children(conn, &refresh, mutation)?;
                 mutation.delete_key(self.keyspace.refresh_children_key(&refresh));
                 budget.consume_child_tokens(&refresh, child_tokens.len())?;
                 child_count = child_count.saturating_add(child_tokens.len());

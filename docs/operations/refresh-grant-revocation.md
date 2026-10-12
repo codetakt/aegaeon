@@ -145,3 +145,12 @@ through a family. Bearer metadata, stale index entries and repeated family links
 are not additional tokens. This is a cleanup count, not a count of every token
 whose grant authority is denied. Reuse commits retain the shared version/type
 preflight and Redis-time deadline checks before publishing denial.
+
+Subject revocation checks that each embedded token ID matches its indexed key
+before denying grant authority or selecting cleanup. Mismatched records allow
+only conditional membership pruning. Cleanup retains observed record bytes and
+uses `WATCH` plus `MULTI`/`EXEC` to reject replacement records; an aborted
+transaction never reports successful cleanup or a revoked count. Token-store
+ACLs must allow `WATCH` and `UNWATCH` for this guarded cleanup. Durable denial may
+already have committed when cleanup detects a conflict. Redis command errors
+still do not promise rollback of every write.

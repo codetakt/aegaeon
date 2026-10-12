@@ -43,6 +43,7 @@ pub(super) struct RedisRefreshPredecessorRecord {
 
 #[derive(Default)]
 pub(super) struct RedisTokenMutation {
+    pub(super) observed_records: HashMap<String, Option<String>>,
     pub(super) delete_keys: HashSet<String>,
     pub(super) delete_access_tokens: HashSet<String>,
     pub(super) delete_refresh_tokens: HashSet<String>,
@@ -52,6 +53,24 @@ pub(super) struct RedisTokenMutation {
 }
 
 impl RedisTokenMutation {
+    pub(super) fn observe_record(
+        &mut self,
+        key: String,
+        raw: Option<String>,
+    ) -> Result<(), TokenStoreStorageError> {
+        if self
+            .observed_records
+            .get(&key)
+            .is_some_and(|prior| *prior != raw)
+        {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "token cleanup observation changed".into(),
+            ));
+        }
+        self.observed_records.insert(key, raw);
+        Ok(())
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.delete_keys.is_empty()
             && self.delete_access_tokens.is_empty()
