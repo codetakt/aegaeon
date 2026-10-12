@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-10-01
+Last updated: 2026-10-13
 
 Status: current implementation baseline
 
