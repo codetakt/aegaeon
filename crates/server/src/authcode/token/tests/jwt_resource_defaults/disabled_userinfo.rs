@@ -97,3 +97,27 @@ async fn disabling_userinfo_preserves_refresh_for_retry_after_reenable() -> Test
     assert_eq!(claims(&token)?["aud"], "https://auth.example.com/userinfo");
     Ok(())
 }
+
+#[test]
+fn device_policy_preserves_opaque_openid_default_and_explicit_resource() -> TestResult {
+    for enabled in [false, true] {
+        let issuer = issuer(false)?.with_oidc(Some(configuration(enabled)?));
+        let policy = issuer.device_access_token_audience_policy();
+        assert_eq!(policy.resolve("client", Some("openid"), None)?, "client");
+        let target = "https://resource.example/api";
+        assert_eq!(
+            policy.resolve("client", Some("openid"), Some(target))?,
+            target
+        );
+        let jwt = issuer.with_jwt_access_tokens_enabled(true);
+        let default =
+            jwt.device_access_token_audience_policy()
+                .resolve("client", Some("openid"), None);
+        if enabled {
+            assert_eq!(default?, "https://auth.example.com/userinfo");
+        } else {
+            assert!(default.is_err());
+        }
+    }
+    Ok(())
+}

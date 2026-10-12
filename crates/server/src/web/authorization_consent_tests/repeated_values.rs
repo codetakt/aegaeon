@@ -7,6 +7,7 @@ const OTHER: &str = "repeat-client";
 const RP_STATE: &str = "same state +&= 値";
 const RP_NONCE: &str = "same nonce +&= 値";
 const REDIRECT: &str = "https://client.example.com/callback";
+const RESOURCE: &str = "https://resource.example/api";
 
 async fn shared_fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<(AppState, String)> {
     let (mut state, sid) = fixture(pool, env).await?;
@@ -57,6 +58,7 @@ fn fields<'a>(
         ("client_id", client),
         ("response_type", "code"),
         ("redirect_uri", REDIRECT),
+        ("resource", RESOURCE),
         (
             "scope",
             if nonce.is_some() {
@@ -215,6 +217,7 @@ async fn repeats(state: &AppState, sid: &str, mode: &str) -> TestResult {
             assert_eq!(stored.state.as_deref(), state_value);
             assert_eq!(stored.nonce.as_deref(), nonce);
             assert_eq!(stored.client_id, client);
+            assert_eq!(stored.resource.as_deref(), Some(RESOURCE));
             assert!(!issued.iter().any(|(old, _, _)| old == &code));
             issued.push((code, client, request));
         }

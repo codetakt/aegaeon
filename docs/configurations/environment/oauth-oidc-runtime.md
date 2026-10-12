@@ -176,6 +176,8 @@ approved code. A missing JWT resource without an approved default returns
 authorization is retained even when omitted at redemption. UserInfo defaults
 require configured OpenID support, enabled UserInfo and the granted `openid` scope; requesting a
 different resource at redemption cannot add authority to the device grant.
+Opaque device tokens retain the bound resource or client-ID fallback, including
+OpenID grants, regardless of UserInfo availability.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |

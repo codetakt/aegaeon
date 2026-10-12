@@ -129,7 +129,8 @@ async fn approved_device_grant_response(
         Ok(timing) => timing,
         Err(response) => return response,
     };
-    let audience = match state.tokens.issuer.access_token_audience(
+    let policy = state.tokens.issuer.device_access_token_audience_policy();
+    let audience = match policy.resolve(
         &grant.client_id,
         grant.scope.as_deref(),
         grant.resource.as_deref(),
@@ -245,7 +246,7 @@ pub(super) async fn handle_token_device_code_grant(
             ctx.client_id.clone(),
             None,
             ctx.resource.clone(),
-            state.tokens.issuer.access_token_audience_policy(),
+            state.tokens.issuer.device_access_token_audience_policy(),
         )
         .await
     {

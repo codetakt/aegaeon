@@ -134,6 +134,16 @@ impl TokenIssuer {
         )
     }
 
+    pub(crate) fn device_access_token_audience_policy(&self) -> AccessTokenAudiencePolicy {
+        if self.jwt_access_tokens_enabled {
+            self.access_token_audience_policy()
+        } else {
+            // Device opaque tokens historically use the client ID, including
+            // OpenID grants; enabling OIDC does not change that stored audience.
+            AccessTokenAudiencePolicy::new(false, None)
+        }
+    }
+
     pub(crate) fn access_token_audience(
         &self,
         client_id: &str,

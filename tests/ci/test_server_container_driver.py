@@ -18,6 +18,7 @@ URL_KEYS = [
     for name in (
         "PAR",
         "AUTH_CODE",
+        "DEVICE_CODE",
         "AUTH_SESSION",
         "STEPUP",
         "OIDC_LOGOUT_SESSION",

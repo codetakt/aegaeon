@@ -261,6 +261,16 @@ async fn scenarios(redis: bool) -> TestResult {
             reject(status, &body);
             assert_eq!(state.device.code_store.try_active_count()?, count);
         }
+        for userinfo_enabled in [false, true] {
+            let mut config = oidc(&state.issuer)?;
+            config.userinfo_enabled = userinfo_enabled;
+            configure_issuer_with_oidc(&mut state, false, Some(config))?;
+            for resource in [None, Some(TARGET)] {
+                let code = grant(&state, CLIENT, Some("openid profile"), resource).await?;
+                let (status, body) = poll(&state, &code, CLIENT, None).await?;
+                accepted(&state, status, &body, false, resource.unwrap_or(CLIENT))?;
+            }
+        }
         configure_issuer(&mut state, false, false)?;
         let code = grant(&state, CLIENT, Some("read"), None).await?;
         let (status, body) = poll(&state, &code, CLIENT, None).await?;
