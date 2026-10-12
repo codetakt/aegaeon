@@ -155,7 +155,6 @@
       "sha256": "f9f973d1cf50c11e4145bc1d2e8384947395da533f642c47d6b277a3852398be",
       "entries": [
         "OIDC-1-001",
-        "OIDC-1-002",
         "OIDC-1-003",
         "OIDC-1-004"
       ],
@@ -325,7 +324,7 @@
       "critical": false
     },
     "crates/server/src/web/mod.rs": {
-      "sha256": "c2e3b0e052aa594682fdb5a032f6c268f8c3a7c9f2cdd20febb1cdac26b7928d",
+      "sha256": "34d8e51eb0afe444049b6c96e9770cc7d65a37ccbd96218815e6114895b84c1d",
       "entries": [
         "6749-014",
         "7521-201",
@@ -386,7 +385,7 @@
       "critical": false
     },
     "crates/server/src/web/token_lifecycle.rs": {
-      "sha256": "7bf41e612058e05fc7f0addbedced904648b7c7be78ec32ed78243e4d7608cf5",
+      "sha256": "fb14837363ef533575ee7da6d6a93fbc9d6734b92640a7ea72ee65070d8b0c86",
       "entries": [
         "7009-002",
         "7009-003",
