@@ -46,7 +46,12 @@ required. Evidence from one suite cannot replace the other.
 ## Measurement and collector CPUs
 
 Fresh collection requires Linux affinity support and at least two allowed CPU
-cores, identified through `thread_siblings_list`. Before launching each native
+cores, identified through `thread_siblings_list`. When sysfs is absent, as in a
+Nix sandbox, the collector uses explicit `processor`, `physical id` and `core id`
+records from `/proc/cpuinfo`. It requires complete, unique topology covering every
+allowed CPU and groups siblings by both package and core ID; logical CPU numbers
+alone cannot establish separate cores. The selected topology source is retained.
+Before launching each native
 executable, the collector selects the highest eligible allowed CPU and moves
 itself off that CPU and all its SMT siblings. A source-bound launcher sets and
 checks the native affinity before `exec`, preserving its PID, process group and

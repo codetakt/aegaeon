@@ -27,18 +27,51 @@ def cpu_list(value: str) -> set[int]:
     return cpus
 
 
+def proc_topology(allowed: set[int], cpuinfo: Path) -> dict[int, set[int]]:
+    """Nix hides sysfs; require explicit kernel package/core IDs from procfs."""
+    cores: dict[int, tuple[int, int]] = {}
+    for block in cpuinfo.read_text().strip().split("\n\n"):
+        fields = {}
+        for line in block.splitlines():
+            key, separator, value = line.partition(":")
+            if separator and key.strip() in ("processor", "physical id", "core id"):
+                key, value = key.strip(), value.strip()
+                require(key not in fields and value.isdecimal(), "Invalid proc CPU topology field")
+                fields[key] = int(value)
+        require(
+            set(fields) == {"processor", "physical id", "core id"}, "Incomplete proc CPU topology"
+        )
+        cpu = fields["processor"]
+        require(cpu not in cores and cpu < 4096, "Duplicate or unbounded proc CPU topology")
+        cores[cpu] = (fields["physical id"], fields["core id"])
+    require(allowed <= cores.keys(), "Allowed CPU missing from proc topology")
+    return {cpu: {other for other, core in cores.items() if core == cores[cpu]} for cpu in allowed}
+
+
 def placement(
-    allowed: set[int], topology: Path = Path("/sys/devices/system/cpu")
+    allowed: set[int],
+    topology: Path = Path("/sys/devices/system/cpu"),
+    cpuinfo: Path = Path("/proc/cpuinfo"),
 ) -> dict[str, Any]:
     require(bool(allowed) and len(allowed) <= 4096, "Invalid allowed CPU set")
+    source = "sysfs-thread-siblings"
+    try:
+        groups = {
+            cpu: cpu_list((topology / f"cpu{cpu}/topology/thread_siblings_list").read_text())
+            for cpu in allowed
+        }
+    except FileNotFoundError:
+        groups = proc_topology(allowed, cpuinfo)
+        source = "proc-package-core-ids"
     # The highest eligible CPU avoids assuming CPU IDs are dense or start at 0.
     for cpu in sorted(allowed, reverse=True):
-        siblings = cpu_list((topology / f"cpu{cpu}/topology/thread_siblings_list").read_text())
+        siblings = groups[cpu]
         require(cpu in siblings, "CPU missing from its sibling topology")
         collector = allowed - siblings
         if collector:
             return {
                 "mode": "separate-core",
+                "topology_source": source,
                 "original": sorted(allowed),
                 "native": [cpu],
                 "native_siblings": sorted(siblings),

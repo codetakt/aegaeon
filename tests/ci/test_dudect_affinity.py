@@ -13,7 +13,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "constant_time"))
-from dudect_affinity import collector_placement, cpu_list, placement, validate_placement
+from dudect_affinity import (
+    collector_placement,
+    cpu_list,
+    placement,
+    proc_topology,
+    validate_placement,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,7 +38,7 @@ class DudectAffinityTests(unittest.TestCase):
 
     def test_sparse_cpuset_excludes_all_native_siblings(self):
         tmp_path = self.root
-        plan = placement({2, 7, 19}, topology(tmp_path, {19: "7,19"}))
+        plan = placement({2, 7, 19}, topology(tmp_path, {2: "2", 7: "7,19", 19: "7,19"}))
         self.assertEqual(plan["native"], [19])
         self.assertEqual(plan["collector"], [2])
         self.assertEqual(plan["native_siblings"], [7, 19])
@@ -52,7 +58,7 @@ class DudectAffinityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two allowed cores"):
             placement({2, 7}, tree)
         with self.assertRaises(FileNotFoundError):
-            placement({2, 8}, tree)
+            placement({2, 8}, tree, tmp_path / "missing-cpuinfo")
 
     def test_collector_affinity_restored_after_failure(self):
         original = os.sched_getaffinity(0)
@@ -109,7 +115,7 @@ class DudectAffinityTests(unittest.TestCase):
 
     def test_replay_rejects_missing_or_overlapping_observed_placement(self):
         tmp_path = self.root
-        plan = placement({2, 7, 19}, topology(tmp_path, {19: "7,19"}))
+        plan = placement({2, 7, 19}, topology(tmp_path, {2: "2", 7: "7,19", 19: "7,19"}))
         process = {"cpu_placement": plan, "argv": ["bound", "pr"]}
         receipt = {"native": [19], "argv": ["bound", "pr"]}
         rows = [{"phase": "observation", "native_affinity": [19], "collector_affinity": [2]}]
@@ -119,3 +125,40 @@ class DudectAffinityTests(unittest.TestCase):
         rows[0]["collector_affinity"] = [7]
         with self.assertRaisesRegex(ValueError, "collector affinity"):
             validate_placement(process, receipt, rows)
+
+    def cpuinfo(self, identities):
+        path = self.root / "cpuinfo"
+        path.write_text(
+            "\n\n".join(
+                f"processor\t: {cpu}\nphysical id\t: {package}\ncore id\t: {core}"
+                for cpu, package, core in identities
+            )
+        )
+        return path
+
+    def test_nix_missing_sysfs_uses_explicit_proc_package_and_core_ids(self):
+        # Core IDs can repeat on different packages. CPU IDs need not be dense.
+        info = self.cpuinfo([(2, 0, 0), (7, 1, 0), (19, 1, 0)])
+        plan = placement({2, 7, 19}, self.root / "absent-sysfs", info)
+        self.assertEqual(plan["native"], [19])
+        self.assertEqual(plan["native_siblings"], [7, 19])
+        self.assertEqual(plan["collector"], [2])
+        self.assertEqual(plan["topology_source"], "proc-package-core-ids")
+
+    def test_proc_requires_complete_unique_topology_for_every_allowed_cpu(self):
+        for value in (
+            "processor: 0\ncore id: 0",  # package is absent
+            "processor: 0\nphysical id: 0\ncore id: -1",
+            "processor: 0\nphysical id: 0\ncore id: 0\ncore id: 1",
+            "processor: 0\nphysical id: 0\ncore id: 0\n\nprocessor: 0\nphysical id: 0\ncore id: 0",
+            "processor: 1\nphysical id: 0\ncore id: 0",  # allowed CPU is absent
+        ):
+            path = self.root / "cpuinfo"
+            path.write_text(value)
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "topology"):
+                proc_topology({0}, path)
+
+    def test_proc_cannot_turn_smt_siblings_into_separate_cores(self):
+        info = self.cpuinfo([(0, 0, 0), (1, 0, 0)])
+        with self.assertRaisesRegex(ValueError, "two allowed cores"):
+            placement({0, 1}, self.root / "absent-sysfs", info)
