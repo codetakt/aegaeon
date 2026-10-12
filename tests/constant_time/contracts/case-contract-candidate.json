@@ -27,7 +27,7 @@
       ],
       "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "legacy",
@@ -53,7 +53,7 @@
       ],
       "proposed_timing_decision": "Preserve valid/invalid timing observations and failures as characterization. They are insufficient for same-public-input secret independence; activation requires the successor secret-key rejection stratum and explicit residual coverage.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "legacy",
@@ -79,7 +79,7 @@
       ],
       "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "legacy",
@@ -105,7 +105,7 @@
       ],
       "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "legacy",
@@ -131,7 +131,7 @@
       ],
       "proposed_timing_decision": "Preserve valid/invalid timing observations and failures as characterization. They are insufficient for same-public-input secret independence; activation requires the successor secret-key rejection stratum and explicit residual coverage.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -156,7 +156,7 @@
       ],
       "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -181,7 +181,7 @@
       ],
       "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -206,7 +206,7 @@
       ],
       "proposed_timing_decision": "Full negative-control schedule must be statistically evaluable and show nondetection; no production-target coverage is inferred.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -230,7 +230,7 @@
       ],
       "proposed_timing_decision": "Require full scheduled nondetection for protected message variation, accounting and numerical eligibility. Fixed-key observations do not cover secret-key variation.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -255,7 +255,7 @@
       ],
       "proposed_timing_decision": "Require full scheduled nondetection for protected message variation, accounting and numerical eligibility. Fixed-key observations do not cover secret-key variation.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "suite": "nix",
@@ -281,7 +281,7 @@
       ],
       "proposed_timing_decision": "Retain all detected differences and complete every scheduled observation; characterize public-fixture behavior, never relabel it as secret noninterference. Production message confidentiality remains unassigned.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication"
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication"
     },
     {
       "stable_id": "legacy/compare_product_32",
@@ -301,7 +301,7 @@
       "proposed_role": "protected_input_observation",
       "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication",
       "implemented_fixture": {
         "class0": "Zero32 reference equal to zero32 candidate",
         "class1": "One bit flipped at a uniformly chosen byte in zero32; position chosen before timing",
@@ -328,7 +328,7 @@
       "proposed_role": "protected_input_observation",
       "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication",
       "implemented_fixture": {
         "class0": "16 bytes 0x42",
         "class1": "Independent random16 key conditioned on JWS_ERR_INVALID_SIGNATURE",
@@ -357,7 +357,7 @@
       "proposed_role": "protected_input_observation",
       "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication",
       "implemented_fixture": {
         "class0": "32 bytes 0x42",
         "class1": "Independent random32 key conditioned on JWE_ERR_DECRYPT_FAILED",
@@ -384,7 +384,7 @@
       "proposed_role": "protected_input_observation",
       "proposed_timing_decision": "Require complete scheduled nondetection under the reviewed numerical profile; any eligible difference or missing/invalid evidence fails admission.",
       "all_previous_outcomes_unchanged": true,
-      "gate_activation": "Version4 per-case monitoring; final-source native validation required before publication",
+      "gate_activation": "Version5 per-case monitoring; final-source native validation required before publication",
       "implemented_fixture": {
         "class0": "32 bytes 0x42",
         "class1": "Independent random32 key",

@@ -14,12 +14,15 @@ import tempfile
 import unittest
 from fractions import Fraction
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "constant_time"))
 
 from dudect_candidate import ALPHA, NUMERICAL_SHA256, CandidateAdmission, significant
 from dudect_certificates import Certificates
+from dudect_contract import ObservationError, assess_case
 from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES
+from dudect_summary import summarize_case
 from dudect_support import single_outlier, single_outlier_tail, validate_support
 from dudect_timing import TIMING_ENV, validate_timing
 from test_dudect_candidate import ROOT, binding, observation, support
@@ -161,6 +164,36 @@ class SingleOutlierTests(unittest.TestCase):
             tail = [numerator * 1024 + offset, denominator * 1024]
             self.assertEqual(tail[0] / tail[1], ALPHA)
             self.assertEqual(significant({"eligible": True, "p": ALPHA, "p_exact": tail}), expected)
+
+    def test_exact_tail_consumers_preserve_the_shared_threshold_boundary(self):
+        # These synthetic ratios test the consumer interface. They cannot arise
+        # from the current bounded single-outlier family (proved below).
+        rows = [observation("control_mean_shift", look=i) for i in range(1, 9)]
+        bound = rows[0]["binding"]
+        admission = CandidateAdmission("control_mean_shift", "pr", binding=bound)
+        baseline = [admission.admit(row) for row in rows]
+        numerator, denominator = ALPHA.as_integer_ratio()
+        for offset in (-1, 0, 1):
+            history = json.loads(json.dumps(baseline))
+            test = history[0]["tests"][0]
+            test.update(p=ALPHA, p_exact=[numerator * 1024 + offset, denominator * 1024])
+            args = (bound["case_id"], "measurement_positive_control", history, "pr")
+            if offset < 0:
+                self.assertTrue(assess_case(*args)["requirement_satisfied"])
+            else:
+                with self.assertRaises(ObservationError):
+                    assess_case(*args)
+            with patch.object(CandidateAdmission, "admit", side_effect=history):
+                diagnostic = summarize_case(rows, bound, "measurement_positive_control")
+            self.assertEqual(diagnostic["requirement_satisfied"], offset < 0)
+            self.assertEqual(
+                diagnostic["looks"][0]["detected_statistics"], [test] if offset < 0 else []
+            )
+
+    def test_admissible_single_outlier_cannot_reach_the_alpha_boundary(self):
+        largest_pooled_count = (BATCH_SIZE - 11) * CANDIDATE_PROFILES["periodic"][0][-1]
+        smallest_tail = Fraction(10001, largest_pooled_count)
+        self.assertGreater(smallest_tail, Fraction(ALPHA))
 
     def test_forged_single_outlier_is_rejected_by_original_frames(self):
         row = outlier_row()

@@ -117,10 +117,18 @@ When both classes have more than 10,000 observations and validated native extrem
 certify one identical pooled integer value, the absolute mean-difference statistic
 is zero under every label permutation. Its exact upper-tail p-value is one under
 the equal-distribution/exchangeability null. This specific rule resolves tied
-native support; floating-point equality alone is insufficient. Unequal constants,
-one-class zero variance, sparse crops, floating aliases and second-order square
-collisions remain ineligible. The [contract](dudect-case-contract.md) details the
-assumptions and residual coverage.
+native support; floating-point equality alone is insufficient.
+
+The adopted single-outlier extension additionally permits exactly two pooled
+native values with multiplicities 1 and N-1. Both retained class counts must
+exceed 10,000, native values must be exactly representable, and transformed values
+must be finite and distinct. Exact endpoint counts are checked against original
+timing frames. The inclusive absolute-mean permutation tail is computed as an
+exact rational value under the same exchangeability null. Other one-class
+zero-variance cases, unequal constants, sparse crops, floating aliases and
+second-order square collisions remain ineligible. The
+[contract](dudect-case-contract.md) gives the formula, class-blind applicability
+rule, prospective schema migration and residual coverage.
 
 ## Admission and evidence
 
@@ -183,7 +191,7 @@ run after failure and require evidence. Shared-output locking prevents concurren
 runs from replacing one another's reports.
 
 Schema version 5 binds case/profile, contract, numerical policy and build identities.
-Current consumers reject historical versions 2 and 3 and nominal summaries. The
+Current consumers reject historical versions 2–4 and nominal summaries. The
 historical numerical and stream modules remain for regression and replay with
 their original outcomes. `run_candidate.py` remains a diagnostic collector: its
 `candidate_collection_complete` result has `admission: inactive` and cannot admit

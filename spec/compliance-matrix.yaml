@@ -5815,7 +5815,7 @@ openid_core:
   ci_check: verify-dudect
   status: implemented
   notes:
-  - Version4 binds per-case fixture observations to sources, native artifacts, controls and complete profiles; historical detected differences remain visible.
+  - Version5 binds per-case fixture observations to sources, native artifacts, controls and complete profiles; historical detected differences remain visible.
   - Protected-input nondetection is bounded empirical evidence. Public/authentication fixture characterization does not establish secret independence or authorize production timing declassification.
   - Full secret domains, valid-result strata, caller composition and product assurance remain separate obligations; see docs/verification/dudect-case-contract.md.
 - id: OIDC-1-009

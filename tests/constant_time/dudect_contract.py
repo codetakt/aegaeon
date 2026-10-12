@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from dudect_candidate import ALPHA, CANDIDATE_CASES, NUMERICAL_SHA256, validate_candidate_report
+from dudect_candidate import (
+    CANDIDATE_CASES,
+    NUMERICAL_SHA256,
+    significant,
+    validate_candidate_report,
+)
 from dudect_results import CANDIDATE_PROFILES as PROFILES, NONDETECTION
 from dudect_support import require
 
@@ -68,7 +73,7 @@ def assess_case(
         require(name in POSITIVE_STATISTICS, "Unknown positive control")
         statistic = POSITIVE_STATISTICS[name]
         require_observation(
-            any(row["tests"][statistic].get("p", 1) < ALPHA for row in history),
+            any(significant(row["tests"][statistic]) for row in history),
             f"Required control statistic {statistic} not detected: {case_id}",
         )
         requirement = f"positive_control_statistic_{statistic}"

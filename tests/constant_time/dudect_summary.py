@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dudect_candidate import ALPHA, CandidateAdmission
+from dudect_candidate import CandidateAdmission, significant
 from dudect_contract import ObservationError, assess_case
 
 
@@ -32,9 +32,7 @@ def summarize_case(
                     [pair[group] - old[group] for group in (0, 1)]
                     for pair, old in zip(counts, previous, strict=True)
                 ],
-                "detected_statistics": [
-                    test for test in decision["tests"] if test["eligible"] and test["p"] < ALPHA
-                ],
+                "detected_statistics": [test for test in decision["tests"] if significant(test)],
                 "ineligible_statistics": [
                     {
                         **test,
