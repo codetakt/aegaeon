@@ -10,6 +10,8 @@ macro_rules! check {
 }
 mod fixture;
 mod membership;
+mod membership_semantics;
+mod reader_contract;
 use fixture::*;
 
 const ORG_A: &str = "organization_00000000-0000-4000-8000-000000000001";
