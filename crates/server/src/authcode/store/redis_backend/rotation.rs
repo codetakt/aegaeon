@@ -80,7 +80,7 @@ impl RedisTokenStoreBackend {
             return Ok(REFRESH_ROTATION_OUTCOME_INVALID.into());
         }
         if previous.rotated {
-            return Ok(REFRESH_ROTATION_OUTCOME_REUSED.to_string());
+            return self.commit_refresh_reuse_denial(conn, &previous, &expected_previous_payload);
         }
         if previous.refresh_grant != new_refresh.refresh_grant
             || previous.application_grant != new_refresh.application_grant
@@ -273,6 +273,31 @@ impl RedisTokenStoreBackend {
         ))
     }
 
+    fn commit_refresh_reuse_denial(
+        &self,
+        conn: &mut redis::Connection,
+        previous: &RefreshToken,
+        expected_previous_payload: &str,
+    ) -> Result<String, TokenStoreStorageError> {
+        let Some(commit) = self.descendant_grant_commit(
+            conn,
+            previous.refresh_grant.as_ref(),
+            &previous.client_id,
+            &previous.user_id,
+            previous.expires_at,
+        )?
+        else {
+            return Ok(REFRESH_ROTATION_OUTCOME_INVALID.into());
+        };
+        commit
+            .deny_reuse(
+                conn,
+                &self.keyspace.refresh_key(&previous.token),
+                expected_previous_payload,
+            )
+            .map_err(|error| TokenStoreStorageError::BackendUnavailable(error.to_string()))
+    }
+
     fn revoke_reused_refresh_family(&self, refresh: &str) -> Result<usize, TokenStoreStorageError> {
         self.with_lock("revoke_reused_refresh_family_direct", |conn| {
             let now = SystemTime::now();
@@ -300,13 +325,13 @@ impl RedisTokenStoreBackend {
                 return Ok((Err(RefreshRotationError::Invalid), None));
             }
 
-            let Some(refresh) =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(token))?
+            let Some(raw) = Self::load_refresh_payload(conn, self.keyspace.refresh_key(token))?
             else {
                 self.apply_token_mutation(conn, mutation, false)?;
                 return Ok((Err(RefreshRotationError::Invalid), None));
             };
 
+            let refresh = decode_redis_json::<RefreshToken>(&raw)?;
             if !self.refresh_grant_active(
                 conn,
                 refresh.refresh_grant.as_ref(),
@@ -318,6 +343,10 @@ impl RedisTokenStoreBackend {
                 return Ok((Err(RefreshRotationError::Invalid), None));
             }
             if refresh.rotated {
+                let outcome = self.commit_refresh_reuse_denial(conn, &refresh, &raw)?;
+                if outcome != REFRESH_ROTATION_OUTCOME_REUSED {
+                    return Err(Self::refresh_rotation_storage_error(&outcome));
+                }
                 let child_count =
                     self.revoke_refresh_family_direct(conn, token, now, &mut mutation)?;
                 self.apply_token_mutation(conn, mutation, true)?;

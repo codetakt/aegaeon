@@ -11,10 +11,11 @@ fn commit(
     now: u64,
     refresh_deadline: u64,
     root_deadline: u64,
+    grant: &super::super::super::refresh_grants::GrantCommit,
 ) -> redis::RedisResult<String> {
     invoke_refresh_rotation_commit(
         conn,
-        &super::super::super::refresh_grants::GrantCommit::independent_for_test(&keys[19]),
+        grant,
         RefreshRotationCommitKeys {
             mutation_barrier: &keys[0],
             previous_refresh: &keys[1],
@@ -95,6 +96,7 @@ fn redis_refresh_root_expiry_rejects_while_refresh_is_unexpired() -> Result<(), 
             now,
             refresh_deadline,
             root_deadline,
+            &super::super::super::refresh_grants::GrantCommit::independent_for_test(&keys[19]),
         )
         .map_err(|error| error.to_string())?;
         let (after, _): (u64, u64) = redis::cmd("TIME")
@@ -201,4 +203,94 @@ fn redis_refresh_root_fractional_comparator_boundaries() {
         .arg(&keys)
         .query::<usize>(&mut conn)
         .unwrap();
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_rotation_script_reuse_requires_and_commits_bound_grant_denial() {
+    use crate::authcode::types::{RefreshGrantRecord, RefreshGrantRef};
+    use std::time::{Duration, SystemTime};
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").unwrap();
+    let namespace = crate::config::RuntimeStateNamespace::for_tests(format!(
+        "rotation-reuse-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let backend = super::super::super::RedisTokenStoreBackend::new(&url, &namespace).unwrap();
+    let mut conn = backend.connection().unwrap();
+    let prefix = format!("rotation-reuse:{{{}}}", uuid::Uuid::new_v4());
+    let mut keys: [String; 21] = std::array::from_fn(|i| format!("{prefix}:{i}"));
+    keys[19] = backend.keyspace.version_key();
+    let (now, _): (u64, u64) = redis::cmd("TIME").query(&mut conn).unwrap();
+    let record = RefreshGrantRecord {
+        version: 1,
+        reference: RefreshGrantRef::new(),
+        client_id: "client".into(),
+        user_id: "user".into(),
+        revoked: false,
+        retain_until: SystemTime::UNIX_EPOCH + Duration::from_secs(now + 7200),
+    };
+    let grant_key = backend.keyspace.refresh_grant_key(&record.reference.id);
+    redis::cmd("SET")
+        .arg(&grant_key)
+        .arg(serde_json::to_string(&record).unwrap())
+        .query::<()>(&mut conn)
+        .unwrap();
+    let previous = serde_json::json!({"rotated":true,"expires_at":{"secs_since_epoch":now+3600,"nanos_since_epoch":0}}).to_string();
+    redis::cmd("SET")
+        .arg(&keys[1])
+        .arg(&previous)
+        .query::<()>(&mut conn)
+        .unwrap();
+    let independent =
+        super::super::super::refresh_grants::GrantCommit::independent_for_test(&keys[19]);
+    assert_eq!(
+        commit(
+            &mut conn,
+            &keys,
+            &previous,
+            now,
+            now + 3600,
+            now + 7200,
+            &independent
+        )
+        .unwrap(),
+        "invalid"
+    );
+    let plan = backend
+        .descendant_grant_commit(
+            &mut conn,
+            Some(&record.reference),
+            "client",
+            "user",
+            record.retain_until,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        commit(
+            &mut conn,
+            &keys,
+            &previous,
+            now,
+            now + 3600,
+            now + 7200,
+            &plan
+        )
+        .unwrap(),
+        "reused"
+    );
+    let raw: String = redis::cmd("GET").arg(&grant_key).query(&mut conn).unwrap();
+    let mut expected = record;
+    expected.revoked = true;
+    assert_eq!(
+        serde_json::from_str::<RefreshGrantRecord>(&raw).unwrap(),
+        expected
+    );
+    assert_eq!(
+        redis::cmd("EXISTS")
+            .arg(&[&keys[8], &keys[13], &keys[16]])
+            .query::<u64>(&mut conn)
+            .unwrap(),
+        0
+    );
 }

@@ -5,7 +5,8 @@ use crate::authcode::types::{RefreshGrantRecord, RefreshGrantRef};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Appended envelope: three keys and eight arguments. Existing script slots stay
-/// fixed. Publishers can separate expiry preparation from final authority
+/// fixed. The sixth argument can carry the exact denied pre-extension record.
+/// Publishers can separate expiry preparation from final authority
 /// publication; the combined helper preserves adjacent callers' commit shape.
 pub(super) struct GrantCommit {
     keys: [String; 3],
@@ -63,6 +64,12 @@ end
 local function publish_refresh_grant()
   if grant_mode ~= '0' then redis.call('SET', KEYS[gk], ARGV[ga+2]) end
 end
+local function deny_refresh_grant_reuse()
+  if grant_mode ~= '2' or ARGV[ga+5] == '' then return false end
+  redis.call('INCR', KEYS[gk+2])
+  redis.call('SET', KEYS[gk], ARGV[ga+5])
+  return true
+end
 local function commit_refresh_grant()
   prepare_refresh_grant_index()
   publish_refresh_grant()
@@ -89,6 +96,35 @@ impl GrantCommit {
 
     pub(super) fn script(body: &str) -> redis::Script {
         redis::Script::new(&format!("{PREPARE}\n{body}"))
+    }
+
+    /// Bind the rotated refresh observation and current authority to the denial.
+    /// Physical cleanup and its lock are deliberately outside this commit.
+    pub(super) fn deny_reuse(
+        &self,
+        conn: &mut redis::Connection,
+        refresh_key: &str,
+        expected_refresh: &str,
+    ) -> redis::RedisResult<String> {
+        if self.args[0] != "2" || self.args[5].is_empty() {
+            return Ok("invalid".into());
+        }
+        redis::Script::new(
+            r"
+if redis.call('GET', KEYS[1]) ~= ARGV[1] or redis.call('GET', KEYS[2]) ~= ARGV[2] then return 'stale' end
+-- Do not report reuse if version preparation or authority publication fails.
+redis.call('INCR', KEYS[3])
+redis.call('SET', KEYS[2], ARGV[3])
+return 'reused'
+",
+        )
+        .key(refresh_key)
+        .key(&self.keys[0])
+        .key(&self.keys[2])
+        .arg(expected_refresh)
+        .arg(&self.args[1])
+        .arg(&self.args[5])
+        .invoke(conn)
     }
 
     pub(super) fn append(&self, invocation: &mut redis::ScriptInvocation<'_>) {
@@ -333,8 +369,12 @@ return result
             return Ok(None);
         }
         let previous_deadline = record.retain_until;
+        let mut denied = record.clone();
+        denied.revoked = true;
         record.retain_until = record.retain_until.max(deadline);
-        GrantCommit::plan(self, "2", &raw, &record, previous_deadline).map(Some)
+        let mut commit = GrantCommit::plan(self, "2", &raw, &record, previous_deadline)?;
+        commit.args[5] = encode_redis_json(&denied)?;
+        Ok(Some(commit))
     }
 }
 #[cfg(test)]
@@ -422,3 +462,6 @@ mod acl_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod reuse_tests;

@@ -71,6 +71,7 @@ if not ok then
   return "refresh_decode"
 end
 if previous["rotated"] == true then
+  if not deny_refresh_grant_reuse() then return "invalid" end
   return "reused"
 end
 local previous_expires_at = system_time_epoch_secs(previous["expires_at"])

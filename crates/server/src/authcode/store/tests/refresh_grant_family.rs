@@ -816,3 +816,52 @@ fn refresh_grant_redis_sender_update_rechecks_exact_parent_expiry() {
         .sender_binding
         .is_none());
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn refresh_grant_reuse_denial_survives_physical_cleanup_lock_timeout() {
+    let store = store(true);
+    let (first_access, parent) = initial(&store, 600);
+    let (second_access, _) = rotate(&store, &parent, 900);
+    let mut replay_parent = parent.clone();
+    let replay = replay_parent.rotate();
+    let (access, meta) = pair(Some(&replay), 1200);
+    let keys = backend(&store).keyspace_for_tests();
+    let mut conn = redis_connection();
+    // A static competing lock blocks only later physical cleanup, not denial.
+    redis::cmd("SET")
+        .arg(keys.lock_key())
+        .arg("other-cleanup-owner")
+        .query::<()>(&mut conn)
+        .unwrap();
+    let result = store.store_refreshed_grant(&parent.token, access, replay, meta);
+    redis::cmd("DEL")
+        .arg(keys.lock_key())
+        .query::<()>(&mut conn)
+        .unwrap();
+    assert!(result.is_err(), "cleanup cannot acquire the competing lock");
+    let raw: String = redis::cmd("GET")
+        .arg(keys.refresh_grant_key(&parent.refresh_grant.as_ref().unwrap().id))
+        .query(&mut conn)
+        .unwrap();
+    let denied: crate::authcode::types::RefreshGrantRecord = serde_json::from_str(&raw).unwrap();
+    assert!(denied.revoked, "reuse denial must precede the cleanup lock");
+    for issued in [first_access, second_access] {
+        assert!(redis::cmd("EXISTS")
+            .arg(keys.access_key(&issued.token))
+            .query::<bool>(&mut conn)
+            .unwrap());
+        assert!(store
+            .try_verify_access_token(&issued.token)
+            .unwrap()
+            .is_none());
+        let validator = crate::authcode::TokenValidator::new(
+            store.clone(),
+            Arc::new(crate::kms::InMemoryKeyManager::new()),
+        );
+        assert_eq!(validator.introspect_token(&issued.token)["active"], false);
+        assert!(validator
+            .validate_bearer_token_with_meta(&format!("Bearer {}", issued.token))
+            .is_err());
+    }
+}

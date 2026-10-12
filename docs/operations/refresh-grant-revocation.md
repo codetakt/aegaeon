@@ -41,7 +41,10 @@ expires. Retention reaches the maximum committed refresh/access/metadata expiry;
 changing token lifetime does not shorten it. Grant revocation commits before
 bounded physical cleanup (4,096 refresh visits and 16,384 child tokens). Missing
 indexes or cleanup-budget failures cannot restore authority. Test snapshot
-replacement cannot overwrite the independent decision.
+replacement cannot overwrite the independent decision. Reuse compares the exact
+refresh and grant records and commits durable denial in one Redis operation
+before reporting reuse. A later cleanup lock timeout or error cannot reactivate
+that grant. The denial preserves its exact existing retention deadline.
 
 Missing, malformed or unsupported grant authority and inconsistent references
 are inactive. Redis failures remain errors. Introspection establishes caller
