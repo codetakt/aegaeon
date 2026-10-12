@@ -67,8 +67,121 @@ int main(void) {
 }
 """
 
+SCHEDULE_PROBE = r"""
+#include <string.h>
+#define DUDECT_IMPLEMENTATION
+#include "dudect.h"
+/* Exercise the real producer and trace framing with deterministic samples.
+ * Any accidental entry into the real measurement loop must fail. */
+uint8_t do_one_computation(uint8_t *data) { (void)data; abort(); }
+void prepare_inputs(dudect_config_t *c, uint8_t *data, uint8_t *classes) {
+    (void)c; (void)data; (void)classes; abort();
+}
+static void fixture_collect(dudect_ctx_t *ctx) {
+    size_t count = ctx->config->number_measurements;
+    ctx->timing_before = dudect_context();
+    for (size_t i = 0; i < count; ++i) {
+        ctx->classes[i] = i % 2;
+        dudect_input_classes[i % 2]++;
+        memset(ctx->input_data + i * ctx->config->chunk_size,
+               i % 2, ctx->config->chunk_size);
+        ctx->ticks[i] = (int64_t)i * 62;
+        ctx->exec_times[i] = 62;
+    }
+    if (ctx->batches == 0) {
+        ctx->pilot_center = 62;
+        prepare_percentiles(ctx);
+    } else update_statistics(ctx);
+    ctx->batches++;
+    ctx->timing_after = dudect_context();
+}
+#define dudect_collect fixture_collect
+#include "dudect_report.h"
+int main(int argc, char **argv) {
+    return dudect_run_case("ct_eq_128", 128, argc, argv);
+}
+"""
+
 
 class NativeTimingTests(unittest.TestCase):
+    def test_native_schedule_retains_uninspected_batches_and_requires_ack(self):
+        bound = binding("ct_eq_128", suite="nix")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, binary = root / "schedule.c", root / "schedule"
+            source.write_text(SCHEDULE_PROBE)
+            for compiler in ("clang", "gcc"):
+                command = [
+                    shutil.which(compiler),
+                    "-O2",
+                    "-std=c11",
+                    "-D_GNU_SOURCE=1",
+                    "-DAEGAEON_DUDECT_CANDIDATE=1",
+                    "-DAEGAEON_DUDECT_BATCH_SIZE=128",
+                    '-DAEGAEON_DUDECT_SUITE="nix"',
+                    "-I",
+                    str(ROOT / "c"),
+                    str(source),
+                    "-lm",
+                    "-o",
+                    str(binary),
+                    *[
+                        f'-DAEGAEON_DUDECT_{key.upper()}="{bound[key]}"'
+                        for key in ("build_sha256", "contract_sha256", "numerical_sha256")
+                    ],
+                ]
+                subprocess.run(command, check=True, capture_output=True, timeout=30)
+                for profile, wanted in (
+                    ("pr", [1, 2, 3, 4, 5, 6, 7, 16]),
+                    ("periodic", [1, 2, 4, 8, 16, 32, 64, 98]),
+                ):
+                    with self.subTest(compiler=compiler, profile=profile):
+                        bound["profile"] = profile
+                        timing, samples = root / "timing", root / "samples"
+                        with timing.open("wb") as out, samples.open("wb") as ordered:
+                            proc = subprocess.run(
+                                [str(binary), profile],
+                                input=b"c" * 8,
+                                env={
+                                    **os.environ,
+                                    TIMING_ENV: str(out.fileno()),
+                                    TRACE_ENV: str(ordered.fileno()),
+                                },
+                                pass_fds=(out.fileno(), ordered.fileno()),
+                                capture_output=True,
+                                check=True,
+                                timeout=30,
+                            )
+                        rows = [json.loads(line) for line in proc.stdout.splitlines()]
+                        self.assertEqual([row["batches"] for row in rows], wanted)
+                        self.assertEqual([row["look"] for row in rows], list(range(1, 9)))
+                        self.assertTrue(all(row["pilot"] == rows[0]["pilot"] for row in rows))
+                        self.assertEqual(sum(rows[-1]["statistics"][0][:2]), wanted[-1] * 117)
+                        with (
+                            patch("dudect_timing.BATCH_SIZE", 128),
+                            patch("dudect_diagnostics.BATCH_SIZE", 128),
+                        ):
+                            self.assertTrue(
+                                validate_timing(timing, {"ct_eq_128": bound}, profile)["complete"]
+                            )
+                            self.assertTrue(validate_trace(samples, bound, profile)["complete"])
+                        self.assertEqual(
+                            timing.stat().st_size,
+                            200 + CASE_V4.size + (wanted[-1] + 1) * (BATCH.size + 128 * 9),
+                        )
+                        self.assertEqual(
+                            samples.stat().st_size,
+                            200 + (wanted[-1] + 1) * (FRAME.size + 128 * 137),
+                        )
+                        failed = subprocess.run(
+                            [str(binary), profile],
+                            input=b"c" * 7,
+                            capture_output=True,
+                            check=False,
+                            timeout=30,
+                        )
+                        self.assertEqual(failed.returncode, 2)
+
     def test_original_ticks_pilot_context_and_multiple_cases_are_retained(self):
         names = ("compare_product_32", "ct_eq_128", "sha256", "hmac_sha256", "hmac_sha256_key")
         bindings = {name: binding(name) for name in names}

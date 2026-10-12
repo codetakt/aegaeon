@@ -75,15 +75,17 @@ static int dudect_run_case(const char *name, size_t chunk, int argc, char **argv
         return 0;
     }
     const int periodic = !strcmp(argv[1], "periodic");
-    const size_t looks[] = {1, 2, 4, 8, 16, 32, 64, 98};
+    const size_t pr_looks[] = {1, 2, 3, 4, 5, 6, 7, 16};
+    const size_t periodic_looks[] = {1, 2, 4, 8, 16, 32, 64, 98};
+    const size_t *looks = periodic ? periodic_looks : pr_looks;
     size_t look = 0;
     dudect_trace_t trace = dudect_trace_begin(name, &ctx);
     dudect_collect(&ctx);
     dudect_trace_batch(&trace, &ctx, 0);
-    for (size_t batch = 1; batch <= (periodic ? 98U : 7U); ++batch) {
+    for (size_t batch = 1; batch <= looks[7]; ++batch) {
         dudect_collect(&ctx);
         dudect_trace_batch(&trace, &ctx, batch);
-        if (periodic && batch != looks[look]) continue;
+        if (batch != looks[look]) continue;
         ++look;
         dudect_require(isfinite(ctx.pilot_center), "finite pilot");
         dudect_print_candidate(name, argv[1], &ctx, batch, look);

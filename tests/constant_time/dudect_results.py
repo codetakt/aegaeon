@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, NoReturn
+from typing import Any, ClassVar, NoReturn
 
 SCHEMA_VERSION = 2
 BATCH_SIZE = 65_536
@@ -15,6 +15,12 @@ NIX_CASES = ("ct_eq_32", "ct_eq_64", "ct_eq_128", "sha256", "hmac_sha256", "ed25
 PROFILES = {
     "pr": (tuple(range(1, 8)), 200_000, 900),
     "periodic": ((1, 2, 4, 8, 16, 32, 64, 98), 3_200_000, 7200),
+}
+# Version 2 replay keeps its original schedule. Current candidate artifacts have
+# a different numerical identity and must complete the additional final look.
+CANDIDATE_PROFILES = {
+    "pr": ((*range(1, 8), 16), 200_000, 900),
+    "periodic": PROFILES["periodic"],
 }
 NONDETECTION = "no_leakage_detected_within_budget"
 
@@ -119,13 +125,14 @@ def welch(values: list[Any]) -> dict[str, Any]:
 
 @dataclass
 class CaseAdmission:
+    profiles: ClassVar[dict[str, tuple[tuple[int, ...], int, int]]] = PROFILES
     name: str
     profile: str
     previous: dict[str, Any] | None = None
     next_look: int = 0
 
     def validate_header(self, data: Any) -> None:
-        looks, _, _ = PROFILES[self.profile]
+        looks, _, _ = self.profiles[self.profile]
         expected_keys = {
             "schema_version",
             "case",
@@ -202,7 +209,7 @@ class CaseAdmission:
         return raw_count
 
     def outcome(self, data: dict[str, Any], decisions: list[dict[str, Any]]) -> str:
-        looks, minimum, _ = PROFILES[self.profile]
+        looks, minimum, _ = self.profiles[self.profile]
         final = self.next_look + 1 == len(looks)
         if any(test["eligible"] and test["p"] < ALPHA for test in decisions):
             result = "leakage_detected"

@@ -1,6 +1,6 @@
 # Timing observation profiles
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -49,11 +49,35 @@ required. Evidence from one suite cannot replace the other.
 | --- | ---: | ---: |
 | Samples per batch | 65,536 | 65,536 |
 | Disjoint pilot batches | 1 | 1 |
-| Measured batches | 7 | 98 |
-| Inspection batches | 1 through 7 | 1, 2, 4, 8, 16, 32, 64, 98 |
+| Measured batches | 16 | 98 |
+| Inspection batches | 1 through 7, then 16 | 1, 2, 4, 8, 16, 32, 64, 98 |
 | Minimum observed raw samples, each class | 200,000 | 3,200,000 |
 | Maximum native runtime per case | 900 seconds | 7,200 seconds |
 | Raw mean standardized effect planning target | 0.02 | 0.005 |
+
+The PR budget adds a final inspection at batch 16 after preserving all seven
+original inspections. The eighth look uses the existing family allocation;
+there are no inspections at batches 8 through 15. This is a fixed schedule for
+every case, independent of observed counts or detections. An earlier detection
+remains a failure after the additional samples. Sparse crops still fail if the
+final count does not exceed 10,000 in each class.
+
+This budget addresses crop counts left insufficient by the seven-batch profile.
+It preserves the pilot, all 102 statistics, thresholds, raw floors and deadlines.
+It does not resolve detected timing differences or establish independence of
+observations. The numerical digest changes: previous seven-batch reports remain
+historical evidence and cannot satisfy the extended profile. Version 2 replay
+keeps its original schedule; the periodic profile is unchanged.
+
+Batch allocations stay fixed. Capturing the pilot and 16 measured batches uses
+17/8 of the previous raw trace storage; a traced Nix suite produces about 343 MiB
+of timing and full `ct_eq_128` input records, before metadata and copied evidence.
+The slowest case in the [retained failed CI](https://github.com/codetakt/aegaeon/actions/runs/38181712184)
+projects to about 670 seconds versus
+the existing 900-second deadline; the complete fresh Nix suite projects to about
+13 minutes versus its 30-minute job limit, excluding build/setup/upload time.
+These extrapolations assume comparable throughput and do not guarantee sufficient
+counts under drift. Timeouts and insufficient samples remain failures.
 
 Each case has its own runtime deadline, including its pilot and all inspections.
 Only completing a case starts the next case's budget; unused time cannot be

@@ -11,10 +11,10 @@ from typing import Any
 from dudect_process import ObservationStream, load_json
 from dudect_results import (
     BATCH_SIZE,
+    CANDIDATE_PROFILES as PROFILES,
     LEGACY_CASES,
     NIX_CASES,
     NONDETECTION,
-    PROFILES,
     STATISTICS,
     CaseAdmission,
     integer,
@@ -113,6 +113,7 @@ def input_audit(data: dict[str, Any], previous: dict[str, Any] | None) -> None:
 
 @dataclass
 class CandidateAdmission(CaseAdmission):
+    profiles = PROFILES
     binding: dict[str, str] = field(default_factory=dict)
     detected: bool = False
 

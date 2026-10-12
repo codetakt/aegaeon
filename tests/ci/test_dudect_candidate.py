@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import io
 import itertools
+import json
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,13 @@ from dudect_candidate import (
     CandidateStream,
     validate_candidate_report,
 )
-from dudect_results import BATCH_SIZE, PROFILES, CaseAdmission, validate_report
+from dudect_results import (
+    BATCH_SIZE,
+    CANDIDATE_PROFILES as PROFILES,
+    PROFILES as HISTORICAL_PROFILES,
+    CaseAdmission,
+    validate_report,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -142,10 +149,12 @@ int main(int argc, char **argv) {
     /* Excluded prefix and uninitialized tail must not reach support. */
     for (size_t i = 0; i < 10; ++i) ctx.exec_times[i] = INT64_MAX;
     ctx.exec_times[65535] = INT64_MAX;
-    for (size_t batch = 1; batch <= 7; ++batch) {
+    size_t look = 0;
+    for (size_t batch = 1; batch <= 16; ++batch) {
         update_statistics(&ctx);
         dudect_input_classes[0] += 32768; dudect_input_classes[1] += 32768;
-        dudect_print_candidate("compare", "pr", &ctx, batch, batch);
+        if (batch <= 7 || batch == 16)
+            dudect_print_candidate("compare", "pr", &ctx, batch, ++look);
     }
     dudect_free(&ctx); return 0;
 }
@@ -153,6 +162,50 @@ int main(int argc, char **argv) {
 
 
 class CandidateTests(unittest.TestCase):
+    def test_pr_extension_preserves_old_looks_and_requires_the_final_look(self):
+        self.assertEqual(HISTORICAL_PROFILES["pr"][0], tuple(range(1, 8)))
+        self.assertEqual(PROFILES["pr"][0], (1, 2, 3, 4, 5, 6, 7, 16))
+        self.assertEqual(PROFILES["pr"][1:], HISTORICAL_PROFILES["pr"][1:])
+        self.assertEqual(PROFILES["periodic"], HISTORICAL_PROFILES["periodic"])
+        for detected_at in (None, 1, 8):
+            stream = CandidateStream(("compare",), "pr", bindings={"compare": binding()})
+            for look in range(1, 8):
+                stream.observe(
+                    json.dumps(observation(look=look, effect=look == detected_at)).encode()
+                )
+            self.assertFalse(stream.decisions[-1]["collection_complete"])
+            with self.assertRaises(ValueError):
+                stream.finish(0)
+            stream.observe(json.dumps(observation(look=8, effect=detected_at == 8)).encode())
+            stream.finish(0)
+            self.assertEqual(
+                stream.decisions[-1]["candidate_statistical_outcome"],
+                "leakage_detected" if detected_at else "no_leakage_detected_within_budget",
+            )
+
+    def test_extended_budget_keeps_sparse_crops_inconclusive(self):
+        for final_count in (10000, 10001):
+            admission = CandidateAdmission("compare", "pr", binding=binding())
+            for look in range(1, 9):
+                row = observation(look=look, constant=True)
+                count = final_count if look == 8 else look * 1000
+                row["statistics"][1][:2] = [count, count]
+                for item in row["support"][1]:
+                    item["count"] = count
+                result = admission.admit(row)
+            self.assertEqual(
+                result["candidate_statistical_outcome"],
+                "inconclusive" if final_count == 10000 else "no_leakage_detected_within_budget",
+            )
+
+    def test_old_numerical_identity_cannot_be_relabelled(self):
+        old = "c076277da6117ef7254e7e4a6dfa48f49c96e075d88f8c6c493c0c8e40d43b69"
+        row = observation()
+        row["binding"]["numerical_sha256"] = old
+        admission = CandidateAdmission("compare", "pr", binding=row["binding"])
+        with self.assertRaisesRegex(ValueError, "numerical contract"):
+            admission.admit(row)
+
     def test_all_cases_both_profiles_keep_detected_differences(self):
         self.assertEqual(sum(map(len, CANDIDATE_CASES.values())), 21)
         self.assertEqual(ALPHA, 0.01 / (21 * 102 * 8))
@@ -172,7 +225,7 @@ class CandidateTests(unittest.TestCase):
 
     def test_constant_native_support_uses_exact_conditional_permutation(self):
         admission = CandidateAdmission("compare", "pr", binding=binding())
-        for look in range(1, 8):
+        for look in range(1, 9):
             result = admission.admit(observation(look=look, constant=True))
         self.assertEqual(
             result["candidate_statistical_outcome"], "no_leakage_detected_within_budget"
@@ -240,7 +293,7 @@ class CandidateTests(unittest.TestCase):
                 self.assertEqual(
                     final["identical_native_tick_candidates"], [] if mode else list(range(102))
                 )
-                self.assertEqual(acknowledgments.getvalue(), b"c" * 7)
+                self.assertEqual(acknowledgments.getvalue(), b"c" * 8)
 
     def test_native_crop_includes_the_entire_integer_boundary(self):
         # Both classes have only the boundary tick. Strict < used to empty all

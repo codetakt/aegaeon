@@ -6,7 +6,14 @@ import math
 import re
 from typing import Any
 
-from dudect_results import BATCH_SIZE, PROFILES, STATISTICS, integer, invalid, number
+from dudect_results import (
+    BATCH_SIZE,
+    CANDIDATE_PROFILES as PROFILES,
+    STATISTICS,
+    integer,
+    invalid,
+    number,
+)
 
 MAX_SUPPORT_COUNT = (BATCH_SIZE - 11) * max(profile[0][-1] for profile in PROFILES.values())
 

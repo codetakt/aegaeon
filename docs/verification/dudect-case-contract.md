@@ -1,6 +1,6 @@
 # Per-case timing observation contract
 
-Last updated: 2026-10-10
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -76,7 +76,12 @@ fixed calibration trials include failures and inconclusive runs in their results
 
 The family contains 21 executions × 102 statistics × at most eight looks. The
 per-inspection allocation is `5.835667600373483e-7`. Existing raw floors of
-200,000 / 3,200,000 and 7 / 98 measured batches remain. The normal raw-mean
+200,000 / 3,200,000 remain. The PR profile measures 16 batches, with inspections
+at 1 through 7 and 16; periodic still measures 98. The additional final PR look
+uses the previously reserved eighth look and cannot cancel earlier detection.
+The [profile budget](dudect.md#numerical-design) changes the numerical identity;
+seven-batch evidence cannot be admitted as an extended-profile result.
+The normal raw-mean
 planning approximation needs 197,075 / 3,153,193 observations per class for effects
 0.02 / 0.005 at 90% power. This approximation does not establish real power,
 second-order sensitivity or runtime.

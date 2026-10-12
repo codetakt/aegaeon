@@ -25,7 +25,7 @@ from dudect_package import (
     require_retained_tree,
 )
 from dudect_process import NativeError, load_json
-from dudect_results import PROFILES
+from dudect_results import CANDIDATE_PROFILES as PROFILES
 from dudect_summary import summarize_collection
 from dudect_support import require
 from run import Adapter, RunError, archive_existing, fail, fcntl, publish, write_json

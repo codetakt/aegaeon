@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests/constant_time"))
 from dudect_candidate import CANDIDATE_CASES, CONTROL_CASES
-from dudect_results import PROFILES
+from dudect_results import CANDIDATE_PROFILES as PROFILES
 from run_candidate import source_paths
 from test_dudect_candidate import observation
 
@@ -41,7 +41,7 @@ if 'AEGAEON_DUDECT_TIMING_FD' in os.environ and not options.get('omit_timing'):
         for name in dict.fromkeys(row['case'] for row in profile):
             width = 32 if name in INPUTS else 0
             timing.write(struct.pack('<64s5Q', name.encode(), STRIDES[name], width, 16, 16, 16))
-            for batch in range(99 if sys.argv[1] == 'periodic' else 8):
+            for batch in range(rows[sys.argv[1]][-1]['batches'] + 1):
                 timing.write(struct.pack('<18Q', batch, 65536, stamp, stamp + 1, *([0] * 14)))
                 stamp += 2
                 timing.seek(65536 * 9 - 1, 1)
@@ -53,7 +53,7 @@ if 'AEGAEON_DUDECT_TRACE_FD' in os.environ and not options.get('omit_trace'):
     with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TRACE_FD'])), 'wb') as trace:
         trace.write(b'AEGTRC02' + b''.join(binding[key].encode() for key in
                     ('build_sha256', 'contract_sha256', 'numerical_sha256')))
-        for batch in range(99 if sys.argv[1] == 'periodic' else 8):
+        for batch in range(rows[sys.argv[1]][-1]['batches'] + 1):
             trace.write(struct.pack('<4Q', batch, 65536, 128, 128))
             trace.seek(65536 * 137 - 1, 1)
             trace.write(b'\x00')

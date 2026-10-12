@@ -42,8 +42,8 @@ class ContractTests(unittest.TestCase):
         )
         self.assertEqual(cases["compare"]["looks"][0]["detected_statistics"][0]["id"], 0)
         sparse = cases["hmac_key_reject"]["looks"][-1]
-        self.assertEqual(sparse["ineligible_statistics"][0]["class_counts"], [2100, 2100])
-        self.assertEqual(sparse["retained_counts_since_previous_look"][1], [300, 300])
+        self.assertEqual(sparse["ineligible_statistics"][0]["class_counts"], [4800, 4800])
+        self.assertEqual(sparse["retained_counts_since_previous_look"][1], [2700, 2700])
         self.assertEqual(sparse["ineligible_statistics"][0]["reason"], "insufficient_count")
         degenerate = cases["compare_product_32"]["looks"][-1]["ineligible_statistics"][0]
         self.assertEqual(degenerate["reason"], "degenerate_variance")
@@ -64,7 +64,7 @@ class ContractTests(unittest.TestCase):
         for row in rows["compare"]["pr"]:
             row["statistics"][0][2] = 103
         for row in rows["hmac_key_reject"]["pr"]:
-            count = row["look"] * 300
+            count = row["batches"] * 300
             row["statistics"][1][:2] = [count, count]
             # Keep variance consistent with the reduced sample, so this is a
             # valid sparse observation rather than malformed native moments.
@@ -127,7 +127,7 @@ class ContractTests(unittest.TestCase):
         row = observation("ed25519", look=1, effect=True)
         admission = CandidateAdmission("ed25519", "pr", binding=row["binding"])
         history = [
-            admission.admit(observation("ed25519", look=i, effect=i == 1)) for i in range(1, 8)
+            admission.admit(observation("ed25519", look=i, effect=i == 1)) for i in range(1, 9)
         ]
         result = assess_case("legacy/ed25519", "public_fixture_characterization", history, "pr")
         self.assertEqual(result["statistical_outcome"], "leakage_detected")
@@ -139,7 +139,7 @@ class ContractTests(unittest.TestCase):
         row = observation("control_variance_shift", effect=True)
         admission = CandidateAdmission(row["case"], "pr", binding=row["binding"])
         history = [
-            admission.admit(observation(row["case"], look=i, effect=True)) for i in range(1, 8)
+            admission.admit(observation(row["case"], look=i, effect=True)) for i in range(1, 9)
         ]
         with self.assertRaisesRegex(ValueError, "statistic 101"):
             assess_case(

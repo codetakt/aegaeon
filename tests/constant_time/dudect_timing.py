@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from dudect_diagnostics import HEADER_SIZE, file_identity
 from dudect_distribution import summarize_context, summarize_distribution
-from dudect_results import BATCH_SIZE, PROFILES
+from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES as PROFILES
 from dudect_support import require
 
 if TYPE_CHECKING:

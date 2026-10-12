@@ -36,7 +36,7 @@ from dudect_diagnostics import (
     validate_trace,
 )
 from dudect_process import load_json, receive, terminate
-from dudect_results import BATCH_SIZE, PROFILES, STATISTICS
+from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES as PROFILES, STATISTICS
 from dudect_support import require
 from dudect_timing import TIMING_ENV, TIMING_NAME, validate_timing
 from run import (

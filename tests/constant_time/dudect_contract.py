@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from dudect_candidate import ALPHA, CANDIDATE_CASES, NUMERICAL_SHA256, validate_candidate_report
-from dudect_results import NONDETECTION, PROFILES
+from dudect_results import CANDIDATE_PROFILES as PROFILES, NONDETECTION
 from dudect_support import require
 
 CONTRACT_COMPLETE = "observation_contract_satisfied"

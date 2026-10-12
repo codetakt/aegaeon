@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from dudect_candidate import canonical
-from dudect_results import BATCH_SIZE, PROFILES
+from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES as PROFILES
 from dudect_support import require
 
 TRACE_NAME = "native.samples"

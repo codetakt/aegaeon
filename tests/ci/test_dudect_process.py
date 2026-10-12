@@ -129,7 +129,7 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
 
     def program(self, delays=(0, 0), *, per_look=0, final_exit=0):
         rows = [
-            [json.dumps(candidate_observation(name, look=look)) for look in range(1, 8)]
+            [json.dumps(candidate_observation(name, look=look)) for look in range(1, 9)]
             for name in self.names
         ]
         bound = self.bindings[self.names[0]]
@@ -143,7 +143,7 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
             " stamp=1\n"
             " for name, stride in [('ct_eq_32',32), ('ct_eq_64',64)]:\n"
             "  f.write(struct.pack('<64s5Q',name.encode(),stride,0,16,16,16))\n"
-            "  for batch in range(8):\n"
+            "  for batch in range(17):\n"
             "   f.write(struct.pack('<18Q',batch,65536,stamp,stamp+1,*([0]*14)))\n"
             "   stamp+=2\n"
             "   f.seek(65536*9-1,1)\n   f.write(b'\\0')\n"
@@ -157,7 +157,7 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
         self.binary.chmod(0o755)
 
     def execute(self):
-        with patch.dict("run_candidate.PROFILES", {"pr": (tuple(range(1, 8)), 200000, 1.0)}):
+        with patch.dict("run_candidate.PROFILES", {"pr": ((*range(1, 8), 16), 200000, 1.0)}):
             return collect(self.root, self.root, self.binary, "pr", self.bindings)
 
     def assert_deadline(self):

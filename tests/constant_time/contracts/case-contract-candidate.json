@@ -522,7 +522,7 @@
     "family_alpha": 0.01,
     "per_inspection_alpha": 5.835667600373483e-07,
     "batch": 65536,
-    "PR_measured_batches": 7,
+    "PR_measured_batches": 16,
     "periodic_measured_batches": 98,
     "raw_per_class_floors": {
       "pr": 200000,
@@ -539,7 +539,7 @@
     "crop_membership": "tick <= frozen empirical pilot quantile; include complete integer ties, with all100 statistics and observed-count floors retained",
     "target_case_count": 15,
     "runtime_control_executions": 6,
-    "implementation_sha256": "c076277da6117ef7254e7e4a6dfa48f49c96e075d88f8c6c493c0c8e40d43b69"
+    "implementation_sha256": "ff0c53a9b2fd02566e98390011dc131bb834ec66033892def3217658492c1340"
   },
   "schema_migration": {
     "candidate_version": 4,
