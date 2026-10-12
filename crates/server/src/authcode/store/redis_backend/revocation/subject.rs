@@ -101,7 +101,6 @@ impl RedisTokenStoreBackend {
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
             self.revoke_subject_grant_authority(conn, subject)?;
-            let mut count = 0usize;
 
             for token in self.subject_access_tokens(conn, subject)? {
                 let Some(access) =
@@ -128,7 +127,6 @@ impl RedisTokenStoreBackend {
                     mutation.delete_bearer_token(access.token.clone());
                     mutation.revoke_until(access.token, meta.expires_at, now);
                 }
-                count = count.saturating_add(1);
             }
 
             let mut family_budget = RefreshFamilyRevocationBudget::new();
@@ -151,14 +149,13 @@ impl RedisTokenStoreBackend {
                     mutation.delete_refresh_token(token);
                     continue;
                 }
-                count = count.saturating_add(1);
-                count = count.saturating_add(self.revoke_refresh_family_direct_with_budget(
+                self.revoke_refresh_family_direct_with_budget(
                     conn,
                     &refresh.token,
                     now,
                     &mut mutation,
                     &mut family_budget,
-                )?);
+                )?;
             }
 
             for token in self.subject_bearer_tokens(conn, subject)? {
@@ -184,6 +181,12 @@ impl RedisTokenStoreBackend {
                 mutation.revoke_until(meta.token_id, meta.expires_at, now);
             }
 
+            // A token may be selected directly and through several family links.
+            // Metadata and stale index entries are not additional tokens.
+            let count = mutation
+                .delete_access_tokens
+                .len()
+                .saturating_add(mutation.delete_refresh_tokens.len());
             self.apply_token_mutation(conn, mutation, count > 0)?;
             Ok(count)
         })

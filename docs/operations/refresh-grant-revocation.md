@@ -136,3 +136,10 @@ invalidation of affected generations and another full drain; running an old
 binary against preserved active tokens is not a rollback procedure. Keep originals
 private and immutable. This upgrade does not authorize production cleanup or
 change the separate code-replay/client-deletion revocation triggers.
+
+Subject-wide revocation reports each retained access or refresh record selected
+for removal once in `revokedTokenCount`, including refresh successors reached
+through a family. Bearer metadata, stale index entries and repeated family links
+are not additional tokens. This is a cleanup count, not a count of every token
+whose grant authority is denied. Reuse commits retain the shared version/type
+preflight and Redis-time deadline checks before publishing denial.

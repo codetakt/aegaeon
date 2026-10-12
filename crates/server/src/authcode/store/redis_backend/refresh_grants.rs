@@ -109,22 +109,13 @@ impl GrantCommit {
         if self.args[0] != "2" || self.args[5].is_empty() {
             return Ok("invalid".into());
         }
-        redis::Script::new(
-            r"
-if redis.call('GET', KEYS[1]) ~= ARGV[1] or redis.call('GET', KEYS[2]) ~= ARGV[2] then return 'stale' end
--- Do not report reuse if version preparation or authority publication fails.
-redis.call('INCR', KEYS[3])
-redis.call('SET', KEYS[2], ARGV[3])
-return 'reused'
-",
-        )
-        .key(refresh_key)
-        .key(&self.keys[0])
-        .key(&self.keys[2])
-        .arg(expected_refresh)
-        .arg(&self.args[1])
-        .arg(&self.args[5])
-        .invoke(conn)
+        let script = redis::Script::new(&format!(
+            "if redis.call('GET', KEYS[1]) ~= ARGV[1] or redis.call('GET', KEYS[2]) ~= ARGV[3] then return 'stale' end\n{PREPARE}\nif not deny_refresh_grant_reuse() then return 'invalid' end\nreturn 'reused'"
+        ));
+        let mut invocation = script.prepare_invoke();
+        invocation.key(refresh_key).arg(expected_refresh);
+        self.append(&mut invocation);
+        invocation.invoke(conn)
     }
 
     pub(super) fn append(&self, invocation: &mut redis::ScriptInvocation<'_>) {

@@ -104,7 +104,7 @@ fn revoke_tokens_by_subject_revokes_matching_refresh_tokens() -> StoreTestResult
         store.try_revoke_tokens_by_subject("user-A"),
         "in-memory subject revocation should succeed",
     );
-    assert_eq!(count, 3); // initial refresh, access and metadata
+    assert_eq!(count, 2); // one refresh and one access; metadata is not another token
     assert!(is_refresh_revoked(&store, &token1));
     assert!(!is_refresh_revoked(&store, &token2));
     Ok(())
@@ -129,8 +129,8 @@ fn revoke_tokens_by_subject_cascades_to_child_access_tokens() -> StoreTestResult
         store.try_revoke_tokens_by_subject("user-A"),
         "in-memory subject revocation should succeed",
     );
-    // refresh + access = at least 2 (access may be counted directly or via cascade)
-    assert!(count >= 2);
+    // The access record is counted once despite also being a family child.
+    assert_eq!(count, 2);
     assert!(verify_access_token(&store, &at_str).is_none());
     assert!(is_refresh_revoked(&store, &rt_str));
     Ok(())

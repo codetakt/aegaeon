@@ -22,7 +22,8 @@ impl TokenStore {
         {
             record.revoked = true;
         }
-        let mut count = 0usize;
+        let access_count_before = state.access_tokens.len();
+        let refresh_count_before = state.refresh_tokens.len();
 
         let access_keys: Vec<String> = state
             .access_tokens
@@ -34,7 +35,6 @@ impl TokenStore {
             if let Some(token) = state.access_tokens.remove(key) {
                 Self::insert_access_revoked_locked(state, key.clone(), &token, now);
             }
-            count += 1;
         }
 
         let refresh_keys: Vec<String> = state
@@ -45,8 +45,7 @@ impl TokenStore {
             .collect();
         for key in &refresh_keys {
             if state.refresh_tokens.contains_key(key) {
-                count = count.saturating_add(1);
-                count = count.saturating_add(Self::revoke_refresh_family_locked(state, key, now)?);
+                Self::revoke_refresh_family_locked(state, key, now)?;
             }
         }
 
@@ -62,6 +61,9 @@ impl TokenStore {
             }
         }
 
+        let count = access_count_before
+            .saturating_sub(state.access_tokens.len())
+            .saturating_add(refresh_count_before.saturating_sub(state.refresh_tokens.len()));
         if count > 0 {
             state.version = state.version.saturating_add(1);
         }

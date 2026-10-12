@@ -99,7 +99,7 @@ fn rotate(store: &TokenStore, previous: &RefreshToken, ttl: u64) -> (AccessToken
 }
 
 fn family_cases(redis: bool) {
-    for generation in [1, 2] {
+    for generation in [0, 1, 2] {
         let store = store(redis);
         let (a1, r1) = initial(&store, 600);
         let (other, _) = initial(&store, 600);
@@ -864,4 +864,51 @@ fn refresh_grant_reuse_denial_survives_physical_cleanup_lock_timeout() {
             .validate_bearer_token_with_meta(&format!("Bearer {}", issued.token))
             .is_err());
     }
+}
+
+fn subject_counts_each_stored_token_once(redis: bool) {
+    let store = store(redis);
+    let (a1, r1) = initial(&store, 600);
+    let (a2, r2) = rotate(&store, &r1, 900);
+    let (a3, r3) = rotate(&store, &r2, 1200);
+    let (independent, independent_refresh) = initial(&store, 600);
+    let (mut other, mut other_meta) = pair(None, 600);
+    other.user_id = "another-user".into();
+    other_meta.user_id = other.user_id.clone();
+    store
+        .store_issued_grant(other.clone(), None, other_meta)
+        .unwrap();
+    // Repeated and stale links must consume their cleanup budget without
+    // inflating the number of distinct retained token records removed.
+    store.try_bind_refresh_access(&r1.token, &a3.token).unwrap();
+    store.try_bind_refresh_access(&r2.token, &a3.token).unwrap();
+    store
+        .try_bind_refresh_access(&r1.token, "missing-child")
+        .unwrap();
+    assert_eq!(store.try_revoke_tokens_by_subject("user").unwrap(), 8);
+    for access in [a1, a2, a3, independent] {
+        assert!(store
+            .try_verify_access_token(&access.token)
+            .unwrap()
+            .is_none());
+    }
+    for refresh in [r1, r2, r3, independent_refresh] {
+        assert!(store.try_is_refresh_revoked(&refresh.token).unwrap());
+    }
+    assert!(store
+        .try_verify_access_token(&other.token)
+        .unwrap()
+        .is_some());
+    assert_eq!(store.try_revoke_tokens_by_subject("user").unwrap(), 0);
+}
+
+#[test]
+fn subject_revocation_counts_distinct_records_memory() {
+    subject_counts_each_stored_token_once(false);
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_subject_revocation_counts_distinct_records() {
+    subject_counts_each_stored_token_once(true);
 }

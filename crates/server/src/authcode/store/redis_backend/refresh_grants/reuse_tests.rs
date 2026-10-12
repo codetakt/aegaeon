@@ -162,7 +162,7 @@ fn redis_reuse_denial_rejects_stale_refresh_and_grant_observations() {
 #[test]
 #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
 fn redis_reuse_denial_does_not_report_success_after_version_failure() {
-    for version in ["bad", "9223372036854775807"] {
+    for version in ["-1", "bad", "9223372036854775807"] {
         let mut f = Fixture::new();
         let plan = f.plan();
         redis::cmd("SET")
@@ -170,9 +170,86 @@ fn redis_reuse_denial_does_not_report_success_after_version_failure() {
             .arg(version)
             .query::<()>(&mut f.conn)
             .unwrap();
-        assert!(plan
-            .deny_reuse(&mut f.conn, &f.previous_key, "rotated-observation")
-            .is_err());
+        assert_eq!(
+            plan.deny_reuse(&mut f.conn, &f.previous_key, "rotated-observation")
+                .unwrap(),
+            "version_exhausted"
+        );
+        assert_eq!(
+            redis::cmd("GET")
+                .arg(f.backend.keyspace.version_key())
+                .query::<String>(&mut f.conn)
+                .unwrap(),
+            version
+        );
         assert_eq!(f.stored(), f.record);
+    }
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_reuse_denial_rechecks_grant_deadline_before_publication() {
+    let mut f = Fixture::new();
+    // A frozen plan whose deadline has elapsed when Redis evaluates it.
+    // No wall-clock sleep or race is needed to exercise the commit boundary.
+    f.record.retain_until = UNIX_EPOCH + Duration::new(1, 123_456_789);
+    let raw = encode_redis_json(&f.record).unwrap();
+    redis::cmd("SET")
+        .arg(f.backend.keyspace.refresh_grant_key(&f.record.reference.id))
+        .arg(&raw)
+        .query::<()>(&mut f.conn)
+        .unwrap();
+    let mut plan =
+        GrantCommit::plan(&f.backend, "2", &raw, &f.record, f.record.retain_until).unwrap();
+    let mut denied = f.record.clone();
+    denied.revoked = true;
+    plan.args[5] = encode_redis_json(&denied).unwrap();
+    assert_eq!(
+        plan.deny_reuse(&mut f.conn, &f.previous_key, "rotated-observation")
+            .unwrap(),
+        "invalid"
+    );
+    assert_eq!(f.stored(), f.record);
+    assert!(!redis::cmd("EXISTS")
+        .arg(f.backend.keyspace.version_key())
+        .query::<bool>(&mut f.conn)
+        .unwrap());
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_reuse_denial_rejects_wrong_version_and_index_types() {
+    for version_key in [true, false] {
+        let mut f = Fixture::new();
+        let plan = f.plan();
+        let key = if version_key {
+            f.backend.keyspace.version_key()
+        } else {
+            f.backend.keyspace.expiry_refresh_grant_key()
+        };
+        redis::cmd("LPUSH")
+            .arg(&key)
+            .arg("wrong-type")
+            .query::<()>(&mut f.conn)
+            .unwrap();
+        assert_eq!(
+            plan.deny_reuse(&mut f.conn, &f.previous_key, "rotated-observation")
+                .unwrap(),
+            if version_key {
+                "version_type"
+            } else {
+                "grant_type"
+            }
+        );
+        assert_eq!(f.stored(), f.record);
+        assert_eq!(
+            redis::cmd("LRANGE")
+                .arg(key)
+                .arg(0)
+                .arg(-1)
+                .query::<Vec<String>>(&mut f.conn)
+                .unwrap(),
+            ["wrong-type"]
+        );
     }
 }
