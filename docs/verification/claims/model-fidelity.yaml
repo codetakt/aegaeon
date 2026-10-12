@@ -16,6 +16,7 @@ modules:
   fstar/authcode/AuthCode.Snapshot.fst: simplified
   fstar/authcode/AuthCode.RedisFlag.fst: simplified
   fstar/authcode/Authorization.ProjectionRevision.fst: simplified
+  # Includes GrantCommit envelope; clock predicate is a checked fixture premise.
   fstar/authcode/AuthCode.RedisGrant.fst: simplified
   fstar/authcode/AuthCode.Store.fst: faithful
   fstar/authcode/AuthCode.Types.fst: faithful

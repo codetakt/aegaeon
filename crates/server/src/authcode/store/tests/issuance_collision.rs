@@ -86,35 +86,16 @@ fn authorization_code_grant_commit_rejects_payload_mismatch_without_consuming_co
     Ok(())
 }
 
+
 #[test]
 fn store_access_for_refresh_parent_rejects_token_key_collision() -> StoreTestResult {
     let store = TokenStore::new_process_local_for_tests();
-    let refresh_parent = store_refresh_token(&store, make_refresh_token("refresh-parent-collision"));
-    must_ok!(
-        store.store_access_for_refresh_parent(
-            make_access_token("refresh-parent-collision-access"),
-            make_bearer_meta(
-                "refresh-parent-collision-access",
-                Some(&refresh_parent),
-            ),
-        ),
-        "initial refresh-parent access token should be stored",
-    );
-
-    let err = must_err!(
-        store.store_access_for_refresh_parent(
-            make_access_token("refresh-parent-collision-access"),
-            make_bearer_meta(
-                "refresh-parent-collision-access",
-                Some(&refresh_parent),
-            ),
-        ),
-        "refresh-parent token collision must fail closed",
-    );
-
-    assert!(
-        err.contains("token key collision"),
-        "unexpected collision error: {err}"
-    );
+    let parent = issue_refresh_fixture(&store, make_refresh_token("refresh-parent-collision"));
+    let mut access = make_access_token("refresh-parent-collision-access");
+    let mut meta = make_bearer_meta(&access.token, Some(&parent.token));
+    copy_fixture_lineage(&store, &mut access, &mut meta);
+    store.store_access_for_refresh_parent(access.clone(), meta.clone())?;
+    let err = store.store_access_for_refresh_parent(access, meta).expect_err("collision rejected");
+    assert!(err.contains("token key collision"), "unexpected collision error: {err}");
     Ok(())
 }

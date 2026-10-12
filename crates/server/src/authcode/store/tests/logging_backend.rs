@@ -15,6 +15,7 @@ fn token_store_logs_only_secret_fingerprints() -> StoreTestResult {
     let expires_at = now + Duration::from_secs(60);
     let store = TokenStore::new_process_local_for_tests();
     let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: access_token.to_string(),

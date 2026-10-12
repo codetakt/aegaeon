@@ -1,6 +1,5 @@
-use super::super::super::redis_support::{RedisRefreshSuccessorRecord, RedisTokenMutation};
+use super::super::super::redis_support::RedisTokenMutation;
 use super::super::RedisTokenStoreBackend;
-use super::family::RefreshFamilyRevocationBudget;
 use crate::authcode::store::{
     ClientBoundRevocationOutcome, TokenRevocationOutcome, TokenStoreStorageError,
 };
@@ -15,13 +14,31 @@ impl RedisTokenStoreBackend {
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
     ) -> Result<TokenRevocationOutcome, TokenStoreStorageError> {
-        let bearer_meta = Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?;
+        let bearer_meta = Self::get_observed_json::<BearerTokenMeta>(
+            conn,
+            self.keyspace.bearer_key(token),
+            mutation,
+        )?;
+        if bearer_meta
+            .as_ref()
+            .is_some_and(|meta| meta.token_id != token)
+        {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "bearer cleanup identity mismatch".into(),
+            ));
+        }
         if bearer_meta.is_some() {
             mutation.delete_bearer_token(token.to_string());
         }
 
-        if let Some(access) = Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
+        if let Some(access) =
+            Self::get_observed_json::<AccessToken>(conn, self.keyspace.access_key(token), mutation)?
         {
+            if access.token != token {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "access cleanup identity mismatch".into(),
+                ));
+            }
             mutation.delete_access_token(token.to_string());
             mutation.revoke_access_until(token.to_string(), &access, now);
             if let Some(meta) = bearer_meta {
@@ -30,44 +47,14 @@ impl RedisTokenStoreBackend {
             return Ok(TokenRevocationOutcome::AccessToken);
         }
 
-        if let Some(refresh) =
-            Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(token))?
+        if Self::get_observed_json::<RefreshToken>(
+            conn,
+            self.keyspace.refresh_key(token),
+            mutation,
+        )?
+        .is_some()
         {
-            self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
-            mutation.delete_refresh_token(token.to_string());
-            mutation.revoke_until(token.to_string(), refresh.expires_at, now);
-            if let Some(meta) = bearer_meta {
-                mutation.revoke_until(token.to_string(), meta.expires_at, now);
-            }
-
-            let mut budget = RefreshFamilyRevocationBudget::new();
-            budget.consume_refresh_visit(token)?;
-            let child_tokens = self.refresh_children(conn, token)?;
-            mutation.delete_key(self.keyspace.refresh_children_key(token));
-            budget.consume_child_tokens(token, child_tokens.len())?;
-            let mut child_count = child_tokens.len();
-            if let Some(successor) = Self::get_json::<RedisRefreshSuccessorRecord>(
-                conn,
-                self.keyspace.refresh_successor_key(token),
-            )? {
-                mutation.delete_key(self.keyspace.refresh_successor_key(token));
-                mutation.delete_key(
-                    self.keyspace
-                        .refresh_predecessor_key(&successor.successor_refresh),
-                );
-                child_count =
-                    child_count.saturating_add(self.revoke_refresh_family_direct_with_budget(
-                        conn,
-                        &successor.successor_refresh,
-                        now,
-                        mutation,
-                        &mut budget,
-                    )?);
-            }
-            mutation.delete_key(self.keyspace.refresh_predecessor_key(token));
-            for child in child_tokens {
-                self.revoke_access_and_meta_direct(conn, &child, now, mutation)?;
-            }
+            let child_count = self.revoke_refresh_family_direct(conn, token, now, mutation)?;
             return Ok(TokenRevocationOutcome::RefreshToken { child_count });
         }
 
@@ -77,6 +64,32 @@ impl RedisTokenStoreBackend {
         }
 
         Ok(TokenRevocationOutcome::Unknown)
+    }
+
+    fn observed_token_client_id(
+        &self,
+        conn: &mut redis::Connection,
+        token: &str,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<String>, TokenStoreStorageError> {
+        if let Some(access) =
+            Self::get_observed_json::<AccessToken>(conn, self.keyspace.access_key(token), mutation)?
+        {
+            return Ok(Some(access.client_id));
+        }
+        if let Some(refresh) = Self::get_observed_json::<RefreshToken>(
+            conn,
+            self.keyspace.refresh_key(token),
+            mutation,
+        )? {
+            return Ok(Some(refresh.client_id));
+        }
+        Ok(Self::get_observed_json::<BearerTokenMeta>(
+            conn,
+            self.keyspace.bearer_key(token),
+            mutation,
+        )?
+        .map(|meta| meta.client_id))
     }
 
     pub(in crate::authcode::store) fn revoke_token(
@@ -107,7 +120,7 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
-            let owner = self.known_token_client_id_direct(conn, token)?;
+            let owner = self.observed_token_client_id(conn, token, &mut mutation)?;
             if let (Some(owner), Some(requester)) = (owner.as_deref(), requesting_client_id) {
                 if owner != requester {
                     self.apply_token_mutation(conn, mutation, false)?;

@@ -114,3 +114,41 @@ fn refresh_rotation_commit_script_treats_corrupt_revoked_payload_as_storage_erro
     assert!(decode_revoked < revoked_decode);
     assert!(revoked_decode < revoked_active_invalid);
 }
+
+#[test]
+fn refresh_rotation_fractional_deadline_slots_preserve_nanoseconds() {
+    use super::super::contract::RedisScriptArg;
+    let args = super::RefreshRotationCommitArgs {
+        now_epoch_secs: 1,
+        has_exchange_root: true,
+        exchange_root_deadline_epoch_secs: 123,
+        exchange_root_deadline_nanos: 987_654_321,
+        previous_refresh_token: "previous",
+        expected_previous_payload: "expected",
+        rotated_previous_payload: "rotated",
+        new_refresh_payload: "next",
+        new_refresh_token: "next-id",
+        new_refresh_expires_at_epoch_secs: 456,
+        successor_payload: "successor",
+        predecessor_payload: "predecessor",
+        new_children_payload: "children",
+        has_grant: false,
+        access_payload: "",
+        access_token: "",
+        access_expires_at_epoch_secs: 0,
+        bearer_payload: "",
+        bearer_token_id: "",
+        bearer_expires_at_epoch_secs: 0,
+    }
+    .ordered();
+    assert_eq!(args.len(), 20);
+    assert!(matches!(args[18], RedisScriptArg::U64(123)));
+    assert!(matches!(args[19], RedisScriptArg::U64(987_654_321)));
+    assert!(!super::COMMIT_REFRESH_ROTATION.contains("redis.call(\"TIME\")"));
+    assert_eq!(
+        super::COMMIT_REFRESH_ROTATION
+            .matches("redis_commit_time()")
+            .count(),
+        1
+    );
+}

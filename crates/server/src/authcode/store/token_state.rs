@@ -8,6 +8,7 @@ use std::time::SystemTime;
 /// Immutable snapshot of the token store
 #[derive(Clone, Debug, Default)]
 pub struct TokenSnapshot {
+    pub refresh_grants: HashMap<String, crate::authcode::types::RefreshGrantRecord>,
     pub access_tokens: HashMap<String, AccessToken>,
     pub refresh_tokens: HashMap<String, RefreshToken>,
     pub revoked_tokens: HashSet<String>,
@@ -18,6 +19,8 @@ pub struct TokenSnapshot {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[cfg(test)]
 pub(super) struct TokenStoreState {
+    #[serde(default)]
+    pub(super) refresh_grants: HashMap<String, crate::authcode::types::RefreshGrantRecord>,
     pub(super) access_tokens: HashMap<String, AccessToken>,
     pub(super) refresh_tokens: HashMap<String, RefreshToken>,
     pub(super) revoked_tokens: HashMap<String, SystemTime>,

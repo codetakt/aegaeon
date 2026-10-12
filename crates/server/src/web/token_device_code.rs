@@ -115,6 +115,23 @@ async fn device_application_authorization(
     Ok((snapshot, guard))
 }
 
+fn device_access_token_response(
+    access_token: &str,
+    token_type: &str,
+    expires_in: u64,
+    scope: Option<&str>,
+) -> Response {
+    let mut body = json!({
+        "access_token": access_token,
+        "token_type": token_type,
+        "expires_in": expires_in,
+    });
+    if let Some(scope) = scope {
+        body["scope"] = json!(scope);
+    }
+    token_json_response(StatusCode::OK, body)
+}
+
 async fn approved_device_grant_response(
     state: &AppState,
     ctx: &TokenEndpointContext,
@@ -165,6 +182,7 @@ async fn approved_device_grant_response(
     };
     let token_type = AccessToken::type_for_confirmation(ctx.cnf_for_at.as_ref());
     let access = AccessToken {
+        refresh_grant: None,
         exchange_root: None,
         client_credentials_digest: None,
         token: access_token.clone(),
@@ -209,15 +227,12 @@ async fn approved_device_grant_response(
     {
         return token_internal_error_response("device_code_access_token_store", Some(&error));
     }
-    let mut body = json!({
-        "access_token": access_token,
-        "token_type": token_type,
-        "expires_in": expires_in,
-    });
-    if let Some(scope) = grant.scope {
-        body["scope"] = json!(scope);
-    }
-    token_json_response(StatusCode::OK, body)
+    device_access_token_response(
+        &access_token,
+        token_type,
+        expires_in,
+        grant.scope.as_deref(),
+    )
 }
 
 pub(super) async fn handle_token_device_code_grant(

@@ -16,7 +16,6 @@ crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.r
 crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
 crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
 crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:                    .unwrap_or_default(),
-crates/server/src/authcode/store/redis_backend/writes/authorization_code_grant.rs:            .unwrap_or_default();
 
 # These protocol collections define absence as an empty scope/key/session/filter set.
 crates/server/src/dcr/everparse.rs:        .unwrap_or_default();

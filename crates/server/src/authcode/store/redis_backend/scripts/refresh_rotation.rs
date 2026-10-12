@@ -1,18 +1,37 @@
+use super::super::refresh_grants::GrantCommit;
 use super::contract::{redis_bool, LuaSlot, RedisScriptArg};
 
 const COMMIT_REFRESH_ROTATION: &str = r#"
+-- The legacy caller timestamp remains a validated envelope slot; only Redis TIME
+-- is authoritative for expiry after a paused writer resumes.
+if not tonumber(ARGV[1]) then return "invalid" end
 if redis.call("EXISTS", KEYS[1]) == 1 then
   return "busy"
 end
 
-if ARGV[18] == "1" then
-  if redis.call("EXISTS", KEYS[21]) == 1 or tonumber(redis.call("TIME")[1]) >= tonumber(ARGV[19]) then
-    return "invalid"
+local write_types = {'string','string','string','zset','string','string','string','string','string','set','set','zset','string','string','set','zset','string','set','zset','string'}
+for i=2,20 do
+  if i < 14 or i > 19 or ARGV[11] == '1' then
+    local actual = redis.call('TYPE', KEYS[i]).ok
+    if actual ~= 'none' and actual ~= write_types[i] then return 'index_type' end
   end
 end
-local now_epoch_secs = tonumber(ARGV[1])
+local current_time = redis_commit_time()
+local now_epoch_secs = tonumber(current_time[1])
+local now_epoch_nanos = tonumber(current_time[2]) * 1000
 if not now_epoch_secs then
   return "refresh_decode"
+end
+if ARGV[18] == "1" then
+  local root_nanos = tonumber(ARGV[20])
+  if not root_nanos or root_nanos < 0 or root_nanos >= 1000000000 or root_nanos % 1 ~= 0 then
+    return "invalid"
+  end
+  if redis.call("EXISTS", KEYS[21]) == 1 or
+    (decimal_ge(current_time[1], ARGV[19]) and
+      (current_time[1] ~= ARGV[19] or now_epoch_nanos >= root_nanos)) then
+    return "invalid"
+  end
 end
 
 local function system_time_epoch_secs(value)
@@ -52,13 +71,14 @@ if not ok then
   return "refresh_decode"
 end
 if previous["rotated"] == true then
+  if not deny_refresh_grant_reuse() then return "invalid" end
   return "reused"
 end
 local previous_expires_at = system_time_epoch_secs(previous["expires_at"])
 if not previous_expires_at then
   return "refresh_decode"
 end
-if now_epoch_secs >= previous_expires_at then
+if now_epoch_secs > previous_expires_at or (now_epoch_secs == previous_expires_at and now_epoch_nanos >= (previous["expires_at"]["nanos_since_epoch"] or 0)) then
   redis.call("DEL", KEYS[2])
   redis.call("DEL", KEYS[5])
   redis.call("DEL", KEYS[6])
@@ -88,6 +108,7 @@ if ARGV[11] == "1" and redis.call("EXISTS", KEYS[17]) == 1 then
   return "token_collision"
 end
 
+commit_refresh_grant()
 redis.call("SET", KEYS[2], ARGV[4])
 redis.call("SET", KEYS[6], ARGV[8])
 redis.call("SET", KEYS[8], ARGV[9])
@@ -132,7 +153,7 @@ const REFRESH_ROTATION_COMMIT_KEY_PLAN: [LuaSlot; 21] = [
     LuaSlot::new(20, "version"),
     LuaSlot::new(21, "exchange_root_revoked"),
 ];
-const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 19] = [
+const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 20] = [
     LuaSlot::new(1, "now_epoch_secs"),
     LuaSlot::new(2, "previous_refresh_token"),
     LuaSlot::new(3, "expected_previous_payload"),
@@ -151,7 +172,8 @@ const REFRESH_ROTATION_COMMIT_ARG_PLAN: [LuaSlot; 19] = [
     LuaSlot::new(16, "bearer_token_id"),
     LuaSlot::new(17, "bearer_expires_at_epoch_secs"),
     LuaSlot::new(18, "has_exchange_root"),
-    LuaSlot::new(19, "exchange_root_deadline"),
+    LuaSlot::new(19, "exchange_root_deadline_epoch_secs"),
+    LuaSlot::new(20, "exchange_root_deadline_nanos"),
 ];
 const REFRESH_ROTATION_COMMIT_KEY_COUNT: usize = REFRESH_ROTATION_COMMIT_KEY_PLAN.len();
 const REFRESH_ROTATION_COMMIT_ARG_COUNT: usize = REFRESH_ROTATION_COMMIT_ARG_PLAN.len();
@@ -185,7 +207,8 @@ pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitKeys<'
 pub(in crate::authcode::store::redis_backend) struct RefreshRotationCommitArgs<'a> {
     pub(in crate::authcode::store::redis_backend) now_epoch_secs: u64,
     pub(in crate::authcode::store::redis_backend) has_exchange_root: bool,
-    pub(in crate::authcode::store::redis_backend) exchange_root_deadline: u64,
+    pub(in crate::authcode::store::redis_backend) exchange_root_deadline_epoch_secs: u64,
+    pub(in crate::authcode::store::redis_backend) exchange_root_deadline_nanos: u32,
     pub(in crate::authcode::store::redis_backend) previous_refresh_token: &'a str,
     pub(in crate::authcode::store::redis_backend) expected_previous_payload: &'a str,
     pub(in crate::authcode::store::redis_backend) rotated_previous_payload: &'a str,
@@ -253,17 +276,19 @@ impl<'a> RefreshRotationCommitArgs<'a> {
             RedisScriptArg::Str(self.bearer_token_id),
             RedisScriptArg::U64(self.bearer_expires_at_epoch_secs),
             RedisScriptArg::Bool(self.has_exchange_root),
-            RedisScriptArg::U64(self.exchange_root_deadline),
+            RedisScriptArg::U64(self.exchange_root_deadline_epoch_secs),
+            RedisScriptArg::U64(u64::from(self.exchange_root_deadline_nanos)),
         ]
     }
 }
 
 pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
     conn: &mut redis::Connection,
+    grant: &GrantCommit,
     keys: RefreshRotationCommitKeys<'_>,
     args: RefreshRotationCommitArgs<'_>,
 ) -> redis::RedisResult<String> {
-    let script = redis::Script::new(COMMIT_REFRESH_ROTATION);
+    let script = GrantCommit::script(COMMIT_REFRESH_ROTATION);
     let mut invocation = script.prepare_invoke();
     for key in keys.ordered() {
         invocation.key(key);
@@ -281,6 +306,7 @@ pub(in crate::authcode::store::redis_backend) fn invoke_refresh_rotation_commit(
             }
         }
     }
+    grant.append(&mut invocation);
     invocation.invoke::<String>(conn)
 }
 

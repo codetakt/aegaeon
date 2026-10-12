@@ -281,17 +281,20 @@ fn certificate_context_requires_trusted_https_provenance() -> TestResult {
 
 #[test]
 fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResult {
-    use crate::authcode::types::{BearerTokenMeta, BearerTokenMetaInput, SenderBinding};
+    use crate::authcode::types::{
+        AccessToken, BearerTokenMeta, BearerTokenMetaInput, CnfClaim, SenderBinding,
+    };
     use crate::authcode::{TokenPolicyContext, TokenValidator};
     use crate::policy::{SecurityPolicy, SenderConstraint};
     let now = std::time::SystemTime::now();
+    let certificate = format!("SHA256:{}", "12".repeat(32));
     for default in [SenderConstraint::DPoP, SenderConstraint::Mtls] {
         for binding in [
             SenderBinding::DPoP {
                 jkt: "test-key".into(),
             },
             SenderBinding::Mtls {
-                fingerprint: "test-cert".into(),
+                fingerprint: certificate.clone(),
             },
         ] {
             let meta = BearerTokenMeta::new(BearerTokenMetaInput {
@@ -308,13 +311,35 @@ fn resource_checks_committed_binding_in_mixed_profile_environments() -> TestResu
                 expires_at: now + std::time::Duration::from_secs(60),
                 refresh_parent: None,
             });
+            let store = crate::authcode::TokenStore::new_process_local_for_tests();
+            let cnf = match &binding {
+                SenderBinding::DPoP { jkt } => CnfClaim::Jkt(jkt.clone()),
+                SenderBinding::Mtls { fingerprint } => CnfClaim::X5tS256(
+                    crate::middleware::tls::mtls_fingerprint_to_x5t_s256(fingerprint)
+                        .ok_or("valid certificate fixture")?,
+                ),
+            };
+            let access = AccessToken {
+                refresh_grant: None,
+                exchange_root: None,
+                client_credentials_digest: None,
+                token: meta.token_id.clone(),
+                token_type: AccessToken::type_for_confirmation(Some(&cnf)).into(),
+                client_id: meta.client_id.clone(),
+                user_id: meta.user_id.clone(),
+                scope: Some("read".into()),
+                expires_in: 60,
+                created_at: now,
+                cnf: Some(cnf),
+            };
+            store.store_issued_grant(access, None, meta.clone())?;
             let validator = TokenValidator::with_policy(
-                crate::authcode::TokenStore::new_process_local_for_tests(),
+                store,
                 std::sync::Arc::new(crate::kms::InMemoryPublicJwtKeyManager::new()?),
                 SecurityPolicy::default().with_sender_constraint(default),
             );
             for (jkt, cert, valid) in [
-                (Some("test-key"), Some("test-cert"), true),
+                (Some("test-key"), Some(certificate.as_str()), true),
                 (None, None, false),
                 (Some("wrong-key"), Some("wrong-cert"), false),
             ] {

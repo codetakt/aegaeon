@@ -284,11 +284,16 @@ randomness and storage atomicity are assumptions. HTTP, SQL and Rust corresponde
 remain review and test obligations. No verified matrix claim is added.
 
 `fstar/authcode/AuthCode.RedisGrant.fst` transcribes the production authorization
-grant Lua's preflight, OIDC cleanup and ordered publication into a small Redis
+grant Lua together with its unchanged `GrantCommit` envelope: version/type
+preflight, OIDC cleanup and ordered grant/token publication into a small Redis
 command model. Failed commands preserve earlier writes; successful `SET` clears
 expiry while mutation of existing collections and `INCR` preserve it. Shared
 JSON fixtures generate concrete F* trace obligations and drive the unmodified
-production Lua in isolated Redis. All keys, complete values, collection members,
+production Lua in isolated Redis. The invocation carries all 21 keys and 29
+arguments, including disabled-envelope aliases. Existing malformed-state cases
+remain present; preflight now rejects wrong types and exhausted versions before
+code consumption. Grant collision/type/expiry and independent-access replay
+cases cover the added envelope. All keys, complete values, collection members,
 ZSET scores and version values are compared. The comparator also observes exact
 absolute expiration when the script should preserve it. A TCP proxy discards a
 completed Lua success reply; resubmission must not change any observed state.
@@ -296,7 +301,14 @@ completed Lua success reply; resubmission must not change any observed state.
 This is finite test-and-review correspondence, not mechanically checked
 Rust/Lua refinement. The adapter supplies finite canonical integer parsing and
 increment tables, string concatenation and the singleton refresh-children JSON
-encoding. General parsing, arbitrary key aliasing/corruption, arbitrary runtime
+encoding and admissible version strings. The deadline predicate is constant over
+an explicit fixture time window, checked against Redis TIME before and after
+every invocation. The clock remaining inside that window during execution is
+an explicit premise; bracketing observations cannot exclude an intermediate
+clock step. This is an adapter premise; it does not prove timer behavior,
+clock monotonicity, exact-boundary scheduling or the full refresh-rotation path.
+The original finite scenarios remain, with expectations updated for earlier
+fail-closed rejection and grant-collision replay. General parsing, arbitrary key aliasing/corruption, arbitrary runtime
 faults, distributed durability, clock scheduling and Rust/HTTP response delivery
 are outside this proof. Disabled-feature placeholder aliases and selected
 malformed Redis states are explicitly tested; dynamic cleanup links are not

@@ -1,6 +1,6 @@
 use super::*;
 
-fn metrics() -> TestResult<(f64, f64)> {
+pub(super) fn metrics() -> TestResult<(f64, f64)> {
     MetricsIntegration::with_global(|m| {
         (
             m.metrics
@@ -30,6 +30,11 @@ async fn shared_redis_refresh_parent_introspection_skips_lookup_when_retention_i
             Some(refresh.clone()),
             meta.clone(),
         )?;
+        let meta = state
+            .tokens
+            .store
+            .try_get_bearer_meta(&access.token)?
+            .ok_or("metadata missing")?;
         let _: () =
             fixture
                 .connection()?
@@ -67,6 +72,11 @@ async fn shared_redis_refresh_parent_introspection_backend_error_is_not_an_activ
             Some(refresh.clone()),
             meta.clone(),
         )?;
+        let meta = state
+            .tokens
+            .store
+            .try_get_bearer_meta(&access.token)?
+            .ok_or("metadata missing")?;
         observe(state, &access.token, true).await?;
         // Only the parent's stored JSON is corrupt. Access, metadata and caller lookups succeed.
         let _: () =

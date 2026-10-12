@@ -1,4 +1,4 @@
-use super::super::super::redis_support::RedisTokenMutation;
+use super::super::super::redis_support::{RedisRevokedTokenRecord, RedisTokenMutation};
 use super::super::RedisTokenStoreBackend;
 use crate::authcode::store::TokenStoreStorageError;
 use std::time::SystemTime;
@@ -12,9 +12,12 @@ impl RedisTokenStoreBackend {
     ) -> Result<(), TokenStoreStorageError> {
         for token in self.expired_index_members(conn, self.keyspace.expiry_revoked_key(), now)? {
             // Sorted-set scores are whole seconds; the record retains subsecond precision.
-            if self
-                .revoked_expires_at(conn, &token)?
-                .is_none_or(|expires| expires <= now)
+            if Self::get_observed_json::<RedisRevokedTokenRecord>(
+                conn,
+                self.keyspace.revoked_key(&token),
+                mutation,
+            )?
+            .is_none_or(|record| record.expires_at <= now)
             {
                 mutation.delete_revoked_token(token);
             }
