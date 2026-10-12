@@ -53,6 +53,44 @@ impl RedisTokenStoreBackend {
         })
     }
 
+    fn revoke_subject_grant_authority(
+        &self,
+        conn: &mut redis::Connection,
+        subject: &str,
+    ) -> Result<(), TokenStoreStorageError> {
+        for token in self.subject_refresh_tokens(conn, subject)? {
+            if let Some(refresh) =
+                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
+            {
+                if refresh.user_id == subject {
+                    self.revoke_refresh_grant(
+                        conn,
+                        refresh.refresh_grant.as_ref(),
+                        &refresh.client_id,
+                        &refresh.user_id,
+                    )?;
+                    self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
+                }
+            }
+        }
+        // Access descendants can remain live after refresh records/indexes expire.
+        for token in self.subject_access_tokens(conn, subject)? {
+            if let Some(access) =
+                Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
+            {
+                if access.user_id == subject {
+                    self.revoke_refresh_grant(
+                        conn,
+                        access.refresh_grant.as_ref(),
+                        &access.client_id,
+                        &access.user_id,
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(in crate::authcode::store) fn revoke_tokens_by_subject(
         &self,
         subject: &str,
@@ -62,36 +100,7 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
-            for token in self.subject_refresh_tokens(conn, subject)? {
-                if let Some(refresh) =
-                    Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
-                {
-                    if refresh.user_id == subject {
-                        self.revoke_refresh_grant(
-                            conn,
-                            refresh.refresh_grant.as_ref(),
-                            &refresh.client_id,
-                            &refresh.user_id,
-                        )?;
-                        self.revoke_exchange_root(conn, refresh.exchange_grant.as_ref())?;
-                    }
-                }
-            }
-            // Access descendants can remain live after refresh records/indexes expire.
-            for token in self.subject_access_tokens(conn, subject)? {
-                if let Some(access) =
-                    Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
-                {
-                    if access.user_id == subject {
-                        self.revoke_refresh_grant(
-                            conn,
-                            access.refresh_grant.as_ref(),
-                            &access.client_id,
-                            &access.user_id,
-                        )?;
-                    }
-                }
-            }
+            self.revoke_subject_grant_authority(conn, subject)?;
             let mut count = 0usize;
 
             for token in self.subject_access_tokens(conn, subject)? {

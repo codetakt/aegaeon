@@ -1,0 +1,339 @@
+{
+  "schema": 1,
+  "recipe_source": "91391f8e5c8f753359399cf37d7adaaa6cea4d1c",
+  "recipe_tree": "d0454579ec7f7c52c0a7cf4cd9176615cd8ff639",
+  "system": "x86_64-linux",
+  "interpreter": "/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env/bin/python3.14",
+  "runtime_root": "/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env",
+  "ca_root": "/nix/store/cfd9q3cczhrn2dn8bk4cqx2rxzc7ilj4-nss-cacert-3.126",
+  "ca_file": "/nix/store/cfd9q3cczhrn2dn8bk4cqx2rxzc7ilj4-nss-cacert-3.126/etc/ssl/certs/ca-bundle.crt",
+  "ca_sha256": "3ba2000fe3d55cb6c41323fabbb105743e2c9422151eea213311538b07b23f5a",
+  "nar_map": {
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67": {
+      "narHash": "sha256-+3EF6gMFKMIG+HEHop1E7n9B9VKABxHm28WzBAgWn0E=",
+      "narSize": 35073096,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/kpcd405yxfc3pfv8x4mv5j3fj54v946p-libidn2-2.3.8",
+        "/nix/store/v4zcvckzr9hqpg1f6bmkbf2q7fmszzvk-xgcc-15.3.0-libgcc"
+      ]
+    },
+    "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8": {
+      "narHash": "sha256-tEQwdlrf4MV+Itd2xkMMwdUI2zV47kpEBCNLfg2olvA=",
+      "narSize": 88952,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8"
+      ]
+    },
+    "/nix/store/1mf3lj0mldr8732yvzjc12fig2407b3d-openssl-3.6.3": {
+      "narHash": "sha256-5NqWvSrF79lYPpAyB/CWpsyPkXzzgNBbu+HhlR2cUE8=",
+      "narSize": 9308816,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/1mf3lj0mldr8732yvzjc12fig2407b3d-openssl-3.6.3"
+      ]
+    },
+    "/nix/store/3i2rbpnd5n7j7f011niszwi9f4m6r62y-python3.14-ply-3.11": {
+      "narHash": "sha256-SEZM1bbo2AexIEmQOVq38BuGVPe/br5ao0QFAEVMCsg=",
+      "narSize": 612272,
+      "references": [
+        "/nix/store/3i2rbpnd5n7j7f011niszwi9f4m6r62y-python3.14-ply-3.11",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7"
+      ]
+    },
+    "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7": {
+      "narHash": "sha256-n6PqY7QGbS9+V5g3xia44TaZ4lmqcT2ckovWXhF8OMg=",
+      "narSize": 142028848,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8",
+        "/nix/store/1mf3lj0mldr8732yvzjc12fig2407b3d-openssl-3.6.3",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/4myf3s1i9rahd2my1zs2cqify7y930sk-readline-8.3p3",
+        "/nix/store/6107vj1ijan2b4v48p064n0bfmn5hgkx-mpdecimal-4.0.1",
+        "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3",
+        "/nix/store/byi2zpy2bgcf3dr6y0l8m50rmjj8z7q1-bash-5.3p15",
+        "/nix/store/fqkp26idpnpqk5l2cjfb51jdn6nj5bam-sqlite-3.53.3",
+        "/nix/store/ivslqa3a0qbj3q0p9w7n71zf62jlag2b-mailcap-2.1.54",
+        "/nix/store/kpjkxs3hlgl7yxqp8cg7fkvs42zi4vfh-util-linux-minimal-2.42.2-lib",
+        "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7",
+        "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib",
+        "/nix/store/ssvhb57axjvgid3q6jqy38vfqz7i7955-gdbm-1.26-lib",
+        "/nix/store/vlgjd2179ahfh509p1aid8fl22bw8ri3-tzdata-2026c",
+        "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1",
+        "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2",
+        "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2",
+        "/nix/store/zlvs6miv8wfki399pmxri7x0sjd3429c-ncurses-6.6"
+      ]
+    },
+    "/nix/store/4myf3s1i9rahd2my1zs2cqify7y930sk-readline-8.3p3": {
+      "narHash": "sha256-7hFWY0d9HXmEwurMKqRMHQlcjkx5xZ8GCDPf0vAk2qY=",
+      "narSize": 506392,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/zlvs6miv8wfki399pmxri7x0sjd3429c-ncurses-6.6"
+      ]
+    },
+    "/nix/store/4x8kka08imz5lxi9qjzf7gipv2cws4wq-libyaml-0.2.5": {
+      "narHash": "sha256-0fjVqTtTBr63FAfWEbdiQBxg4iBiVF5mu0Bqix0De3k=",
+      "narSize": 147400,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/4x8kka08imz5lxi9qjzf7gipv2cws4wq-libyaml-0.2.5"
+      ]
+    },
+    "/nix/store/604l31x2ds02xmcrw3i1nd6pcbh6wffv-python3.14-referencing-0.37.0": {
+      "narHash": "sha256-neCtssw7CZG7onsb1tooQRl7emduwqDmD2fffapeJi0=",
+      "narSize": 440288,
+      "references": [
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/604l31x2ds02xmcrw3i1nd6pcbh6wffv-python3.14-referencing-0.37.0",
+        "/nix/store/73wawjyim6b4s116qqv4icwypks8hwcx-python3.14-attrs-26.1.0",
+        "/nix/store/d9wibviqb969bcsad2cacxck1sfxq4ql-python3.14-typing-extensions-4.16.0",
+        "/nix/store/yxayzn6k4q1czdipa7pvlv8bq3bj1ym9-python3.14-rpds-py-2026.6.3"
+      ]
+    },
+    "/nix/store/6107vj1ijan2b4v48p064n0bfmn5hgkx-mpdecimal-4.0.1": {
+      "narHash": "sha256-OZZoM8cRxdFG/ckHcSTqVxrHMBdW1pGFWU5umvXzXDs=",
+      "narSize": 226192,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67"
+      ]
+    },
+    "/nix/store/73wawjyim6b4s116qqv4icwypks8hwcx-python3.14-attrs-26.1.0": {
+      "narHash": "sha256-7KmFsIOPPt1wOL2HnfJiY1Nh5ZwJ3B3AsfaYmIpHJ4A=",
+      "narSize": 681088,
+      "references": [
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/73wawjyim6b4s116qqv4icwypks8hwcx-python3.14-attrs-26.1.0"
+      ]
+    },
+    "/nix/store/7rk81dyph6lqfs192nv6cs4mp57xbcal-python3.14-jsonschema-specifications-2025.9.1": {
+      "narHash": "sha256-TpbiizDx56uKBxQ3xfFFU9ZJXo9KWoC65JS3rqAgkrw=",
+      "narSize": 66816,
+      "references": [
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/604l31x2ds02xmcrw3i1nd6pcbh6wffv-python3.14-referencing-0.37.0",
+        "/nix/store/7rk81dyph6lqfs192nv6cs4mp57xbcal-python3.14-jsonschema-specifications-2025.9.1"
+      ]
+    },
+    "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3": {
+      "narHash": "sha256-XFZmWmdgGhNC8MOCjS00TkxNVZAJGyzo0jlMfONP+ug=",
+      "narSize": 857952,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3"
+      ]
+    },
+    "/nix/store/9wc76lg441yq68hwkkdbxnab41zfcwv9-python3.14-jsonschema-4.26.0": {
+      "narHash": "sha256-JTpA+A+dV2GadwlXUfI5M/b6CSPX9H25wfCkpot0mrI=",
+      "narSize": 1496528,
+      "references": [
+        "/nix/store/3i2rbpnd5n7j7f011niszwi9f4m6r62y-python3.14-ply-3.11",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/604l31x2ds02xmcrw3i1nd6pcbh6wffv-python3.14-referencing-0.37.0",
+        "/nix/store/73wawjyim6b4s116qqv4icwypks8hwcx-python3.14-attrs-26.1.0",
+        "/nix/store/7rk81dyph6lqfs192nv6cs4mp57xbcal-python3.14-jsonschema-specifications-2025.9.1",
+        "/nix/store/9wc76lg441yq68hwkkdbxnab41zfcwv9-python3.14-jsonschema-4.26.0",
+        "/nix/store/byi2zpy2bgcf3dr6y0l8m50rmjj8z7q1-bash-5.3p15",
+        "/nix/store/d9wibviqb969bcsad2cacxck1sfxq4ql-python3.14-typing-extensions-4.16.0",
+        "/nix/store/fq25vjzbirmigy68cj7f2kf0ijnr1wgf-python3.14-jsonpath-ng-1.8.0",
+        "/nix/store/yxayzn6k4q1czdipa7pvlv8bq3bj1ym9-python3.14-rpds-py-2026.6.3"
+      ]
+    },
+    "/nix/store/ax9r74k7hy3wn6a4cbmamsmysrw1fajk-python3.14-pyyaml-6.0.3": {
+      "narHash": "sha256-713bKefYdzWGeRGB0wRYOCdK5SD8RIop3Hhln2fZdeE=",
+      "narSize": 1037256,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/4x8kka08imz5lxi9qjzf7gipv2cws4wq-libyaml-0.2.5",
+        "/nix/store/ax9r74k7hy3wn6a4cbmamsmysrw1fajk-python3.14-pyyaml-6.0.3"
+      ]
+    },
+    "/nix/store/byi2zpy2bgcf3dr6y0l8m50rmjj8z7q1-bash-5.3p15": {
+      "narHash": "sha256-ZJjrWsiQchuZJRpude52KCjdlw+WKZur1m3yTXIMd0Q=",
+      "narSize": 1856848,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/byi2zpy2bgcf3dr6y0l8m50rmjj8z7q1-bash-5.3p15"
+      ]
+    },
+    "/nix/store/cfd9q3cczhrn2dn8bk4cqx2rxzc7ilj4-nss-cacert-3.126": {
+      "narHash": "sha256-S+hnwqnc0PBS6tfno8h9JRYdANnToBSGx4yADsUbZK4=",
+      "narSize": 665336,
+      "references": [
+        "/nix/store/cfd9q3cczhrn2dn8bk4cqx2rxzc7ilj4-nss-cacert-3.126"
+      ]
+    },
+    "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc": {
+      "narHash": "sha256-tONCFj6jkBmjuySLfD+Ja0ClggwKox3Dytormhcj1Ro=",
+      "narSize": 197752,
+      "references": []
+    },
+    "/nix/store/d9wibviqb969bcsad2cacxck1sfxq4ql-python3.14-typing-extensions-4.16.0": {
+      "narHash": "sha256-VFIGxxWnjjoWL17MYFWYb2ir7O5RA4rTgjuwh2ADTBE=",
+      "narSize": 543992,
+      "references": [
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/d9wibviqb969bcsad2cacxck1sfxq4ql-python3.14-typing-extensions-4.16.0"
+      ]
+    },
+    "/nix/store/fq25vjzbirmigy68cj7f2kf0ijnr1wgf-python3.14-jsonpath-ng-1.8.0": {
+      "narHash": "sha256-OrJHeaPfqrZTIo/QX2YdbgcpkH5F4fVYPr0nTEFpnyk=",
+      "narSize": 801912,
+      "references": [
+        "/nix/store/3i2rbpnd5n7j7f011niszwi9f4m6r62y-python3.14-ply-3.11",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/byi2zpy2bgcf3dr6y0l8m50rmjj8z7q1-bash-5.3p15",
+        "/nix/store/fq25vjzbirmigy68cj7f2kf0ijnr1wgf-python3.14-jsonpath-ng-1.8.0"
+      ]
+    },
+    "/nix/store/fqkp26idpnpqk5l2cjfb51jdn6nj5bam-sqlite-3.53.3": {
+      "narHash": "sha256-MfbV8ZxoXR3r02M6uJ1OkewKB5KGI36tQpEquWW5U70=",
+      "narSize": 6027056,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2"
+      ]
+    },
+    "/nix/store/h5yzhyi8j6iq4r26giryd0rh9ynsayan-libunistring-1.4.2": {
+      "narHash": "sha256-2Mw4cLRRMTLI6cuken2VRFp5Tv7XVSKJa8eLETAVMfs=",
+      "narSize": 2078944,
+      "references": [
+        "/nix/store/h5yzhyi8j6iq4r26giryd0rh9ynsayan-libunistring-1.4.2"
+      ]
+    },
+    "/nix/store/ivslqa3a0qbj3q0p9w7n71zf62jlag2b-mailcap-2.1.54": {
+      "narHash": "sha256-/2pkdgHKodEDLknYROnuSN0F17m+BZ4AymO51vBpcvU=",
+      "narSize": 119360,
+      "references": []
+    },
+    "/nix/store/kpcd405yxfc3pfv8x4mv5j3fj54v946p-libidn2-2.3.8": {
+      "narHash": "sha256-VujoHRwRQNuxI13D74fc3GI4QorEniKeKeLoiBwMEZY=",
+      "narSize": 368176,
+      "references": [
+        "/nix/store/h5yzhyi8j6iq4r26giryd0rh9ynsayan-libunistring-1.4.2",
+        "/nix/store/kpcd405yxfc3pfv8x4mv5j3fj54v946p-libidn2-2.3.8"
+      ]
+    },
+    "/nix/store/kpjkxs3hlgl7yxqp8cg7fkvs42zi4vfh-util-linux-minimal-2.42.2-lib": {
+      "narHash": "sha256-g/ybLnkGE4jceBXlQXYuavTdwc+jjuPN+q5XXqKooWo=",
+      "narSize": 2100440,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/kpjkxs3hlgl7yxqp8cg7fkvs42zi4vfh-util-linux-minimal-2.42.2-lib"
+      ]
+    },
+    "/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env": {
+      "narHash": "sha256-rR29bRJMkQxsKraQg/63fqRhVGo/QIWy1fE9bPaXEBw=",
+      "narSize": 264928,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/3i2rbpnd5n7j7f011niszwi9f4m6r62y-python3.14-ply-3.11",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/604l31x2ds02xmcrw3i1nd6pcbh6wffv-python3.14-referencing-0.37.0",
+        "/nix/store/73wawjyim6b4s116qqv4icwypks8hwcx-python3.14-attrs-26.1.0",
+        "/nix/store/7rk81dyph6lqfs192nv6cs4mp57xbcal-python3.14-jsonschema-specifications-2025.9.1",
+        "/nix/store/9wc76lg441yq68hwkkdbxnab41zfcwv9-python3.14-jsonschema-4.26.0",
+        "/nix/store/ax9r74k7hy3wn6a4cbmamsmysrw1fajk-python3.14-pyyaml-6.0.3",
+        "/nix/store/d9wibviqb969bcsad2cacxck1sfxq4ql-python3.14-typing-extensions-4.16.0",
+        "/nix/store/fq25vjzbirmigy68cj7f2kf0ijnr1wgf-python3.14-jsonpath-ng-1.8.0",
+        "/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env",
+        "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib",
+        "/nix/store/yxayzn6k4q1czdipa7pvlv8bq3bj1ym9-python3.14-rpds-py-2026.6.3"
+      ]
+    },
+    "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7": {
+      "narHash": "sha256-lXRP0teMeX3ZiI776TTY41gdlBzVLq5B6WOlM6Jt5Ec=",
+      "narSize": 1202224,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7",
+        "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib"
+      ]
+    },
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib": {
+      "narHash": "sha256-1U4BgRHy86BXmN/QIHW1om3XOUEvYCEpDepiwSO60gk=",
+      "narSize": 10317392,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc",
+        "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib"
+      ]
+    },
+    "/nix/store/ssvhb57axjvgid3q6jqy38vfqz7i7955-gdbm-1.26-lib": {
+      "narHash": "sha256-WODGTsy1KXeDDH0ZBLBY8WLftzf/zw2Mk7zVffo2mgE=",
+      "narSize": 459336,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/ssvhb57axjvgid3q6jqy38vfqz7i7955-gdbm-1.26-lib"
+      ]
+    },
+    "/nix/store/v4zcvckzr9hqpg1f6bmkbf2q7fmszzvk-xgcc-15.3.0-libgcc": {
+      "narHash": "sha256-cMuvHKKZQ7us4kpUA40tNxZpkQQRivt6fWtZHAPVcK8=",
+      "narSize": 197672,
+      "references": []
+    },
+    "/nix/store/vlgjd2179ahfh509p1aid8fl22bw8ri3-tzdata-2026c": {
+      "narHash": "sha256-9RNssc1MdqwuuxmVP0DyUxn6Xl1vnlEu6BaF7SMk35s=",
+      "narSize": 2138680,
+      "references": []
+    },
+    "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1": {
+      "narHash": "sha256-fa4z0fgvXUT9B67VAZqh44MC/wXfHtqf2ktzaYcXoCE=",
+      "narSize": 95704,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1"
+      ]
+    },
+    "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2": {
+      "narHash": "sha256-z9HPq2vYrSO1CEMXTNqyr3Rw90mC+EhK97I7oFfLGrk=",
+      "narSize": 320072,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2"
+      ]
+    },
+    "/nix/store/yxayzn6k4q1czdipa7pvlv8bq3bj1ym9-python3.14-rpds-py-2026.6.3": {
+      "narHash": "sha256-+wnJfZorRvJCFjdbLwcI5oAfAdB/1ggiO02mrAdVrQ4=",
+      "narSize": 753328,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+        "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib",
+        "/nix/store/yxayzn6k4q1czdipa7pvlv8bq3bj1ym9-python3.14-rpds-py-2026.6.3"
+      ]
+    },
+    "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2": {
+      "narHash": "sha256-QQyKRA+n4j8R4ZqL/7rU2MvY0J8683UwnmGjw8m/qw0=",
+      "narSize": 132608,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67"
+      ]
+    },
+    "/nix/store/zlvs6miv8wfki399pmxri7x0sjd3429c-ncurses-6.6": {
+      "narHash": "sha256-CsM9renMHg7TUSCMMXo7LRwiuGli3RBdL5utlT5o7Aw=",
+      "narSize": 3870560,
+      "references": [
+        "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+        "/nix/store/zlvs6miv8wfki399pmxri7x0sjd3429c-ncurses-6.6"
+      ]
+    }
+  },
+  "external_trust_premises": [
+    "GitHub resolves a literal immutable remote signed B action revision; local candidate actions are excluded.",
+    "Initial shell, coreutils, sudo, mount, Nix installer and Nix CLI are independently admitted platform executables.",
+    "Initial download TLS, fixed binary-cache keys and privileged Nix store integrity are independently admitted.",
+    "No candidate code runs before this bootstrap; privileged setup and credential custody remain platform responsibilities."
+  ],
+  "qualification": "Observed local recipe/output identities under recorded platform trust; this record does not establish initial or hosted admission, P installation, native supply, selection or product assurance.",
+  "local_realization": {
+    "cache_signed_roots": 34,
+    "trusted_local_derivation_roots": 1,
+    "local_derivation_root": "/nix/store/nkr7lz5d84msklcnjcy82p17xnn5irxr-python3-3.14.7-env",
+    "qualification": "The Python environment was locally realized and marked ultimate by trusted Nix under the independently pinned recipe. It is not a binary-cache-signed output. Registration timestamps and signatures are not reproducibility fields."
+  }
+}

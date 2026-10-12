@@ -39,11 +39,11 @@ not attest the historical WASM outputs or a released SDK. The snapshot below
 records earlier extraction work under its stated scope and date.
 
 > **Status (2026-03-10)**
-> `scripts/extraction/package_verified_core.sh` を実行すると、`VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1` に加えて **claims 入力版**（`VerifiedCore_dpop_verify_claims_v1`, `VerifiedCore_jwt_verify_claims_v1`）もエクスポートする `verified_core.wasm` が生成される。claims exports はもはや一律スタブではなく、Verified WASM path では **EdDSA** に対して意味のある status を返し、`jwt_verify_claims_v1` は optional な expected `iss` / `aud` 制約も処理する。`ES256` / `RS256` は引き続き **WASM 内部署名検証**としては unsupported だが、`SIGNATURE_PREVERIFIED` flags を通じて Node/Web reference adapters が host crypto で署名を事前検証し、その後の claims / time / replay enforcement を Verified Core claims exports に委譲できるようになった。`tests/verified_core_wasm/test_instantiate.mjs` は preverified `RS256` accept と non-preverified reject の両方を検証し、`runtime_{node,web}_reference_test.mjs` は adapter-side `RS256` / `ES256` coverage を提供する。
-> 2026-03-09 時点で `aud` membership は `c/verified-core/verified_core_exports.c` 内に内製化され、`Dpop.Htm_validation` も `FStar_String_uppercase` を要求しなくなった。さらに minimal runtime shim と HMAC 非依存 build を入れたことで、default fixture の import table は 67 → 64 → 7 に減った。残る host/runtime imports は replay store、`vc_host_register_bytes` / `vc_host_release_handle`、compact parser、handle resolution のみである。`scripts/sdk/runtime_node_reference.mjs` はこの 7-import boundary を直接消費する reference Node adapter であり、`tests/verified_core_wasm/runtime_node_reference_test.mjs` が compact / claims 両経路の Node smoke coverage を提供する。
-> `WASI_CLANG` / `WASI_SYSROOT` は自動検出に対応済みだが、未検出の場合は従来通り環境変数で上書きする。
-> Low* Warning 15（GC 型／整数）は extraction 時の注意点として残るが、default fixture では `Prims_*` / `__multi3` / allocator shims はもはや host import ではない。
-> `scripts/sdk/package_verified_core_dist.js` と `scripts/sdk/sign_core_artifact.js` により、dev/test 用の Ed25519 署名、CycloneDX SBOM、hash helper files、TypeScript bindings を含む packaged distribution は生成可能になった。`tests/verified_core_wasm/package_dist_test.mjs` が sign → package → fetch verification を通す。`scripts/sdk/runtime_web_reference.mjs` と `tests/verified_core_wasm/runtime_web_reference_test.mjs` は browser-facing runtime adapter surface を Node/WebCrypto 上で検証し、`tests/verified_core_wasm/runtime_web_reference.html` / `runtime_web_reference_server.mjs` は secure-context browser smoke harness を提供する。残る課題は production key custody、CI attestations、公開 release 向けの運用固定化、および dedicated browser CI である。
+> Running `scripts/extraction/package_verified_core.sh` generates `verified_core.wasm`, which exports the **claims-input variants** (`VerifiedCore_dpop_verify_claims_v1`, `VerifiedCore_jwt_verify_claims_v1`) alongside `VerifiedCore_dpop_verify_v1` / `VerifiedCore_jwt_verify_v1`. The claims exports are no longer uniformly stubs: they return meaningful status values for **EdDSA** in the verified WASM path, and `jwt_verify_claims_v1` also handles optional expected `iss` / `aud` constraints. `ES256` / `RS256` remain unsupported for **signature verification inside WASM**, but the `SIGNATURE_PREVERIFIED` flags now allow Node/Web reference adapters to preverify signatures with host crypto and delegate subsequent claims / time / replay enforcement to the Verified Core claims exports. `tests/verified_core_wasm/test_instantiate.mjs` verifies both acceptance of preverified `RS256` and rejection without preverification, while `runtime_{node,web}_reference_test.mjs` provides adapter-side `RS256` / `ES256` coverage.
+> As of 2026-03-09, `aud` membership checks have been brought into `c/verified-core/verified_core_exports.c`, and `Dpop.Htm_validation` no longer requires `FStar_String_uppercase`. Adding a minimal runtime shim and a build without HMAC dependencies further reduced the default fixture's import table from 67 → 64 → 7. The remaining host/runtime imports are limited to the replay store, `vc_host_register_bytes` / `vc_host_release_handle`, compact parsers, and handle resolution. `scripts/sdk/runtime_node_reference.mjs` is the reference Node adapter that consumes this 7-import boundary directly, and `tests/verified_core_wasm/runtime_node_reference_test.mjs` provides Node smoke coverage for both compact and claims paths.
+> `WASI_CLANG` / `WASI_SYSROOT` now support automatic detection; if detection fails, override them through environment variables as before.
+> Low* Warning 15 (GC types / integers) remains an extraction concern, but `Prims_*` / `__multi3` / allocator shims are no longer host imports in the default fixture.
+> `scripts/sdk/package_verified_core_dist.js` and `scripts/sdk/sign_core_artifact.js` can now generate a packaged distribution containing an Ed25519 signature for dev/test use, a CycloneDX SBOM, hash helper files, and TypeScript bindings. `tests/verified_core_wasm/package_dist_test.mjs` passes sign → package → fetch verification. `scripts/sdk/runtime_web_reference.mjs` and `tests/verified_core_wasm/runtime_web_reference_test.mjs` verify the browser-facing runtime adapter surface on Node/WebCrypto, while `tests/verified_core_wasm/runtime_web_reference.html` / `runtime_web_reference_server.mjs` provide a secure-context browser smoke harness. Remaining work includes production key custody, CI attestations, finalizing operations for public releases, and dedicated browser CI.
 > **Positioning note (2026-03-09)**
 > This plan supports the future client / SDK distribution track. It does **not** by itself create a claimable "formally verified client" product statement. Use `../product-positioning.md` for current outward-facing wording and `../verification/claims/assurance-case/claim-definition.md` for the formal boundary.
 
@@ -52,17 +52,17 @@ records earlier extraction work under its stated scope and date.
 Provide a reproducible pipeline that extracts the Verified Core (F*/Low*/KaRaMeL) into a `wasm32-wasi`
 artifact, signs it, and exposes a minimal C ABI for higher-level adapters. The **same extracted C**
 is also built as a **native library** for the server; the WASM artifact is for **client distribution**.
-Verified Core artefacts stay in this repository; the Runtime Adapter / Domain SDK 層は別リポジトリ
-(`aegaeon-sdk`) で管理される。
+Verified Core artefacts stay in this repository; the Runtime Adapter / Domain SDK layers are managed in a separate repository
+(`aegaeon-sdk`).
 This work supports the TypeScript/Rust SDK publication track captured in
 `docs/program-management/roadmaps/active/management-platform-follow-on-plan.md`.
 
 ## 2. Scope
 
 - **Input modules (initial set)**
-  - Phase 1 (prototype): PKCE core (`Pkce`, `Pkce.Challenge`, `Pkce.Verifier`, `Pkce.Method_selection`, `Pkce.Verification`) と DPoP core (`Dpop.*`).
-  - AuthCode/Token store モジュールは KaRaMeL 変換時に `Failure("nth")` が発生するため、一時的に除外。原因は KaRaMeL `Simplify.remove_unused_parameters` の既知不具合で、最小再現（`AuthCode.Flow`＋`AuthCode.Store`＋`AuthCode.Types`）でも再発する。修正方針を追跡し、回避策が確立次第に再追加する。
-  - 共通ユーティリティ（`ConstTime` / `EverCrypt.*` 等）は対応モジュールの取り込み時に再接続する。
+  - Phase 1 (prototype): PKCE core (`Pkce`, `Pkce.Challenge`, `Pkce.Verifier`, `Pkce.Method_selection`, `Pkce.Verification`) and DPoP core (`Dpop.*`).
+  - AuthCode/Token store modules are temporarily excluded because KaRaMeL conversion raises `Failure("nth")`. The cause is a known bug in KaRaMeL's `Simplify.remove_unused_parameters`, which also recurs in a minimal reproduction (`AuthCode.Flow` + `AuthCode.Store` + `AuthCode.Types`). Track the fix and reintroduce the modules once a workaround is established.
+  - Reconnect shared utilities (`ConstTime` / `EverCrypt.*`, etc.) when incorporating the corresponding modules.
 - **Outputs**
   - `artifacts/verified-core/verified_core.wasm` (wasm32-wasi, stripped).
   - `artifacts/verified-core/verified_core.wasm.sha256` / `.sri` / `manifest.json` (hash & metadata).
@@ -87,11 +87,11 @@ This work supports the TypeScript/Rust SDK publication track captured in
    - `nix develop .#verification --command scripts/extraction/run_verified_core_lowstar.sh` (new script).
    - Outputs C sources under `generated/lowstar/verified-core/`.
 3. **WASM compilation / staging**
-   - `scripts/extraction/package_verified_core.sh`（`nix develop .#verification` 内での実行を推奨）。
-     - `WASI_CLANG` / `WASI_SYSROOT` が未指定の場合でも、`wasm32-unknown-wasi-clang` と `*-wasi-sysroot` を `/nix/store` から自動検出するように更新済み。
-     - 自動検出に失敗した場合は環境変数を明示する。
-   - 内部で `run_verified_core_lowstar.sh` を `WITH_WASM_BUILD=1` 付きで呼び出し、`verified_core.wasm` とハッシュ artefact を `artifacts/verified-core/` にコピーする。
-   - コンパイルは `wasm32-unknown-wasi` clang ラッパー、KaRaMeL headers (`lib/krml/{c,dist}`)、`assert.h` 不在時のスタブ (`c/wasi-stubs/`) を利用して実施。
+   - `nix develop .#verification --command bash scripts/extraction/package_verified_core.sh`.
+     - The verification shell supplies all required extraction and WASI routes, including `WASI_CLANG` and `WASI_SYSROOT`.
+     - The script requires explicit routes and rejects missing or inconsistent values before creating outputs.
+   - Internally calls `run_verified_core_lowstar.sh` with `WITH_WASM_BUILD=1` and copies `verified_core.wasm` and hash artefacts into `artifacts/verified-core/`.
+   - Compilation uses the `wasm32-unknown-wasi` clang wrapper, KaRaMeL headers (`lib/krml/{c,dist}`), and stubs for missing `assert.h` (`c/wasi-stubs/`).
    - Exported functions follow naming convention `vc_*`.
 4. **Signing & SBOM**
    - Signing key managed via `./keys/verified-core-dev.key` (dev) and Secrets Manager in CI.
@@ -153,19 +153,19 @@ void vc_free_slice(vc_slice slice);
 | PKCE | `fstar/pkce/Pkce.fst`, `Pkce.Challenge.fst`, `Pkce.Verifier.fst`, `Pkce.Method_selection.fst` | Requires `ConstTime`, `Result`. |
 | DPoP | `fstar/dpop/Dpop.fst`, `Dpop.Validation.fst`, `Dpop.Signature.fst`, `Dpop.Replay.fst`, `Dpop.Claims.fst` | Depends on JOSE signature helpers + replay store lemmas. |
 | JWT/JWS | `fstar/jose/Jose.Jwt_validation.fst`, `Jose.Jws_signature.fst`, `Jose.Jwk_structure.fst`, `Jose.Alg_policy.fst` | Relies on EverCrypt HMAC/Ed25519 wrappers and TLV parsers. |
-| Nonce/State | _(Deferred)_ `fstar/authcode/AuthCode.Store.fst`, `AuthCode.Types.fst` | KaRaMeL `Failure("nth")` のため現状は除外。回避策確立後に再評価。 |
+| Nonce/State | _(Deferred)_ `fstar/authcode/AuthCode.Store.fst`, `AuthCode.Types.fst` | Currently excluded because of KaRaMeL `Failure("nth")`. Reassess once a workaround is established. |
 | Utilities | `fstar/ConstTime.fst`, `fstar/result/Result.fst`, `fstar/EverCrypt.HMAC.fst`, `fstar/EverCrypt.Chacha20Poly1305.fst` | Provide constant-time primitives and crypto facades. |
 
 > Action: confirm `authcode` module structure and extend the table before extraction scripting.
 
 ## 7. Next Steps
 
-1. Low* warnings整理：Warning 15（GC 型／整数）を発生させている関数群を列挙し、`compat.h` 追加やストア実装リファクタで解消するか、`noextract`/`bundle` 方針を決定する。
-2. Token/PkJWT 再統合: `empty_store` 関数化後に KaRaMeL 抽出を再試行し、`Failure("nth")` が解消されたか確認。必要に応じて upstream fix を追従。
-3. ABI + Shim: `c/verified_core.c` と `include/verified_core.h` を実装し、`vc_*` エントリポイントを定義。
-4. Smoke tests: `cargo test -p aegaeon-core`（wasmtime）と `pnpm test --filter @aegaeon/verified-core`（Node/Web）を実装。
-5. 署名/SBOM: `cosign` による `verified_core.wasm.sig` と `nix run .#security-sbom` による CycloneDX を生成、CI に組み込む。
-6. Artefact 配信: SDK リポジトリが `pnpm run fetch-core` 経由で取得できるよう、GitHub Release/S3 配信とバージョン管理フローを整備。
+1. Review Low* warnings: enumerate the functions causing Warning 15 (GC types / integers) and decide whether to resolve them by adding `compat.h` or refactoring store implementations, or adopt a `noextract`/`bundle` approach.
+2. Reintegrate Token/PkJWT: retry KaRaMeL extraction after turning `empty_store` into a function and check whether `Failure("nth")` is resolved. Follow upstream fixes as needed.
+3. ABI + Shim: implement `c/verified_core.c` and `include/verified_core.h` and define the `vc_*` entry points.
+4. Smoke tests: implement `cargo test -p aegaeon-core` (wasmtime) and `pnpm test --filter @aegaeon/verified-core` (Node/Web).
+5. Signatures/SBOM: generate `verified_core.wasm.sig` with `cosign` and CycloneDX with `nix run .#security-sbom`, and integrate them into CI.
+6. Artefact delivery: establish GitHub Release/S3 distribution and versioning so the SDK repository can fetch artefacts through `pnpm run fetch-core`.
 
 ---
 

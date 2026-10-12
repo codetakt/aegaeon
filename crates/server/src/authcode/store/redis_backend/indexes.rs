@@ -6,6 +6,20 @@ use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::time::SystemTime;
 
+// Inventory may discard only the requested index membership. The authority
+// record can be created or replaced after it was observed, even under a lease.
+const PRUNE_OBSERVED_SUBJECT_MEMBER: &str = r#"
+local current = redis.call("GET", KEYS[1])
+if ARGV[1] == "absent" then
+  if current then return 0 end
+elseif ARGV[1] == "present" then
+  if current ~= ARGV[2] then return 0 end
+else
+  return 0
+end
+return redis.call("SREM", KEYS[2], ARGV[3])
+"#;
+
 impl RedisTokenStoreBackend {
     pub(super) fn expired_index_members(
         &self,
@@ -66,6 +80,29 @@ impl RedisTokenStoreBackend {
             .arg(key)
             .arg(token)
             .query::<()>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+    }
+
+    pub(super) fn prune_observed_subject_member(
+        &self,
+        conn: &mut redis::Connection,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+        observed_raw: Option<&str>,
+    ) -> Result<(), TokenStoreStorageError> {
+        redis::Script::new(PRUNE_OBSERVED_SUBJECT_MEMBER)
+            .key(record_key)
+            .key(subject_key)
+            .arg(if observed_raw.is_some() {
+                "present"
+            } else {
+                "absent"
+            })
+            .arg(observed_raw.map_or("", |raw| raw))
+            .arg(token)
+            .invoke::<usize>(conn)
+            .map(|_| ())
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }
 
@@ -180,5 +217,25 @@ impl RedisTokenStoreBackend {
             .arg(self.keyspace.expiry_revoked_key())
             .arg(token)
             .ignore();
+    }
+}
+
+#[cfg(test)]
+impl RedisTokenStoreBackend {
+    pub(crate) fn prune_inventory_observation_for_tests(
+        &self,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+        observed: Option<&str>,
+    ) {
+        self.prune_observed_subject_member(
+            &mut self.connection().unwrap(),
+            record_key,
+            subject_key,
+            token,
+            observed,
+        )
+        .unwrap();
     }
 }

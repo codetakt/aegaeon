@@ -6,6 +6,22 @@ use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 
 impl RedisTokenStoreBackend {
+    fn bearer_cleanup_record(
+        &self,
+        conn: &mut redis::Connection,
+        token: &str,
+    ) -> Result<(Option<BearerTokenMeta>, bool), TokenStoreStorageError> {
+        let record = Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?;
+        if record.as_ref().is_some_and(|meta| meta.token_id != token) {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "bearer metadata token identity mismatch during cleanup".into(),
+            ));
+        }
+        let access_missing = record.is_some()
+            && Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?.is_none();
+        Ok((record, access_missing))
+    }
+
     pub(in crate::authcode::store::redis_backend) fn apply_token_mutation(
         &self,
         conn: &mut redis::Connection,
@@ -36,16 +52,7 @@ impl RedisTokenStoreBackend {
             .delete_bearer_tokens
             .iter()
             .map(|token| {
-                let record =
-                    Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?;
-                if record.as_ref().is_some_and(|meta| meta.token_id != *token) {
-                    return Err(TokenStoreStorageError::InvariantViolation(
-                        "bearer metadata token identity mismatch during cleanup".into(),
-                    ));
-                }
-                let access_missing = record.is_some()
-                    && Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
-                        .is_none();
+                let (record, access_missing) = self.bearer_cleanup_record(conn, token)?;
                 Ok((token.clone(), record, access_missing))
             })
             .collect::<Result<Vec<_>, _>>()?;

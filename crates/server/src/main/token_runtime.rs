@@ -45,6 +45,7 @@ pub(super) fn token_runtime_from_shared_env(
         )
         .with_jwt_access_tokens_enabled(jwt_runtime.access_tokens_enabled())
         .with_jwt_leeway_secs(jwt_runtime.leeway_secs())
+        .with_jose_header_max_len(cfg.jose_header_max_len)
         .with_issuer(Some(issuer.to_string())),
     );
 

@@ -17,3 +17,5 @@ mod client_credentials;
 mod refresh_grant_family;
 
 mod redis_publication_failure;
+
+mod redis_inventory_time;

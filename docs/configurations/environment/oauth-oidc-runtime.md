@@ -1,6 +1,6 @@
 # Server Environment: OAuth And OIDC Runtime Settings
 
-Last updated: 2026-07-08
+Last updated: 2026-10-02
 
 Status: current implementation baseline
 
@@ -69,10 +69,15 @@ duplicate `access_token` fields is rejected. DPoP-bound tokens require the DPoP
 Authorization scheme and a proof for the actual POST method and token hash
 (RFC 9449 section 7). The router's request-body size limit also applies.
 
-## Browser endpoint query admission
+## Browser endpoint parameter admission
 
 `/authorize` and `/logout` use strict form decoding for GET and implicit HEAD
-queries. Percent escapes must be complete hexadecimal pairs and the decoded
+queries. `/authorize` also accepts cross-origin OAuth client POST requests with
+`application/x-www-form-urlencoded` bodies through the same authorization policy.
+POST rejects a nonempty URI query and duplicate or unsupported Content-Type
+headers; parameters come exclusively from its bounded form body. Response mode
+selects query or form-post output independently of the incoming method.
+Percent escapes must be complete hexadecimal pairs and the decoded
 text must be valid UTF-8 ([RFC 6749 Appendix B](https://www.rfc-editor.org/rfc/rfc6749#appendix-B)).
 `+` decodes to a space; `%2B` decodes to a literal plus.
 
@@ -83,12 +88,15 @@ singleton parameters are rejected, including encoded spellings of the same name
 Repeated `resource` values reach the existing single-resource policy and return
 `invalid_target`; they are not silently collapsed.
 
-Limits remain 16 KiB of raw query, 64 nonempty encoded parameters, 64 decoded
+Limits remain 16 KiB of raw query or authorization form body, 64 nonempty encoded parameters, 64 decoded
 bytes per name and 8 KiB per value. Ignored and empty parameters count toward
 these limits. Transport and URI credential checks still apply. Admission errors
 return no-cache `invalid_request` responses without echoing supplied values.
 Clients that relied on replacement-character decoding must send valid UTF-8;
-no server configuration or database migration is required.
+no new server configuration or database migration is required for this admission
+change. Login and consent retain admitted input server-side; see the
+[continuation rollout requirements](../../operations/authorization-code-refresh-recovery.md#authorization-continuation-rollout)
+before updating nodes with pending interactions.
 
 ## Authorization configuration snapshots
 
@@ -132,6 +140,13 @@ No database migration or new environment setting is required.
 
 ## JWT bearer grant (RFC 7523)
 
+When JWT access tokens are enabled, a JWT-bearer request must include a valid
+`resource`. The current policy defines no default resource for this grant;
+omission returns `invalid_target` before token storage. A client identifier and
+the assertion's token-endpoint audience do not select an access-token resource.
+The client_credentials default-target policy authorizes that grant only and is
+not reused for JWT-bearer subjects. Opaque-token behavior remains compatible.
+
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
 | `AEGAEON_ENABLE_JWT_BEARER_GRANT` | _removed_ | `environment` | Removed startup-environment fallback. Enables the JWT bearer authorization grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:jwt-bearer`. |
@@ -145,6 +160,24 @@ No database migration or new environment setting is required.
 | `AEGAEON_ENABLE_TOKEN_EXCHANGE` | _removed_ | `environment` | Removed startup-environment fallback. Enables the token exchange grant on `/token`. In the supported PostgreSQL-backed runtime, `policy.allowedGrantTypes` is authoritative and must include `urn:ietf:params:oauth:grant-type:token-exchange`. |
 
 ## JWT access tokens / JWT introspection response
+
+RFC 9068 section 3 requires a resource audience for JWT access tokens. The
+OpenID JWT grant default is the issuer's enabled UserInfo resource; authorized
+client_credentials permits supply their selected resource audience. Other
+grants without an explicit resource or an approved default return
+`invalid_target`. Authorization codes are rejected before storage when no JWT
+resource can be selected. Codes or refresh grants created under legacy opaque
+client-ID defaults cannot become JWT resource grants after enabling JWT output;
+clients must authorize again with a resource. Refresh target snapshots continue
+to prevent switching resources or widening scopes.
+Device-code redemption applies the same audience policy before consuming an
+approved code. A missing JWT resource without an approved default returns
+`invalid_target` and retains the code. A resource explicitly bound at device
+authorization is retained even when omitted at redemption. UserInfo defaults
+require configured OpenID support, enabled UserInfo and the granted `openid` scope; requesting a
+different resource at redemption cannot add authority to the device grant.
+Opaque device tokens retain the bound resource or client-ID fallback, including
+OpenID grants, regardless of UserInfo availability.
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |
@@ -242,6 +275,11 @@ The local snapshot remains an optimization; PostgreSQL is the authoritative regi
 monitor exits if a node cannot converge to the DB projection.
 
 ## PAR (Pushed Authorization Requests)
+
+All `/par` forms require outer `client_id`, including those using Basic or
+assertion authentication or a signed Request Object. Its value must match the
+authenticated client and the verified Request Object `client_id`. See
+[client assertion identification](../../operations/private-key-jwt.md#client-identification).
 
 | Variable | Default | Scope | Notes |
 | --- | --- | --- | --- |

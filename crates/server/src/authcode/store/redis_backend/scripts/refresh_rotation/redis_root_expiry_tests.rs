@@ -41,7 +41,8 @@ fn commit(
         RefreshRotationCommitArgs {
             now_epoch_secs: now,
             has_exchange_root: true,
-            exchange_root_deadline: root_deadline,
+            exchange_root_deadline_epoch_secs: root_deadline,
+            exchange_root_deadline_nanos: 0,
             previous_refresh_token: "previous-refresh",
             expected_previous_payload: previous,
             rotated_previous_payload: "rotated-previous",
@@ -134,4 +135,70 @@ fn redis_refresh_root_expiry_rejects_while_refresh_is_unexpired() -> Result<(), 
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_refresh_root_fractional_comparator_boundaries() {
+    // Exercise the exact production guard at deterministic Redis-resolution
+    // timestamps. The real-store test separately checks TIME and Rust transport.
+    let source = super::COMMIT_REFRESH_ROTATION;
+    let start = source
+        .find("local current_time = redis_commit_time()")
+        .unwrap();
+    let end = source
+        .find("local function system_time_epoch_secs")
+        .unwrap();
+    let body = format!(
+        "local function redis_commit_time() return {{ARGV[1], ARGV[2]}} end\n{}\nreturn 'ok'",
+        &source[start..end]
+    );
+    let script = super::super::super::refresh_grants::GrantCommit::script(&body);
+    let url = std::env::var("AEGAEON_TEST_REDIS_URL").unwrap();
+    let mut conn = redis::Client::open(url).unwrap().get_connection().unwrap();
+    let prefix = format!("root-comparator:{{{}}}", uuid::Uuid::new_v4());
+    let keys: [String; 21] = std::array::from_fn(|i| format!("{prefix}:{i}"));
+    for (seconds, micros, deadline_seconds, nanos, has_root, revoked, expected) in [
+        (100_u64, 0_u32, 101_u64, 0_u32, true, false, "ok"),
+        (100, 0, 100, 0, true, false, "invalid"),
+        (100, 1, 100, 0, true, false, "invalid"),
+        (100, 0, 100, 1, true, false, "ok"),
+        (100, 949_999, 100, 950_000_000, true, false, "ok"),
+        (100, 950_000, 100, 950_000_000, true, false, "invalid"),
+        (100, 950_001, 100, 950_000_000, true, false, "invalid"),
+        (100, 950_000, 100, 950_000_001, true, false, "ok"),
+        (101, 0, 100, 999_999_999, true, false, "invalid"),
+        (100, 0, u64::MAX, 999_999_999, true, false, "ok"),
+        (100, 0, 101, 0, true, true, "invalid"),
+        (100, 950_000, 100, 0, false, true, "ok"),
+    ] {
+        redis::cmd("DEL")
+            .arg(&keys)
+            .query::<usize>(&mut conn)
+            .unwrap();
+        if revoked {
+            redis::cmd("SET")
+                .arg(&keys[20])
+                .arg("revoked")
+                .query::<()>(&mut conn)
+                .unwrap();
+        }
+        let mut invocation = script.prepare_invoke();
+        invocation.key(&keys);
+        let mut args = vec![String::new(); 20];
+        args[0] = seconds.to_string();
+        args[1] = micros.to_string();
+        args[17] = if has_root { "1" } else { "0" }.into();
+        args[18] = deadline_seconds.to_string();
+        args[19] = nanos.to_string();
+        invocation.arg(&args);
+        super::super::super::refresh_grants::GrantCommit::independent_for_test(&keys[19])
+            .append(&mut invocation);
+        let actual: String = invocation.invoke(&mut conn).unwrap();
+        assert_eq!(actual, expected, "now=({seconds},{micros}) deadline=({deadline_seconds},{nanos}) root={has_root} revoked={revoked}");
+    }
+    redis::cmd("DEL")
+        .arg(&keys)
+        .query::<usize>(&mut conn)
+        .unwrap();
 }

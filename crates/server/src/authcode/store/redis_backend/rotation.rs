@@ -119,7 +119,15 @@ impl RedisTokenStoreBackend {
             || self.keyspace.version_key(),
             |root| self.keyspace.revoked_key(&root.id),
         );
-        let root_deadline = root.map_or(0, |root| system_time_epoch_secs(root.expires_at));
+        let root_deadline = root
+            .map(|root| root.expires_at.duration_since(SystemTime::UNIX_EPOCH))
+            .transpose()
+            .map_err(|_| {
+                TokenStoreStorageError::InvariantViolation(
+                    "exchange root deadline before epoch".into(),
+                )
+            })?
+            .map_or(std::time::Duration::ZERO, |deadline| deadline);
         let previous_subject_refresh_key =
             self.keyspace.subject_refresh_key(&rotated_previous.user_id);
         let new_subject_refresh_key = self.keyspace.subject_refresh_key(&new_refresh.user_id);
@@ -213,7 +221,8 @@ impl RedisTokenStoreBackend {
             RefreshRotationCommitArgs {
                 now_epoch_secs: system_time_epoch_secs(SystemTime::now()),
                 has_exchange_root: root.is_some(),
-                exchange_root_deadline: root_deadline,
+                exchange_root_deadline_epoch_secs: root_deadline.as_secs(),
+                exchange_root_deadline_nanos: root_deadline.subsec_nanos(),
                 previous_refresh_token: previous_refresh,
                 expected_previous_payload: expected_previous_payload.as_str(),
                 rotated_previous_payload: rotated_previous_payload.as_str(),

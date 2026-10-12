@@ -15,7 +15,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 URL_KEYS = [
     f"AEGAEON_{name}_REDIS_URL"
-    for name in ("PAR", "AUTH_CODE", "TOKEN_STORE", "REQUEST_OBJECT_JTI")
+    for name in (
+        "PAR",
+        "AUTH_CODE",
+        "DEVICE_CODE",
+        "AUTH_SESSION",
+        "STEPUP",
+        "OIDC_LOGOUT_SESSION",
+        "TOKEN_STORE",
+        "REQUEST_OBJECT_JTI",
+    )
 ]
 CASES = ("redis_code_case", "postgres_case", "http_par_jar_shared_redis_refresh")
 MOCK = r"""

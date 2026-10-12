@@ -16,6 +16,9 @@ use super::{
 #[cfg(test)]
 mod sender_contract_tests;
 
+#[cfg(test)]
+mod resource_tests;
+
 struct ApprovedDeviceGrant {
     user_id: String,
     scope: Option<String>,
@@ -112,6 +115,23 @@ async fn device_application_authorization(
     Ok((snapshot, guard))
 }
 
+fn device_access_token_response(
+    access_token: &str,
+    token_type: &str,
+    expires_in: u64,
+    scope: Option<&str>,
+) -> Response {
+    let mut body = json!({
+        "access_token": access_token,
+        "token_type": token_type,
+        "expires_in": expires_in,
+    });
+    if let Some(scope) = scope {
+        body["scope"] = json!(scope);
+    }
+    token_json_response(StatusCode::OK, body)
+}
+
 async fn approved_device_grant_response(
     state: &AppState,
     ctx: &TokenEndpointContext,
@@ -126,10 +146,17 @@ async fn approved_device_grant_response(
         Ok(timing) => timing,
         Err(response) => return response,
     };
-    let audience = grant
-        .resource
-        .clone()
-        .unwrap_or_else(|| grant.client_id.clone());
+    let policy = state.tokens.issuer.device_access_token_audience_policy();
+    let audience = match policy.resolve(
+        &grant.client_id,
+        grant.scope.as_deref(),
+        grant.resource.as_deref(),
+    ) {
+        Ok(audience) => audience,
+        Err(error) => {
+            return token_error_response(StatusCode::BAD_REQUEST, "invalid_target", Some(error));
+        }
+    };
     let access_token = match state
         .tokens
         .issuer
@@ -200,15 +227,12 @@ async fn approved_device_grant_response(
     {
         return token_internal_error_response("device_code_access_token_store", Some(&error));
     }
-    let mut body = json!({
-        "access_token": access_token,
-        "token_type": token_type,
-        "expires_in": expires_in,
-    });
-    if let Some(scope) = grant.scope {
-        body["scope"] = json!(scope);
-    }
-    token_json_response(StatusCode::OK, body)
+    device_access_token_response(
+        &access_token,
+        token_type,
+        expires_in,
+        grant.scope.as_deref(),
+    )
 }
 
 pub(super) async fn handle_token_device_code_grant(
@@ -232,11 +256,12 @@ pub(super) async fn handle_token_device_code_grant(
     let poll = match state
         .device
         .code_store
-        .try_poll_async(
+        .try_poll_for_token_async(
             device_code,
             ctx.client_id.clone(),
             None,
             ctx.resource.clone(),
+            state.tokens.issuer.device_access_token_audience_policy(),
         )
         .await
     {

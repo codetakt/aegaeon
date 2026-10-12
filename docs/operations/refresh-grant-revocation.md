@@ -1,6 +1,6 @@
 # Refresh-grant revocation and coordinated upgrade
 
-Last updated: 2026-10-03
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -70,6 +70,13 @@ and service availability are restored. These rules do not promise transaction
 rollback, successful cleanup under permanently denied permissions, or failure
 atomicity for every authorization-code, rotation and exchange write. A final
 publication followed by a lost reply remains an uncertain outcome.
+
+Subject token listings filter inactive or inconsistent records without deleting
+stored authority. Stale subject-index memberships are pruned only if the current
+record still matches the observed bytes or remains absent. Explicit expiry and
+revocation cleanup retain responsibility for physical record removal. Refresh
+rotation compares exchange-root deadlines at Redis microsecond resolution against
+the stored seconds and nanoseconds, including the final fractional second.
 
 ## Upgrade and inventory
 

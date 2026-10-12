@@ -1,12 +1,12 @@
 mod error;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 mod in_memory;
 mod record;
 mod redis_store;
 mod scripts;
 
 pub(super) use error::ParStorageError;
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub(super) use in_memory::InMemoryParRequestStore;
 pub(super) use redis_store::RedisParRequestStore;
 

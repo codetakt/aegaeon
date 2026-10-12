@@ -289,3 +289,5 @@ fn fixture_fresh_for(entry: &mut CacheEntry, duration: std::time::Duration) {
 mod cache_policy_tests;
 
 mod refresh_failure_tests;
+
+mod usage_metadata;

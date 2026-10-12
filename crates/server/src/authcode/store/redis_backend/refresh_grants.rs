@@ -16,6 +16,11 @@ const PREPARE: &str = r"
 local gk = #KEYS - 2
 local ga = #ARGV - 7
 local grant_mode = ARGV[ga]
+local commit_time
+local function redis_commit_time()
+  if not commit_time then commit_time = redis.call('TIME') end
+  return commit_time
+end
 local version_type = redis.call('TYPE', KEYS[gk+2]).ok
 if version_type ~= 'none' and version_type ~= 'string' then return 'version_type' end
 local version = redis.call('GET', KEYS[gk+2]) or '0'
@@ -33,7 +38,7 @@ if grant_mode ~= '0' then
   elseif grant_mode == '2' then
     if redis.call('GET', KEYS[gk]) ~= ARGV[ga+1] then return 'invalid' end
   else return 'invalid' end
-  local time = redis.call('TIME')
+  local time = redis_commit_time()
   if decimal_ge(time[1], ARGV[ga+6]) then
     if time[1] ~= ARGV[ga+6] or tonumber(time[2]) * 1000 >= tonumber(ARGV[ga+7]) then return 'invalid' end
   end

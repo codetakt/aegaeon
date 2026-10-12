@@ -4,8 +4,9 @@
 fn trust_chain_resolved_metadata_no_policy() {
     let now = 1_700_000_000_i64;
     let leaf = sample_entity_config("https://rp.example.com", now);
-    let sub_stmt =
+    let mut sub_stmt =
         sample_subordinate_statement("https://ta.example.com", "https://rp.example.com", now);
+    sub_stmt.metadata_policy = None;
     let ta = sample_entity_config("https://ta.example.com", now);
 
     let chain = TrustChain {
@@ -55,7 +56,7 @@ fn trust_chain_resolved_metadata_with_policy() {
 }
 
 #[test]
-fn trust_chain_resolved_metadata_policy_violation() {
+fn trust_chain_resolved_metadata_empty_subset() {
     let now = 1_700_000_000_i64;
     let mut leaf = sample_entity_config("https://rp.example.com", now);
     // Leaf claims implicit grant
@@ -87,8 +88,8 @@ fn trust_chain_resolved_metadata_policy_violation() {
         },
     };
 
-    let err = must_err(chain.resolved_metadata());
-    assert!(matches!(err, FederationError::MetadataPolicy(_)));
+    let resolved = must_some(must_ok(chain.resolved_metadata()));
+    assert_eq!(resolved["openid_relying_party"]["grant_types"], json!([]));
 }
 
 #[test]
@@ -97,8 +98,9 @@ fn trust_chain_no_metadata() {
     let mut leaf = sample_entity_config("https://rp.example.com", now);
     leaf.metadata = None;
 
-    let sub_stmt =
+    let mut sub_stmt =
         sample_subordinate_statement("https://ta.example.com", "https://rp.example.com", now);
+    sub_stmt.metadata_policy = None;
     let ta = sample_entity_config("https://ta.example.com", now);
 
     let chain = TrustChain {

@@ -246,12 +246,26 @@ jobs:
       - name: Run equivalence tests (fail-close)
         run: |
           set -euo pipefail
-          wasm_file=$(find -L result/ -name '*.wasm' -type f | head -1)
-          if [ -z "$wasm_file" ]; then
+          wasm_manifest=$(mktemp)
+          trap 'rm -f "$wasm_manifest"' EXIT
+          if ! find -L result/ -name '*.wasm' -type f -print0 > "$wasm_manifest"; then
+            echo "::error::WASM build output scan failed"
+            exit 1
+          fi
+          mapfile -d '' -t wasm_files < "$wasm_manifest"
+          if [ "${#wasm_files[@]}" -eq 0 ]; then
             echo "::error::No .wasm file found in build output"
             exit 1
           fi
-          AEG_REQUIRE_WASM=1 nix develop .#verification --command tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
+          if [ "${#wasm_files[@]}" -ne 1 ]; then
+            echo "::error::Ambiguous WASM build output"
+            exit 1
+          fi
+          wasm_file="${wasm_files[0]}"
+          sha256sum "$wasm_file"
+          AEGAEON_REQUIRE_WASM=1 AEGAEON_REQUIRE_NATIVE_EQUIV=1 \
+            nix develop .#verification --command nix develop .#typescript --command \
+              tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
 
   # Dudect Constant-Time Analysis (HACL*/EverCrypt)
   dudect:
@@ -457,6 +471,7 @@ jobs:
           run_test -p aegaeon-server --lib \
             raw_id_token_payload_parser_rejects_unknown_surface_backend_override \
             -- --nocapture
+          run_test -p aegaeon-server --lib oidc_pss_hash_ -- --nocapture
           run_test -p aegaeon-server --lib \
             compat_profile_falls_back_when_hash_runtime_is_unavailable -- --nocapture
           run_test -p aegaeon-server --lib \
@@ -587,6 +602,8 @@ jobs:
             --features "$strict_features" -- --nocapture
           run_test -p aegaeon-server --lib \
             test_extract_nonce_from_proof_rejects_duplicate_keys \
+            --features "$strict_features" -- --nocapture
+          run_test -p aegaeon-server --lib oidc_pss_hash_ \
             --features "$strict_features" -- --nocapture
           run_test -p aegaeon-server --test oidc_hash_vectors \
             --features "$strict_features" -- --nocapture

@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {webcrypto, createHash} from 'node:crypto';
 
-export async function checkDpopTimePolicyBounds(source, fixture) {
+export async function checkDpopTimePolicyBounds(source, fixture, onCheck) {
   const wasmBytes = fs.readFileSync(fixture);
   const manifest = {sha256:createHash('sha256').update(wasmBytes).digest('hex'),size_bytes:wasmBytes.length};
   const u64Max = (1n << 64n) - 1n;
@@ -42,6 +42,7 @@ export async function checkDpopTimePolicyBounds(source, fixture) {
     try {
       run();
       passed++;
+      onCheck?.(`${adapter}/${route}/${label}`);
     } catch (error) {
       error.message = `${adapter}/${route}/${label}: ${error.message}`;
       throw error;

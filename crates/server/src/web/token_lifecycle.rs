@@ -19,6 +19,8 @@ use crate::authcode::token::TokenPolicyError;
 use crate::authcode::types::AccessToken;
 use crate::util;
 
+#[cfg(test)]
+mod basic_auth_tests;
 mod client_auth;
 mod forms;
 mod introspection;
@@ -227,17 +229,7 @@ pub(super) async fn introspect(
         Ok(form) => form,
         Err(resp) => return resp,
     };
-    // Pin the presented identity before authentication; token state remains unread here.
-    let basic_id = super::oauth_errors::authorization_header(&headers)
-        .ok()
-        .flatten()
-        .and_then(crate::client_registry::ClientRegistry::decode_basic_auth_credentials)
-        .map(|(id, _)| id);
-    let requested_id = basic_id.as_deref().or(form.client_id.as_deref());
-    let state = match super::client_credentials_authorization::request_state(
-        &state,
-        &requested_id.into_iter().collect::<Vec<_>>(),
-    ) {
+    let state = match client_auth::introspection_request_state(&state, &headers, &form).await {
         Ok(state) => state,
         Err(response) => return response,
     };

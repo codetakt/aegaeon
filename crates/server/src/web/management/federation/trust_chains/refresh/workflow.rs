@@ -1,8 +1,11 @@
-use crate::federation::FederationError;
+use crate::federation::{
+    resolve_trust_chain_with_jwts, FederationError, HttpFederationFetcher, TrustAnchor,
+};
 use crate::management::types::FederationTrustChainEntry;
 use crate::web::management::federation_cache::{
     duration_secs_i64, load_federation_trust_chain_entry, load_resolvable_trust_anchors,
     resolve_refreshed_trust_chain_payload, store_refreshed_federation_trust_chain,
+    validate_refreshed_trust_chain,
 };
 use crate::web::management::state::ManagementSession;
 use crate::web::management::{
@@ -23,6 +26,38 @@ pub(super) async fn refresh_federation_trust_chain_inner(
     outbound_allowed_domains: Vec<String>,
     request_id: &str,
 ) -> Result<FederationTrustChainEntry, Response> {
+    refresh_with(
+        pool,
+        params,
+        session,
+        trust_chain_cache_ttl,
+        request_id,
+        |leaf, anchors, now| async move {
+            let fetcher = HttpFederationFetcher::try_with_optional_allowed_domains(
+                &outbound_allowed_domains,
+            )?;
+            resolve_trust_chain_with_jwts(&leaf, &anchors, &fetcher, now)
+                .await
+                .map(|resolved| resolved.chain_jwts)
+        },
+    )
+    .await
+}
+
+// The seam supplies raw acquisition only. Common admission below independently
+// verifies signatures, identities and policies; no detached chain can bypass it.
+pub(in crate::web::management) async fn refresh_with<F, Fut>(
+    pool: &PgPool,
+    params: &TeamEnvironmentTrustChainPath,
+    session: &ManagementSession,
+    trust_chain_cache_ttl: Duration,
+    request_id: &str,
+    acquire: F,
+) -> Result<FederationTrustChainEntry, Response>
+where
+    F: FnOnce(String, Vec<TrustAnchor>, i64) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<String>, FederationError>>,
+{
     let trust_chain_id = params.trust_chain_id(request_id)?;
     let (scope, trust_chain_id) = require_federation_lifecycle_resource_scope(
         pool,
@@ -60,13 +95,9 @@ pub(super) async fn refresh_federation_trust_chain_inner(
         ));
     }
 
-    let chain_jwts = resolve_refreshed_trust_chain_payload(
-        &existing,
-        trust_anchors,
-        outbound_allowed_domains,
-        request_id,
-    )
-    .await?;
+    let chain_jwts =
+        resolve_refreshed_trust_chain_payload(&existing, trust_anchors, request_id, acquire)
+            .await?;
 
     let ttl_secs = duration_secs_i64(trust_chain_cache_ttl, request_id)?;
     let mut tx = begin_management_transaction(pool, request_id).await?;
@@ -78,11 +109,16 @@ pub(super) async fn refresh_federation_trust_chain_inner(
         "Insufficient permissions for federation trust chain operations",
     )
     .await?;
+    // Revalidate after acquisition against current configuration; shared row
+    // locks prevent key/pin changes or deletion until renewal and audit commit.
+    let current_anchors =
+        load_resolvable_trust_anchors(&mut tx, scope.environment, request_id).await?;
+    validate_refreshed_trust_chain(&chain_jwts, &existing, &current_anchors, request_id)?;
     let refreshed = store_refreshed_federation_trust_chain(
         &mut tx,
         trust_chain_id,
         scope.environment,
-        chain_jwts,
+        serde_json::json!(chain_jwts),
         ttl_secs,
         request_id,
     )
