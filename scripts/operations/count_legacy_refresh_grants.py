@@ -27,6 +27,9 @@ def connection() -> tuple[list[str], dict[str, str]]:
     if url.scheme not in ("redis", "rediss") or not url.hostname:
         message = "AEGAEON_TOKEN_STORE_REDIS_URL must be redis:// or rediss://"
         raise ValueError(message)
+    if url.username and url.password is None:
+        message = "Redis URL username requires an explicit password (empty is allowed)"
+        raise ValueError(message)
     command = [
         "redis-cli",
         "--json",
@@ -44,6 +47,7 @@ def connection() -> tuple[list[str], dict[str, str]]:
     if url.scheme == "rediss":
         command += ["--tls"]
     env = os.environ.copy()
+    env.pop("REDISCLI_AUTH", None)
     if url.password is not None:
         env["REDISCLI_AUTH"] = urllib.parse.unquote(url.password)
     return command, env

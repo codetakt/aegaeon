@@ -103,7 +103,11 @@ backfill, automatic root creation or authorization to delete production records.
    `redis-cli` 7.0 or later on the inventory host for its `--json` and `-e`
    options; this client-side prerequisite does not raise the Redis server
    requirement. The helper reads
-   `AEGAEON_TOKEN_STORE_REDIS_URL`, invokes `redis-cli`, and emits counts only:
+   `AEGAEON_TOKEN_STORE_REDIS_URL`, invokes `redis-cli`, and emits counts only.
+   It ignores inherited `REDISCLI_AUTH`; only a password explicitly supplied in
+   that URL is passed to the child process. A named user requires an explicit
+   password component (empty for a `nopass` account); omitting it is rejected
+   to prevent redis-cli from silently using the default account:
 
    ```sh
    python3 scripts/operations/count_legacy_refresh_grants.py \

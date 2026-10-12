@@ -151,3 +151,35 @@ def test_inventory_rejects_malformed_time_before_scan_or_count_output(monkeypatc
 )
 def test_inventory_time_preserves_exact_seconds_and_microseconds(reply, expected):
     assert inventory.time_reply(reply) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("redis://127.0.0.1:6379/13", None),
+        ("redis://reader:url%2Dpassword@127.0.0.1:6379/13", "url-password"),
+        ("redis://reader:@127.0.0.1:6379/13", ""),
+        ("redis://:url%2Dpassword@127.0.0.1:6379/13", "url-password"),
+    ],
+)
+def test_inventory_url_exclusively_controls_authentication(monkeypatch, url, expected):
+    monkeypatch.setenv("AEGAEON_TOKEN_STORE_REDIS_URL", url)
+    monkeypatch.setenv("REDISCLI_AUTH", "unrelated-ambient-credential")
+    monkeypatch.setenv("LANG", "C.UTF-8")
+    command, env = inventory.connection()
+    assert env.get("REDISCLI_AUTH") == expected
+    assert env["LANG"] == "C.UTF-8"
+    assert "unrelated-ambient-credential" not in command
+
+
+@pytest.mark.parametrize("scheme", ["redis", "rediss"])
+def test_inventory_named_user_cannot_fall_back_to_default_account(monkeypatch, capsys, scheme):
+    monkeypatch.setenv("AEGAEON_TOKEN_STORE_REDIS_URL", f"{scheme}://reader@127.0.0.1:6379/13")
+    monkeypatch.setattr("sys.argv", ["inventory", "--prefix", "fixture"])
+    with (
+        patch.object(inventory.subprocess, "run") as run,
+        pytest.raises(ValueError, match=r"^Redis URL username requires an explicit password"),
+    ):
+        inventory.main()
+    run.assert_not_called()
+    assert capsys.readouterr().out == ""
