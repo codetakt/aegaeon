@@ -137,8 +137,10 @@ impl ReaderContract {
                     .and_then(|(table, column)| supported_column(table, column))
             };
             let capability = parse_key(left).ok_or("unsupported reader join")?;
-            if left == right
-                || parse_key(right) != Some(capability)
+            let same_column = left == right;
+            let compatible_keys = parse_key(right) == Some(capability);
+            if same_column
+                || !compatible_keys
                 || !matches!(
                     capability,
                     Capability::UserJoinKey | Capability::OrganizationJoinKey
@@ -202,7 +204,7 @@ impl ReaderContract {
 fn reader_contract_rejects_unsupported_and_incomplete_inputs() -> TestResult {
     ReaderContract::load()?;
     let original: serde_json::Value = serde_json::from_str(SOURCE)?;
-    let controls: [fn(&mut serde_json::Value); 13] = [
+    let controls: [fn(&mut serde_json::Value); 16] = [
         |v: &mut serde_json::Value| v["version"] = 2.into(),
         |v: &mut serde_json::Value| v["unexpected"] = true.into(),
         |v: &mut serde_json::Value| {
@@ -217,6 +219,9 @@ fn reader_contract_rejects_unsupported_and_incomplete_inputs() -> TestResult {
             v["relations"][0]["columns"][1] = v["relations"][0]["columns"][0].clone()
         },
         |v: &mut serde_json::Value| v["joins"][1] = v["joins"][0].clone(),
+        |v: &mut serde_json::Value| v["joins"][0][1] = v["joins"][0][0].clone(),
+        |v: &mut serde_json::Value| v["joins"][0][1] = "organizations.id".into(),
+        |v: &mut serde_json::Value| v["joins"][0][1] = "organization_users.missing".into(),
         |v: &mut serde_json::Value| v["semantics"][1] = v["semantics"][0].clone(),
         |v: &mut serde_json::Value| v["predicates"]["active_status"] = "enabled".into(),
         |v: &mut serde_json::Value| {
