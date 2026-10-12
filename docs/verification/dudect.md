@@ -69,6 +69,13 @@ They do not reserve a physical host, move unrelated tasks or interrupts, or
 prove uninterrupted execution. Linux documents those separate mechanisms in
 its [CPU isolation guide](https://docs.kernel.org/admin-guide/cpu-isolation.html).
 
+The candidate collector touches every page of its timestamp and delta buffers
+during initialization, including each final partial page. This moves their lazy
+`calloc` allocation faults ahead of the independent pilot. Their initial values
+remain zero; no target calls, extra samples, discarded batches or changed
+numerical rules are introduced. Original batch resource counters continue to
+record any faults that occur during measurement.
+
 The variance control requires statistic 101 even when a cropped statistic detects
 a difference. Very long measurements can dominate its error term. CPU separation
 reduces one source of competing work; it neither changes that decision nor removes
