@@ -347,14 +347,9 @@ impl TokenIssuer {
 
         let expires_in = self.access_token_ttl_secs;
         let now = SystemTime::now();
-        let expires_at = match access_token_expires_at(now, expires_in) {
-            Ok(expires_at) => expires_at,
-            Err(()) => {
-                return Err(SubjectTokenGrantError::server(
-                    "access token expiry is outside representable time",
-                ));
-            }
-        };
+        let expires_at = access_token_expires_at(now, expires_in).map_err(|()| {
+            SubjectTokenGrantError::server("access token expiry is outside representable time")
+        })?;
         // An assertion grant is not an OpenID authorization grant, even when
         // its requested scope contains openid; it has no UserInfo default.
         let audience = self

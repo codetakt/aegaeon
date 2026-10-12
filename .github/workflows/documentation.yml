@@ -16,6 +16,10 @@ on:
         required: false
         type: string
         default: ""
+      pr-author:
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -41,6 +45,7 @@ jobs:
           PR_BASE_SHA: ${{ inputs.base }}
           PR_HEAD_SHA: ${{ inputs.source-head }}
           PR_TITLE: ${{ inputs.pr-title }}
+          PR_AUTHOR_LOGIN: ${{ inputs.pr-author }}
         run: nix develop .#docs --command bash scripts/ci/run_docs_metadata.sh
 
   helpers:

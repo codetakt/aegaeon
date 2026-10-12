@@ -90,9 +90,9 @@ server.
 | `AEGAEON_DATABASE_URL` | _unset_ | `system` | Required Postgres connection string for the server runtime. |
 | `AEGAEON_DB_MAX_CONNECTIONS` | `10` | `system` | SQLx pool size cap. |
 | `AEGAEON_DB_ACQUIRE_TIMEOUT_SECS` | `5` | `system` | Timeout (seconds) when acquiring a pooled connection. |
-| `AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` | `4096` | `system` | Retained login/consent rows per environment and table; range 1–1,000,000. Deployment storage budget, not an issuer authorization permission. |
-| `AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` | `300` | `system` | New login/consent rows per environment and table in a rolling minute; range 1–1,000,000. Size for the deployment's aggregate traffic. |
-| `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` | `60` | `system` | Authorization requests per transport-validated source in a 60-second shared Redis bucket; positive. Separate from password-login buckets. |
+| `AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` | `4096` | `system` | Retained login/consent/logout-confirmation rows per environment and table; range 1–1,000,000. Deployment storage budget, not an issuer authorization permission. |
+| `AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` | `300` | `system` | New login/consent/logout-confirmation rows per environment and table in a rolling minute; range 1–1,000,000. Size for the deployment's aggregate traffic. |
+| `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` | `60` | `system` | Authorization and initial RP logout requests per transport-validated source in a 60-second shared Redis bucket; positive. Separate from password-login buckets. |
 
 Database URLs require an explicit authority host and cannot contain a fragment.
 Transport checks use SQLx's effective destination, including a `host` or `hostaddr`

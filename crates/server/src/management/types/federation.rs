@@ -25,8 +25,35 @@ pub struct FederationTrustAnchor {
 pub struct CreateFederationTrustAnchorRequest {
     pub entity_id: String,
     pub jwks: serde_json::Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_metadata_policy"
+    )]
+    #[cfg_attr(feature = "openapi", schema(schema_with = metadata_policy_pin_schema))]
     pub metadata_policy: Option<serde_json::Value>,
+}
+
+#[cfg(feature = "openapi")]
+fn metadata_policy_pin_schema() -> utoipa::openapi::schema::Object {
+    use utoipa::openapi::schema::{AdditionalProperties, ObjectBuilder, Type};
+
+    let operators = ObjectBuilder::new()
+        .schema_type(Type::Object)
+        .min_properties(Some(1))
+        .additional_properties(Some(AdditionalProperties::FreeForm(true)));
+    let parameters = ObjectBuilder::new()
+        .schema_type(Type::Object)
+        .min_properties(Some(1))
+        .additional_properties(Some(operators));
+    ObjectBuilder::new()
+        .schema_type(Type::Object)
+        .min_properties(Some(1))
+        .additional_properties(Some(parameters))
+        .description(Some(
+            "Optional local equality pin for the anchor-issued metadata policy. Omit to apply no local pin. When present, entity types, metadata parameters and operator maps must each be nonempty objects; null is invalid. Operator operands and combinations also undergo Federation policy validation, including scope token rules. This schema describes the object structure, not every semantic constraint.",
+        ))
+        .build()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,4 +172,12 @@ pub struct ListFederationLogoutRecoveryIncidentsResponse {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ClearFederationLogoutRecoveryIncidentRequest {
     pub reason: String,
+}
+
+// Missing means no local pin; an explicitly supplied JSON null must reach
+// validation as invalid Some(null), rather than silently becoming absence.
+fn present_metadata_policy<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error> {
+    serde_json::Value::deserialize(deserializer).map(Some)
 }

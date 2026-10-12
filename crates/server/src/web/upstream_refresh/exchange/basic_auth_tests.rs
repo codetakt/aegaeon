@@ -4,12 +4,30 @@ use std::collections::HashMap;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn fixture(id: &str, secret: &str, method: &str) -> UpstreamRefreshLink {
-    UpstreamRefreshLink {
+fn fixture(
+    id: &str,
+    secret: &str,
+    method: &str,
+) -> Result<UpstreamRefreshLink, Box<dyn std::error::Error>> {
+    let token = crate::oidc::IdTokenBuilder::try_new(
+        "https://upstream.example".into(),
+        "subject".into(),
+        id.into(),
+    )
+    .map_err(std::io::Error::other)?
+    .build();
+    let subject_hash =
+        crate::upstream::upstream_subject_link_hash(&token.claims.iss, &token.claims.sub);
+    let original_authentication = crate::web::upstream_refresh_token_envelope::UpstreamRefreshAuthenticationContext::from_validated_id_token(
+        &token, id, &token.claims.iss, &subject_hash,
+    ).map_err(|e| format!("{e:?}"))?;
+    Ok(UpstreamRefreshLink {
         account_link_id: uuid::Uuid::nil(),
         link_env_id: uuid::Uuid::nil(),
+        configuration_version_id: uuid::Uuid::nil(),
         upstream_issuer: "https://upstream.example".into(),
-        upstream_sub_hash: "subject-hash".into(),
+        upstream_sub_hash: subject_hash,
+        original_authentication,
         upstream_refresh_token_generation: 1,
         upstream_refresh_token: "refresh-token".into(),
         upstream_connection_id: uuid::Uuid::nil(),
@@ -17,7 +35,8 @@ fn fixture(id: &str, secret: &str, method: &str) -> UpstreamRefreshLink {
         upstream_client_id: id.into(),
         upstream_auth_method: method.into(),
         upstream_client_secret: Some(secret.into()),
-    }
+        upstream_client_secret_encrypted: None,
+    })
 }
 
 fn discovery() -> OidcDiscovery {
@@ -42,7 +61,7 @@ fn oauth_basic_refresh_builder_encodes_actual_authorization_header() -> TestResu
             "generated_ID-1:secret_ID-2",
         ),
     ] {
-        let link = fixture(id, secret, "client_secret_basic");
+        let link = fixture(id, secret, "client_secret_basic")?;
         let form = build_refresh_form(&link, "client_secret_basic");
         let request = build_refresh_token_request(
             &Client::new(),
@@ -86,7 +105,7 @@ fn oauth_basic_refresh_builder_encodes_actual_authorization_header() -> TestResu
 #[test]
 fn oauth_basic_refresh_builder_preserves_other_methods() -> TestResult {
     for method in ["client_secret_post", "none"] {
-        let link = fixture("client+id", "secret%2B", method);
+        let link = fixture("client+id", "secret%2B", method)?;
         let request = build_refresh_token_request(
             &Client::new(),
             &discovery(),

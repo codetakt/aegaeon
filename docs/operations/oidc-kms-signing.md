@@ -248,6 +248,32 @@ RSA path.
 4. downgrade release wording to compat-only if claim-preserving parity is no
    longer established
 
+## Encrypted Request Objects during rotation
+
+Managed RSA-OAEP/A256GCM Request Objects require a nonempty protected `kid`
+matching the published active encryption key or a still-live retiring decryption
+key. The comparison is case-sensitive. Missing, unknown, expired, revoked or
+signing-purpose identifiers are refused without trying another key. Clients that
+previously omitted `kid` must send the published encryption `kid`; the explicit
+single-key library API retains caller-owned key selection.
+
+After a normal NEXT-to-ACTIVE management transition and runtime restart/reload,
+Aegaeon can decrypt with the active successor and the eligible retiring private
+keys. Each retiring deadline is checked again at use with no extra leeway.
+Both `/jwks` and `/.well-known/jwks.json` continue to publish only the active
+encryption key; retiring private material is never published. With no ACTIVE
+decryption key, the encrypted Request Object capability remains disabled even
+when retiring records exist.
+
+Runtime authority drift still returns 503 and requests restart; these keys are
+not hot-reloaded. Emergency revocation can deliberately interrupt old requests.
+Reactivating a configuration does not restore historical key records or purge
+external caches. The stored retirement-duration formulas and public JWKS cache
+policy are unchanged by this consumer repair. Their coordination, older issued
+artifact lifetimes, rapid-rotation capacity and emergency operations require
+separate release review; successful decryption overlap alone does not establish
+complete rotation continuity.
+
 ## Incident handling
 
 Treat the following as fail-closed conditions:

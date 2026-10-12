@@ -34,6 +34,14 @@ fn oidc(issuer: &str) -> TestResult<crate::oidc::OidcConfig> {
 
 fn configure_issuer(state: &mut AppState, jwt: bool, configured_oidc: bool) -> TestResult {
     let oidc = configured_oidc.then(|| oidc(&state.issuer)).transpose()?;
+    configure_issuer_with_oidc(state, jwt, oidc)
+}
+
+fn configure_issuer_with_oidc(
+    state: &mut AppState,
+    jwt: bool,
+    oidc: Option<crate::oidc::OidcConfig>,
+) -> TestResult {
     state.oidc.config = oidc.clone().map(Arc::new);
     state.tokens.issuer = Arc::new(
         crate::authcode::TokenIssuer::with_stores(
@@ -224,6 +232,17 @@ async fn scenarios(redis: bool) -> TestResult {
         }
         configure_issuer(&mut state, true, true)?;
         let userinfo = crate::resource_audience::userinfo(state.issuer.as_str());
+        let code = grant(&state, CLIENT, Some("openid"), None).await?;
+        let mut disabled = oidc(&state.issuer)?;
+        disabled.userinfo_enabled = false;
+        configure_issuer_with_oidc(&mut state, true, Some(disabled))?;
+        let count = state.device.code_store.try_active_count()?;
+        let (status, body) = poll(&state, &code, CLIENT, None).await?;
+        reject(status, &body);
+        assert_eq!(state.device.code_store.try_active_count()?, count);
+        configure_issuer(&mut state, true, true)?;
+        let (status, body) = poll(&state, &code, CLIENT, None).await?;
+        accepted(&state, status, &body, true, &userinfo)?;
         for scope in ["openid", "openid profile"] {
             let code = grant(&state, CLIENT, Some(scope), None).await?;
             let (status, body) = poll(&state, &code, CLIENT, None).await?;
@@ -260,7 +279,7 @@ async fn device_resource_http_memory_rejects_before_consumption_and_binds_jwt_au
 
 #[tokio::test]
 #[ignore = "requires owned PostgreSQL and Redis"]
-async fn device_resource_http_redis_rejects_before_consumption_and_binds_jwt_audience() -> TestResult
-{
+async fn shared_redis_device_resource_http_rejects_before_consumption_and_binds_jwt_audience(
+) -> TestResult {
     scenarios(true).await
 }

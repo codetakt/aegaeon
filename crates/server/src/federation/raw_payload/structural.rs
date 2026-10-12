@@ -47,6 +47,7 @@ fn decode_entity_statement_from_structural(
     let mut jwks = None;
     let mut metadata = None;
     let mut metadata_policy = None;
+    let mut metadata_policy_crit = None;
     let mut constraints = None;
     let mut trust_marks = None;
     let mut authority_hints = None;
@@ -69,6 +70,9 @@ fn decode_entity_statement_from_structural(
             "metadata_policy" => {
                 metadata_policy = parse_optional_structural_value(payload, member)?
             }
+            "metadata_policy_crit" => {
+                metadata_policy_crit = parse_optional_structural_value(payload, member)?
+            }
             "constraints" => constraints = parse_optional_structural_value(payload, member)?,
             "trust_marks" => trust_marks = parse_optional_structural_value(payload, member)?,
             "authority_hints" => {
@@ -89,6 +93,7 @@ fn decode_entity_statement_from_structural(
         jwks,
         metadata,
         metadata_policy,
+        metadata_policy_crit,
         constraints,
         trust_marks,
         authority_hints,

@@ -305,3 +305,5 @@ async fn refresh_scope_narrowing_keeps_original_openid_resource_default() -> Tes
     assert_eq!(claims(&token)?["aud"], "https://auth.example.com/userinfo");
     Ok(())
 }
+
+mod disabled_userinfo;

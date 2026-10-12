@@ -1,19 +1,14 @@
-use super::oauth_errors::json_error_with_iss;
+use super::oauth_errors::no_cache_json_error_with_iss as json_error_with_iss;
 use super::request_admission::enforce_no_credentials_in_uri;
 use super::transport_boundary::transport_rejection_for_route;
 use super::upstream_id_token::{
-    refreshed_upstream_id_token_signature_failure, validate_upstream_id_token,
-    verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
+    admit_upstream_id_token_header, refreshed_upstream_id_token_signature_failure,
+    validate_upstream_id_token, verify_upstream_id_token_claims, UpstreamIdTokenValidationInput,
 };
-use super::upstream_metadata::{
-    fetch_upstream_jwks_cached, verify_upstream_federation_metadata_blocking,
-};
+use super::upstream_metadata::fetch_upstream_jwks_cached;
 use super::upstream_refresh_links::{
     authenticate_upstream_refresh_caller, load_upstream_refresh_link, UpstreamRefreshLink,
     UpstreamRefreshQuery,
-};
-use super::upstream_refresh_token_envelope::{
-    seal_upstream_refresh_token, upstream_refresh_token_envelope_error_response,
 };
 use super::upstream_token_response::UpstreamTokenResponse;
 use super::AppState;
@@ -24,44 +19,55 @@ use axum::{
     Json,
 };
 use serde_json::json;
-use sqlx::PgPool;
 use std::net::SocketAddr;
 
 use crate::oidc::IdToken;
 use crate::util;
 
-mod exchange;
+pub(super) mod exchange;
+mod persistence;
 mod profile;
+mod runtime_version;
+use aegaeon_pure::upstream_refresh as freshness;
 use exchange::{perform_upstream_refresh_exchange, UpstreamRefreshExchange};
+use persistence::persist_upstream_refresh_exchange;
 use profile::resolve_upstream_refresh_profile;
 #[cfg(test)]
 pub(super) use profile::validate_upstream_refresh_profile_policy;
 
-fn next_upstream_refresh_generation(current: i64, issuer_base: &str) -> Result<i64, Response> {
-    current.checked_add(1).ok_or_else(|| {
-        json_error_with_iss(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server_error",
-            Some("upstream refresh token generation overflow"),
-            issuer_base,
-        )
-    })
-}
-
-async fn validate_upstream_refresh_exchange(
+async fn fetch_upstream_refresh_jwks(
     state: &AppState,
     issuer_base: &str,
-    link: &UpstreamRefreshLink,
     exchange: &UpstreamRefreshExchange,
-) -> Result<(), Response> {
-    let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
-        return Ok(());
-    };
+    id_token_str: &str,
+) -> Result<aegaeon_jose::jwk::JwkSet, Response> {
+    let header = admit_upstream_id_token_header(
+        id_token_str,
+        &exchange.metadata.discovery,
+        state.cfg.jose_header_max_len,
+    )
+    .map_err(refreshed_upstream_id_token_signature_failure)
+    .map_err(|error| {
+        json_error_with_iss(
+            error.status,
+            "server_error",
+            Some(&error.message),
+            issuer_base,
+        )
+    })?;
     let jwks = fetch_upstream_jwks_cached(
         &exchange.client,
-        &exchange.discovery.jwks_uri,
+        &exchange.metadata.discovery.jwks_uri,
         &state.upstream.jwks_cache,
+        &state.upstream.jwks_fetches,
+        &header,
         state.cfg.upstream().outbound_allowed_domains(),
+        |candidate| async move {
+            exchange
+                .metadata
+                .validate_signing_keys(&candidate, issuer_base)
+                .map_err(|_| "upstream JWKS does not match federation metadata".to_string())
+        },
     )
     .await
     .map_err(|message| {
@@ -72,19 +78,26 @@ async fn validate_upstream_refresh_exchange(
             issuer_base,
         )
     })?;
-    verify_upstream_federation_metadata_blocking(
-        state.clone(),
-        link.upstream_issuer.clone(),
-        link.link_env_id,
-        exchange.discovery.clone(),
-        Some(jwks.clone()),
-        issuer_base.to_string(),
-    )
-    .await?;
+    Ok(jwks)
+}
+
+pub(super) async fn validate_upstream_refresh_exchange(
+    state: &AppState,
+    issuer_base: &str,
+    link: &UpstreamRefreshLink,
+    exchange: &UpstreamRefreshExchange,
+) -> Result<(), Response> {
+    let Some(id_token_str) = exchange.token_response.id_token.as_ref() else {
+        return Ok(());
+    };
+    let jwks = fetch_upstream_refresh_jwks(state, issuer_base, exchange, id_token_str).await?;
+    exchange
+        .metadata
+        .validate_signing_keys(&jwks, issuer_base)?;
     let (claims, alg_name) = verify_upstream_id_token_claims(
         id_token_str,
         &jwks,
-        &exchange.discovery,
+        &exchange.metadata.discovery,
         state.cfg.jose_header_max_len,
     )
     .map_err(|error| {
@@ -113,9 +126,20 @@ async fn validate_upstream_refresh_exchange(
             jwt_leeway_secs: state.cfg.jwt_runtime().leeway_secs(),
         },
     )
+    .and_then(|()| {
+        if !freshness::issued_during_refresh(
+            id_token.claims.iat,
+            exchange.request_started_at,
+            state.cfg.jwt_runtime().leeway_secs(),
+        ) {
+            return Err("refreshed id_token predates refresh request".to_string());
+        }
+        link.original_authentication
+            .validate_refreshed_id_token(&id_token)
+            .map_err(|_| "original authentication context mismatch".to_string())
+    })
     .map_err(|error| {
         tracing::warn!(
-            upstream_issuer = %link.upstream_issuer,
             error = %error,
             "upstream refreshed id_token validation failed"
         );
@@ -126,109 +150,6 @@ async fn validate_upstream_refresh_exchange(
             issuer_base,
         )
     })
-}
-
-async fn persist_upstream_refresh_exchange(
-    pool: &PgPool,
-    link: &UpstreamRefreshLink,
-    token_response: &UpstreamTokenResponse,
-    issuer_base: &str,
-) -> Result<(), Response> {
-    if let Some(new_refresh_token) = token_response.refresh_token.as_ref() {
-        let next_generation =
-            next_upstream_refresh_generation(link.upstream_refresh_token_generation, issuer_base)?;
-        let encrypted_refresh_token = seal_upstream_refresh_token(
-            new_refresh_token,
-            link.link_env_id,
-            link.upstream_issuer.as_str(),
-            link.upstream_sub_hash.as_str(),
-            link.upstream_connection_id,
-            next_generation,
-        )
-        .map_err(|error| {
-            upstream_refresh_token_envelope_error_response(
-                error,
-                "failed to encrypt rotated upstream refresh token",
-                issuer_base,
-            )
-        })?;
-        let result = sqlx::query(
-            "UPDATE aegaeon.account_links \
-             SET upstream_refresh_token_encrypted = $1, \
-                 upstream_refresh_token_connection_id = $2, \
-                 upstream_refresh_token_generation = $3, \
-                 last_used_at = now() \
-             WHERE id = $4 \
-               AND environment_id = $5 \
-               AND upstream_issuer = $6 \
-               AND upstream_sub_hash = $7 \
-               AND connection_id = $2 \
-               AND upstream_refresh_token_connection_id = $2 \
-               AND upstream_refresh_token_generation = $8",
-        )
-        .bind(encrypted_refresh_token)
-        .bind(link.upstream_connection_id)
-        .bind(next_generation)
-        .bind(link.account_link_id)
-        .bind(link.link_env_id)
-        .bind(&link.upstream_issuer)
-        .bind(&link.upstream_sub_hash)
-        .bind(link.upstream_refresh_token_generation)
-        .execute(pool)
-        .await
-        .map_err(|_| {
-            json_error_with_iss(
-                StatusCode::BAD_GATEWAY,
-                "server_error",
-                Some("failed to persist rotated upstream refresh token"),
-                issuer_base,
-            )
-        })?;
-        if result.rows_affected() == 0 {
-            return Err(json_error_with_iss(
-                StatusCode::CONFLICT,
-                "invalid_grant",
-                Some("upstream refresh token generation is stale"),
-                issuer_base,
-            ));
-        }
-        return Ok(());
-    }
-    let result = sqlx::query(
-        "UPDATE aegaeon.account_links SET last_used_at = now() \
-         WHERE id = $1 \
-           AND environment_id = $2 \
-           AND upstream_issuer = $3 \
-           AND upstream_sub_hash = $4 \
-           AND connection_id = $5 \
-           AND upstream_refresh_token_connection_id = $5 \
-           AND upstream_refresh_token_generation = $6",
-    )
-    .bind(link.account_link_id)
-    .bind(link.link_env_id)
-    .bind(&link.upstream_issuer)
-    .bind(&link.upstream_sub_hash)
-    .bind(link.upstream_connection_id)
-    .bind(link.upstream_refresh_token_generation)
-    .execute(pool)
-    .await
-    .map_err(|_| {
-        json_error_with_iss(
-            StatusCode::BAD_GATEWAY,
-            "server_error",
-            Some("failed to persist upstream refresh metadata"),
-            issuer_base,
-        )
-    })?;
-    if result.rows_affected() == 0 {
-        return Err(json_error_with_iss(
-            StatusCode::CONFLICT,
-            "invalid_grant",
-            Some("upstream refresh token generation is stale"),
-            issuer_base,
-        ));
-    }
-    Ok(())
 }
 
 fn build_upstream_refresh_response(
@@ -288,6 +209,11 @@ pub(super) async fn upstream_refresh(
         Ok(link) => link,
         Err(resp) => return resp,
     };
+    if let Err(response) =
+        runtime_version::validate_loaded_runtime_version(&state, &link, issuer_base)
+    {
+        return response;
+    }
     let profile = match resolve_upstream_refresh_profile(&state, issuer_base, &link).await {
         Ok(profile) => profile,
         Err(resp) => return resp,
@@ -302,10 +228,19 @@ pub(super) async fn upstream_refresh(
     {
         return resp;
     }
-    if let Err(resp) =
-        persist_upstream_refresh_exchange(pool, &link, &exchange.token_response, issuer_base).await
+    if let Err(resp) = persist_upstream_refresh_exchange(
+        pool,
+        &link,
+        &exchange.token_response,
+        &profile,
+        issuer_base,
+    )
+    .await
     {
         return resp;
     }
     build_upstream_refresh_response(&link, &exchange.token_response)
 }
+
+#[cfg(test)]
+mod tests;

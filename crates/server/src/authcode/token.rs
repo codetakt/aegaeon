@@ -128,6 +128,8 @@ impl TokenIssuer {
             self.jwt_access_tokens_enabled,
             self.oidc
                 .as_ref()
+                // Preserve opaque-token compatibility; JWT defaults require a live resource.
+                .filter(|cfg| !self.jwt_access_tokens_enabled || cfg.userinfo_enabled)
                 .map(|cfg| crate::resource_audience::userinfo(&cfg.issuer)),
         )
     }

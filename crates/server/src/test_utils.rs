@@ -9,14 +9,14 @@ pub mod mock_dpop {
     use std::collections::HashSet;
 
     /// Mock implementation with a configurable `iat` acceptance window.
-    pub fn verify_dpop_with_iat_window(
+    pub fn verify_dpop_with_iat_window_and_issued_at(
         proof: &str,
         method: &str,
         uri: &str,
         now: u64,
         expected_ath: Option<&str>,
         iat_window_secs: u64,
-    ) -> Option<DpopVerification> {
+    ) -> Option<(DpopVerification, u64)> {
         struct Claims {
             htm: String,
             htu: String,
@@ -125,10 +125,13 @@ pub mod mock_dpop {
             (None, None) => {}
         }
 
-        Some(DpopVerification {
-            jti: claims.jti,
-            nonce: claims.nonce,
-        })
+        Some((
+            DpopVerification {
+                jti: claims.jti,
+                nonce: claims.nonce,
+            },
+            iat,
+        ))
     }
 
     fn strip_query_and_fragment(uri: &str) -> &str {
@@ -283,3 +286,6 @@ pub mod env_inventory {
             })
     }
 }
+
+#[cfg(test)]
+pub(crate) mod jwk_usage;

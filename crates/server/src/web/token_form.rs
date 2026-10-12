@@ -105,7 +105,8 @@ pub(super) fn token_form_from_params(
     Ok(TokenForm {
         grant_type,
         code: optional_token_param(params, "code", issuer_base)?,
-        client_id: optional_token_param(params, "client_id", issuer_base)?,
+        client_id: optional_token_param(params, "client_id", issuer_base)?
+            .filter(|value| !value.is_empty()),
         client_secret: optional_token_param(params, "client_secret", issuer_base)?,
         code_verifier: optional_token_param(params, "code_verifier", issuer_base)?,
         redirect_uri: optional_token_param(params, "redirect_uri", issuer_base)?,

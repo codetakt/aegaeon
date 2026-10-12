@@ -1,6 +1,6 @@
 # Management Plane Configuration Model
 
-Last updated: 2026-09-15
+Last updated: 2026-10-11
 
 Status: current implementation baseline
 
@@ -102,22 +102,39 @@ Recommended defaults (policy guidance; not normative):
 
 ### DPoP replay detection (Redis required)
 
-- During DPoP validation, Verified Core only returns a `replay_ticket` (a ticket containing inputs such as the JTI); it does not manage storage.
-- The control plane/data plane determines a **namespace** and TTL for each environment and records the ticket in an external store such as Redis using a single operation (`SET <key> 1 NX PX <ttl>`).
-- Recommended TTL:
-  - Add `AEGAEON_DPOP_IAT_WINDOW_SECS` (the existing acceptance window, equivalent to 5 minutes) and `AEGAEON_JWT_LEEWAY_SECS` (60 seconds), for a default of 360 seconds.
-  - Allow a margin for future clock skew.
-- Key inputs:
-  - The environment namespace (for example, set explicitly with `AEGAEON_DPOP_NAMESPACE`; use the issuer URL if unset).
-  - The method (uppercase `htm`), normalized URI (`htu`), `jti`, public key thumbprint (`jkt`), and `ath` when applicable.
-  - Hash these inputs with SHA-256 and encode the result as base64url to form the Redis key `dpop:v1:{namespace}:{hash}`.
-- Backend implementation requirements:
-  - Require `AEGAEON_DPOP_REDIS_URL` and use Redis. The `noeviction` setting (explicitly prohibiting eviction) is recommended.
-  - If Redis cannot be reached or SET fails, **fail closed** and notify the client (`503 Temporarily Unavailable`, `error="temporarily_unavailable"`).
-  - The legacy in-memory fallback for absent configuration remains only for protocol-level test harnesses and is removed from supported server runtime configurations.
-  - If the same key already exists, classify the request as a replay and reject it with `invalid_token` (DPoP replay).
-- Auditing:
-  - Support recording success, retry, and failure (backend unavailable) as audit events.
+Rust FFI checks DPoP signatures and freshness, returning the `jti` and optional
+nonce. Rust middleware owns replay storage and nonce policy; the FFI result does
+not guarantee persistence.
+
+- Derive namespaces from the management database Environment ID, without an
+  issuer URL or `AEGAEON_DPOP_NAMESPACE` override.
+- Key material consists of length-delimited `jkt` and `jti`. Combine it with the
+  length-delimited environment namespace, hash with SHA-256, encode as base64url,
+  and use the environment/surface Redis prefix. Do not include `htm`, `htu`, or
+  `ath` in replay key material.
+- Before insertion, middleware raises TTL to
+  `max(2 * MAX_DPOP_IAT_WINDOW_SECS + 1, 2 * iat_window_secs + 1, caller TTL)`
+  seconds. The current supported minimum is **601 seconds**. Preserve longer
+  caller retention and fail closed on arithmetic overflow.
+- The active configuration document's `policy.dpopIatWindowSeconds` determines
+  the `iat` window. Retention covers the inclusive interval from the future edge
+  to the final acceptable second. One window plus JWT leeway is insufficient;
+  JWT leeway is not added to DPoP freshness.
+- Recheck the authenticated `iat` using the current clock before and after
+  atomic replay insertion. Reject expired in-flight proofs or clock failures;
+  preserve any record already inserted until its TTL expires.
+- Apply the same minimum with nonce enforcement enabled or disabled. Do not
+  shorten it to nonce TTL or assume nonces are single-use.
+- Server runtime requires shared Redis through `AEGAEON_DPOP_REDIS_URL` and
+  atomically stores with `SET <key> 1 NX PX <ttl_ms>`. Reject existing keys as
+  replays and fail closed with `503` / `temporarily_unavailable` on connection
+  or storage failures. In-memory stores are for direct unit tests, fuzzing, and
+  protocol harnesses.
+
+Follow the [DPoP Replay Store Operations Guide](../../operations/dpop-replay-store.md)
+for capacity, shared-store/no-eviction and clock premises, and the upgrade
+admission suspension covering the maximum prior acceptance horizon after the
+last old acceptance. New instances cannot restore expired records.
 
 ## Environment configuration
 

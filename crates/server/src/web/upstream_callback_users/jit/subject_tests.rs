@@ -31,6 +31,7 @@ async fn request(pool: &PgPool, env: &TestEnvironment) -> TestResult<UpstreamAut
     .fetch_one(pool)
     .await?;
     Ok(UpstreamAuthRequest {
+        browser_binding_digest: None,
         state: "state".into(),
         nonce: "nonce".into(),
         code_verifier: None,
