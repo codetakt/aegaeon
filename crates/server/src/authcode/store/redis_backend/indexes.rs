@@ -6,7 +6,7 @@ use crate::authcode::store::TokenStoreStorageError;
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::time::SystemTime;
 
-// Inventory may discard only the requested index membership. The authority
+// Stale-index cleanup may discard only the requested index membership. The authority
 // record can be created or replaced after it was observed, even under a lease.
 const PRUNE_OBSERVED_SUBJECT_MEMBER: &str = r#"
 local current = redis.call("GET", KEYS[1])
@@ -73,14 +73,11 @@ impl RedisTokenStoreBackend {
     pub(super) fn prune_missing_subject_member(
         &self,
         conn: &mut redis::Connection,
-        key: String,
+        record_key: &str,
+        subject_key: &str,
         token: &str,
     ) -> Result<(), TokenStoreStorageError> {
-        redis::cmd("SREM")
-            .arg(key)
-            .arg(token)
-            .query::<()>(conn)
-            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
+        self.prune_observed_subject_member(conn, record_key, subject_key, token, None)
     }
 
     pub(super) fn prune_observed_subject_member(
@@ -235,6 +232,24 @@ impl RedisTokenStoreBackend {
             subject_key,
             token,
             observed,
+        )
+        .unwrap();
+    }
+}
+
+#[cfg(test)]
+impl RedisTokenStoreBackend {
+    pub(crate) fn prune_missing_subject_member_for_tests(
+        &self,
+        record_key: &str,
+        subject_key: &str,
+        token: &str,
+    ) {
+        self.prune_missing_subject_member(
+            &mut self.connection().unwrap(),
+            record_key,
+            subject_key,
+            token,
         )
         .unwrap();
     }

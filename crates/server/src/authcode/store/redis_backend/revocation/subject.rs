@@ -109,10 +109,10 @@ impl RedisTokenStoreBackend {
                 else {
                     self.prune_missing_subject_member(
                         conn,
-                        self.keyspace.subject_access_key(subject),
+                        &self.keyspace.access_key(&token),
+                        &self.keyspace.subject_access_key(subject),
                         &token,
                     )?;
-                    mutation.delete_access_token(token);
                     continue;
                 };
                 if access.user_id != subject {
@@ -141,10 +141,10 @@ impl RedisTokenStoreBackend {
                 else {
                     self.prune_missing_subject_member(
                         conn,
-                        self.keyspace.subject_refresh_key(subject),
+                        &self.keyspace.refresh_key(&token),
+                        &self.keyspace.subject_refresh_key(subject),
                         &token,
                     )?;
-                    mutation.delete_refresh_token(token);
                     continue;
                 };
                 if refresh.user_id != subject {
@@ -170,10 +170,10 @@ impl RedisTokenStoreBackend {
                 else {
                     self.prune_missing_subject_member(
                         conn,
-                        self.keyspace.subject_bearer_key(subject),
+                        &self.keyspace.bearer_key(&token),
+                        &self.keyspace.subject_bearer_key(subject),
                         &token,
                     )?;
-                    mutation.delete_bearer_token(token);
                     continue;
                 };
                 if meta.user_id != subject {

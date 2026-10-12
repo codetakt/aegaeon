@@ -379,3 +379,106 @@ fn redis_inventory_preserves_grant_and_listed_access_validation() {
         assert_eq!(raw(&mut conn, &meta_key), meta_before);
     }
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_subject_missing_observation_preserves_new_issuance() {
+    let (store, mut conn) = fixture();
+    let keys = backend(&store).keyspace_for_tests();
+    let cases = [
+        (
+            keys.access_key("access"),
+            keys.subject_access_key("user"),
+            "access",
+        ),
+        (
+            keys.refresh_key("refresh"),
+            keys.subject_refresh_key("user"),
+            "refresh",
+        ),
+        (
+            keys.bearer_key("access"),
+            keys.subject_bearer_key("user"),
+            "access",
+        ),
+    ];
+    // Freeze the missing observations, then publish before stale pruning runs.
+    for (record_key, subject_key, token) in &cases {
+        assert_eq!(raw(&mut conn, record_key), None);
+        redis::cmd("SADD")
+            .arg(subject_key)
+            .arg(token)
+            .query::<()>(&mut conn)
+            .unwrap();
+    }
+    store
+        .store_issued_grant(
+            make_access_token("access"),
+            Some(make_refresh_token("refresh")),
+            make_bearer_meta("access", Some("refresh")),
+        )
+        .unwrap();
+    for (record_key, subject_key, token) in &cases {
+        let before = raw(&mut conn, record_key).unwrap();
+        backend(&store).prune_missing_subject_member_for_tests(record_key, subject_key, token);
+        assert_eq!(raw(&mut conn, record_key).as_deref(), Some(before.as_str()));
+        assert!(member(&mut conn, subject_key, token));
+        assert!(store.try_verify_access_token("access").unwrap().is_some());
+    }
+    // Genuinely absent records still lose their stale membership.
+    for (record_key, subject_key, token) in &cases {
+        redis::cmd("DEL")
+            .arg(record_key)
+            .query::<()>(&mut conn)
+            .unwrap();
+        backend(&store).prune_missing_subject_member_for_tests(record_key, subject_key, token);
+        assert!(!member(&mut conn, subject_key, token));
+        assert_eq!(raw(&mut conn, record_key), None);
+    }
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_subject_revocation_prunes_missing_memberships_only() {
+    let (store, mut conn) = fixture();
+    let keys = backend(&store).keyspace_for_tests();
+    let subject_keys = [
+        keys.subject_access_key("user"),
+        keys.subject_refresh_key("user"),
+        keys.subject_bearer_key("user"),
+    ];
+    for key in &subject_keys {
+        redis::cmd("SADD")
+            .arg(key)
+            .arg("absent")
+            .query::<()>(&mut conn)
+            .unwrap();
+    }
+    // Optional cleanup indexes are not authority and need not be erased by
+    // a missing subject observation. Retain them for their own cleanup lane.
+    let expiry_keys = [
+        keys.expiry_access_key(),
+        keys.expiry_refresh_key(),
+        keys.expiry_bearer_key(),
+    ];
+    for key in &expiry_keys {
+        redis::cmd("ZADD")
+            .arg(key)
+            .arg(u64::MAX)
+            .arg("absent")
+            .query::<()>(&mut conn)
+            .unwrap();
+    }
+    assert_eq!(backend(&store).revoke_tokens_by_subject("user").unwrap(), 0);
+    for key in &subject_keys {
+        assert!(!member(&mut conn, key, "absent"));
+    }
+    for key in &expiry_keys {
+        assert!(redis::cmd("ZSCORE")
+            .arg(key)
+            .arg("absent")
+            .query::<Option<f64>>(&mut conn)
+            .unwrap()
+            .is_some());
+    }
+}
