@@ -70,11 +70,12 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
 }
 
 fn seed_grant(state: &AppState) -> TestResult<String> {
+    let audience = format!("{}/userinfo", state.issuer);
     let mut refresh = RefreshToken::new(RefreshTokenInput {
         scope: Some(GRANTED_SCOPE.to_string()),
+        resource: Some(audience.clone()),
         ..RefreshTokenInput::new(CLIENT_ID.to_string(), "scope-user".to_string())
     });
-    let audience = format!("{}/userinfo", state.issuer);
     refresh.target_context = Some(RefreshTargetContext {
         version: 1,
         audience: audience.clone(),
@@ -194,6 +195,7 @@ fn check_grant(state: &AppState, body: &Value, expected_scope: &str) -> TestResu
         Some(GRANTED_SCOPE),
         "replacement RT grant must stay unchanged"
     );
+    assert_eq!(saved.resource.as_deref(), Some(meta.audience.as_str()));
     // RFC 6749 permits omission when response scope equals the request's scope.
     if let Some(scope) = body.get("scope") {
         assert_eq!(

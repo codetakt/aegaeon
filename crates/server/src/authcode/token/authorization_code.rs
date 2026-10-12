@@ -274,6 +274,11 @@ impl TokenIssuer {
             }
         };
 
+        let audience = self
+            .access_token_audience(&req.client_id, req.scope.as_deref(), resource.as_deref())
+            .map_err(|description| {
+                AuthorizationCodeIssueError::InvalidTarget(description.into())
+            })?;
         let redirect_uri = req.redirect_uri.clone();
         let mut code = AuthorizationCode::new_with_ttl(
             AuthorizationCodeInput {
@@ -294,7 +299,8 @@ impl TokenIssuer {
             self.authorization_code_ttl_secs,
         );
 
-        code.exchange_grant = self.capture_code_exchange_authority(&code, &exchange_scope_ceiling);
+        code.exchange_grant =
+            self.capture_code_exchange_authority(&code, &audience, &exchange_scope_ceiling);
         code.application_grant = application_grant;
         let redirect_uri = code.redirect_uri.clone();
         Ok((code, redirect_uri))
@@ -303,19 +309,15 @@ impl TokenIssuer {
     fn capture_code_exchange_authority(
         &self,
         code: &AuthorizationCode,
+        audience: &str,
         client_scope_ceiling: &[String],
     ) -> Option<ExchangeGrant> {
-        let audience = self.access_token_audience(
-            &code.client_id,
-            code.scope.as_deref(),
-            code.resource.as_deref(),
-        );
         let captured = self.issuer.as_deref().and_then(|issuer| {
             self.exchange_policy.capture(
                 issuer,
                 &code.client_id,
                 &code.user_id,
-                &audience,
+                audience,
                 &super::split_scopes(code.scope.as_deref()),
                 client_scope_ceiling,
             )
