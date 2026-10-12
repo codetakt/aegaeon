@@ -81,12 +81,22 @@ impl RedisTokenStoreBackend {
         key: String,
         mutation: &mut RedisTokenMutation,
     ) -> Result<Option<T>, TokenStoreStorageError> {
+        Self::get_observed_raw(conn, key, mutation)?
+            .map(|payload| decode_redis_json(&payload))
+            .transpose()
+    }
+
+    pub(super) fn get_observed_raw(
+        conn: &mut redis::Connection,
+        key: String,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<String>, TokenStoreStorageError> {
         let raw = redis::cmd("GET")
             .arg(&key)
             .query::<Option<String>>(conn)
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
         mutation.observe_record(key, raw.clone())?;
-        raw.map(|payload| decode_redis_json(&payload)).transpose()
+        Ok(raw)
     }
 
     pub(super) fn increment_version(

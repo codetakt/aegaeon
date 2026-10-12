@@ -331,7 +331,13 @@ impl RedisTokenStoreBackend {
                 return Ok((Err(RefreshRotationError::Invalid), None));
             };
 
+            mutation.observe_record(self.keyspace.refresh_key(token), Some(raw.clone()))?;
             let refresh = decode_redis_json::<RefreshToken>(&raw)?;
+            if refresh.token != token {
+                return Err(TokenStoreStorageError::InvariantViolation(
+                    "refresh rotation identity mismatch".into(),
+                ));
+            }
             if !self.refresh_grant_active(
                 conn,
                 refresh.refresh_grant.as_ref(),
@@ -355,9 +361,7 @@ impl RedisTokenStoreBackend {
 
             if now >= refresh.expires_at {
                 mutation.delete_refresh_token(token.to_string());
-                mutation.delete_key(self.keyspace.refresh_children_key(token));
-                mutation.delete_key(self.keyspace.refresh_successor_key(token));
-                mutation.delete_key(self.keyspace.refresh_predecessor_key(token));
+                self.collect_expired_refresh_links(conn, token, &mut mutation)?;
                 self.apply_token_mutation(conn, mutation, true)?;
                 return Ok((Err(RefreshRotationError::Expired), None));
             }

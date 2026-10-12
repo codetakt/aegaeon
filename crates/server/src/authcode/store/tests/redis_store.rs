@@ -93,7 +93,8 @@ fn redis_token_store_shares_refresh_rotation_and_revocation() -> StoreTestResult
         "store access for active refresh parent",
     );
     assert!(verify_access_token(&store_b, &access_3).is_some());
-    issue_access_fixture(&store_b, make_access_token(&access_4));
+    // This is a child of the selected grant, not an independent issuance.
+    must_ok!(parent_access_fixture(&store_b, &access_4, &refresh_2), "store bound child");
     must_ok!(
         store_a.try_bind_refresh_access(&refresh_2, &access_4),
         "bind access to refresh parent",

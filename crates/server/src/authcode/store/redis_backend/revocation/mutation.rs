@@ -22,12 +22,44 @@ impl RedisTokenStoreBackend {
         Ok((record, access_missing))
     }
 
+    fn validate_cleanup_observations(
+        &self,
+        mutation: &RedisTokenMutation,
+    ) -> Result<(), TokenStoreStorageError> {
+        let mut required = mutation.delete_keys.clone();
+        for token in &mutation.delete_access_tokens {
+            required.insert(self.keyspace.access_key(token));
+        }
+        for token in &mutation.delete_refresh_tokens {
+            required.insert(self.keyspace.refresh_key(token));
+            required.insert(self.keyspace.refresh_children_key(token));
+        }
+        for token in &mutation.delete_bearer_tokens {
+            required.insert(self.keyspace.bearer_key(token));
+            // Absence of the access record authorizes removal of its membership.
+            required.insert(self.keyspace.access_key(token));
+        }
+        for token in &mutation.delete_revoked_tokens {
+            required.insert(self.keyspace.revoked_key(token));
+        }
+        if required
+            .iter()
+            .any(|key| !mutation.observed_records.contains_key(key))
+        {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "token cleanup requires original observations for every deletion".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub(in crate::authcode::store::redis_backend) fn apply_token_mutation(
         &self,
         conn: &mut redis::Connection,
         mut mutation: RedisTokenMutation,
         increment_version: bool,
     ) -> Result<(), TokenStoreStorageError> {
+        self.validate_cleanup_observations(&mutation)?;
         let observed = std::mem::take(&mut mutation.observed_records);
         let mut watched: Vec<_> = observed.keys().cloned().collect();
         watched.extend(

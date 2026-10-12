@@ -412,28 +412,6 @@ impl RedisTokenStoreBackend {
         }
         Ok(true)
     }
-
-    pub(super) fn known_token_client_id_direct(
-        &self,
-        conn: &mut redis::Connection,
-        token: &str,
-    ) -> Result<Option<String>, TokenStoreStorageError> {
-        if let Some(access) = Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
-        {
-            return Ok(Some(access.client_id));
-        }
-        if let Some(refresh) =
-            Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(token))?
-        {
-            return Ok(Some(refresh.client_id));
-        }
-        if let Some(meta) =
-            Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(token))?
-        {
-            return Ok(Some(meta.client_id));
-        }
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

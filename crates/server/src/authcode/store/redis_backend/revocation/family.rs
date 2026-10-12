@@ -4,7 +4,7 @@ use super::super::super::redis_support::{
     MAX_REFRESH_FAMILY_REVOCATION_REFRESH_VISITS,
 };
 use super::super::RedisTokenStoreBackend;
-use crate::authcode::store::TokenStoreStorageError;
+use crate::authcode::store::{token_consistency::refresh_family_matches, TokenStoreStorageError};
 use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use std::collections::HashSet;
 use std::time::SystemTime;
@@ -67,13 +67,21 @@ impl RedisTokenStoreBackend {
         &self,
         conn: &mut redis::Connection,
         token: &str,
+        root: &RefreshToken,
         now: SystemTime,
         mutation: &mut RedisTokenMutation,
     ) -> Result<(), TokenStoreStorageError> {
         if let Some(access) =
             Self::get_observed_json::<AccessToken>(conn, self.keyspace.access_key(token), mutation)?
         {
-            if access.token != token {
+            if access.token != token
+                || !refresh_family_matches(
+                    root,
+                    access.refresh_grant.as_ref(),
+                    &access.client_id,
+                    &access.user_id,
+                )
+            {
                 return Err(TokenStoreStorageError::InvariantViolation(
                     "access cleanup token identity mismatch".into(),
                 ));
@@ -86,7 +94,14 @@ impl RedisTokenStoreBackend {
             self.keyspace.bearer_key(token),
             mutation,
         )? {
-            if meta.token_id != token {
+            if meta.token_id != token
+                || !refresh_family_matches(
+                    root,
+                    meta.refresh_grant.as_ref(),
+                    &meta.client_id,
+                    &meta.user_id,
+                )
+            {
                 return Err(TokenStoreStorageError::InvariantViolation(
                     "bearer cleanup token identity mismatch".into(),
                 ));
@@ -114,7 +129,7 @@ impl RedisTokenStoreBackend {
         )
     }
 
-    fn collect_refresh_predecessor(
+    pub(in crate::authcode::store::redis_backend) fn collect_refresh_predecessor(
         &self,
         conn: &mut redis::Connection,
         refresh: &str,
@@ -137,7 +152,7 @@ impl RedisTokenStoreBackend {
         Ok(())
     }
 
-    fn collect_refresh_successor(
+    pub(in crate::authcode::store::redis_backend) fn collect_refresh_successor(
         &self,
         conn: &mut redis::Connection,
         refresh: &str,
@@ -159,7 +174,7 @@ impl RedisTokenStoreBackend {
         Ok(Some(record.successor_refresh))
     }
 
-    fn observed_refresh_children(
+    pub(in crate::authcode::store::redis_backend) fn observed_refresh_children(
         &self,
         conn: &mut redis::Connection,
         refresh: &str,
@@ -189,24 +204,26 @@ impl RedisTokenStoreBackend {
         mutation: &mut RedisTokenMutation,
         budget: &mut RefreshFamilyRevocationBudget,
     ) -> Result<usize, TokenStoreStorageError> {
-        if let Some(root) = Self::get_observed_json::<RefreshToken>(
+        let Some(root) = Self::get_observed_json::<RefreshToken>(
             conn,
             self.keyspace.refresh_key(root_refresh),
             mutation,
-        )? {
-            if root.token != root_refresh {
-                return Err(TokenStoreStorageError::InvariantViolation(
-                    "refresh cleanup token identity mismatch".into(),
-                ));
-            }
-            self.revoke_refresh_grant(
-                conn,
-                root.refresh_grant.as_ref(),
-                &root.client_id,
-                &root.user_id,
-            )?;
-            self.revoke_exchange_root(conn, root.exchange_grant.as_ref())?;
+        )?
+        else {
+            return Ok(0);
+        };
+        if root.token != root_refresh {
+            return Err(TokenStoreStorageError::InvariantViolation(
+                "refresh cleanup token identity mismatch".into(),
+            ));
         }
+        self.revoke_refresh_grant(
+            conn,
+            root.refresh_grant.as_ref(),
+            &root.client_id,
+            &root.user_id,
+        )?;
+        self.revoke_exchange_root(conn, root.exchange_grant.as_ref())?;
         let mut stack = vec![root_refresh.to_string()];
         let mut seen = HashSet::new();
         let mut child_count = 0usize;
@@ -228,7 +245,14 @@ impl RedisTokenStoreBackend {
             )?;
             let refresh_exists = refresh_token.is_some();
             if let Some(token) = refresh_token {
-                if token.token != refresh {
+                if token.token != refresh
+                    || !refresh_family_matches(
+                        &root,
+                        token.refresh_grant.as_ref(),
+                        &token.client_id,
+                        &token.user_id,
+                    )
+                {
                     return Err(TokenStoreStorageError::InvariantViolation(
                         "refresh cleanup token identity mismatch".into(),
                     ));
@@ -250,11 +274,23 @@ impl RedisTokenStoreBackend {
                 self.keyspace.bearer_key(&refresh),
                 mutation,
             )? {
-                if meta.token_id != refresh {
+                if meta.token_id != refresh
+                    || !refresh_family_matches(
+                        &root,
+                        meta.refresh_grant.as_ref(),
+                        &meta.client_id,
+                        &meta.user_id,
+                    )
+                {
                     return Err(TokenStoreStorageError::InvariantViolation(
                         "bearer cleanup token identity mismatch".into(),
                     ));
                 }
+                Self::get_observed_json::<AccessToken>(
+                    conn,
+                    self.keyspace.access_key(&refresh),
+                    mutation,
+                )?;
                 mutation.delete_bearer_token(refresh.clone());
                 mutation.revoke_until(refresh.clone(), meta.expires_at, now);
             }
@@ -265,7 +301,7 @@ impl RedisTokenStoreBackend {
                 budget.consume_child_tokens(&refresh, child_tokens.len())?;
                 child_count = child_count.saturating_add(child_tokens.len());
                 for child in child_tokens {
-                    self.revoke_access_and_meta_direct(conn, &child, now, mutation)?;
+                    self.revoke_access_and_meta_direct(conn, &child, &root, now, mutation)?;
                 }
             }
         }

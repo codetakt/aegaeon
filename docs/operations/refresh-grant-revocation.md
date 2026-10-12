@@ -154,3 +154,19 @@ transaction never reports successful cleanup or a revoked count. Token-store
 ACLs must allow `WATCH` and `UNWATCH` for this guarded cleanup. Durable denial may
 already have committed when cleanup detects a conflict. Redis command errors
 still do not promise rollback of every write.
+
+Every physical deletion plan must retain its original record and link bytes,
+including an observed absence. The common commit boundary rejects incomplete
+plans before writing. This covers expiry cleanup, direct revocation, subject and
+client authorization reads, and expired rotation cleanup. Removing metadata may
+also prune access membership, so the access record observation is required;
+refresh cleanup similarly retains the child-index observation. A replacement
+published after planning aborts cleanup rather than being deleted.
+
+Family links are untrusted traversal hints. Each retained refresh, access and
+metadata record must match the root's grant reference, client and subject before
+its authority or record is removed. A missing root cannot authorize graph
+traversal. An inconsistent link can leave cleanup incomplete after denial of the
+selected grant, but cannot authorize denial of an independent grant. Legacy
+records retain their existing reference-less domain; this check does not infer
+or backfill a grant identity.

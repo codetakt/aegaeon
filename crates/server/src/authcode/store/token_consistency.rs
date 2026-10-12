@@ -229,3 +229,13 @@ pub(super) fn refresh_parent_matches_remint(
     }
     Ok(())
 }
+
+/// Graph edges do not authorize crossing a grant or owner boundary.
+pub(super) fn refresh_family_matches(
+    root: &crate::authcode::types::RefreshToken,
+    reference: Option<&crate::authcode::types::RefreshGrantRef>,
+    client: &str,
+    user: &str,
+) -> bool {
+    root.refresh_grant.as_ref() == reference && root.client_id == client && root.user_id == user
+}

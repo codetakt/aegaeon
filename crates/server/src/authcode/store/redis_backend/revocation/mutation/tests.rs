@@ -162,3 +162,105 @@ fn redis_cleanup_repeated_read_cannot_replace_original_observation() {
     );
     assert_eq!(f.stored().as_deref(), Some("replacement"));
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_cleanup_requires_observations_for_all_deletions_and_supports() {
+    let mut f = Fixture::new();
+    let token = &f.token.token;
+    let mut plans = Vec::new();
+    let mut access = RedisTokenMutation::default();
+    access.delete_access_token(token.clone());
+    plans.push(access);
+    let mut refresh = RedisTokenMutation::default();
+    refresh.delete_refresh_token(token.clone());
+    plans.push(refresh);
+    let mut refresh = RedisTokenMutation::default();
+    refresh.delete_refresh_token(token.clone());
+    refresh
+        .observe_record(f.backend.keyspace.refresh_key(token), None)
+        .unwrap();
+    plans.push(refresh); // Missing implicit child-index observation.
+    let mut bearer = RedisTokenMutation::default();
+    bearer.delete_bearer_token(token.clone());
+    plans.push(bearer);
+    let mut bearer = RedisTokenMutation::default();
+    bearer.delete_bearer_token(token.clone());
+    bearer
+        .observe_record(f.backend.keyspace.bearer_key(token), None)
+        .unwrap();
+    plans.push(bearer); // Missing access-absence authorization for SREM.
+    let mut revoked = RedisTokenMutation::default();
+    revoked.delete_revoked_token(token.clone());
+    plans.push(revoked);
+    let mut link = RedisTokenMutation::default();
+    link.delete_key(f.backend.keyspace.refresh_successor_key(token));
+    plans.push(link);
+    for plan in plans {
+        assert!(f
+            .backend
+            .apply_token_mutation(&mut f.conn, plan, true)
+            .is_err());
+        assert_eq!(f.stored().as_deref(), Some(f.raw.as_str()));
+        assert!(!redis::cmd("EXISTS")
+            .arg(f.backend.keyspace.version_key())
+            .query::<bool>(&mut f.conn)
+            .unwrap());
+    }
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_expiry_planning_preserves_replacements_and_new_records() {
+    use std::time::{Duration, SystemTime};
+    for missing in [false, true] {
+        let mut f = Fixture::new();
+        let now = SystemTime::now();
+        let mut expired = f.token.clone();
+        expired.created_at = now - Duration::from_secs(1000);
+        let key = f.backend.keyspace.access_key(&expired.token);
+        if missing {
+            redis::cmd("DEL")
+                .arg(&key)
+                .query::<()>(&mut f.conn)
+                .unwrap();
+        } else {
+            redis::cmd("SET")
+                .arg(&key)
+                .arg(encode_redis_json(&expired).unwrap())
+                .query::<()>(&mut f.conn)
+                .unwrap();
+        }
+        redis::cmd("ZADD")
+            .arg(f.backend.keyspace.expiry_access_key())
+            .arg(0)
+            .arg(&expired.token)
+            .query::<()>(&mut f.conn)
+            .unwrap();
+        let mut mutation = RedisTokenMutation::default();
+        f.backend
+            .collect_expired_tokens(&mut f.conn, now, &mut mutation)
+            .unwrap();
+        assert!(mutation.delete_access_tokens.contains(&expired.token));
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(&f.raw)
+            .query::<()>(&mut f.observer)
+            .unwrap();
+        assert!(f
+            .backend
+            .apply_token_mutation(&mut f.conn, mutation, true)
+            .is_err());
+        assert_eq!(f.stored().as_deref(), Some(f.raw.as_str()));
+        // A new plan sees the live record and leaves it alone.
+        let mut mutation = RedisTokenMutation::default();
+        f.backend
+            .collect_expired_tokens(&mut f.conn, now, &mut mutation)
+            .unwrap();
+        assert!(!mutation.delete_access_tokens.contains(&expired.token));
+        f.backend
+            .apply_token_mutation(&mut f.conn, mutation, false)
+            .unwrap();
+        assert_eq!(f.stored().as_deref(), Some(f.raw.as_str()));
+    }
+}

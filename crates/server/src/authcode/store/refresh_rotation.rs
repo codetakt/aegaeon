@@ -58,9 +58,10 @@ impl TokenStore {
         root_refresh: &str,
         now: SystemTime,
     ) -> Result<usize, String> {
-        if let Some(root) = state.refresh_tokens.get(root_refresh).cloned() {
-            Self::revoke_refresh_grant_locked(state, &root);
-        }
+        let Some(root) = state.refresh_tokens.get(root_refresh).cloned() else {
+            return Ok(0);
+        };
+        Self::revoke_refresh_grant_locked(state, &root);
         let mut stack = vec![root_refresh.to_string()];
         let mut seen = HashSet::new();
         let mut child_count = 0usize;
@@ -72,6 +73,18 @@ impl TokenStore {
             if seen.len() > super::redis_support::MAX_REFRESH_FAMILY_REVOCATION_REFRESH_VISITS {
                 return Err("refresh family cleanup visit budget exceeded; grant denial may already have committed".into());
             }
+            if state.refresh_tokens.get(&refresh).is_some_and(|token| {
+                token.token != refresh
+                    || !super::token_consistency::refresh_family_matches(
+                        &root,
+                        token.refresh_grant.as_ref(),
+                        &token.client_id,
+                        &token.user_id,
+                    )
+            }) {
+                return Err("refresh family identity mismatch".into());
+            }
+            Self::validate_family_child_locked(state, &root, &refresh)?;
             if let Some(successor) = state.refresh_successors.remove(&refresh) {
                 stack.push(successor);
             }
@@ -92,6 +105,7 @@ impl TokenStore {
                 if let Some(child_tokens) = state.refresh_children.remove(&refresh) {
                     child_count = child_count.checked_add(child_tokens.len()).filter(|count| *count <= super::redis_support::MAX_REFRESH_FAMILY_REVOCATION_CHILD_TOKENS).ok_or("refresh family cleanup child budget exceeded; grant denial may already have committed")?;
                     for child in child_tokens {
+                        Self::validate_family_child_locked(state, &root, &child)?;
                         if let Some(token) = state.access_tokens.remove(&child) {
                             Self::insert_access_revoked_locked(state, child.clone(), &token, now);
                         }
@@ -104,6 +118,35 @@ impl TokenStore {
         }
 
         Ok(child_count)
+    }
+
+    #[cfg(test)]
+    fn validate_family_child_locked(
+        state: &TokenStoreState,
+        root: &RefreshToken,
+        child: &str,
+    ) -> Result<(), String> {
+        use super::token_consistency::refresh_family_matches;
+        if state.access_tokens.get(child).is_some_and(|token| {
+            token.token != child
+                || !refresh_family_matches(
+                    root,
+                    token.refresh_grant.as_ref(),
+                    &token.client_id,
+                    &token.user_id,
+                )
+        }) || state.bearer_meta.get(child).is_some_and(|meta| {
+            meta.token_id != child
+                || !refresh_family_matches(
+                    root,
+                    meta.refresh_grant.as_ref(),
+                    &meta.client_id,
+                    &meta.user_id,
+                )
+        }) {
+            return Err("refresh family child identity mismatch".into());
+        }
+        Ok(())
     }
 
     fn record_refresh_reuse(refresh: &str, child_count: usize) {

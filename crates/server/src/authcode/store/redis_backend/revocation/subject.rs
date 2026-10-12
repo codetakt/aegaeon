@@ -16,8 +16,12 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
-            let owns_token = Self::get_json::<AccessToken>(conn, self.keyspace.access_key(token))?
-                .is_some_and(|record| record.user_id == subject);
+            let owns_token = Self::get_observed_json::<AccessToken>(
+                conn,
+                self.keyspace.access_key(token),
+                &mut mutation,
+            )?
+            .is_some_and(|record| record.user_id == subject && record.token == token);
             if !owns_token {
                 self.apply_token_mutation(conn, mutation, false)?;
                 return Ok(false);
@@ -39,9 +43,12 @@ impl RedisTokenStoreBackend {
             let mut mutation = RedisTokenMutation::default();
             self.collect_expired_revoked(conn, now, &mut mutation)?;
 
-            let owns_token =
-                Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(token))?
-                    .is_some_and(|record| record.user_id == subject);
+            let owns_token = Self::get_observed_json::<RefreshToken>(
+                conn,
+                self.keyspace.refresh_key(token),
+                &mut mutation,
+            )?
+            .is_some_and(|record| record.user_id == subject && record.token == token);
             if !owns_token {
                 self.apply_token_mutation(conn, mutation, false)?;
                 return Ok(false);

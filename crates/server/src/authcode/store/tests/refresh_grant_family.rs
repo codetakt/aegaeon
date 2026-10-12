@@ -912,3 +912,70 @@ fn subject_revocation_counts_distinct_records_memory() {
 fn redis_subject_revocation_counts_distinct_records() {
     subject_counts_each_stored_token_once(true);
 }
+
+fn foreign_family_link_preserves_independent_grant(redis: bool, successor: bool) {
+    let store = store(redis);
+    let (own_access, root) = initial(&store, 600);
+    let (other_access, other_refresh) = initial(&store, 600);
+    if successor {
+        match &store.backend {
+            TokenStoreBackend::InMemory(state) => {
+                state
+                    .write()
+                    .unwrap()
+                    .refresh_successors
+                    .insert(root.token.clone(), other_refresh.token.clone());
+            }
+            TokenStoreBackend::Redis(backend) => {
+                let mut conn =
+                    redis::Client::open(std::env::var("AEGAEON_TEST_REDIS_URL").unwrap())
+                        .unwrap()
+                        .get_connection()
+                        .unwrap();
+                let keys = backend.keyspace_for_tests();
+                redis::cmd("SET").arg(keys.refresh_successor_key(&root.token)).arg(serde_json::json!({"previous_refresh":root.token,"successor_refresh":other_refresh.token}).to_string()).query::<()>(&mut conn).unwrap();
+                redis::cmd("SET").arg(keys.refresh_predecessor_key(&other_refresh.token)).arg(serde_json::json!({"refresh_token":other_refresh.token,"predecessor_refresh":root.token}).to_string()).query::<()>(&mut conn).unwrap();
+            }
+        }
+    } else {
+        store
+            .try_bind_refresh_access(&root.token, &other_access.token)
+            .unwrap();
+    }
+    // Cleanup may reject the inconsistent graph after denying the selected grant.
+    let _outcome = store.try_revoke_token_for_client(&root.token, Some("client"));
+    assert!(store
+        .try_verify_access_token(&own_access.token)
+        .unwrap()
+        .is_none());
+    assert!(
+        store
+            .try_verify_access_token(&other_access.token)
+            .unwrap()
+            .is_some(),
+        "unrelated authorization must remain active"
+    );
+    assert!(!store.try_is_refresh_revoked(&other_refresh.token).unwrap());
+}
+
+#[test]
+fn foreign_child_link_preserves_independent_grant_memory() {
+    foreign_family_link_preserves_independent_grant(false, false);
+}
+
+#[test]
+fn foreign_successor_link_preserves_independent_grant_memory() {
+    foreign_family_link_preserves_independent_grant(false, true);
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_foreign_child_link_preserves_independent_grant() {
+    foreign_family_link_preserves_independent_grant(true, false);
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_foreign_successor_link_preserves_independent_grant() {
+    foreign_family_link_preserves_independent_grant(true, true);
+}
