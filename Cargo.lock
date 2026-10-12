@@ -150,6 +150,7 @@ version = "0.1.0"
 name = "aegaeon-server"
 version = "0.9.0-beta"
 dependencies = [
+ "aegaeon-attribute-mapping",
  "aegaeon-crypto",
  "aegaeon-jose",
  "aegaeon-observability",
