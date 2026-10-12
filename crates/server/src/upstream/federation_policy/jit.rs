@@ -78,6 +78,11 @@ pub fn parse_upstream_jit_provisioning_policy(
         })?,
     };
 
+    if enabled {
+        collision_policy
+            .validate_for_enabled_jit()
+            .map_err(str::to_string)?;
+    }
     let initial_status = match jit.get("initialStatus") {
         None => UpstreamJitProvisioningInitialStatus::Active,
         Some(value) => UpstreamJitProvisioningInitialStatus::parse(

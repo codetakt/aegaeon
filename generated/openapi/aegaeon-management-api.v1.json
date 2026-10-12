@@ -9636,6 +9636,15 @@
           "allow_low_confidence"
         ]
       },
+      "AccountLinkProvenance": {
+        "type": "string",
+        "description": "Local source of binding authority; not proof of historical ownership.",
+        "enum": [
+          "legacy_unreviewed",
+          "jit_v2",
+          "administrator_confirmed"
+        ]
+      },
       "AccountLinkRefreshTokenHandling": {
         "type": "string",
         "enum": [
@@ -9656,9 +9665,20 @@
           "endUserSubject",
           "endUserStatus",
           "hasRefreshToken",
+          "bindingProvenance",
+          "bindingRevision",
           "createdAt"
         ],
         "properties": {
+          "bindingProvenance": {
+            "$ref": "#/components/schemas/AccountLinkProvenance"
+          },
+          "bindingRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Positive revision, advanced only when the binding owner changes.",
+            "minimum": 1
+          },
           "connectionId": {
             "type": "string",
             "format": "uuid"
