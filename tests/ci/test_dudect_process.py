@@ -158,7 +158,9 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
 
     def execute(self):
         with patch.dict("run_candidate.PROFILES", {"pr": ((*range(1, 8), 16), 200000, 1.0)}):
-            return collect(self.root, self.root, self.binary, "pr", self.bindings)
+            return collect(
+                Path(__file__).resolve().parents[2], self.root, self.binary, "pr", self.bindings
+            )
 
     def assert_deadline(self):
         with self.assertRaisesRegex(ValueError, "deadline"):
