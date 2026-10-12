@@ -96,7 +96,10 @@ backfill, automatic root creation or authorization to delete production records.
    changing namespace is not an exact inventory.
 3. Using an account restricted to `SCAN`, `GET`, `TIME` and `SELECT`, run the
    read-only helper with the exact configured v3 token-store prefix. `SELECT`
-   is required when the Redis URL selects a nonzero database. The helper reads
+   is required when the Redis URL selects a nonzero database. Install
+   `redis-cli` 7.0 or later on the inventory host for its `--json` and `-e`
+   options; this client-side prerequisite does not raise the Redis server
+   requirement. The helper reads
    `AEGAEON_TOKEN_STORE_REDIS_URL`, invokes `redis-cli`, and emits counts only:
 
    ```sh

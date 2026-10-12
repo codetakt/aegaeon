@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 NANOS_PER_SECOND = 1_000_000_000
+MAX_SCAN_CURSOR = (1 << 64) - 1
+MAX_SCAN_CURSOR_DIGITS = len(str(MAX_SCAN_CURSOR))
 SCOPE = "read-only drained namespace inventory; not an active-token or assurance decision"
 
 
@@ -69,15 +71,12 @@ class RedisReader:
         cursor, seen = "0", set()
         while True:
             reply = self.read("SCAN", cursor, "MATCH", pattern, "COUNT", "256")
-            if not isinstance(reply, list) or len(reply) != 2:  # noqa: PLR2004
-                message = "Malformed SCAN response; inventory incomplete"
-                raise RuntimeError(message)
-            cursor, page = reply
+            cursor, page = scan_reply(reply)
             for key in page:
                 if key not in seen:
                     seen.add(key)
                     yield key
-            if str(cursor) == "0":
+            if int(cursor) == 0:
                 break
 
     def record(self, key: str) -> dict[str, object] | None:
@@ -97,6 +96,24 @@ class RedisReader:
             raise RuntimeError(message)
         seconds, micros = map(int, reply)
         return seconds, seconds * NANOS_PER_SECOND + micros * 1000
+
+
+def scan_reply(reply: object) -> tuple[str, list[str]]:
+    message = "Malformed SCAN response; inventory incomplete"
+    if not isinstance(reply, list) or len(reply) != 2:  # noqa: PLR2004
+        raise RuntimeError(message)
+    cursor, page = reply
+    if (
+        not isinstance(cursor, str)
+        or not cursor.isascii()
+        or not cursor.isdecimal()
+        or len(cursor) > MAX_SCAN_CURSOR_DIGITS
+        or int(cursor) > MAX_SCAN_CURSOR
+        or not isinstance(page, list)
+        or any(not isinstance(key, str) for key in page)
+    ):
+        raise RuntimeError(message)
+    return cursor, page
 
 
 def timestamp(value: object) -> int | None:
