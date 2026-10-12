@@ -202,6 +202,29 @@ rfc_6749:
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+- id: 6749-019
+  section: '1.9, 3.2; RFC 8693 sections 2.1, 2.2'
+  requirement: MUST
+  description: Ignore unknown token request names while preserving the recognized grant-limited organization restriction and effective singleton semantics.
+  module: crates/server/src/web/token_form.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_form/tests.rs
+  - crates/server/src/web/oauth_conformance_tests.rs
+  - crates/server/src/web/token_refresh/tests.rs
+  - crates/server/src/web/token_exchange/tests/omission_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters/membership.rs
+  - crates/server/src/web/token_client_credentials/tests/unknown_parameters.rs
+  status: implemented
+  ci_check: token-unknown-parameter-handling
+  runtime_link: crates/server/src/web/application_authorization.rs
+  notes:
+  - The normative unknown-name and no-value rules ignore organizationId without adding an alias. Canonical organization_id is a recognized local restriction; its nonexchange refusal is implementation policy, not a newly asserted RFC MUST.
+  - Empty canonical fields are omitted before applicability and multiplicity checks. Duplicate nonempty canonical fields reject; duplicate unknown fields remain ignored. Raw transport limits are unchanged.
+  - Canonical exchange selection preserves existing membership, target, scope and currentness boundaries; selected parents retain selection when omitted and cannot switch organizations. Unknown fields do not supply a missing selection or remove global roles.
+  - Finite native parser and PostgreSQL HTTP tests include actual membership SQL on isolated test-owned tables, projection currentness, output claims and code/refresh nonconsumption controls. Fixture join-key types do not adopt an external production schema or writer contract. No full protocol, deployment or product assurance claim.
+
 - id: 6749-010
   section: '10.3'
   requirement: MUST
@@ -2306,7 +2329,7 @@ rfc_7523:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); request-parameter multiplicity is enforced at request admission, with no F* function-level counterpart."
   notes:
-  - "Token endpoint parses application/x-www-form-urlencoded as a list of key/value pairs to fail closed on duplicate client_assertion/client_assertion_type keys."
+  - "Token endpoint parses application/x-www-form-urlencoded as a list of key/value pairs, omits empty values, and rejects duplicate nonempty client_assertion/client_assertion_type parameters."
 
 - id: 7523-111
   section: '2.1'
@@ -4052,7 +4075,7 @@ rfc_9396:
   - client
   notes:
   - "Structural parsing and persistence slices exist. No runtime RAR type has semantic validation and attenuation; nonempty authorizationDetailsTypesSupported is rejected at activation and startup."
-  - "Authorize, PAR and all token grants reject nonempty unsupported authorization_details. Token admission rejects duplicates and preserves code/refresh usability on refusal. Empty form values are omitted."
+  - "Authorize, PAR and all token grants reject nonempty unsupported authorization_details. Token admission omits empty form values before rejecting duplicate nonempty parameters and preserves code/refresh usability on refusal."
   - "Client-side usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
 - id: 9396-101
@@ -5210,15 +5233,17 @@ draft_oauth_v2_1:
   section: '3.2'
   requirement: MUST
   description: Token endpoint MUST ignore unrecognized request parameters and reject duplicate parameters
-  module: crates/server/src/web/mod.rs
+  module: crates/server/src/web/token_form.rs
   tests:
-  - crates/server/src/web/request_admission.rs
+  - crates/server/src/web/token_form/tests.rs
+  - crates/server/src/web/token_exchange/tests/omission_parameters.rs
+  - crates/server/src/web/token_client_credentials/tests/unknown_parameters.rs
   ci_check: oauth21-token-param-handling
   status: implemented
   notes:
-  - Token endpoint deserializes known fields only; unknown fields are ignored.
-  - take_param() detects and rejects duplicate parameters with invalid_request.
-  - Parameters without values treated as omitted.
+  - Token endpoint retains decoded form pairs and reads recognized names only; unknown fields are ignored.
+  - Empty values are omitted before token_param() rejects duplicate nonempty singleton parameters with invalid_request.
+  - RFC 8693 audience/resource extension parameters retain their permitted multiplicity and target checks.
 - id: v21-042
   section: '2.4.1'
   requirement: MUST
