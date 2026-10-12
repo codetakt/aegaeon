@@ -57,21 +57,30 @@ if TYPE_CHECKING:
 ADDITIONS = (
     Harness(
         "compare_product_32",
-        ("tests/constant_time/compare_product_timing_test.c", "c/rsa_signatures.c"),
-        ("-lmbedcrypto", "-lmbedx509", "-lm"),
+        (
+            "tests/constant_time/compare_product_timing_test.c",
+            "c/rsa_signatures.c",
+            "c/crypto_init.c",
+        ),
+        ("-lmbedcrypto", "-lmbedx509", "-lm", "-pthread"),
     ),
     Harness(
         "hmac_key_reject",
-        ("tests/constant_time/hmac_key_reject_timing_test.c", "c/jws.c", "c/rsa_signatures.c"),
-        ("-lmbedcrypto", "-lmbedx509", "-lm"),
+        (
+            "tests/constant_time/hmac_key_reject_timing_test.c",
+            "c/jws.c",
+            "c/rsa_signatures.c",
+            "c/crypto_init.c",
+        ),
+        ("-lmbedcrypto", "-lmbedx509", "-lm", "-pthread"),
     ),
     Harness(
         "jwe_key_reject",
-        ("tests/constant_time/jwe_key_reject_timing_test.c", "c/jwe.c"),
-        ("-lcrypto", "-lm"),
+        ("tests/constant_time/jwe_key_reject_timing_test.c", "c/jwe.c", "c/crypto_init.c"),
+        ("-lcrypto", "-lm", "-pthread"),
     ),
 )
-PROVIDER = Harness("dudect_harness", ("c/dudect_harness.c",), ("-lm",))
+PROVIDER = Harness("dudect_harness", ("c/dudect_harness.c", "c/crypto_init.c"), ("-lm", "-pthread"))
 CONTROLS = Harness("dudect_controls", ("tests/constant_time/calibration_timing_test.c",), ("-lm",))
 
 
@@ -93,7 +102,13 @@ def source_paths(root: Path) -> list[Path]:
     ]
     paths += [
         root / p
-        for p in ("flake.lock", "nix/dudect.nix", "nix/evercrypt/dist.nix", "nix/karamel.nix")
+        for p in (
+            "flake.lock",
+            "nix/dudect.nix",
+            "nix/evercrypt/dist.nix",
+            "nix/evercrypt/sha256-cpu-policy.patch",
+            "nix/karamel.nix",
+        )
     ]
     return sorted(paths)
 

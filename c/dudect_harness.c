@@ -18,6 +18,7 @@
 #include "Hacl_Ed25519.h"
 #include "Hacl_HMAC.h"
 #include "Hacl_Hash_SHA2.h"
+#include "crypto_init.h"
 /* ── Test selector ── */
 
 typedef enum {
@@ -231,6 +232,7 @@ void prepare_inputs(dudect_config_t *c, uint8_t *input_data, uint8_t *classes) {
 }
 
 int main(int argc, char **argv) {
+    aegaeon_crypto_init();
     dudect_require(real_ed25519_verify(ed25519_pk, ed25519_msg0, ED25519_MSG_LEN,
                                        ed25519_sig0), "Ed25519 class 0 vector");
     dudect_require(real_ed25519_verify(ed25519_pk, ed25519_msg1, ED25519_MSG_LEN,

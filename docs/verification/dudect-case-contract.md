@@ -33,6 +33,11 @@ separate from implementation status.
 | `legacy/jwe_key_reject` | protected input observation | c/jwe.c::Jose_Jwe_chacha20poly1305_decrypt -> EverCrypt AEAD; Valid decryption, plaintext release, all keys and caller composition remain separate obligations. |
 | `nix/hmac_sha256_key` | protected input observation | Hacl_HMAC_compute_sha2_256 in the same pinned provider; Finite key observations do not establish universal key/input constant time; artifact and observation-model restrictions remain. |
 
+Native SHA/HMAC observations use the original HACL API targets after the shared
+CPU-policy initializer. The [native dispatch description](dudect.md#native-sha-dispatch-and-initialization)
+records this setup, the supplier patch and its proof boundary. This implementation
+change does not alter the case domains or numerical contract below.
+
 Exact inputs, conditional key domains, class construction, allowed values and
 residual obligations are in [the machine-readable contract](../../tests/constant_time/contracts/case-contract-candidate.json).
 The historical filename is retained for stable references. These finite cases do

@@ -25,6 +25,7 @@ let
         "flake.lock"
         "nix/dudect.nix"
         "nix/evercrypt/dist.nix"
+        "nix/evercrypt/sha256-cpu-policy.patch"
         "nix/karamel.nix"
       ];
   };

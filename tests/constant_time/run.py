@@ -42,20 +42,29 @@ HARNESSES = (
     Harness("compare", ("tests/constant_time/compare_timing_test.c",), ("-lm",)),
     Harness(
         "hmac",
-        ("tests/constant_time/hmac_timing_test.c", "c/rsa_signatures.c", "c/jws.c"),
-        ("-lmbedcrypto", "-lmbedx509", "-lm"),
+        (
+            "tests/constant_time/hmac_timing_test.c",
+            "c/rsa_signatures.c",
+            "c/jws.c",
+            "c/crypto_init.c",
+        ),
+        ("-lmbedcrypto", "-lmbedx509", "-lm", "-pthread"),
     ),
     Harness(
         "ed25519",
-        ("tests/constant_time/ed25519_timing_test.c", "c/rsa_signatures.c"),
-        ("-lmbedcrypto", "-lmbedx509", "-lcrypto", "-lm"),
+        ("tests/constant_time/ed25519_timing_test.c", "c/rsa_signatures.c", "c/crypto_init.c"),
+        ("-lmbedcrypto", "-lmbedx509", "-lcrypto", "-lm", "-pthread"),
     ),
     Harness(
         "rsa",
-        ("tests/constant_time/rsa_timing_test.c", "c/rsa_signatures.c"),
-        ("-lmbedcrypto", "-lmbedx509", "-lcrypto", "-lm"),
+        ("tests/constant_time/rsa_timing_test.c", "c/rsa_signatures.c", "c/crypto_init.c"),
+        ("-lmbedcrypto", "-lmbedx509", "-lcrypto", "-lm", "-pthread"),
     ),
-    Harness("jwe", ("tests/constant_time/jwe_timing_test.c", "c/jwe.c"), ("-lcrypto", "-lm")),
+    Harness(
+        "jwe",
+        ("tests/constant_time/jwe_timing_test.c", "c/jwe.c", "c/crypto_init.c"),
+        ("-lcrypto", "-lm", "-pthread"),
+    ),
 )
 
 fcntl: ModuleType | None

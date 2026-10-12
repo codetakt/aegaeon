@@ -205,6 +205,7 @@ class LegacyDudectTests(unittest.TestCase):
                 "tests/constant_time/hmac_timing_test.c",
                 "c/rsa_signatures.c",
                 "c/jws.c",
+                "c/crypto_init.c",
                 "-Iinclude",
                 "-Ic",
                 f"-I{self.bin.parent / 'include'}",
@@ -221,6 +222,7 @@ class LegacyDudectTests(unittest.TestCase):
                 "-lmbedcrypto",
                 "-lmbedx509",
                 "-lm",
+                "-pthread",
             ],
         )
         self.assertEqual([e["tool"] for e in events].count("pkg-config"), 2)
@@ -256,8 +258,8 @@ class LegacyDudectTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            compiler[1]["args"][-5:],
-            ["-lmbedcrypto", "-lmbedx509", "-lm", "-levercrypt", "-pthread"],
+            compiler[1]["args"][-6:],
+            ["-lmbedcrypto", "-lmbedx509", "-lm", "-pthread", "-levercrypt", "-pthread"],
         )
         self.assertEqual([e["name"] for e in self.recorded() if e["tool"] == "binary"], list(NAMES))
 

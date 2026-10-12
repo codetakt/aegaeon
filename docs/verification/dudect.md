@@ -43,6 +43,32 @@ The shell and xtask adapters share `run_contract.py`, retaining their `cc` and
 results are checked before measuring. Unix process groups and file locking are
 required. Evidence from one suite cannot replace the other.
 
+## Native SHA dispatch and initialization
+
+The pinned supplier now dispatches every SHA-224/256 compression block, including
+padding, to its existing Vale SHA implementation when the CPU policy enables both
+SHA extensions and SSE. It retains the original scalar compression otherwise.
+The public HACL entry points and padding remain unchanged. This also covers final
+blocks reached through EverCrypt; changing only its full-block entry point leaves
+short messages on the scalar implementation.
+
+Native Aegaeon crypto entry points share one `pthread_once` initializer before
+reading EverCrypt's CPU policy. The Nix harness initializes the same policy before
+setup and measurement. Explicit feature disabling after initialization remains in
+effect; callers must synchronize policy changes with crypto use, as with the
+supplier's existing configuration API. Raw uninitialized library calls stay scalar.
+WASM extraction retains its existing scalar provider without this native initializer.
+
+The new dispatch and initialization glue is outside the upstream proofs. Functional
+and concurrency regressions validate the pinned implementation, including CPU
+capability fallbacks and explicit disabling; they are not a proof of timing
+noninterference. The Nix supplier build runs these regressions on Linux/x86-64.
+Timing evidence binds the supplier patch, initializer, compiler and actual binary.
+Fresh successful observations apply only to that checked configuration and budget.
+Historical SHA/HMAC detections, scalar fallback limitations and the periodic
+`ct_eq_128` failure remain retained; a new nondetection does not resolve their cause.
+Case roles, input classes, repetitions and numerical decisions are unchanged.
+
 ## Numerical design
 
 | Parameter | PR profile | Periodic profile |
