@@ -86,8 +86,14 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
     run(true, |rt, f| {
         rt.block_on(async {
             let mut claims = f.claims()?;
-            claims["aud"] = json!(["client", "other"]);
-            claims["azp"] = json!("client");
+            // Additional audiences remain untrusted even with a matching azp.
+            let mut untrusted = claims.clone();
+            untrusted["aud"] = json!(["client", "other"]);
+            untrusted["azp"] = json!("client");
+            assert!(f
+                .callback(&untrusted, Some("private-refresh-rejected"))
+                .is_err());
+            claims["aud"] = json!(["client", "client"]);
             f.store_callback(&f.callback(&claims, Some("private-refresh-original"))?)
                 .await
                 .map_err(error)?;
@@ -96,8 +102,11 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
             for (field, value) in [
                 ("sub", json!("different-private-subject")),
                 ("iss", json!("https://other.example")),
-                ("aud", json!("client")),
+                ("aud", json!("other")),
                 ("aud", json!(["client", "untrusted"])),
+                ("aud", json!(["untrusted", "client"])),
+                ("aud", json!([])),
+                ("azp", json!("other")),
                 ("nonce", json!("changed-private-nonce")),
                 ("auth_time", json!(1)),
             ] {
@@ -113,12 +122,23 @@ fn upstream_refresh_context_pg_rejects_changed_signed_original_claims() -> Resul
                 reject_without_secrets(response).await?;
                 assert_eq!(before, f.stored().await?);
             }
-            let mut equivalent = claims.clone();
-            equivalent["aud"] = json!(["other", "client", "other"]);
-            f.refresh(&link, Some(&equivalent), None)
-                .await
-                .map_err(error)?;
-            assert_eq!(before, f.stored().await?);
+            for aud in [
+                json!("client"),
+                json!(["client"]),
+                json!(["client", "client"]),
+            ] {
+                for azp in [None, Some("client")] {
+                    let mut equivalent = claims.clone();
+                    equivalent["aud"] = aud.clone();
+                    if let Some(value) = azp {
+                        equivalent["azp"] = json!(value);
+                    }
+                    f.refresh(&link, Some(&equivalent), None)
+                        .await
+                        .map_err(error)?;
+                    assert_eq!(before, f.stored().await?);
+                }
+            }
             Ok(())
         })
     })
