@@ -63,16 +63,30 @@ async fn rar_constraints_are_never_ignored_by_any_token_grant() -> TestResult {
 }
 
 #[tokio::test]
-async fn rar_duplicates_are_invalid_even_when_empty() -> TestResult {
-    let params = vec![
-        ("grant_type".into(), "client_credentials".into()),
-        ("authorization_details".into(), "".into()),
-        ("authorization_details".into(), "".into()),
-    ];
-    let response = token_form_from_params(&params, "https://issuer.example")
-        .err()
-        .ok_or("duplicate accepted")?;
-    error(response, StatusCode::BAD_REQUEST, "invalid_request").await
+async fn rar_omission_preserves_nonempty_constraints_and_duplicate_errors() -> TestResult {
+    for (values, expected) in [
+        (vec!["", ""], None),
+        (vec!["", "[]", ""], Some("invalid_authorization_details")),
+        (vec!["[]", ""], Some("invalid_authorization_details")),
+        (vec!["", " "], Some("invalid_authorization_details")),
+        (vec!["[]", "[]"], Some("invalid_request")),
+        (vec!["", "[]", "", "[]"], Some("invalid_request")),
+    ] {
+        let mut params = vec![("grant_type".into(), "client_credentials".into())];
+        params.extend(
+            values
+                .into_iter()
+                .map(|value| ("authorization_details".into(), value.into())),
+        );
+        let result = token_form_from_params(&params, "https://issuer.example");
+        if let Some(code) = expected {
+            let response = result.err().ok_or("RAR constraint accepted")?;
+            error(response, StatusCode::BAD_REQUEST, code).await?;
+        } else {
+            assert!(result.is_ok(), "empty RAR fields must be omitted");
+        }
+    }
+    Ok(())
 }
 
 #[test]
