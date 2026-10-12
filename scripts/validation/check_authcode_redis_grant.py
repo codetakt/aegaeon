@@ -320,7 +320,6 @@ def main() -> None:
     sources = [
         FIXTURE,
         GENERATED,
-        GRANT_SOURCE,
         MODEL,
         LUA_SOURCE,
         GRANT_SOURCE,
