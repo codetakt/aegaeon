@@ -133,6 +133,16 @@ new authentication. Rejected responses expose no new upstream tokens and do
 not replace stored token/context state. Generation comparisons prevent a stale
 response from overwriting a later callback or rotation.
 
+An unchanged local grant does not guarantee that its upstream refresh token is
+still usable. The OP may consume that token before returning a response that
+fails validation, including an untrusted audience or mismatched `azp`. Aegaeon
+discards the response's replacement refresh token together with the rejected
+ID/access tokens; it does not recover the grant from unvalidated response data.
+If the OP consumed the old token, correct the provider's claim configuration and
+perform fresh upstream authentication that returns a new refresh token. Repeated
+refresh attempts cannot restore the consumed token. This recovery requirement
+also applies to previously stored grants whose audiences this upgrade rejects.
+
 Version 2 envelopes lack original context. They are refused before upstream
 exchange with `400 invalid_grant` and a generic reauthentication-required
 message. A fresh successful callback receiving a refresh token writes version 3;
