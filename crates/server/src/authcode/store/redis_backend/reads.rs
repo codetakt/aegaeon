@@ -97,7 +97,7 @@ impl RedisTokenStoreBackend {
         Ok(None)
     }
 
-    fn inventory_record<T: DeserializeOwned>(
+    pub(super) fn inventory_record<T: DeserializeOwned>(
         conn: &mut redis::Connection,
         key: &str,
     ) -> Result<Option<(String, T)>, TokenStoreStorageError> {

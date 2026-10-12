@@ -78,6 +78,8 @@ Subject token listings filter inactive or inconsistent records without deleting
 stored authority. Stale subject-index memberships are pruned only if the current
 record still matches the observed bytes or remains absent. Subject revocation also rechecks missing records atomically before pruning
 membership and never schedules record deletion from that absence observation.
+A stale index pointing at a different owner also permits only conditional
+membership pruning; the other owner's records and valid indexes are preserved.
 Explicit expiry and revocation cleanup retain responsibility for physical record removal. Refresh
 rotation compares exchange-root deadlines at Redis microsecond resolution against
 the stored seconds and nanoseconds, including the final fractional second.

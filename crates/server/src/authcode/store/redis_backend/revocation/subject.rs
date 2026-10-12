@@ -91,6 +91,47 @@ impl RedisTokenStoreBackend {
         Ok(())
     }
 
+    fn revoke_subject_access_records(
+        &self,
+        conn: &mut redis::Connection,
+        subject: &str,
+        now: SystemTime,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<(), TokenStoreStorageError> {
+        for token in self.subject_access_tokens(conn, subject)? {
+            let Some((raw, access)) =
+                Self::inventory_record::<AccessToken>(conn, &self.keyspace.access_key(&token))?
+            else {
+                self.prune_missing_subject_member(
+                    conn,
+                    &self.keyspace.access_key(&token),
+                    &self.keyspace.subject_access_key(subject),
+                    &token,
+                )?;
+                continue;
+            };
+            if access.user_id != subject {
+                self.prune_observed_subject_member(
+                    conn,
+                    &self.keyspace.access_key(&token),
+                    &self.keyspace.subject_access_key(subject),
+                    &token,
+                    Some(&raw),
+                )?;
+                continue;
+            }
+            mutation.delete_access_token(access.token.clone());
+            mutation.revoke_access_until(access.token.clone(), &access, now);
+            if let Some(meta) =
+                Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&access.token))?
+            {
+                mutation.delete_bearer_token(access.token.clone());
+                mutation.revoke_until(access.token, meta.expires_at, now);
+            }
+        }
+        Ok(())
+    }
+
     pub(in crate::authcode::store) fn revoke_tokens_by_subject(
         &self,
         subject: &str,
@@ -102,40 +143,17 @@ impl RedisTokenStoreBackend {
 
             self.revoke_subject_grant_authority(conn, subject)?;
 
-            for token in self.subject_access_tokens(conn, subject)? {
-                let Some(access) =
-                    Self::get_json::<AccessToken>(conn, self.keyspace.access_key(&token))?
-                else {
-                    self.prune_missing_subject_member(
-                        conn,
-                        &self.keyspace.access_key(&token),
-                        &self.keyspace.subject_access_key(subject),
-                        &token,
-                    )?;
-                    continue;
-                };
-                if access.user_id != subject {
-                    mutation.delete_access_token(token);
-                    continue;
-                }
-                mutation.delete_access_token(access.token.clone());
-                mutation.revoke_access_until(access.token.clone(), &access, now);
-                if let Some(meta) = Self::get_json::<BearerTokenMeta>(
-                    conn,
-                    self.keyspace.bearer_key(&access.token),
-                )? {
-                    mutation.delete_bearer_token(access.token.clone());
-                    mutation.revoke_until(access.token, meta.expires_at, now);
-                }
-            }
+            self.revoke_subject_access_records(conn, subject, now, &mut mutation)?;
 
             let mut family_budget = RefreshFamilyRevocationBudget::new();
             for token in self.subject_refresh_tokens(conn, subject)? {
                 if mutation.delete_refresh_tokens.contains(&token) {
                     continue;
                 }
-                let Some(refresh) =
-                    Self::get_json::<RefreshToken>(conn, self.keyspace.refresh_key(&token))?
+                let Some((raw, refresh)) = Self::inventory_record::<RefreshToken>(
+                    conn,
+                    &self.keyspace.refresh_key(&token),
+                )?
                 else {
                     self.prune_missing_subject_member(
                         conn,
@@ -146,7 +164,13 @@ impl RedisTokenStoreBackend {
                     continue;
                 };
                 if refresh.user_id != subject {
-                    mutation.delete_refresh_token(token);
+                    self.prune_observed_subject_member(
+                        conn,
+                        &self.keyspace.refresh_key(&token),
+                        &self.keyspace.subject_refresh_key(subject),
+                        &token,
+                        Some(&raw),
+                    )?;
                     continue;
                 }
                 self.revoke_refresh_family_direct_with_budget(
@@ -162,8 +186,10 @@ impl RedisTokenStoreBackend {
                 if mutation.delete_bearer_tokens.contains(&token) {
                     continue;
                 }
-                let Some(meta) =
-                    Self::get_json::<BearerTokenMeta>(conn, self.keyspace.bearer_key(&token))?
+                let Some((raw, meta)) = Self::inventory_record::<BearerTokenMeta>(
+                    conn,
+                    &self.keyspace.bearer_key(&token),
+                )?
                 else {
                     self.prune_missing_subject_member(
                         conn,
@@ -174,7 +200,13 @@ impl RedisTokenStoreBackend {
                     continue;
                 };
                 if meta.user_id != subject {
-                    mutation.delete_bearer_token(token);
+                    self.prune_observed_subject_member(
+                        conn,
+                        &self.keyspace.bearer_key(&token),
+                        &self.keyspace.subject_bearer_key(subject),
+                        &token,
+                        Some(&raw),
+                    )?;
                     continue;
                 }
                 mutation.delete_bearer_token(meta.token_id.clone());

@@ -482,3 +482,56 @@ fn redis_subject_revocation_prunes_missing_memberships_only() {
             .is_some());
     }
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL"]
+fn redis_subject_revocation_preserves_records_owned_by_another_subject() {
+    let (store, mut conn) = fixture();
+    store
+        .store_issued_grant(
+            make_access_token("access"),
+            Some(make_refresh_token("refresh")),
+            make_bearer_meta("access", Some("refresh")),
+        )
+        .unwrap();
+    let keys = backend(&store).keyspace_for_tests();
+    let cases = [
+        (
+            keys.access_key("access"),
+            keys.subject_access_key("wrong-user"),
+            keys.subject_access_key("user"),
+            "access",
+        ),
+        (
+            keys.refresh_key("refresh"),
+            keys.subject_refresh_key("wrong-user"),
+            keys.subject_refresh_key("user"),
+            "refresh",
+        ),
+        (
+            keys.bearer_key("access"),
+            keys.subject_bearer_key("wrong-user"),
+            keys.subject_bearer_key("user"),
+            "access",
+        ),
+    ];
+    let before: Vec<_> = cases
+        .iter()
+        .map(|(record, _, _, _)| raw(&mut conn, record).unwrap())
+        .collect();
+    for (_, wrong_index, _, token) in &cases {
+        redis::cmd("SADD")
+            .arg(wrong_index)
+            .arg(token)
+            .query::<()>(&mut conn)
+            .unwrap();
+    }
+    assert_eq!(store.try_revoke_tokens_by_subject("wrong-user").unwrap(), 0);
+    for ((record, wrong_index, owner_index, token), expected) in cases.iter().zip(before) {
+        assert_eq!(raw(&mut conn, record).as_deref(), Some(expected.as_str()));
+        assert!(!member(&mut conn, wrong_index, token));
+        assert!(member(&mut conn, owner_index, token));
+    }
+    assert!(store.try_verify_access_token("access").unwrap().is_some());
+    assert!(!store.try_is_refresh_revoked("refresh").unwrap());
+}
