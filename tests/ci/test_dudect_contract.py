@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tests/constant_time"))
 from dudect_candidate import CANDIDATE_CASES, CandidateAdmission
 from dudect_contract import ObservationError, assess_case, contract_roles
 from dudect_package import checked_package
+from dudect_results import CANDIDATE_PROFILES
 from run_contract import contract_at, validate_report_file
 from test_dudect_candidate import observation, support
 
@@ -109,6 +110,13 @@ class ContractTests(unittest.TestCase):
         inventory = json.loads((ROOT / "ci/ci-expected-inventory.json").read_text())
         recorded = inventory["families"]["dudect"]
         self.assertEqual(recorded["schema_version"], 4)
+        self.assertEqual(
+            recorded["profiles"],
+            {
+                name: {"looks": list(looks), "minimum_raw_per_class": minimum}
+                for name, (looks, minimum, _) in CANDIDATE_PROFILES.items()
+            },
+        )
         self.assertEqual(recorded["family_cases"], sum(map(len, CANDIDATE_CASES.values())))
         self.assertEqual(
             recorded["cases_by_suite"],

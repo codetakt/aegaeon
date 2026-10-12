@@ -109,6 +109,10 @@ def transformed_support(
         center = data["pilot"]["center"]
         ends = [(float(t) - center) * (float(t) - center) for t in (low, high)]
         require(maximum == max(ends) and minimum <= min(ends), "Square support mismatch")
+        if center <= float(low) or center >= float(high):
+            # The transform is monotone on this interval, including singleton
+            # ticks: both transformed extrema must be attained endpoints.
+            require(minimum == min(ends), "Square support minimum contradicts endpoints")
     if 0 < index < STATISTICS - 1:
         require(high <= data["pilot"]["cutoffs"][index - 1], "Crop includes excluded tick")
     if index:

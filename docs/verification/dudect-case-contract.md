@@ -106,6 +106,13 @@ crop/second-order ranges and moment/support mismatches. Binary64 equality above
 the exact-integer range does not certify native equality. Numerical controls and
 finite native calibration do not prove all timing-test assumptions.
 
+When the frozen pilot center is outside or at an endpoint of the attained tick
+interval, the centered-square transform is monotone on that interval. Its minimum
+and maximum must therefore equal the transformed endpoints. In particular, a
+singleton tick cannot claim nonconstant squared support before the exact-tail
+shortcut is considered. A center strictly inside the interval can instead have
+its squared minimum at an attained interior tick.
+
 ### Necessary moment bounds and rounding
 
 Before Welch inference, each nonconstant class must have moments consistent

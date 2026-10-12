@@ -31,6 +31,7 @@ from dudect_results import (
     CaseAdmission,
     validate_report,
 )
+from dudect_support import transformed_support
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -254,6 +255,31 @@ class CandidateTests(unittest.TestCase):
                 item["count"] = 10000
         result = CandidateAdmission("compare", "pr", binding=binding()).admit(data)
         self.assertTrue(all(not t["eligible"] for t in result["tests"][1:101]))
+
+    def test_singleton_ticks_cannot_hide_nonconstant_squared_moments(self):
+        for group in (0, 1):
+            data = observation(constant=True)
+            squared = data["statistics"][-1]
+            data["support"][-1][group]["value_min_hex"] = float(0).hex()
+            squared[2 + group] = 722
+            squared[4 + group] = squared[group] * 100000
+            with self.subTest(group=group), self.assertRaisesRegex(ValueError, "Square support"):
+                CandidateAdmission("compare", "pr", binding=binding()).admit(data)
+
+    def test_squared_support_endpoints_follow_the_frozen_center(self):
+        # Outside the attained tick interval, the squared transform is monotone;
+        # inside it, an attained interior tick may set the minimum instead.
+        for center, minimum, maximum in ((80, 100, 900), (120, 100, 900), (100, 0, 100)):
+            data = observation()
+            data["pilot"]["center"] = center
+            raw = data["support"][0][0]
+            pair = support(raw["count"], 90, 110, minimum, maximum)
+            with self.subTest(center=center):
+                transformed_support(101, pair, raw, data)
+                if minimum:
+                    pair["value_min_hex"] = float(0).hex()
+                    with self.assertRaisesRegex(ValueError, "Square support"):
+                        transformed_support(101, pair, raw, data)
 
     def test_native_support_rounding_and_square_collisions(self):
         with tempfile.TemporaryDirectory() as directory:
