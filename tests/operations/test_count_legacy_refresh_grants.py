@@ -93,3 +93,61 @@ def test_inventory_scan_preserves_cursor_pages_and_deduplicates_keys(monkeypatch
     with patch.object(inventory.RedisReader, "read", side_effect=replies) as read:
         assert list(inventory.RedisReader().keys("fixture:*")) == ["first", "last"]
     assert [call.args[1] for call in read.call_args_list] == ["0", cursor, "1"]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        None,
+        {},
+        [],
+        ["0"],
+        ["0", "0", "extra"],
+        [False, False],
+        [1.5, 0],
+        [1, "0"],
+        ["0", 1],
+        ["", "0"],
+        ["-1", "0"],
+        ["+1", "0"],
+        [" 1", "0"],
+        ["1 ", "0"],
+        ["1.5", "0"],
+        ["01", "0"],
+        ["\uff11", "0"],
+        ["0", "-1"],
+        ["0", "+1"],
+        ["0", " 1"],
+        ["0", "1 "],
+        ["0", "1.5"],
+        ["0", "00"],
+        ["0", "\uff11"],
+        ["0", "1000000"],
+        [str(1 << 63), "0"],
+        ["1" * 100, "0"],
+        ["0", "1" * 100],
+    ],
+)
+def test_inventory_rejects_malformed_time_before_scan_or_count_output(monkeypatch, capsys, reply):
+    monkeypatch.setenv("AEGAEON_TOKEN_STORE_REDIS_URL", "redis://127.0.0.1:6379/13")
+    monkeypatch.setattr("sys.argv", ["inventory", "--prefix", "fixture"])
+    with (
+        patch.object(inventory.RedisReader, "read", return_value=reply) as read,
+        pytest.raises(RuntimeError, match=r"^Malformed TIME response; inventory incomplete$"),
+    ):
+        inventory.main()
+    assert [call.args for call in read.call_args_list] == [("TIME",)]
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        (["0", "0"], (0, 0)),
+        (["123", "456"], (123, 123_000_456_000)),
+        (["123", "999999"], (123, 123_999_999_000)),
+        ([str((1 << 63) - 1), "0"], ((1 << 63) - 1, ((1 << 63) - 1) * 1_000_000_000)),
+    ],
+)
+def test_inventory_time_preserves_exact_seconds_and_microseconds(reply, expected):
+    assert inventory.time_reply(reply) == expected

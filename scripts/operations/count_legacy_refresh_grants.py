@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 NANOS_PER_SECOND = 1_000_000_000
 MAX_SCAN_CURSOR = (1 << 64) - 1
 MAX_SCAN_CURSOR_DIGITS = len(str(MAX_SCAN_CURSOR))
+MAX_TIME_SECONDS = (1 << 63) - 1
+MICROS_PER_SECOND = 1_000_000
 SCOPE = "read-only drained namespace inventory; not an active-token or assurance decision"
 
 
@@ -91,11 +93,26 @@ class RedisReader:
 
     def time(self) -> tuple[int, int]:
         reply = self.read("TIME")
-        if not isinstance(reply, list) or len(reply) != 2:  # noqa: PLR2004
-            message = "Malformed TIME response; inventory incomplete"
+        return time_reply(reply)
+
+
+def time_reply(reply: object) -> tuple[int, int]:
+    message = "Malformed TIME response; inventory incomplete"
+    if not isinstance(reply, list) or len(reply) != 2:  # noqa: PLR2004
+        raise RuntimeError(message)
+    limits = (MAX_TIME_SECONDS, MICROS_PER_SECOND - 1)
+    for part, maximum in zip(reply, limits, strict=True):
+        if (
+            not isinstance(part, str)
+            or not part.isascii()
+            or not part.isdecimal()
+            or (part != "0" and part.startswith("0"))
+            or len(part) > len(str(maximum))
+            or int(part) > maximum
+        ):
             raise RuntimeError(message)
-        seconds, micros = map(int, reply)
-        return seconds, seconds * NANOS_PER_SECOND + micros * 1000
+    seconds, micros = map(int, reply)
+    return seconds, seconds * NANOS_PER_SECOND + micros * 1000
 
 
 def scan_reply(reply: object) -> tuple[str, list[str]]:
