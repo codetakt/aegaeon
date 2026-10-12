@@ -133,8 +133,8 @@ modules:
   fstar/oidc/FormPost.fst: faithful
   fstar/oidc/IdToken.Low.Plan.fst: faithful
   fstar/oidc/IdToken.Low.Runtime.fst: faithful
-  fstar/oidc/IdToken.Spec.fst: faithful
-  fstar/oidc/IdToken.fst: faithful
+  fstar/oidc/IdToken.Spec.fst: simplified
+  fstar/oidc/IdToken.fst: simplified
   fstar/oidc/Logout.Spec.fst: faithful
   fstar/oidc/Logout.fst: faithful
   fstar/par/Authorization.fst: faithful

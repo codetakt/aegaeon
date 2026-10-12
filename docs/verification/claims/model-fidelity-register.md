@@ -1,6 +1,6 @@
 # Model Fidelity Register
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -21,6 +21,19 @@ modules as grounding for `status: verified` entries.
   may ground a verified entry when the matrix row states the narrowed claim.
 - `toy-stub`: the module contains placeholder behavior or toy data and must not
   ground a verified matrix entry.
+
+## ID Token audience policy correspondence
+
+`IdToken.Spec` and its `IdToken` compatibility re-export are `simplified`.
+The model accepts any audience list containing the client ID, requires `azp`
+for every array and forbids it for a string audience. The Rust validator instead
+accepts only a nonempty audience containing exclusively the expected client ID,
+allows absent `azp` for either representation, and checks every supplied `azp`
+against that ID. Model lemmas about mandatory or forbidden `azp` do not establish
+the runtime policy. Row `OIDC-1-002` remains a required obligation but is `partial`;
+finite validator and signed-path tests do not close the model-to-Rust gap.
+Other model properties retain their stated scope. A passing F* run checks those
+model predicates, not this runtime audience policy or the composed login flow.
 
 ## Initial High-Risk Entries
 

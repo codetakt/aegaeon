@@ -5854,8 +5854,11 @@ openid_core:
     invariant: oidc_token_prop
   tests:
   - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/oidc/id_token/tests/audience.rs
+  - crates/server/src/web/upstream_tests/id_token/audience.rs
+  - crates/server/src/web/upstream_refresh/tests/cases.rs
   ci_check: verify-fstar
-  status: verified
+  status: partial
   runtime_link: crates/server/src/authcode/token/tests/oidc_id_token.rs
   trace:
     kind: guard
@@ -5865,6 +5868,8 @@ openid_core:
   notes:
   - F* verification includes `IdToken.fst` (which includes `IdToken.Spec`) via `nix build .#verify-fstar`.
   - Runtime behaviour is exercised by OIDC E2E tests (issuer/audience/nonce validation paths).
+  - "OIDC Core 1.0 errata set 2 (2023-12-15), sections 2 and 3.1.3.7: string and one-element array audiences are equivalent; untrusted additional audiences must reject. Aegaeon currently trusts only the expected client ID, including self-only duplicates. A supplied azp must match exactly as local policy; missing azp is allowed. Core azp guidance is extension-dependent, not a universal multiple-audience presence rule."
+  - "The cited F* model retains its older audience-membership and multiple-array azp predicates. Those predicates do not establish this runtime trust policy or representation equivalence. Public validators, signed upstream decode/validation tests and PostgreSQL callback-storage/refresh tests are finite implementation evidence; model correspondence remains open, so this requirement is partial until the required invariants and implementation linkage are established."
 - id: OIDC-1-003
   section: Hash claims
   requirement: MUST
@@ -6078,6 +6083,7 @@ openid_core:
     rust: crates/server/src/oidc/required_rs256/verification.rs#verify_required_id_token_claims
     test: crates/server/src/oidc/required_rs256/tests.rs
   notes:
+  - "The IdToken.Spec oidc_token_prop citation describes model semantics only; it does not establish the RP audience/azp admission policy. That model-to-runtime obligation is tracked as partial in OIDC-1-002."
   - "The Kani citation covers six fixed Rust canonicalization inputs only and is continuously selected by spec/kani-evidence.json. It does not prove arbitrary-input safety, native parsing, RS256 cryptography or end-to-end closure; OIDC-1-007 remains partial. This legacy verified evidence inventory row does not activate the assurance contract."
   - "The general verified allowlist remains modern-only (`HS*`, `EdDSA`). This row records a promoted OIDC-specific exception rather than a reclassification of broad RSA."
   - "Runtime carve-out is centralized in `crates/server/src/oidc/required_rs256.rs` and wired into OP issuance plus shared upstream/brokering validation helpers."
