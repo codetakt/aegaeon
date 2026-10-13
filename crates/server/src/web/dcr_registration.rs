@@ -204,6 +204,9 @@ pub(super) async fn register(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(response) =

@@ -69,7 +69,7 @@ pub(super) async fn change_other_environment(
         "senderConstraint":"none", "jwtAccessTokensEnabled":true, "retainRefreshChain":true,
         "allowedGrantTypes":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:token-exchange"]})).await?;
     if redis {
-        exchange::use_redis(&mut seeded)?;
+        exchange::use_redis(&mut seeded).await?;
     }
     let after = reload(pool, &other, &seeded).await?;
     let foreign = exchange::grant(&after).await?;

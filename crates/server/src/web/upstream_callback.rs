@@ -126,6 +126,9 @@ pub(super) async fn upstream_callback(
     Path(connection): Path<String>,
     Query(params): Query<UpstreamCallbackQuery>,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     let request_id = request_id_from_headers(&headers);
     if let Err(kind) = state.transport.enforce(Some(remote), &headers) {

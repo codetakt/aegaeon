@@ -31,10 +31,10 @@ async fn fixture(pool: &PgPool, env: &TestEnvironment) -> TestResult<AppState> {
     )
     .await?;
     let mut state = test_app_state(pool.clone(), env).await?;
-    state.application_authority = Some(Authority {
+    state.application_authority = Some(std::sync::Arc::new(Authority {
         projections: pool.clone(),
         memberships: None,
-    });
+    }));
     state.tokens.validator = Arc::new(crate::authcode::TokenValidator::with_policy(
         state.tokens.store.as_ref().clone(),
         Arc::clone(&state.keys.access_token),

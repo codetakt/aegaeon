@@ -163,6 +163,9 @@ pub(in crate::web) async fn register_update(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
 
     if let Err(response) =

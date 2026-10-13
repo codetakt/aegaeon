@@ -57,6 +57,9 @@ pub(in crate::web) async fn device_verify_get(
     State(state): State<AppState>,
     OriginalUri(uri): OriginalUri,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if !state.cfg.grant_runtime().device_authorization_enabled() {
         return no_cache_json_error_with_iss(StatusCode::NOT_FOUND, "not_found", None, issuer_base);
@@ -273,6 +276,9 @@ pub(in crate::web) async fn device_verify_post(
         axum::extract::rejection::FormRejection,
     >,
 ) -> Response {
+    if let Err(response) = state.require_subject_namespace() {
+        return response;
+    }
     let issuer_base = state.issuer.as_str();
     if let Err(response) = enforce_device_verify_post_admission(&state, &uri, issuer_base) {
         return response;

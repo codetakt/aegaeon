@@ -89,12 +89,14 @@ async fn cleanup(pool: &PgPool, env: &TestEnvironment) -> Result<(), sqlx::Error
     cleanup_test_environment(pool, env).await
 }
 
-async fn snapshot(pool: &PgPool, env: &TestEnvironment) -> TestResult<(i64, i64, i64, i64)> {
-    Ok(sqlx::query_as("SELECT (SELECT count(*) FROM aegaeon.end_users WHERE environment_id=$1),(SELECT count(*) FROM aegaeon.account_links WHERE environment_id=$1),(SELECT count(*) FROM aegaeon.audit_events WHERE environment_id=$1),(SELECT count(*) FROM aegaeon.end_user_profiles p JOIN aegaeon.end_users u ON u.id=p.end_user_id WHERE u.environment_id=$1)").bind(env.environment_id).fetch_one(pool).await?)
+async fn snapshot(pool: &PgPool, env: &TestEnvironment) -> TestResult<serde_json::Value> {
+    let admin = crate::web::test_support::test_admin_pool(pool).await?;
+    Ok(sqlx::query_scalar(r#"SELECT jsonb_build_object('users',(SELECT jsonb_agg(to_jsonb(u) ORDER BY id) FROM aegaeon.end_users u WHERE environment_id=$1),'links',(SELECT jsonb_agg(to_jsonb(l) ORDER BY id) FROM aegaeon.account_links l WHERE environment_id=$1),'audit',(SELECT jsonb_agg(to_jsonb(a) ORDER BY occurred_at,id) FROM aegaeon.audit_events a WHERE environment_id=$1),'profiles',(SELECT jsonb_agg(to_jsonb(p) ORDER BY end_user_id) FROM aegaeon.end_user_profiles p JOIN aegaeon.end_users u ON u.id=p.end_user_id WHERE u.environment_id=$1),'namespace',(SELECT to_jsonb(n) FROM aegaeon.subject_ownership_namespaces n WHERE environment_id=$1),'receipt',(SELECT to_jsonb(a) FROM aegaeon.subject_ownership_adoptions a WHERE environment_id=$1),'owners',(SELECT jsonb_agg(to_jsonb(o) ORDER BY owner_id) FROM aegaeon.end_user_identity_owners o WHERE environment_id=$1),'reservations',(SELECT jsonb_agg(to_jsonb(r) ORDER BY subject COLLATE "C") FROM aegaeon.end_user_subject_reservations r WHERE environment_id=$1))"#)
+        .bind(env.environment_id).fetch_one(&admin).await?)
 }
 
 #[tokio::test]
-#[ignore = "requires isolated PostgreSQL"]
+#[ignore = "requires isolated restricted PostgreSQL and explicit admin observations"]
 async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestResult {
     let pool = test_pg_pool().await?.ok_or("database required")?;
     let env = setup_test_environment(&pool).await?;
@@ -130,6 +132,7 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
         );
         assert!(!subject.contains(&request.issuer));
         tx.commit().await?;
+        assert_jit_owner(&pool, &env, id.ok_or("owner id")?, &[&subject]).await?;
         let mut tx = pool.begin().await?;
         let linked = super::super::account_link::resolve_linked_upstream_callback_user(
             &mut tx,
@@ -184,26 +187,11 @@ async fn oidc_subject_format_jit_creation_links_email_and_collision() -> TestRes
         .map_err(response_error)?;
         assert_eq!(reused, (subject.clone(), id));
         tx.commit().await?;
-        let before = snapshot(&pool, &env).await?;
-        let mut tx = pool.begin().await?;
-        // Deterministic candidate exercises the real insert-only collision boundary.
-        assert!(select_or_provision_upstream_user(
-            &mut tx,
-            &request,
-            env.environment_id,
-            &subject,
-            UpstreamCallbackEmail {
-                value: None,
-                verified: false
-            },
-            &env.issuer_url,
-            "subject-collision"
-        )
-        .await
-        .is_err());
-        tx.rollback().await?;
-        assert_eq!(snapshot(&pool, &env).await?, before);
+        assert_jit_owner(&pool, &env, id.ok_or("owner id")?, &[&subject]).await?;
+        check_jit_current_collision(&pool, &env, &request, &subject).await?;
         check_policy_refusals(&pool, &env, &request).await?;
+        check_jit_historical_subject(&pool, &env, &request, id.ok_or("owner id")?, &subject)
+            .await?;
         Ok(())
     }
     .await;
@@ -246,7 +234,7 @@ async fn check_policy_refusals(
 }
 
 #[tokio::test]
-#[ignore = "requires isolated PostgreSQL"]
+#[ignore = "requires isolated restricted PostgreSQL and explicit admin observations"]
 async fn oidc_subject_format_jit_concurrent_link_conflict_rolls_back() -> TestResult {
     let pool = test_pg_pool().await?.ok_or("database required")?;
     let env = setup_test_environment(&pool).await?;
@@ -281,7 +269,10 @@ async fn oidc_subject_format_jit_concurrent_link_conflict_rolls_back() -> TestRe
         winner.commit().await?;
         let response=tokio::time::timeout(Duration::from_secs(5),loser).await???;
         blocked??;assert_eq!(response,Some(StatusCode::FORBIDDEN));
-        let counts=snapshot(&pool,&env).await?;assert_eq!(counts.0,1);assert_eq!(counts.1,1);assert_eq!(counts.3,0);
+        let counts=snapshot(&pool,&env).await?;
+        for key in ["users","links","owners","reservations"] { assert_eq!(counts[key].as_array().ok_or("committed rows")?.len(),1,"{key}"); }
+        assert!(counts["profiles"].is_null());
+        assert_jit_owner(&pool,&env,first.1.ok_or("winner owner")?,&[&first.0]).await?;
         let loser_audit:i64=sqlx::query_scalar("SELECT count(*) FROM aegaeon.audit_events WHERE environment_id=$1 AND request_id='subject-loser'").bind(env.environment_id).fetch_one(&pool).await?;assert_eq!(loser_audit,0);
         let mut tx=pool.begin().await?;
         let linked=super::super::account_link::resolve_linked_upstream_callback_user(&mut tx,&request,"race",&env.issuer_url,"subject-after-race").await.map_err(response_error)?.ok_or("link")?;
@@ -290,3 +281,5 @@ async fn oidc_subject_format_jit_concurrent_link_conflict_rolls_back() -> TestRe
     }.await;
     finish_test(result, cleanup(&pool, &env).await)
 }
+
+include!("subject_tests/ownership.rs");

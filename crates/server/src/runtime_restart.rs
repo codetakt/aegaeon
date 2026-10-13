@@ -141,16 +141,29 @@ impl RuntimeRestartState {
     }
 
     pub async fn notified(&self) {
-        if self.is_requested() {
-            return;
+        // notify_waiters is observed from future creation, including before its
+        // first poll. Register before reading the flag to avoid a lost broadcast.
+        let notified = self.inner.notify.notified();
+        self.wait_for_request(notified).await;
+    }
+
+    fn wait_for_request<'a>(
+        &self,
+        notified: tokio::sync::futures::Notified<'a>,
+    ) -> impl std::future::Future<Output = ()> + 'a {
+        let requested = self.is_requested();
+        async move {
+            if !requested {
+                notified.await;
+            }
         }
-        self.inner.notify.notified().await;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
 
     #[test]
     fn runtime_restart_state_records_first_request_only() -> Result<(), String> {
@@ -224,5 +237,60 @@ mod tests {
         ));
 
         state.notified().await;
+    }
+
+    #[tokio::test]
+    async fn runtime_restart_notification_covers_unpolled_broadcast_interleavings() {
+        for before_flag in [true, false] {
+            let state = RuntimeRestartState::new();
+            let notified = state.inner.notify.notified();
+            let request = || {
+                state.request_restart(RuntimeRestartRequest::runtime_authority_drift(
+                    "first",
+                    "auth.example.com",
+                    "test",
+                ));
+            };
+            if before_flag {
+                request();
+            }
+            let pending = state.wait_for_request(notified);
+            if !before_flag {
+                request();
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(1), pending)
+                .await
+                .expect("broadcast between registration/flag/poll must not be lost");
+            state.notified().await;
+            state.notified().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_restart_notification_broadcasts_to_all_waiters() {
+        let state = RuntimeRestartState::new();
+        let waiters: Vec<_> = (0..8).map(|_| Box::pin(state.notified())).collect();
+        let mut waiters = waiters;
+        for waiter in &mut waiters {
+            let poll =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(waiter.as_mut().poll(cx))).await;
+            assert!(poll.is_pending());
+        }
+        state.request_restart(RuntimeRestartRequest::runtime_authority_drift(
+            "first",
+            "auth.example.com",
+            "test",
+        ));
+        state.request_restart(RuntimeRestartRequest::runtime_authority_drift(
+            "later",
+            "auth.example.com",
+            "ignored",
+        ));
+        for waiter in waiters {
+            tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+                .await
+                .expect("every registered waiter must wake");
+        }
+        assert_eq!(state.request().unwrap().request_id(), "first");
     }
 }
