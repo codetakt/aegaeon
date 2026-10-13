@@ -211,7 +211,7 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/releases/README.md` | index | Releases Overview | current implementation baseline | 2026-09-07 | Release Engineering | release managers, maintainers |
+| `docs/releases/README.md` | index | Releases Overview | current implementation baseline | 2026-10-13 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/README.md` | index | Release Evidence | current implementation baseline | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/admin-ui-assurance-phase3-internal-evidence.md` | evidence | Admin UI Assurance Phase 3 Internal Evidence | snapshot | 2026-07-08 | Release Engineering | release managers, maintainers |
 | `docs/releases/evidence/beta-conformance.md` | evidence | Beta Conformance Summary | snapshot | 2026-07-07 | Release Engineering | release managers, maintainers |

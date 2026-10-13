@@ -16,7 +16,7 @@ pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUser
     let headers = reader
         .next_record()
         .map_err(|err| format!("Failed to parse CSV header: {err}"))?
-        .unwrap_or_default();
+        .ok_or_else(|| "CSV must include a header row".to_string())?;
     if headers.is_empty() {
         return Err("CSV must include a header row".to_string());
     }

@@ -110,6 +110,26 @@ then their union is retained for the shared store. Validate all three manifests
 with `--locked --frozen` after updating this lock; do not prune only the helper
 manifest and commit its reduced lock as the workspace evidence.
 
+## Human review required before the next release
+
+[Issue #220](https://github.com/codetakt/aegaeon/issues/220) is an open release
+gate for the 2026-10-13 dependency audits and CSV replacement. Integration may
+proceed after Codex review and the normal required CI / merge queue checks.
+The next Aegaeon release, including a prerelease, must wait for a named human's
+recorded review and acceptance of the exact release candidate.
+
+Security/Verification owns the review and retained evidence handoff. Release
+Engineering must verify acceptance before tagging, dispatching a release workflow
+or publishing artifacts. The issue defines the review scope, inherited trust and
+exemption qualifications, source/evidence checks and closure criteria. AI review,
+CI success and PR merge do not close it. This is a documented manual release gate;
+existing release workflows do not automatically enforce the issue state.
+
+The [audit record](dependency-audits/2026-10-13.md#evidence-seal-and-release-disposition)
+identifies the immutable evidence manifests. Their integrity commitments do not
+constitute human or independent organizational approval. Reconcile any later
+dependency changes with the release candidate before human acceptance.
+
 ## Historical cargo-vet Findings (Triage Log, 2026-02-13)
 This list captures the non-blocking `cargo vet check` findings from `security-suite`.
 We keep the triage here until the corresponding audits or trust entries are recorded.
