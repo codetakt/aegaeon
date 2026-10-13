@@ -1,6 +1,6 @@
 # OIDC RP Brokering Specification
 
-Last updated: 2026-10-01
+Last updated: 2026-10-13
 
 Status: current implementation baseline
 
@@ -341,6 +341,43 @@ Account-link operations must remain environment-scoped and auditable. Relink, co
 and bulk-relink flows fail closed when a moved link stores an upstream refresh token unless the
 operator explicitly chooses `clear` or `retain`. Low-confidence reassignment and reassignment to a
 non-`ACTIVE` target user also require explicit operator acknowledgement.
+
+## New Upstream Identity Provisioning
+
+The exact environment, issuer and SHA-256 of `issuer || NUL || sub` identify an account link.
+OIDC Core 1.0 section 5.7 treats the issuer/subject pair as the stable identity; neither email nor
+`email_verified` establishes ownership of a local account. An unlinked validated identity receives
+an opaque local subject using the existing `upstream:` plus UUIDv4 format. Local-user creation
+remains insert-only. A collision with an existing live subject aborts the login without updating
+that user. A concurrent link conflict also aborts and rolls back the newly created user; the caller
+can start a new login to resolve the exact winning link. Permanent subject ownership and historical
+non-reassignment require the shared issuer ownership boundary; JIT adds no separate subject
+reservation authority. This change does not establish non-reassignment after deletion or rename.
+
+The user, account link, profile projection, refresh envelope and required audits share the callback
+PostgreSQL transaction. A browser session is created only after that transaction commits. Existing
+public subjects, exact link hashes and refresh-token encryption/AAD are preserved.
+
+`reject_existing_email` refuses a case-insensitive email match with a non-deleted local account,
+including a user whose subject matches the old delimiter-derived spelling. Email uniqueness across
+the database is not promised.
+Enabled `reuse_existing_email` is rejected at configuration save, activation and runtime loading.
+An admitted callback still carrying that legacy policy refuses unlinked provisioning before
+mutations. Disabled configurations can retain the value for diagnosis. Configure
+`reject_existing_email` and use deliberate, privileged account linking where appropriate.
+Verified-email, domain allowlist and initial-status gates remain additional conditions.
+
+New links record `bindingProvenance=jit_v2` and `bindingRevision=1`. The `jit_v2` value identifies
+the no-email-reuse binding policy and does not change the subject format. Explicit management creation
+records `administrator_confirmed`. Management owner changes, including bulk relink and conflict
+resolution, set that provenance and advance the positive revision in the same audited transaction;
+bigint overflow aborts. Reads, previews, no-ops and callback touches do not re-attest a binding.
+Migration and old writers default to `legacy_unreviewed`, revision 1, without guessed backfills.
+These values record a local authority source, not proof of historical ownership or product assurance.
+
+Existing exact links are still resolved before JIT. Historical binding review, enforcement of that
+review, and remediation of previously issued authentication state remain open. See the
+[coordinated upgrade guide](../operations/upstream-identity-provisioning-upgrade.md).
 
 ## Mapping And Claim Release Requirements
 
