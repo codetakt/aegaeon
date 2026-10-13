@@ -1,4 +1,4 @@
-h1:uc9P7BgCV8KOV0dOupgEtZ8XY+wT1FnWNJd9brIn2tY=
+h1:lAGmYNztjV+/WewwtO5hS2fcmGE35PNLVey7jDXVTWk=
 20260803140000_baseline.sql h1:MiEiQpBNweRvDKhVVt17w7Td1YklwRIaQ6GXfRwCmjE=
 20260909070000_authorization_consents.sql h1:PEdKG9v67t73TfECEz8BkuHoh0DaH7/pS57dHwGWEWY=
 20260909090000_authorization_logins.sql h1:z9IBFYQfQuCGGm08Ndc50Q461gDjhRzOu3YJUQ98ij8=
@@ -11,3 +11,5 @@ h1:uc9P7BgCV8KOV0dOupgEtZ8XY+wT1FnWNJd9brIn2tY=
 20261014090000_user_attribute_sources.sql h1:zlGtUqe3OJGKmEAdar1UwPIffkgZvoUt1stTLSESnww=
 20261014091000_subject_ownership.sql h1:OuSnPlhqzXatwqhwJ9614G/slTsmrX9YFAA3owQ63JQ=
 20261014092000_subject_audit_authority.sql h1:OArKGCrtDfcNKuCNj1Xtnj9BJDguky9uVApLA9t2IlU=
+20261014100000_lti_platform.sql h1:PQ7LGtuta3VeO3CFgSc6t4vU/uRKKPC6d8Sj3I4+dBk=
+20261014101000_lti_subject_inventory.sql h1:qiIcfl/sgXbu82l2CBFeLbp8BMApcdnBVDNWgONLAXU=

@@ -19,6 +19,8 @@ sender constraints, and release handling.
 
 ## Canonical Documents
 
+- `[runbook]` [LTI resource-link Platform](lti-platform.md) — registration, producer authority, mapping and launch recovery.
+
 - `[runbook]` [Back-Channel Logout Token profile](backchannel-logout.md) —
   explicit token type, expiration, recipient compatibility and delivery scope.
 

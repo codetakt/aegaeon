@@ -52,6 +52,7 @@ pub mod key_encryption;
 pub mod key_rotation;
 pub mod kms;
 pub mod local_credentials;
+pub mod lti;
 pub mod metrics_integration;
 pub mod metrics_support;
 pub mod policy;

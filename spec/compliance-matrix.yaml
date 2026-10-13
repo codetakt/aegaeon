@@ -6871,3 +6871,49 @@ security_review:
   status: not_applicable
   notes:
   - "Low priority — origin comparison is not a secret comparison. Timing oracle reveals nothing exploitable."
+
+lti_1_3:
+- id: LTI-CORE-001
+  section: 'Security Framework 1.0 §5.1; LTI Core 1.3 §4'
+  requirement: MUST
+  description: Issue authenticated LTI resource-link launches through the explicit Tool capability and OIDC form_post profile
+  module: crates/server/src/web/lti/authorize.rs
+  proof: []
+  tests:
+  - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/lti/tests/dpop.rs
+  - crates/server/src/web/lti/tests/failures.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "Scope is authenticated top-level LtiResourceLinkRequest with manual registration; no Advantage, anonymous, iframe or dynamic Tool registration claim."
+  - "GET/POST parameters, exact registered redirects, silent session correspondence, nonce/state preservation, RS256 and one-use transactional publication are implemented."
+  - "Real PostgreSQL/router tests and independent JWKS signature validation are finite functional evidence; HTTP DPoP fixture verification and independent FFI proof verification are separate observations, not formal same-system assurance or certification."
+- id: LTI-CORE-002
+  section: 'LTI Core 1.3 §§5.3, 5.4; Appendix A'
+  requirement: MUST
+  description: Compose resource-link identity, deployment, context and role claims from admitted authority and explicitly released attributes
+  module: crates/server/src/lti/claims.rs
+  proof: []
+  tests:
+  - crates/server/src/lti/tests.rs
+  - crates/server/src/web/lti/tests.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "The generic mapping engine has an LTI preset; custom rules cannot override identity or protocol-owned claims."
+  - "Local source disclosure, transformation admission and output release remain distinct; legacy and external attributes are not silently adopted."
+- id: LTI-CORE-003
+  section: 'LTI Core 1.3 §§3.1, 5.3.3, 5.4.1'
+  requirement: MUST
+  description: Preserve issuer-scoped deployment and placement identities across capability revisions and retirement
+  module: crates/server/src/lti/store.rs
+  proof: []
+  tests:
+  - crates/server/src/web/lti/tests.rs
+  - crates/server/src/web/management/tests/initialization/lti.rs
+  ci_check: db-integration
+  status: implemented
+  notes:
+  - "Immutable history and identifier reservations prevent reassignment; compare-and-swap activation never restores an older revision."
+  - "Permanent subject ownership and historical-adoption preconditions remain separate shared protocol obligations."

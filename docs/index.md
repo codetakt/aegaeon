@@ -55,6 +55,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/design/README.md` | index | Design Overview | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/external-boundary-naming-plan.md` | design | External-Boundary Naming Plan | active plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
+| `docs/design/lti-platform-launch.md` | design | LTI Platform resource-link launches | current implementation baseline | 2026-10-13 | Engineering | protocol implementers, operators, reviewers |
 | `docs/design/oidc-kms-signing-design.md` | design | OIDC KMS/HSM Signing Design | active plan | 2026-07-08 | Engineering | implementation contributors, maintainers |
 | `docs/design/runtime-adapter-design.md` | design | Runtime Adapter Design (Draft) | draft | 2026-07-07 | Engineering | implementation contributors, maintainers |
 | `docs/design/verified-core-api-plan.md` | design | Verified Core API Export Plan | future plan | 2026-07-07 | Engineering | implementation contributors, maintainers |
@@ -358,6 +359,7 @@ Audience: contributors, maintainers
 | `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
+| `docs/operations/lti-platform.md` | runbook | Configure an LTI resource-link Platform | current implementation baseline | 2026-10-13 | Engineering | operators, integrators, reviewers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |
 | `docs/operations/management-platform-regulated-environment.md` | runbook | Management Platform Regulated-Environment Runbook | current implementation baseline | 2026-07-08 | Operations | operators, maintainers |
 | `docs/operations/monitoring/README.md` | index | Monitoring & Alerts (Prometheus/Alertmanager) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |

@@ -5626,6 +5626,226 @@
         }
       }
     },
+    "/api/v1/teams/{teamId}/environments/{environmentId}/lti/registrations": {
+      "get": {
+        "tags": [
+          "lti"
+        ],
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest registration and Platform endpoints; activeRevision identifies the effective document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human OWNER or ADMINISTRATOR required"
+          },
+          "404": {
+            "description": "Registration not found"
+          },
+          "503": {
+            "description": "Dependency unavailable"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "lti"
+        ],
+        "operationId": "replace",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceLtiRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Immutable revision saved; secure default requires activation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human lifecycle role, Origin and CSRF required"
+          },
+          "404": {
+            "description": "Current client not found"
+          },
+          "409": {
+            "description": "Stale baseRevision or permanent identity conflict"
+          },
+          "422": {
+            "description": "Malformed or unknown fields"
+          },
+          "503": {
+            "description": "Dependency or mandatory audit failed; transaction not released"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/{teamId}/environments/{environmentId}/lti/registrations/activate": {
+      "post": {
+        "tags": [
+          "lti"
+        ],
+        "operationId": "activate",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateLtiRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Exact latest revision activated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Human lifecycle role, Origin and CSRF required"
+          },
+          "404": {
+            "description": "Current registration or client not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          },
+          "503": {
+            "description": "Dependency or mandatory audit failed"
+          }
+        }
+      }
+    },
     "/api/v1/teams/{teamId}/environments/{environmentId}/oauthProfiles": {
       "get": {
         "tags": [
@@ -9959,6 +10179,23 @@
         },
         "additionalProperties": false
       },
+      "ActivateLtiRegistrationRequest": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "revision"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "ActivateRuntimeKeyRequest": {
         "type": "object",
         "required": [
@@ -11269,6 +11506,44 @@
           }
         }
       },
+      "Deployment": {
+        "type": "object",
+        "required": [
+          "id",
+          "producers",
+          "allowedRoles",
+          "resourceLinks"
+        ],
+        "properties": {
+          "allowedRoles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "producers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "resourceLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceLink"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/Lifecycle"
+          }
+        },
+        "additionalProperties": false
+      },
       "Environment": {
         "type": "object",
         "required": [
@@ -11856,6 +12131,45 @@
             "$ref": "#/components/schemas/KeyStorePublicView"
           }
         }
+      },
+      "LaunchContext": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Lifecycle": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled",
+          "retired"
+        ]
       },
       "ListAccountLinksResponse": {
         "type": "object",
@@ -13932,6 +14246,27 @@
         },
         "additionalProperties": false
       },
+      "ReplaceLtiRegistrationRequest": {
+        "type": "object",
+        "required": [
+          "clientId",
+          "baseRevision",
+          "configuration"
+        ],
+        "properties": {
+          "baseRevision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/ToolConfiguration"
+          }
+        },
+        "additionalProperties": false
+      },
       "ResolveAccountLinkConflictRequest": {
         "type": "object",
         "required": [
@@ -13980,6 +14315,41 @@
           },
           "upstreamSubject": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResourceLink": {
+        "type": "object",
+        "required": [
+          "id",
+          "targetLinkUri",
+          "context"
+        ],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/LaunchContext"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Lifecycle"
+          },
+          "targetLinkUri": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "additionalProperties": false
@@ -14074,6 +14444,21 @@
             "$ref": "#/components/schemas/RuntimeKey"
           }
         }
+      },
+      "SecurityPolicy": {
+        "type": "object",
+        "properties": {
+          "requireConsent": {
+            "type": "boolean"
+          },
+          "requireDpop": {
+            "type": "boolean"
+          },
+          "stagedActivation": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "SetDcrBearerTokenRequest": {
         "type": "object",
@@ -14201,6 +14586,52 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ToolConfiguration": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "name",
+          "initiateLoginUri",
+          "redirectUris",
+          "deployments"
+        ],
+        "properties": {
+          "deployments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Deployment"
+            }
+          },
+          "initiateLoginUri": {
+            "type": "string"
+          },
+          "mapping": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "redirectUris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "security": {
+            "$ref": "#/components/schemas/SecurityPolicy"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Lifecycle"
           }
         },
         "additionalProperties": false

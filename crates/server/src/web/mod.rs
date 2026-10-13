@@ -36,6 +36,7 @@ mod logout_context;
 mod logout_dispatch;
 mod logout_endpoint;
 mod logout_id_token_hint;
+mod lti;
 pub mod management;
 mod metadata;
 pub(crate) mod namespace_runtime;
