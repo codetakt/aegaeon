@@ -66,7 +66,7 @@ def prepare(output: Path) -> dict[str, Any]:
     subprocess.run(
         ["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL
     )
-    source = "git+" + ROOT.as_uri() + "?rev=" + head
+    source = "git+" + ROOT.as_uri() + "?rev=" + head + "&shallow=1"
     analysis = build("dudect-analysis", output, source)
     natives = {
         f"{c}-{s}": build(f"dudect-analysis-native-{c}-{s}", output, source)
