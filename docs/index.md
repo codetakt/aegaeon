@@ -283,6 +283,7 @@ Audience: contributors, maintainers
 | `docs/verification/dudect-analysis-package.md` | verification | Opt-in Dudect analysis package | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-case-contract.md` | verification | Per-case timing observation contract | current implementation baseline | 2026-10-12 | Engineering | verification tooling maintainers |
 | `docs/verification/dudect-hosted-migration.md` | verification | GitHub-hosted Dudect migration candidate | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
+| `docs/verification/dudect-hosted-reliability.md` | verification | Hosted Dudect reliability evaluation | active plan | 2026-10-17 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-four-exception.md` | verification | PR four-exception supplement | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-sparse-experiment.md` | verification | Experimental PR sparse-support replay | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-sparse-runtime.md` | verification | Private PR sparse runtime candidate | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |

@@ -1,0 +1,92 @@
+# Frozen 299-opportunity campaign. The coordinator publishes the next batch tag
+# only after complete recovery/replay of the previous batch, with zero failures.
+name: Dudect hosted reliability campaign
+
+on:
+  push:
+    tags: ['dudect-hosted-reliability-20261017-b*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dudect-hosted-reliability-20261017
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.inventory.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: inventory
+        run: python3 -B scripts/ci/dudect_hosted_campaign.py matrix >> "$GITHUB_OUTPUT"
+
+  opportunity:
+    name: opportunity-${{ matrix.slot }}
+    needs: inventory
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.inventory.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      PYTHONDONTWRITEBYTECODE: "1"
+      CAMPAIGN_SLOT: ${{ matrix.slot }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record frozen opportunity
+        run: >-
+          python3 -B scripts/ci/dudect_hosted_campaign.py receipt
+          --slot "$CAMPAIGN_SLOT" --output artifacts/dudect-hosted
+      - name: Setup Nix
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "false"
+      - name: Build, self-test and freeze inputs
+        timeout-minutes: 60
+        run: >-
+          python3 -B scripts/ci/prepare_dudect_hosted.py
+          --campaign-slot "$CAMPAIGN_SLOT"
+          --output artifacts/dudect-hosted/preparation
+      - name: Execute all 42 cases
+        timeout-minutes: 152
+        run: |
+          exec python3 -B scripts/ci/run_dudect_analysis_matrix.py \
+            --plan artifacts/dudect-hosted/preparation/plan.json \
+            --plan-sha256 "$(cat artifacts/dudect-hosted/preparation/plan.sha256)" \
+            --output artifacts/dudect-hosted/measurement
+      - name: Replay retained raw, including statistical failures
+        if: ${{ always() && hashFiles('artifacts/dudect-hosted/preparation/plan.json') != '' }}
+        timeout-minutes: 15
+        run: |
+          exec python3 -B scripts/ci/verify_dudect_analysis_matrix.py \
+            --plan artifacts/dudect-hosted/preparation/plan.json \
+            --plan-sha256 "$(cat artifacts/dudect-hosted/preparation/plan.sha256)" \
+            --evidence artifacts/dudect-hosted/measurement \
+            --output artifacts/dudect-hosted/replay
+      - name: Seal complete or partial evidence
+        if: ${{ always() }}
+        timeout-minutes: 15
+        run: >-
+          python3 -B scripts/ci/retain_dudect_hosted.py
+          --source artifacts/dudect-hosted --destination artifacts/dudect-hosted-upload
+      - name: Retain evidence after success, failure or cancellation
+        if: ${{ always() }}
+        timeout-minutes: 10
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-reliability-${{ github.run_id }}-${{ matrix.slot }}
+          path: artifacts/dudect-hosted-upload/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

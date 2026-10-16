@@ -1,0 +1,45 @@
+{
+  "schema": "dudect-hosted-reliability/1",
+  "campaign": "hosted-reliability-20261017",
+  "tag_prefix": "dudect-hosted-reliability-20261017-b",
+  "maximum_opportunities": 299,
+  "batch_size": 16,
+  "target_failure_rate": [
+    1,
+    100
+  ],
+  "one_sided_error": [
+    1,
+    20
+  ],
+  "replacements": 0,
+  "prior_screen_included": false,
+  "early_stop": "Stop future tag batches after any failed or unrecoverable opportunity; finish and recover the already submitted batch. No replacement or automatic candidate change.",
+  "unit": "One fresh hosted VM runs all 21 PR cases under GCC and Clang, 42 roles total.",
+  "package_baseline_revision": "ff995ccf9bc9601d566b20bf1101d40ceb305273",
+  "packages": {
+    "analysis_package": {
+      "executable_sha256": "bc30d22e9ca684473c32e8719151e07d567064374ec94809bb83a6c49a58d6e6",
+      "path": "/nix/store/dgx4j1q2pncjd7g0qnv29g5lv9n8cwbz-dudect-analysis-0.1.0"
+    },
+    "native_packages": {
+      "clang-legacy": {
+        "index_sha256": "db419d336f381fe0c3927faf429515b9ac224c43c0a8d6361bbee30df49f150b",
+        "path": "/nix/store/985jbpqk62f2n4x3civpzmif0pgxh491-dudect-native-legacy-0.2.0"
+      },
+      "clang-nix": {
+        "index_sha256": "4b0d2dc9e7a9f69d07df9264c4fefa9f3c11e2b887217de92c59d507f92f91c9",
+        "path": "/nix/store/790xq360rlw67j9smv03k0m33c6psnlw-dudect-native-nix-0.2.0"
+      },
+      "gcc-legacy": {
+        "index_sha256": "dca2d5dfd7506f803be72e250be45a5f07dd3ed487a3c8b51aa656b665e7db95",
+        "path": "/nix/store/1ps5qsgr55xjz4k7vdrfml615363kbs4-dudect-native-legacy-0.2.0"
+      },
+      "gcc-nix": {
+        "index_sha256": "319aa8363eed2d3713dd0ba5ef9e105e5cf2ccb1f0c9bd771a71a14f5c3a63ff",
+        "path": "/nix/store/bd5s6z3zq6583w1inxr7lhm0054zjhbr-dudect-native-nix-0.2.0"
+      }
+    },
+    "case_contract_sha256": "a58ac52b773eed82647e249b9734c891e8a27e50428511c9d7a864097e09900c"
+  }
+}

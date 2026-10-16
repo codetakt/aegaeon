@@ -40,10 +40,13 @@ SOURCES = [
     "scripts/ci/dudect_hosted_environment.py",
     "scripts/ci/prepare_dudect_hosted.py",
     "scripts/ci/retain_dudect_hosted.py",
+    "scripts/ci/dudect_hosted_campaign.py",
+    "scripts/ci/dudect-hosted-reliability.json",
     "tests/constant_time/dudect_affinity.py",
     "tests/constant_time/dudect_results.py",
     "tests/constant_time/dudect_support.py",
     ".github/workflows/dudect-hosted-screen.yml",
+    ".github/workflows/dudect-hosted-reliability.yml",
     ".github/actions/setup-nix-ci/action.yml",
     ".github/actions/setup-nix-ci/prepare-disk.sh",
 ]

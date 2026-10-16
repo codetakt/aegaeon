@@ -58,7 +58,15 @@ def identity(python: Path, analysis: Path, packet: str, unit: str) -> dict[str, 
     return dict(json.loads(result))
 
 
-def prepare(output: Path) -> dict[str, Any]:
+def prepare(  # noqa: PLR0915 -- one pinned preparation transaction
+    output: Path, campaign_slot: int | None = None
+) -> dict[str, Any]:
+    campaign = None
+    if campaign_slot is not None:
+        import dudect_hosted_campaign  # noqa: PLC0415 -- optional orchestration mode
+
+        campaign = dudect_hosted_campaign.context(campaign_slot)
+        write_json(output / "campaign.json", campaign)
     config = hosted.freeze()
     write_json(output / "allocation-before-build.json", config)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -86,6 +94,8 @@ def prepare(output: Path) -> dict[str, Any]:
     for name, path in {"analysis": analysis, **natives}.items():
         shutil.copytree(path, output / "packages" / name)
     packet = f"hosted-{config['runner']['GITHUB_RUN_ID']}"
+    if campaign is not None:
+        packet += f"-s{campaign_slot:03d}"
     contract = (
         analysis
         / "libexec/dudect-analysis/source/tests/constant_time/contracts"
@@ -123,6 +133,9 @@ def prepare(output: Path) -> dict[str, Any]:
                 "analysis": identity(python, analysis, packet, unit),
             }
         )
+    if campaign is not None:
+        plan["campaign"] = campaign
+        dudect_hosted_campaign.check_packages(plan)
     check_matrix(plan)
     check_analysis(plan)
     pinned_inputs(plan)
@@ -142,10 +155,11 @@ def prepare(output: Path) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--campaign-slot", type=int)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     try:
-        prepare(args.output)
+        prepare(args.output, args.campaign_slot)
     except BaseException as error:
         write_json(
             args.output / "preparation-failure.json", {"error": str(error), "ci_admission": False}
