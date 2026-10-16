@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from build_ct_preparation import PROVIDER, build as overlay
-from ct_preparation_plan import ROOT, overlay_unit, package_unit, schedule
+from collect_ct_preparation import ordered_bindings
+from ct_preparation_plan import ROOT, check_unit, overlay_unit, package_unit, schedule
 
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 import dudect_hosted_environment as hosted
@@ -41,6 +42,37 @@ def selftests(binary: str, output: Path) -> None:
                 == {"cases": 7, "callbacks": 63, "timing_executed": False},
                 "Incomplete input compatibility self-test",
             )
+
+
+def invocation_selftests(units: dict[str, Any], output: Path) -> None:
+    """Exercise the persisted format and the actual native case-order receipt."""
+    output.mkdir()
+    for name, unit in units.items():
+        path = output / (name + ".json")
+        write_json(path, unit)
+        loaded = json.loads(path.read_text())
+        check_unit(loaded)
+        bindings = ordered_bindings(loaded)
+        environment = {k: v for k, v in os.environ.items() if not k.startswith("AEGAEON_DUDECT_")}
+        environment.update(loaded["environment"])
+        result = subprocess.run(
+            [loaded["binary"], "--self-test"],
+            env=environment,
+            capture_output=True,
+            check=True,
+            timeout=60,
+        )
+        (output / (name + ".stdout")).write_bytes(result.stdout)
+        (output / (name + ".stderr")).write_bytes(result.stderr)
+        expected = [
+            {"case_id": bindings[n]["case_id"], "self_test": True, "timing_executed": False}
+            for n in bindings
+        ]
+        require(
+            [json.loads(line) for line in result.stdout.splitlines()] == expected,
+            "Persisted schedule differs from actual native self-test",
+        )
+        check_unit(loaded)
 
 
 def prepare(output: Path, compiler: str) -> dict[str, Any]:  # noqa: PLR0915 -- freeze transaction
@@ -99,6 +131,7 @@ def prepare(output: Path, compiler: str) -> dict[str, Any]:  # noqa: PLR0915 -- 
         units[arm] = overlay_unit(builds["normal"], PROVIDER, mode)
     for dose in (0, 16):
         units[f"signal{dose}"] = overlay_unit(builds["signal"], PROVIDER[:3], "uniform", dose)
+    invocation_selftests(units, output / "invocation-selftests")
     sources = [
         *sorted((ROOT / "scripts/diagnostics").glob("*.*")),
         *[
@@ -113,7 +146,7 @@ def prepare(output: Path, compiler: str) -> dict[str, Any]:  # noqa: PLR0915 -- 
         ],
     ]
     plan = {
-        "schema": "dudect-ct-preparation/1",
+        "schema": "dudect-ct-preparation/2",
         "ci_admission": False,
         "compiler": compiler,
         "head": head,

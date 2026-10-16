@@ -8,7 +8,7 @@ import os
 import signal
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -20,6 +20,18 @@ SIGNAL_DOSE = 16
 def interrupted(signum: int, _frame: FrameType | None) -> NoReturn:
     message = f"Research process interrupted by signal {signum}"
     raise TimeoutError(message)
+
+
+def ordered_bindings(unit: dict[str, Any]) -> dict[str, Any]:
+    """JSON object ordering is not the native execution schedule."""
+    names = unit["cases"]
+    if not isinstance(names, list) or not names or len(set(names)) != len(names):
+        message = "Invalid explicit case schedule"
+        raise ValueError(message)
+    if set(names) != set(unit["bindings"]):
+        message = "Case schedule differs from binding inventory"
+        raise ValueError(message)
+    return {name: unit["bindings"][name] for name in names}
 
 
 def main() -> None:  # noqa: PLR0912, PLR0915 -- source-specific collector lifecycle
@@ -49,7 +61,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915 -- source-specific collector lifec
         signal.signal(sig, interrupted)
     signal.setitimer(signal.ITIMER_REAL, args.seconds)
     try:
-        histories = collect(source, args.output, Path(unit["binary"]), "pr", unit["bindings"])
+        histories = collect(source, args.output, Path(unit["binary"]), "pr", ordered_bindings(unit))
         decisions = json.loads((args.output / "effective-decisions.json").read_text())
         roles = contract_roles(
             json.loads(

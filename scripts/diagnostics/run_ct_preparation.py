@@ -23,7 +23,7 @@ from verify_dudect_analysis_matrix import require, sha256, write_json
 
 def run(plan: dict[str, Any], output: Path) -> None:  # noqa: PLR0915 -- bounded acquisition transaction
     require(
-        plan["schema"] == "dudect-ct-preparation/1" and plan["ci_admission"] is False,
+        plan["schema"] == "dudect-ct-preparation/2" and plan["ci_admission"] is False,
         "Unreviewed plan",
     )
     require(plan["order"] == schedule(plan["compiler"]), "Changed experiment order")

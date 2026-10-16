@@ -170,7 +170,8 @@ def build(package: Path, output: Path, variant: str) -> dict[str, Any]:  # noqa:
     build_hash = hashlib.sha256(
         json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    argv += [
+    argv = [
+        *argv,
         "-DAEGAEON_DUDECT_CANDIDATE=1",
         '-DAEGAEON_DUDECT_SUITE="nix"',
         f'-DAEGAEON_DUDECT_CONTRACT_SHA256="{manifest["contract_sha256"]}"',

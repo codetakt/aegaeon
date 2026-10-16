@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/diagnostics"))
 from build_ct_preparation import PROVIDER, replace_once
+from collect_ct_preparation import ordered_bindings
 from ct_preparation_plan import check_unit, overlay_unit, schedule, wait_owned
 from verify_dudect_analysis_matrix import sha256
 
@@ -128,7 +129,8 @@ class PreparationTests(unittest.TestCase):
                         "source": str(root / "source"),
                         "environment": {},
                         "binary": "unused",
-                        "bindings": {},
+                        "cases": ["test"],
+                        "bindings": {"test": {}},
                     }
                 )
             )
@@ -155,6 +157,15 @@ class PreparationTests(unittest.TestCase):
             pid = int((root / "observations/child.pid").read_text())
             with self.assertRaises(ProcessLookupError):
                 os.kill(pid, 0)
+
+    def test_sorted_json_retains_explicit_native_order(self):
+        unit = {"cases": PROVIDER, "bindings": {n: {"case_id": "nix/" + n} for n in PROVIDER}}
+        saved = json.loads(json.dumps(unit, sort_keys=True))
+        self.assertNotEqual(list(saved["bindings"]), PROVIDER)
+        self.assertEqual(list(ordered_bindings(saved)), PROVIDER)
+        for names in ([], PROVIDER[:-1], [*PROVIDER, PROVIDER[0]]):
+            with self.assertRaises(ValueError):
+                ordered_bindings({**saved, "cases": names})
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ def package_unit(package: Path, executable: str) -> dict[str, Any]:
         "binary": str(package / entry["relative_binary"]),
         "binary_sha256": entry["sha256"],
         "suite": index["suite"],
+        "cases": entry["cases"][:],
         "bindings": {
             name: {
                 "case_id": f"{index['suite']}/{name}",
@@ -65,6 +66,7 @@ def overlay_unit(
         "binary": build["binary"],
         "binary_sha256": build["binary_sha256"],
         "suite": "nix",
+        "cases": names[:],
         "bindings": {
             name: {
                 "case_id": f"nix/{name}",

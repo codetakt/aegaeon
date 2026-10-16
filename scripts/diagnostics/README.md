@@ -80,3 +80,16 @@ preparation using identical deterministic RNG draws: full bytes, labels, request
 request size, RNG state and actual callback return. Unknown modes fail. Original source
 and generated source are separately hashed; the normal native contains no fixture RNG.
 Saved evidence is replayed after acquisition; this is not a new physical trial.
+
+## Collection-format correction
+
+The initial hosted comparison stopped after the original Nix controls: sorting JSON
+object keys reordered the provider binding map, so the collector expected ct128 before
+ct32. Both failures and partial raw records remain retained. They are not completed
+preparation contrasts and are not replaced in the reliability record.
+
+Plan version 2 carries a separate ordered `cases` array. Before acquisition, every
+serialized invocation is checked against its actual ELF's non-timing case receipt.
+The corrected comparison is a new fixed eight-process allocation per compiler; it uses
+the same interventions, order, signal doses and bounds. It does not resume the stopped
+reliability campaign. A further collection failure stops this comparison for review.
