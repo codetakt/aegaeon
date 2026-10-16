@@ -52,7 +52,10 @@ def prepare(output: Path, compiler: str) -> dict[str, Any]:  # noqa: PLR0915 -- 
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     require(head == config["runner"]["GITHUB_SHA"], "Wrong checkout")
     subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True)
-    source = "git+" + ROOT.as_uri() + "?rev=" + head + "&shallow=1"
+    # New diagnostic directories change Nix source identity even when filtered empty.
+    # Build O from its exact historical revision, not the overlay checkout.
+    base = "f3c3e2adc0480a076ce7ea986dcc82451ba7dc43"
+    source = "git+" + ROOT.as_uri() + "?rev=" + base + "&shallow=1"
     baseline = json.loads((ROOT / "scripts/ci/dudect-hosted-reliability.json").read_text())[
         "packages"
     ]
@@ -114,6 +117,7 @@ def prepare(output: Path, compiler: str) -> dict[str, Any]:  # noqa: PLR0915 -- 
         "ci_admission": False,
         "compiler": compiler,
         "head": head,
+        "native_base": base,
         "hosted": config,
         "python": str(python),
         "python_sha256": sha256(python),
