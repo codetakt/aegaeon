@@ -1,10 +1,10 @@
-# Frozen 299-opportunity campaign. The coordinator publishes the next batch tag
+# Frozen 299-opportunity campaign. The coordinator publishes the next batch branch
 # only after complete recovery/replay of the previous batch, with zero failures.
 name: Dudect hosted reliability campaign
 
 on:
   push:
-    tags: ['dudect-hosted-reliability-20261017-b*']
+    branches: ['ci/dudect-hosted-reliability-20261017-b*']
 
 permissions:
   contents: read

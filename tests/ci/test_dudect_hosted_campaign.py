@@ -24,7 +24,7 @@ class CampaignTests(unittest.TestCase):
             "GITHUB_RUN_ATTEMPT": "1",
             "GITHUB_RUN_ID": "123",
             "GITHUB_SHA": "a" * 40,
-            "GITHUB_REF": "refs/tags/" + self.spec["tag_prefix"] + "01",
+            "GITHUB_REF": "refs/heads/" + self.spec["branch_prefix"] + "01",
         }
 
     def test_exact_design_is_minimum_and_inventories_partition_299(self):
@@ -38,14 +38,14 @@ class CampaignTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 campaign.slots(self.spec, batch)
 
-    def test_replacement_unknown_tag_or_wrong_batch_slot_is_rejected(self):
+    def test_replacement_unknown_ref_or_wrong_batch_slot_is_rejected(self):
         for key, value in (
             ("GITHUB_RUN_ATTEMPT", "2"),
             ("GITHUB_EVENT_NAME", "workflow_dispatch"),
             ("GITHUB_SHA", "unknown"),
             ("GITHUB_RUN_ID", ""),
             ("GITHUB_REF", "refs/heads/main"),
-            ("GITHUB_REF", "refs/tags/" + self.spec["tag_prefix"] + "20"),
+            ("GITHUB_REF", "refs/heads/" + self.spec["branch_prefix"] + "20"),
         ):
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 campaign.invocation(self.spec, {**self.env, key: value}, 1)
@@ -118,9 +118,9 @@ class CampaignTests(unittest.TestCase):
             prepare.prepare(Path("unused"), 17)
         freeze.assert_not_called()
 
-    def test_workflow_is_tag_scoped_and_preserves_failed_jobs(self):
+    def test_workflow_is_branch_scoped_and_preserves_failed_jobs(self):
         text = (ROOT / ".github/workflows/dudect-hosted-reliability.yml").read_text()
-        self.assertIn("tags: ['dudect-hosted-reliability-20261017-b*']", text)
+        self.assertIn("branches: ['ci/dudect-hosted-reliability-20261017-b*']", text)
         self.assertIn("fail-fast: false", text)
         self.assertIn("max-parallel: 16", text)
         self.assertIn("timeout-minutes: 152", text)

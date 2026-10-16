@@ -23,8 +23,8 @@ describes inversion of the binomial tail; no normal approximation is used here.
 ## Frozen execution and stopping
 
 `scripts/ci/dudect-hosted-reliability.json` fixes the packages, case contract,
-criterion, opportunity inventory and tag namespace before acquisition. All
-batch tags point to the same signed commit. There are 19 batches: 18 of 16
+criterion, opportunity inventory and branch namespace before acquisition. All
+batch branches point to the same signed commit. There are 19 batches: 18 of 16
 opportunities, followed by 11. Each matrix job receives a fresh VM and a unique
 slot ID; the ID is bound into its analysis packet before input generation.
 The four suites and native cases retain their original order within a VM.

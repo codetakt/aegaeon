@@ -42,16 +42,16 @@ def slots(spec: dict[str, Any], batch: int) -> list[int]:
 def invocation(
     spec: dict[str, Any], env: dict[str, str], slot: int | None = None
 ) -> dict[str, Any]:
-    require(env.get("GITHUB_EVENT_NAME") == "push", "Campaign must be a frozen tag push")
+    require(env.get("GITHUB_EVENT_NAME") == "push", "Campaign must be a frozen branch push")
     require(env.get("GITHUB_RUN_ATTEMPT") == "1", "Replacement workflow attempt")
     require(re.fullmatch(r"[0-9]+", env.get("GITHUB_RUN_ID", "")) is not None, "Missing run ID")
     require(
         re.fullmatch(r"[0-9a-f]{40}", env.get("GITHUB_SHA", "")) is not None, "Missing revision"
     )
     match = re.fullmatch(
-        re.escape("refs/tags/" + spec["tag_prefix"]) + r"([0-9]{2})", env.get("GITHUB_REF", "")
+        re.escape("refs/heads/" + spec["branch_prefix"]) + r"([0-9]{2})", env.get("GITHUB_REF", "")
     )
-    require(match is not None, "Unexpected campaign tag")
+    require(match is not None, "Unexpected campaign branch")
     if match is None:
         raise ValueError("Missing batch")
     batch = int(match[1])
@@ -67,7 +67,7 @@ def invocation(
         "revision": env["GITHUB_SHA"],
         "run_id": env["GITHUB_RUN_ID"],
         "attempt": 1,
-        "tag": env["GITHUB_REF"],
+        "ref": env["GITHUB_REF"],
         "ci_admission": False,
         "prior_screen_included": False,
     }

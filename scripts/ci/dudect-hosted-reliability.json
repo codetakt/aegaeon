@@ -1,7 +1,7 @@
 {
   "schema": "dudect-hosted-reliability/1",
   "campaign": "hosted-reliability-20261017",
-  "tag_prefix": "dudect-hosted-reliability-20261017-b",
+  "branch_prefix": "ci/dudect-hosted-reliability-20261017-b",
   "maximum_opportunities": 299,
   "batch_size": 16,
   "target_failure_rate": [
@@ -14,7 +14,7 @@
   ],
   "replacements": 0,
   "prior_screen_included": false,
-  "early_stop": "Stop future tag batches after any failed or unrecoverable opportunity; finish and recover the already submitted batch. No replacement or automatic candidate change.",
+  "early_stop": "Stop future branch batches after any failed or unrecoverable opportunity; finish and recover the already submitted batch. No replacement or automatic candidate change.",
   "unit": "One fresh hosted VM runs all 21 PR cases under GCC and Clang, 42 roles total.",
   "package_baseline_revision": "ff995ccf9bc9601d566b20bf1101d40ceb305273",
   "packages": {
