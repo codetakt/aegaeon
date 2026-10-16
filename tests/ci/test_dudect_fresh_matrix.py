@@ -3,6 +3,7 @@
 # ruff: noqa: PT009, PT027
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import os
@@ -90,6 +91,7 @@ class FreshTests(unittest.TestCase):
         self.enterContext(patch.object(fresh.os, "sched_setaffinity"))
         self.enterContext(patch.object(fresh, "snapshot", side_effect=good_environment))
         self.enterContext(patch.object(fresh.time, "sleep"))
+        self.real_popen = subprocess.Popen
         self.spawn = self.enterContext(
             patch.object(fresh.subprocess, "Popen", side_effect=self.capture)
         )
@@ -114,6 +116,58 @@ class FreshTests(unittest.TestCase):
         self.assertFalse(result["ci_admission"])
         self.assertEqual(self.spawn.call_count, 4)
         self.assertEqual(sum(len(r["assessment"]) for r in result["units"]), 42)
+
+    def test_cli_relative_output_survives_collector_working_directory(self):
+        # Exercise the nested cwd/launcher boundary that an absolute-only fixture
+        # misses. No timing is performed by this child.
+        def launch_from_snapshot(argv, **kwargs):
+            output = Path(argv[argv.index("--output") + 1])
+            snapshot = output / "package/sources"
+            snapshot.mkdir(parents=True)
+            helper = snapshot / "helper.py"
+            helper.write_text(
+                "import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('launched')\n"
+            )
+            receipt = output / "launched.txt"
+            child = self.real_popen(
+                [sys.executable, str(helper), str(receipt)],
+                cwd=snapshot,
+                stdout=kwargs["stdout"],
+                stderr=kwargs["stderr"],
+            )
+            code = child.wait(timeout=10)
+            if code == 0:
+                self.assertEqual(receipt.read_text(), "launched")
+                unit = argv[argv.index("--unit") + 1]
+                shutil.copyfile(
+                    self.fixture.evidence / unit / "gate/research-report.json",
+                    output / "research-report.json",
+                )
+            return SimpleNamespace(wait=lambda **_: code)
+
+        self.spawn.side_effect = launch_from_snapshot
+        plan = self.fixture.root / "plan.json"
+        fixtures.write(plan, self.plan)
+        with (
+            contextlib.chdir(self.fixture.root),
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "fresh",
+                    "--plan",
+                    "plan.json",
+                    "--plan-sha256",
+                    fresh.sha256(plan),
+                    "--output",
+                    "relative-output",
+                ],
+            ),
+        ):
+            self.assertEqual(fresh.main(), 0)
+        self.assertEqual(self.spawn.call_count, 4)
+        result = json.loads((self.fixture.root / "relative-output/summary.json").read_text())
+        self.assertTrue(result["complete"])
 
     def test_statistical_failure_does_not_skip_later_units(self):
         self.fixture.change_report(

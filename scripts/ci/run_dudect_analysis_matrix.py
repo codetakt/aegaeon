@@ -208,6 +208,8 @@ def main() -> int:
     parser.add_argument("--plan-sha256", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    # Package collectors change cwd before launching native helpers.
+    args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, cancelled)
