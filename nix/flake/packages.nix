@@ -18,6 +18,8 @@
   verifyKani,
   verifyDudect,
   dudectCheck,
+  dudectAnalysis,
+  dudectAnalysisNatives,
   verifyJose,
   verifyFstarAbstract,
   rustToolchain,
@@ -51,6 +53,11 @@ in
   verify-tamarin = verifyTamarin;
   verify-dudect = verifyDudect;
   dudect-check = dudectCheck;
+  dudect-analysis = dudectAnalysis;
+  dudect-analysis-native-gcc-legacy = dudectAnalysisNatives.gcc-legacy;
+  dudect-analysis-native-gcc-nix = dudectAnalysisNatives.gcc-nix;
+  dudect-analysis-native-clang-legacy = dudectAnalysisNatives.clang-legacy;
+  dudect-analysis-native-clang-nix = dudectAnalysisNatives.clang-nix;
   verify-jose = verifyJose;
   verify-abstract = verifyFstarAbstract;
   assurance-standards = assuranceStandards;
