@@ -24,10 +24,10 @@ from verify_dudect_analysis_matrix import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def build(attribute: str, output: Path) -> Path:
+def build(attribute: str, output: Path, source: str) -> Path:
     with (output / f"{attribute}.log").open("xb") as log:
         result = subprocess.run(
-            ["nix", "build", f"path:{ROOT}#{attribute}", "--no-link", "--print-out-paths", "-L"],
+            ["nix", "build", f"{source}#{attribute}", "--no-link", "--print-out-paths", "-L"],
             stdout=subprocess.PIPE,
             stderr=log,
             text=True,
@@ -66,12 +66,14 @@ def prepare(output: Path) -> dict[str, Any]:
     subprocess.run(
         ["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL
     )
-    analysis = build("dudect-analysis", output)
+    source = "git+" + ROOT.as_uri() + "?rev=" + head
+    analysis = build("dudect-analysis", output, source)
     natives = {
-        f"{c}-{s}": build(f"dudect-analysis-native-{c}-{s}", output) for c, s in hosted.ORDER
+        f"{c}-{s}": build(f"dudect-analysis-native-{c}-{s}", output, source)
+        for c, s in hosted.ORDER
     }
     python_root = subprocess.check_output(
-        ["nix", "eval", "--raw", f"path:{ROOT}#dudect-analysis.python"],
+        ["nix", "eval", "--raw", f"{source}#dudect-analysis.python"],
         text=True,
     ).strip()
     python = Path(python_root) / "bin/python"
@@ -95,6 +97,7 @@ def prepare(output: Path) -> dict[str, Any]:
         "cycles": ["r1"],
         "packet": packet,
         "mode": "distributed",
+        "source_revision": head,
         "execution": hosted.EXECUTION,
         "hosted": config,
         "analysis_package": {
@@ -124,6 +127,10 @@ def prepare(output: Path) -> dict[str, Any]:
     check_analysis(plan)
     pinned_inputs(plan)
     require(hosted.freeze() == config, "Allocation changed while building")
+    require(
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip() == head,
+        "Checkout revision changed while building",
+    )
     subprocess.run(
         ["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL
     )
