@@ -1,0 +1,75 @@
+# Fixed diagnostic comparison; never an ordinary gate or reliability retry.
+name: Dudect input preparation comparison
+
+on:
+  push:
+    branches: [test/dudect-uniform-input-preparation]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dudect-input-preparation
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        compiler: [gcc, clang]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record allocation
+        run: |
+          mkdir -p artifacts/preparation-comparison
+          python3 - <<'PY'
+          import json, os, pathlib
+          keys = ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'ImageOS', 'ImageVersion')
+          pathlib.Path('artifacts/preparation-comparison/opportunity.json').write_text(
+              json.dumps({k: os.environ.get(k) for k in keys}, indent=2) + '\n')
+          if os.environ['GITHUB_RUN_ATTEMPT'] != '1':
+              raise SystemExit('Replacement attempts are not allowed')
+          PY
+      - name: Setup Nix
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "false"
+      - name: Build and freeze comparison
+        timeout-minutes: 60
+        run: >-
+          python3 -B scripts/diagnostics/prepare_ct_preparation.py
+          --compiler ${{ matrix.compiler }}
+          --output artifacts/preparation-comparison/preparation
+      - name: Run eight fixed processes
+        timeout-minutes: 152
+        run: |
+          exec python3 -B scripts/diagnostics/run_ct_preparation.py \
+            --plan artifacts/preparation-comparison/preparation/plan.json \
+            --plan-sha256 "$(cat artifacts/preparation-comparison/preparation/plan.sha256)" \
+            --output artifacts/preparation-comparison/measurement
+      - name: Seal complete or partial evidence
+        if: ${{ always() }}
+        timeout-minutes: 15
+        run: >-
+          python3 -B scripts/ci/retain_dudect_hosted.py
+          --source artifacts/preparation-comparison
+          --destination artifacts/preparation-comparison-upload
+      - name: Upload all evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-preparation-${{ matrix.compiler }}-${{ github.run_id }}
+          path: artifacts/preparation-comparison-upload/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
