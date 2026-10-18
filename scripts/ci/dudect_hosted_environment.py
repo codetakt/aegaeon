@@ -33,6 +33,7 @@ EXECUTION = {
     "replacement_trials": 0,
 }
 ORDER = [(c, s) for c in ("gcc", "clang") for s in ("legacy", "nix")]
+# Retained diagnostic implementation; the retired Hosted workflow is not executable input.
 SOURCES = [
     "scripts/ci/run_dudect_analysis_matrix.py",
     "scripts/ci/verify_dudect_analysis_matrix.py",
@@ -43,7 +44,6 @@ SOURCES = [
     "tests/constant_time/dudect_affinity.py",
     "tests/constant_time/dudect_results.py",
     "tests/constant_time/dudect_support.py",
-    ".github/workflows/dudect-hosted-screen.yml",
     ".github/actions/setup-nix-ci/action.yml",
     ".github/actions/setup-nix-ci/prepare-disk.sh",
 ]

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from types import FrameType
 
 import dudect_hosted_environment as hosted
+import dudect_metal_environment as metal
 from dudect_analysis_environment import PROFILE, check, snapshot
 from verify_dudect_analysis_matrix import (
     check_analysis,
@@ -53,7 +54,18 @@ def run(plan: dict[str, Any], output: Path) -> dict[str, Any]:  # noqa: C901, PL
     check_matrix(plan)
     check_analysis(plan)
     is_hosted = plan["execution"] == hosted.EXECUTION
-    require(is_hosted or plan["execution"] == EXECUTION, "Unreviewed execution policy")
+    is_metal = plan["execution"] == metal.EXECUTION
+    require(is_hosted or is_metal or plan["execution"] == EXECUTION, "Unreviewed execution policy")
+    if is_metal:
+        require(
+            set(plan["orchestration"]) == set(metal.SOURCES),
+            "Incomplete metal orchestration binding",
+        )
+        for name, expected in plan["orchestration"].items():
+            require(
+                sha256(Path(__file__).resolve().parents[2] / name) == expected,
+                "Metal orchestration changed",
+            )
     require(len(plan["cycles"]) == 1, "One complete CI opportunity per execution")
     command, indexes = pinned_inputs(plan)
     if is_hosted:
@@ -81,6 +93,10 @@ def run(plan: dict[str, Any], output: Path) -> dict[str, Any]:  # noqa: C901, PL
     def inspect(path: Path) -> None:
         if is_hosted:
             hosted.environment(path, config)
+        elif is_metal:
+            value = metal.snapshot()
+            write_json(path, value)
+            metal.check(value)
         else:
             environment(path)
 

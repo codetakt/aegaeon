@@ -17,8 +17,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/ci"))
 import dudect_analysis_environment as environment
+import dudect_metal_environment as metal
 import run_dudect_analysis_matrix as fresh
 import test_dudect_analysis_matrix as fixtures
+import test_dudect_metal as metal_fixture
 import verify_dudect_analysis_matrix as verifier
 
 
@@ -108,6 +110,35 @@ class FreshTests(unittest.TestCase):
         )
         report = json.loads((output / "research-report.json").read_text())
         return SimpleNamespace(wait=lambda **_: 0 if report["gate_satisfied"] else 1)
+
+    def metal_plan(self):
+        self.plan["execution"] = copy.deepcopy(metal.EXECUTION)
+        root = Path(__file__).resolve().parents[2]
+        self.plan["orchestration"] = {name: fresh.sha256(root / name) for name in metal.SOURCES}
+        self.enterContext(patch.object(metal, "snapshot", side_effect=metal_fixture.fixture))
+
+    def test_metal_complete_path_and_environment_receipts(self):
+        self.metal_plan()
+        result = fresh.run(self.plan, self.out)
+        self.assertTrue(result["complete"])
+        self.assertFalse(result["ci_admission"])
+        self.assertEqual(self.spawn.call_count, 4)
+        for unit in self.plan["units"]:
+            for when in ("before", "after"):
+                value = json.loads((self.out / unit["id"] / f"environment-{when}.json").read_text())
+                self.assertEqual(value["profile"], fresh.metal.PROFILE)
+
+    def test_metal_changed_or_incomplete_binding_cannot_start(self):
+        self.metal_plan()
+        key = next(iter(self.plan["orchestration"]))
+        self.plan["orchestration"][key] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "orchestration changed"):
+            fresh.run(self.plan, self.out)
+        self.spawn.assert_not_called()
+        del self.plan["orchestration"][key]
+        with self.assertRaisesRegex(ValueError, "Incomplete metal"):
+            fresh.run(self.plan, self.out)
+        self.spawn.assert_not_called()
 
     def test_all_four_units_fresh_once(self):
         result = fresh.run(self.plan, self.out)
