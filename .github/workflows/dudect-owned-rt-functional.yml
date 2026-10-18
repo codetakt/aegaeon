@@ -1,0 +1,40 @@
+name: Dudect owned RT functional 20261018
+on:
+  push:
+    branches: [test/dudect-owned-rt-functional-20261018]
+permissions:
+  contents: read
+concurrency:
+  group: dudect-owned-rt-functional-20261018
+  cancel-in-progress: false
+jobs:
+  functional:
+    if: >-
+      github.repository == 'codetakt/aegaeon' &&
+      github.event.created == true && github.event.deleted == false &&
+      github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Execute the fixed owned-unit functional opportunity
+        timeout-minutes: 9
+        run: >-
+          sudo -n --preserve-env=GITHUB_SHA,GITHUB_RUN_ID,GITHUB_RUN_NUMBER,GITHUB_RUN_ATTEMPT,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_EVENT_NAME,GITHUB_EVENT_PATH,GITHUB_WORKFLOW_REF,GITHUB_WORKFLOW_SHA,ImageOS,ImageVersion
+          /usr/bin/python3 -I -B scripts/diagnostics/dudect_owned_rt/hosted.py
+      - name: Retain encrypted complete or partial evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-owned-rt-${{ github.run_id }}
+          path: |
+            artifacts/owned-rt/upload/evidence.cms
+            artifacts/owned-rt/upload/summary.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
