@@ -220,7 +220,7 @@ class DudectRunnerTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
-            timeout=40,
+            timeout=180,  # Full raw-prefix verification is part of this fixture.
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         validate_report_file(
@@ -262,7 +262,7 @@ class DudectRunnerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=40,
+                timeout=180,  # Full raw-prefix verification is part of this fixture.
             )
             report = output / "dudect/report.json"
             self.assertEqual(result.returncode == 0, not options, result.stdout + result.stderr)
@@ -289,7 +289,7 @@ class DudectRunnerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=40,
+                timeout=180,  # Full raw-prefix verification is part of this fixture.
             )
             self.assertEqual(
                 (output / "success").exists(), not options, result.stdout + result.stderr

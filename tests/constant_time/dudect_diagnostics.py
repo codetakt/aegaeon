@@ -308,6 +308,11 @@ def validate_diagnostics(
         ),
         "All-case timing diagnostic identity mismatch",
     )
+    if profile == "pr":
+        require(
+            diagnostics.get("sparse") == file_identity(output / "sparse-prefixes.jsonl"),
+            "Sparse evidence identity mismatch",
+        )
     if "ct_eq_128" in bindings:
         require(
             diagnostics.get("samples")
