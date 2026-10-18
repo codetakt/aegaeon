@@ -229,7 +229,7 @@ Audience: contributors, maintainers
 
 | Path | Type | Title | Status | Last Updated | Owner | Audience |
 | --- | --- | --- | --- | --- | --- | --- |
-| `docs/performance/README.md` | index | Performance Overview | current implementation baseline | 2026-07-08 | Performance | performance reviewers, maintainers |
+| `docs/performance/README.md` | index | Performance Overview | current implementation baseline | 2026-10-19 | Performance | performance reviewers, maintainers |
 | `docs/performance/aws-perf-env.md` | performance | AWS performance environment (OpenTofu / EC2) | snapshot | 2026-07-08 | Performance | performance reviewers, maintainers |
 | `docs/performance/enterprise-slo-baselines.md` | performance | Enterprise SLO Baselines | snapshot | 2026-07-08 | Performance | performance reviewers, maintainers |
 | `docs/performance/jose-json-parsing-baseline.md` | performance | JSON Parsing Performance Baseline (bytes_block implementation) | snapshot | 2026-07-07 | Performance | performance reviewers, maintainers |
@@ -281,7 +281,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status/gaps-and-promotion-work.md` | claim | Verification Maturity Gaps And Promotion Work | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/dudect-case-contract.md` | verification | Per-case timing observation contract | current implementation baseline | 2026-10-12 | Engineering | verification tooling maintainers |
-| `docs/verification/dudect.md` | verification | Timing observation profiles | current implementation baseline | 2026-10-12 | Engineering | contributors |
+| `docs/verification/dudect.md` | verification | Timing observation profiles | current implementation baseline | 2026-10-19 | Engineering | contributors |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/assumption-graph.md` | verification | F\* Effective-Assumption Graph | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/module-admission.md` | verification | F* Per-Module Admission | current implementation baseline | 2026-09-15 | Verification | verification reviewers, contributors |
@@ -393,6 +393,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/development/README.md` | index | Development Overview | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/admin-console-handoff.md` | development | Admin Console frontend handoff (Phase 1) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
+| `docs/development/ci-execution-boundary.md` | development | CI execution and qualification boundaries | active plan | 2026-10-19 | Engineering | maintainers, verification reviewers |
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
