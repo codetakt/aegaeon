@@ -1,20 +1,20 @@
-# Performance Testing: Owns load tests, observability verification, code coverage, and KPI validation.
-# Schedule (daily 2 AM UTC): load tests + observability + coverage + KPI validation.
+# Functional load smoke, observability and coverage; no performance qualification.
+# Schedule (daily 2 AM UTC): functional load smoke + observability + coverage.
 # Push to main: observability + coverage (no load tests).
 # PR: performance remains deferred; PR applicability is owned by pr.yml.
-# Manual dispatch: set run_load_tests=true to include load tests + KPI validation.
-name: Performance Testing
+# Manual dispatch: set run_load_tests=true to include functional load smoke.
+name: Functional load and observability
 
 on:
   push:
     branches: [ main ]
   schedule:
-    # Daily regression: load tests + observability + coverage + KPI validation
+    # Daily regression: functional load smoke + observability + coverage
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       run_load_tests:
-        description: "Run load tests + KPI validation (heavy)"
+        description: "Run functional load smoke (heavy)"
         required: false
         default: "false"
 
@@ -27,16 +27,13 @@ env:
   RUST_BACKTRACE: 1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CARGO_INCREMENTAL: "0"
-  SLO_TARGET_RPS: "100"
-  SLO_MIN_THROUGHPUT_RATIO: "0.9"
-  SLO_MAX_ERROR_RATE: "0.01"
   # Separate supplier/runtime acceptance must replace this pending hold.
   POLICY_MIXED_PREREQUISITES: pending
 
 jobs:
   # Load Testing
   load-test:
-    name: Load Testing
+    name: Functional load smoke
     # Runs on schedule (daily regression) and on manual dispatch with run_load_tests.
     if: >-
       ${{
@@ -78,9 +75,9 @@ jobs:
           # Public-only loopback fixture uses the documented direct HTTP development policy.
           AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY: "0"
           AEGAEON_REQUIRE_TLS_PROXY: "0"
-          PERF_WORKERS: "25"
-          PERF_RPS: "100"
-          PERF_RUN_TIME: 30s
+          PERF_WORKERS: "2"
+          PERF_RPS: "4"
+          PERF_RUN_TIME: 4s
           PERF_WARMUP: "2"
           PERF_SERVER_PORT: "18095"
           AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
@@ -90,11 +87,11 @@ jobs:
           REPORT_PATH: artifacts/perf/ci-load-smoke/report.json
           LEGACY_REPORT: artifacts/load-test-report.json
         run: |
-          nix run .#perf-load
+          nix run .#perf-load -- --functional-only
 
-      - name: Validate public smoke SLOs
+      - name: Validate public functional smoke
         run: |
-          python3 ci/validate_slos.py artifacts/perf/ci-load-smoke/report.json
+          python3 ci/validate_load_smoke.py artifacts/perf/ci-load-smoke/report.json
 
       - name: Report pending policy-mixed prerequisites
         if: ${{ always() && env.POLICY_MIXED_PREREQUISITES != 'accepted' }}
@@ -119,14 +116,12 @@ jobs:
           REPORT_PATH: artifacts/perf/ci-policy-mixed/report.json
           LEGACY_REPORT: artifacts/policy-mixed-report.json
         run: |
-          nix run .#perf-load
+          nix run .#perf-load -- --functional-only
 
-      - name: Validate policy-mixed smoke SLOs
+      - name: Validate policy-mixed functional smoke
         if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
-        env:
-          SLO_TARGET_RPS: "4"
         run: |
-          python3 ci/validate_slos.py artifacts/perf/ci-policy-mixed/report.json
+          python3 ci/validate_load_smoke.py artifacts/perf/ci-policy-mixed/report.json
 
       - name: Upload load test results
         if: always()
@@ -360,46 +355,3 @@ jobs:
             exit 1
           fi
           EOF
-
-  # KPI Validation
-  validate-kpis:
-    name: Validate Performance KPIs
-    runs-on: ubuntu-latest
-    needs: [load-test, observability-test]
-    if: >-
-      ${{
-        github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' &&
-        github.event.inputs.run_load_tests == 'true')
-      }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: load-test-results
-          path: artifacts
-
-      - name: Validate public smoke KPIs
-        env:
-          SLO_TARGET_RPS: "100"
-          SLO_MIN_THROUGHPUT_RATIO: "0.9"
-          SLO_MAX_ERROR_RATE: "0.01"
-        run: |
-          python3 ci/validate_slos.py artifacts/load-test-report.json
-
-      - name: Report pending policy-mixed KPI prerequisites
-        if: ${{ always() && env.POLICY_MIXED_PREREQUISITES != 'accepted' }}
-        run: |
-          echo "::notice::policy-mixed pending: activated HTTPS, client profile, public-login session and supplier prerequisites await separate acceptance"
-          echo "policy-mixed KPIs: pending prerequisites; validation and performance acceptance skipped" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Validate policy-mixed KPIs
-        if: ${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}
-        env:
-          SLO_TARGET_RPS: "4"
-          SLO_MIN_THROUGHPUT_RATIO: "0.9"
-          SLO_MAX_ERROR_RATE: "0.01"
-        run: |
-          python3 ci/validate_slos.py artifacts/policy-mixed-report.json

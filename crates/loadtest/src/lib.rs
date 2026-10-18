@@ -30,8 +30,18 @@ pub struct ReportIdentity {
 }
 
 /// Test results
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptanceMode {
+    #[default]
+    PerformanceSlo,
+    Functional,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoadTestResults {
+    #[serde(default)]
+    pub acceptance_mode: AcceptanceMode,
     pub schema_version: u32,
     pub request_unit: String,
     pub memory_subject: String,
@@ -124,6 +134,7 @@ impl LoadTestResults {
     /// Returns an error when the latency histogram cannot be initialized.
     pub fn try_new() -> Result<Self> {
         Ok(Self {
+            acceptance_mode: AcceptanceMode::PerformanceSlo,
             schema_version: 2,
             request_unit: "scenario_invocations".into(),
             memory_subject: "load_generator_process".into(),
@@ -330,7 +341,8 @@ impl LoadTestResults {
     pub fn meets_slos(&self, target_rps: f64) -> bool {
         let min_throughput = (target_rps * 0.9).max(1.0);
         let max_error_rate = 0.01;
-        target_rps.is_finite()
+        self.acceptance_mode == AcceptanceMode::PerformanceSlo
+            && target_rps.is_finite()
             && target_rps > 0.0
             && self.validate_complete().is_ok()
             && self.p50_latency_ms <= 50.0
@@ -339,6 +351,11 @@ impl LoadTestResults {
             && self.total_requests > 0
             && self.error_rate <= max_error_rate
             && self.peak_memory_mb <= 500.0
+    }
+
+    #[must_use]
+    pub fn meets_functional_requirements(&self) -> bool {
+        self.validate_complete().is_ok() && self.successful_requests > 0
     }
 
     pub fn validate_complete(&self) -> Result<()> {
@@ -487,6 +504,17 @@ mod report_tests {
         report.record_memory_sample(10.0);
         report.finalize(Duration::from_secs(1)).await;
         assert!(report.validate_complete().is_ok());
+        assert!(report.meets_functional_requirements());
+        let mut functional = report.clone();
+        functional.acceptance_mode = AcceptanceMode::Functional;
+        functional.p99_latency_ms = 1_000_000.0;
+        functional.throughput = 0.001;
+        functional.peak_memory_mb = 1_000_000.0;
+        assert!(functional.meets_functional_requirements());
+        assert!(!functional.meets_slos(0.001));
+        functional.completion_errors.push("lost worker".into());
+        assert!(!functional.meets_functional_requirements());
+        functional.completion_errors.clear();
         let saved = report.identity.as_ref().unwrap().clone();
         // A hash-consistent witness must still satisfy the actual execution gate.
         for change in ["pacing", "duration", "url", "workers"] {

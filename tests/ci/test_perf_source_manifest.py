@@ -381,7 +381,7 @@ class PerfSourceManifestTests(unittest.TestCase):
         )
 
     def invocation_report(
-        self, sha: str, binary: pathlib.Path
+        self, sha: str, binary: pathlib.Path, *, functional_only: bool = False
     ) -> tuple[pathlib.Path, dict[str, object]]:
         report = self.evidence.parent / "report.json"
         report_id = str(uuid.uuid4())
@@ -406,6 +406,8 @@ class PerfSourceManifestTests(unittest.TestCase):
             "--discovery-expected-issuer",
             "https://issuer.example.test",
         ]
+        if functional_only:
+            argv.append("--functional-only")
         result = self.invoke("invocation", "--sha256", sha, "--", *argv)
         self.assertEqual(result.returncode, 0, result.stderr)
         config = {
@@ -457,6 +459,33 @@ class PerfSourceManifestTests(unittest.TestCase):
         report, baseline = self.invocation_report(sha, binary)
         return sha, report, baseline
 
+    def test_functional_mode_is_bound_and_cannot_become_slo(self) -> None:
+        sha = self.freeze()
+        binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
+        result = self.invoke(
+            "bind",
+            "--sha256",
+            sha,
+            "--name",
+            "aegaeon-loadtest",
+            "--build-log",
+            str(self.build_record(binary)),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report, data = self.invocation_report(sha, binary, functional_only=True)
+        data["acceptance_mode"] = "functional"
+        report.write_text(json.dumps(data))
+        result = self.invoke("report", "--sha256", sha, "--report", str(report))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for mode in (None, "performance_slo", "unknown"):
+            if mode is None:
+                data.pop("acceptance_mode", None)
+            else:
+                data["acceptance_mode"] = mode
+            report.write_text(json.dumps(data))
+            result = self.invoke("report", "--sha256", sha, "--report", str(report))
+            self.assertNotEqual(result.returncode, 0)
+
     def test_invocation_rejects_unbound_duplicate_nonfinite_and_missing_arguments(self) -> None:
         sha = self.freeze()
         binary = self.write("target/release/aegaeon-loadtest", b"inert executable", 0o755)
@@ -496,6 +525,7 @@ class PerfSourceManifestTests(unittest.TestCase):
             [*argv, "--users", "1"],
             [*argv, "--workers", "3"],
             [*argv, "--debug", "--debug"],
+            [*argv, "--functional-only", "--functional-only"],
             [*argv, "--unknown"],
             argv[:-2],
         ]
@@ -1240,6 +1270,7 @@ if mode=="wrong-path":identity["report_path"]+=".other"
 if mode=="missing-config":del identity["config_json"]
 if mode!="no-report":
  report.write_text(json.dumps({"selected_scenario":config["scenario"],
+ "acceptance_mode":"functional" if "--functional-only" in sys.argv else "performance_slo",
  "identity":identity}))
 raise SystemExit(17 if mode=="workload-failure" else 0)
 """
@@ -1349,6 +1380,18 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         )
         self.assertEqual(retained["report_path"], "artifacts/perf/runner/selected.json")
         self.assertEqual(uuid.UUID(retained["report_id"]).version, 4)
+
+    def test_runner_functional_mode_reaches_bound_workload(self) -> None:
+        result = self.runner(wrapper=True, arguments=("--functional-only",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        directory = self.root / "artifacts/perf/runner"
+        invocation = json.loads((directory / "source/INVOCATION.json").read_bytes())
+        report = json.loads((directory / "report.json").read_bytes())
+        self.assertIn("--functional-only", invocation["argv"])
+        self.assertEqual(report["acceptance_mode"], "functional")
+        self.assertEqual(
+            json.loads((directory / "source-status.json").read_bytes())["stage"], "complete"
+        )
 
     def test_runner_recomputed_config_uuid_and_path_mutations_cannot_pass(self) -> None:
         for number, mode in enumerate(
