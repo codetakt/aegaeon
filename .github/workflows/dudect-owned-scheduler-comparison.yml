@@ -1,0 +1,56 @@
+name: Dudect owned scheduler comparison 20261018
+on:
+  push:
+    branches: [test/dudect-owned-scheduler-comparison-20261018]
+permissions:
+  contents: read
+concurrency:
+  group: dudect-owned-scheduler-comparison-20261018
+  cancel-in-progress: false
+jobs:
+  compare:
+    if: >-
+      github.repository == 'codetakt/aegaeon' &&
+      github.event.created == true && github.event.deleted == false &&
+      github.run_number == 1 && github.run_attempt == 1
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        slot: [1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Setup pinned native build environment
+        uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "false"
+      - name: Build and freeze artifacts without timing
+        timeout-minutes: 15
+        run: >-
+          python3 -B scripts/diagnostics/dudect_rt_collector/prepare.py
+          artifacts/owned-scheduler/preparation ${{ matrix.slot }}
+      - name: Run fixed comparison and encrypt complete or partial evidence
+        if: ${{ always() }}
+        timeout-minutes: 28
+        run: >-
+          sudo -n --preserve-env=GITHUB_SHA,GITHUB_RUN_ID,GITHUB_RUN_NUMBER,GITHUB_RUN_ATTEMPT,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_EVENT_NAME,GITHUB_EVENT_PATH,GITHUB_WORKFLOW_REF,GITHUB_WORKFLOW_SHA,ImageOS,ImageVersion
+          /usr/bin/python3 -I -B scripts/diagnostics/dudect_rt_collector/hosted.py ${{ matrix.slot }}
+      - name: Recover encrypted diagnostic evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-owned-scheduler-${{ matrix.slot }}-${{ github.run_id }}
+          path: artifacts/owned-scheduler/upload/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

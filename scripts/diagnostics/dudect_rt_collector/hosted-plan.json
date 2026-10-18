@@ -1,0 +1,110 @@
+{
+  "analysis": "frozen interval-only consumer, current prefix before real ACK",
+  "arms": {
+    "A": "SCHED_OTHER priority 0 reset-on-fork",
+    "B": "SCHED_FIFO priority 1 reset-on-fork"
+  },
+  "branch": "test/dudect-owned-scheduler-comparison-20261018",
+  "contrasts_sha256": "de27a858bceb48ae039a57c9a544c3bb1cf11f862e5a1021d7fcddbbf31bb9b1",
+  "excluded": "No normal CI admission, numerical adoption, old299 resumption, retry, dose or bound tuning. Third-party settings unchanged. Temporary unsigned-publication exception; all introduced commits re-signed and tree/artifact verified on non-trigger branch before merge.",
+  "inputs": {
+    ".github/actions/setup-nix-ci/action.yml": "a155ad91a2bd97001737d332dc707e35704105142c697744f2c72b8b86dd5c76",
+    ".github/actions/setup-nix-ci/prepare-disk.sh": "13d7aab3866c1f0ede7a30b64888d8ffae93125394dd1c0555b4135c0fd8bb68",
+    ".github/workflows/dudect-owned-scheduler-comparison.yml": "cc1a86f186500a034ed2c1c45a03496dee1d1571401b9c4bc21ef551fd528b50",
+    "scripts/ci/dudect-hosted-reliability.json": "e2d7814facd2be640f60a383c906ccfca93f1ed352b3a98ddab3412b4b8a32e1",
+    "scripts/ci/dudect_analysis_environment.py": "c127028f332de3895721fb40dd04c88ac4a43801c8bdb75f67dbbfa1c907b777",
+    "scripts/ci/dudect_hosted_environment.py": "8d572498669156d7eed8d9d3f68517263748d48fd1789bfa04af35818aaecd61",
+    "scripts/ci/prepare_dudect_hosted.py": "f734cf363e886005b825acd7f9b8a8e05f8cde174fc4fdf3e6c4c528471146e9",
+    "scripts/ci/verify_dudect_analysis_matrix.py": "249ce38995f29e59ce30012f152e48f1ce4f7263d07d1e838f2fab68d1f2e80f",
+    "scripts/diagnostics/build_ct_preparation.py": "5abf31d602acc8eb0f8cdb62b46eb4c735322bd79a1fd2e0f9b8d3e72115aa40",
+    "scripts/diagnostics/collect_ct_preparation.py": "a6fe0ac394e381d64fef01d118bf4192c916859fbe3ddfb498e01fe0d29db88b",
+    "scripts/diagnostics/ct_preparation.h": "c6afd01317fc31216207c4f8424918bcfeb13197ecf5e6a6dd568d5f9213f4bb",
+    "scripts/diagnostics/ct_preparation_plan.py": "551193fe8d489303128ac9fd7966fe1efa07b9e3d2eeeb662923dabf335f44fa",
+    "scripts/diagnostics/ct_preparation_selftest.h": "d0712aacee8e141265053518943c31c5e0605e90192f0f7b22ea0e468ded44fc",
+    "scripts/diagnostics/dudect_owned_rt/run_functional.py": "aed92cd6bf1514e56b44b52d703b7d18c4eb9b0b667dc5362cb82078ee27982b",
+    "scripts/diagnostics/dudect_placement/rt-kernel-reference.json": "2ba8292a2afb1140a8bcf629de58234798b4ff64b31797b8a06803a003ea8721",
+    "scripts/diagnostics/dudect_placement/rt_kernel_identity.py": "0a734d8c36332c262f524ca2b8577916aa8b76ef2b126501b947e42fd0293724",
+    "scripts/diagnostics/dudect_placement/rt_preflight.py": "389957e4751f3c68d76b77e423ee8d2446e9bb9098c2c3ae3a555a7e1eab8557",
+    "scripts/diagnostics/dudect_placement/rt_runtime.py": "8c0915e03568afb9610c563b5ee83207bd251a753fd0e7c1d41cdb59f6c674aa",
+    "scripts/diagnostics/dudect_rt_collector/README.md": "cd6a0440270171d2fd5c57c6cbaf63aae74b82f67f1d3504bad4299e21fc2767",
+    "scripts/diagnostics/dudect_rt_collector/audit.py": "b94647874c043a67eba7e74d9242a806962855b3037d16579ca2ab735313e5c1",
+    "scripts/diagnostics/dudect_rt_collector/collector.py": "f862f482cdbbbe4ab677e8572a2bfe231d857be2223ad11de67b70fe9035b5fe",
+    "scripts/diagnostics/dudect_rt_collector/fixture.py": "227e3ca98343a6bac3aa82f3c6f4c5b2dcd4d42242f669bf018ffbe1d849ec5b",
+    "scripts/diagnostics/dudect_rt_collector/hosted.py": "a7e395df7c6651851a1ce90492cbf9a397e595481e3d048a4fa4cf4e205085a5",
+    "scripts/diagnostics/dudect_rt_collector/prepare.py": "719027d1de9087f338f716a99edd9317e0e09cc85842f1b839757760ab1c8ba1",
+    "scripts/diagnostics/dudect_rt_collector/protocol.py": "0d0542b2d59551c95f7634c51e63174177f51066a67e29019ee355594828692f",
+    "scripts/diagnostics/dudect_rt_collector/recipient.pem": "962eb9aee901ca8e300c6f72f1adc74bcd09bb030367d6cb40207b8f7971ea64",
+    "scripts/diagnostics/dudect_rt_collector/recover.py": "65584f496afe99d632adab041324f9ffd6e31c819eabb91d8bddb5753f82617e",
+    "scripts/diagnostics/dudect_rt_collector/run_unit.py": "9b4aea4a72afdb3b69e9e792312e4dad6d1f9a873673b00f101e74e5c2bf2c1d",
+    "scripts/diagnostics/dudect_rt_collector/runtime.py": "97656b82b623e6bda32780a9f61865a4ca522772fea7b427d51f4b8344fc31cf",
+    "scripts/diagnostics/dudect_rt_collector/test_protocol.py": "c50f2125908c8eced808d6fb3d3da66c8e8ba15686bbbb81be04e99d7967178d",
+    "scripts/diagnostics/dudect_rt_collector/test_recovery.py": "c81b3a3de71e5207df519ac76bf4252773dee028b0883522eba90c45b47c93ec",
+    "scripts/diagnostics/prepare_ct_preparation.py": "3e7354b24fb0ab9eaca9d0cb110313343cc635cdebf593f5a3560a663b9f3ebe",
+    "tests/constant_time/dudect_affinity.py": "74db8f634dca9d67f46e942eea891cb76fb98087f3ec8ef47c42a891a23f0c1f"
+  },
+  "limits": {
+    "allocations": 2,
+    "attempts": 1,
+    "case_seconds": 900,
+    "cases_per_allocation": 48,
+    "cleanup_seconds_after_end": 20,
+    "gap_seconds": 10,
+    "measurement_seconds": 1200,
+    "process_seconds": 150,
+    "processes_per_allocation": 16,
+    "replacement_trials": 0,
+    "rttime_microseconds": [
+      60000000,
+      90000000
+    ],
+    "stop_seconds_after_end": 5,
+    "validation_seconds": 10,
+    "workflow_minutes": 50
+  },
+  "local_evidence": {
+    "functional-final/checks.json": "fd73177c36da733ab50124317b01cc74080d3c31a457d07d3fb90a41e61ec074",
+    "functional-final/summary.json": "774acf272fb349ef4d4267163cee1387b247ab0f8cddd2f17460e44d6abbc856",
+    "functional-replay.json": "c9cbf277c0d494dd76fbd52a4d12cb7c7df4138019ee896d5616d14aee3a20cd",
+    "hosted-prepare-local-v2/plan.json": "228f9d3936bbd4314ebe0165528c84275167934ec85b96511e5a73c1c00dba11",
+    "independent-local/summary.json": "faea05d712349bc9460796373d84b5b3c59e9d787ee32a6cd40cc5034be7f88b",
+    "local-corrected-plan.json": "50fd4fd8bad9797e917b573023ecd00673d21cb9c2e277f15dc0eedc482c5410",
+    "local-replay.json": "a7315cbf9e14bf25ade15bb2d482d2bd5062cf520fe96ddfe6da9458daa92561",
+    "owned-tests-final.log": "70092d2e21d4b2384dd8668ae2a1ff952e581fe7f58bfafb8daa89eb385c9bf1",
+    "preflight-tests-final.log": "2e8d98aaea4e4511f118b7631f8efce7f6c713f522453db90b6074aefe49a703",
+    "python-tests-final.log": "40c7289c2374db13a19cdcdd337ca1a5e7f251ca9a52d457a00d268e4845604d",
+    "transport-roundtrip/results.json": "51a1d105f85ea51ae199d71dc9d204cb4ab21946d3fdbbbd6f2aeadbb3154d1e"
+  },
+  "preflight": "kernel/reference correspondence; CONFIG_RT_GROUP_SCHED=n; global950000/1000000; H0,1 M2,3; same-PID owned promotion after guards",
+  "reference": "new owned-unit execution path; no old artifact physical equivalence",
+  "requirements": {
+    "controls": "original roles, mandatory raw0 and 101",
+    "operational_failure": "stop further starts, recover partial evidence; no replacement",
+    "signal0": "original negative roles",
+    "signal16": "ct_eq_128 raw0 at any scheduled look; crop is not substitute",
+    "statistical_failure": "retain and continue fixed schedule"
+  },
+  "schedule": {
+    "compiler": [
+      "gcc",
+      "clang"
+    ],
+    "modes": [
+      "nix original controls",
+      "legacy original controls",
+      "uniform preparation signal0",
+      "uniform preparation signal16"
+    ],
+    "slot1": [
+      "A",
+      "B"
+    ],
+    "slot2": [
+      "B",
+      "A"
+    ],
+    "slot2_key_order": "reverse",
+    "within_native_case_order": "original"
+  },
+  "schema": "owned-scheduler-comparison-plan/1",
+  "source_base": "f3c3e2adc0480a076ce7ea986dcc82451ba7dc43"
+}
