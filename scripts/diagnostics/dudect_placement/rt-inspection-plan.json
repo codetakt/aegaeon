@@ -1,0 +1,41 @@
+{
+  "acquisition": "First new branch-creation workflow run and attempt only; no replacement. UNKNOWN is retained.",
+  "artifact": "New RSA-OAEP recipient, authenticated AES-256-GCM CMS plus safe summary only; private key kept outside checkout.",
+  "branch": "test/dudect-rt-readonly-20261018",
+  "excluded": "No RT, new unit, CPU/limit/config mutation, native, original299campaign, PID1 extension, adoption or ordinary CI.",
+  "execution_admitted": false,
+  "generation": 1,
+  "kernel_config": "Release-named boot file alone remains unproven correspondence; never infer unknown config.",
+  "limits": {
+    "allocations": 1,
+    "attempts": 1,
+    "censuses": 2,
+    "collector_outer_seconds": 65,
+    "collector_seconds": 60,
+    "command_seconds": 5,
+    "configuration_mutations": 0,
+    "job_seconds": 600,
+    "native_invocations": 0,
+    "operation_seconds": 170,
+    "replacements": 0
+  },
+  "plan_id": "dudect-rt-readonly-20261018-g1",
+  "runner_label": "ubuntu-24.04",
+  "runtime": "Before/after ELF dependency snapshots; actual systemctl/OpenSSL loader objects checked; parent modules/maps separately recorded. No patch-equivalence or in-memory attestation claim.",
+  "schema": "aegaeon.dudect.rt-readonly-plan.v1",
+  "signature": "Temporary unsigned publication exception if needed; re-sign introduced commits and verify signatures/tree/artifact before merge.",
+  "source_sha256": {
+    ".github/workflows/dudect-rt-readonly.yml": "67dde69dd28bad7aaf9fd6daf7bf54dcf8935f11cc69366b2c22b0e53d0ec0e1",
+    "scripts/diagnostics/dudect_placement/RT-PREFLIGHT.md": "c4e00276ea2cb19a7937401511222c7d42037bfb9bb86adf8d6691bf75cceaad",
+    "scripts/diagnostics/dudect_placement/hosted_rt_preflight.py": "9b1fd865cfd12b30778055ff8263f10b421a24b7212aa56ebe6e11613ab5ae12",
+    "scripts/diagnostics/dudect_placement/recover_rt_preflight.py": "9839191adfa1e9e22cfc4535f54ab90fbdd5e385ed02297178bc9a1a7f3ca919",
+    "scripts/diagnostics/dudect_placement/rt-receipt-recipient.pem": "edc17af82e8304c40be2b55ae3c1740f758911b2d83427b3dcef6d7b902c18b8",
+    "scripts/diagnostics/dudect_placement/rt_preflight.py": "d6d7cc64368ab22982d4fb8f13aa5a2de1da35d41410de1959d6b4e82b3fd720",
+    "scripts/diagnostics/dudect_placement/rt_runtime.py": "8c0915e03568afb9610c563b5ee83207bd251a753fd0e7c1d41cdb59f6c674aa",
+    "scripts/diagnostics/dudect_placement/test_rt_preflight.py": "c5343e51738876b3e4651513963404c327d178bc0b320359af8fe7fe9607b910",
+    "scripts/diagnostics/dudect_placement/test_rt_transport.py": "196e3df1a4a306a105a70858fda17318a5518f943c2308d552da1f3a25d2c171"
+  },
+  "stage": "read_only_acquisition",
+  "unit": "hosted-compute-agent.service",
+  "workflow": ".github/workflows/dudect-rt-readonly.yml"
+}
