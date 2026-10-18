@@ -103,21 +103,77 @@ async function main(): Promise<void> {
   await execFile("python3", [validatorPath, outputPath], { cwd: ROOT_DIR });
   const output = JSON.parse(await readFile(outputPath, "utf8"));
   assert.equal(output.generated_at, input.generated_at);
-  assert.equal(output.lane.hosted, true);
-  assert.equal(output.source.github_run_id, "77777");
-  assert.equal(output.source.github_workflow, "SDK Managed Provider Evidence");
-  assert.equal(output.source.github_repository, "openai/aegaeon-sdk");
-  assert.equal(output.source.github_ref, "main");
-  assert.equal(output.source.github_sha, "newsha");
-  assert.equal(output.source.github_job, "external-provider-managed");
-  assert.equal(output.source.imported_github_run_id, input.source.github_run_id);
-  assert.equal(output.source.imported_github_workflow, input.source.github_workflow);
-  assert.equal(output.source.imported_github_repository, input.source.github_repository);
-  assert.equal(output.source.imported_github_ref, input.source.github_ref);
-  assert.equal(output.source.imported_github_sha, input.source.github_sha);
-  assert.equal(output.source.imported_github_job, input.source.github_job);
-  assert.equal(output.source.imported_evidence_path, path.relative(ROOT_DIR, inputPath));
-  assert.equal(output.source.imported_evidence_sha256, await shaHex(inputPath));
+  assert.deepEqual(output.source, input.source);
+  assert.deepEqual(output.lane, input.lane);
+  assert.deepEqual(output.runtime, input.runtime);
+  assert.deepEqual(output.provider, input.provider);
+  const receipt = output.import_history[0];
+  assert.equal(output.import_history.length, 1);
+  assert.equal(receipt.importer.github_run_id, "77777");
+  assert.equal(receipt.importer.github_ref, "refs/heads/main");
+  assert.equal(receipt.importer.github_sha, "newsha");
+  assert.equal(receipt.evidence_path, path.relative(ROOT_DIR, inputPath));
+  assert.equal(receipt.evidence_sha256, await shaHex(inputPath));
+  assert.ok(Date.parse(receipt.imported_at) > Date.parse(output.generated_at));
+  const secondPath = path.join(tempRoot, "second-import.json");
+  await execFile(
+    process.execPath,
+    [toolPath, "--root", ROOT_DIR, "--evidence", outputPath, "--out", secondPath],
+    { cwd: ROOT_DIR, env: { ...process.env, GITHUB_RUN_ID: "88888" } },
+  );
+  const second = JSON.parse(await readFile(secondPath, "utf8"));
+  assert.deepEqual(second.source, input.source);
+  assert.deepEqual(second.lane, input.lane);
+  assert.equal(second.generated_at, input.generated_at);
+  assert.equal(second.import_history.length, 2);
+  assert.deepEqual(second.import_history[0], receipt);
+  assert.equal(second.import_history[1].importer.github_run_id, "88888");
+  assert.equal(second.import_history[1].evidence_sha256, await shaHex(outputPath));
+  await execFile("python3", [validatorPath, secondPath], { cwd: ROOT_DIR });
+  await assert.rejects(
+    execFile("python3", [validatorPath, "--require-enterprise-ready", secondPath], {
+      cwd: ROOT_DIR,
+    }),
+    /must be no older/,
+  );
+  await assert.rejects(
+    execFile(
+      "python3",
+      [validatorPath, "--require-enterprise-ready", "--max-age-hours", "10000000", secondPath],
+      { cwd: ROOT_DIR },
+    ),
+    /hosted=true/,
+  );
+  const original = await readFile(inputPath, "utf8");
+  await assert.rejects(
+    execFile(
+      process.execPath,
+      [toolPath, "--root", ROOT_DIR, "--evidence", inputPath, "--out", inputPath],
+      { cwd: ROOT_DIR },
+    ),
+    /EEXIST/,
+  );
+  assert.equal(await readFile(inputPath, "utf8"), original);
+  for (const malformed of [null, 1, [], { ...input, import_history: {} }]) {
+    const malformedPath = path.join(tempRoot, "malformed.json");
+    await writeFile(malformedPath, JSON.stringify(malformed));
+    await assert.rejects(
+      execFile(
+        process.execPath,
+        [
+          toolPath,
+          "--root",
+          ROOT_DIR,
+          "--evidence",
+          malformedPath,
+          "--out",
+          path.join(tempRoot, "rejected.json"),
+        ],
+        { cwd: ROOT_DIR },
+      ),
+      /Expected/,
+    );
+  }
   console.log("managed provider evidence import tests passed");
 }
 
