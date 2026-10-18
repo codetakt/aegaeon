@@ -1,0 +1,35 @@
+# One allocation, read-only. Never starts a native test or changes CPU policy.
+name: Dudect hosted service inspection
+on:
+  push:
+    branches: [test/dudect-hosted-service-inspection]
+permissions:
+  contents: read
+concurrency:
+  group: dudect-hosted-service-inspection
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Inspect once and encrypt complete or partial receipt
+        timeout-minutes: 3
+        run: >-
+          sudo -n --preserve-env=GITHUB_SHA,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_REF,GITHUB_REPOSITORY,ImageOS,ImageVersion
+          /usr/bin/python3 -I -B scripts/diagnostics/dudect_placement/hosted_inspection.py
+      - name: Retain encrypted receipt only
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-service-inspection-${{ github.run_id }}
+          path: artifacts/service-inspection-upload/evidence.cms
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

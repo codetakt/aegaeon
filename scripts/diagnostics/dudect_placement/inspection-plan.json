@@ -1,0 +1,29 @@
+{
+  "schema": "dudect.read-only-hosted-inspection/1",
+  "branch": "test/dudect-hosted-service-inspection",
+  "unit": "hosted-compute-agent.service",
+  "limits": {
+    "allocations": 1,
+    "job_seconds": 600,
+    "collector_seconds": 60,
+    "command_seconds": 5,
+    "census_passes": 2,
+    "native_invocations": 0,
+    "configuration_mutations": 0,
+    "replacements": 0
+  },
+  "source_sha256": {
+    "scripts/diagnostics/dudect_placement/inspect_environment.py": "0caedf61c958348d807ebd554b17cfad028afd3e32875349a3ae2f0452169c69",
+    "scripts/diagnostics/dudect_placement/state.py": "be68f5b1f9e933c6e7970623d913238a21c1eba149db66f2a6412369f8978332",
+    "scripts/diagnostics/dudect_placement/hosted_inspection.py": "fdc8d3e727abbcb98a0e07863863cdbe07fb65d4f51d7c40e2d08191018f23cc",
+    "scripts/diagnostics/dudect_placement/receipt-recipient.pem": "77a0a336bf0fb3461d51b93decac86f6dd22281f306b1bbd3d424304f47a1257",
+    "scripts/diagnostics/dudect_placement/README.md": "05919b39d9bf5bf49bd570b2d8f204454f5b8e2e3ac1510e3f6a64c5e44811b4",
+    "scripts/diagnostics/dudect_placement/test_inspection.py": "cf5f1fa601fda356448c4bf73404dc8eff1d78aac13b89e9bdffb768f78b019f",
+    "scripts/diagnostics/dudect_placement/test_hosted_inspection.py": "853bdc2bad8f96630da6c8acc71cd473a23eaaad37253b861c9d27bb36d2b102",
+    ".github/workflows/dudect-service-inspection.yml": "cf86c4ac8c728f3f474de3eb836be63fefbca75f7cead3208690a8ceff3de0ca"
+  },
+  "classification_does_not_admit_timing": true,
+  "runtime_binding": "system Python, systemd, OpenSSL and linked libraries frozen before collector and checked after; actual isolated module closure recorded",
+  "artifact": "encrypted CMS only; no plaintext fallback",
+  "signing": "Temporary unsigned publication permitted; all introduced commits must be signed and tree/artifact correspondence verified before merge"
+}
