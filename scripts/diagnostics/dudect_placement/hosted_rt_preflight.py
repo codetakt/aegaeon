@@ -13,14 +13,16 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(HERE))  # fixed checkout path, also with isolated Python
 import rt_runtime
+import rt_kernel_identity
 
-PLAN = 'rt-inspection-plan.json'
-CERT = 'rt-receipt-recipient.pem'
-BRANCH = 'test/dudect-rt-readonly-20261018'
-WORKFLOW = '.github/workflows/dudect-rt-readonly.yml'
+PLAN = 'rt-kernel-inspection-plan.json'
+CERT = 'rt-kernel-recipient.pem'
+BRANCH = 'test/dudect-kernel-readonly-20261018'
+WORKFLOW = '.github/workflows/dudect-kernel-readonly.yml'
 REPO = 'codetakt/aegaeon'
 PREFIX = 'scripts/diagnostics/dudect_placement/'
 FILES = {PREFIX + name for name in ('rt_preflight.py', 'rt_runtime.py',
+         'rt_kernel_identity.py', 'rt-kernel-reference.json', 'test_rt_kernel_identity.py',
          'hosted_rt_preflight.py', 'recover_rt_preflight.py', CERT,
          'test_rt_preflight.py', 'test_rt_transport.py', 'RT-PREFLIGHT.md')} | {WORKFLOW}
 LIMITS = {'allocations': 1, 'attempts': 1, 'job_seconds': 600, 'operation_seconds': 170,
@@ -78,6 +80,7 @@ def load_plan():
             plan.get('branch') != BRANCH or plan.get('workflow') != WORKFLOW or
             plan.get('unit') != 'hosted-compute-agent.service' or
             plan.get('limits') != LIMITS or plan.get('generation') != 1 or
+            plan.get('kernel_reference_sha256') != rt_kernel_identity.REFERENCE_SHA256 or
             plan.get('stage') != 'read_only_acquisition' or plan.get('execution_admitted') is not False):
         raise ValueError('unexpected frozen plan')
     if not re.fullmatch(r'[a-z0-9-]{12,80}', plan.get('plan_id', '')):
@@ -214,7 +217,9 @@ def execute(plan, opportunity, base):
         if result['returncode'] or receipt['before'] != receipt['after'] or receipt['boot_before'] != receipt['boot_after']:
             raise RuntimeError('collector failure or binding/boot change')
         inspection = read_json(private / 'inspection.json', 24 * 1024 * 1024)
-        if (inspection.get('classification') not in CLASSIFICATIONS or
+        if (inspection.get('schema') != 'aegaeon.dudect.rt-readonly-preflight.v2' or
+                inspection.get('kernel_reference_sha256') != plan['kernel_reference_sha256'] or
+                inspection.get('classification') not in CLASSIFICATIONS or
                 inspection.get('execution_admitted') is not False or
                 inspection.get('native_invocations') != 0 or inspection.get('configuration_mutations') != 0 or
                 inspection.get('job_pid') != os.getpid() or inspection.get('unit') != plan['unit'] or

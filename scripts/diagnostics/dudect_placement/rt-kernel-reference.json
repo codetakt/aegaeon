@@ -1,0 +1,48 @@
+{
+  "archive_chain": {
+    "archive_signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+    "common_source_version_confirmed": true,
+    "config_bytes": 206837,
+    "config_matches_saved_digest": true,
+    "config_sha256": "b684cdecf90ab6fb67f49c2b63ee95738810ee5c92476fa6f801815f75051ab5",
+    "execution_admitted": false,
+    "ikconfig": "n",
+    "index_sha256": "752341f36b7029abcf4b181d65fa7112a46dbdf9b8eedc16524880efd76e0ec8",
+    "key_origin": "HTTPS official Ubuntu archive/project keyring plus independently published Ubuntu list fingerprint; no local preexisting key anchor",
+    "packages": [
+      {
+        "matches_signed_index": true,
+        "package": "linux-buildinfo-6.17.0-1022-azure",
+        "sha256": "e6f5c92a8cafa00ea93b573b77591c76c8ec1603c308b301d3d03e89cc57c5b3",
+        "version": "6.17.0-1022.22"
+      },
+      {
+        "matches_signed_index": true,
+        "package": "linux-image-6.17.0-1022-azure",
+        "sha256": "909e771d8abc1aecb5df5aa699650a1488ea65fb526f8b648ee6925d71805e60",
+        "version": "6.17.0-1022.22"
+      }
+    ],
+    "rt_group_sched": "n",
+    "running_build_correspondence": "not established; historical runtime build ID missing",
+    "secure_boot_PE_signature_verification": "not performed",
+    "signature_valid": true
+  },
+  "execution_admitted": false,
+  "identity": {
+    "architecture": "x86_64",
+    "build_id": "69f86991943f21a6e5450266c913374d52c1dbf3",
+    "config_sha256": "b684cdecf90ab6fb67f49c2b63ee95738810ee5c92476fa6f801815f75051ab5",
+    "image_package_sha256": "909e771d8abc1aecb5df5aa699650a1488ea65fb526f8b648ee6925d71805e60",
+    "release": "6.17.0-1022-azure",
+    "source_version": "linux-azure-6.17 6.17.0-1022.22",
+    "version": "#22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026"
+  },
+  "notes_bytes": 136,
+  "notes_sha256": "bb4a90734cf4b8806f4b72f8009745b558f685faabbcceb71474ce0acf735b5e",
+  "reference_id": "ubuntu-azure-6.17.0-1022.22-amd64-v1",
+  "review_manifest_sha256": "8e2154a856087da908e06fea9fdf2c14c2cbd3d9e26312d93e81d01a4f597c47",
+  "schema": "aegaeon.kernel-archive-reference.v1",
+  "trust_model": "Authenticated Ubuntu archive and trusted running provider; linked build identity, not memory attestation or proof of runtime patch absence",
+  "version_signature": "Ubuntu 6.17.0-1022.22-azure 6.17.13"
+}

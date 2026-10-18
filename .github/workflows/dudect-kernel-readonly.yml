@@ -1,0 +1,41 @@
+# A new, separate read-only opportunity. No native, unit or scheduler changes.
+name: Dudect kernel correspondence 20261018
+on:
+  push:
+    branches: [test/dudect-kernel-readonly-20261018]
+permissions:
+  contents: read
+concurrency:
+  group: dudect-kernel-readonly-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: >-
+      github.repository == 'codetakt/aegaeon' &&
+      github.event.created == true && github.event.deleted == false &&
+      github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read once and encrypt complete or partial evidence
+        timeout-minutes: 3
+        run: >-
+          sudo -n --preserve-env=GITHUB_SHA,GITHUB_RUN_ID,GITHUB_RUN_NUMBER,GITHUB_RUN_ATTEMPT,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_EVENT_NAME,GITHUB_EVENT_PATH,GITHUB_WORKFLOW_REF,GITHUB_WORKFLOW_SHA,ImageOS,ImageVersion
+          /usr/bin/python3 -I -B scripts/diagnostics/dudect_placement/hosted_rt_preflight.py
+      - name: Retain authenticated encrypted evidence and safe summary
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dudect-kernel-readonly-${{ github.run_id }}
+          path: |
+            artifacts/rt-preflight-upload/evidence.cms
+            artifacts/rt-preflight-upload/summary.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

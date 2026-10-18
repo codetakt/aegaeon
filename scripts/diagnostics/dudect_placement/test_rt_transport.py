@@ -119,6 +119,7 @@ class TransportTests(unittest.TestCase):
                     'workflow': host.WORKFLOW, 'unit': 'hosted-compute-agent.service',
                     'limits': dict(host.LIMITS), 'plan_id': 'rt-readonly-local-fixture',
                     'generation': 1, 'stage': 'read_only_acquisition', 'execution_admitted': False,
+                    'kernel_reference_sha256': host.rt_kernel_identity.REFERENCE_SHA256,
                     'source_sha256': {r: runtime.digest(root / r)['sha256'] for r in sorted(host.FILES)}}
             host.write(here / host.PLAN, plan)
             head = 'a' * 40
@@ -140,6 +141,8 @@ class TransportTests(unittest.TestCase):
     def collect(self, private, deadline):
         plan = host.load_plan()
         host.write(private / 'inspection.json', {
+            'schema': 'aegaeon.dudect.rt-readonly-preflight.v2',
+            'kernel_reference_sha256': plan['kernel_reference_sha256'],
             'classification': 'UNKNOWN_NO_EXECUTION', 'censuses': [{'partial': True}],
             'native_invocations': 0, 'configuration_mutations': 0, 'execution_admitted': False,
             'job_pid': os.getpid(), 'unit': plan['unit'],
@@ -174,11 +177,60 @@ class TransportTests(unittest.TestCase):
     def test_limits_and_generation_cannot_be_relaxed(self):
         with self.fixture() as (_, here, plan, _):
             for key, value in (('generation', 2), ('execution_admitted', True),
+                               ('kernel_reference_sha256', '0' * 64),
                                ('limits', {**plan['limits'], 'allocations': 2})):
                 changed = {**plan, key: value}
                 (here / host.PLAN).write_bytes(host.encoded(changed))
                 with self.subTest(key=key), self.assertRaises(ValueError):
                     host.load_plan()
+
+    def test_reference_bytes_are_in_frozen_source_inventory(self):
+        with self.fixture() as (_, here, plan, _):
+            self.assertIn(host.PREFIX + 'rt-kernel-reference.json', host.source_binding(plan))
+            with (here / 'rt-kernel-reference.json').open('ab') as out:
+                out.write(b' ')
+            with self.assertRaisesRegex(ValueError, 'source digest'):
+                host.load_plan()
+
+    def test_old_schema_and_wrong_reference_reports_rejected(self):
+        for key, value in (('schema', 'aegaeon.dudect.rt-readonly-preflight.v1'),
+                           ('kernel_reference_sha256', '0' * 64)):
+            def bad(private, deadline):
+                result = self.collect(private, deadline)
+                path = private / 'inspection.json'
+                row = json.loads(path.read_text());row[key] = value
+                path.write_bytes(host.encoded(row))
+                return result
+            with self.subTest(key=key), self.fixture() as (root, _, plan, opportunity), self.mock_acquisition(bad):
+                self.assertEqual(host.execute(plan, opportunity, root / 'artifacts'), 1)
+                result, _ = self.recovered(root, opportunity)
+                self.assertFalse(result['operation_complete'])
+
+    def test_full_correspondence_and_raw_notes_encrypted_roundtrip(self):
+        import base64
+        from test_rt_kernel_identity import CorrespondenceTests, note, captured
+        kernel = CorrespondenceTests().kernel()
+        # Maximum-size syntactically valid note stream, duplicated only for the
+        # fixed two censuses. Exercise actual authenticated transport capacity.
+        raw = note(bytes(host.rt_kernel_identity.MAX_NOTES - len(note()) - 20), b'Linux\0', 1) + note()
+        self.assertEqual(len(raw), host.rt_kernel_identity.MAX_NOTES)
+        host.rt_kernel_identity.parse_notes(raw)
+        kernel['notes'] = {**captured(raw), 'parsed': host.rt_kernel_identity.parse_notes(raw)}
+        def full(private, deadline):
+            result = self.collect(private, deadline)
+            path = private / 'inspection.json';row = json.loads(path.read_text())
+            row['censuses'] = [{'facts': {'kernel': kernel}, 'errors': []}] * 2
+            path.write_bytes(host.encoded(row))
+            return result
+        with self.fixture() as (root, _, plan, opportunity), self.mock_acquisition(full):
+            self.assertEqual(host.execute(plan, opportunity, root / 'artifacts'), 0)
+            _, out = self.recovered(root, opportunity)
+            saved = json.loads((out / 'inspection.json').read_text())
+            for census in saved['censuses']:
+                restored = census['facts']['kernel']
+                self.assertEqual(restored, kernel)
+                self.assertEqual(base64.b64decode(restored['notes']['raw_base64']), raw)
+                self.assertFalse(restored['correspondence_receipt']['execution_admitted'])
 
     def test_event_branch_attempt_run_and_commit_guard(self):
         with self.fixture() as (_, _, plan, opportunity):

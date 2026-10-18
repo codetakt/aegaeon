@@ -1,6 +1,8 @@
 """Functional fixtures only: no service creation or scheduling changes."""
 import copy
 import ast
+import base64
+import struct
 import gzip
 import json
 import os
@@ -194,13 +196,21 @@ class InputTests(unittest.TestCase):
             if isinstance(value, Exception):
                 raise value
             return value
-        with patch.object(collector, 'read', side_effect=read):
+        original = read
+        def read_with_reference(path, *args):
+            if Path(path) == r.kernel_identity.REFERENCE:
+                return Path(path).read_bytes()
+            return original(path, *args)
+        # Config parser fixtures use a synthetic, non-matching build ID.
+        notes = base64.b64encode(struct.pack("<III", 4, 20, 3) + b"GNU\0" + bytes(20)).decode()
+        with patch.object(collector, 'read', side_effect=read_with_reference), \
+                patch.object(r.kernel_identity, 'capture', return_value={'raw_base64': notes}):
             return collector.kernel()
 
-    def test_running_kernel_config_binding(self):
+    def test_running_config_with_unmatched_notes_is_not_archive_correspondence(self):
         result = self.kernel_with({'/proc/config.gz': gzip.compress(config_bytes()), '/proc/cmdline': b''})
-        self.assertTrue(result['config_correspondence'])
-        self.assertFalse(result['errors'])
+        self.assertFalse(result['config_correspondence'])
+        self.assertEqual(result['config_sources'][0]['correspondence'], 'running_kernel_interface')
 
     def test_boot_filename_is_not_kernel_build_binding(self):
         result = self.kernel_with({'/boot/config': config_bytes(), '/proc/cmdline': b''})

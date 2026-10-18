@@ -21,6 +21,7 @@ import sys
 import time
 
 import rt_runtime
+import rt_kernel_identity as kernel_identity
 
 CG = Path('/sys/fs/cgroup')
 MAX_FILE = 1024 * 1024
@@ -325,12 +326,42 @@ class Collector:
         except (OSError, ValueError) as exc:
             cmdline = None
             errors.append('cmdline: ' + type(exc).__name__)
+        notes, reference = None, None
+        try:
+            notes = kernel_identity.capture(self.read, self.check)
+            if uname.machine != 'x86_64':
+                raise ValueError('notes decoder is reviewed for x86_64 only')
+            import base64
+            notes['parsed'] = kernel_identity.parse_notes(
+                base64.b64decode(notes['raw_base64'], validate=True), self.check)
+        except (OSError, ValueError) as exc:
+            errors.append('running kernel notes: ' + type(exc).__name__ + ': ' + str(exc))
+        try:
+            version_signature = {'status': 'present',
+                                 'value': self.read('/proc/version_signature', 4096).decode().strip()}
+        except FileNotFoundError:
+            version_signature = {'status': 'absent', 'purpose': 'supporting_only'}
+        except (OSError, ValueError) as exc:
+            version_signature = {'status': 'error', 'reason': type(exc).__name__}
+            errors.append('version_signature: ' + type(exc).__name__)
+        try:
+            reference = kernel_identity.reference(self.read)
+        except (OSError, ValueError) as exc:
+            errors.append('kernel reference: ' + type(exc).__name__ + ': ' + str(exc))
+        if reference:
+            correspondence = kernel_identity.correspondence(
+                reference, uname, sources, notes, version_signature, errors)
+        else:
+            correspondence = {'schema': 'aegaeon.kernel-build-correspondence.v1',
+                              'status': kernel_identity.UNKNOWN, 'execution_admitted': False,
+                              'reasons': list(errors)}
+        self.check()
         return {'release': uname.release, 'version': uname.version, 'machine': uname.machine,
                 'config': sources[0]['values'] if sources else None,
                 'config_sources': sources, 'missing_sources': missing, 'errors': errors,
-                # A filename alone is not a build binding. A later reviewed
-                # package/image binding may supply that evidence; we do not invent it.
-                'config_correspondence': any(s['correspondence'] == 'running_kernel_interface' for s in sources),
+                'notes': notes, 'version_signature': version_signature,
+                'correspondence_receipt': correspondence,
+                'config_correspondence': correspondence['status'] == kernel_identity.MATCH,
                 'model_version_supported': bool(re.match(r'^6\.17(?:\.|-)', uname.release)),
                 'cmdline': cmdline}
 
@@ -516,7 +547,8 @@ class Collector:
             self.child_runtime = child
         elif self.child_runtime != child:
             raise ValueError('systemctl dependency binding changed')
-        paths = {str(Path(__file__).resolve()), str(Path(sys.executable).resolve())}
+        paths = {str(Path(__file__).resolve()), str(Path(sys.executable).resolve()),
+                 str(kernel_identity.REFERENCE.resolve())}
         if self.systemctl:
             paths.add(str(Path(self.systemctl).resolve()))
         for module in list(sys.modules.values()):
@@ -540,7 +572,7 @@ class Collector:
                 'workflow_checkout_event_binding': 'external_runner_responsibility'}
 
     def collect(self):
-        result = {'schema': 'aegaeon.dudect.rt-readonly-preflight.v1', 'censuses': [],
+        result = {'schema': 'aegaeon.dudect.rt-readonly-preflight.v2', 'censuses': [],
                   'classification': UNKNOWN, 'execution_admitted': False,
                   'hosted_execution_ready': False,
                   'native_invocations': 0, 'configuration_mutations': 0,
@@ -551,6 +583,10 @@ class Collector:
                              'processes': MAX_PROCESSES, 'threads_per_census': MAX_THREADS,
                              'CPU_ID_bound': MAX_CPUS, 'censuses': 2},
                   'model': 'upstream-linux-v6.17-source-reviewed; distribution patches unproven'}
+        result['kernel_reference_sha256'] = kernel_identity.REFERENCE_SHA256
+        result['limits'].update(notes_bytes=kernel_identity.MAX_NOTES,
+                                notes_records=kernel_identity.MAX_RECORDS,
+                                reference_bytes=kernel_identity.MAX_REFERENCE)
         try:
             result['runtime_before'] = self.runtime_binding()
             for _ in range(2):
