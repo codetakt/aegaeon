@@ -122,23 +122,6 @@ jobs:
             python3 scripts/ci/run_core_pr_checks.py --all-checks
           fi
 
-      - name: Collect original core Dudect gate outputs
-        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.core-checks.outcome) }}
-        run: >-
-          python3 scripts/ci/collect_dudect_nix_output.py
-          --core-record artifacts/ci-dudect-outputs.json
-          --output artifacts/ct/dudect-core-gates
-
-      - name: Preserve core Dudect gate outputs
-        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.core-checks.outcome) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dudect-core-gate-outputs
-          path: |
-            artifacts/ci-dudect-outputs.json
-            artifacts/ct/dudect-core-gates/
-          if-no-files-found: error
-
       - name: Preserve PR check ownership
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

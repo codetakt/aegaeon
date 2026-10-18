@@ -911,6 +911,8 @@
         verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];
 
         verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
+          pkgs.mbedtls
+          pkgs.openssl
           pkgs.pkg-config
         ];
 
