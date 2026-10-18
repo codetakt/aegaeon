@@ -1,0 +1,435 @@
+{
+  "schema": "ci-responsibility-audit/1",
+  "status": "commissioning_required",
+  "scope": "Structural inventory and explicit open obligations; not execution or qualification evidence.",
+  "jobs": [
+    {
+      "id": "check-dependency-updates.yml/check-rsa-update",
+      "kind": "monitoring"
+    },
+    {
+      "id": "ci.yml/ci",
+      "kind": "functional"
+    },
+    {
+      "id": "ci.yml/dependency-audit",
+      "kind": "functional"
+    },
+    {
+      "id": "ci.yml/db-integration",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/build",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/rfc7520-vectors",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/security-audit",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/sbom-generation",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/rfc-must-requirements",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/oauth2-conformance",
+      "kind": "notice"
+    },
+    {
+      "id": "compliance.yml/compliance-monitor",
+      "kind": "monitoring"
+    },
+    {
+      "id": "compliance.yml/container-security",
+      "kind": "functional"
+    },
+    {
+      "id": "compliance.yml/slsa-provenance",
+      "kind": "publication"
+    },
+    {
+      "id": "compliance.yml/oidf-conformance",
+      "kind": "notice"
+    },
+    {
+      "id": "compliance.yml/conformance-summary",
+      "kind": "aggregation"
+    },
+    {
+      "id": "development-tools-validation.yml/development-tools",
+      "kind": "functional"
+    },
+    {
+      "id": "docker-build.yml/build-and-push",
+      "kind": "publication"
+    },
+    {
+      "id": "documentation.yml/metadata",
+      "kind": "functional"
+    },
+    {
+      "id": "documentation.yml/helpers",
+      "kind": "functional"
+    },
+    {
+      "id": "documentation.yml/complete",
+      "kind": "aggregation"
+    },
+    {
+      "id": "dudect-periodic.yml/qualification",
+      "kind": "notice"
+    },
+    {
+      "id": "flakehub-cache-seed.yml/seed-cargo-vet-vendor",
+      "kind": "publication"
+    },
+    {
+      "id": "flakehub-cache-seed.yml/validate-cold-substitution",
+      "kind": "functional"
+    },
+    {
+      "id": "flakehub-preview.yml/publish",
+      "kind": "publication"
+    },
+    {
+      "id": "flakehub-preview.yml/consume",
+      "kind": "functional"
+    },
+    {
+      "id": "infrastructure-validation.yml/infrastructure",
+      "kind": "functional"
+    },
+    {
+      "id": "lint.yml/lint",
+      "kind": "functional"
+    },
+    {
+      "id": "lint.yml/typescript-lint",
+      "kind": "functional"
+    },
+    {
+      "id": "lint.yml/python-lint",
+      "kind": "functional"
+    },
+    {
+      "id": "lint.yml/rust-strict-lint",
+      "kind": "functional"
+    },
+    {
+      "id": "oidc-kms-parity.yml/oidc-kms-parity",
+      "kind": "emulator"
+    },
+    {
+      "id": "oidf-conformance.yml/oidf-conformance",
+      "kind": "external_conformance"
+    },
+    {
+      "id": "performance.yml/load-test",
+      "kind": "functional_load"
+    },
+    {
+      "id": "performance.yml/observability-test",
+      "kind": "functional"
+    },
+    {
+      "id": "performance.yml/coverage",
+      "kind": "functional"
+    },
+    {
+      "id": "pr.yml/plan",
+      "kind": "aggregation"
+    },
+    {
+      "id": "pr.yml/docs",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/integrity",
+      "kind": "functional"
+    },
+    {
+      "id": "pr.yml/core",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/lint",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/security",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/verification",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/compliance",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/kms",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/container",
+      "kind": "reusable"
+    },
+    {
+      "id": "pr.yml/required",
+      "kind": "aggregation"
+    },
+    {
+      "id": "python-example-validation.yml/minimal-rp",
+      "kind": "functional"
+    },
+    {
+      "id": "release-core.yml/build-and-sign",
+      "kind": "publication"
+    },
+    {
+      "id": "release-core.yml/draft-release",
+      "kind": "publication"
+    },
+    {
+      "id": "release.yml/validate-release",
+      "kind": "functional"
+    },
+    {
+      "id": "release.yml/build-release",
+      "kind": "functional"
+    },
+    {
+      "id": "release.yml/generate-sbom",
+      "kind": "functional"
+    },
+    {
+      "id": "release.yml/security-scan",
+      "kind": "functional"
+    },
+    {
+      "id": "release.yml/run-conformance",
+      "kind": "functional"
+    },
+    {
+      "id": "release.yml/create-release",
+      "kind": "publication"
+    },
+    {
+      "id": "release.yml/publish-container",
+      "kind": "publication"
+    },
+    {
+      "id": "security.yml/security-stage",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/fstar",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/everparse-dcr",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/lowstar-extraction",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/verified-core-wasm",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/verified-core-equivalence",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/dudect",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/tamarin",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/kani-pure",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/kani",
+      "kind": "diagnostic"
+    },
+    {
+      "id": "verification.yml/jose-vectors",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/verified-reqs",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/verify-ffi-contracts",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/validation-scripts",
+      "kind": "functional"
+    },
+    {
+      "id": "verification.yml/verify-all",
+      "kind": "notice"
+    },
+    {
+      "id": "verification.yml/verification-summary",
+      "kind": "aggregation"
+    },
+    {
+      "id": "verify-fstar-ci.yml/verify-fstar",
+      "kind": "functional"
+    }
+  ],
+  "external_obligations": [
+    {
+      "id": "dudect",
+      "owner": "Verification",
+      "subject": "actual native ELF, product-call mapping, CPU and numerical profile",
+      "required_evidence": [
+        "all 21 cases and both compilers",
+        "original raw0/101 controls and separate required sensitivity",
+        "count/inference eligibility and retained detections",
+        "full raw/input/prefix replay and capability confirmation"
+      ],
+      "entrypoints": [
+        "scripts/ci/dudect_check.sh",
+        "tests/constant_time/run_contract.py",
+        "docs/verification/dudect-case-contract.md"
+      ],
+      "open_items": [
+        "commission qualified external execution and protected result consumer",
+        "review research candidate separately from existing observation contract"
+      ]
+    },
+    {
+      "id": "performance",
+      "owner": "Performance",
+      "subject": "server/image, load generator, topology and workload profile",
+      "required_evidence": [
+        "fixed successful scenario inventory and request accounting",
+        "separate load generation and exclusive measurement lease",
+        "DB/Redis/KMS/network versions and deployed runtime identity",
+        "threshold acceptance and preserved failed/partial runs"
+      ],
+      "entrypoints": [
+        ".github/workflows/performance.yml",
+        "crates/loadtest/src/lib.rs",
+        "scripts/perf/run_load_tests.sh"
+      ],
+      "open_items": [
+        "commission external performance acceptance",
+        "policy-mixed fixtures and execution remain pending"
+      ]
+    },
+    {
+      "id": "auth0",
+      "owner": "Identity",
+      "subject": "client/WASM/runtime, dedicated test tenant configuration and browser",
+      "required_evidence": [
+        "IaC ownership/readback before live execution",
+        "actual required browser cases; no optional skip",
+        "original observation time/producer/subject preserved on import",
+        "bounded secret use, full recovery and owned resource cleanup"
+      ],
+      "entrypoints": [
+        "scripts/sdk/tools-src/import-managed-provider-evidence.ts",
+        "scripts/sdk/check_managed_provider_readiness.ts",
+        "scripts/validation/validate_managed_provider_evidence.py"
+      ],
+      "open_items": [
+        "propagate import fix to the separately maintained SDK repository",
+        "bind IaC/live results to actual client artifact and tenant configuration",
+        "authenticate original producer and observed_at separately from generated_at"
+      ]
+    },
+    {
+      "id": "kms",
+      "owner": "Crypto and Operations",
+      "subject": "real supported KMS/HSM backend and key/policy profile",
+      "required_evidence": [
+        "real backend distinguished from LocalStack",
+        "required algorithms, permissions, rotation and failure behavior",
+        "runtime dependency and key/policy identity; safe cleanup"
+      ],
+      "entrypoints": [
+        ".github/workflows/oidc-kms-parity.yml",
+        "scripts/validation/validate_kms_hsm_classification.py"
+      ],
+      "open_items": [
+        "commission backend-specific qualification beyond emulator coverage"
+      ]
+    },
+    {
+      "id": "conformance",
+      "owner": "Protocol verification",
+      "subject": "pinned suite version, plans, parameter variants and actual result IDs",
+      "required_evidence": [
+        "nonempty complete configured inventory",
+        "all required modules/variants and original dispositions",
+        "notice jobs never substitute for execution or certification"
+      ],
+      "entrypoints": [
+        ".github/workflows/oidf-conformance.yml",
+        ".github/workflows/compliance.yml"
+      ],
+      "open_items": [
+        "close suite discovery and canonical result correspondence"
+      ]
+    },
+    {
+      "id": "admission",
+      "owner": "Release engineering",
+      "subject": "reviewed merge candidate and exact distributable artifacts",
+      "required_evidence": [
+        "trusted producer authentication and request/subject/profile correspondence",
+        "freshness policy and immutable original observations",
+        "no missing, skipped, partial, failed or inconclusive required result",
+        "merge-group and all publication routes consume protected decisions"
+      ],
+      "entrypoints": [
+        ".github/workflows/pr.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/release-core.yml",
+        ".github/workflows/docker-build.yml"
+      ],
+      "open_items": [
+        "replace temporary merge/tag-release holds with verified receipts",
+        "audit verified-core draft/SDK dispatch and container publication separately",
+        "review all required subject dependency/freshness policies"
+      ]
+    },
+    {
+      "id": "measurement-lifecycle",
+      "owner": "Operations",
+      "subject": "owned finite execution with independent stop and encrypted recovery",
+      "required_evidence": [
+        "fixed inventory, cost/time/capacity limits and exclusive lease",
+        "independent deadline stop; no retry or replacement",
+        "authenticated complete/partial recovery and hash verification",
+        "cleanup evidence for owned transient resources"
+      ],
+      "entrypoints": [
+        "docs/development/ci-execution-boundary.md"
+      ],
+      "open_items": [
+        "generalize finite research runner into reviewed production orchestration"
+      ]
+    }
+  ]
+}
