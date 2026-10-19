@@ -305,7 +305,12 @@ class SupplementalAggregateTests(unittest.TestCase):
         }
         assert POLICY["supplemental_lanes"] == {"components": "pending"}
         workflow = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
-        assert set(workflow["jobs"]["required"]["needs"]) == {"plan", *expected}
+        assert set(workflow["jobs"]["required"]["needs"]) == {
+            "exception",
+            "security_patch",
+            "plan",
+            *expected,
+        }
         assert "components" not in workflow["jobs"]
         for path, scope in [
             ("SECURITY.md", "docs"),
@@ -788,9 +793,45 @@ class WiringTests(unittest.TestCase):
         events = workflow.get("on", workflow.get(True))
         assert events["pull_request"]["types"] == ["opened", "synchronize", "reopened", "edited"]
         jobs = workflow["jobs"]
-        assert set(jobs["required"]["needs"]) == set(POLICY["scopes"]["full"]) | {"plan"}
+        assert set(jobs["required"]["needs"]) == set(POLICY["scopes"]["full"]) | {
+            "exception",
+            "security_patch",
+            "plan",
+        }
         assert "always()" in jobs["required"]["if"]
-        assert jobs["required"]["steps"][1]["with"]["ref"] == "${{ needs.plan.outputs.base }}"
+        ordinary = "needs.exception.outputs.admitted != 'true'"
+        exceptional = "needs.exception.outputs.admitted == 'true'"
+        assert jobs["plan"]["needs"] == "exception"
+        assert jobs["plan"]["if"] == ordinary
+        assert jobs["security_patch"]["needs"] == "exception"
+        assert jobs["security_patch"]["if"] == exceptional
+        steps = jobs["required"]["steps"]
+        for condition, names in (
+            (
+                ordinary,
+                ("Require a validated protected base", "Require success of every selected check"),
+            ),
+            (
+                exceptional,
+                (
+                    "Check out the scoped exception evaluator",
+                    "Require every selected security check",
+                ),
+            ),
+        ):
+            for name in names:
+                matching = [step for step in steps if step.get("name") == name]
+                assert len(matching) == 1
+                assert matching[0]["if"] == condition
+        checkout = [
+            step
+            for step in steps
+            if step.get("uses", "").startswith("actions/checkout@")
+            and step.get("with", {}).get("ref") == "${{ needs.plan.outputs.base }}"
+        ]
+        assert len(checkout) == 1
+        assert checkout[0]["if"] == ordinary
+        assert all(step["if"] in (ordinary, exceptional) for step in steps)
         for lane in set(POLICY["scopes"]["full"]) - {"docs", "integrity"}:
             assert jobs[lane]["if"] == "needs.plan.outputs.scope == 'full'"
             child = yaml.safe_load((ROOT / jobs[lane]["uses"]).read_text())
