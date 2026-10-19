@@ -458,6 +458,20 @@ impl LoadTestResults {
 #[cfg(test)]
 mod report_tests {
     use super::*;
+
+    fn assert_functional_mode_preserves_completion_checks(report: &LoadTestResults) {
+        let mut functional = report.clone();
+        functional.acceptance_mode = AcceptanceMode::Functional;
+        functional.p99_latency_ms = 1_000_000.0;
+        functional.throughput = 0.001;
+        functional.peak_memory_mb = 1_000_000.0;
+        assert!(functional.meets_functional_requirements());
+        assert!(!functional.meets_slos(0.001));
+        functional.completion_errors.push("lost worker".into());
+        assert!(!functional.meets_functional_requirements());
+        functional.completion_errors.clear();
+    }
+
     #[tokio::test]
     async fn report_rejects_missing_identity_counts_nonfinite_and_selected_legs() {
         let mut report = LoadTestResults::try_new().unwrap();
@@ -505,16 +519,7 @@ mod report_tests {
         report.finalize(Duration::from_secs(1)).await;
         assert!(report.validate_complete().is_ok());
         assert!(report.meets_functional_requirements());
-        let mut functional = report.clone();
-        functional.acceptance_mode = AcceptanceMode::Functional;
-        functional.p99_latency_ms = 1_000_000.0;
-        functional.throughput = 0.001;
-        functional.peak_memory_mb = 1_000_000.0;
-        assert!(functional.meets_functional_requirements());
-        assert!(!functional.meets_slos(0.001));
-        functional.completion_errors.push("lost worker".into());
-        assert!(!functional.meets_functional_requirements());
-        functional.completion_errors.clear();
+        assert_functional_mode_preserves_completion_checks(&report);
         let saved = report.identity.as_ref().unwrap().clone();
         // A hash-consistent witness must still satisfy the actual execution gate.
         for change in ["pacing", "duration", "url", "workers"] {
