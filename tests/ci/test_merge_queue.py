@@ -342,8 +342,24 @@ class WorkflowTests(unittest.TestCase):
         assert 'git show "$TRUSTED_BASE_SHA:scripts/ci/validate_change.py"' in run
         assert '[[ "$GITHUB_EVENT_NAME" == pull_request ]]' in run
         required = workflow["jobs"]["required"]["steps"]
-        assert '[[ "$PLAN_RESULT" == success ]]' in required[0]["run"]
-        assert required[1]["with"]["ref"] == "${{ needs.plan.outputs.base }}"
+        guard = next(s for s in required if s.get("name") == "Require a validated protected base")
+        checkout = next(
+            s
+            for s in required
+            if s.get("uses", "").startswith("actions/checkout@")
+            and s.get("with", {}).get("ref") == "${{ needs.plan.outputs.base }}"
+        )
+        aggregate = next(
+            s for s in required if s.get("name") == "Require success of every selected check"
+        )
+        assert '[[ "$PLAN_RESULT" == success ]]' in guard["run"]
+        assert (
+            guard["if"]
+            == checkout["if"]
+            == aggregate["if"]
+            == "needs.exception.outputs.admitted != 'true'"
+        )
+        assert required.index(guard) < required.index(checkout) < required.index(aggregate)
 
     def test_concurrency_has_distinct_workflow_event_and_group_keys(self):
         groups = []
