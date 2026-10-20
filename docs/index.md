@@ -393,7 +393,7 @@ Audience: contributors, maintainers
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/development/README.md` | index | Development Overview | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/admin-console-handoff.md` | development | Admin Console frontend handoff (Phase 1) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
-| `docs/development/ci-execution-boundary.md` | development | CI execution and qualification boundaries | active plan | 2026-10-19 | Engineering | maintainers, verification reviewers |
+| `docs/development/ci-execution-boundary.md` | development | CI execution and qualification boundaries | active plan | 2026-10-20 | Engineering | maintainers, verification reviewers |
 | `docs/development/claude-agent-guide.md` | development | CLAUDE Agent Guide (≤40 k) | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/current-delivery-context.md` | development | Current Delivery Context | current implementation baseline | 2026-07-08 | Engineering | contributors, maintainers |
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |

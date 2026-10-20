@@ -1,6 +1,6 @@
 # CI execution and qualification boundaries
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 Status: active plan
 
@@ -40,6 +40,21 @@ Ordinary checks may pass while these explicit holds fail. Commissioning requires
 a separate reviewed implementation; no variable, old receipt or missing job
 silently enables admission. Docs/integrity-only scopes retain their existing
 selection. Do not merge this transition as a completed qualification system.
+
+## Protected result contract compatibility
+
+The planner accepts result contract version 1 and transition version 2. Version 2
+requires the exact functional-only transition record: external admission pending,
+qualification-sensitive merge and release blocked, and automatic retry disabled.
+Missing, relaxed or unknown transition records fail validation. A version-1 record
+cannot carry a transition section. The transport commitment records the actual
+protected contract version and bytes; changing the envelope label does not change
+its authority.
+
+This check also runs during helper-test discovery. A contract-version mismatch
+previously made discovery fail and sent every helper group through the complete
+fallback suite. Successful discovery now partitions the inventory normally;
+discovery failures still retain the existing fail-closed fallback.
 
 ## Responsibility and environments
 

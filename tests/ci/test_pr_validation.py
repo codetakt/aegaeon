@@ -831,7 +831,15 @@ class WiringTests(unittest.TestCase):
         ]
         assert len(checkout) == 1
         assert checkout[0]["if"] == ordinary
-        assert all(step["if"] in (ordinary, exceptional) for step in steps)
+        hold = [
+            step
+            for step in steps
+            if step.get("name") == "Hold qualification-sensitive admission during migration"
+        ]
+        assert len(hold) == 1
+        assert hold[0]["if"] == "needs.plan.outputs.scope == 'full'"
+        assert "exit 1" in hold[0]["run"]
+        assert all(step["if"] in (ordinary, exceptional) for step in steps if step != hold[0])
         for lane in set(POLICY["scopes"]["full"]) - {"docs", "integrity"}:
             assert jobs[lane]["if"] == "needs.plan.outputs.scope == 'full'"
             child = yaml.safe_load((ROOT / jobs[lane]["uses"]).read_text())
