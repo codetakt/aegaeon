@@ -23,6 +23,11 @@ CI producer attestation. Full raw inputs, timing frames, execution and authentic
 recovery records remain private. The [2026-10-19 checkpoint](dudect-baremetal-checkpoint.md)
 and earlier failures retain their original identities and outcomes.
 
+The [limited monitoring contract](dudect-baremetal-contract.md) records the
+2026-10-22 review corrections, exposes the measured source bytes and specifies
+the proposed adoption entry. It preserves this checkpoint and its original
+hashes; it does not grant CI admission or transfer measurements to a rebuild.
+
 ## Candidate behavior
 
 The PR-profile candidate replaces crops1–100 for a fixed seven-case scope, common

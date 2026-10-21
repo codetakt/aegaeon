@@ -95,6 +95,18 @@ Native integer crops include every tick equal to the frozen pilot cutoff. This
 preserves whole ties without removing any of the 100 crop statistics. Sparse
 crops remain inconclusive even if raw counts meet their floors.
 
+That pilot-membership rule describes the original native baseline. The separate
+[limited bare-metal contract](dudect-baremetal-contract.md), pending adoption,
+replaces PR crops1–100 for exactly seven cases with distributed calibration:
+one class/time-independent reserved position per sixteen original positions,
+current-prefix pooled quantiles, whole inclusive ties, and disjoint remaining
+test samples. Moving boundaries require recomputation of the current prefix.
+Raw0/101, the other fourteen cases and periodic calibration retain the baseline.
+The candidate retains original pilot-crop results as evidence; it does not OR
+them into the replacement gate. Its versioned scope and role rules apply only
+through the named seven-case entry, never by inferring semantics from a generic
+`distributed` mode name.
+
 Certified identical pooled native integer support, with both counts greater
 than 10,000, uses the exact absolute-mean-difference permutation upper tail:
 every relabeling yields zero, hence p=1. The null is equality of distributions
