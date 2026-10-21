@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: pr-validation-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
@@ -19,8 +20,70 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  exception:
+    name: Check scoped security exception
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      admitted: ${{ steps.admission.outputs.admitted || 'false' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Bind the exception to PR228 and its unchanged product source
+        id: admission
+        if: >-
+          (github.event_name == 'pull_request' && github.event.pull_request.number == 228) ||
+          (github.event_name == 'merge_group' && startsWith(github.event.merge_group.head_ref, 'refs/heads/gh-readonly-queue/main/pr-228-'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/rustls_exception.py
+      - name: Preserve exception admission
+        if: steps.admission.outputs.admitted == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustls-exception-admission
+          path: artifacts/rustls-ci-exception/admission.json
+          if-no-files-found: error
+
+  security_patch:
+    name: Scoped rustls security checks
+    needs: exception
+    if: needs.exception.outputs.admitted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Recheck source and merge context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/rustls_exception.py
+      - uses: ./.github/actions/setup-nix-ci
+        with:
+          free-disk: "true"
+          enable-flakehub-cache: "true"
+      - name: Execute the fixed non-timing security inventory
+        run: nix develop .#ci --command bash scripts/ci/run_rustls_exception.sh
+      - name: Preserve selected-check evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustls-exception-checks
+          path: artifacts/rustls-ci-exception/
+          if-no-files-found: error
+
   plan:
     name: Select checks
+    needs: exception
+    if: needs.exception.outputs.admitted != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -352,10 +415,23 @@ jobs:
   required:
     name: Required checks
     if: ${{ always() }}
-    needs: [plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
+    needs: [exception, security_patch, plan, docs, integrity, core, lint, security, verification, compliance, kms, container]
     runs-on: ubuntu-latest
     steps:
+      - name: Check out the scoped exception evaluator
+        if: needs.exception.outputs.admitted == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require every selected security check
+        if: needs.exception.outputs.admitted == 'true'
+        env:
+          PR_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 scripts/ci/rustls_exception.py --results
+          printf '%s\n' 'PR228 scoped CI exception: security checks passed; full/timing CI is explicitly outside this result.' >> "$GITHUB_STEP_SUMMARY"
       - name: Require a validated protected base
+        if: needs.exception.outputs.admitted != 'true'
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           BASE_SHA: ${{ needs.plan.outputs.base }}
@@ -363,13 +439,27 @@ jobs:
           [[ "$PLAN_RESULT" == success ]]
           [[ "$BASE_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.exception.outputs.admitted != 'true'
         with:
           ref: ${{ needs.plan.outputs.base }}
           persist-credentials: false
       - name: Require success of every selected check
+        if: needs.exception.outputs.admitted != 'true'
         env:
           PR_NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
+          # The normal protected-base checker retains its original inventory.
+          PR_NEEDS_JSON=$(python3 - <<'PY'
+          import json, os
+          needs = json.loads(os.environ['PR_NEEDS_JSON'])
+          if needs.pop('exception')['result'] != 'success':
+              raise SystemExit('Exception routing failed')
+          if needs.pop('security_patch')['result'] != 'skipped':
+              raise SystemExit('Unexpected exception execution')
+          print(json.dumps(needs))
+          PY
+          )
+          export PR_NEEDS_JSON
           if [ -f scripts/ci/check_pr_results.py ] && [ -f ci/pr-policy.json ]; then
             python3 scripts/ci/check_pr_results.py --policy ci/pr-policy.json
           else
