@@ -4,7 +4,7 @@ Last updated: 2026-10-21
 
 Status: snapshot
 
-Status note: finite candidate qualification complete; formal adoption and CI admission remain open.
+Status note: finite qualification complete; the limited contract was adopted on 2026-10-22. CI admission remains open.
 
 Owner: Engineering
 
@@ -25,7 +25,7 @@ and earlier failures retain their original identities and outcomes.
 
 The [limited monitoring contract](dudect-baremetal-contract.md) records the
 2026-10-22 review corrections, exposes the measured source bytes and specifies
-the proposed adoption entry. It preserves this checkpoint and its original
+the adopted entry and owner approval. It preserves this checkpoint and its original
 hashes; it does not grant CI admission or transfer measurements to a rebuild.
 
 ## Candidate behavior

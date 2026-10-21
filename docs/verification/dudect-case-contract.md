@@ -96,7 +96,7 @@ preserves whole ties without removing any of the 100 crop statistics. Sparse
 crops remain inconclusive even if raw counts meet their floors.
 
 That pilot-membership rule describes the original native baseline. The separate
-[limited bare-metal contract](dudect-baremetal-contract.md), pending adoption,
+[limited bare-metal contract](dudect-baremetal-contract.md), adopted on 2026-10-22,
 replaces PR crops1–100 for exactly seven cases with distributed calibration:
 one class/time-independent reserved position per sixteen original positions,
 current-prefix pooled quantiles, whole inclusive ties, and disjoint remaining

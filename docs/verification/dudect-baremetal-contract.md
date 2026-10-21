@@ -2,9 +2,9 @@
 
 Last updated: 2026-10-22
 
-Status: draft
+Status: current implementation baseline
 
-Status note: adoption candidate; owner review pending. CI admission remains disabled.
+Status note: adopted in the limited scope on 2026-10-22; CI admission remains disabled.
 
 Owner: Engineering
 
@@ -20,7 +20,7 @@ constant-time assurance. A machine type alone is not an environment contract.
 ## Normative documents and execution evidence
 
 The [versioned contract](../../ci/contracts/dudect-baremetal-v1/contract.json)
-is the single entry to the proposed adoption specification. Its linked scope,
+is the single entry to the adopted specification. Its linked scope,
 sensitivity and role documents agree on seven calibrated cases and fourteen
 other cases. Scope governs case membership; roles govern final eligibility;
 sensitivity governs the retained signals, numerical obligations and deadlines.
@@ -142,8 +142,13 @@ checkpoint preserves those earlier results and their original verification scope
 ## Review and admission boundary
 
 The Fable review supports conditional adoption within the limited scope above.
-This successor addresses its three mandatory findings; it is pending owner
-review and is not an adoption receipt. Remaining statistical assumptions,
+The repository owner approved the corrected version on 2026-10-22. The
+[adoption record](../../ci/evidence/dudect-contract-adoption-20261022.json) binds
+the reviewed commit, exact contract bytes, three normative documents and
+supporting receipts. It closes the final contract review within the scope above.
+The frozen contract and earlier receipts retain their creation-time pending
+fields; the new adoption record supplies their current adoption state without
+changing those bytes. Remaining statistical assumptions,
 historical detections, other environments and sensitivity limits remain explicit.
 The partially truncated information findings in the supplied review are not
 reconstructed as new requirements.
