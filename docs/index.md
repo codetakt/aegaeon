@@ -282,6 +282,7 @@ Audience: contributors, maintainers
 | `docs/verification/claims/verification-maturity-status.md` | claim | Verification Maturity Status | snapshot | 2026-07-08 | Verification | verification reviewers, maintainers |
 | `docs/verification/dudect-analysis-package.md` | verification | Opt-in Dudect analysis package | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-baremetal-checkpoint.md` | verification | Dudect bare-metal research checkpoint | snapshot | 2026-10-19 | Engineering | maintainers, verification reviewers |
+| `docs/verification/dudect-calibration-qualification.md` | verification | Dudect calibration and role qualification | snapshot | 2026-10-21 | Engineering | maintainers, verification reviewers |
 | `docs/verification/dudect-case-contract.md` | verification | Per-case timing observation contract | current implementation baseline | 2026-10-12 | Engineering | verification tooling maintainers |
 | `docs/verification/dudect-hosted-migration.md` | verification | GitHub-hosted Dudect migration candidate | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-four-exception.md` | verification | PR four-exception supplement | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |

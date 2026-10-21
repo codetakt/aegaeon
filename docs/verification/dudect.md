@@ -8,6 +8,10 @@ Owner: Engineering
 
 Audience: contributors
 
+The separately bound [calibration and role qualification candidate](dudect-calibration-qualification.md)
+has completed its finite physical inventory. That checkpoint does not replace
+this ordinary contract or enable CI admission.
+
 Nix is the primary entry point. `bash scripts/ci/dudect_check.sh pr` builds a
 source-bound native package and collects **fresh** observations. Building
 `.#dudect-check` alone produces binaries and their input manifests, never timing

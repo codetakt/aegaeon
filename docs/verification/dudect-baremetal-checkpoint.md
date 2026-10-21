@@ -10,6 +10,10 @@ Owner: Engineering
 
 Audience: maintainers, verification reviewers
 
+The later [calibration and role qualification](dudect-calibration-qualification.md)
+records the completed sensitivity and all-case integration stages. This earlier
+checkpoint retains its original scope, identities and results.
+
 The finite GCC/Clang run uses source `118f98f5cace51778efaed4f8bbdc4983de90e5a`
 and tree `00e919bcf5ad1ac62ebf708e5719442ca7a0d28f`. Later documentation commits
 preserve that measured source identity. The public
