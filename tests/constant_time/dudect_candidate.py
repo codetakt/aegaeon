@@ -45,7 +45,7 @@ def canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-NUMERICAL_PARAMETERS = {
+BASE_NUMERICAL_PARAMETERS = {
     "schema": 5,
     "case_executions": 21,
     "statistics": STATISTICS,
@@ -63,6 +63,21 @@ NUMERICAL_PARAMETERS = {
     "continuous": "fractional_df_welch_positive_variance",
     "timer": "mfence_lfence_rdtsc_lfence_requires_execution_serialization",
 }
+BASE_NUMERICAL_SHA256 = digest(canonical(BASE_NUMERICAL_PARAMETERS))
+SPARSE_RUNTIME = {
+    "schema": "dudect-pr-sparse-runtime/1",
+    "base_numerical_sha256": BASE_NUMERICAL_SHA256,
+    "base_contract_sha256": "c44d1ac1ef801e229448960e57e90b2851be819cd449492a5500000996c97ca6",
+    "policy_sha256": "78072812fe889501b24ea4fdb1081634fa43145ff29dd4a033ef19d3532f4093",
+    "profile": "pr",
+    "exceptions": [2, 3],
+    "prefix": "original_frames_through_current_look_before_ack",
+    "failure": "evidence_resource_deadline_errors_fail_collection",
+    "worker_address_space_bytes": 256 * 1024 * 1024,
+    "look_seconds": 10,
+    "valid_base_tests": "unchanged",
+}
+NUMERICAL_PARAMETERS = {**BASE_NUMERICAL_PARAMETERS, "sparse_runtime": SPARSE_RUNTIME}
 NUMERICAL_SHA256 = digest(canonical(NUMERICAL_PARAMETERS))
 
 
