@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dudect_affinity import collector_placement
 from dudect_candidate import (
     ALPHA,
     CANDIDATE_CASES,
@@ -37,6 +38,8 @@ from dudect_diagnostics import (
 )
 from dudect_process import load_json, receive, terminate
 from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES as PROFILES, STATISTICS
+from dudect_sparse_contract import check_runtime_contract
+from dudect_sparse_runtime import PROOF_NAME, RuntimeStream, Worker
 from dudect_support import require
 from dudect_timing import TIMING_ENV, TIMING_NAME, validate_timing
 from run import (
@@ -137,6 +140,7 @@ def freeze_sources(root: Path, evidence: Path) -> tuple[Path, dict[str, str]]:
 
 
 def check_contract(snapshot: Path) -> str:
+    check_runtime_contract(snapshot / "tests/constant_time/contracts")
     data = (snapshot / "tests/constant_time/contracts/case-contract-candidate.json").read_bytes()
     contract = load_json(data)
     expected = {f"{suite}/{name}" for suite, names in CANDIDATE_CASES.items() for name in names}
@@ -231,11 +235,13 @@ def build(
     return binary, identity
 
 
-def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle together
+def collect(  # noqa: PLR0912, PLR0915 - keep the owned process/evidence lifecycle together
     snapshot: Path, evidence: Path, binary: Path, profile: str, bindings: dict[str, Any]
 ) -> dict[str, Any]:
     names = tuple(bindings)
-    stream = CandidateStream(names, profile, bindings=bindings)
+    stream_type = RuntimeStream if profile == "pr" else CandidateStream
+    stream = stream_type(names, profile, bindings=bindings)
+    worker = None
     argv = [str(binary), profile]
     status = {"argv": argv, "accepted": False, "collection_complete": False}
     process = None
@@ -244,25 +250,41 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
     status["diagnostics"] = diagnostics
     try:
         with (
+            collector_placement() as placement,
             (evidence / "native.stdout").open("wb") as output,
             (evidence / "native.stderr").open("wb") as errors,
             (evidence / CONTEXT_NAME).open("xb") as runtime,
             contextlib.ExitStack() as files,
         ):
+            status["cpu_placement"] = placement
             capture = RuntimeCapture(runtime)
             capture.snapshot("start")
             environment = dict(os.environ)
             environment.pop(TRACE_ENV, None)
             environment.pop(TIMING_ENV, None)
             timing = files.enter_context((evidence / TIMING_NAME).open("xb"))
+            if profile == "pr":
+                journal = files.enter_context((evidence / PROOF_NAME).open("xb"))
+                worker_errors = files.enter_context((evidence / "sparse-worker.stderr").open("wb"))
+                worker = Worker(evidence / TIMING_NAME, bindings, worker_errors)
+                files.callback(worker.close)
+                stream.attach(worker, journal)
             descriptors: tuple[int, ...] = (timing.fileno(),)
             environment[TIMING_ENV] = str(timing.fileno())
             if "ct_eq_128" in bindings:
                 samples = files.enter_context((evidence / TRACE_NAME).open("xb"))
                 descriptors = (*descriptors, samples.fileno())
                 environment[TRACE_ENV] = str(samples.fileno())
+            launcher = [
+                sys.executable,
+                str(snapshot / "tests/constant_time/dudect_affinity.py"),
+                str(placement["native"][0]),
+                str(evidence / "affinity.json"),
+                *argv,
+            ]
+            status["launcher_argv"] = launcher
             process = subprocess.Popen(
-                argv,
+                launcher,
                 cwd=snapshot,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -283,6 +305,12 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
             finally:
                 status["exit"] = terminate(process)
                 capture.snapshot("end")
+            affinity = load_json((evidence / "affinity.json").read_bytes())
+            require(
+                affinity == {"pid": process.pid, "native": placement["native"], "argv": argv},
+                "Native affinity receipt mismatch",
+            )
+            diagnostics["affinity"] = file_identity(evidence / "affinity.json")
             diagnostics["timing"] = validate_timing(
                 evidence / TIMING_NAME, bindings, profile, stream.histories
             )
@@ -290,18 +318,26 @@ def collect(  # noqa: PLR0915 - keep the owned process/evidence lifecycle togeth
                 diagnostics["samples"] = validate_trace(
                     evidence / TRACE_NAME, bindings["ct_eq_128"], profile
                 )
+            require(
+                time.monotonic() < stream.deadline,
+                "Case deadline reached during final evidence verification",
+            )
             status["collection_complete"] = True
     finally:
         if process is not None and "exit" not in status:
             status["exit"] = terminate(process)
         status["elapsed_seconds"] = time.monotonic() - started
         for name, filename in (
+            ("affinity", "affinity.json"),
             ("runtime", CONTEXT_NAME),
             ("samples", TRACE_NAME),
             ("timing", TIMING_NAME),
+            ("sparse", PROOF_NAME),
         ):
             if (evidence / filename).is_file() and name not in diagnostics:
                 diagnostics[name] = file_identity(evidence / filename)
+        if profile == "pr":
+            write_json(evidence / "effective-decisions.json", getattr(stream, "effective", []))
         for name, value in (
             ("process", status),
             ("observations", stream.histories),

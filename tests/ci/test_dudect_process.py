@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,9 @@ from test_dudect_candidate import binding as candidate_binding, observation as c
 from test_dudect_statistics import observation
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "constant_time"))
+from dudect_candidate import canonical, digest
 from dudect_process import NativeError, run_native
+from dudect_sparse_contract import check_runtime_contract
 from run_candidate import collect
 
 
@@ -132,33 +135,53 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
             [json.dumps(candidate_observation(name, look=look)) for look in range(1, 9)]
             for name in self.names
         ]
-        bound = self.bindings[self.names[0]]
-        header = b"AEGTIM03" + b"".join(
-            bound[key].encode() for key in ("build_sha256", "contract_sha256", "numerical_sha256")
+        # Real current-format prefixes let deadline tests reach ACK processing.
+        from dudect_fixture import NATIVE  # noqa: PLC0415
+
+        for observations in rows:
+            for i, encoded in enumerate(observations):
+                row = json.loads(encoded)
+                row["binding"]["contract_sha256"] = check_runtime_contract()
+                row["binding"]["build_sha256"] = digest(canonical({"fixture": "deadline"}))
+                observations[i] = row
+        self.bindings = {items[0]["case"]: items[0]["binding"] for items in rows}
+        source = NATIVE.replace("ROWS", repr({"pr": [row for items in rows for row in items]}))
+        source = source.replace("NAME", repr("deadline_fixture"))
+        source = source.replace("import array,", "import time, array,")
+        source = source.replace(
+            "Path.cwd() / 'tests/constant_time'",
+            repr(str(Path(__file__).resolve().parents[1] / "constant_time")),
         )
-        self.binary.write_text(
-            f"#!{sys.executable}\nimport os, struct, sys, time\n"
-            "with os.fdopen(os.dup(int(os.environ['AEGAEON_DUDECT_TIMING_FD'])), 'wb') as f:\n"
-            f" f.write({header!r})\n"
-            " stamp=1\n"
-            " for name, stride in [('ct_eq_32',32), ('ct_eq_64',64)]:\n"
-            "  f.write(struct.pack('<64s5Q',name.encode(),stride,0,16,16,16))\n"
-            "  for batch in range(17):\n"
-            "   f.write(struct.pack('<18Q',batch,65536,stamp,stamp+1,*([0]*14)))\n"
-            "   stamp+=2\n"
-            "   f.seek(65536*9-1,1)\n   f.write(b'\\0')\n"
-            f"for delay, rows in zip({delays!r}, {rows!r}, strict=True):\n"
-            " time.sleep(delay)\n"
-            " for row in rows:\n"
-            f"  time.sleep({per_look!r})\n"
-            "  print(row, flush=True)\n  sys.stdin.buffer.read(1)\n"
-            f"time.sleep({final_exit!r})\n"
+        source = source.replace(
+            "    planned = [row",
+            f"    time.sleep(dict(zip({self.names!r}, {delays!r}))[name])\n    planned = [row",
         )
+        source = source.replace(
+            "        print(json.dumps(row),flush=True)",
+            f"        time.sleep({per_look!r})\n        print(json.dumps(row),flush=True)",
+        )
+        source += f"\ntime.sleep({final_exit!r})\n"
+        (self.root / "options.json").write_text("{}")
+        self.binary.write_text(f"#!{sys.executable}\n" + source)
         self.binary.chmod(0o755)
 
     def execute(self):
-        with patch.dict("run_candidate.PROFILES", {"pr": ((*range(1, 8), 16), 200000, 1.0)}):
-            return collect(self.root, self.root, self.binary, "pr", self.bindings)
+        with (
+            patch.dict(
+                "run_candidate.PROFILES",
+                {"pr": ((*range(1, 8), 16), 200000, getattr(self, "case_seconds", 5.0))},
+            ),
+            patch.dict(
+                os.environ,
+                {
+                    "FIXTURE_OPTIONS": str(self.root / "options.json"),
+                    "FIXTURE_EVENTS": str(self.root / "events.jsonl"),
+                },
+            ),
+        ):
+            return collect(
+                Path(__file__).resolve().parents[2], self.root, self.binary, "pr", self.bindings
+            )
 
     def assert_deadline(self):
         with self.assertRaisesRegex(ValueError, "deadline"):
@@ -172,25 +195,26 @@ class DudectCandidateDeadlineTests(unittest.TestCase):
         self.assertTrue((self.root / "decisions.json").is_file())
 
     def test_first_case_cannot_borrow_later_case_budget(self):
-        self.program(delays=(1.5, 0))
+        self.program(delays=(6, 0))
         self.assert_deadline()
 
     def test_later_case_cannot_borrow_unused_earlier_budget(self):
-        self.program(delays=(0, 1.5))
+        self.program(delays=(0, 6))
         self.assert_deadline()
 
     def test_completed_case_starts_a_fresh_individual_budget(self):
-        self.program(delays=(0.6, 0.6))
+        self.case_seconds = 12.0
+        self.program(delays=(7, 7))
         observed = self.execute()
         self.assertEqual(set(observed), set(self.names))
         self.assertTrue(json.loads((self.root / "process.json").read_text())["collection_complete"])
 
     def test_each_look_cannot_restart_the_case_budget(self):
-        self.program(per_look=0.2)
+        self.program(per_look=0.8)
         self.assert_deadline()
 
     def test_final_observation_does_not_renew_process_exit_budget(self):
-        self.program(final_exit=1.5)
+        self.program(final_exit=6)
         self.assert_deadline()
 
 
