@@ -97,8 +97,8 @@ def exact_tail(histograms: list[dict[int, int]], values: dict[int, Fraction]) ->
     n0, n1 = counts
     total = n0 + n1
     deviations = {t: v - values[mode] for t, v in values.items()}
-    pooled_sum = sum(deviations[t] * n for t, n in pooled.items())
-    actual_sum = sum(deviations[t] * n for t, n in histograms[0].items())
+    pooled_sum = sum((deviations[t] * n for t, n in pooled.items()), Fraction())
+    actual_sum = sum((deviations[t] * n for t, n in histograms[0].items()), Fraction())
     observed = abs(total * actual_sum - n0 * pooled_sum)
     denominator = falling(total, r)
     numerator = mass = states = 0
@@ -106,7 +106,9 @@ def exact_tail(histograms: list[dict[int, int]], values: dict[int, Fraction]) ->
         k = sum(allocation)
         weight = falling(n0, k) * falling(n1, r - k)
         weight *= math.prod(math.comb(n, a) for (_, n), a in zip(rare, allocation, strict=True))
-        allocated = sum(deviations[t] * a for (t, _), a in zip(rare, allocation, strict=True))
+        allocated = sum(
+            (deviations[t] * a for (t, _), a in zip(rare, allocation, strict=True)), Fraction()
+        )
         mass += weight
         states += 1
         if abs(total * allocated - n0 * pooled_sum) >= observed:

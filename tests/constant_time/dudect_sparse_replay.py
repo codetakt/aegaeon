@@ -9,6 +9,7 @@ import math
 import struct
 from collections import Counter
 from fractions import Fraction
+from typing import Any
 
 from dudect_candidate import CandidateAdmission, significant
 from dudect_results import BATCH_SIZE, CANDIDATE_PROFILES, NONDETECTION
@@ -19,15 +20,15 @@ from dudect_support import binary64, require
 class Prefix:
     """Consume frames in order; no future labels, modes or counts are consulted."""
 
-    def __init__(self):
-        self.histograms = [Counter(), Counter()]
+    def __init__(self) -> None:
+        self.histograms: list[Counter[int]] = [Counter(), Counter()]
         self.batch = -1
         self.rejected = 0
-        self.pilot = None
+        self.pilot: dict[str, Any] | None = None
         self.prepared_counts = [0, 0]
-        self.sorted_support = None
+        self.sorted_support: list[tuple[list[int], list[int]]] | None = None
 
-    def push(self, payload: bytes, batch: int, size: int = BATCH_SIZE):
+    def push(self, payload: bytes, batch: int, size: int = BATCH_SIZE) -> None:
         require(batch == self.batch + 1, "Missing or reordered timing frame")
         require(len(payload) >= size * 9, "Truncated timestamp/label frame")
         ticks = struct.unpack_from(f"<{size}q", payload)
@@ -64,7 +65,7 @@ class Prefix:
                 ],
             }
 
-    def check_row(self, row):
+    def check_row(self, row: dict[str, Any]) -> None:
         require(row["batch_size"] == BATCH_SIZE, "Unreviewed batch size")
         require(self.batch == row["batches"], "Look does not match current prefix")
         require(self.pilot == row["pilot"], "Calibration differs from original timestamps")
@@ -74,7 +75,7 @@ class Prefix:
             "Raw counts differ from original prefix",
         )
 
-    def indexed(self):
+    def indexed(self) -> list[tuple[list[int], list[int]]]:
         if self.sorted_support is None:
             self.sorted_support = []
             for histogram in self.histograms:
@@ -83,7 +84,7 @@ class Prefix:
                 self.sorted_support.append((values, counts))
         return self.sorted_support
 
-    def endpoints(self, row, index):
+    def endpoints(self, row: dict[str, Any], index: int) -> list[int]:
         limit = row["pilot"]["cutoffs"][index - 1] if 0 < index < 101 else None
         ends = [
             len(v) if limit is None else bisect.bisect_right(v, limit) for v, _ in self.indexed()
@@ -96,7 +97,9 @@ class Prefix:
         )
         return ends
 
-    def selected(self, row, index, *, small_only=False):
+    def selected(
+        self, row: dict[str, Any], index: int, *, small_only: bool = False
+    ) -> list[dict[int, int]] | None:
         ends = self.endpoints(row, index)
         if small_only and any(end > 4 for end in ends):
             return None
@@ -106,7 +109,7 @@ class Prefix:
         ]
 
 
-def check_moments(histogram, row, index, group):
+def check_moments(histogram: dict[int, int], row: dict[str, Any], index: int, group: int) -> None:
     """Exact dyadic moments, allowing only the existing Welford forward-error budget."""
     count = sum(histogram.values())
     require(count > 0, "Empty histogram certificate")
@@ -132,8 +135,8 @@ def check_moments(histogram, row, index, group):
         recorded_support[key] = binary64(recorded_support[key]).hex()
     require(actual == recorded_support, "Histogram contradicts native support")
     exact = {t: Fraction(v) for t, v in values.items()}
-    total = sum(exact[t] * n for t, n in histogram.items())
-    squares = sum(exact[t] ** 2 * n for t, n in histogram.items())
+    total = sum((exact[t] * n for t, n in histogram.items()), Fraction())
+    squares = sum((exact[t] ** 2 * n for t, n in histogram.items()), Fraction())
     mean, m2 = total / count, squares - total * total / count
     recorded_mean = Fraction(float(row["statistics"][index][2 + group]))
     recorded_m2 = Fraction(float(row["statistics"][index][4 + group]))
@@ -163,7 +166,9 @@ def check_moments(histogram, row, index, group):
     )
 
 
-def augment(row, original, prefix, prior_detected):
+def augment(
+    row: dict[str, Any], original: dict[str, Any], prefix: Prefix, prior_detected: bool
+) -> dict[str, Any]:
     """Preserve the complete original result; supplements only fill an unsupported test."""
     prefix.check_row(row)
     effective = copy.deepcopy(original)
@@ -214,7 +219,7 @@ def augment(row, original, prefix, prior_detected):
     }
 
 
-def baseline_history(rows):
+def baseline_history(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     first = rows[0]
     admission = CandidateAdmission(first["case"], first["profile"], binding=first["binding"])
     history = [admission.admit(row) for row in rows]

@@ -268,6 +268,7 @@ def collect(  # noqa: PLR0912, PLR0915 - keep the owned process/evidence lifecyc
                 worker_errors = files.enter_context((evidence / "sparse-worker.stderr").open("wb"))
                 worker = Worker(evidence / TIMING_NAME, bindings, worker_errors)
                 files.callback(worker.close)
+                assert isinstance(stream, RuntimeStream)
                 stream.attach(worker, journal)
             descriptors: tuple[int, ...] = (timing.fileno(),)
             environment[TIMING_ENV] = str(timing.fileno())
@@ -319,7 +320,7 @@ def collect(  # noqa: PLR0912, PLR0915 - keep the owned process/evidence lifecyc
                     evidence / TRACE_NAME, bindings["ct_eq_128"], profile
                 )
             require(
-                time.monotonic() < stream.deadline,
+                stream.deadline is not None and time.monotonic() < stream.deadline,
                 "Case deadline reached during final evidence verification",
             )
             status["collection_complete"] = True

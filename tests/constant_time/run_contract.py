@@ -93,7 +93,9 @@ def collect_package(
     return collection
 
 
-def verified_histories(evidence, index, collection, expected):
+def verified_histories(
+    evidence: Path, index: dict[str, Any], collection: dict[str, Any], expected: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
     # Validate the complete original envelope before authenticating supplements.
     validate_candidate_report(collection, expected)
     histories = {}
@@ -107,7 +109,9 @@ def verified_histories(evidence, index, collection, expected):
     return histories
 
 
-def assess_verified(collection, contract, histories):
+def assess_verified(
+    collection: dict[str, Any], contract: dict[str, Any], histories: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
     roles = contract_roles(contract)
     return [
         assess_case(
