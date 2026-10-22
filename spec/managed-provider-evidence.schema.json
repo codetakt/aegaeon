@@ -249,6 +249,84 @@
           }
         }
       }
+    },
+    "import_history": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "imported_at",
+          "evidence_path",
+          "evidence_sha256",
+          "importer"
+        ],
+        "properties": {
+          "imported_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evidence_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "importer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "github_run_id",
+              "github_workflow",
+              "github_repository",
+              "github_ref",
+              "github_sha",
+              "github_job"
+            ],
+            "properties": {
+              "github_run_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "github_workflow": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "github_repository": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "github_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "github_sha": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "github_job": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

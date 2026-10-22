@@ -48,9 +48,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
     const rawKey = token.slice(2);
-    const key = rawKey.replace(
-      /-([a-z])/g,
-      (_, character) => character.toUpperCase(),
+    const key = rawKey.replace(/-([a-z])/g, (_, character) =>
+      character.toUpperCase(),
     ) as keyof typeof options;
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) {
@@ -94,46 +93,44 @@ function findWorkspaceRoot(explicitRoot: string | null): string {
   }
 }
 
-async function shaHex(filePath: string): Promise<string> {
-  const hash = createHash("sha256");
-  hash.update(await fs.readFile(filePath));
-  return hash.digest("hex");
-}
-
-async function readJson<T>(filePath: string): Promise<T> {
-  return JSON.parse(await fs.readFile(filePath, "utf8")) as T;
-}
-
-function withHostedSource(
+function withImportRecord(
   evidence: ManagedProviderEvidenceFile,
   sourcePath: string,
   sourceSha256: string,
   rootDir: string,
 ): ManagedProviderEvidenceFile {
-  const previousSource = evidence.source ?? {};
+  if (
+    !evidence ||
+    typeof evidence !== "object" ||
+    Array.isArray(evidence) ||
+    typeof evidence.generated_at !== "string" ||
+    !evidence.source ||
+    !evidence.lane
+  ) {
+    throw new Error("Expected original managed-provider evidence and observation metadata");
+  }
+  if (evidence.import_history !== undefined && !Array.isArray(evidence.import_history)) {
+    throw new Error("Expected an import history array");
+  }
   return {
     ...evidence,
-    source: {
-      ...previousSource,
-      imported_evidence_path: path.relative(rootDir, sourcePath),
-      imported_evidence_sha256: sourceSha256,
-      imported_github_run_id: previousSource.github_run_id ?? null,
-      imported_github_workflow: previousSource.github_workflow ?? null,
-      imported_github_repository: previousSource.github_repository ?? null,
-      imported_github_ref: previousSource.github_ref ?? null,
-      imported_github_sha: previousSource.github_sha ?? null,
-      imported_github_job: previousSource.github_job ?? null,
-      github_run_id: process.env.GITHUB_RUN_ID ?? null,
-      github_workflow: process.env.GITHUB_WORKFLOW ?? null,
-      github_repository: process.env.GITHUB_REPOSITORY ?? null,
-      github_ref: process.env.GITHUB_REF_NAME ?? process.env.GITHUB_REF ?? null,
-      github_sha: process.env.GITHUB_SHA ?? null,
-      github_job: process.env.GITHUB_JOB ?? null,
-    },
-    lane: {
-      ...(evidence.lane ?? {}),
-      hosted: true,
-    },
+    // Importing never changes who observed the result, where, or when.
+    import_history: [
+      ...(evidence.import_history ?? []),
+      {
+        imported_at: new Date().toISOString(),
+        evidence_path: path.relative(rootDir, sourcePath),
+        evidence_sha256: sourceSha256,
+        importer: {
+          github_run_id: process.env.GITHUB_RUN_ID ?? null,
+          github_workflow: process.env.GITHUB_WORKFLOW ?? null,
+          github_repository: process.env.GITHUB_REPOSITORY ?? null,
+          github_ref: process.env.GITHUB_REF ?? null,
+          github_sha: process.env.GITHUB_SHA ?? null,
+          github_job: process.env.GITHUB_JOB ?? null,
+        },
+      },
+    ],
   };
 }
 
@@ -143,11 +140,20 @@ async function main(): Promise<void> {
   const evidencePath = path.resolve(rootDir, options.evidence);
   const outPath = path.resolve(rootDir, options.out);
 
-  const input = await readJson<ManagedProviderEvidenceFile>(evidencePath);
-  const imported = withHostedSource(input, evidencePath, await shaHex(evidencePath), rootDir);
+  const raw = await fs.readFile(evidencePath);
+  const input = JSON.parse(raw.toString("utf8")) as ManagedProviderEvidenceFile;
+  const imported = withImportRecord(
+    input,
+    evidencePath,
+    createHash("sha256").update(raw).digest("hex"),
+    rootDir,
+  );
 
   await fs.mkdir(path.dirname(outPath), { recursive: true });
-  await fs.writeFile(outPath, `${JSON.stringify(imported, null, 2)}\n`, "utf8");
+  await fs.writeFile(outPath, `${JSON.stringify(imported, null, 2)}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+  });
   console.log(`[import-managed-provider-evidence] wrote ${path.relative(rootDir, outPath)}`);
 }
 

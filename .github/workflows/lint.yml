@@ -126,6 +126,11 @@ jobs:
       - name: Run strict TypeScript policy audit
         run: nix develop .#typescript --command npm run audit:strict-types
 
+      - name: Verify managed-provider import provenance
+        run: |
+          nix develop .#typescript --command nix develop .#integrity --command \
+            node --experimental-strip-types tests/verified_core_wasm/managed_provider_evidence_import_test.ts
+
       - name: Run root strict TypeScript policy tests
         run: |
           nix develop .#typescript --command node --experimental-strip-types \
@@ -158,6 +163,11 @@ jobs:
         run: |
           nix develop .#ci --command \
             mypy scripts/validation scripts/ci ci/validate_slos.py ci/validate_load_smoke.py
+
+      - name: Audit CI qualification responsibilities
+        run: |
+          nix develop .#integrity --command python scripts/ci/check_qualification_responsibilities.py
+          nix develop .#integrity --command pytest -q tests/ci/test_qualification_responsibilities.py
 
   rust-strict-lint:
     name: Rust Strict Lint
