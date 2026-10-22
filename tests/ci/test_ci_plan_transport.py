@@ -1047,7 +1047,7 @@ class CiPlanTransportTests(unittest.TestCase):
                     {
                         "name": "Hold qualification-sensitive admission during migration",
                         "if": "needs.plan.outputs.scope == 'full'",
-                        "run": 'echo "::error::External Dudect/performance/provider qualification '
+                        "run": 'echo "::error::External Dudect admission '
                         "is not commissioned. Ordinary CI is functional-only; this full-scope "
                         'change is not admitted for merge."\nexit 1\n',
                     },

@@ -426,7 +426,7 @@ jobs:
       - name: Hold qualification-sensitive admission during migration
         if: needs.plan.outputs.scope == 'full'
         run: |
-          echo "::error::External Dudect/performance/provider qualification is not commissioned. Ordinary CI is functional-only; this full-scope change is not admitted for merge."
+          echo "::error::External Dudect admission is not commissioned. Ordinary CI is functional-only; this full-scope change is not admitted for merge."
           exit 1
       - name: Require success of every selected check
         if: needs.exception.outputs.admitted != 'true'

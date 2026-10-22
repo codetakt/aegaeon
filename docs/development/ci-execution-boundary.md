@@ -1,6 +1,6 @@
 # CI execution and qualification boundaries
 
-Last updated: 2026-10-20
+Last updated: 2026-10-23
 
 Status: active plan
 
@@ -9,6 +9,14 @@ Owner: Engineering
 Audience: maintainers, verification reviewers
 
 Migration implementation: external admission is not commissioned. Task 3 remains paused.
+
+The current implementation sequence is Dudect qualification and its CI connection,
+then reviewed PR integration and functional completeness, then full assurance.
+The owner confirmed this separation on 2026-10-23. Performance and managed-provider
+qualification are separate work; completing their whole assurance designs is not
+a prerequisite for closing the Dudect work. Existing selected functional checks
+remain required. The present full-scope hold names the unfinished Dudect admission
+connection; it is not a demand to complete Task3 before ordinary CI can run.
 
 Ordinary GitHub-hosted CI checks build, lint, tests, formal verification, dependency
 integrity, real callback self-tests and load/observability functionality. It does

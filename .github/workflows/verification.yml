@@ -284,11 +284,25 @@ jobs:
           enable-flakehub-cache: "true"
       - name: Build and self-test all callbacks
         run: nix build .#verify-dudect --out-link result-dudect-functional -L
+      - name: Verify the adopted Dudect sources and evidence interfaces
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/dudect-functional
+          analysis_python="$(nix build .#dudect-analysis.python --no-link --print-out-paths)"
+          env -u PYTHONPATH -u PYTHONHOME "$analysis_python/bin/python" \
+            scripts/validation/verify_dudect_review_followup.py \
+            > artifacts/dudect-functional/source-correspondence.json
+          env -u PYTHONPATH -u PYTHONHOME "$analysis_python/bin/python" \
+            -m unittest discover -s tests/dudect_adoption -p 'test_*.py' -v \
+            > artifacts/dudect-functional/adoption-tests.log 2>&1
       - name: Preserve functional results
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dudect-functional-results
-          path: result-dudect-functional/functional/functional-report.json
+          path: |
+            result-dudect-functional/functional/functional-report.json
+            artifacts/dudect-functional/
           if-no-files-found: error
 
   # Tamarin Protocol Verification
