@@ -153,6 +153,11 @@ historical detections, other environments and sensitivity limits remain explicit
 The partially truncated information findings in the supplied review are not
 reconstructed as new requirements.
 
+Optional reporting, deadline-order and test-portability improvements are tracked
+in [the follow-up implementation](dudect-review-improvements.md). That separate
+layer retains the measured evaluator and supplies replay-bound reports; it does
+not reopen this contract review or grant CI admission.
+
 Protected CI admission still needs an independently trusted producer, exact
 revision/artifact binding, obligation completeness, freshness/reuse rules and
 independent validation. A PR-controlled JSON receipt or this verifier cannot

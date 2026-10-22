@@ -289,6 +289,7 @@ Audience: contributors, maintainers
 | `docs/verification/dudect-pr-four-exception.md` | verification | PR four-exception supplement | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-sparse-experiment.md` | verification | Experimental PR sparse-support replay | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
 | `docs/verification/dudect-pr-sparse-runtime.md` | verification | Private PR sparse runtime candidate | draft | 2026-10-16 | Aegaeon maintainers | verification maintainers |
+| `docs/verification/dudect-review-improvements.md` | verification | Dudect replay reporting and operation-test improvements | draft | 2026-10-22 | Engineering | CI maintainers, verification reviewers |
 | `docs/verification/dudect.md` | verification | Timing observation profiles | current implementation baseline | 2026-10-13 | Engineering | contributors |
 | `docs/verification/fstar/README.md` | index | F\* Verification Overview | current implementation baseline | 2026-07-08 | Verification | verification reviewers, contributors |
 | `docs/verification/fstar/assumption-graph.md` | verification | F\* Effective-Assumption Graph | current implementation baseline | 2026-09-12 | Verification | verification reviewers, contributors |
