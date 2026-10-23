@@ -71,8 +71,11 @@ The public `scheduled_ordinary(cutoff, ...)` helper installs
 `schedule.installed(cutoff)` before calling `ordinary.execute`, which installs the
 live worker and stream. The cutoff is a finite absolute monotonic time supplied
 by the already bounded controller. Insufficient initial time is rejected before
-execution. The existing stream withholds the ACK if the next case cannot fit;
-success and exceptions restore both installation contexts.
+execution. Installation supplies a cutoff-bound stream **class**, preserving the
+collector's runtime type check. Each executable constructs a new stream and must
+still have at least 900 seconds before initialization, worker creation or native
+launch. The stream also withholds the ACK if the next case in the same executable
+cannot fit; success and exceptions restore both installation contexts.
 
 This closes the public-caller and installation-order gap. It does not implement
 an independent stop guard, provision infrastructure or authorize a new run. The
@@ -123,10 +126,33 @@ New reports use `ordinary-replay-report/1` and explicit case inventories. The
 HMAC-only research entry remains outside the adopted seven-case entry.
 
 The limited contract review stays closed. Further review of authenticated CI
-admission is separate. The ordinary measurement source, mathematical inference,
+admission is separate. Archived measurement sources, mathematical inference,
 role requirements, historical failures and physical evidence are unchanged.
+The current scheduler differs from the archived implementation as described below.
 
-## Verification result
+## Scheduling correction (2026-10-23)
+
+The original connection tests mocked `ordinary.execute` and missed two defects:
+installing a function in place of `RuntimeStream` raised `TypeError` at collection
+setup, and later executables did not recheck their initial 900-second budget.
+The corrected installation uses a subclass and checks the budget for every stream.
+The regression tests exercise the real public wrapper, ordinary execution loop,
+collector setup and journal attachment. Only external transport, environment
+inspection and final replay are replaced by fixtures; no timing samples are taken.
+They cover two executables, exactly 900 seconds remaining, refusal at 899 seconds,
+expired and non-finite cutoffs, and restoration after a launch failure. Both normal
+Python and `-O` must pass.
+
+The [source correction receipt](../../ci/evidence/dudect-schedule-correction-20261023.json)
+preserves the previous published scheduler bytes and binds their historical hash,
+the measured-source hash and the corrected-source hash. The source verifier checks
+all three without modifying the archived source, original receipt or adoption
+contract. Of the 44 Python files, 42 historically had normalized AST correspondence;
+the current tree has 41, plus this explicit operational correction and the two
+already recorded test-only changes. This correction does not transfer historical
+physical qualification to the changed scheduler or grant external CI admission.
+
+## Historical verification result (2026-10-22)
 
 The [implementation receipt](../../ci/evidence/dudect-optional-review-20261022.json)
 binds the added files and records 24 new regression tests, 31 including the existing

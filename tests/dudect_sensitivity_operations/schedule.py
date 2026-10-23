@@ -1,8 +1,9 @@
-# Preserve import/annotation behavior of the measured checkpoint.
+# The measured checkpoint remains in the source archive; this is a runtime correction.
 # ruff: noqa: I002
 """Absolute acquisition cutoff, checked before allowing the next native case."""
 
 import contextlib
+import math
 import time
 
 import analysis_runtime
@@ -13,6 +14,10 @@ BaseStream = analysis_runtime.Stream
 
 class Stream(BaseStream):
     def __init__(self, *args, absolute_deadline, **kwargs):
+        require(
+            math.isfinite(absolute_deadline) and time.monotonic() + 900 <= absolute_deadline,
+            "Insufficient remaining budget for executable",
+        )
         super().__init__(*args, **kwargs)
         self.absolute_deadline = absolute_deadline
 
@@ -32,11 +37,17 @@ class Stream(BaseStream):
 
 @contextlib.contextmanager
 def installed(cutoff):
-    require(time.monotonic() + 900 <= cutoff, "Insufficient initial case budget")
-    old = analysis_runtime.Stream
-    analysis_runtime.Stream = lambda *args, **kwargs: Stream(
-        *args, absolute_deadline=cutoff, **kwargs
+    require(
+        math.isfinite(cutoff) and time.monotonic() + 900 <= cutoff,
+        "Insufficient initial case budget",
     )
+
+    class CutoffStream(Stream):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, absolute_deadline=cutoff, **kwargs)
+
+    old = analysis_runtime.Stream
+    analysis_runtime.Stream = CutoffStream
     try:
         yield
     finally:

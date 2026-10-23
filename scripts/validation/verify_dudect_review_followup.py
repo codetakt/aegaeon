@@ -56,6 +56,43 @@ def syntax(data: bytes) -> str:
     return ast.dump(Syntax().visit(ast.parse(data)), include_attributes=False)
 
 
+SCHEDULE_SOURCE = "tests/dudect_sensitivity_operations/schedule.py"
+SCHEDULE_CORRECTION = "ci/evidence/dudect-schedule-correction-20261023.json"
+
+
+def schedule_correction(root: Path, original: dict[str, str]) -> tuple[bytes, bytes]:
+    """Verify one explicit post-measurement correction, not an AST exception list."""
+    receipt = json.loads((root / SCHEDULE_CORRECTION).read_bytes())
+    require(
+        receipt["schema"] == "dudect-schedule-source-correction/1"
+        and receipt["path"] == SCHEDULE_SOURCE,
+        "Wrong scheduling correction scope",
+    )
+    require(
+        receipt["new_physical_trials"] == 0
+        and receipt["physical_equivalence_asserted"] is False
+        and receipt["ci_admission"] is False,
+        "Scheduling correction cannot grant physical qualification or admission",
+    )
+    historical = receipt["historical_publication_source"].encode("utf-8")
+    require(
+        sha(historical)
+        == receipt["historical_publication_sha256"]
+        == original["publication_sha256"]
+        and receipt["measured_sha256"] == original["measured_sha256"],
+        "Historical scheduling correspondence changed",
+    )
+    current = (root / SCHEDULE_SOURCE).read_bytes()
+    require(
+        sha(current) == receipt["corrected_publication_sha256"], "Corrected scheduling hash changed"
+    )
+    require(
+        syntax(current) != syntax(historical),
+        "Scheduling correction must declare its executable change",
+    )
+    return historical, current
+
+
 def verify(root: Path) -> dict[str, object]:
     root = root.resolve()
     folder = root / "ci/contracts/dudect-baremetal-v1"
@@ -146,8 +183,9 @@ def verify(root: Path) -> dict[str, object]:
     inventory = checkpoint["publication_source_correspondence"]["files"]
     expected = {row["path"]: row for row in inventory}
     require(len(expected) == len(inventory) == 54, "Incomplete source correspondence inventory")
+    old_schedule, current_schedule = schedule_correction(root, expected[SCHEDULE_SOURCE])
     exceptions = set(contract["measured_source"]["test_only_AST_changes"])
-    python_count = equal_count = 0
+    python_count = equal_count = historical_equal_count = 0
     observed_exceptions = set()
     with tarfile.open(archive_path, "r:gz") as archive:
         members = archive.getmembers()
@@ -164,20 +202,27 @@ def verify(root: Path) -> dict[str, object]:
                 raise ValueError(message)
             measured = source.read()
             row = expected[member.name]
-            published = (root / member.name).read_bytes()
+            current = (
+                current_schedule
+                if member.name == SCHEDULE_SOURCE
+                else (root / member.name).read_bytes()
+            )
+            published = old_schedule if member.name == SCHEDULE_SOURCE else current
             require(sha(measured) == row["measured_sha256"], f"Measured hash: {member.name}")
             require(sha(published) == row["publication_sha256"], f"Published hash: {member.name}")
             if member.name.endswith(".py"):
                 python_count += 1
                 same = syntax(measured) == syntax(published)
                 if same:
-                    equal_count += 1
+                    historical_equal_count += 1
                 else:
                     require(
                         member.name in exceptions and row["test_only"],
                         f"Execution syntax changed: {member.name}",
                     )
                     observed_exceptions.add(member.name)
+                if syntax(measured) == syntax(current):
+                    equal_count += 1
             elif not member.name.endswith(".md"):
                 require(measured == published, f"Non-Python measured input changed: {member.name}")
     require(
@@ -207,6 +252,8 @@ def verify(root: Path) -> dict[str, object]:
         "source_files": len(expected),
         "python_files": python_count,
         "normalized_AST_equal": equal_count,
+        "historical_publication_AST_equal": historical_equal_count,
+        "post_measurement_source_corrections": [SCHEDULE_SOURCE],
         "test_only_AST_changes": sorted(observed_exceptions),
         "historical_checkpoint_unchanged": True,
         "new_contracts_scope_consistent": True,

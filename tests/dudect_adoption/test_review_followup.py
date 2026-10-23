@@ -32,6 +32,7 @@ class FollowupTests(unittest.TestCase):
             checkpoint,
             ROOT / "ci/evidence/dudect-contract-review-followup-20261022.json",
             ROOT / "ci/evidence/dudect-measured-source-20261021.tar.gz",
+            ROOT / CHECK.SCHEDULE_CORRECTION,
         ]
         for path in paths:
             target = self.root / path.relative_to(ROOT)
@@ -42,7 +43,9 @@ class FollowupTests(unittest.TestCase):
         report = CHECK.verify(self.root)
         self.assertEqual(report["source_files"], 54)
         self.assertEqual(report["python_files"], 44)
-        self.assertEqual(report["normalized_AST_equal"], 42)
+        self.assertEqual(report["normalized_AST_equal"], 41)
+        self.assertEqual(report["historical_publication_AST_equal"], 42)
+        self.assertEqual(report["post_measurement_source_corrections"], [CHECK.SCHEDULE_SOURCE])
         self.assertFalse(report["ci_admission"])
 
     def test_modified_source_rejected(self):
@@ -56,6 +59,37 @@ class FollowupTests(unittest.TestCase):
         path.write_bytes(path.read_bytes()[:-1])
         with self.assertRaisesRegex(ValueError, "archive changed"):
             CHECK.verify(self.root)
+
+    def test_modified_corrected_scheduler_rejected(self):
+        path = self.root / CHECK.SCHEDULE_SOURCE
+        path.write_bytes(path.read_bytes() + b"\n# changed\n")
+        with self.assertRaisesRegex(ValueError, "Corrected scheduling hash"):
+            CHECK.verify(self.root)
+
+    def test_correction_cannot_rewrite_historical_source(self):
+        path = self.root / CHECK.SCHEDULE_CORRECTION
+        receipt = json.loads(path.read_bytes())
+        receipt["historical_publication_source"] += "\n# changed\n"
+        receipt["historical_publication_sha256"] = CHECK.sha(
+            receipt["historical_publication_source"].encode()
+        )
+        path.write_text(json.dumps(receipt))
+        with self.assertRaisesRegex(ValueError, "Historical scheduling correspondence"):
+            CHECK.verify(self.root)
+
+    def test_correction_cannot_change_scope_or_claim_physical_qualification(self):
+        path = self.root / CHECK.SCHEDULE_CORRECTION
+        original = json.loads(path.read_bytes())
+        for field, bad in (
+            ("path", "tests/dudect_sensitivity_operations/ordinary.py"),
+            ("new_physical_trials", 1),
+            ("physical_equivalence_asserted", True),
+            ("ci_admission", True),
+        ):
+            with self.subTest(field=field):
+                path.write_text(json.dumps(original | {field: bad}))
+                with self.assertRaises(ValueError):
+                    CHECK.verify(self.root)
 
     def test_scope_mismatch_even_after_local_rebinding(self):
         folder = self.root / "ci/contracts/dudect-baremetal-v1"
