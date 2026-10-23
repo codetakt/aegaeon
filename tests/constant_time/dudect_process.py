@@ -55,6 +55,7 @@ class ObservationStream:
     decisions: list[dict[str, Any]] = field(default_factory=list)
     histories: dict[str, list[Any]] = field(init=False)
     admission: CaseAdmission = field(init=False)
+    absolute_deadline: float | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         self.histories = {name: [] for name in self.cases}
@@ -96,7 +97,7 @@ class ObservationStream:
             invalid(f"Incomplete native dudect execution (exit {code})")
 
 
-def receive(  # noqa: PLR0912 - bounded process and per-case deadline lifecycle
+def receive(  # noqa: C901, PLR0912 - bounded process and per-case deadline lifecycle
     process: subprocess.Popen[bytes],
     output: IO[bytes],
     stream: ObservationStream,
@@ -109,6 +110,11 @@ def receive(  # noqa: PLR0912 - bounded process and per-case deadline lifecycle
     with selectors.DefaultSelector() as selector:
         selector.register(process.stdout, selectors.EVENT_READ)
         while selector.get_map():
+            # Apply the acquisition limit even before the first observation and
+            # after an intermediate case renews its individual budget.
+            if stream.absolute_deadline is not None:
+                deadline = min(deadline, stream.absolute_deadline)
+            stream.deadline = deadline
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 invalid("Native dudect deadline reached: inconclusive")

@@ -341,6 +341,89 @@ class ScheduleConnectionTests(unittest.TestCase):
     def test_stricter_case_deadline_is_preserved(self):
         self.complete_transport(deadline=800, ack=799.5, eof=799.6, exit_at=799.7, finish_at=799.8)
 
+    def stalled_transport(  # noqa: C901, PLR0915 - keep the silent-wait lifecycle fixture together
+        self, *, cutoff=900, renew=False, initial_time=899.8, deadline=900.5
+    ):
+        """Bound silent waits using the real scheduler, consume and transport."""
+        process = SimpleNamespace(stdout=object(), stdin=io.BytesIO(), wait=Mock())
+        selector = Mock()
+        selector.__enter__ = Mock(return_value=selector)
+        selector.__exit__ = Mock(return_value=False)
+        selector.get_map.return_value = True
+        key = SimpleNamespace(fd=99, fileobj=process.stdout)
+        waits = []
+
+        def initialize(obj):
+            obj.deadline = obj.before_observation = None
+            obj.index = obj.total = 0
+            obj.cases = ("first", "second") if renew else ("first",)
+            obj.buffer = b""
+            clock.return_value += 0.5
+
+        def observe(obj, _line):
+            obj.index += 1
+
+        def flush():
+            # Time between the next-case budget check and budget renewal.
+            clock.return_value += 0.5
+
+        def select(timeout):
+            waits.append((clock.return_value, timeout))
+            if renew and stream.index == 0:
+                return [(key, 1)]
+            clock.return_value += timeout
+            return []
+
+        with (
+            patch.object(self.schedule.time, "monotonic", return_value=0) as clock,
+            patch.object(self.schedule.BaseStream, "__init__", initialize),
+            patch.object(self.schedule.BaseStream, "observe", observe),
+            patch.object(self.transport.ObservationStream, "observe", observe),
+            patch.object(self.transport.selectors, "DefaultSelector", return_value=selector),
+            patch.object(self.transport.os, "read", return_value=b"{}\n"),
+        ):
+            if cutoff is None:
+                stream = object.__new__(self.transport.ObservationStream)
+                initialize(stream)
+            else:
+                stream = self.schedule.Stream(absolute_deadline=cutoff)
+            self.assertEqual(clock.return_value, 0.5)
+            clock.return_value = initial_time
+            process.stdin.flush = flush
+            selector.select.side_effect = select
+            with self.assertRaisesRegex(ValueError, "deadline reached"):
+                self.transport.receive(process, io.BytesIO(), stream, deadline, case_budget=900)
+            expected = initial_time + 0.5 + 900 if renew else deadline
+            if cutoff is not None:
+                expected = min(expected, cutoff)
+            self.assertEqual(clock.return_value, max(initial_time, expected))
+            if cutoff is not None and stream.deadline is not None:
+                self.assertEqual(stream.deadline, expected)
+            for started, timeout in waits:
+                self.assertLessEqual(started + timeout, expected)
+            self.assertEqual(process.stdin.getvalue(), b"c" if renew else b"")
+            process.wait.assert_not_called()
+            if initial_time >= expected:
+                selector.select.assert_not_called()
+
+    def test_stall_before_first_observation_obeys_acquisition_cutoff(self):
+        self.stalled_transport()
+
+    def test_expired_cutoff_never_starts_first_selector_wait(self):
+        self.stalled_transport(initial_time=900)
+
+    def test_case_budget_renewal_cannot_extend_acquisition_wait(self):
+        self.stalled_transport(cutoff=1000, renew=True, initial_time=100)
+
+    def test_silent_first_case_preserves_stricter_case_limit(self):
+        self.stalled_transport(deadline=800, initial_time=799.8)
+
+    def test_silent_unscheduled_stream_keeps_original_case_limit(self):
+        self.stalled_transport(cutoff=None)
+
+    def test_unscheduled_stream_still_renews_completed_case_budget(self):
+        self.stalled_transport(cutoff=None, renew=True, initial_time=100)
+
 
 if __name__ == "__main__":
     unittest.main()

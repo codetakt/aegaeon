@@ -76,9 +76,11 @@ collector's runtime type check. Each executable constructs a new stream and must
 still have at least 900 seconds before initialization, worker creation or native
 launch. The stream also withholds the ACK if the next case in the same executable
 cannot fit; success and exceptions restore both installation contexts.
-The transport retains any tighter deadline imposed by the stream while waiting
-for output, process exit and final evidence verification. Only completion of an
-intermediate case starts a fresh case budget, after the scheduler has checked
+The transport applies the absolute cutoff before every output wait, including
+the first observation and waits after case-budget renewal. It also retains any
+tighter deadline imposed by the stream through process exit and final evidence
+verification. Only a completed intermediate case starts a fresh case budget,
+after the scheduler has checked
 that the next case fits within the absolute cutoff. An on-time final ACK does
 not extend the completion deadline.
 
@@ -166,6 +168,15 @@ non-timing tests cover these boundaries, stalled output, successful completion
 and a stricter case deadline using the actual scheduler, ACK and receive methods.
 Statistics, pipes and the clock are fixtures. Existing process tests separately
 check per-case renewal, descendant stopping and failed evidence retention.
+
+A further correction applies the absolute cutoff before each selector wait.
+Otherwise initialization after the initial 900-second admission check could
+extend a silent first-case wait; time spent sending a case's last ACK could also
+extend a renewed case budget. Six regressions cover both gaps, an already expired
+cutoff, a stricter individual case limit, and streams without an absolute cutoff
+with and without case-budget renewal. The three cutoff scenarios reject the
+previous transport. These are deterministic lifecycle checks, not new timing
+measurements or physical stopping guarantees.
 
 This changes `tests/constant_time/dudect_process.py` and therefore the collector
 source identity. Historical package bindings and physical receipts remain
