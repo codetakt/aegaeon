@@ -48,12 +48,14 @@ class ObservationStream:
     cases: tuple[str, ...]
     profile: str
     before_observation: Callable[[], None] | None = None
+    deadline: float | None = None
     index: int = 0
     buffer: bytes = b""
     total: int = 0
     decisions: list[dict[str, Any]] = field(default_factory=list)
     histories: dict[str, list[Any]] = field(init=False)
     admission: CaseAdmission = field(init=False)
+    absolute_deadline: float | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         self.histories = {name: [] for name in self.cases}
@@ -83,6 +85,8 @@ class ObservationStream:
             if self.before_observation is not None:
                 self.before_observation()
             self.observe(line)
+            if self.deadline is not None and time.monotonic() >= self.deadline:
+                invalid("Native dudect deadline reached before ACK: inconclusive")
             acknowledgments.write(b"c")
             acknowledgments.flush()
 
@@ -93,7 +97,7 @@ class ObservationStream:
             invalid(f"Incomplete native dudect execution (exit {code})")
 
 
-def receive(
+def receive(  # noqa: C901, PLR0912 - bounded process and per-case deadline lifecycle
     process: subprocess.Popen[bytes],
     output: IO[bytes],
     stream: ObservationStream,
@@ -106,6 +110,11 @@ def receive(
     with selectors.DefaultSelector() as selector:
         selector.register(process.stdout, selectors.EVENT_READ)
         while selector.get_map():
+            # Apply the acquisition limit even before the first observation and
+            # after an intermediate case renews its individual budget.
+            if stream.absolute_deadline is not None:
+                deadline = min(deadline, stream.absolute_deadline)
+            stream.deadline = deadline
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 invalid("Native dudect deadline reached: inconclusive")
@@ -119,7 +128,12 @@ def receive(
                 if case_budget is not None and time.monotonic() >= deadline:
                     invalid("Native dudect case deadline reached: inconclusive")
                 previous_case = stream.index
+                stream.deadline = deadline
                 stream.consume(chunk, process.stdin)
+                # Observers may tighten the case budget to a campaign cutoff.
+                # Keep that limit while waiting for more output or process exit.
+                if stream.deadline is not None:
+                    deadline = min(deadline, stream.deadline)
                 if case_budget is not None and previous_case < stream.index < len(stream.cases):
                     completed = time.monotonic()
                     if completed >= deadline:
@@ -128,7 +142,21 @@ def receive(
                     # Individual looks cannot renew it, and successful process
                     # exit must fit within the final case's remaining budget.
                     deadline = completed + case_budget
-    stream.finish(process.wait(timeout=max(0.001, deadline - time.monotonic())))
+    _complete(process, stream, deadline)
+
+
+def _complete(process: subprocess.Popen[bytes], stream: ObservationStream, deadline: float) -> None:
+    """Preserve the effective limit through exit and final evidence processing."""
+    stream.deadline = deadline
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        invalid("Native dudect deadline reached before completion: inconclusive")
+    code = process.wait(timeout=remaining)
+    if time.monotonic() >= deadline:
+        invalid("Native dudect deadline reached at process exit: inconclusive")
+    stream.finish(code)
+    if time.monotonic() >= deadline:
+        invalid("Native dudect deadline reached at completion: inconclusive")
 
 
 def terminate(process: subprocess.Popen[bytes]) -> int:

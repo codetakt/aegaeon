@@ -1,4 +1,4 @@
-# Formal Verification: Owns F*, Tamarin, Kani, EverParse/Low*, dudect,
+# Formal Verification: Owns F*, Tamarin, Kani, EverParse/Low*, Dudect callback checks,
 # JOSE test vectors, metrics E2E, and private_key_jwt E2E.
 # nix flake check (build gate) -> ci.yml.
 # F* was previously also in verify-fstar-ci.yml (now retired).
@@ -267,34 +267,42 @@ jobs:
             nix develop .#verification --command nix develop .#typescript --command \
               tests/verified_core_wasm/test_equivalence.sh "$wasm_file"
 
-  # Dudect Constant-Time Analysis (HACL*/EverCrypt)
+  # Functional callback checks only. Timing qualification uses a separate environment.
   dudect:
-    name: Constant-Time (dudect, HACL*)
+    name: Dudect callbacks (non-timing)
     timeout-minutes: 30
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    needs: fstar
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Setup Nix CI
-        uses: ./.github/actions/setup-nix-ci
+      - uses: ./.github/actions/setup-nix-ci
         with:
           enable-flakehub-cache: "true"
-
-      - name: Run fresh dudect observations
-        run: bash scripts/ci/dudect_check.sh pr
-
-      - name: Preserve dudect observations
-        if: ${{ always() }}
+      - name: Build and self-test all callbacks
+        run: nix build .#verify-dudect --out-link result-dudect-functional -L
+      - name: Verify the adopted Dudect sources and evidence interfaces
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/dudect-functional
+          analysis_python="$(nix build .#dudect-analysis.python --no-link --print-out-paths)"
+          env -u PYTHONPATH -u PYTHONHOME "$analysis_python/bin/python" \
+            scripts/validation/verify_dudect_review_followup.py \
+            > artifacts/dudect-functional/source-correspondence.json
+          env -u PYTHONPATH -u PYTHONHOME "$analysis_python/bin/python" \
+            -m unittest discover -s tests/dudect_adoption -p 'test_*.py' -v \
+            > artifacts/dudect-functional/adoption-tests.log 2>&1
+      - name: Preserve functional results
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: dudect-pr-observations
-          path: artifacts/ct/dudect-nix/
+          name: dudect-functional-results
+          path: |
+            result-dudect-functional/functional/functional-report.json
+            artifacts/dudect-functional/
           if-no-files-found: error
 
   # Tamarin Protocol Verification
@@ -814,45 +822,8 @@ jobs:
         with:
           enable-flakehub-cache: "true"
 
-      - name: Collect fresh legacy timing observations
-        run: nix develop .#verification --command python3 tests/constant_time/run_contract.py --profile pr
-
-      - name: Preserve legacy timing observations
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dudect-legacy-pr-observations
-          path: artifacts/ct/dudect/
-          if-no-files-found: error
-
-      - name: Run VerifiedReqs checks (Nix)
-        id: verified-reqs-nix
-        run: |
-          output="$(nix eval --raw .#verified-reqs.outPath)"
-          printf 'store-output=%s\n' "$output" >> "$GITHUB_OUTPUT"
-          nix build .#verified-reqs --keep-failed -L
-          if [ -L result ]; then
-            echo "=== VerifiedReqs Integrity Log ==="
-            cat result/verify.log 2>/dev/null || true
-          fi
-
-      - name: Collect attempted Nix timing gate output
-        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.verified-reqs-nix.outcome) }}
-        env:
-          DUDECT_NIX_OUTPUT: ${{ steps.verified-reqs-nix.outputs.store-output }}
-          DUDECT_NIX_OUTCOME: ${{ steps.verified-reqs-nix.outcome }}
-        run: >-
-          python3 scripts/ci/collect_dudect_nix_output.py
-          --store-output "$DUDECT_NIX_OUTPUT" --outcome "$DUDECT_NIX_OUTCOME"
-          --output artifacts/ct/dudect-nix-gate
-
-      - name: Preserve attempted Nix timing gate output
-        if: ${{ always() && contains(fromJSON('["success", "failure", "cancelled"]'), steps.verified-reqs-nix.outcome) }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dudect-nix-gate-output
-          path: artifacts/ct/dudect-nix-gate/
-          if-no-files-found: error
+      - name: Run VerifiedReqs integrity checks (non-timing)
+        run: nix build .#verified-reqs --no-link -L
 
   # FFI Contract Drift Detection
   # Validates that F* assume vals match their C implementations.
@@ -983,9 +954,9 @@ jobs:
             fi
 
             if [ "${{ needs.dudect.result }}" == "success" ]; then
-              echo "✅ Constant-time analysis passed"
+              echo "✅ Dudect callback checks passed; timing qualification not evaluated"
             else
-              echo "❌ Constant-time analysis failed"
+              echo "❌ Dudect callback checks failed"
             fi
 
             if [ "${{ needs.everparse-dcr.result }}" == "success" ]; then
@@ -1013,9 +984,9 @@ jobs:
             fi
 
             if [ "${{ needs.dudect.result }}" == "success" ]; then
-              echo "✅ dudect-check (HACL*) passed"
+              echo "✅ Dudect callback build/self-test passed"
             else
-              echo "❌ dudect-check (HACL*) failed"
+              echo "❌ Dudect callback build/self-test failed"
             fi
 
             if [ "${{ needs.verified-core-wasm.result }}" == "success" ]; then

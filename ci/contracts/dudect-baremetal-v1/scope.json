@@ -1,0 +1,75 @@
+{
+  "id": "dudect-limited-baremetal/scope/1",
+  "profile": "pr",
+  "cases": [
+    "nix/ct_eq_32",
+    "nix/ct_eq_64",
+    "nix/ct_eq_128",
+    "nix/sha256",
+    "nix/hmac_sha256",
+    "nix/hmac_sha256_key",
+    "legacy/compare"
+  ],
+  "compilers": [
+    "gcc",
+    "clang"
+  ],
+  "statistics": [
+    1,
+    100
+  ],
+  "selector": "unchanged distributed.py policy, seed and original packet/unit domain; one position per 16 original indices before admission",
+  "case_state": "separate calibration/testing histograms and absorbing detection history for each case; shared selector does not pool cases",
+  "calibration": "current-prefix reserved samples only; pilot excluded; pooled 100 original quantiles with inclusive ties",
+  "testing": "admissible nonreserved samples; recompute entire current-prefix crops when thresholds move",
+  "inference": "positive-variance Welch and certified Student tail at frozen binary64 t/df; no old-population sparse inference on replacement crops",
+  "unchanged": [
+    "raw0",
+    "101",
+    "other14cases",
+    "periodic",
+    "alpha",
+    "floors",
+    "look_schedule",
+    "native",
+    "signal_strength"
+  ],
+  "multiplicity": "replace crops, never OR with original crops; original decisions retained separately; 21*102*8 family unchanged",
+  "look_batches": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    16
+  ],
+  "minimum_class_count": 10001,
+  "minimum_raw_class_count": 200000,
+  "case_seconds": 900,
+  "worker_seconds": 10,
+  "worker_address_space_bytes": 268435456,
+  "failures": "missing/reordered/future/mismatched prefix, numeric unresolved, resource limit and integrity failure are never nondetection",
+  "model_limit": "sample separation does not establish temporal independence, exchangeability, Welch approximation validity or real-clock sensitivity",
+  "version_date": "2026-10-22",
+  "status": "adoption_candidate_pending_owner_review",
+  "formal_adoption": false,
+  "ci_admission": false,
+  "task3": "paused",
+  "normative_precedence": "contract.json governs scope, entry, identities and field precedence; this version supersedes only the explicitly listed historical text, never historical evidence bindings",
+  "deployment": "PR-only seven-case external monitoring on the qualified c6i.metal Ice Lake research profile; measured implementation and artifacts only. No Hosted, other CPU/image, CI admission, operational-rate or product-claim adoption.",
+  "creation_state": {
+    "status": "offline_candidate_not_adopted",
+    "predecessor": {
+      "id": "pr-distributed-six-case-crops/review-1",
+      "sha256": "2edd4c5b8b76abed850e7d06f9e8e70f5d79dfeeb93d6cfbdbc6f465e894daab"
+    },
+    "source": {
+      "path": "tests/dudect_calibration_scope/scope_contract.json",
+      "sha256": "d135e586ad3a2d8764bef53c41801c6e4ab4a4f3d91591f487a28be5c50c1864",
+      "id": "pr-distributed-seven-case-crops/review-1"
+    },
+    "deployment": "separately identified local collector candidate; no physical or CI adoption"
+  }
+}

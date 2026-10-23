@@ -221,7 +221,13 @@ class RuntimeCapture:
             "phase": phase,
             "monotonic_ns": time.monotonic_ns(),
             "unix_time_ns": time.time_ns(),
-            "native_affinity": affinity,
+            # Before launch and after exit there is no live native process to
+            # inspect. Do not label the collector mask or a stale mask as native.
+            "native_affinity": affinity if pid is not None else None,
+            "native_pid": pid,
+            "collector_affinity": sorted(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else None,
             "telemetry_cpu_limit": 64,
             **look,
             "system": {
@@ -272,6 +278,7 @@ def validate_diagnostics(
     output: Path, process: dict[str, Any], bindings: dict[str, Any], profile: str
 ) -> None:
     # Avoid a module cycle: timing shares the immutable diagnostic file helper.
+    from dudect_affinity import validate_placement  # noqa: PLC0415
     from dudect_process import load_json  # noqa: PLC0415
     from dudect_timing import TIMING_NAME, validate_timing  # noqa: PLC0415
 
@@ -283,6 +290,15 @@ def validate_diagnostics(
         "Runtime diagnostic identity mismatch",
     )
     require(
+        diagnostics.get("affinity") == file_identity(output / "affinity.json"),
+        "CPU affinity diagnostic identity mismatch",
+    )
+    validate_placement(
+        process,
+        load_json((output / "affinity.json").read_bytes()),
+        [load_json(line) for line in (output / CONTEXT_NAME).read_bytes().splitlines()],
+    )
+    require(
         diagnostics.get("timing")
         == validate_timing(
             output / TIMING_NAME,
@@ -292,6 +308,11 @@ def validate_diagnostics(
         ),
         "All-case timing diagnostic identity mismatch",
     )
+    if profile == "pr":
+        require(
+            diagnostics.get("sparse") == file_identity(output / "sparse-prefixes.jsonl"),
+            "Sparse evidence identity mismatch",
+        )
     if "ct_eq_128" in bindings:
         require(
             diagnostics.get("samples")

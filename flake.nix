@@ -168,6 +168,44 @@
         };
 
         dudectCheck = pkgs.callPackage ./nix/dudect.nix { inherit evercryptDist karamel; };
+        dudectAnalysis = pkgs.callPackage ./nix/dudect-analysis.nix { inherit evercryptDist karamel; };
+        dudectAnalysisNatives =
+          let
+            native =
+              compiler: suite:
+              (dudectCheck.override { stdenv = compiler; }).overrideAttrs (old: {
+                pname = "dudect-native-${suite}";
+                buildInputs = old.buildInputs ++ [
+                  pkgs.openssl
+                  pkgs.mbedtls
+                ];
+                installPhase = builtins.replaceStrings [ "--suite nix" ] [ "--suite ${suite}" ] old.installPhase;
+                doInstallCheck = true;
+                installCheckPhase = ''
+                  python3 - "$out" <<'PYTEST'
+                  import json, pathlib, subprocess, sys
+                  root = pathlib.Path(sys.argv[1])
+                  index = json.loads((root / 'package.json').read_text())
+                  count = 0
+                  for entry in index['executables']:
+                      result = subprocess.run([str(root / entry['relative_binary']), '--self-test'],
+                                              check=True, capture_output=True, text=True, timeout=30)
+                      rows = [json.loads(line) for line in result.stdout.splitlines()]
+                      assert [r['case_id'] for r in rows] == [index['suite'] + '/' + name for name in entry['cases']]
+                      assert all(r['self_test'] and not r['timing_executed'] for r in rows)
+                      count += len(rows)
+                  assert count == (11 if index['suite'] == 'legacy' else 10)
+                  print('Non-timing callback cases:', count)
+                  PYTEST
+                '';
+              });
+          in
+          {
+            gcc-legacy = native pkgs.stdenv "legacy";
+            gcc-nix = native pkgs.stdenv "nix";
+            clang-legacy = native llvmPackages.stdenv "legacy";
+            clang-nix = native llvmPackages.stdenv "nix";
+          };
 
         tamarin-prover' = pkgs.tamarin-prover.overrideAttrs (oldAttrs: {
           postPatch = (oldAttrs.postPatch or "") + ''
@@ -911,6 +949,8 @@
         verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];
 
         verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
+          pkgs.mbedtls
+          pkgs.openssl
           pkgs.pkg-config
         ];
 
@@ -1070,6 +1110,8 @@
             verifyKani
             verifyDudect
             dudectCheck
+            dudectAnalysis
+            dudectAnalysisNatives
             verifyJose
             verifyFstarAbstract
             rustToolchain

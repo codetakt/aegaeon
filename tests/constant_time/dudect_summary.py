@@ -6,14 +6,20 @@ from typing import Any
 
 from dudect_candidate import CandidateAdmission, significant
 from dudect_contract import ObservationError, assess_case
+from dudect_support import require
 
 
 def summarize_case(
-    observations: list[dict[str, Any]], binding: dict[str, str], role: str
+    observations: list[dict[str, Any]],
+    binding: dict[str, str],
+    role: str,
+    verified_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     name = binding["case_id"].split("/")[1]
     admission = CandidateAdmission(name, binding["profile"], binding=binding)
-    history = [admission.admit(row) for row in observations]
+    original = [admission.admit(row) for row in observations]
+    history = original if verified_history is None else verified_history
+    require(len(history) == len(original), "Verified history length mismatch")
     failure = None
     try:
         assess_case(binding["case_id"], role, history, binding["profile"])
@@ -59,7 +65,10 @@ def summarize_case(
 
 
 def summarize_collection(
-    cases: dict[str, Any], bindings: dict[str, Any], roles: dict[str, str]
+    cases: dict[str, Any],
+    bindings: dict[str, Any],
+    roles: dict[str, str],
+    verified_histories: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": "dudect-diagnostic-summary/1",
@@ -69,7 +78,12 @@ def summarize_collection(
             binding["case_id"] for name, binding in bindings.items() if name not in cases
         ],
         "cases": {
-            name: summarize_case(rows, bindings[name], roles[bindings[name]["case_id"]])
+            name: summarize_case(
+                rows,
+                bindings[name],
+                roles[bindings[name]["case_id"]],
+                None if verified_histories is None else verified_histories[name],
+            )
             for name, rows in cases.items()
         },
     }

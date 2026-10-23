@@ -28,6 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
+      - name: Hold release until external qualification is commissioned
+        run: |
+          echo "::error::Release qualification is pending. Hosted functional checks and historical timing results cannot authorize this release artifact."
+          exit 1
+
       - name: Determine version
         id: version
         run: |

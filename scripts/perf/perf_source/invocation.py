@@ -148,17 +148,24 @@ def _duration_text(value: str) -> str:
     return value
 
 
-def _parse_config(
+def _parse_config(  # noqa: C901, PLR0912, PLR0915 -- strict option accounting
     argv: list[str], *, report: bool, runtime: Dependencies
 ) -> tuple[dict[str, Any], dict[str, str]]:
     options: dict[str, str] = {}
     debug = False
+    functional_only = False
     position = 0
     required_options = {"--url", "--workers", "--run-time", "--warmup", "--rps", "--scenario"}
     if report:
         required_options |= {"--report-file", "--report-id"}
     while position < len(argv):
         name = argv[position]
+        if name == "--functional-only":
+            if functional_only:
+                fail("duplicate child option")
+            functional_only = True
+            position += 1
+            continue
         if name == "--debug":
             if debug:
                 fail("duplicate child option")
@@ -233,7 +240,7 @@ def freeze_invocation(
     )
 
 
-def verify_report(
+def verify_report(  # noqa: PLR0912 -- independent identity and mode checks
     root: pathlib.Path,
     evidence: pathlib.Path,
     expected: str,
@@ -287,6 +294,11 @@ def verify_report(
     data = strict_json(raw)
     if not isinstance(data, dict):
         fail("report must be a JSON object")
+    expected_mode = (
+        "functional" if "--functional-only" in invocation["argv"][1:] else "performance_slo"
+    )
+    if data.get("acceptance_mode", "performance_slo") != expected_mode:
+        fail("report acceptance mode differs from independent invocation")
     identity = data.get("identity")
     if isinstance(identity, dict):
         for name in ("profile_sha256", "session_provenance_sha256"):
