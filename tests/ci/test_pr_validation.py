@@ -868,10 +868,11 @@ class WiringTests(unittest.TestCase):
         assert docs["jobs"]["helpers"]["strategy"]["matrix"]["group"] == [
             "sanitizer",
             "security-fuzz",
+            "dudect",
             "other",
         ]
         assert docs["jobs"]["helpers"]["strategy"]["fail-fast"] is False
-        assert docs["jobs"]["helpers"]["strategy"]["max-parallel"] == 3
+        assert docs["jobs"]["helpers"]["strategy"]["max-parallel"] == 4
         for job in ("helpers", "complete"):
             command = next(step["run"] for step in docs["jobs"][job]["steps"] if "run" in step)
             assert command.index("nix develop .#docs --command bash -c") < command.index(

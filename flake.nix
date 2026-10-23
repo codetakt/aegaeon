@@ -946,7 +946,10 @@
                 OUT_DIR="$out" ${pkgs.bash}/bin/bash ${./scripts/flake/verify_fstar.sh}
             '';
 
-        verifyTamarin = mkVerification "verify-tamarin" ./scripts/flake/verify_tamarin.sh [ ];
+        verifyTamarin = import ./nix/tamarin-check.nix {
+          inherit pkgs;
+          tamarinProver = tamarin-prover';
+        };
 
         verifyDudect = mkVerification "verify-dudect" ./scripts/flake/verify_dudect.sh [
           pkgs.mbedtls
@@ -1135,7 +1138,6 @@
             cargoArtifacts
             cargoLintChecks
             pre-commit-check
-            mkVerification
             mkLightVerification
             verifiedReqs
             verifyFstar

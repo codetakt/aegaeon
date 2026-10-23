@@ -1,6 +1,6 @@
 # CI execution and qualification boundaries
 
-Last updated: 2026-10-23
+Last updated: 2026-10-24
 
 Status: active plan
 
@@ -91,7 +91,10 @@ The `other` helper group has a 45-minute job limit, including setup and receipt
 upload; the other groups and metadata/aggregate jobs retain 30 minutes. Run
 39875920867 reached 1,031 of its 1,332 `other` tests without an assertion failure
 before the original 30-minute limit cancelled it. That incomplete run remains a
-failure. The larger fixed limit changes no inventory, test or acceptance rule;
+failure. Dudect functional modules now run in a separate worker so the remaining
+`other` tests need not wait for collector and synthetic-input regressions. All
+four workers retain complete discovery and occurrence accounting. The fixed
+limits and module split change no test inventory or acceptance rule;
 missing accounting still rejects the aggregate. It is unrelated to Dudect's
 physical measurement deadlines or trial budgets.
 

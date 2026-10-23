@@ -51,14 +51,14 @@ jobs:
   helpers:
     name: CI helper tests (${{ matrix.group }})
     runs-on: ubuntu-latest
-    # The complete other group has 1,332 tests; 30m expired after test 1,031.
-    # Keep its inventory intact and reserve time for execution and accounting.
+    # Keep the existing deadline while separating Dudect functional helpers.
+    # Coverage accounting still requires every discovered test occurrence.
     timeout-minutes: ${{ matrix.group == 'other' && 45 || 30 }}
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 4
       matrix:
-        group: [sanitizer, security-fuzz, other]
+        group: [sanitizer, security-fuzz, dudect, other]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
