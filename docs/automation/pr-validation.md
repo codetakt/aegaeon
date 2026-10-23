@@ -1,6 +1,6 @@
 # Pull Request Validation
 
-Last updated: 2026-10-05
+Last updated: 2026-10-24
 
 Status: current implementation baseline
 
@@ -11,6 +11,11 @@ Audience: contributors, reviewers, repository administrators
 ## Selection policy
 
 `.github/workflows/pr.yml` owns PR validation against `main`, including drafts.
+The active version-2 protected planner conservatively selects `full` for every
+PR and merge group. Reduced scopes below describe the classifier's available
+policy, not active permission to omit checks. Dependency-graph narrowing remains
+disabled in `ci/ci-input-authority.json`.
+
 `ci/pr-policy.json` lists the inputs eligible for reduced validation. Classification
 uses the complete Git diff from the merge base to the PR head; a rename includes
 both its old and new path. No GitHub changed-file API limit applies.
@@ -43,9 +48,11 @@ Container publication remains disabled for PR events, including reusable calls.
 ## Documentation and CI helper execution
 
 The Documentation lane calls `documentation.yml`. Document and PR metadata
-checks run alongside three whole-module CI-helper groups: sanitizer,
-security-fuzz and other. Each job has a 30-minute limit. The matrix keeps all
-three groups enabled and does not cancel other groups when one fails.
+checks run alongside four whole-module CI-helper groups: sanitizer,
+security-fuzz, Dudect and other. Dudect helpers exercise the collector and
+synthetic inputs; they do not run physical timing qualification. The `other`
+group retains its 45-minute limit; other jobs retain 30 minutes. The matrix
+allows four concurrent workers and does not cancel other groups when one fails.
 
 Every worker performs the original complete unittest discovery before selecting
 its modules. The final job requires successful metadata and worker jobs, matching
@@ -59,6 +66,8 @@ the time limit still applies. No test is omitted based on changed paths.
 `scripts/ci/run_docs.sh` retains the complete serial entrypoint. Local correction
 checks should execute only the affected methods; hosted CI owns the complete
 suite. Parallel job limits do not guarantee a particular hosted completion time.
+See [CI execution efficiency](ci-optimization.md) for measurement and Nix input
+boundaries; these do not enable path-based omission of checks.
 
 ## Classification and aggregate gate
 

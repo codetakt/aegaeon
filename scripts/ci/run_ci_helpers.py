@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 else:
     ResultBase = unittest.TextTestResult
 
-GROUPS = ("sanitizer", "security-fuzz", "other")
+GROUPS = ("sanitizer", "security-fuzz", "dudect", "other")
 ROOT = Path(__file__).resolve().parents[2]
 PATTERN = "test_*.py"
 FIXTURE_CALLERS = frozenset(
@@ -51,6 +51,8 @@ def module_group(module: str) -> str:
         return "sanitizer"
     if name.startswith("test_security_fuzz"):
         return "security-fuzz"
+    if name.startswith("test_dudect"):
+        return "dudect"
     return "other"
 
 

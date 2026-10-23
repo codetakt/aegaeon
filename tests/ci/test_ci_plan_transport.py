@@ -1093,8 +1093,8 @@ class CiPlanTransportTests(unittest.TestCase):
             documentation["jobs"]["helpers"]["strategy"],
             {
                 "fail-fast": False,
-                "max-parallel": 3,
-                "matrix": {"group": ["sanitizer", "security-fuzz", "other"]},
+                "max-parallel": 4,
+                "matrix": {"group": ["sanitizer", "security-fuzz", "dudect", "other"]},
             },
         )
         complete = documentation["jobs"]["complete"]

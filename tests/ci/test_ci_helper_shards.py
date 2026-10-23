@@ -36,6 +36,7 @@ class HelperShardTests(unittest.TestCase):
             "test_sanitizer_shard_fixture",
             "test_security_fuzz_shard_fixture",
             "test_other_shard_fixture",
+            "test_dudect_shard_fixture",
         )
         self.original_path = list(sys.path)
         self.addCleanup(self.clean_modules)
@@ -86,7 +87,7 @@ class Cases(unittest.TestCase):
         receipts = self.receipts()
         aggregate(receipts, BOUND, DEPENDENCIES)
         self.assertEqual({row["mode"] for row in receipts}, {"normal"})
-        self.assertEqual(sum(row["tests_run"] for row in receipts), 3)
+        self.assertEqual(sum(row["tests_run"] for row in receipts), 4)
         for name in self.modules:
             self.assertEqual(sys.modules[name].marks, ["module", "class", "test"])
 
@@ -104,7 +105,7 @@ class Derived(Base):
         aggregate(receipts, BOUND, DEPENDENCIES)
         other = next(row for row in receipts if row["group"] == "other")
         self.assertEqual(other["tests_run"], 4)
-        self.assertEqual(sum(row["tests_run"] for row in receipts), 6)
+        self.assertEqual(sum(row["tests_run"] for row in receipts), 7)
 
     def test_duplicate_original_occurrences_are_preserved_without_deduplication(self):
         _, suite = self.load()
@@ -134,7 +135,7 @@ def load_tests(loader, tests, pattern):
         )
         receipts = self.receipts()
         self.assertEqual({row["mode"] for row in receipts}, {"full-fallback"})
-        self.assertTrue(all(row["tests_run"] == 3 for row in receipts))
+        self.assertTrue(all(row["tests_run"] == 4 for row in receipts))
         aggregate(receipts, BOUND, DEPENDENCIES)
 
     def test_import_error_cannot_become_an_empty_successful_shard(self):
@@ -145,10 +146,10 @@ def load_tests(loader, tests, pattern):
         self.assertTrue(loader.errors)
         selected, full, mode = partition(suite, "sanitizer", self.start, discovery_errors=True)
         self.assertIs(selected, suite)
-        self.assertEqual((len(full), mode), (4, "full-fallback"))
+        self.assertEqual((len(full), mode), (5, "full-fallback"))
         result = unittest.TextTestRunner(stream=io.StringIO()).run(selected)
         self.assertFalse(result.wasSuccessful())
-        self.assertEqual(result.testsRun, 4)
+        self.assertEqual(result.testsRun, 5)
 
     def test_custom_suite_and_unknown_group_fail_before_selected_effects(self):
         effects = []
@@ -167,7 +168,8 @@ def load_tests(loader, tests, pattern):
 
     def test_missing_duplicate_foreign_partial_or_mixed_receipts_fail(self):
         valid = self.receipts()
-        mutations = [valid[:-1], [valid[0], valid[0], valid[2]]]
+        mutations = [[row for row in valid if row["group"] != group] for group in GROUPS]
+        mutations.append([valid[0], valid[0], *valid[2:]])
         for field, value in [
             ("context", {**BOUND, "attempt": "2"}),
             ("mode", "full-fallback"),
@@ -428,9 +430,9 @@ class Cases(unittest.TestCase):
         aggregate(receipts, BOUND, DEPENDENCIES)
         for receipt in receipts:
             self.assertEqual(receipt["mode"], "full-fallback")
-            self.assertEqual(receipt["started_slots"], [1, 2])
-            self.assertEqual(receipt["fixture_skipped_slots"], [0, 3])
-            self.assertEqual([event["slots"] for event in receipt["fixture_events"]], [[0], [3]])
+            self.assertEqual(receipt["started_slots"], [1, 2, 3])
+            self.assertEqual(receipt["fixture_skipped_slots"], [0, 4])
+            self.assertEqual([event["slots"] for event in receipt["fixture_events"]], [[0], [4]])
 
     def test_subtest_skip_is_an_actual_started_case(self):
         self.write(
