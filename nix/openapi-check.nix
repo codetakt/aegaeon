@@ -17,9 +17,18 @@ let
     cargoLock = ../Cargo.lock;
     CARGO_PROFILE = "dev";
     CARGO_INCREMENTAL = "0";
-    # Match the compiler variables in the CI development shell.
-    CC = "${pkgs.stdenv.cc}/bin/cc";
-    CXX = "${pkgs.stdenv.cc}/bin/c++";
+    # Cargo's target configuration forces bare cc/c++/ar names. Resolve them
+    # to the same LLVM tools as commonShellHook, after stdenv setup hooks run.
+    preBuild = ''
+      export PATH="${llvmPackages.bintools}/bin:${llvmPackages.clang}/bin:$PATH"
+      export CC=${llvmPackages.clang}/bin/clang
+      export CXX=${llvmPackages.clang}/bin/clang++
+      export AR=${llvmPackages.bintools}/bin/ar
+      export LD=${llvmPackages.bintools}/bin/ld.lld
+      test "$(command -v cc)" = ${llvmPackages.clang}/bin/cc
+      test "$(command -v c++)" = ${llvmPackages.clang}/bin/c++
+      test "$(command -v ar)" = ${llvmPackages.bintools}/bin/ar
+    '';
     nativeBuildInputs = [
       llvmPackages.clang
       llvmPackages.bintools
