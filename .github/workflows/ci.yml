@@ -104,7 +104,7 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
-          nix develop .#ci --command cargo run --locked --package xtask --bin xtask --features openapi -- openapi --check
+          nix build .#openapi-check --no-link --print-build-logs
 
       - name: Evaluate all flake outputs and build core-owned checks
         id: core-checks

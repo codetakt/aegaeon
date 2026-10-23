@@ -1,6 +1,6 @@
 # Automation & CI/CD (GitHub Actions + Nix flake)
 
-Last updated: 2026-09-07
+Last updated: 2026-10-24
 
 Status: current implementation baseline
 
@@ -59,7 +59,7 @@ python3 scripts/validation/check_docs_structure.py
 nix flake check --print-build-logs
 
 # OpenAPI drift gate
-cargo xtask openapi --check
+nix build .#openapi-check --no-link --print-build-logs
 
 # Full gate (merge guard + security suite)
 nix run .#verify-full
@@ -151,6 +151,15 @@ All workflows live under `.github/workflows/`. The source of truth for their fil
 CI also treats OpenAPI artefact drift as a hard failure:
 
 - OpenAPI JSON: `generated/openapi/`
+
+`nix build .#openapi-check` executes the existing locked, development-profile
+`xtask --features openapi` check against both JSON files. It derives the schemas
+from the actual server API, runs the OpenAPI regression tests, and stores the
+checked files. The same derivation is included in `nix flake check`, so repeated
+entry points can reuse the result without compiling the check again. Rust,
+generated/native inputs, lockfiles, features and toolchain remain bound to the
+derivation. The existing production source filter excludes prose, not API inputs.
+Missing or stale JSON fails; CI does not regenerate it automatically.
 
 If you touch any Utoipa input or management/ops API schema:
 
