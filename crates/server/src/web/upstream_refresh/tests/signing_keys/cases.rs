@@ -19,11 +19,12 @@ fn sign_as(flow: &Flow, claims: &Value, kid: Option<&str>) -> ResultTest<String>
         flow.new_key.local_encoding_key().ok_or("fixture key")?,
     )?)
 }
-async fn original(f: &Fixture) -> ResultTest {
-    f.store_callback(&f.callback(&f.claims()?, Some("private-refresh"))?)
+async fn original(f: &Fixture) -> ResultTest<Value> {
+    let claims = f.claims()?;
+    f.store_callback(&f.callback(&claims, Some("private-refresh"))?)
         .await
         .map_err(error)?;
-    Ok(())
+    Ok(claims)
 }
 
 #[test]
@@ -31,9 +32,9 @@ async fn original(f: &Fixture) -> ResultTest {
 fn upstream_jwks_refresh_pg_callback_rotates_and_does_not_resurrect_removed_keys() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
-            let claims = f.claims()?;
+            let claims = original_claims.clone();
             flow.keys
                 .respond(StatusCode::OK, combined(f, &flow)?.to_string());
             flow.token(flow.signed(&claims)?);
@@ -66,9 +67,9 @@ fn upstream_jwks_refresh_pg_callback_rotates_and_does_not_resurrect_removed_keys
 fn upstream_jwks_refresh_pg_rotation_preserves_original_context() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
-            let claims = f.claims()?;
+            let claims = original_claims.clone();
             let original = f.load().await.map_err(error)?.original_authentication;
             flow.keys
                 .respond(StatusCode::OK, combined(f, &flow)?.to_string());
@@ -113,9 +114,9 @@ fn upstream_jwks_refresh_pg_rotation_preserves_original_context() -> ResultTest 
 fn upstream_jwks_refresh_pg_known_bad_tokens_never_force_retrieval() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
-            let claims = f.claims()?;
+            let claims = original_claims.clone();
             let stored = f.stored().await?;
             let raw = |header: Value| {
                 format!("{}.e30.invalid", URL_SAFE_NO_PAD.encode(header.to_string()))
@@ -207,14 +208,14 @@ fn upstream_jwks_refresh_pg_known_bad_tokens_never_force_retrieval() -> ResultTe
 fn upstream_jwks_refresh_pg_new_set_still_missing_key_rejects_without_loop() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
             let stored = f.stored().await?;
             flow.keys.respond(
                 StatusCode::OK,
                 serde_json::to_string(&f.signing_key.jwks())?,
             );
-            flow.token(flow.signed(&f.claims()?)?);
+            flow.token(flow.signed(&original_claims)?);
             assert_eq!(flow.callback().await?.status(), StatusCode::BAD_GATEWAY);
             assert_eq!(flow.keys.hits(), 1);
             assert_eq!(
@@ -236,10 +237,10 @@ fn upstream_jwks_refresh_pg_new_set_still_missing_key_rejects_without_loop() -> 
 fn upstream_jwks_refresh_pg_claims_and_original_context_still_reject_after_fetch() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
             let stored = f.stored().await?;
-            let mut claims = f.claims()?;
+            let mut claims = original_claims.clone();
             claims["aud"] = json!("different-client");
             flow.token(flow.signed(&claims)?);
             assert_eq!(flow.callback().await?.status(), StatusCode::BAD_GATEWAY);
@@ -247,7 +248,7 @@ fn upstream_jwks_refresh_pg_claims_and_original_context_still_reject_after_fetch
             flow.assert_no_effects(f, &stored, 0).await?;
             flow.cache_keys(serde_json::to_value(f.signing_key.jwks())?)?;
             flow.clock.advance(30_000);
-            claims = f.claims()?;
+            claims = original_claims.clone();
             claims["nonce"] = json!("changed-private-nonce");
             flow.token(flow.signed(&claims)?);
             assert_eq!(
@@ -269,11 +270,11 @@ fn upstream_jwks_refresh_pg_claims_and_original_context_still_reject_after_fetch
 fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-            original(f).await?;
+            let original_claims = original(f).await?;
             let flow = Flow::new(f).await?;
             let stored = f.stored().await?;
             federation::bind(&flow, f, serde_json::to_value(f.signing_key.jwks())?).await?;
-            flow.token(flow.signed(&f.claims()?)?);
+            flow.token(flow.signed(&original_claims)?);
             let callback = flow.callback().await?;
             assert_eq!(callback.status(), StatusCode::BAD_GATEWAY);
             let body = axum::body::to_bytes(callback.into_body(), 16384).await?;
@@ -310,13 +311,13 @@ fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> Resul
             assert_eq!(flow.keys.hits(), 2);
             flow.assert_no_effects(f, &stored, 0).await?;
             // Rejected replacements must not break a valid token using the endorsed old key.
-            flow.token(f.signed(&f.claims()?)?);
+            flow.token(f.signed(&original_claims)?);
             assert_eq!(
                 flow.refresh(f).await.map_err(error)?.status(),
                 StatusCode::OK
             );
             assert_eq!(flow.keys.hits(), 2);
-            flow.token(flow.signed(&f.claims()?)?);
+            flow.token(flow.signed(&original_claims)?);
             federation::bind(&flow, f, serde_json::to_value(flow.new_key.jwks())?).await?;
             assert_eq!(
                 flow.refresh(f)
@@ -344,7 +345,7 @@ fn upstream_jwks_refresh_pg_connection_change_during_key_fetch_rejects_publicati
     for rotate in [false, true] {
         run(false, |rt, f| {
             rt.block_on(async {
-                original(f).await?;
+                let original_claims = original(f).await?;
                 let flow = Flow::new(f).await?;
                 let stored = f.stored().await?;
                 flow.keys
@@ -354,7 +355,7 @@ fn upstream_jwks_refresh_pg_connection_change_during_key_fetch_rejects_publicati
                 flow.tokens.respond(
                     StatusCode::OK,
                     json!({
-                        "id_token": flow.signed(&f.claims()?)?,
+                        "id_token": flow.signed(&original_claims)?,
                         "access_token": "private-access-token",
                         "token_type": "Bearer",
                         "expires_in": 3600,

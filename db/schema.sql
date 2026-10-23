@@ -641,6 +641,10 @@ CREATE TABLE aegaeon.account_links (
     upstream_refresh_token_encrypted bytea,
     upstream_refresh_token_connection_id uuid,
     upstream_refresh_token_generation bigint DEFAULT 0 NOT NULL,
+    binding_provenance text DEFAULT 'legacy_unreviewed' NOT NULL,
+    binding_revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT account_links_binding_provenance_valid CHECK (binding_provenance IN ('legacy_unreviewed', 'jit_v2', 'administrator_confirmed')),
+    CONSTRAINT account_links_binding_revision_positive CHECK (binding_revision > 0),
     CONSTRAINT account_links_refresh_token_binding_complete CHECK ((((upstream_refresh_token_encrypted IS NULL) AND (upstream_refresh_token_connection_id IS NULL) AND (upstream_refresh_token_generation = 0)) OR ((upstream_refresh_token_encrypted IS NOT NULL) AND (upstream_refresh_token_connection_id IS NOT NULL) AND (upstream_refresh_token_generation > 0))))
 );
 
