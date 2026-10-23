@@ -43,6 +43,13 @@ Across `aegaeon`, `aegaeon-sdk`, and `aegaeon-admin-console`, use the following 
 - **Avoid “manual setup”**: if you cannot use Nix, prefer the project’s Docker entry points over
   ad-hoc host installs to reduce drift.
 
+Core CI runs its direct npm, pre-commit, commit-message, workflow, ABI and lint
+commands in `nix develop .#ci-tools`. This shell includes the configured hook
+packages and the tools those commands invoke. It does not initialize the
+interactive compiler, extraction or Kani environment. Rust builds, OpenAPI
+validation and proof checks retain their own Nix derivations; runtime and
+dependency-policy jobs continue to use `.#ci`.
+
 ## Quick local loop (recommended)
 
 ```bash
