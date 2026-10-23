@@ -1,7 +1,8 @@
-use csv::Trim;
 use std::collections::HashSet;
 
 use super::super::super::{normalize_email, normalize_subject};
+
+mod records;
 
 #[derive(Debug, Clone)]
 pub(super) struct ParsedCsvUserRow {
@@ -11,14 +12,11 @@ pub(super) struct ParsedCsvUserRow {
 }
 
 pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUserRow>, String> {
-    let mut reader = csv::ReaderBuilder::new()
-        .trim(Trim::All)
-        .flexible(false)
-        .from_reader(csv_data.as_bytes());
+    let mut reader = records::CsvRecords::new(csv_data.as_bytes());
     let headers = reader
-        .headers()
+        .next_record()
         .map_err(|err| format!("Failed to parse CSV header: {err}"))?
-        .clone();
+        .ok_or_else(|| "CSV must include a header row".to_string())?;
     if headers.is_empty() {
         return Err("CSV must include a header row".to_string());
     }
@@ -39,12 +37,12 @@ pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUser
 
     let mut seen_subjects = HashSet::new();
     let mut rows = Vec::new();
-    for (idx, record) in reader.records().enumerate() {
+    for (idx, record) in std::iter::from_fn(|| reader.next_record().transpose()).enumerate() {
         let record = record.map_err(|err| format!("Failed to parse CSV row {}: {err}", idx + 2))?;
         if record.iter().all(|value| value.trim().is_empty()) {
             continue;
         }
-        let Some(subject) = record.get(0).and_then(normalize_subject) else {
+        let Some(subject) = record.first().and_then(|value| normalize_subject(value)) else {
             return Err(format!("CSV row {} has an invalid subject", idx + 2));
         };
         if !seen_subjects.insert(subject.clone()) {
@@ -56,7 +54,7 @@ pub(super) fn parse_import_users_csv(csv_data: &str) -> Result<Vec<ParsedCsvUser
         }
         let email = match record
             .get(1)
-            .map(str::trim)
+            .map(|value| value.trim())
             .filter(|value| !value.is_empty())
         {
             Some(raw_email) => Some(
