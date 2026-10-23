@@ -47,7 +47,7 @@ jobs:
 
       - name: Upload F* artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fstar-artifacts
           path: |
@@ -120,7 +120,7 @@ jobs:
 
       - name: Upload EverParse artefacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: everparse-dcr
           path: |
@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload Low* logs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lowstar-extraction
           path: artifacts/lowstar/
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload WASM artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-core-wasm
           path: artifacts/verified-core-wasm/
@@ -297,7 +297,7 @@ jobs:
             > artifacts/dudect-functional/adoption-tests.log 2>&1
       - name: Preserve functional results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dudect-functional-results
           path: |
@@ -331,7 +331,7 @@ jobs:
 
       - name: Upload Tamarin evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tamarin-results
           path: |
@@ -375,7 +375,7 @@ jobs:
           done
       - name: Upload Kani evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kani-pure-artifacts
           path: |
@@ -407,7 +407,7 @@ jobs:
         run: python3 scripts/validation/summarize_kani_evidence.py artifacts/kani-evidence-diagnostic "Kani (model checking, diagnostic scope — not evidence)"
       - name: Upload diagnostic Kani records
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kani-report
           path: artifacts/kani-evidence-diagnostic/
@@ -795,7 +795,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jose-test-results
           path: artifacts/jose/
@@ -881,7 +881,7 @@ jobs:
 
       - name: Upload runtime drift evidence
         if: ${{ always() && steps.runtime-drift.outcome && steps.runtime-drift.outcome != 'skipped' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: runtime-drift-evidence
           path: |
