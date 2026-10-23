@@ -778,10 +778,12 @@ async function main() {
   assert.match(publicationOrgRolloutWorkflow, /publication-org-rollout-report/);
 
   const setupNixCiAction = await readFile(path.join(outDir, ".github", "actions", "setup-nix-ci", "action.yml"), "utf8");
+  const sourceSetupNixCiAction = await readFile(path.join(ROOT_DIR, ".github", "actions", "setup-nix-ci", "action.yml"), "utf8");
+  assert.equal(setupNixCiAction, sourceSetupNixCiAction);
   assert.match(setupNixCiAction, /^name: Setup Nix CI/m);
-  assert.match(setupNixCiAction, /DeterminateSystems\/nix-installer-action@v21/);
+  assert.match(setupNixCiAction, /DeterminateSystems\/nix-installer-action@[0-9a-f]{40}(?:\s|$)/);
   assert.match(setupNixCiAction, /enable-flakehub-cache/);
-  assert.match(setupNixCiAction, /DeterminateSystems\/flakehub-cache-action@v1/);
+  assert.match(setupNixCiAction, /DeterminateSystems\/flakehub-cache-action@[0-9a-f]{40}(?:\s|$)/);
 
   const playwrightWorkflow = await readFile(path.join(outDir, ".github", "workflows", "playwright.yml"), "utf8");
   assert.match(playwrightWorkflow, /name: playwright/);
