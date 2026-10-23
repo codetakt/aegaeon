@@ -1,6 +1,6 @@
 # Performance Overview
 
-Last updated: 2026-07-08
+Last updated: 2026-10-19
 
 Status: current implementation baseline
 
@@ -14,6 +14,14 @@ how to reproduce them locally, and how to interpret results.
 Baseline documents remain point-in-time snapshots. Current raw evidence belongs
 under `artifacts/perf/`; checked-in Markdown should stay as methodology plus
 stable summary.
+
+The Hosted workflow now checks a small, nonempty functional load path and
+observability. It does not enforce latency, throughput or memory SLO thresholds;
+its validator rejects malformed/empty results and failed requests. Existing
+performance baselines remain historical observations, not a new Hosted verdict.
+Performance acceptance moves to a controlled bare-metal profile with a separate
+load generator under the [CI execution policy](../development/ci-execution-boundary.md).
+That external admission route remains uncommissioned and release admission held.
 
 ## Scope
 

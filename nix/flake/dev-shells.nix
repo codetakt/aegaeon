@@ -52,6 +52,7 @@ in
       pkgs.markdownlint-cli2
       pkgs.commitlint
       pkgs.gitMinimal
+      pkgs.gnupg
       pkgs.bash
       pkgs.jq
       pkgs.ripgrep

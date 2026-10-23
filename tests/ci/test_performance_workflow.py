@@ -93,18 +93,16 @@ class PerformanceWorkflowTests(unittest.TestCase):
                 for step in workflow_job["steps"]:
                     self.assertNotIn("POLICY_MIXED_PREREQUISITES", step.get("env", {}))
         steps = {step.get("name"): step for step in job["steps"]}
-        kpi_steps = {step.get("name"): step for step in workflow["jobs"]["validate-kpis"]["steps"]}
+        self.assertNotIn("validate-kpis", workflow["jobs"])
         expected = "${{ env.POLICY_MIXED_PREREQUISITES == 'accepted' }}"
         for name, selected_steps in [
             ("Run policy-mixed load smoke", steps),
-            ("Validate policy-mixed smoke SLOs", steps),
-            ("Validate policy-mixed KPIs", kpi_steps),
+            ("Validate policy-mixed functional smoke", steps),
         ]:
             with self.subTest(guard=name):
                 self.assertEqual(selected_steps[name]["if"], expected)
         for name, selected_steps in [
             ("Report pending policy-mixed prerequisites", steps),
-            ("Report pending policy-mixed KPI prerequisites", kpi_steps),
         ]:
             with self.subTest(notice=name):
                 pending = selected_steps[name]
@@ -122,14 +120,9 @@ class PerformanceWorkflowTests(unittest.TestCase):
                 self.assertIn("pending", pending["run"])
                 self.assertIn("skipped", pending["run"])
                 self.assertIn("$GITHUB_STEP_SUMMARY", pending["run"])
-        self.assertIn(
-            "validation and performance acceptance skipped",
-            kpi_steps["Report pending policy-mixed KPI prerequisites"]["run"],
-        )
         self.assertNotIn("AEG_LOADTEST_PROOF_ORIGIN", steps["Run policy-mixed load smoke"]["run"])
         self.assertNotIn("if", steps["Run public smoke load test"])
-        self.assertNotIn("if", steps["Validate public smoke SLOs"])
-        self.assertNotIn("if", kpi_steps["Validate public smoke KPIs"])
+        self.assertNotIn("if", steps["Validate public functional smoke"])
         self.assertIn("nix run .#perf-load", steps["Run public smoke load test"]["run"])
 
 
