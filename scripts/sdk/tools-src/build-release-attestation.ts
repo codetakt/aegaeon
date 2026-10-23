@@ -366,9 +366,7 @@ async function main(): Promise<void> {
   const attestationBytes = await fs.readFile(outPath);
   const signatureBytes = signBuffer(algorithm, attestationBytes, key);
   const signatureBase64 = signatureBytes.toString("base64");
-  const exportedPublicKey = publicKey.export({ type: "spki", format: "pem" });
-  const publicKeyPem =
-    typeof exportedPublicKey === "string" ? exportedPublicKey : exportedPublicKey.toString("utf8");
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" });
   const signerSource = process.env.AEGAEON_COSIGN_KEY ? "cosign_key_env" : "cosign_key_path";
 
   await fs.mkdir(path.dirname(signaturePath), { recursive: true });

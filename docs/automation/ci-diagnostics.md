@@ -1,6 +1,6 @@
 # CI Diagnostics and Evidence
 
-Last updated: 2026-09-08
+Last updated: 2026-10-24
 
 Status: current implementation baseline
 
@@ -9,6 +9,26 @@ Owner: CI / Automation
 Audience: contributors, security reviewers, CI maintainers
 
 ## Supported tools
+
+First-party Node tooling uses Node 26, with a minimum version of 26.12.1.
+The `nodejs-nixpkgs` input separately pins its security-updated runtime;
+the main Nix input, Rust compiler and proof-tool pins remain unchanged.
+Development and CI shells, the TypeScript shell, and the WASM suite's Nix
+fallback select that runtime. The root npm validator also rejects older 26.x
+releases, other majors and prereleases. npm 10.9.7 remains the separately
+integrity-verified package manager for the clean development-tool check.
+
+The SDK generators now emit the same minimum Node version and Node 26 type
+declarations. This raises the minimum for newly generated package metadata;
+it does not update or qualify an already published SDK or another repository.
+The runtime adapter, package and scaffold checks must pass on the selected
+Node version before adoption.
+
+The Node 26 migration remains a candidate until its
+[scheduled LTS transition](https://github.com/nodejs/Release/blob/main/schedule.json)
+is confirmed and the required CI checks pass. The schedule lists 2026-10-28;
+the date alone is not confirmation. The pinned 26.12.1 release includes the
+[October security fixes](https://nodejs.org/en/blog/release/v26.12.1/).
 
 Repository-wide Nix formatting uses `treefmt --ci` from the pinned
 `pkgs.nixfmt-tree` wrapper. Pre-commit can still pass individual Nix files to
@@ -24,6 +44,9 @@ dependency it downloads.
 The JavaScript Actions used for checkout, artifacts, attestation, Nix installation,
 Docker metadata/login, release publication, issue creation, SARIF upload, GitHub
 scripts, and Java setup use Node 24 releases.
+These upstream Action runtimes are independent of the first-party Node 26
+toolchain. Keep their supported runner settings; there is no repository-wide
+replacement of `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` with an invented Node 26 flag.
 Hosted runners must support Node 24 (runner 2.327.1 or newer); authenticated
 Git operations inside container actions with the current checkout require 2.329.0
 or newer. Artifact downloads retain digest-mismatch failures and normal archive

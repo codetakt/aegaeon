@@ -143,7 +143,7 @@ function verifiedCorePackageJson(version) {
       access: "public",
     },
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     keywords: ["oidc", "oauth", "wasm", "verification", "sdk"],
     exports: {
@@ -192,7 +192,7 @@ function runtimePackageJson(name, version) {
       access: "public",
     },
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     keywords: ["oidc", "oauth", "wasm", "verification", "sdk"],
     dependencies: {
@@ -217,7 +217,7 @@ function managementClientPackageJson(version) {
       access: "public",
     },
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     keywords: ["management", "openapi", "csrf", "sdk", "admin"],
     exports: {
@@ -245,7 +245,7 @@ function rpCorePackageJson(version) {
       access: "public",
     },
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     keywords: ["oidc", "oauth", "pkce", "rp", "sdk"],
     exports: {
@@ -273,7 +273,7 @@ function issuerSpaPackageJson(version) {
       access: "public",
     },
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     keywords: ["oidc", "oauth", "pkce", "spa", "sdk"],
     dependencies: {

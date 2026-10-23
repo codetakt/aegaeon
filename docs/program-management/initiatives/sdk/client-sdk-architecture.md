@@ -136,7 +136,7 @@ php/                      # PHP language track (planned)
 
 - Use `pnpm` workspaces. Build all packages with `pnpm recursive run build`.
 - Do not track WASM artefacts in git; `pnpm run fetch-core` fetches them from `artifacts/verified-core/` and places them in `dist/`.
-  - Reference: `scripts/sdk/fetch_core_artifact.js` in this repository is the CLI scaffold (Node 22+ / Ed25519 verification).
+  - Reference: `scripts/sdk/fetch_core_artifact.js` in this repository is the CLI scaffold (Node 26.12.1+ / Ed25519 verification).
 - CI:
   - Step1: run `scripts/extraction/package_verified_core.sh` to generate artefacts.
   - Step2: `pnpm run fetch-core && pnpm run lint && pnpm run test`.

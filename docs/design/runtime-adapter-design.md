@@ -289,13 +289,13 @@ await withAbort(options.abortSignal, () => fs.readFile(wasmPath));
 
 | Scenario | Runtime | Command |
 |----------|---------|---------|
-| Unit tests | Node 22+ | `pnpm test --filter runtime-*` |
-| Type checks | Node 22+ | `pnpm run lint` (tsc + eslint) |
+| Unit tests | Node 26.12.1+ | `pnpm test --filter runtime-*` |
+| Type checks | Node 26.12.1+ | `pnpm run lint` (tsc + eslint) |
 | Browser smoke | Chromium (Playwright) | `pnpm run test:e2e --filter runtime-web` |
-| WASM integration | Node 22+ | `pnpm run test:wasm` (when Verified Core exports ready) |
-| Supply-chain | Node 22+ | `pnpm run verify-core -- --version <tag>` (calls fetch-core + manifest check) |
+| WASM integration | Node 26.12.1+ | `pnpm run test:wasm` (when Verified Core exports ready) |
+| Supply-chain | Node 26.12.1+ | `pnpm run verify-core -- --version <tag>` (calls fetch-core + manifest check) |
 
-CI should run Node 22 LTS and optional Node 20 to check compatibility. For browsers, limit to Chromium headless to keep jobs fast; expand to WebKit/Firefox later if needed.
+CI uses the repository-pinned Node 26 runtime (minimum 26.12.1). Earlier Node majors are outside this candidate profile; adoption follows confirmation of the Node 26 LTS transition and the required CI checks. For browsers, limit to Chromium headless to keep jobs fast; expand to WebKit/Firefox later if needed.
 
 ## 7. Follow-up Tasks
 
