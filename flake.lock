@@ -159,6 +159,23 @@
         "type": "github"
       }
     },
+    "nodejs-nixpkgs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792582118,
+        "narHash": "sha256-y6FSM8JvGew+KHVtHHZjD++9ZeuZzOltKSK7gFDFbFA=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "607036aace1dbcfeb0897d709519ca14f82ba227",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "607036aace1dbcfeb0897d709519ca14f82ba227",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "crane": "crane",
@@ -166,6 +183,7 @@
         "flake-utils": "flake-utils",
         "git-hooks": "git-hooks",
         "nixpkgs": "nixpkgs_2",
+        "nodejs-nixpkgs": "nodejs-nixpkgs",
         "rust-overlay": "rust-overlay",
         "steel": "steel",
         "verification-nixpkgs": "verification-nixpkgs"

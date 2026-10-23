@@ -72,7 +72,7 @@ async function signCompact({ header, payload, privateKey }) {
 async function main() {
   console.log("=== Verified Core Web Reference Adapter Tests ===");
 
-  assert.ok(subtle, "SubtleCrypto must be available in Node.js 24+");
+  assert.ok(subtle, "SubtleCrypto must be available in Node.js 26.12.1+");
 
   const { manifestUrl, wasmUrl } = resolveDefaultArtifactUrls();
   const manifest = JSON.parse(await readFile(new URL(manifestUrl), "utf8"));

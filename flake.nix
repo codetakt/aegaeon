@@ -3,6 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    # Keep the Node security update independent of the Rust/proof toolchain.
+    nodejs-nixpkgs = {
+      url = "github:nixos/nixpkgs/607036aace1dbcfeb0897d709519ca14f82ba227";
+      flake = false;
+    };
     verification-nixpkgs = {
       url = "github:nixos/nixpkgs/c6245e83d836d0433170a16eb185cefe0572f8b8";
       flake = false;
@@ -24,6 +29,7 @@
   outputs =
     inputs@{
       nixpkgs,
+      nodejs-nixpkgs,
       verification-nixpkgs,
       flake-utils,
       crane,
@@ -75,6 +81,7 @@
         };
         inherit (pkgs) lib;
         inherit (pkgs.stdenv.hostPlatform) isLinux;
+        nodejsRuntime = (import nodejs-nixpkgs { inherit system; }).nodejs_26;
 
         rustToolchainConfig = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustChannel = rustToolchainConfig.toolchain.channel;
@@ -529,7 +536,7 @@
             python'
           ]
           ++ (with pkgs; [
-            nodejs_24
+            nodejsRuntime
             pnpm
             pkg-config
             openssl
@@ -1152,6 +1159,7 @@
         flakeDevShells = import ./nix/flake/dev-shells.nix {
           inherit
             pkgs
+            nodejsRuntime
             lib
             cargoArtifacts
             devTools

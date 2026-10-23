@@ -1,5 +1,6 @@
 {
   pkgs,
+  nodejsRuntime,
   lib,
   cargoArtifacts,
   devTools,
@@ -29,7 +30,7 @@ let
 in
 {
   typescript = pkgs.mkShellNoCC {
-    packages = [ pkgs.nodejs_24 ];
+    packages = [ nodejsRuntime ];
   };
 
   docs = pkgs.mkShellNoCC {

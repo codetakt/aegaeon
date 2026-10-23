@@ -240,7 +240,7 @@ async function main() {
   assert.equal(rootPackage.name, "aegaeon-sdk");
   assert.equal(rootPackage.private, true);
   assert.equal(rootPackage.packageManager, "pnpm@9.15.0");
-  assert.equal(rootPackage.engines.node, ">=24");
+  assert.equal(rootPackage.engines.node, ">=26.12.1");
   assert.equal(rootPackage.scripts["build:tools"], "node ./node_modules/typescript/bin/tsc --build tsconfig.tools.json");
   assert.equal(rootPackage.scripts["build:tests:node"], "node ./node_modules/typescript/bin/tsc --project tsconfig.tests.node.json");
   assert.equal(rootPackage.scripts["typecheck:tests:node"], "node ./node_modules/typescript/bin/tsc --project tsconfig.tests.node.json --pretty false --noEmit");
@@ -317,7 +317,7 @@ async function main() {
   assert.match(rootPackage.scripts.test, /test:repo/);
   assert.equal(rootPackage.devDependencies["@changesets/cli"], "^2.29.6");
   assert.equal(rootPackage.devDependencies["@playwright/test"], "^1.55.0");
-  assert.equal(rootPackage.devDependencies["@types/node"], "^24.3.0");
+  assert.equal(rootPackage.devDependencies["@types/node"], "^26.6.5");
   assert.equal(rootPackage.devDependencies.typescript, "^5.8.2");
 
   const workspaceYaml = await readFile(path.join(outDir, "pnpm-workspace.yaml"), "utf8");

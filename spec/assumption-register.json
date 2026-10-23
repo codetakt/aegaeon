@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract": "assumption-register-v1",
-  "updated": "2026-09-12",
+  "updated": "2026-10-24",
   "entries": [
     {
       "id": "foreign:hacl_sha256",
@@ -351,7 +351,8 @@
       "premise_ids": [
         "premise:tool:fstar"
       ],
-      "tool_sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf"
+      "tool_sha256": "5c2624926f31da67d4b776328101b39eacc682e8967d847680640fcd221da9bf",
+      "notes": "The Node 26.12.1 development/WASM-host runtime is selected from the separate nodejs-nixpkgs input (607036aace1dbcfeb0897d709519ca14f82ba227). It is not an F* verifier or solver and is outside the F* pass closure. This migration leaves the registered F* and Z3 executable identities, provider pins and main nixpkgs input unchanged; Node compatibility is established separately by runtime tests, not by the assumption graph."
     },
     {
       "id": "tool:z3-4.13.3-effective",

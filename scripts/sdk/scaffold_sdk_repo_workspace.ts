@@ -305,12 +305,12 @@ function rootPackageJson(version) {
     type: "module",
     description: "Separate SDK workspace scaffold generated from the Aegaeon backend repository.",
     engines: {
-      node: ">=24",
+      node: ">=26.12.1",
     },
     devDependencies: {
       "@changesets/cli": "^2.29.6",
       "@playwright/test": "^1.55.0",
-      "@types/node": "^24.3.0",
+      "@types/node": "^26.6.5",
       typescript: "^5.8.2",
     },
     scripts: {
