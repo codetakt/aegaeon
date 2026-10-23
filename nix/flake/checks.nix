@@ -7,7 +7,6 @@
   cargoLintChecks,
   stdenv,
   pre-commit-check,
-  mkVerification,
   mkLightVerification,
   verifiedReqs,
   verifyFstar,
@@ -63,7 +62,7 @@ in
   };
 
   compliance-matrix =
-    mkVerification "verify-compliance-matrix" ../../scripts/flake/verify_compliance_matrix.sh
+    mkLightVerification "verify-compliance-matrix" ../../scripts/flake/verify_compliance_matrix.sh
       [ ];
 
   verified-reqs = verifiedReqs;
@@ -72,10 +71,7 @@ in
     mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
       [ ];
 
-  workflow-lint = mkVerification "lint-workflows" ../../scripts/flake/lint_workflows.sh [
-    pkgs.actionlint
-    pkgs.shellcheck
-  ];
+  workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
   rust-strict-packages = craneLib.mkCargoDerivation {
     inherit src cargoArtifacts;
