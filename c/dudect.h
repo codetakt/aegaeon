@@ -392,6 +392,17 @@ void dudect_collect(dudect_ctx_t *ctx) {
   ctx->batches++;
 }
 
+#ifdef AEGAEON_DUDECT_CANDIDATE
+/* calloc can defer physical allocation until the pilot writes its timestamps.
+ * Touch every page, including an unaligned final page, before calibration.
+ * The buffers remain zero; no target computation or sample is added. */
+static void dudect_prefault(void *buffer, size_t bytes, size_t page_size) {
+  volatile uint8_t *data = (volatile uint8_t *)buffer;
+  for (size_t offset = 0; offset < bytes; offset += page_size) data[offset] = 0;
+  if (bytes) data[bytes - 1] = 0;
+}
+#endif
+
 int dudect_init(dudect_ctx_t *ctx, dudect_config_t *conf)
 {
   ctx->batches = 0;
@@ -425,6 +436,12 @@ int dudect_init(dudect_ctx_t *ctx, dudect_config_t *conf)
   assert(ctx->classes);
   assert(ctx->input_data);
   assert(ctx->percentiles);
+#ifdef AEGAEON_DUDECT_CANDIDATE
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (page_size <= 0) abort();
+  dudect_prefault(ctx->ticks, conf->number_measurements * sizeof(int64_t), (size_t)page_size);
+  dudect_prefault(ctx->exec_times, conf->number_measurements * sizeof(int64_t), (size_t)page_size);
+#endif
 
   return 0;
 }

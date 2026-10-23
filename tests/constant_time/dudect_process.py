@@ -48,6 +48,7 @@ class ObservationStream:
     cases: tuple[str, ...]
     profile: str
     before_observation: Callable[[], None] | None = None
+    deadline: float | None = None
     index: int = 0
     buffer: bytes = b""
     total: int = 0
@@ -83,6 +84,8 @@ class ObservationStream:
             if self.before_observation is not None:
                 self.before_observation()
             self.observe(line)
+            if self.deadline is not None and time.monotonic() >= self.deadline:
+                invalid("Native dudect deadline reached before ACK: inconclusive")
             acknowledgments.write(b"c")
             acknowledgments.flush()
 
@@ -93,7 +96,7 @@ class ObservationStream:
             invalid(f"Incomplete native dudect execution (exit {code})")
 
 
-def receive(
+def receive(  # noqa: PLR0912 - bounded process and per-case deadline lifecycle
     process: subprocess.Popen[bytes],
     output: IO[bytes],
     stream: ObservationStream,
@@ -119,6 +122,7 @@ def receive(
                 if case_budget is not None and time.monotonic() >= deadline:
                     invalid("Native dudect case deadline reached: inconclusive")
                 previous_case = stream.index
+                stream.deadline = deadline
                 stream.consume(chunk, process.stdin)
                 if case_budget is not None and previous_case < stream.index < len(stream.cases):
                     completed = time.monotonic()
@@ -128,7 +132,10 @@ def receive(
                     # Individual looks cannot renew it, and successful process
                     # exit must fit within the final case's remaining budget.
                     deadline = completed + case_budget
+    stream.deadline = deadline
     stream.finish(process.wait(timeout=max(0.001, deadline - time.monotonic())))
+    if time.monotonic() >= deadline:
+        invalid("Native dudect deadline reached at completion: inconclusive")
 
 
 def terminate(process: subprocess.Popen[bytes]) -> int:
