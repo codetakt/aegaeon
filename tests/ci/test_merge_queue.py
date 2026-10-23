@@ -6,6 +6,7 @@ import ast
 import copy
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -404,11 +405,59 @@ class WorkflowTests(unittest.TestCase):
                     "refs/heads/topic",
                     "refs/heads/gh-readonly-queue/main/pr-1",
                 ]:
-                    expected = event in {"push", "workflow_dispatch"} and ref in {
-                        "refs/heads/main",
-                        "refs/tags/v1.0",
-                    }
+                    expected = event in {"push", "workflow_dispatch"} and ref == "refs/heads/main"
                     assert condition(guard, event=event, ref=ref) == expected
+
+    def test_container_release_hold_is_first_and_cannot_continue_on_failure(self):
+        workflow = self.load("docker-build")
+        assert workflow[True]["push"]["tags"] == ["v*"]
+        assert "workflow_dispatch" in workflow[True]
+        assert "workflow_call" in workflow[True]
+        job = workflow["jobs"]["build-and-push"]
+        assert "continue-on-error" not in job
+        hold = job["steps"][0]
+        assert hold["name"].startswith("Hold versioned container publication")
+        assert "continue-on-error" not in hold
+        release = self.load("release")["jobs"]
+        release_hold = next(
+            step
+            for step in release["validate-release"]["steps"]
+            if step.get("name", "").startswith("Hold release")
+        )
+        assert hold["run"] == release_hold["run"]
+        assert "if" not in release_hold
+        assert "continue-on-error" not in release_hold
+        assert "validate-release" in release["publish-container"]["needs"]
+        for step in job["steps"][1:]:
+            assert "always(" not in step.get("if", "")
+            assert "failure(" not in step.get("if", "")
+
+    def test_container_release_hold_rejects_tag_push_dispatch_and_reuse(self):
+        hold = self.load("docker-build")["jobs"]["build-and-push"]["steps"][0]
+        bash = shutil.which("bash")
+        assert bash is not None
+        for event in ("push", "workflow_dispatch", "workflow_call", "pull_request", "merge_group"):
+            for ref in (
+                "refs/tags/v1.0.0",
+                "refs/tags/v1.0.0-beta",
+                "refs/tags/other",
+                "refs/heads/main",
+                "refs/heads/topic",
+                "refs/pull/226/merge",
+            ):
+                with self.subTest(event=event, ref=ref):
+                    blocked = condition(hold["if"], event=event, ref=ref)
+                    assert blocked == ref.startswith("refs/tags/v")
+                    if blocked:
+                        result = subprocess.run(  # noqa: S603 - fixed repository release guard; no publication.
+                            [bash, "-e", "-c", hold["run"]],
+                            env={**os.environ, "GITHUB_EVENT_NAME": event, "GITHUB_REF": ref},
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                        )
+                        assert result.returncode == 1
+                        assert "Release qualification is pending" in result.stdout
 
     def test_group_compliance_matches_pr_and_attestation_requires_main_event(self):
         jobs = self.load("compliance")["jobs"]

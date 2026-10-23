@@ -57,7 +57,13 @@ and historical failures remain bound to the original evidence. Later dependency,
 typing, packaging and CI changes have not received physical requalification.
 
 The unconditional **release hold** in `Validate Release` remains the expiration
-barrier. Before the next release, complete production authentication, independent
+barrier. The independent container workflow also fails before checkout or build
+on `v*` tag references, including tag pushes and manual dispatch on a version tag.
+Its registry login, push and publication reporting permit only `main` push or
+manual-dispatch events during this hold. PR and merge-group image builds remain
+functional checks; `main` images remain development outputs, not qualified releases.
+The release workflow's container publisher still depends on `Validate Release`.
+Before the next release, complete production authentication, independent
 verification, protected identities and lifecycle commissioning, and qualify the
 release artifacts under the reviewed contract. No variable, historical receipt or
 functional check can bypass that hold. This transition is not the completed
