@@ -124,6 +124,10 @@ def receive(  # noqa: PLR0912 - bounded process and per-case deadline lifecycle
                 previous_case = stream.index
                 stream.deadline = deadline
                 stream.consume(chunk, process.stdin)
+                # Observers may tighten the case budget to a campaign cutoff.
+                # Keep that limit while waiting for more output or process exit.
+                if stream.deadline is not None:
+                    deadline = min(deadline, stream.deadline)
                 if case_budget is not None and previous_case < stream.index < len(stream.cases):
                     completed = time.monotonic()
                     if completed >= deadline:
@@ -132,8 +136,19 @@ def receive(  # noqa: PLR0912 - bounded process and per-case deadline lifecycle
                     # Individual looks cannot renew it, and successful process
                     # exit must fit within the final case's remaining budget.
                     deadline = completed + case_budget
+    _complete(process, stream, deadline)
+
+
+def _complete(process: subprocess.Popen[bytes], stream: ObservationStream, deadline: float) -> None:
+    """Preserve the effective limit through exit and final evidence processing."""
     stream.deadline = deadline
-    stream.finish(process.wait(timeout=max(0.001, deadline - time.monotonic())))
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        invalid("Native dudect deadline reached before completion: inconclusive")
+    code = process.wait(timeout=remaining)
+    if time.monotonic() >= deadline:
+        invalid("Native dudect deadline reached at process exit: inconclusive")
+    stream.finish(code)
     if time.monotonic() >= deadline:
         invalid("Native dudect deadline reached at completion: inconclusive")
 

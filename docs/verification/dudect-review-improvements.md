@@ -1,6 +1,6 @@
 # Dudect replay reporting and operation-test improvements
 
-Last updated: 2026-10-22
+Last updated: 2026-10-23
 
 Status: draft
 
@@ -76,6 +76,11 @@ collector's runtime type check. Each executable constructs a new stream and must
 still have at least 900 seconds before initialization, worker creation or native
 launch. The stream also withholds the ACK if the next case in the same executable
 cannot fit; success and exceptions restore both installation contexts.
+The transport retains any tighter deadline imposed by the stream while waiting
+for output, process exit and final evidence verification. Only completion of an
+intermediate case starts a fresh case budget, after the scheduler has checked
+that the next case fits within the absolute cutoff. An on-time final ACK does
+not extend the completion deadline.
 
 This closes the public-caller and installation-order gap. It does not implement
 an independent stop guard, provision infrastructure or authorize a new run. The
@@ -151,6 +156,21 @@ contract. Of the 44 Python files, 42 historically had normalized AST corresponde
 the current tree has 41, plus this explicit operational correction and the two
 already recorded test-only changes. This correction does not transfer historical
 physical qualification to the changed scheduler or grant external CI admission.
+
+The subsequent transport correction preserves the tightened deadline instead of
+overwriting it with the original case deadline after the final ACK. Expired EOF
+cannot start a process wait; late process exit is rejected before finalization,
+and finalization itself must finish before the deadline. The retained deadline
+also bounds the collector's subsequent evidence verification. Six additional
+non-timing tests cover these boundaries, stalled output, successful completion
+and a stricter case deadline using the actual scheduler, ACK and receive methods.
+Statistics, pipes and the clock are fixtures. Existing process tests separately
+check per-case renewal, descendant stopping and failed evidence retention.
+
+This changes `tests/constant_time/dudect_process.py` and therefore the collector
+source identity. Historical package bindings and physical receipts remain
+unchanged; reproducing those observations still requires their pinned sources.
+The new transport is not assigned the old collector's physical qualification.
 
 ## Historical verification result (2026-10-22)
 

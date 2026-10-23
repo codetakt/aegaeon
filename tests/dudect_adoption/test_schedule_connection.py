@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import io
 import json
 import sys
 import tempfile
@@ -38,6 +39,7 @@ class ScheduleConnectionTests(unittest.TestCase):
         cls.runtime = importlib.import_module("analysis_runtime")
         cls.schedule = importlib.import_module("schedule")
         cls.candidate = importlib.import_module("run_candidate")
+        cls.transport = importlib.import_module("dudect_process")
 
     @classmethod
     def tearDownClass(cls):
@@ -233,6 +235,111 @@ class ScheduleConnectionTests(unittest.TestCase):
             with self.schedule.installed(time.monotonic() + 1800):
                 self.assertIs(self.candidate.RuntimeStream, captured)
                 self.assertIsNot(captured, self.runtime.Stream)
+
+    def complete_transport(  # noqa: C901, PLR0913, PLR0915 - keep the transport lifecycle fixture together
+        self,
+        *,
+        deadline=900.5,
+        ack=899.8,
+        eof=899.85,
+        exit_at=899.9,
+        finish_at=899.95,
+        stalled=False,
+        failure=None,
+    ):
+        """Real scheduler/ACK/receive with only statistics, clock and pipes mocked."""
+        stream = object.__new__(self.schedule.Stream)
+        stream.absolute_deadline = 900
+        stream.deadline = None
+        stream.index = stream.total = 0
+        stream.cases, stream.buffer = ("fixture",), b""
+        stream.before_observation = None
+        process = SimpleNamespace(stdout=object(), stdin=io.BytesIO())
+        selector = Mock()
+        selector.__enter__ = Mock(return_value=selector)
+        selector.__exit__ = Mock(return_value=False)
+        selector.get_map.side_effect = [True, True, True] if stalled else [True, True, False]
+        key = SimpleNamespace(fd=99, fileobj=process.stdout)
+        selector.select.return_value = [(key, 1)]
+
+        def observe(obj, _line):
+            self.assertEqual(obj.deadline, min(deadline, 900))
+            obj.index += 1
+
+        def read(_fd, _size):
+            if stream.index == 0:
+                clock.return_value = ack
+                return b"{}\n"
+            clock.return_value = eof
+            return b""
+
+        def wait(*, timeout):
+            self.assertGreater(timeout, 0)
+            self.assertLessEqual(timeout, min(deadline, 900) - eof)
+            clock.return_value = exit_at
+            return 0
+
+        def finish(_code):
+            self.assertEqual(stream.deadline, min(deadline, 900))
+            clock.return_value = finish_at
+
+        with (
+            patch.object(self.schedule.time, "monotonic", return_value=ack) as clock,
+            patch.object(self.schedule.BaseStream, "observe", observe),
+            patch.object(stream, "finish", side_effect=finish) as finalize,
+            patch.object(self.transport.selectors, "DefaultSelector", return_value=selector),
+            patch.object(self.transport.os, "read", side_effect=read),
+        ):
+            process.wait = Mock(side_effect=wait)
+            if stalled:
+
+                def select(timeout):
+                    if stream.index == 0:
+                        return [(key, 1)]
+                    self.assertLessEqual(timeout, 900 - clock.return_value)
+                    clock.return_value = 900
+                    return []
+
+                selector.select.side_effect = select
+            expected = (
+                self.assertRaisesRegex(ValueError, failure) if failure else contextlib.nullcontext()
+            )
+            with expected:
+                self.transport.receive(process, io.BytesIO(), stream, deadline, case_budget=900)
+            self.assertEqual(process.stdin.getvalue(), b"c")
+            self.assertEqual(stream.deadline, min(deadline, 900))
+            if stalled or eof >= min(deadline, 900):
+                process.wait.assert_not_called()
+                finalize.assert_not_called()
+            elif exit_at >= min(deadline, 900):
+                finalize.assert_not_called()
+            else:
+                finalize.assert_called_once_with(0)
+            if failure is None:
+                # collect() uses this same value for its final evidence checks.
+                self.assertLess(clock.return_value, stream.deadline)
+                clock.return_value = min(deadline, 900)
+                self.assertFalse(clock.return_value < stream.deadline)
+
+    def test_on_time_final_ack_cannot_admit_exit_at_or_after_cutoff(self):
+        for exit_at in (900, 900.2):
+            with self.subTest(exit_at=exit_at):
+                self.complete_transport(exit_at=exit_at, failure="deadline.*process exit")
+
+    def test_late_eof_cannot_start_completion_wait(self):
+        self.complete_transport(eof=900.2, failure="deadline.*before completion")
+
+    def test_final_ack_cannot_extend_stalled_output_wait(self):
+        self.complete_transport(stalled=True, failure="deadline reached")
+
+    def test_finishing_evidence_must_remain_within_cutoff(self):
+        self.complete_transport(finish_at=900.2, failure="deadline.*completion")
+
+    def test_success_preserves_cutoff_for_final_evidence_verification(self):
+        self.complete_transport()
+
+    def test_stricter_case_deadline_is_preserved(self):
+        self.complete_transport(deadline=800, ack=799.5, eof=799.6, exit_at=799.7, finish_at=799.8)
 
 
 if __name__ == "__main__":
