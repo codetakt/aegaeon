@@ -51,7 +51,9 @@ jobs:
   helpers:
     name: CI helper tests (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The complete other group has 1,332 tests; 30m expired after test 1,031.
+    # Keep its inventory intact and reserve time for execution and accounting.
+    timeout-minutes: ${{ matrix.group == 'other' && 45 || 30 }}
     strategy:
       fail-fast: false
       max-parallel: 3

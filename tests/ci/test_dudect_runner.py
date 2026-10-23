@@ -144,9 +144,9 @@ class DudectRunnerTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertNotEqual(result.returncode, 0)
-        result = self.fixture.invoke(wrapper=True, exit=43)
+        self.functional_stub(43)
+        result = self.fixture.invoke(wrapper=True)
         self.assertEqual(result.returncode, 43)
-        self.assertIn("Dudect failed:", (self.fixture.output / "dudect.log").read_text())
 
     def test_failed_status_or_report_publication_cannot_leave_success(self):
         args = SimpleNamespace(suite="nix", profile="pr", adapter="shell", native_package=None)
@@ -203,29 +203,12 @@ class DudectRunnerTests(unittest.TestCase):
         self.assertEqual(self.fixture.report_path().read_text(), "previous report")
         self.assertFalse(self.fixture.events.exists())
 
-    def test_actual_workflow_collects_current_source_bound_legacy_evidence(self):
+    def test_actual_workflow_executes_functional_callbacks(self):
         document = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())
-        step = next(
-            row
-            for row in document["jobs"]["verified-reqs"]["steps"]
-            if row.get("name") == "Collect fresh legacy timing observations"
-        )
-        command = shlex.split(step["run"])
-        prefix = ["nix", "develop", ".#verification", "--command"]
-        self.assertEqual(command[:4], prefix)
-        result = subprocess.run(
-            command[4:],
-            cwd=self.fixture.root,
-            env=self.fixture.environment(),
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=40,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        validate_report_file(
-            self.fixture.root, self.fixture.root / "artifacts/ct/dudect/report.json"
-        )
+        steps = document["jobs"]["dudect"]["steps"]
+        self.assertTrue(any("nix build .#verify-dudect" in row.get("run", "") for row in steps))
+        self.assertFalse(any("run_contract.py" in row.get("run", "") for row in steps))
+        self.assertTrue(any("functional-report.json" in str(row) for row in steps))
 
     def caller_script(self):
         source = (ROOT / "flake.nix").read_text().split("mkVerification =", 1)[1]
@@ -244,41 +227,23 @@ class DudectRunnerTests(unittest.TestCase):
         self.assertNotIn("${", script)
         return script
 
-    def test_verified_reqs_retains_bundle_outside_temporary_build_source(self):
+    def test_verified_reqs_validates_without_collecting_observations(self):
         source = (ROOT / "scripts/flake/verify_reqs.sh").read_text()
-        start = source.index("\tdudect_output=")
-        script = source[start : source.index('\n\techo ""', start)]
-        validator = self.fixture.root / "scripts/validation/check_dudect.py"
-        validator.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / "scripts/validation/check_dudect.py", validator)
-        for position, options in enumerate(({"compiler_exit": 31}, {"exit": 43}, {})):
-            self.fixture.options.write_text(json.dumps(options))
-            output = self.fixture.directory / f"retained output {position}"
-            output.mkdir()
-            result = subprocess.run(
-                [shutil.which("bash"), "-e", "-o", "pipefail", "-c", script],
-                cwd=self.fixture.root,
-                env={**self.fixture.environment(), "OUT_DIR": str(output)},
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=40,
-            )
-            report = output / "dudect/report.json"
-            self.assertEqual(result.returncode == 0, not options, result.stdout + result.stderr)
-            self.assertEqual(report.exists(), not options)
-            runs = list((output / "dudect/runs").iterdir())
-            self.assertEqual(len(runs), 1)
-            status = json.loads((runs[0] / "status.json").read_text())
-            self.assertEqual(status["accepted"], not options)
-        # The build workspace can disappear; native sources, executables and
-        # stdout must still be sufficient for validation against current inputs.
-        shutil.rmtree(self.fixture.root)
-        validate_report_file(ROOT, report)
+        self.assertIn("test_dudect.py", source)
+        self.assertNotIn("run_contract.py", source)
+        self.assertNotIn("check_dudect.py", source)
 
-    def test_actual_nix_caller_marks_success_only_after_valid_observations(self):
+    def functional_stub(self, exit_code):
+        validator = self.fixture.root / "scripts/validation/test_dudect.py"
+        validator.parent.mkdir(parents=True, exist_ok=True)
+        validator.write_text("# Separate validator dependency for this shell-caller fixture.\n")
+        target = self.fixture.root / "scripts/ci/check_dudect_functional.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("import sys;sys.exit(" + str(exit_code) + ")\n")
+
+    def test_actual_nix_caller_requires_functional_success(self):
         for position, options in enumerate(({"compiler_exit": 31}, {"exit": 43}, {})):
-            self.fixture.options.write_text(json.dumps(options))
+            self.functional_stub(31 if options else 0)
             build = self.fixture.directory / f"build-{position}"
             build.mkdir()
             output = self.fixture.directory / f"caller-{position}"
@@ -289,7 +254,7 @@ class DudectRunnerTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=40,
+                timeout=180,  # Full raw-prefix verification is part of this fixture.
             )
             self.assertEqual(
                 (output / "success").exists(), not options, result.stdout + result.stderr
@@ -433,79 +398,25 @@ class DudectNixRetentionTests(unittest.TestCase):
         self.assertFalse(record["output_retained"])
         self.assertIn("regular file or directory", record["collection_error"])
 
-    def test_workflow_collects_and_uploads_after_attempted_nix_build(self):
+    def test_workflow_verified_reqs_does_not_collect_timing(self):
         document = yaml.safe_load((ROOT / ".github/workflows/verification.yml").read_text())
         steps = document["jobs"]["verified-reqs"]["steps"]
-        build = next(i for i, row in enumerate(steps) if row.get("id") == "verified-reqs-nix")
-        self.assertIn("nix eval --raw .#verified-reqs.outPath", steps[build]["run"])
-        self.assertIn("nix build .#verified-reqs --keep-failed -L", steps[build]["run"])
-        collect, upload = steps[build + 1 : build + 3]
-        self.assertIn("collect_dudect_nix_output.py", collect["run"])
-        self.assertIn("always()", collect["if"])
-        self.assertEqual(collect["if"], upload["if"])
-        self.assertIn('["success", "failure", "cancelled"]', collect["if"])
-        self.assertEqual(upload["with"]["path"], "artifacts/ct/dudect-nix-gate/")
-        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        self.assertTrue(any("nix build .#verified-reqs" in row.get("run", "") for row in steps))
+        self.assertFalse(any("collect_dudect" in row.get("run", "") for row in steps))
 
-    def test_pr_integrity_caller_preserves_failed_timing_output(self):
+    def test_pr_integrity_caller_keeps_functional_and_ffi_checks(self):
         document = yaml.safe_load((ROOT / ".github/workflows/pr.yml").read_text())
         steps = document["jobs"]["integrity"]["steps"]
-        build = next(i for i, row in enumerate(steps) if row.get("id") == "integrity-nix")
-        self.assertIn("nix eval --raw .#verified-reqs.outPath", steps[build]["run"])
-        self.assertIn("--keep-failed", steps[build]["run"])
-        self.assertNotIn(".#ffi-contracts", steps[build]["run"])
-        ffi = steps[build - 1]
-        self.assertEqual(ffi["run"], "nix build .#ffi-contracts --no-link -L")
-        self.assertNotIn("continue-on-error", ffi)
-        self.assertEqual(set(steps[build]), {"name", "id", "run"})
-        self.assertEqual(set(ffi), {"name", "run"})
-        collect, upload = steps[build + 1 : build + 3]
-        self.assertIn("collect_dudect_nix_output.py", collect["run"])
-        self.assertIn("always()", collect["if"])
-        self.assertIn('["success", "failure", "cancelled"]', collect["if"])
-        self.assertEqual(collect["if"], upload["if"])
-        self.assertIn(
-            "steps.integrity-nix.outputs.store-output", collect["env"]["DUDECT_NIX_OUTPUT"]
-        )
-        self.assertIn("steps.integrity-nix.outcome", collect["env"]["DUDECT_NIX_OUTCOME"])
-        self.assertEqual(upload["with"]["name"], "dudect-integrity-gate-output")
-        self.assertEqual(upload["with"]["path"], "artifacts/ct/dudect-integrity-gate/")
-        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        self.assertTrue(any("nix build .#verified-reqs" in row.get("run", "") for row in steps))
+        self.assertTrue(any("nix build .#ffi-contracts" in row.get("run", "") for row in steps))
+        self.assertFalse(any("collect_dudect" in row.get("run", "") for row in steps))
 
-    def test_periodic_workflow_runs_both_suites_without_failure_cancellation(self):
+    def test_periodic_workflow_holds_without_timing_or_schedule(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/dudect-periodic.yml").read_text())
-        job = workflow["jobs"]["dudect"]
-        self.assertFalse(job["strategy"]["fail-fast"])
-        self.assertEqual(
-            job["strategy"]["matrix"]["include"],
-            [
-                {"suite": "nix", "output": "artifacts/ct/dudect-nix/"},
-                {"suite": "legacy", "output": "artifacts/ct/dudect/"},
-            ],
-        )
-        nix, legacy, upload = job["steps"][-3:]
-        self.assertEqual(nix["if"], "${{ matrix.suite == 'nix' }}")
-        self.assertEqual(nix["run"], "bash scripts/ci/dudect_check.sh periodic")
-        self.assertEqual(legacy["if"], "${{ matrix.suite == 'legacy' }}")
-        self.assertEqual(
-            shlex.split(legacy["run"]),
-            [
-                "nix",
-                "develop",
-                ".#verification",
-                "--command",
-                "bash",
-                "tests/constant_time/run.sh",
-                "--profile",
-                "periodic",
-            ],
-        )
-        self.assertEqual(upload["if"], "${{ always() }}")
-        self.assertIn("${{ matrix.suite }}", upload["with"]["name"])
-        self.assertEqual(upload["with"]["path"], "${{ matrix.output }}")
-        self.assertEqual(upload["with"]["if-no-files-found"], "error")
-        for node in (job, nix, legacy):
-            self.assertNotIn("continue-on-error", node)
+        self.assertNotIn("schedule", workflow[True])
+        self.assertNotIn("dudect_check.sh", str(workflow))
+        self.assertNotIn("run_contract.py", str(workflow))
+        self.assertIn("exit 1", str(workflow))
 
     def core_outputs(self, outcomes):
         rows = {

@@ -376,6 +376,47 @@ def check_protected_source(repo: Path, bound: dict[str, str], records: dict[str,
         raise ValueError("transport verifier differs from protected base")
 
 
+def validate_result_contract(results: dict[str, Any]) -> None:
+    """Recognize the legacy holds and the bounded owner migration exception."""
+    version = results.get("version")
+    if version not in ("1", "2", "3"):
+        raise ValueError("unsupported protected result contract")
+    if version == "1":
+        if "qualification_transition" in results:
+            raise ValueError("qualification transition requires result contract version 2 or 3")
+        return
+    transition = results.get("qualification_transition")
+    expected: dict[str, Any]
+    if version == "2":
+        expected = {
+            "status": "blocked_pending_external_admission",
+            "ordinary_ci": "functional_only",
+            "release": "blocked",
+            "merge_for_qualification_sensitive_changes": "blocked",
+            "automatic_retry": False,
+        }
+    else:
+        expected = {
+            "status": "owner_authorized_pre_release_exception",
+            "ordinary_ci": "functional_only",
+            "release": "blocked",
+            "merge_for_qualification_sensitive_changes": "selected_functional_checks_required",
+            "external_dudect_authentication": "deferred_until_next_release",
+            "expires_before": "next_release",
+            "owner_exception": {
+                "path": "ci/evidence/dudect-ci-transition-20261023.json",
+                "sha256": "53d8b100008aa1c654f664e34baed194f46c9ee37d87d6c828ede7a32ad70cdc",
+            },
+            "automatic_retry": False,
+        }
+    if (
+        not isinstance(transition, dict)
+        or transition != expected
+        or transition["automatic_retry"] is not False
+    ):
+        raise ValueError("unsupported protected qualification transition")
+
+
 def validate_authority(records: dict[str, bytes]) -> dict[str, Any]:
     graph = load(records["ci/ci-input-authority.json"])
     if set(graph) != {
@@ -409,8 +450,9 @@ def validate_authority(records: dict[str, bytes]) -> dict[str, Any]:
             raise ValueError("duplicate or unsorted protected authority inventory")
     inventory = load(records["ci/ci-expected-inventory.json"])
     results = load(records["ci/ci-result-contract.json"])
-    if inventory["version"] != "1" or results["version"] != "1":
-        raise ValueError("unsupported protected inventory or result contract")
+    if inventory["version"] != "1":
+        raise ValueError("unsupported protected inventory")
+    validate_result_contract(results)
     if (
         sorted(inventory["families"]) != graph["inventory_families"]
         or sorted(results["families"]) != graph["inventory_families"]
@@ -634,7 +676,7 @@ def prepare(
         ),
         "result_contract": commitment(
             records["ci/ci-result-contract.json"],
-            "1",
+            load(records["ci/ci-result-contract.json"])["version"],
             bound["base"],
             records["ci/ci-result-contract.json"],
         ),
