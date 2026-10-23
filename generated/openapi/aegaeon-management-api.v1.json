@@ -7462,6 +7462,235 @@
         }
       }
     },
+    "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/attributes": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "get_user_attributes",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attribute sources and provenance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAttributeSourcesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Human OWNER or ADMINISTRATOR required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Attribute source operation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "replace_local_attributes",
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceLocalAttributesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Local namespace replaced atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalAttributesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid attributes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, Origin or CSRF check failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale baseRevision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or unknown request fields"
+          },
+          "500": {
+            "description": "Attribute source operation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Mandatory audit failed; replacement rolled back",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/teams/{teamId}/environments/{environmentId}/users/{userId}/credentials": {
       "get": {
         "tags": [
@@ -12108,6 +12337,21 @@
           }
         }
       },
+      "LocalAttributesResponse": {
+        "type": "object",
+        "required": [
+          "userId",
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/UserAttributeSourceView"
+          },
+          "userId": {
+            "type": "string"
+          }
+        }
+      },
       "OAuthProfile": {
         "type": "object",
         "required": [
@@ -13670,6 +13914,24 @@
         },
         "additionalProperties": false
       },
+      "ReplaceLocalAttributesRequest": {
+        "type": "object",
+        "required": [
+          "baseRevision",
+          "values"
+        ],
+        "properties": {
+          "baseRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero creates an absent local namespace; otherwise the current revision."
+          },
+          "values": {
+            "description": "Complete replacement object. An omitted member becomes missing; null is a value."
+          }
+        },
+        "additionalProperties": false
+      },
       "ResolveAccountLinkConflictRequest": {
         "type": "object",
         "required": [
@@ -14321,6 +14583,46 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "UserAttributeSourceView": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "revision",
+          "provenance",
+          "values"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "provenance": {
+            "description": "Authenticated source metadata: kind, authority, source_revision, observed_at, expires_at."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "values": {}
+        }
+      },
+      "UserAttributeSourcesResponse": {
+        "type": "object",
+        "required": [
+          "userId",
+          "sources"
+        ],
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserAttributeSourceView"
+            }
+          },
+          "userId": {
+            "type": "string"
           }
         }
       },

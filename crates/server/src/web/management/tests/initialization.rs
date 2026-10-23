@@ -9,6 +9,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod attributes;
 mod client_credentials_policy;
 mod client_credentials_reload;
 mod database_cleanup;

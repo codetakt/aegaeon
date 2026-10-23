@@ -1,4 +1,5 @@
 mod application_authorization;
+mod attributes;
 mod audit;
 mod list;
 mod mutation;
@@ -33,6 +34,10 @@ pub(super) fn routes() -> Router<AppState> {
             get(read::get_user)
                 .patch(mutation::update_user)
                 .delete(mutation::delete_user),
+        )
+        .route(
+            "/teams/:teamId/environments/:environmentId/users/:userId/attributes",
+            get(attributes::get).put(attributes::replace_local),
         )
         .route(
             "/teams/:teamId/environments/:environmentId/users/:userId/profile",
