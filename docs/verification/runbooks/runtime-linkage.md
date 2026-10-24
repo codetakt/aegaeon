@@ -1,6 +1,6 @@
 # Runtime Linkage — Proof-to-Implementation Traceability
 
-Last updated: 2026-10-01
+Last updated: 2026-10-24
 
 Status: current implementation baseline
 
@@ -165,17 +165,39 @@ The drift detection system tracks changes to runtime-linked files:
 # Generate manifest (after updating runtime_link fields)
 python3 scripts/validation/check_runtime_drift.py --generate
 
-# Check for drift (CI, warning mode)
+# Check current matrix membership and file hashes
 python3 scripts/validation/check_runtime_drift.py --check
 ```
 
-The manifest (`spec/runtime-link-manifest.json`) stores SHA-256 hashes of
-all runtime-linked files. When a linked file changes, the drift checker
-reports which compliance-matrix entries are affected, helping reviewers
-assess whether the proof-to-implementation link is still valid.
+The manifest (`spec/runtime-link-manifest.json`) stores hashes and requirement
+IDs for verified matrix rows that have a `runtime_link`, plus independently
+monitored crypto files. The checker rediscovers current matrix membership on
+every check: added, removed, renamed or differently attributed links require a
+matching manifest even when file bytes have not changed. Shared files may have
+multiple distinct IDs. `path#symbol` links monitor the containing file; this
+check does not establish symbol existence or proof validity. Requirements without
+a runtime link are governed by the separate linkage checks.
 
-**CI integration:** Drift detection runs in warning mode (non-blocking)
-as part of the `verify_reqs.sh` CI script.
+Missing or malformed inputs, duplicate mapping keys/selected IDs, invalid paths,
+incomplete inventories and attempts to downgrade criticality fail explicitly.
+Generation validates and reads all selected files before writing its output;
+a missing linked file must not replace the manifest with a partial inventory.
+No CI check regenerates the manifest automatically.
+
+**Exit status:** 0 means valid inputs with no drift, 1 means valid noncritical
+content drift, and 2 means critical drift or invalid/incomplete required inputs.
+`verify_reqs.sh` treats only status 1 as advisory; unexpected execution statuses
+also fail. The standalone `verification.yml` drift step blocks on every nonzero
+status, preserving its existing policy.
+
+The evidence wrapper (`scripts/ci/run_runtime_drift.py`) records the matrix,
+manifest, checker and wrapper digests, plus bytes of listed, currently discovered
+and independently monitored files before and after checking. This includes
+untracked/ignored files and followed symlink contents. Discovery errors are
+recorded separately from a valid empty result. Source mutation or evidence
+collection failure yields status 3, while a stable checker failure retains its
+original status and log. Evidence is written outside the checkout and uploaded
+on failure as well as success.
 
 ---
 

@@ -15,6 +15,7 @@ from typing import Any
 
 CHECKER = Path("scripts/validation/check_runtime_drift.py")
 MANIFEST = Path("spec/runtime-link-manifest.json")
+MATRIX = Path("spec/compliance-matrix.yaml")
 WRAPPER = Path("scripts/ci/run_runtime_drift.py")
 CONTEXT_KEYS = (
     "GITHUB_SHA",
@@ -34,42 +35,47 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def read_manifest() -> bytes | None:
+def read_input(path: Path) -> bytes | None:
     try:
-        return MANIFEST.read_bytes()
+        return path.read_bytes()
     except FileNotFoundError:
-        # Missing manifests are an existing checker failure, not a wrapper failure.
+        # Missing inputs are checker failures; record their absence explicitly.
         return None
 
 
-def listed_paths(manifest: bytes | None) -> set[str]:
-    try:
-        data = json.loads(manifest.decode("utf-8")) if manifest is not None else None
-    except (ValueError, RecursionError):
-        # Let the existing checker decide invalid-manifest failures.
-        return set()
-    if not isinstance(data, dict):
-        return set()
-    return {
-        path
-        for group in (data.get("files"), data.get("monitored_files"))
-        if isinstance(group, dict)
-        for path, info in group.items()
-        if isinstance(path, str) and isinstance(info, dict)
-    }
+def listed_paths(manifest: bytes | None, checker: dict[str, Any]) -> set[str]:
+    data = checker["read_manifest"](manifest) if manifest is not None else {}
+    paths: set[str] = set()
+    for name in ("files", "monitored_files"):
+        group = data.get(name)
+        if not isinstance(group, dict):
+            continue
+        for path in group:
+            paths.add(checker["_runtime_path"](path))
+    return paths
 
 
-def runtime_inputs(manifest: bytes | None) -> dict[str, str | None]:
-    # Import only definitions; use the checker's discovery, including ignored files.
+def runtime_inputs(
+    manifest: bytes | None, matrix: bytes | None
+) -> tuple[dict[str, str | None], dict[str, str]]:
+    # Import definitions and share discovery; never treat a parse error as a
+    # successfully discovered empty inventory. The original bytes remain bound.
     checker = runpy.run_path(str(CHECKER), run_name="runtime_drift_snapshot")
-    paths = listed_paths(manifest) | set(checker["_collect_monitored_files"]())
+    paths = set(checker["_collect_monitored_files"]())
+    errors: dict[str, str] = {}
+    try:
+        paths.update(listed_paths(manifest, checker))
+    except ValueError as error:
+        errors["manifest"] = str(error)
+    try:
+        paths.update(checker["runtime_links"](matrix))
+    except ValueError as error:
+        errors["matrix"] = str(error)
     inventory: dict[str, str | None] = {}
     for path in sorted(paths):
-        try:
-            inventory[path] = digest(Path(path).read_bytes())
-        except FileNotFoundError:
-            inventory[path] = None
-    return inventory
+        data = read_input(Path(path))
+        inventory[path] = digest(data) if data is not None else None
+    return inventory, errors
 
 
 def source_state() -> dict[str, Any]:
@@ -77,7 +83,9 @@ def source_state() -> dict[str, Any]:
     commit = git("rev-parse", "HEAD")
     if os.environ.get("GITHUB_SHA", commit) != commit:
         raise ValueError("GITHUB_SHA differs from the checked out commit")
-    manifest = read_manifest()
+    manifest = read_input(MANIFEST)
+    matrix = read_input(MATRIX)
+    inputs, discovery_errors = runtime_inputs(manifest, matrix)
     return {
         "commit": commit,
         "tree": git("rev-parse", "HEAD^{tree}"),
@@ -85,10 +93,12 @@ def source_state() -> dict[str, Any]:
         "tracked_diff_sha256": digest(subprocess.check_output(["git", "diff", "HEAD", "--binary"])),
         "sha256": {
             str(MANIFEST): digest(manifest) if manifest is not None else None,
+            str(MATRIX): digest(matrix) if matrix is not None else None,
             str(CHECKER): digest(CHECKER.read_bytes()),
             str(WRAPPER): digest(WRAPPER.read_bytes()),
         },
-        "runtime_inputs": runtime_inputs(manifest),
+        "runtime_inputs": inputs,
+        "discovery_errors": discovery_errors,
     }
 
 
@@ -97,6 +107,8 @@ def validate_result(before: dict[str, Any], after: dict[str, Any], status: int) 
         raise ValueError("source changed during the runtime drift check")
     if status not in (0, 1, 2):
         raise ValueError("runtime drift checker returned an unexpected status")
+    if before["discovery_errors"] and status != 2:
+        raise ValueError("invalid discovery did not produce an input-error status")
 
 
 def check(evidence: Path) -> dict[str, Any]:
