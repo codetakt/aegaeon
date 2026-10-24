@@ -13,25 +13,14 @@ else
 fi
 LOCALSTACK_WAIT_SECONDS="${AEG_OIDC_KMS_LOCALSTACK_WAIT_SECONDS:-60}"
 REQUIRE_LOCALSTACK="${AEG_KMS_REQUIRE_LOCALSTACK:-1}"
-TEST_NAME="test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TEST_NAME="oidc::config::tests::kms_parity::test_oidc_aws_kms_runtime_key_material_issues_verifiable_rs256_jwt"
 TEST_COMMAND_STRING="cargo test -p aegaeon-server --features kms-aws"
-TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME} -- --nocapture"
+TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME} -- --exact --nocapture --color never"
 TEST_COMMAND=(
-	cargo test -p aegaeon-server --features kms-aws --lib "${TEST_NAME}" -- --nocapture
+	cargo test -p aegaeon-server --features kms-aws --lib "${TEST_NAME}"
+	-- --exact --nocapture --color never
 )
-
-if [[ ${MODE} == "aws" ]]; then
-	TEST_COMMAND_STRING="cargo test -p aegaeon-server --features kms-aws"
-	TEST_COMMAND_STRING="${TEST_COMMAND_STRING} --lib ${TEST_NAME}"
-	TEST_COMMAND_STRING="${TEST_COMMAND_STRING} -- --nocapture"
-	TEST_COMMAND=(
-		cargo test -p aegaeon-server --features kms-aws --lib
-		"${TEST_NAME}" -- --nocapture
-	)
-elif [[ ${MODE} != "localstack" ]]; then
-	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
-	exit 2
-fi
 
 mkdir -p "${ARTIFACT_DIR}"
 
@@ -61,6 +50,7 @@ write_summary() {
 	cat >"${ARTIFACT_DIR}/summary.json" <<EOF
 {
 	"artifacts": {
+		"execution": "execution.json",
 		"localstack_health": ${localstack_health_json},
 		"log": "test.log",
 		"metadata": "metadata.txt"
@@ -85,6 +75,14 @@ EOF
 }
 
 trap write_summary EXIT
+
+# Never let an earlier run supply execution evidence for this attempt.
+rm -f "${ARTIFACT_DIR}/test.log" "${ARTIFACT_DIR}/execution.json"
+
+if [[ ${MODE} != "aws" && ${MODE} != "localstack" ]]; then
+	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
+	exit 2
+fi
 
 if [[ ${MODE} == "localstack" ]]; then
 	export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
@@ -149,4 +147,6 @@ if [[ ${MODE} == "localstack" && ${REQUIRE_LOCALSTACK} == "1" ]]; then
 fi
 
 "${TEST_COMMAND[@]}" 2>&1 | tee "${ARTIFACT_DIR}/test.log"
+python3 "${SCRIPT_DIR}/validate_oidc_kms_execution.py" "${ARTIFACT_DIR}/test.log" \
+	>"${ARTIFACT_DIR}/execution.json"
 status="passed"
