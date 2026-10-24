@@ -224,24 +224,38 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run RFC compliance tests
+        id: rfc-tests
         run: |
+          set -o pipefail
           chmod +x scripts/validation/test_rfc_compliance.sh
-          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh
+          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee rfc-compliance.log
 
       - name: Generate compliance report
         if: always()
+        env:
+          RFC_TEST_OUTCOME: ${{ steps.rfc-tests.outcome }}
         run: |
-          echo "# RFC Compliance Report" > compliance-report.md
-          echo "Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> compliance-report.md
-          echo "" >> compliance-report.md
-          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee -a compliance-report.md || true
+          {
+            printf '# RFC Compliance Report\n\n'
+            printf 'Date: %s\n' "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            printf 'Test step outcome: %s\n\n' "${RFC_TEST_OUTCOME:-unavailable}"
+            printf '```text\n'
+            if [ -f rfc-compliance.log ]; then
+              cat rfc-compliance.log
+            else
+              printf 'No test log was produced; the tests may not have started.\n'
+            fi
+            printf '\n```\n'
+          } > compliance-report.md
 
       - name: Upload compliance report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rfc-compliance-report
-          path: compliance-report.md
+          path: |
+            compliance-report.md
+            rfc-compliance.log
 
   oauth2-conformance:
     permissions: {}

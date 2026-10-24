@@ -52,6 +52,11 @@ replays the retained admission records against the current evidence registry,
 and every selected theory/lemma must be admitted. No proof selection, warning
 exception, timeout or acceptance criterion changes.
 
+RFC compliance reporting uses the output and outcome of the required test
+invocation. Report creation does not execute the suite again, including after
+cancellation. The original stdout/stderr log is retained with the report;
+missing output is identified explicitly, and test/logging failures remain fatal.
+
 ## Validation and measurement
 
 Before publication, verify complete discovery and the helper receipt rejection
