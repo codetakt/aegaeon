@@ -106,6 +106,7 @@ Audience: contributors, maintainers
 | `docs/automation/flakehub-preview.md` | automation | Private FlakeHub server preview | current implementation baseline | 2026-09-09 | CI / Automation | maintainer using Aegaeon in internal development projects |
 | `docs/automation/pr-validation.md` | automation | Pull Request Validation | current implementation baseline | 2026-10-24 | CI / Automation | contributors, reviewers, repository administrators |
 | `docs/automation/security-analysis.md` | automation | Security Analysis Execution | current implementation baseline | 2026-09-08 | CI / Automation | contributors, security reviewers |
+| `docs/automation/workflow-time-analysis.md` | automation | Workflow time analysis | current implementation baseline | 2026-10-24 | CI / Automation | contributors, reviewers, repository administrators |
 
 ## Program Management
 
