@@ -57,6 +57,13 @@ invocation. Report creation does not execute the suite again, including after
 cancellation. The original stdout/stderr log is retained with the report;
 missing output is identified explicitly, and test/logging failures remain fatal.
 
+The RFC 7520 job uses the same approach: execute its original Cargo command
+once, retain both output streams, and generate a JSON report from the recorded
+step outcome. `rfc7520-results.json` is a versioned outcome/log receipt, not a
+second libtest event stream. Its artifact also contains `rfc7520.log`. The
+conformance summary requires a successful producer job, a successful test
+outcome and the corresponding nonempty log; file existence alone is insufficient.
+
 ## Validation and measurement
 
 Before publication, verify complete discovery and the helper receipt rejection
@@ -91,3 +98,37 @@ F* source narrowing and cross-event producer reuse likewise require their own
 complete input and evidence contracts. They are not enabled by the Tamarin
 boundary. External Dudect/performance qualification and release admission remain
 governed by the [CI execution boundary](../development/ci-execution-boundary.md).
+
+## Follow-up work
+
+The integrated helper, Nix, OpenAPI and reporting improvements do not close the
+entire optimization program. The following work remains in dependency order.
+Each implementation must retain its original result and evidence requirements;
+an unchecked item is not permission to omit a check.
+
+| Priority | Work | Depends on | Completion evidence |
+| --- | --- | --- | --- |
+| 1 | Inventory remaining Rust, JOSE and KMS producers and consumers | Current workflow and command inventory | For each invocation: source, toolchain, features/profile/backend, test identities, runtime services, events, outputs and failure policy; identify equivalent and complementary executions separately |
+| 1 | Reconcile all protected-input authority holds | Direct component checks and actual discovery paths | Current source evidence for every entry in `ci/ci-input-authority.json`; base/head/tested union, additions, removals, renames and unknown-input controls; unexplained inputs retain full selection |
+| 2 | Separate additional Rust build/test and lightweight-check inputs | Complete producer and transitive-input inventories | Build scripts, generated/includes, migrations, fixtures and tools retained; relevant mutations invalidate outputs, irrelevant changes preserve outputs, mandatory-input removal fails, actual test inventory agrees |
+| 2 | Share equivalent JOSE/KMS build products | Exact compilation and runtime identities | Same target/profile/features and backend, all original tests/results accounted for, independent service tests preserved, missing or mismatched products rebuild |
+| 2 | Evaluate selective execution in shadow mode | All relevant protected-input holds resolved | Compare proposed selection with full execution for docs, infrastructure, component, Rust/proof, mixed and unknown changes; no missing required consumer; separate acceptance before enabling omissions |
+| 3 | Reuse results across events | Complete producer/consumer equivalence and trust rules | Revision/artifact binding, trusted producer, successful complete evidence, expiry/revocation checks and full fallback; dynamic and publication responsibilities retain their owners |
+| 3 | Review F* checked-file/pass reuse and Tamarin batching | Separate proof-evidence designs | Preserve solver context, module/interface and assumption-graph inputs, every admitted obligation, exceptions, outputs and freshness; ordinary CI optimization does not establish product assurance |
+| Parallel | Measure resource effects | A fixed before/after candidate and unchanged obligations | Matched event/runner/tool/cache scenarios, elapsed and summed job times, waits, setup/build/test times, disk peaks, substitutions, failures and retries; unmatched historical runs stay descriptive |
+| Parallel | Audit legacy and manual consumers | Workflow, runbook, scaffold and dynamic-call inventory | A documented replacement or retained owner before removing a helper/job; absence from workflow search is insufficient |
+
+Keep three boundaries explicit:
+
+- Cache capacity/eviction is an investigation, not an established cause of slow
+  runs. Obtain service evidence before changing capacity or cleanup thresholds.
+- Tested versus shipped release artifacts and external qualification belong to
+  the release execution boundary. They remain required for their claims, but
+  are not silently added as prerequisites to every local CI optimization.
+- Blanket deletion of main triggers, hash-only selection, weaker tests,
+  unreviewed proof batching and increased queue concurrency are not adopted.
+
+For each item, record the implementation PR, actual validation, remaining
+conditions and integration result separately. Complete direct checks and pinned
+extraction routes already integrated in earlier PRs must be reconciled with the
+current code rather than implemented a second time.
