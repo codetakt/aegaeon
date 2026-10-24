@@ -413,7 +413,7 @@
               language = "system";
               pass_filenames = false;
               files =
-                "^(package(-lock)?\\.json|eslint\\.config\\.js|tsconfig\\.json|"
+                "^(package(-lock)?\\.json|eslint\\.config\\.cjs|tsconfig\\.json|"
                 + "scripts/check-strict-types\\.ts|scripts/check-workflow-inventory\\.ts|"
                 + "scripts/sdk/check_sdk_strict_types\\.ts|scripts/sdk/tools-src/check-strict-types\\.ts|"
                 + "tests/verified_core_wasm/(root_strict_types_policy_test|strict_types_policy_test|workflow_inventory_policy_test)\\.ts)$";
