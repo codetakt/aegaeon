@@ -120,7 +120,7 @@ PY
 	python3 scripts/validation/check_runtime_drift.py --check 2>&1 || DRIFT_RC=$?
 	if [ "$DRIFT_RC" -eq 0 ]; then
 		echo "  No drift detected."
-	elif [ "$DRIFT_RC" -eq 1 ]; then
+	elif [ "$DRIFT_RC" -eq 10 ]; then
 		echo "  WARNING: Runtime-link drift detected (non-blocking)."
 		DRIFT_WARNINGS=1
 	else

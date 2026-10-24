@@ -6,7 +6,7 @@ Two modes:
                 status:verified entries and write spec/runtime-link-manifest.json.
                 Also hashes files matched by MONITORED_PATHS independently.
     --check     Compare current file hashes against the manifest and report drift
-                (0 clean, 1 noncritical drift, 2 critical drift or invalid inputs).
+                (0 clean, 10 noncritical drift, 2 critical drift or invalid inputs).
 
 The manifest records which compliance-matrix entry IDs depend on each file,
 so drift reports are actionable.
@@ -390,10 +390,10 @@ def main() -> int:
             f"match manifest ({critical_total} critical)"
         )
 
-    # Exit 2 for critical drift (fail-close), 1 for non-critical drift, 0 for clean.
+    # Reserve 10 for completed noncritical drift; Python failures commonly exit 1.
     if critical_drifted:
         return 2
-    return 1 if drifted else 0
+    return 10 if drifted else 0
 
 
 if __name__ == "__main__":

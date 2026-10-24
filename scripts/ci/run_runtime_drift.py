@@ -105,7 +105,7 @@ def source_state() -> dict[str, Any]:
 def validate_result(before: dict[str, Any], after: dict[str, Any], status: int) -> None:
     if before != after:
         raise ValueError("source changed during the runtime drift check")
-    if status not in (0, 1, 2):
+    if status not in (0, 10, 2):
         raise ValueError("runtime drift checker returned an unexpected status")
     if before["discovery_errors"] and status != 2:
         raise ValueError("invalid discovery did not produce an input-error status")

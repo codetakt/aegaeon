@@ -110,10 +110,10 @@ class RuntimeDriftTests(RuntimeDriftFixture):
         self.write(str(MANIFEST), json.dumps(manifest))
         assert self.invoke("--check").returncode == 0
         self.write("a.rs", "changed\n")
-        assert self.invoke("--check").returncode == 1
+        assert self.invoke("--check").returncode == 10
 
     def test_changed_and_missing_runtime_files_preserve_exit_classes(self):
-        for path, expected in (("a.rs", 1), ("crates/ffi/src/critical.rs", 2)):
+        for path, expected in (("a.rs", 10), ("crates/ffi/src/critical.rs", 2)):
             for missing in (False, True):
                 with self.subTest(path=path, missing=missing):
                     self.write(path, "baseline\n")
@@ -177,7 +177,7 @@ class RuntimeDriftTests(RuntimeDriftFixture):
         base_source = b"one\ntwo\nthree\nfour\nfive\nsix\nseven\n"
         left_source = base_source.replace(b"one", b"left")
         right_source = base_source.replace(b"seven", b"right")
-        for path, expected in (("a.rs", 1), ("crates/ffi/src/critical.rs", 2)):
+        for path, expected in (("a.rs", 10), ("crates/ffi/src/critical.rs", 2)):
             with self.subTest(path=path):
                 self.write(path, left_source.decode())
                 left_manifest = self.generate()
@@ -237,7 +237,7 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
         self.write(str(CHECKER.relative_to(ROOT)), original.replace(guard, replacement))
 
     def test_wrapper_preserves_status_and_binds_unchanged_manifest(self):
-        for expected, path in ((0, None), (1, "a.rs"), (2, "crates/crypto/src/monitored.rs")):
+        for expected, path in ((0, None), (10, "a.rs"), (2, "crates/crypto/src/monitored.rs")):
             with self.subTest(expected=expected):
                 self.generate()
                 if path:
@@ -294,6 +294,7 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
                 0,
             ),
             ("raise SystemExit(42)\n", 42),
+            ('raise RuntimeError("checker crashed")\n', 1),
         )
         for index, (program, status) in enumerate(cases):
             with self.subTest(status=status):
@@ -412,7 +413,7 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
                 assert receipt["source_before"] == receipt["source_after"]
                 assert receipt["source_before"]["runtime_inputs"][path] == sha(b"new\n")
                 (self.root / path).unlink()
-        for path, status in (("a.rs", 1), ("crates/crypto/src/monitored.rs", 2)):
+        for path, status in (("a.rs", 10), ("crates/crypto/src/monitored.rs", 2)):
             with self.subTest(path=path):
                 original = (self.root / path).read_bytes()
                 (self.root / path).unlink()
@@ -769,7 +770,52 @@ class RuntimeInputIntegrityTests(RuntimeDriftFixture):
         assert self.invoke("--check").returncode == 2
 
 
-class VerifiedReqsDriftDispatchTests(unittest.TestCase):
+class VerifiedReqsDriftDispatchTests(RuntimeDriftFixture):
+    def test_real_checker_failures_cannot_become_advisory(self):
+        script = ROOT / "scripts/flake/verify_reqs.sh"
+        helpers = self.root / "scripts/flake"
+        helpers.mkdir(parents=True)
+        shutil.copyfile(
+            script.with_name("dudect_output_permissions.sh"),
+            helpers / "dudect_output_permissions.sh",
+        )
+        binary = self.root / "bin"
+        binary.mkdir()
+        shim = binary / "python3"
+        shim.write_text(
+            "#!/usr/bin/env bash\n"
+            'printf "%s\\n" "$*" >> "$DISPATCH_LOG"\n'
+            'if [[ "$1" == "scripts/validation/check_runtime_drift.py" ]]; then\n'
+            '  exec "$DRIFT_PYTHON" "$@"\nfi\n'
+        )
+        shim.chmod(0o755)
+        for name, program in (
+            ("runtime-error", 'raise RuntimeError("checker crashed")\n'),
+            ("syntax-error", "def broken(:\n"),
+            ("import-error", "import missing_runtime_drift_test_module\n"),
+        ):
+            with self.subTest(name=name):
+                self.write(str(CHECKER.relative_to(ROOT)), program)
+                log = self.temporary / f"{name}.log"
+                result = subprocess.run(
+                    ["bash", str(script)],
+                    cwd=self.root,
+                    env={
+                        **os.environ,
+                        "PATH": f"{binary}:{os.environ['PATH']}",
+                        "DRIFT_PYTHON": sys.executable,
+                        "DISPATCH_LOG": str(log),
+                        "AEGAEON_ASSURANCE_SOURCE_DIR": str(self.root),
+                        "OUT_DIR": str(self.root),
+                    },
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                assert result.returncode != 0, result.stdout + result.stderr
+                assert "check_crypto_calls.py --check" not in log.read_text()
+                assert "WARNING: Runtime-link drift" not in result.stdout
+
     def test_actual_script_only_allows_valid_noncritical_drift_as_advisory(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         script = ROOT / "scripts/flake/verify_reqs.sh"
@@ -789,7 +835,7 @@ class VerifiedReqsDriftDispatchTests(unittest.TestCase):
             '  exit "$DRIFT_STATUS"\nfi\n'
         )
         shim.chmod(0o755)
-        for status in (0, 1, 2, 3, 42, 127, 137):
+        for status in (0, 1, 2, 3, 10, 42, 127, 137):
             with self.subTest(status=status):
                 log = root / f"calls-{status}.log"
                 result = subprocess.run(
@@ -807,10 +853,10 @@ class VerifiedReqsDriftDispatchTests(unittest.TestCase):
                     capture_output=True,
                     check=False,
                 )
-                assert result.returncode == (0 if status in (0, 1) else 1), (
+                assert result.returncode == (0 if status in (0, 10) else 1), (
                     result.stdout + result.stderr
                 )
                 calls = log.read_text()
                 assert "check_runtime_drift.py --check" in calls
-                assert ("check_crypto_calls.py --check" in calls) == (status in (0, 1))
-                assert ("with warnings" in result.stdout) == (status == 1)
+                assert ("check_crypto_calls.py --check" in calls) == (status in (0, 10))
+                assert ("with warnings" in result.stdout) == (status == 10)
