@@ -1,6 +1,6 @@
 # CI execution efficiency
 
-Last updated: 2026-10-24
+Last updated: 2026-10-25
 
 Status: current implementation baseline
 
@@ -14,6 +14,27 @@ not an improvement if it stops executing an obligation. Required checks remain
 the acceptance gate for PRs and merge groups.
 
 ## Current changes
+
+OpenAPI dependency preparation and validation use a dedicated source boundary.
+It excludes `.github/`, `ci/`, `scripts/ci/` and `tests/ci/` from the existing
+build source, so changes confined to CI orchestration do not invalidate the
+OpenAPI build. All other build inputs remain, including unknown new paths,
+Rust and native sources, Cargo configuration, generated files, migrations and
+fixtures. The existing exclusion of documentation is preserved. This filter
+is local to OpenAPI; other Rust consumers keep their own source boundaries.
+
+The OpenAPI command still compares both checked-in JSON artifacts and runs all
+four original unit tests with the same locked Cargo commands, profile, features
+and native toolchain. Changes to relevant inputs invalidate the check; stale
+JSON and missing required native sources fail. CI orchestration retains its
+own validation and the full lane selection. A future OpenAPI dependency on an
+excluded directory requires revisiting this boundary before using that input.
+
+The boundary is tested with file changes, additions and removals, and with the
+actual package source. Local sandbox builds retained the same generated JSON
+and test inventory; derivation comparisons confirmed reuse for CI-only changes.
+These checks establish cache eligibility, not a measured reduction in Hosted
+elapsed time.
 
 Nextest uses a dedicated dependency artifact with the same ordered OpenSSL
 pkg-config input as its consumer. OpenSSL precedes Crane's zstd input in both
