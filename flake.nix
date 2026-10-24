@@ -75,6 +75,7 @@
         };
         inherit (pkgs) lib;
         inherit (pkgs.stdenv.hostPlatform) isLinux;
+        nodejsRuntime = pkgs.nodejs_24;
 
         rustToolchainConfig = builtins.fromTOML (builtins.readFile ./rust-toolchain.toml);
         rustChannel = rustToolchainConfig.toolchain.channel;
@@ -529,7 +530,7 @@
             python'
           ]
           ++ (with pkgs; [
-            nodejs_24
+            nodejsRuntime
             pnpm
             pkg-config
             openssl
@@ -1168,6 +1169,7 @@
         flakeDevShells = import ./nix/flake/dev-shells.nix {
           inherit
             pkgs
+            nodejsRuntime
             lib
             cargoArtifacts
             devTools

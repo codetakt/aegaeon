@@ -1,5 +1,6 @@
 {
   pkgs,
+  nodejsRuntime,
   lib,
   cargoArtifacts,
   devTools,
@@ -29,7 +30,7 @@ let
 in
 {
   typescript = pkgs.mkShellNoCC {
-    packages = [ pkgs.nodejs_24 ];
+    packages = [ nodejsRuntime ];
   };
 
   docs = pkgs.mkShellNoCC {
@@ -72,6 +73,41 @@ in
       pkgs.jq
       pkgs.ripgrep
     ];
+  };
+
+  ci-tools = pkgs.mkShellNoCC {
+    # Core's direct commands inspect source/metadata. Compilation and proofs
+    # run in their own derivations; do not import cargoArtifacts or shell hooks
+    # that also pull extraction, Kani and the interactive development tools.
+    packages = lib.unique (
+      pre-commit-check.enabledPackages
+      ++ (with pkgs; [
+        pre-commit
+        nodejsRuntime
+        gitMinimal
+        bash
+        coreutils
+        gnused
+        gnugrep
+        findutils
+        diffutils
+        jq
+        nixfmt-tree
+        statix
+        deadnix
+        actionlint
+        shellcheck
+        markdownlint-cli2
+        commitlint
+      ])
+    );
+    shellHook = guardedPreCommitShellHook {
+      repoNames = [
+        "aegaeon"
+        "aegaeon-server-ci"
+      ];
+      marker = "Cargo.toml";
+    } pre-commit-check.shellHook;
   };
 
   ci = pkgs.mkShell {

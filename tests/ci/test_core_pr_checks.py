@@ -49,11 +49,15 @@ with pathlib.Path("commands.jsonl").open("a") as out:
     out.write(json.dumps(args) + "\\n")
 data = json.loads(pathlib.Path("inventory.json").read_text())
 if args[0] == "flake":
+    if os.environ.get("FAKE_COLD_IFD") and not pathlib.Path("ifd-prepared").exists():
+        sys.exit(24)
     sys.exit(int(os.environ.get("FAKE_FLAKE_EXIT", "0")))
 if args[0] == "eval":
     if os.environ.get("FAKE_INVALID_JSON"):
         print("invalid"); sys.exit(0)
     print(json.dumps(data["checks" if "checks." in args[2] else "packages"]))
+    if "checks." in args[2]:
+        pathlib.Path("ifd-prepared").touch()
     sys.exit(int(os.environ.get("FAKE_EVAL_EXIT", "0")))
 if args[0] == "build":
     if os.environ.get("FAKE_FAILED_TARGET", "not-a-target") in args:
@@ -100,7 +104,8 @@ sys.exit(2)
         result = self.invoke()
         assert result.returncode == 0, result.stderr
         commands = self.commands()
-        assert commands[0] == ["flake", "check", "--no-build", "--print-build-logs"]
+        assert [c[0] for c in commands] == ["eval", "eval", "flake", "build"]
+        assert commands[2] == ["flake", "check", "--no-build", "--print-build-logs"]
         builds = [c for c in commands if c[0] == "build"]
         assert len(builds) == 1
         expected = set(self.checks.values()) - set(self.formal.values())
@@ -110,6 +115,19 @@ sys.exit(2)
         assert not set(owners["core"]) & set(owners["verification"])
         assert owners["verification"] == self.formal
         assert not (self.root / "artifacts/ci-dudect-outputs.json").exists()
+
+    def test_cold_ifd_inputs_are_prepared_without_building_delegated_checks(self):
+        result = self.invoke(FAKE_COLD_IFD="1")
+        assert result.returncode == 0, result.stderr
+        builds = [c for c in self.commands() if c[0] == "build"]
+        assert len(builds) == 1
+        assert not {d + "^*" for d in self.formal.values()} & set(builds[0][3:])
+
+    def test_full_output_validation_failure_still_stops_before_receipt_and_build(self):
+        result = self.invoke(FAKE_COLD_IFD="1", FAKE_FLAKE_EXIT="25")
+        assert result.returncode != 0
+        assert not any(c[0] == "build" for c in self.commands())
+        assert not (self.root / "artifacts/ci-check-ownership.json").exists()
 
     def test_push_and_manual_runs_keep_every_formal_and_functional_check(self):
         for event in ("push", "workflow_dispatch"):
