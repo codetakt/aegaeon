@@ -914,6 +914,7 @@
             '';
 
         assuranceStandards = import ./nix/assurance-sources.nix { inherit pkgs; };
+        ffiContractCheck = import ./nix/ffi-contract-check.nix { inherit pkgs; };
         verifiedReqs =
           (mkLightVerification "verify-reqs" ./scripts/flake/verify_reqs.sh [
             llvmPackages.clang
@@ -1111,7 +1112,7 @@
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             openapiCheck
-            mkLightVerification
+            ffiContractCheck
             assuranceStandards
             verifiedReqs
             lib
@@ -1146,6 +1147,7 @@
         flakeChecks = import ./nix/flake/checks.nix {
           inherit
             openapiCheck
+            ffiContractCheck
             pkgs
             isLinux
             craneLib

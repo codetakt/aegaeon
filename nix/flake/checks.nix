@@ -1,5 +1,6 @@
 {
   openapiCheck,
+  ffiContractCheck,
   pkgs,
   isLinux,
   craneLib,
@@ -70,9 +71,7 @@ in
 
   verified-reqs = verifiedReqs;
 
-  ffi-contracts =
-    mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
-      [ ];
+  ffi-contracts = ffiContractCheck;
 
   workflow-lint = import ../workflow-lint.nix { inherit pkgs; };
 
