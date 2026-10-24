@@ -162,6 +162,39 @@ class WorkflowTimesTests(unittest.TestCase):
         assert report["completed_job_seconds"] == 10
         assert report["attempt_to_first_job_seconds"] is None
 
+    def test_invalid_or_unfinished_timing_cannot_identify_last_completed_job(self):
+        for mutation in ("completion", "step", "unfinished", "run_start"):
+            with self.subTest(mutation=mutation):
+                run, jobs = fixture()
+                last = jobs["jobs"][1]
+                last["completed_at"] = "2026-10-24T00:00:30Z"
+                if mutation == "completion":
+                    last["completed_at"] = None
+                elif mutation == "step":
+                    last["steps"][0]["started_at"] = None
+                elif mutation == "unfinished":
+                    run.update(status="in_progress", conclusion=None)
+                    last.update(status="in_progress", conclusion=None, completed_at=None)
+                else:
+                    run["run_started_at"] = None
+                report = summarize(run, jobs)
+                assert report["last_completed_job_id"] is None
+                assert not report["complete"]
+                assert report["completed_job_seconds"] == (45 if mutation == "run_start" else 20)
+
+    def test_last_completed_job_requires_unique_latest_timestamp(self):
+        run, jobs = fixture()
+        report = summarize(run, jobs)
+        assert report["complete"]
+        assert report["attempt_elapsed_seconds"] == 25
+        assert report["last_completed_job_id"] is None
+        jobs["jobs"][1]["completed_at"] = "2026-10-24T09:00:25+09:00"
+        assert summarize(run, jobs)["last_completed_job_id"] is None
+        jobs["jobs"][1]["completed_at"] = "2026-10-24T00:00:26Z"
+        report = summarize(run, jobs)
+        assert report["last_completed_job_id"] == 21
+        assert report["attempt_elapsed_seconds"] == 26
+
     def test_requested_run_and_job_remain_visible(self):
         run, jobs = fixture()
         run.update(status="requested", conclusion=None)

@@ -57,6 +57,11 @@ after GitHub created a job; it does not include all dependency waiting or isolat
 runner allocation. Job time outside completed step intervals remains explicitly
 unattributed.
 
+`last_completed_job_id` is available only when the run is complete, all timing is
+valid, and one job has the unique maximum completion timestamp. Incomplete or
+invalid timing cannot identify the last job. Tied completion timestamps also
+leave the ID unavailable, while preserving the valid elapsed measurement.
+
 The longest job or last-finishing job does not, by itself, identify the causal
 dependency critical path. A step that builds and tests cannot be split into
 compile, test, transfer and cache costs from its timestamps alone. Use its retained

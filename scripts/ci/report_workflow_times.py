@@ -297,7 +297,14 @@ def summarize(
         if complete and last
         else None,
         "completed_job_seconds": sum(row["occupied_seconds"] for row in finished),
-        "last_completed_job_id": last["id"] if last else None,
+        "last_completed_job_id": last["id"]
+        if complete
+        and last
+        and sum(
+            timestamp(row["completed_at"]) == timestamp(last["completed_at"]) for row in finished
+        )
+        == 1
+        else None,
         "jobs": rows,
         "limits": [
             "Incomplete/invalid snapshots have no final elapsed; totals exclude unaccounted jobs.",
