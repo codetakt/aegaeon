@@ -450,19 +450,25 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run JOSE JSON/TLV compatibility tests
+        id: jose-compat
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
           set -euo pipefail
+          mkdir -p artifacts/jose/tlv-parity
           run_test() {
             cargo test "$@"
           }
 
           run_test -p aegaeon-jose --test rfc7520_vectors -- --nocapture
-          run_test -p aegaeon-jose --test tlv_parity -- --test-threads=1 --nocapture
+          run_test -p aegaeon-jose --test tlv_parity -- --test-threads=1 --nocapture \
+            2>&1 | tee artifacts/jose/tlv-parity/default.txt
+          sha256sum artifacts/jose/tlv-parity/default.txt > artifacts/jose/tlv-parity/default.txt.sha256
           run_test -p aegaeon-jose --test rfc7520_vectors \
             --features everparse_jose_header_entry -- --test-threads=1 --nocapture
           run_test -p aegaeon-jose --test tlv_parity \
-            --features everparse_jose_header_entry -- --test-threads=1 --nocapture
+            --features everparse_jose_header_entry -- --test-threads=1 --nocapture \
+            2>&1 | tee artifacts/jose/tlv-parity/everparse-jose-header-entry.txt
+          sha256sum artifacts/jose/tlv-parity/everparse-jose-header-entry.txt > artifacts/jose/tlv-parity/everparse-jose-header-entry.txt.sha256
           run_test -p ffi --test jose_header_runtime_test -- --test-threads=1 --nocapture
           run_test -p aegaeon-jose ffi_tlv_feature \
             --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
@@ -471,7 +477,9 @@ jobs:
           run_test -p aegaeon-jose --test rfc7520_vectors \
             --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
           run_test -p aegaeon-jose --test tlv_parity \
-            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture
+            --features ffi_jose_header_tlv -- --test-threads=1 --nocapture \
+            2>&1 | tee artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt
+          sha256sum artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt > artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt.sha256
           run_test -p aegaeon-jose --lib -- tlv_utf8_values_match_json_header
           run_test -p aegaeon-jose --lib \
             request_object_raw_parser_preserves_authorization_details -- --nocapture
@@ -534,9 +542,11 @@ jobs:
           )"
 
       - name: Run strict claim-bearing profile tests
+        id: jose-strict
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
           set -euo pipefail
+          mkdir -p artifacts/jose/tlv-parity
           run_test() {
             cargo test "$@"
           }
@@ -556,7 +566,9 @@ jobs:
           run_test -p aegaeon-jose --test rfc7520_vectors \
             --features "$strict_ffi_features" -- --test-threads=1 --nocapture
           run_test -p aegaeon-jose --test tlv_parity \
-            --features "$strict_ffi_features" -- --test-threads=1 --nocapture
+            --features "$strict_ffi_features" -- --test-threads=1 --nocapture \
+            2>&1 | tee artifacts/jose/tlv-parity/ffi-jose-header-tlv-verified-claim.txt
+          sha256sum artifacts/jose/tlv-parity/ffi-jose-header-tlv-verified-claim.txt > artifacts/jose/tlv-parity/ffi-jose-header-tlv-verified-claim.txt.sha256
           run_test -p aegaeon-jose --lib \
             request_object_verification_rejects_duplicate_claim_keys \
             --features "$strict_features" -- --nocapture
@@ -644,9 +656,14 @@ jobs:
           )"
 
       - name: Run TLV parity tests
+        env:
+          JOSE_COMPAT_OUTCOME: ${{ steps.jose-compat.outcome }}
+          JOSE_STRICT_OUTCOME: ${{ steps.jose-strict.outcome }}
         run: |
           nix develop .#verification --command bash -c "$(cat <<'BASH'
           set -euo pipefail
+          [ "${JOSE_COMPAT_OUTCOME:-}" = "success" ]
+          [ "${JOSE_STRICT_OUTCOME:-}" = "success" ]
           mkdir -p artifacts/jose/tlv-parity
           : > artifacts/jose/tlv-parity/test-output.txt
 
@@ -656,35 +673,20 @@ jobs:
             verified-claim \
             ffi-jose-header-tlv \
             ffi-jose-header-tlv-verified-claim; do
-            case "$profile" in
-              default)
-                features=""
-                ;;
-              everparse-jose-header-entry)
-                features="everparse_jose_header_entry"
-                ;;
-              verified-claim)
-                features="verified-claim"
-                ;;
-              ffi-jose-header-tlv)
-                features="ffi_jose_header_tlv"
-                ;;
-              ffi-jose-header-tlv-verified-claim)
-                features="ffi_jose_header_tlv,verified-claim"
-                ;;
-            esac
-
             output="artifacts/jose/tlv-parity/${profile}.txt"
             echo "=== TLV parity profile: ${profile} ===" \
               | tee -a artifacts/jose/tlv-parity/test-output.txt
             status=0
-            if [ -n "$features" ]; then
+            if [ "$profile" = "verified-claim" ]; then
+              # The preceding strict-profile call uses the default thread count.
+              # Preserve this distinct serial execution as well.
               cargo test -p aegaeon-jose --test tlv_parity \
-                --features "$features" -- --test-threads=1 --nocapture 2>&1 \
+                --features verified-claim -- --test-threads=1 --nocapture 2>&1 \
                 | tee "$output" || status=$?
             else
-              cargo test -p aegaeon-jose --test tlv_parity \
-                -- --test-threads=1 --nocapture 2>&1 | tee "$output" || status=$?
+              # Reuse only this job's earlier successful, identical invocation.
+              [ -s "$output" ]
+              sha256sum --check --status "$output.sha256"
             fi
             append_status=0
             cat "$output" >> artifacts/jose/tlv-parity/test-output.txt || append_status=$?
@@ -710,7 +712,8 @@ jobs:
             echo "Git branch: $(git branch --show-current 2>/dev/null || echo 'unknown')"
             echo ""
             echo "Failed tests:"
-            grep -E "^test .* \.\.\. FAILED$" artifacts/jose/tlv-parity/test-output.txt 2>/dev/null | \
+            grep -hE "^test .* \.\.\. FAILED$" artifacts/jose/tlv-parity/*.txt 2>/dev/null | \
+              sort -u | \
               sed 's/^test //' | sed 's/ \.\.\. FAILED$//' || echo "(no failures parsed)"
             echo ""
             echo "Failure summary:"
