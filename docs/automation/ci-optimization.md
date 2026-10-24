@@ -78,6 +78,20 @@ synthetic native inputs. It changes neither the samples in those fixtures nor
 the complete discovery inventory. Fixture boundaries, fallback behavior and
 occurrence-level receipt reconciliation remain in place.
 
+The Dudect timing-file validator retains two exact payload summaries during
+each validation. Synthetic helper batches alternate between two payloads, so
+a one-entry cache repeatedly recomputed their distributions. Reuse requires
+equal current bytes, case and input width. Every file is read and hashed again;
+frame context, order and cumulative certificate checks still run on each frame.
+Returned summaries are copied so changes to one result cannot affect another.
+
+The cache retains at most two payloads (5,373,952 bytes with the current largest
+input width), plus their summaries. A third distinct payload evicts an older
+entry. The cache does not retain file acceptance or survive a validation call.
+Full-size fixtures, sample counts, test invocations and rejection assertions
+remain unchanged. This reduces diagnostic recomputation; it does not establish
+new physical timing evidence or change a statistical acceptance condition.
+
 Successful runs [40031175387](https://github.com/codetakt/aegaeon/actions/runs/40031175387),
 [39982940198](https://github.com/codetakt/aegaeon/actions/runs/39982940198) and
 [39988492614](https://github.com/codetakt/aegaeon/actions/runs/39988492614) spent
