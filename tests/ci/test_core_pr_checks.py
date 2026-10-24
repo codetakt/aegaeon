@@ -186,6 +186,9 @@ sys.exit(2)
         assert pr["jobs"]["core"]["if"] == "needs.plan.outputs.scope == 'full'"
         assert {"core", "verification"} <= set(pr["jobs"]["required"]["needs"])
         steps = core["jobs"]["ci"]["steps"]
+        openapi = next(step for step in steps if step.get("name") == "Check OpenAPI artefact drift")
+        assert "if" not in openapi
+        assert "nix build .#openapi-check --no-link --print-build-logs" in openapi["run"]
         full = next(step for step in steps if step.get("id") == "core-checks")
         assert "if" not in full
         assert (

@@ -798,6 +798,18 @@
           source = src;
         };
 
+        openapiCheck = import ./nix/openapi-check.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+          src = buildSrc;
+        };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -1097,6 +1109,7 @@
 
         flakePackages = import ./nix/flake/packages.nix {
           inherit
+            openapiCheck
             mkLightVerification
             assuranceStandards
             verifiedReqs
@@ -1131,6 +1144,7 @@
 
         flakeChecks = import ./nix/flake/checks.nix {
           inherit
+            openapiCheck
             pkgs
             isLinux
             craneLib

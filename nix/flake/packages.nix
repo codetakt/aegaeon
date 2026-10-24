@@ -1,4 +1,5 @@
 {
+  openapiCheck,
   mkLightVerification,
   assuranceStandards,
   verifiedReqs,
@@ -44,6 +45,8 @@ let
 in
 {
   inherit cargoArtifacts;
+
+  openapi-check = openapiCheck;
 
   default = aegaeonWorkspace;
   server = aegaeonWorkspace;

@@ -1,4 +1,5 @@
 {
+  openapiCheck,
   pkgs,
   isLinux,
   craneLib,
@@ -31,6 +32,8 @@ let
 in
 {
   inherit pre-commit-check;
+
+  openapi = openapiCheck;
 
   release-tags =
     pkgs.runCommand "release-tag-tests"
