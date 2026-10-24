@@ -182,6 +182,18 @@ class KmsExecutionTests(unittest.TestCase):
         assert not (self.root / "artifacts/oidc-kms/test.log").exists()
         assert not (self.root / "artifacts/oidc-kms/execution.json").exists()
 
+    def test_invalid_mode_retry_clears_success_without_running_cargo(self):
+        assert self.run_wrapper().returncode == 0
+        calls = (self.root / "commands.jsonl").read_bytes()
+        result = self.run_wrapper(mode="invalid")
+        assert result.returncode == 2
+        assert "must be localstack or aws" in result.stderr
+        assert self.summary()["status"] == "failed"
+        assert self.summary()["mode"] == "invalid"
+        assert (self.root / "commands.jsonl").read_bytes() == calls
+        assert not (self.root / "artifacts/oidc-kms/test.log").exists()
+        assert not (self.root / "artifacts/oidc-kms/execution.json").exists()
+
     def test_failed_retry_cannot_reuse_previous_execution_receipt(self):
         assert self.run_wrapper().returncode == 0
         assert self.run_wrapper("running 0 tests\n").returncode != 0

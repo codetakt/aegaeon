@@ -22,11 +22,6 @@ TEST_COMMAND=(
 	-- --exact --nocapture --color never
 )
 
-if [[ ${MODE} != "aws" && ${MODE} != "localstack" ]]; then
-	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
-	exit 2
-fi
-
 mkdir -p "${ARTIFACT_DIR}"
 
 status="failed"
@@ -83,6 +78,11 @@ trap write_summary EXIT
 
 # Never let an earlier run supply execution evidence for this attempt.
 rm -f "${ARTIFACT_DIR}/test.log" "${ARTIFACT_DIR}/execution.json"
+
+if [[ ${MODE} != "aws" && ${MODE} != "localstack" ]]; then
+	echo "AEG_OIDC_KMS_MODE must be localstack or aws (got ${MODE})" >&2
+	exit 2
+fi
 
 if [[ ${MODE} == "localstack" ]]; then
 	export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
