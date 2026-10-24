@@ -114,7 +114,12 @@ in
   };
 
   tests = craneLib.cargoNextest {
-    inherit src cargoArtifacts;
+    inherit src;
+    # Prepend OpenSSL so pkg-config's ordered path matches the consumer, including
+    # the zstd input added by Crane. Leave the shared production artifacts unchanged.
+    cargoArtifacts = cargoArtifacts.overrideAttrs (old: {
+      nativeBuildInputs = [ pkgs.openssl ] ++ old.nativeBuildInputs;
+    });
     stdenv = _: stdenv;
     pname = "aegaeon-workspace-nextest";
     version = "0.0.0";

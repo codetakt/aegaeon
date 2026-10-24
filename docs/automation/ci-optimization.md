@@ -15,6 +15,19 @@ the acceptance gate for PRs and merge groups.
 
 ## Current changes
 
+Nextest uses a dedicated dependency artifact with the same ordered OpenSSL
+pkg-config input as its consumer. OpenSSL precedes Crane's zstd input in both
+search paths. This avoids invalidating the AWS-LC build-script fingerprint solely
+because the dependency producer used a different `PKG_CONFIG_PATH`. The source
+build still selects static AWS-LC; this change does not select OpenSSL as the
+cryptographic backend.
+
+The shared server/Clippy dependency artifact is unchanged. Dependency preparation
+retains its check, build and test-no-run commands, and Nextest still executes the
+full workspace tests with the same profile, features and existing skips. The
+additional artifact adds cold build and storage cost; reuse is not a previous
+CI result, and one local comparison does not establish a Hosted speedup.
+
 The `verify-jose` Nix check prepares the ten package/feature combinations used
 by its Cargo tests in the dev/test profile. It selects `target/verify-jose`
 before Crane restores the dependency products. Feature combinations remain
