@@ -15,6 +15,15 @@ the acceptance gate for PRs and merge groups.
 
 ## Current changes
 
+The `verify-jose` Nix check prepares the ten package/feature combinations used
+by its Cargo tests in the dev/test profile. It selects `target/verify-jose`
+before Crane restores the dependency products. Feature combinations remain
+separate, and Cargo fingerprints determine reuse; changed inputs rebuild.
+All 32 original Cargo invocations and the Python conformance check still execute.
+The direct Hosted JOSE workflow is unchanged. Dependency preparation compiles
+artifacts and does not supply test-result evidence. Populating this cache adds
+compilation and storage; no reduction in initial total compute is assumed.
+
 The JOSE verification job retains the first TLV parity output for the default,
 entry-validator, FFI and strict FFI profiles. Its later profile report checks
 the required producer outcomes and retained log digests instead of running those
