@@ -31,10 +31,19 @@ have `complete: false` and no final elapsed time; their job totals include only
 completed jobs with valid timestamps. Retain the inputs and earlier snapshots
 when collecting a later state.
 
-Any job timestamp error also makes the attempt-to-first-job delay unavailable:
-discarding an earlier invalid job must not make a later job appear to start first.
+Any job timestamp error or nonskipped job with an unknown start also makes the
+attempt-to-first-job delay unavailable: discarding an earlier invalid or unstarted
+job must not make a later job appear to start first. In-progress jobs and steps
+must have a valid start; queued steps may omit their optional timestamps.
+
+The reporter recognizes the GitHub lifecycle states, including `requested`.
+The API may omit the attempt start before work begins. Missing or invalid run
+timestamps remain visible in `run_timestamp_error`, with `complete: false` and
+both attempt time metrics unavailable. Valid individual job intervals remain in
+the partial total. These distinctions follow the [GitHub REST schemas](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.json).
 
 An all-skipped completed run has zero occupied job time and no elapsed measurement.
+Skipped timestamp placeholders are retained but never used as measured intervals.
 Zero-job snapshots also preserve the run status and conclusion with zero occupied
 job time and no elapsed measurement, including cancellation before any job starts.
 Malformed job metadata or mixed/incomplete pagination fail the command. The output

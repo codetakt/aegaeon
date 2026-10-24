@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from pr_plan import unique_json_object
 
-STATUSES = {"queued", "waiting", "pending", "in_progress", "completed"}
+STATUSES = {"queued", "requested", "waiting", "pending", "in_progress", "completed"}
 
 
 def require(condition: object, reason: str) -> None:
@@ -32,6 +32,34 @@ def interval(start: object, end: object) -> float:
     seconds = (timestamp(end) - timestamp(start)).total_seconds()
     require(seconds >= 0, "reversed timestamp interval")
     return seconds
+
+
+def observed_interval(record: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
+    """Validate available timestamps even when an interval is not yet complete."""
+    if record["conclusion"] == "skipped":
+        return None, None
+    start, end = record.get("started_at"), record.get("completed_at")
+    started = timestamp(start) if start is not None else None
+    ended = timestamp(end) if end is not None else None
+    completed = record["status"] == "completed"
+    timed = completed and record["conclusion"] != "skipped"
+    require(
+        not (timed or record["status"] == "in_progress") or started is not None,
+        "missing start timestamp",
+    )
+    require(not timed or ended is not None, "missing completion timestamp")
+    require(ended is None or completed, "unfinished work has a completion timestamp")
+    if ended is not None:
+        interval(start, end)
+    return started, ended
+
+
+def run_start(run: dict[str, Any]) -> tuple[str | None, str | None]:
+    try:
+        interval(run["created_at"], run.get("run_started_at"))
+    except ValueError as error:
+        return None, str(error)
+    return cast("str", run["run_started_at"]), None
 
 
 def validate_job(job: dict[str, Any]) -> None:
@@ -63,7 +91,7 @@ def validate_job(job: dict[str, Any]) -> None:
     for step in job["steps"]:
         require(isinstance(step, dict), "step must be an object")
         require(
-            {"number", "name", "status", "conclusion", "started_at", "completed_at"} <= step.keys(),
+            {"number", "name", "status", "conclusion"} <= step.keys(),
             "missing step field",
         )
         require(
@@ -91,13 +119,16 @@ def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     intervals: list[tuple[datetime, datetime]] = []
     for step in job["steps"]:
         number = step["number"]
+        started, ended = observed_interval(step)
         timed = step.get("conclusion") != "skipped" and step["status"] == "completed"
         seconds = interval(step.get("started_at"), step.get("completed_at")) if timed else None
-        if timed:
+        if started is not None:
             interval(job.get("started_at"), step["started_at"])
-            if job.get("completed_at"):
-                interval(step["completed_at"], job["completed_at"])
-            intervals.append((timestamp(step["started_at"]), timestamp(step["completed_at"])))
+            if job.get("completed_at") is not None:
+                interval(step["started_at"], job["completed_at"])
+            intervals.append((started, ended or started))
+        if ended is not None and job.get("completed_at") is not None:
+            interval(step["completed_at"], job["completed_at"])
         steps.append(
             {
                 "number": number,
@@ -116,17 +147,19 @@ def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
     return steps
 
 
-def job_report(job: dict[str, Any], attempt_start: str) -> dict[str, Any]:
+def job_report(job: dict[str, Any], attempt_start: str | None) -> dict[str, Any]:
     """Keep running/skipped jobs visible; do not estimate their occupied time."""
     skipped = job.get("conclusion") == "skipped"
     completed = job["status"] == "completed"
     started = job.get("started_at")
     ended = job.get("completed_at")
+    observed_interval(job)
+    timestamp(job["created_at"])
     duration = None
     if completed and not skipped:
         require(bool(job.get("conclusion")), "completed job has no conclusion")
         duration = interval(started, ended)
-    if started:
+    if started is not None and attempt_start is not None and not skipped:
         interval(attempt_start, started)
     queue_delay = interval(job["created_at"], started) if started and not skipped else None
     steps = job_steps(job)
@@ -150,7 +183,7 @@ def job_report(job: dict[str, Any], attempt_start: str) -> dict[str, Any]:
     }
 
 
-def retained_job_report(job: dict[str, Any], attempt_start: str) -> dict[str, Any]:
+def retained_job_report(job: dict[str, Any], attempt_start: str | None) -> dict[str, Any]:
     try:
         return {**job_report(job, attempt_start), "timestamp_error": None}
     except ValueError as error:
@@ -191,7 +224,10 @@ def summarize(
     require(len(jobs) == total, "incomplete job pagination")
     require(len({job["id"] for job in jobs}) == total, "duplicate job IDs")
     require(type(run["run_attempt"]) is int and run["run_attempt"] > 0, "invalid run attempt")
-    require(isinstance(run["status"], str) and run["status"] in STATUSES, "unknown run status")
+    require(
+        run["status"] is None or (isinstance(run["status"], str) and run["status"] in STATUSES),
+        "unknown run status",
+    )
     for job in jobs:
         validate_job(job)
         require(
@@ -200,8 +236,7 @@ def summarize(
             and job["head_sha"] == run["head_sha"],
             "job run/attempt/head mismatch",
         )
-    attempt_start = run["run_started_at"]
-    interval(run["created_at"], attempt_start)
+    attempt_start, run_timestamp_error = run_start(run)
     rows = [retained_job_report(job, attempt_start) for job in jobs]
     finished_run = run["status"] == "completed" and all(
         row["status"] == "completed" for row in rows
@@ -211,7 +246,7 @@ def summarize(
             finished_run and bool(run.get("conclusion")),
             "completed run has unfinished jobs/outcome",
         )
-    timing_valid = not any(row["timestamp_error"] for row in rows)
+    timing_valid = run_timestamp_error is None and not any(row["timestamp_error"] for row in rows)
     complete = finished_run and timing_valid
     finished = [row for row in rows if row["occupied_seconds"] is not None]
     last = max(finished, key=lambda row: timestamp(row["completed_at"])) if finished else None
@@ -244,6 +279,7 @@ def summarize(
             )
         },
         "complete": complete,
+        "run_timestamp_error": run_timestamp_error,
         "unaccounted_job_ids": [
             row["id"]
             for row in rows
@@ -253,7 +289,9 @@ def summarize(
             sorted(Counter(row["conclusion"] or row["status"] for row in rows).items())
         ),
         "attempt_to_first_job_seconds": interval(attempt_start, first)
-        if first and timing_valid
+        if first
+        and timing_valid
+        and all(row["started_at"] is not None or row["conclusion"] == "skipped" for row in rows)
         else None,
         "attempt_elapsed_seconds": interval(attempt_start, last["completed_at"])
         if complete and last

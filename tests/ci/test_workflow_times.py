@@ -162,6 +162,99 @@ class WorkflowTimesTests(unittest.TestCase):
         assert report["completed_job_seconds"] == 10
         assert report["attempt_to_first_job_seconds"] is None
 
+    def test_requested_run_and_job_remain_visible(self):
+        run, jobs = fixture()
+        run.update(status="requested", conclusion=None)
+        for job in jobs["jobs"]:
+            job.update(status="requested", conclusion=None, completed_at=None, steps=[])
+        report = summarize(run, jobs)
+        assert report["run"]["status"] == "requested"
+        assert report["job_outcomes"] == {"requested": 2}
+        assert not report["complete"]
+
+    def test_unstarted_job_prevents_claiming_later_job_started_first(self):
+        for status in ("in_progress", "queued"):
+            with self.subTest(status=status):
+                run, jobs = fixture()
+                run.update(status="in_progress", conclusion=None)
+                jobs["jobs"][0].update(
+                    status=status, conclusion=None, started_at=None, completed_at=None, steps=[]
+                )
+                jobs["jobs"][1].update(started_at="2026-10-24T00:00:15Z", steps=[])
+                report = summarize(run, jobs)
+                assert report["attempt_to_first_job_seconds"] is None
+                assert report["completed_job_seconds"] == 10
+                assert report["unaccounted_job_ids"] == [20]
+                if status == "in_progress":
+                    assert "missing" in report["jobs"][0]["timestamp_error"]
+                else:
+                    assert report["jobs"][0]["timestamp_error"] is None
+
+    def test_missing_run_start_preserves_snapshot_without_attempt_timing(self):
+        for status, conclusion in (("queued", None), (None, None), ("completed", "cancelled")):
+            for omit in (True, False):
+                with self.subTest(status=status, omit=omit):
+                    run, _ = fixture()
+                    run.update(status=status, conclusion=conclusion, run_started_at=None)
+                    if omit:
+                        del run["run_started_at"]
+                    report = summarize(run, {"total_count": 0, "jobs": []})
+                    assert report["run"]["status"] == status
+                    assert report["run"]["conclusion"] == conclusion
+                    assert not report["complete"]
+                    assert "missing" in report["run_timestamp_error"]
+                    assert report["attempt_to_first_job_seconds"] is None
+                    assert report["attempt_elapsed_seconds"] is None
+                    assert report["completed_job_seconds"] == 0
+
+    def test_invalid_run_start_preserves_valid_job_intervals(self):
+        for value in (None, "", "2026-10-22T00:00:00Z", "2026-10-24T00:00:00"):
+            with self.subTest(value=value):
+                run, jobs = fixture()
+                run["run_started_at"] = value
+                report = summarize(run, jobs)
+                assert not report["complete"]
+                assert report["run_timestamp_error"]
+                assert report["attempt_to_first_job_seconds"] is None
+                assert report["attempt_elapsed_seconds"] is None
+                assert report["completed_job_seconds"] == 40
+
+    def test_unfinished_step_timestamp_errors_remain_visible(self):
+        for mutation in ("missing", "malformed", "before_job", "ended", "overlap"):
+            with self.subTest(mutation=mutation):
+                run, jobs = fixture()
+                run.update(status="in_progress", conclusion=None)
+                job = jobs["jobs"][0]
+                job.update(status="in_progress", conclusion=None, completed_at=None)
+                step = job["steps"][1]
+                step.update(status="in_progress", conclusion=None, completed_at=None)
+                if mutation == "missing":
+                    del step["started_at"]
+                elif mutation == "malformed":
+                    step["started_at"] = ""
+                elif mutation == "before_job":
+                    step["started_at"] = "2026-10-24T00:00:04Z"
+                elif mutation == "ended":
+                    step["completed_at"] = "2026-10-24T00:00:24Z"
+                else:
+                    step["started_at"] = "2026-10-24T00:00:09Z"
+                report = summarize(run, jobs)
+                assert report["jobs"][0]["timestamp_error"]
+                assert report["attempt_to_first_job_seconds"] is None
+                assert report["completed_job_seconds"] == 20
+
+    def test_queued_step_can_omit_both_optional_timestamps(self):
+        run, jobs = fixture()
+        run.update(status="in_progress", conclusion=None)
+        job = jobs["jobs"][0]
+        job.update(status="in_progress", conclusion=None, completed_at=None)
+        job["steps"][1].update(status="queued", conclusion=None)
+        del job["steps"][1]["started_at"]
+        del job["steps"][1]["completed_at"]
+        report = summarize(run, jobs)
+        assert report["jobs"][0]["timestamp_error"] is None
+        assert report["jobs"][0]["steps"][1]["seconds"] is None
+
     def test_cancelled_api_timestamp_contradiction_remains_visible(self):
         run, jobs = fixture()
         run["conclusion"] = "cancelled"
@@ -201,6 +294,10 @@ class WorkflowTimesTests(unittest.TestCase):
         run, jobs = fixture()
         for job in jobs["jobs"]:
             job.update(conclusion="skipped", steps=[], started_at=None, completed_at=None)
+        # GitHub can report reversed placeholder intervals for work never started.
+        jobs["jobs"][0].update(
+            started_at="2026-10-24T00:00:05Z", completed_at="2026-10-24T00:00:04Z"
+        )
         report = summarize(run, jobs)
         assert report["complete"]
         assert report["attempt_elapsed_seconds"] is None
