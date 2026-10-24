@@ -49,6 +49,10 @@ packages and the tools those commands invoke. It does not initialize the
 interactive compiler, extraction or Kani environment. Rust builds, OpenAPI
 validation and proof checks retain their own Nix derivations; runtime and
 dependency-policy jobs continue to use `.#ci`.
+Core evaluates its complete check inventories before the read-only full-flake
+validation, so a fresh runner prepares evaluation-time dependencies such as
+Kani's patched lockfile explicitly. Full output validation still precedes check
+execution; delegated proof checks are not built by this preparation.
 
 ## Quick local loop (recommended)
 
