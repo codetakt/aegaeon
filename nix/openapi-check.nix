@@ -9,7 +9,10 @@
 }:
 let
   common = {
-    inherit src;
+    src = import ./openapi-source.nix {
+      inherit (pkgs) lib;
+      source = src;
+    };
     stdenv = _: stdenv;
     pname = "aegaeon-openapi-check";
     version = "0.0.0";
