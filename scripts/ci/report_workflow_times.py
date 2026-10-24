@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from collections import Counter
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -14,6 +15,7 @@ from typing import Any, cast
 from pr_plan import unique_json_object
 
 STATUSES = {"queued", "requested", "waiting", "pending", "in_progress", "completed"}
+PRESTART_STATUSES = STATUSES - {"in_progress", "completed"}
 
 
 def require(condition: object, reason: str) -> None:
@@ -62,9 +64,46 @@ def run_start(run: dict[str, Any]) -> tuple[str | None, str | None]:
     return cast("str", run["run_started_at"]), None
 
 
-def validate_job(job: dict[str, Any]) -> None:
-    require(isinstance(job, dict), "job must be an object")
+def require_fields(record: dict[str, Any], fields: set[str], kind: str) -> None:
+    require(isinstance(record, dict), f"{kind} must be an object")
+    require(fields <= record.keys(), f"missing {kind} field")
+
+
+def validate_identity(record: dict[str, Any], kind: str) -> None:
+    fields = ("id", "run_attempt") if kind == "run" else ("id", "run_id", "run_attempt")
+    for field in fields:
+        require(type(record[field]) is int and record[field] > 0, f"invalid {kind} {field}")
     require(
+        isinstance(record["head_sha"], str)
+        and re.fullmatch(r"[0-9a-fA-F]{40}", record["head_sha"]),
+        f"invalid {kind} head_sha",
+    )
+
+
+def validate_state(record: dict[str, Any], kind: str) -> None:
+    status, outcome = record["status"], record["conclusion"]
+    require(
+        (kind == "run" and status is None) or (isinstance(status, str) and status in STATUSES),
+        f"unknown {kind} status",
+    )
+    require(
+        outcome is None or (isinstance(outcome, str) and bool(outcome)), f"invalid {kind} outcome"
+    )
+    require(status != "completed" or outcome is not None, f"missing {kind} outcome")
+
+
+def validate_run(run: dict[str, Any]) -> None:
+    require_fields(
+        run, {"id", "run_attempt", "head_sha", "status", "conclusion", "created_at", "event"}, "run"
+    )
+    validate_identity(run, "run")
+    validate_state(run, "run")
+    require(isinstance(run["event"], str) and bool(run["event"]), "invalid run event")
+
+
+def validate_job(job: dict[str, Any]) -> dict[str, Any]:
+    require_fields(
+        job,
         {
             "id",
             "name",
@@ -76,42 +115,49 @@ def validate_job(job: dict[str, Any]) -> None:
             "run_id",
             "run_attempt",
             "head_sha",
-            "steps",
-        }
-        <= job.keys(),
-        "missing job field",
+        },
+        "job",
     )
-    require(type(job["id"]) is int and job["id"] > 0, "invalid job ID")
+    validate_identity(job, "job")
     require(isinstance(job["name"], str) and bool(job["name"]), "invalid job name")
-    require(isinstance(job["status"], str) and job["status"] in STATUSES, "unknown job status")
-    require(job["conclusion"] is None or isinstance(job["conclusion"], str), "invalid job outcome")
-    require(job["status"] != "completed" or bool(job["conclusion"]), "missing job outcome")
+    validate_state(job, "job")
+    if "steps" not in job:
+        unstarted = job["status"] in PRESTART_STATUSES and job["conclusion"] is None
+        require(unstarted or job["conclusion"] == "skipped", "missing steps for started job")
+        job = {**job, "steps": []}
     require(isinstance(job["steps"], list), "job steps must be an array")
     numbers = set()
     for step in job["steps"]:
-        require(isinstance(step, dict), "step must be an object")
-        require(
-            {"number", "name", "status", "conclusion"} <= step.keys(),
-            "missing step field",
-        )
+        require_fields(step, {"number", "name", "status", "conclusion"}, "step")
         require(
             type(step["number"]) is int and step["number"] > 0 and step["number"] not in numbers,
             "invalid or duplicate step number",
         )
         numbers.add(step["number"])
         require(isinstance(step["name"], str) and bool(step["name"]), "invalid step name")
-        require(
-            isinstance(step["status"], str) and step["status"] in STATUSES, "unknown step status"
-        )
-        require(
-            step["conclusion"] is None or isinstance(step["conclusion"], str),
-            "invalid step outcome",
-        )
-        require(step["status"] != "completed" or bool(step["conclusion"]), "missing step outcome")
+        validate_state(step, "step")
         require(
             job["status"] != "completed" or step["status"] == "completed",
             "completed job has an unfinished step",
         )
+    return job
+
+
+def validated_jobs(job_pages: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    pages = job_pages if isinstance(job_pages, list) else [job_pages]
+    require(bool(pages), "empty job response")
+    for page in pages:
+        require_fields(page, {"total_count", "jobs"}, "job page")
+        require(
+            type(page["total_count"]) is int and page["total_count"] >= 0, "invalid job inventory"
+        )
+        require(isinstance(page["jobs"], list), "job inventory must be an array")
+    total = pages[0]["total_count"]
+    require(all(page["total_count"] == total for page in pages), "job totals changed between pages")
+    jobs = [validate_job(job) for page in pages for job in page["jobs"]]
+    require(len(jobs) == total, "incomplete job pagination")
+    require(len({job["id"] for job in jobs}) == total, "duplicate job IDs")
+    return jobs
 
 
 def job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
@@ -161,7 +207,11 @@ def job_report(job: dict[str, Any], attempt_start: str | None) -> dict[str, Any]
         duration = interval(started, ended)
     if started is not None and attempt_start is not None and not skipped:
         interval(attempt_start, started)
-    queue_delay = interval(job["created_at"], started) if started and not skipped else None
+    queue_delay = (
+        interval(job["created_at"], started)
+        if started and not skipped and job["status"] not in PRESTART_STATUSES
+        else None
+    )
     steps = job_steps(job)
     step_seconds = sum(step["seconds"] for step in steps if step["seconds"] is not None)
     if duration is not None:
@@ -215,21 +265,9 @@ def summarize(
     run: dict[str, Any], job_pages: dict[str, Any] | list[dict[str, Any]]
 ) -> dict[str, Any]:
     """Accept one REST page or the array produced by gh --paginate --slurp."""
-    pages = job_pages if isinstance(job_pages, list) else [job_pages]
-    require(bool(pages), "empty job response")
-    total = pages[0]["total_count"]
-    require(type(total) is int and total >= 0, "invalid job inventory")
-    require(all(page["total_count"] == total for page in pages), "job totals changed between pages")
-    jobs = [job for page in pages for job in page["jobs"]]
-    require(len(jobs) == total, "incomplete job pagination")
-    require(len({job["id"] for job in jobs}) == total, "duplicate job IDs")
-    require(type(run["run_attempt"]) is int and run["run_attempt"] > 0, "invalid run attempt")
-    require(
-        run["status"] is None or (isinstance(run["status"], str) and run["status"] in STATUSES),
-        "unknown run status",
-    )
+    validate_run(run)
+    jobs = validated_jobs(job_pages)
     for job in jobs:
-        validate_job(job)
         require(
             job["run_id"] == run["id"]
             and job["run_attempt"] == run["run_attempt"]
@@ -291,7 +329,11 @@ def summarize(
         "attempt_to_first_job_seconds": interval(attempt_start, first)
         if first
         and timing_valid
-        and all(row["started_at"] is not None or row["conclusion"] == "skipped" for row in rows)
+        and all(
+            (row["started_at"] is not None and row["status"] not in PRESTART_STATUSES)
+            or row["conclusion"] == "skipped"
+            for row in rows
+        )
         else None,
         "attempt_elapsed_seconds": interval(attempt_start, last["completed_at"])
         if complete and last

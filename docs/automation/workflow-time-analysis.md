@@ -31,6 +31,17 @@ have `complete: false` and no final elapsed time; their job totals include only
 completed jobs with valid timestamps. Retain the inputs and earlier snapshots
 when collecting a later state.
 
+Run ID, attempt, full 40-digit hexadecimal head SHA and event are required even
+when there are no jobs. Run and job identity integers must be positive integers;
+booleans and floating-point values cannot stand in for IDs or attempts. Page
+counts and job arrays are validated before identity matching.
+
+The optional job `steps` field may be omitted for pre-start or explicitly skipped
+work; the report treats that omission as an empty step list without modifying the
+retained input. Started work must include its step observations. A malformed
+supplied list remains an error. Pre-start timestamp placeholders do not establish
+job or attempt start-delay measurements.
+
 Any job timestamp error or nonskipped job with an unknown start also makes the
 attempt-to-first-job delay unavailable: discarding an earlier invalid or unstarted
 job must not make a later job appear to start first. In-progress jobs and steps

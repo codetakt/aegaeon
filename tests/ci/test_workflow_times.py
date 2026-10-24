@@ -79,6 +79,100 @@ class WorkflowTimesTests(unittest.TestCase):
         pages = [{"total_count": 2, "jobs": [job]} for job in jobs["jobs"]]
         assert summarize(run, jobs) == summarize(run, pages)
 
+    def test_run_identity_is_required_with_or_without_jobs(self):
+        invalid = {
+            "id": (None, True, 10.0, "10", 0, -1),
+            "head_sha": (None, "", "a" * 39, "x" * 40, []),
+            "run_attempt": (None, True, 2.0, "2", 0, -1),
+            "event": (None, "", []),
+            "status": ("unknown", [], 1),
+            "conclusion": ([], 1, ""),
+            "created_at": (),
+        }
+        for empty in (True, False):
+            for field, values in invalid.items():
+                for value in (*values, "omit"):
+                    with self.subTest(empty=empty, field=field, value=value):
+                        run, jobs = fixture()
+                        if empty:
+                            jobs = {"total_count": 0, "jobs": []}
+                            run["conclusion"] = "cancelled"
+                        if value == "omit":
+                            del run[field]
+                        else:
+                            run[field] = value
+                        with pytest.raises(
+                            ValueError, match=r"invalid run|missing run|unknown run"
+                        ):
+                            summarize(run, jobs)
+
+    def test_job_identity_uses_strict_types_before_equality(self):
+        for field in ("id", "run_id", "run_attempt"):
+            for value in (None, True, 0, -1, "10", 10.0 if field == "run_id" else 2.0):
+                with self.subTest(field=field, value=value):
+                    run, jobs = fixture()
+                    jobs["jobs"][0][field] = value
+                    with pytest.raises(ValueError, match="invalid job"):
+                        summarize(run, jobs)
+
+    def test_invalid_inventory_shapes_and_page_count_types_are_rejected(self):
+        run, jobs = fixture()
+        invalid = (
+            None,
+            [],
+            {},
+            {"total_count": 0},
+            {"jobs": []},
+            {"total_count": 0, "jobs": {}},
+            {"total_count": 0, "jobs": None},
+            {"total_count": 1, "jobs": [None]},
+            {"total_count": 1, "jobs": [{"id": []}]},
+            [{"total_count": 2, "jobs": jobs["jobs"]}, {"total_count": 2.0, "jobs": []}],
+        )
+        for pages in invalid:
+            with (
+                self.subTest(pages=pages),
+                pytest.raises(ValueError, match=r"must be|missing|invalid|empty"),
+            ):
+                summarize(run, pages)
+
+    def test_unstarted_and_skipped_jobs_can_omit_steps_without_mutating_input(self):
+        for status in ("queued", "requested", "waiting", "pending", "completed"):
+            with self.subTest(status=status):
+                run, jobs = fixture()
+                run.update(status="in_progress", conclusion=None)
+                job = jobs["jobs"][0]
+                job.update(
+                    status=status,
+                    conclusion="skipped" if status == "completed" else None,
+                    completed_at=None,
+                )
+                del job["steps"]
+                report = summarize(run, jobs)
+                assert "steps" not in job
+                assert report["jobs"][0]["steps"] == []
+                assert report["jobs"][0]["timestamp_error"] is None
+                assert report["jobs"][0]["created_to_start_seconds"] is None
+
+    def test_started_job_cannot_claim_omitted_steps_are_empty(self):
+        for status in ("in_progress", "completed"):
+            with self.subTest(status=status):
+                run, jobs = fixture()
+                run.update(status=status, conclusion="success" if status == "completed" else None)
+                job = jobs["jobs"][0]
+                job["status"] = status
+                del job["steps"]
+                with pytest.raises(ValueError, match="missing steps for started job"):
+                    summarize(run, jobs)
+
+    def test_unstarted_timestamp_placeholder_does_not_establish_start_delay(self):
+        run, jobs = fixture()
+        run.update(status="in_progress", conclusion=None)
+        jobs["jobs"][0].update(status="queued", conclusion=None, completed_at=None, steps=[])
+        report = summarize(run, jobs)
+        assert report["jobs"][0]["created_to_start_seconds"] is None
+        assert report["attempt_to_first_job_seconds"] is None
+
     def test_missing_duplicate_changed_total_and_foreign_identity_rejected(self):
         run, original = fixture()
         for mutation in ("missing", "duplicate", "run_id", "run_attempt", "head_sha"):
@@ -91,7 +185,8 @@ class WorkflowTimesTests(unittest.TestCase):
                 else:
                     jobs["jobs"][1][mutation] = "foreign"
                 with pytest.raises(
-                    ValueError, match=r"incomplete job|duplicate job|job run/attempt/head"
+                    ValueError,
+                    match=r"incomplete job|duplicate job|job run/attempt/head|invalid job",
                 ):
                     summarize(run, jobs)
         with pytest.raises(ValueError, match="job totals changed"):
@@ -284,6 +379,10 @@ class WorkflowTimesTests(unittest.TestCase):
         job["steps"][1].update(status="queued", conclusion=None)
         del job["steps"][1]["started_at"]
         del job["steps"][1]["completed_at"]
+        report = summarize(run, jobs)
+        assert report["jobs"][0]["timestamp_error"] is None
+        assert report["jobs"][0]["steps"][1]["seconds"] is None
+        job["steps"][1]["status"] = "pending"
         report = summarize(run, jobs)
         assert report["jobs"][0]["timestamp_error"] is None
         assert report["jobs"][0]["steps"][1]["seconds"] is None
