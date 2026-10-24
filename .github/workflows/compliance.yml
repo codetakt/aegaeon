@@ -80,19 +80,44 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run RFC 7520 Test Vectors
-        run: nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose
+        id: jose-tests
+        run: |
+          set -o pipefail
+          nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose 2>&1 | tee rfc7520.log
 
       - name: Generate test report
         if: always()
+        env:
+          JOSE_TEST_OUTCOME: ${{ steps.jose-tests.outcome }}
         run: |
-          nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors -- --format=json > rfc7520-results.json || true
+          python3 -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          log = Path("rfc7520.log")
+          content = log.read_bytes() if log.is_file() else None
+          result = {
+              "schema_version": 1,
+              "suite": "rfc7520_vectors",
+              "test_step_outcome": os.environ.get("JOSE_TEST_OUTCOME") or "unavailable",
+              "log_file": log.name,
+              "log_bytes": len(content) if content is not None else None,
+              "log_sha256": hashlib.sha256(content).hexdigest() if content is not None else None,
+          }
+          Path("rfc7520-results.json").write_text(json.dumps(result, indent=2) + "\n")
+          PY
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rfc7520-test-results
-          path: rfc7520-results.json
+          path: |
+            rfc7520-results.json
+            rfc7520.log
+          if-no-files-found: error
 
   security-audit:
     permissions:
@@ -427,6 +452,8 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         
       - name: Generate summary report
+        env:
+          JOSE_JOB_RESULT: ${{ needs.rfc7520-vectors.result }}
         run: |
           {
             echo "# Conformance Test Summary"
@@ -438,10 +465,20 @@ jobs:
             echo "| Test Suite | Status |"
             echo "|------------|--------|"
 
-            if [ -f rfc7520-test-results/rfc7520-results.json ]; then
+            if [ "$JOSE_JOB_RESULT" = "success" ] &&
+               [ -s rfc7520-test-results/rfc7520.log ] &&
+               jq -e '.schema_version == 1 and .suite == "rfc7520_vectors" and
+                 .test_step_outcome == "success" and .log_file == "rfc7520.log" and
+                 (.log_bytes | type == "number" and . > 0) and
+                 (.log_sha256 | type == "string" and test("^[0-9a-f]{64}$"))' \
+                 rfc7520-test-results/rfc7520-results.json >/dev/null 2>&1 &&
+               [ "$(jq -r '.log_bytes' rfc7520-test-results/rfc7520-results.json)" = \
+                 "$(wc -c < rfc7520-test-results/rfc7520.log | tr -d '[:space:]')" ] &&
+               [ "$(jq -r '.log_sha256' rfc7520-test-results/rfc7520-results.json)" = \
+                 "$(sha256sum rfc7520-test-results/rfc7520.log | cut -d ' ' -f 1)" ]; then
               echo "| RFC 7520 JOSE Vectors | ✅ Pass |"
             else
-              echo "| RFC 7520 JOSE Vectors | ❌ Fail |"
+              echo "| RFC 7520 JOSE Vectors | ❌ Failed or incomplete (${JOSE_JOB_RESULT:-unavailable}) |"
             fi
 
             if [ -f security-audit-report/audit-report.json ]; then
