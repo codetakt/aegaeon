@@ -1,6 +1,6 @@
 # CI execution efficiency
 
-Last updated: 2026-10-24
+Last updated: 2026-10-25
 
 Status: current implementation baseline
 
@@ -147,7 +147,7 @@ an unchecked item is not permission to omit a check.
 | 1 | Reconcile all protected-input authority holds | Direct component checks and actual discovery paths | Current source evidence for every entry in `ci/ci-input-authority.json`; base/head/tested union, additions, removals, renames and unknown-input controls; unexplained inputs retain full selection |
 | 2 | Separate additional Rust build/test and lightweight-check inputs | Complete producer and transitive-input inventories | Build scripts, generated/includes, migrations, fixtures and tools retained; relevant mutations invalidate outputs, irrelevant changes preserve outputs, mandatory-input removal fails, actual test inventory agrees |
 | 2 | Share equivalent JOSE/KMS build products | Exact compilation and runtime identities | Same target/profile/features and backend, all original tests/results accounted for, independent service tests preserved, missing or mismatched products rebuild |
-| 2 | Evaluate selective execution in shadow mode | All relevant protected-input holds resolved | Compare proposed selection with full execution for docs, infrastructure, component, Rust/proof, mixed and unknown changes; no missing required consumer; separate acceptance before enabling omissions |
+| 2 | Evaluate input selection in shadow mode | Explicit partial input mappings; full execution remains authoritative | Use `report_input_selection.py` to retain unknown consumers, all holds and old/current test correspondence. Compare with full execution for docs, infrastructure, component, Rust/proof, mixed and unknown changes. Resolve all affected holds before a separate change enables omissions. |
 | 3 | Reuse results across events | Complete producer/consumer equivalence and trust rules | Revision/artifact binding, trusted producer, successful complete evidence, expiry/revocation checks and full fallback; dynamic and publication responsibilities retain their owners |
 | 3 | Review F* checked-file/pass reuse and Tamarin batching | Separate proof-evidence designs | Preserve solver context, module/interface and assumption-graph inputs, every admitted obligation, exceptions, outputs and freshness; ordinary CI optimization does not establish product assurance |
 | Parallel | Measure resource effects | A fixed before/after candidate and unchanged obligations | Matched event/runner/tool/cache scenarios, elapsed and summed job times, waits, setup/build/test times, disk peaks, substitutions, failures and retries; unmatched historical runs stay descriptive |
