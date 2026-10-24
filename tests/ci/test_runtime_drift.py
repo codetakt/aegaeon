@@ -455,7 +455,10 @@ class RuntimeEvidenceTests(RuntimeDriftFixture):
 
     def test_missing_and_malformed_matrix_retain_checker_failure_and_discovery_error(self):
         matrix = self.root / "spec/compliance-matrix.yaml"
-        for index, contents in enumerate((None, b"{", b"{}", b"\xff")):
+        surrogate_path = json.dumps(
+            {"requirements": [{"id": "bad", "status": "verified", "runtime_link": "\ud800.rs"}]}
+        ).encode()
+        for index, contents in enumerate((None, b"{", b"{}", b"\xff", surrogate_path)):
             with self.subTest(contents=contents):
                 if contents is None:
                     matrix.unlink()
@@ -606,7 +609,7 @@ class RuntimeInputIntegrityTests(RuntimeDriftFixture):
                     "a\n",
                 ),
             ),
-            ("id", (None, 1, [], "", " ")),
+            ("id", (None, 1, [], "", " ", "bad\ud800", "bad\udfff")),
         ):
             for value in values:
                 with self.subTest(field=field, value=value):
@@ -619,6 +622,52 @@ class RuntimeInputIntegrityTests(RuntimeDriftFixture):
         data["requirements"].append(data["requirements"][0].copy())
         self.save_matrix(data)
         assert self.invoke("--generate").returncode == 2
+
+    def test_surrogate_paths_are_input_errors_even_with_matching_attribution(self):
+        original = (self.root / MANIFEST).read_bytes()
+        for surrogate in ("\ud800", "\udfff", "\udc80"):
+            with self.subTest(surrogate=surrogate):
+                path = f"bad{surrogate}.rs"
+                self.save_matrix(
+                    {"requirements": [{"id": "bad", "status": "verified", "runtime_link": path}]}
+                )
+                manifest = {
+                    "files": {path: {"sha256": "0" * 64, "entries": ["bad"], "critical": False}},
+                    "monitored_files": {},
+                }
+                self.write(str(MANIFEST), json.dumps(manifest))
+                before = (self.root / MANIFEST).read_bytes()
+                for mode in ("--check", "--generate"):
+                    result = self.invoke(mode)
+                    assert result.returncode == 2, result.stderr
+                    assert "ERROR: runtime drift input:" in result.stderr
+                    assert "Traceback" not in result.stderr
+                    assert (self.root / MANIFEST).read_bytes() == before
+        # Unicode scalar values, including non-BMP characters, are valid paths.
+        path = "文書\U0001f512.rs"
+        self.write(path, "valid unicode")
+        self.write(
+            "spec/compliance-matrix.yaml",
+            json.dumps(
+                {"requirements": [{"id": "要件", "status": "verified", "runtime_link": path}]},
+                ensure_ascii=False,
+            ),
+        )
+        (self.root / MANIFEST).write_bytes(original)
+        self.generate()
+        assert self.invoke("--check").returncode == 0
+
+    def test_undecodable_monitored_filename_is_not_advisory(self):
+        # POSIX permits bytes that cannot be represented as Unicode scalar values.
+        raw_path = os.fsencode(self.root / "crates/crypto/src") + b"/bad\xff.rs"
+        descriptor = os.open(raw_path, os.O_WRONLY | os.O_CREAT, 0o600)
+        os.close(descriptor)
+        before = (self.root / MANIFEST).read_bytes()
+        for mode in ("--check", "--generate"):
+            result = self.invoke(mode)
+            assert result.returncode == 2, result.stderr
+            assert "Traceback" not in result.stderr
+            assert (self.root / MANIFEST).read_bytes() == before
 
     def test_missing_or_nonfile_link_does_not_write_partial_generation(self):
         before = (self.root / MANIFEST).read_bytes()

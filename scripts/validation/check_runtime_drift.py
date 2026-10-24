@@ -115,6 +115,10 @@ class UniqueLoader(yaml.SafeLoader):  # type: ignore[misc]
         return _unique_mapping(self.construct_pairs(node, deep=deep))
 
 
+def _has_surrogates(value: str) -> bool:
+    return any(0xD800 <= ord(char) <= 0xDFFF for char in value)
+
+
 def _runtime_path(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise InputError("runtime path must be a nonempty string")
@@ -125,6 +129,7 @@ def _runtime_path(value: object) -> str:
         or str(path) != value
         or value == "."
         or "\\" in value
+        or _has_surrogates(value)
         or any(ord(char) < 32 or ord(char) == 127 for char in value)
     ):
         raise InputError(f"invalid runtime path: {value!r}")
@@ -148,7 +153,12 @@ def _collect_runtime_links(data: object) -> dict[str, list[str]]:
             if entry.get("status") != "verified" or "runtime_link" not in entry:
                 continue
             entry_id = entry.get("id")
-            if not isinstance(entry_id, str) or not entry_id.strip() or entry_id in seen:
+            if (
+                not isinstance(entry_id, str)
+                or not entry_id.strip()
+                or _has_surrogates(entry_id)
+                or entry_id in seen
+            ):
                 raise InputError(f"invalid or duplicate selected entry ID: {entry_id!r}")
             link = entry["runtime_link"]
             if not isinstance(link, str):
@@ -226,7 +236,7 @@ def _collect_monitored_files() -> dict[str, list[str]]:
     for pattern in MONITORED_PATHS:
         for path in sorted(pathlib.Path(".").glob(pattern)):
             if path.is_file():
-                result[str(path)].append(f"monitored:{pattern}")
+                result[_runtime_path(str(path))].append(f"monitored:{pattern}")
     return dict(result)
 
 
