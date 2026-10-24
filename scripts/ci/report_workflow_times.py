@@ -185,7 +185,7 @@ def summarize(
     pages = job_pages if isinstance(job_pages, list) else [job_pages]
     require(bool(pages), "empty job response")
     total = pages[0]["total_count"]
-    require(type(total) is int and total > 0, "invalid or empty job inventory")
+    require(type(total) is int and total >= 0, "invalid job inventory")
     require(all(page["total_count"] == total for page in pages), "job totals changed between pages")
     jobs = [job for page in pages for job in page["jobs"]]
     require(len(jobs) == total, "incomplete job pagination")

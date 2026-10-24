@@ -206,6 +206,23 @@ class WorkflowTimesTests(unittest.TestCase):
         assert report["attempt_elapsed_seconds"] is None
         assert report["completed_job_seconds"] == 0
 
+    def test_zero_job_snapshots_preserve_outcome_without_elapsed_measurement(self):
+        run, _ = fixture()
+        jobs = {"total_count": 0, "jobs": []}
+        for status, conclusion in (("completed", "cancelled"), ("in_progress", None)):
+            with self.subTest(status=status):
+                run.update(status=status, conclusion=conclusion)
+                report = summarize(run, jobs)
+                assert report["run"]["status"] == status
+                assert report["run"]["conclusion"] == conclusion
+                assert report["complete"] == (status == "completed")
+                assert report["job_outcomes"] == {}
+                assert report["completed_job_seconds"] == 0
+                assert report["attempt_elapsed_seconds"] is None
+                assert report["attempt_to_first_job_seconds"] is None
+        with pytest.raises(ValueError, match=r"invalid.*job inventory"):
+            summarize(run, {"total_count": -1, "jobs": []})
+
     def test_cli_refuses_input_overwrite_through_direct_symlink_or_hardlink(self):
         run, jobs = fixture()
         with tempfile.TemporaryDirectory() as directory:

@@ -35,6 +35,8 @@ Any job timestamp error also makes the attempt-to-first-job delay unavailable:
 discarding an earlier invalid job must not make a later job appear to start first.
 
 An all-skipped completed run has zero occupied job time and no elapsed measurement.
+Zero-job snapshots also preserve the run status and conclusion with zero occupied
+job time and no elapsed measurement, including cancellation before any job starts.
 Malformed job metadata or mixed/incomplete pagination fail the command. The output
 must be distinct from both inputs, including symbolic and hard links.
 
