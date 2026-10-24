@@ -1,6 +1,6 @@
 {
   openapiCheck,
-  mkLightVerification,
+  ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
   lib,
@@ -65,9 +65,7 @@ in
   verify-abstract = verifyFstarAbstract;
   assurance-standards = assuranceStandards;
   verified-reqs = verifiedReqs;
-  ffi-contracts =
-    mkLightVerification "verify-ffi-contracts" ../../scripts/flake/verify_ffi_contracts.sh
-      [ ];
+  ffi-contracts = ffiContractCheck;
   lint-rust-strict-packages = craneLib.mkCargoDerivation {
     inherit src cargoArtifacts;
     stdenv = _: stdenv;
