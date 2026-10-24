@@ -970,14 +970,17 @@
           pkgs.pkg-config
         ];
 
-        verifyJose = craneLib.mkCargoDerivation {
-          pname = "verify-jose";
-          version = "0.0.0";
-          inherit src cargoArtifacts;
-          stdenv = _: stdenv;
-          cargoToml = ./Cargo.toml;
-          cargoLock = ./Cargo.lock;
-          nativeBuildInputs = verificationRuntimeInputs;
+        verifyJose = import ./nix/jose-check.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            verificationRuntimeInputs
+            haclStar
+            steel
+            evercryptDist
+            ;
           buildPhaseCargoCommand = ''
             export HOME="$TMPDIR"
             export HACL_FSTAR_PATH=${haclStar}/share/hacl-star/fstar
@@ -987,12 +990,6 @@
             export OUT_DIR="$out"
             ${pkgs.bash}/bin/bash ${./scripts/flake/verify_jose_check.sh}
           '';
-          checkPhaseCargoCommand = "";
-          installPhaseCommand = ''
-            mkdir -p $out
-            touch $out/success
-          '';
-          doInstallCargoArtifacts = false;
         };
 
         verifyFstarAbstract =
