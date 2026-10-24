@@ -178,14 +178,19 @@ multiple distinct IDs. `path#symbol` links monitor the containing file; this
 check does not establish symbol existence or proof validity. Requirements without
 a runtime link are governed by the separate linkage checks.
 
-Missing or malformed inputs, duplicate mapping keys/selected IDs, invalid paths,
-incomplete inventories and attempts to downgrade criticality fail explicitly.
+Missing or malformed matrix/manifest inputs, duplicate mapping keys/selected IDs,
+invalid paths, incomplete inventories and attempts to downgrade criticality fail
+explicitly.
 Generation validates and reads all selected files before writing its output;
 a missing linked file must not replace the manifest with a partial inventory.
 No CI check regenerates the manifest automatically.
 
-**Exit status:** 0 means valid inputs with no drift, 1 means valid noncritical
-content drift, and 2 means critical drift or invalid/incomplete required inputs.
+**Exit status:** 0 means valid matrix/manifest inputs with no drift. Status 1
+means only noncritical linked source files changed or are missing; their absence
+retains the existing advisory policy. Status 2 means critical source drift
+(including missing critical or independently monitored files), invalid/incomplete
+matrix or manifest inputs, or a source-read error. Generation also returns 2
+when any selected source file is missing and leaves the existing manifest intact.
 `verify_reqs.sh` treats only status 1 as advisory; unexpected execution statuses
 also fail. The standalone `verification.yml` drift step blocks on every nonzero
 status, preserving its existing policy.
