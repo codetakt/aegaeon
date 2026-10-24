@@ -153,6 +153,15 @@ class WorkflowTimesTests(unittest.TestCase):
                 assert report["completed_job_seconds"] == 20
                 assert report["job_outcomes"] == {"success": 2}
 
+    def test_invalid_earliest_job_cannot_make_later_start_look_like_first(self):
+        run, jobs = fixture()
+        jobs["jobs"][0]["completed_at"] = None
+        jobs["jobs"][1].update(started_at="2026-10-24T00:00:15Z", steps=[])
+        report = summarize(run, jobs)
+        assert report["unaccounted_job_ids"] == [20]
+        assert report["completed_job_seconds"] == 10
+        assert report["attempt_to_first_job_seconds"] is None
+
     def test_cancelled_api_timestamp_contradiction_remains_visible(self):
         run, jobs = fixture()
         run["conclusion"] = "cancelled"

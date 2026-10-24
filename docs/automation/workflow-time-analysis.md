@@ -31,6 +31,9 @@ have `complete: false` and no final elapsed time; their job totals include only
 completed jobs with valid timestamps. Retain the inputs and earlier snapshots
 when collecting a later state.
 
+Any job timestamp error also makes the attempt-to-first-job delay unavailable:
+discarding an earlier invalid job must not make a later job appear to start first.
+
 An all-skipped completed run has zero occupied job time and no elapsed measurement.
 Malformed job metadata or mixed/incomplete pagination fail the command. The output
 must be distinct from both inputs, including symbolic and hard links.

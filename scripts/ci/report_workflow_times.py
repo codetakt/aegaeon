@@ -211,7 +211,8 @@ def summarize(
             finished_run and bool(run.get("conclusion")),
             "completed run has unfinished jobs/outcome",
         )
-    complete = finished_run and not any(row["timestamp_error"] for row in rows)
+    timing_valid = not any(row["timestamp_error"] for row in rows)
+    complete = finished_run and timing_valid
     finished = [row for row in rows if row["occupied_seconds"] is not None]
     last = max(finished, key=lambda row: timestamp(row["completed_at"])) if finished else None
     first = min(
@@ -251,7 +252,9 @@ def summarize(
         "job_outcomes": dict(
             sorted(Counter(row["conclusion"] or row["status"] for row in rows).items())
         ),
-        "attempt_to_first_job_seconds": interval(attempt_start, first) if first else None,
+        "attempt_to_first_job_seconds": interval(attempt_start, first)
+        if first and timing_valid
+        else None,
         "attempt_elapsed_seconds": interval(attempt_start, last["completed_at"])
         if complete and last
         else None,
