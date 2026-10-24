@@ -15,6 +15,19 @@ the acceptance gate for PRs and merge groups.
 
 ## Current changes
 
+The JOSE verification job retains the first TLV parity output for the default,
+entry-validator, FFI and strict FFI profiles. Its later profile report checks
+the required producer outcomes and retained log digests instead of running those
+four identical commands again. The strict `verified-claim` profile retains both
+its original default-thread execution and its later serial execution: those
+commands are different obligations. This reuse is confined to one job and does
+not substitute results from another event or from the security/KMS suites.
+
+The first invocations retain their order, feature flags and test arguments.
+Missing, empty or changed output, unsuccessful producer steps and logging errors
+fail the report; they do not trigger a replacement test. Each of the five profile
+logs and the combined report remain available as artifacts.
+
 The complete helper suite is divided into four whole-module groups:
 `sanitizer`, `security-fuzz`, `dudect` and `other`. The new group contains
 `test_dudect*` modules, including the actual collector/ACK regressions with
