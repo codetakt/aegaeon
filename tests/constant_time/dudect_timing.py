@@ -164,10 +164,12 @@ def validate_timing(  # noqa: PLR0915 - sequential framing and context checks
         require(set(histories) == set(bindings), "Timing/certificate case mismatch")
     certificates_checked = 0
     frames = PROFILES[profile][0][-1] + 1
-    # Repeated synthetic batches can have identical payloads. Read every byte,
-    # but reuse only the last exact (payload, case, width) summary within this
-    # validation. Context/order checks always run; no file identity is cached.
-    summarize_samples = functools.lru_cache(maxsize=1)(validate_samples)
+    # Synthetic batches alternate two exact payloads. Retain at most two
+    # (payload, case, width) summaries within this validation, reading every byte.
+    # Current formats bound retained payloads to 2 * BATCH_SIZE * (9 + 32) bytes.
+    # Context/order and cumulative certificate checks still run for every frame;
+    # no file identity or acceptance result is cached across validations.
+    summarize_samples = functools.lru_cache(maxsize=2)(validate_samples)
     with path.open("rb") as source:
         magic, case_frame = validate_header(
             source.read(HEADER_SIZE), bindings, frames, identity["bytes"]
