@@ -1,6 +1,6 @@
 # CI execution efficiency
 
-Last updated: 2026-10-25
+Last updated: 2026-10-26
 
 Status: current implementation baseline
 
@@ -14,6 +14,22 @@ not an improvement if it stops executing an obligation. Required checks remain
 the acceptance gate for PRs and merge groups.
 
 ## Current changes
+
+Fuzz Smoke and Cargo Geiger use the existing runner disk-capacity guard. Cleanup
+is skipped only when the workspace, runner temporary directory and Nix store
+filesystems each have at least 80 GiB available. A missing Nix directory is
+checked through its nearest existing parent. Insufficient or unreadable capacity
+retains the original cleanup. The other security stages keep unconditional
+cleanup; commands, toolchains, budgets, result checks and evidence recovery are
+unchanged.
+
+The main run [40158609276](https://github.com/codetakt/aegaeon/actions/runs/40158609276)
+reported 86 GiB free before both jobs, with cleanup taking 108 seconds for Fuzz
+and 235 seconds for Geiger. These observations motivate the bounded opt-in; they
+do not establish maximum disk use or an overall CI speedup. Both jobs report
+capacity after the security stage and before workflow output cleanup, including
+on failure. That snapshot is not a peak measurement. Fuzz also retains its
+existing receipt-bound internal cleanup and recovery.
 
 OpenAPI dependency preparation and validation use a dedicated source boundary.
 It excludes `.github/`, `ci/`, `scripts/ci/` and `tests/ci/` from the existing

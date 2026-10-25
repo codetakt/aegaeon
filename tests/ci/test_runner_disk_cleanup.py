@@ -178,7 +178,7 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                 assert "Disk capacity after cleanup decision" in result.stdout
                 assert "Disk cleanup elapsed seconds:" in result.stdout
 
-    def test_action_keeps_disabled_default_and_only_two_workflows_opt_in(self):
+    def test_action_keeps_disabled_default_and_only_reviewed_jobs_opt_in(self):
         action = yaml.safe_load((ROOT / ".github/actions/setup-nix-ci/action.yml").read_text())
         assert action["inputs"]["free-disk"]["default"] == "false"
         assert action["inputs"]["minimum-free-gib"]["default"] == "0"
@@ -192,11 +192,42 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                 for step in job.get("steps", []):
                     inputs = step.get("with", {})
                     if "minimum-free-gib" in inputs:
-                        assert inputs["minimum-free-gib"] == "80"
                         assert inputs["free-disk"] == "true"
-                        opted_in.append((path.name, job_name))
+                        if (path.name, job_name) == ("security.yml", "security-stage"):
+                            assert (
+                                inputs["minimum-free-gib"]
+                                == "${{ matrix.minimum-free-gib || '0' }}"
+                            )
+                            stages = job["strategy"]["matrix"]["include"]
+                            assert len(stages) == 10
+                            for stage in stages:
+                                budget = stage.get("minimum-free-gib", "0")
+                                assert budget == (
+                                    "80" if stage["stage"] in ("fuzz", "geiger") else "0"
+                                )
+                                if budget != "0":
+                                    opted_in.append((path.name, stage["stage"]))
+                            observation = next(
+                                row
+                                for row in job["steps"]
+                                if row.get("name") == "Observe disk capacity before output cleanup"
+                            )
+                            assert (
+                                observation["if"]
+                                == "${{ always() && matrix.minimum-free-gib == '80' }}"
+                            )
+                            assert job["steps"].index(observation) < next(
+                                index
+                                for index, row in enumerate(job["steps"])
+                                if row.get("name") == "Cleanup transient outputs"
+                            )
+                        else:
+                            assert inputs["minimum-free-gib"] == "80"
+                            opted_in.append((path.name, job_name))
         assert sorted(opted_in) == [
             ("oidc-kms-parity.yml", "oidc-kms-parity"),
+            ("security.yml", "fuzz"),
+            ("security.yml", "geiger"),
             ("verification.yml", "tamarin"),
         ]
 
