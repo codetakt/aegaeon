@@ -178,7 +178,8 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                 assert "Disk capacity after cleanup decision" in result.stdout
                 assert "Disk cleanup elapsed seconds:" in result.stdout
 
-    def test_action_keeps_disabled_default_and_only_reviewed_jobs_opt_in(self):
+    # Keep the historical inventory ID; the explicit allowlist now includes security jobs.
+    def test_action_keeps_disabled_default_and_only_two_workflows_opt_in(self):
         action = yaml.safe_load((ROOT / ".github/actions/setup-nix-ci/action.yml").read_text())
         assert action["inputs"]["free-disk"]["default"] == "false"
         assert action["inputs"]["minimum-free-gib"]["default"] == "0"
