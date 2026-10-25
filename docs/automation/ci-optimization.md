@@ -36,6 +36,23 @@ and test inventory; derivation comparisons confirmed reuse for CI-only changes.
 These checks establish cache eligibility, not a measured reduction in Hosted
 elapsed time.
 
+The full-scope Kani derivation excludes only `docs/automation/`, `tests/ci/`
+and `tests/constant_time/` from its existing source. Changes confined to these
+CI documentation and helper directories no longer invalidate that derivation.
+All other inputs remain, including Rust packages and build scripts, native and
+generated sources, embedded WASM and other fixtures, Cargo configuration, proof
+registries, citation data, tool packaging and unknown new paths. Other checks
+retain their source boundaries and continue validating the excluded files.
+
+Kani still executes its complete required and diagnostic selection when the
+derivation builds. The Hosted wrapper continues reconstructing the retained
+records against the current source and checking citations, including when Nix
+reuses an output. Discovery freshness, dependency preparation, flags, deadlines
+and rejection rules are unchanged. A future Kani dependency on one of the
+excluded directories requires revisiting this boundary before using that input.
+Source identity tests cover changes, additions, removals and near-prefix paths;
+cache eligibility alone does not establish a Hosted elapsed-time improvement.
+
 Nextest uses a dedicated dependency artifact with the same ordered OpenSSL
 pkg-config input as its consumer. OpenSSL precedes Crane's zstd input in both
 search paths. This avoids invalidating the AWS-LC build-script fingerprint solely
