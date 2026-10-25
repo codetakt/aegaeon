@@ -1002,7 +1002,11 @@
             craneLib.mkCargoDerivation {
               pname = "verify-kani";
               version = "0.0.0";
-              inherit src cargoArtifacts;
+              inherit cargoArtifacts;
+              src = import ./nix/kani-source.nix {
+                inherit lib;
+                source = src;
+              };
               stdenv = _: stdenv;
               cargoToml = ./Cargo.toml;
               cargoLock = ./Cargo.lock;
