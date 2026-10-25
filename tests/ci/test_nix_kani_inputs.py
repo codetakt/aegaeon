@@ -1,4 +1,8 @@
-"""Exercise the Kani source boundary with real Nix source paths."""
+"""Exercise the Kani source boundary in the checkout-based CI helper lane.
+
+This module needs Git metadata and Nix, so it stays outside the lightweight
+integrity gate's test_kani_*.py discovery pattern.
+"""
 
 from __future__ import annotations
 
@@ -143,7 +147,8 @@ class KaniInputTests(unittest.TestCase):
             }};
           in {{
             fixtures = builtins.mapAttrs (_: path: toString (sourceFor path)) fixtures;
-            actual = toString flake.packages.${{builtins.currentSystem}}.verify-kani.src;
+            # This is source evaluation only; Kani execution is Linux-only.
+            actual = toString flake.packages.x86_64-linux.verify-kani.src;
           }}
         """
         result = evaluate(expression)
