@@ -9,21 +9,31 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from sanitizer_support.core import Failure, Interrupted, failure, require
 from sanitizer_support.evidence import EvidenceStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def group_alive(pgid: int) -> bool:
     # A reparented zombie has exited; it is not a running descendant. Linux is
     # also the platform of the existing lib/linux ASan runtime configuration.
-    for entry in Path("/proc").iterdir():
+    # These checks run repeatedly for every supervised command. Use the paths
+    # already supplied by scandir rather than constructing Path objects for
+    # every process. Each call still reads current stat files; nothing is cached.
+    with os.scandir("/proc") as scan:
+        # Preserve Path.iterdir's complete enumeration before inspecting files:
+        # a later directory-read failure must not be hidden by an early match.
+        entries = list(scan)
+    for entry in entries:
         if not entry.name.isdigit():
             continue
         try:
-            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+            with open(entry.path + "/stat") as stream:  # noqa: PTH123 - avoid per-process Path allocation
+                fields = stream.read().rsplit(")", 1)[1].split()
             if int(fields[2]) == pgid and fields[0] not in {"Z", "X"}:
                 return True
         except (FileNotFoundError, ProcessLookupError):

@@ -95,6 +95,14 @@ synthetic native inputs. It changes neither the samples in those fixtures nor
 the complete discovery inventory. Fixture boundaries, fallback behavior and
 occurrence-level receipt reconciliation remain in place.
 
+The sanitizer supervisor uses `os.scandir` paths directly when inspecting Linux
+process groups, avoiding repeated `Path` construction for each `/proc` entry.
+Every call still reads the current process state and group membership. No PID,
+membership or exit result is cached, and only vanished processes are ignored;
+unreadable or malformed records still fail supervision. Command deadlines,
+termination, final descendant checks and the complete helper inventory remain
+unchanged. This reduces scan overhead without reducing lifecycle coverage.
+
 The Dudect timing-file validator retains two exact payload summaries during
 each validation. Synthetic helper batches alternate between two payloads, so
 a one-entry cache repeatedly recomputed their distributions. Reuse requires
