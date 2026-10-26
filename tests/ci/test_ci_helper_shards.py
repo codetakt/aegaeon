@@ -158,6 +158,45 @@ class Cases(unittest.TestCase):
         for name in self.modules:
             self.assertEqual(sys.modules[name].marks, ["module", "class", "test"])
 
+    def test_reassigned_modules_keep_complete_ordered_fixture_lifecycles(self):
+        moved = {
+            "test_dudect_moved_fixture": "other",
+            "test_perf_moved_fixture": "dudect",
+            "test_sanitizer_moved_fixture": "security-fuzz",
+        }
+        for name in moved:
+            self.write(
+                name,
+                """import unittest
+marks = []
+def setUpModule(): marks.append("module setup")
+def tearDownModule(): marks.append("module teardown")
+class Cases(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls): marks.append("class setup")
+    @classmethod
+    def tearDownClass(cls): marks.append("class teardown")
+    def test_a(self): marks.append("a")
+    def test_b(self): marks.append("b")
+""",
+            )
+        with mock.patch.object(helpers, "MODULE_GROUP_OVERRIDES", moved):
+            receipts = self.receipts()
+            aggregate(receipts, BOUND, DEPENDENCIES)
+        self.assertEqual({row["mode"] for row in receipts}, {"normal"})
+        self.assertEqual(sum(row["tests_run"] for row in receipts), 10)
+        for name, group in moved.items():
+            owners = {
+                row["group"]
+                for row in receipts
+                if any(row["full"][slot]["module"] == name for slot in row["started_slots"])
+            }
+            self.assertEqual(owners, {group})
+            self.assertEqual(
+                sys.modules[name].marks,
+                ["module setup", "class setup", "a", "b", "class teardown", "module teardown"],
+            )
+
     def test_added_modules_methods_and_inherited_cases_remain_in_complete_union(self):
         self.write(
             "test_new_helper_shard_fixture",

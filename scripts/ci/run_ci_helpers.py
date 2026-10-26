@@ -29,6 +29,14 @@ else:
     ResultBase = unittest.TextTestResult
 
 GROUPS = ("sanitizer", "security-fuzz", "dudect", "other")
+# Groups are execution partitions, not verification scopes. These measured-cost
+# exceptions move complete modules; discovery, fixture order and accounting stay
+# unchanged. New modules still use the prefix rules below.
+MODULE_GROUP_OVERRIDES = {
+    "test_dudect_runner": "other",
+    "test_perf_source_manifest": "dudect",
+    "test_sanitizer_boundaries": "security-fuzz",
+}
 ROOT = Path(__file__).resolve().parents[2]
 PATTERN = "test_*.py"
 FIXTURE_CALLERS = frozenset(
@@ -49,6 +57,8 @@ def require(condition: object, reason: str) -> None:
 
 def module_group(module: str) -> str:
     name = module.rsplit(".", 1)[-1]
+    if name in MODULE_GROUP_OVERRIDES:
+        return MODULE_GROUP_OVERRIDES[name]
     if name.startswith("test_sanitizer"):
         return "sanitizer"
     if name.startswith("test_security_fuzz"):
