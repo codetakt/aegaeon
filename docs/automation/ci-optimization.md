@@ -91,6 +91,17 @@ The direct Hosted JOSE workflow is unchanged. Dependency preparation compiles
 artifacts and does not supply test-result evidence. Populating this cache adds
 compilation and storage; no reduction in initial total compute is assumed.
 
+The JOSE Nix check and its dependency preparation exclude only
+`docs/automation/`, `scripts/ci/` and `tests/ci/` from their source. Changes confined
+to these orchestration paths no longer invalidate the check. Workflow files stay
+in the source because Rust guards read them. All other inputs remain, including
+Rust packages, build scripts, native/generated sources, vectors, fixtures,
+verification scripts, other documentation and unknown additions. The full
+32 Cargo invocations, Python conformance test, toolchain and failure handling
+are unchanged. The excluded paths retain their CI validation; a future JOSE
+dependency on them requires revisiting this boundary. Cache eligibility is
+distinct from a measured reduction in Hosted execution time.
+
 The JOSE verification job retains the first TLV parity output for the default,
 entry-validator, FFI and strict FFI profiles. Its later profile report checks
 the required producer outcomes and retained log digests instead of running those
