@@ -178,7 +178,7 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                 assert "Disk capacity after cleanup decision" in result.stdout
                 assert "Disk cleanup elapsed seconds:" in result.stdout
 
-    # Keep the historical inventory ID; the explicit allowlist now includes security jobs.
+    # Keep the historical inventory ID; the explicit allowlist identifies all opted-in jobs.
     def test_action_keeps_disabled_default_and_only_two_workflows_opt_in(self):
         action = yaml.safe_load((ROOT / ".github/actions/setup-nix-ci/action.yml").read_text())
         assert action["inputs"]["free-disk"]["default"] == "false"
@@ -226,11 +226,34 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                             assert inputs["minimum-free-gib"] == "80"
                             opted_in.append((path.name, job_name))
         assert sorted(opted_in) == [
+            ("ci.yml", "dependency-audit"),
+            ("lint.yml", "lint"),
+            ("lint.yml", "python-lint"),
+            ("lint.yml", "rust-strict-lint"),
+            ("lint.yml", "typescript-lint"),
             ("oidc-kms-parity.yml", "oidc-kms-parity"),
             ("security.yml", "fuzz"),
             ("security.yml", "geiger"),
             ("verification.yml", "tamarin"),
         ]
+
+    def test_lint_and_dependency_capacity_observation_runs_after_checks_on_failure(self):
+        targets = {
+            "lint.yml": ("lint", "typescript-lint", "python-lint", "rust-strict-lint"),
+            "ci.yml": ("dependency-audit",),
+        }
+        for filename, names in targets.items():
+            workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text())
+            for name in names:
+                with self.subTest(workflow=filename, job=name):
+                    steps = workflow["jobs"][name]["steps"]
+                    observation = steps[-1]
+                    assert observation["name"] == "Observe remaining disk capacity"
+                    assert observation["if"] == "always()"
+                    assert 'df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix' in observation["run"]
+                    assert "peak usage was not measured" in observation["run"]
+                    # An observation failure must not replace the original checks' result.
+                    assert observation["run"].rstrip().endswith("|| true")
 
 
 if __name__ == "__main__":

@@ -200,10 +200,18 @@ jobs:
         uses: ./.github/actions/setup-nix-ci
         with:
           free-disk: "true"
+          # Retain cleanup when any relevant filesystem is below 80 GiB or unreadable.
+          minimum-free-gib: "80"
           enable-flakehub-cache: "true"
 
       - name: Check dependency policies (licenses, bans, sources, advisories)
         run: nix develop .#ci --command cargo deny check
+
+      - name: Observe remaining disk capacity
+        if: always()
+        run: |
+          echo "Disk capacity after checks; peak usage was not measured."
+          df -B1 -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix || true
 
   db-integration:
     name: DB Integration Tests
