@@ -1,6 +1,6 @@
 # CI execution efficiency
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -270,3 +270,27 @@ For each item, record the implementation PR, actual validation, remaining
 conditions and integration result separately. Complete direct checks and pinned
 extraction routes already integrated in earlier PRs must be reconciled with the
 current code rather than implemented a second time.
+
+## Coverage compilation reuse
+
+Coverage caches only instrumented dependency compilation products in a separate
+target directory. The exact key includes the runner OS/architecture, Cargo lock
+and manifests, toolchain, Cargo configuration, Nix definitions and build scripts.
+There is no fallback key. Cargo still checks dependency fingerprints and rebuilds
+when necessary; the normal `cargo llvm-cov --workspace` command always cleans
+workspace products, runs all tests and generates a new report, even on a hit.
+
+Before a successful miss is saved, `cargo llvm-cov clean --workspace` removes
+workspace executables and coverage results. A remaining raw/merged profile or
+LCOV file fails cache preparation. The cache never supplies a previous test
+outcome or changes the 40% threshold. Failed tests or threshold checks prevent
+a new cache save. Cache absence still executes the complete cold build.
+
+A local full-workspace comparison retained all 2,662 passing tests, 455 existing
+ignored occurrences and the same coverage file/function/line inventory. The
+cold run took 181.6 seconds and dependency reuse with standard cleaning took
+145.5 seconds after archive restoration, with another 1.4 seconds to restore;
+both reported 46.77% line coverage. Dependency preparation for
+saving added 7.9 seconds of cleanup and 1.4 seconds of compression; the archive
+was 337 MB. Network transfer and Hosted cache-hit behavior still require direct
+observation; these local values are not a claim about overall Hosted latency.

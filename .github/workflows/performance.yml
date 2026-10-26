@@ -375,6 +375,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/coverage
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -383,6 +385,13 @@ jobs:
         with:
           free-disk: "true"
           enable-flakehub-cache: "true"
+
+      - name: Restore coverage dependencies
+        id: coverage-dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/coverage
+          key: coverage-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'flake.nix', 'flake.lock', 'nix/**', '**/build.rs') }}
 
       - name: Run tests with coverage
         run: |
@@ -420,3 +429,18 @@ jobs:
             exit 1
           fi
           EOF
+
+      # The cache contains dependency compilation products, never workspace
+      # executables or coverage counters/results. Default llvm-cov cleaning also
+      # runs before every test attempt, including an exact cache hit.
+      - name: Prepare dependency-only coverage cache
+        if: ${{ steps.coverage-dependencies.outputs.cache-hit != 'true' }}
+        run: |
+          nix develop .#ci --command cargo llvm-cov clean --workspace
+          test -d "$CARGO_TARGET_DIR"
+          retained=$(find "$CARGO_TARGET_DIR" -type f \
+            \( -name '*.profraw' -o -name '*.profdata' -o -name '*.lcov' \) -print -quit)
+          if [ -n "$retained" ]; then
+            echo "Coverage results must not enter the compilation cache" >&2
+            exit 1
+          fi
