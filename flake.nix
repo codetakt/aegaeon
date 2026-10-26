@@ -811,6 +811,19 @@
           src = buildSrc;
         };
 
+        oidcKmsTest = import ./nix/oidc-kms-test.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -1113,6 +1126,7 @@
         flakePackages = import ./nix/flake/packages.nix {
           inherit
             openapiCheck
+            oidcKmsTest
             ffiContractCheck
             assuranceStandards
             verifiedReqs

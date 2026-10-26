@@ -40,6 +40,11 @@ if name == "cargo":
 if name == "curl":
     print("{}")
     raise SystemExit(int(os.environ.get("CURL_FIXTURE_EXIT", "0")))
+if name == "nix":
+    with Path("nix-commands.jsonl").open("a") as stream:
+        stream.write(json.dumps(sys.argv[1:]) + "\\n")
+    print(os.environ["NIX_FIXTURE_OUTPUT"])
+    raise SystemExit(int(os.environ.get("NIX_FIXTURE_EXIT", "0")))
 if name == "tee":
     counter = Path("tee-count")
     count = int(counter.read_text()) + 1 if counter.exists() else 1
@@ -73,7 +78,7 @@ class KmsExecutionTests(unittest.TestCase):
         path.write_text(f"#!{sys.executable}\n{FAKE_TOOL}")
         path.chmod(0o755)
 
-    def run_wrapper(self, output=SUCCESS, *, mode="localstack", **environment):
+    def run_wrapper(self, output=SUCCESS, *, mode="localstack", arguments=(), **environment):
         (self.root / "cargo-output.txt").write_text(output)
         env = {**self.environment, "AEG_OIDC_KMS_MODE": mode, **environment}
         if mode == "aws":
@@ -83,7 +88,7 @@ class KmsExecutionTests(unittest.TestCase):
                 AEGAEON_OIDC_SIGNING_KID="fixture-kid",
             )
         return subprocess.run(  # noqa: S603 - checked-in wrapper with isolated controlled tools
-            [shutil.which("bash"), str(WRAPPER)],
+            [shutil.which("bash"), str(WRAPPER), *arguments],
             cwd=self.root,
             env=env,
             capture_output=True,
@@ -224,6 +229,99 @@ class KmsExecutionTests(unittest.TestCase):
                 )
                 assert result.returncode != 0
                 assert result.stdout == ""
+
+    def compiled_package(self):
+        self.tool("nix")
+        package = self.root / "compiled-test"
+        executable = package / "libexec/oidc-kms-test"
+        executable.parent.mkdir(parents=True)
+        executable.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\nfrom pathlib import Path\n"
+            f"root = Path({str(self.root)!r})\n"
+            "with (root / 'executions.jsonl').open('a') as stream:\n"
+            "    stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "(root / 'execution-cwd.txt').write_text(str(Path.cwd()))\n"
+            "print((root / 'cargo-output.txt').read_text(), end='')\n"
+            "raise SystemExit(int(os.environ.get('COMPILED_FIXTURE_EXIT', '0')))\n"
+        )
+        executable.chmod(0o755)
+        receipt = {
+            "schema_version": 1,
+            "scope": "compilation-only",
+            "test": TEST_NAME,
+            "executable": "libexec/oidc-kms-test",
+            "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+            "features": ["default", "kms-aws", "telemetry"],
+            "profile": {"test": True, "debug_assertions": True, "opt_level": "0"},
+            "build": {"source": "fixture-source"},
+        }
+        (package / "build.json").write_text(json.dumps(receipt))
+        self.environment["NIX_FIXTURE_OUTPUT"] = str(package)
+        return package
+
+    def test_compiled_package_runs_fresh_exact_test_on_every_attempt(self):
+        package = self.compiled_package()
+        for _ in range(2):
+            result = self.run_wrapper(arguments=("--nix",))
+            assert result.returncode == 0, result.stderr
+            assert self.summary()["status"] == "passed"
+            assert self.summary()["execution_backend"] == "nix"
+        expected = [TEST_NAME, "--exact", "--nocapture", "--color", "never"]
+        calls = [
+            json.loads(line) for line in (self.root / "executions.jsonl").read_text().splitlines()
+        ]
+        assert calls == [expected, expected]
+        assert (self.root / "execution-cwd.txt").read_text() == str(ROOT / "crates/server")
+        assert not (self.root / "commands.jsonl").exists()
+        builds = [
+            json.loads(line) for line in (self.root / "nix-commands.jsonl").read_text().splitlines()
+        ]
+        assert builds == [["build", "--no-link", "--print-out-paths", f"{ROOT}#oidc-kms-test"]] * 2
+        receipt = json.loads((self.root / "artifacts/oidc-kms/build.json").read_text())
+        assert receipt["package"] == str(package)
+        assert receipt["scope"] == "compilation-only"
+
+    def test_compiled_execution_keeps_failure_and_completion_checks(self):
+        self.compiled_package()
+        for env, output in (({"COMPILED_FIXTURE_EXIT": "37"}, SUCCESS), ({}, "running 0 tests\n")):
+            with self.subTest(env=env, output=output):
+                result = self.run_wrapper(output, arguments=("--nix",), **env)
+                assert result.returncode != 0
+                assert self.summary()["status"] == "failed"
+
+    def test_compiled_package_build_failure_or_mutation_never_falls_back(self):
+        package = self.compiled_package()
+        assert self.run_wrapper(arguments=("--nix",)).returncode == 0
+        calls = (self.root / "executions.jsonl").read_bytes()
+        result = self.run_wrapper(arguments=("--nix",), NIX_FIXTURE_EXIT="23")
+        assert result.returncode == 23
+        (package / "libexec/oidc-kms-test").write_text("changed")
+        assert self.run_wrapper(arguments=("--nix",)).returncode != 0
+        assert self.summary()["status"] == "failed"
+        assert (self.root / "executions.jsonl").read_bytes() == calls
+        assert not (self.root / "commands.jsonl").exists()
+        assert not (self.root / "artifacts/oidc-kms/execution.json").exists()
+
+    def test_compiled_path_still_requires_live_service_preflight(self):
+        self.compiled_package()
+        result = self.run_wrapper(
+            arguments=("--nix",), CURL_FIXTURE_EXIT="22", AEG_OIDC_KMS_LOCALSTACK_WAIT_SECONDS="0"
+        )
+        assert result.returncode != 0
+        assert self.summary()["status"] == "failed"
+        assert not (self.root / "executions.jsonl").exists()
+
+    def test_invalid_arguments_or_package_output_cannot_run_a_test(self):
+        self.compiled_package()
+        for arguments in (("--other",), ("--nix", "extra")):
+            result = self.run_wrapper(arguments=arguments)
+            assert result.returncode == 2
+        for output in ("", "relative/path", "/first\n/second", "/missing/output"):
+            result = self.run_wrapper(arguments=("--nix",), NIX_FIXTURE_OUTPUT=output)
+            assert result.returncode != 0
+        assert not (self.root / "executions.jsonl").exists()
+        assert not (self.root / "commands.jsonl").exists()
 
 
 if __name__ == "__main__":
