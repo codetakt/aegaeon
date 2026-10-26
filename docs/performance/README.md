@@ -72,6 +72,12 @@ database, then bootstrap the active management environment/configuration and
 required runtime keys through the management API or `aegaeon-hosted-bootstrap`
 before starting `perf-load`.
 
+The scheduled Hosted public smoke supplies PostgreSQL and Redis, applies the
+schema migrations, and activates the existing loopback-only, OIDC-off runtime
+fixture before starting the server. Its seed receipt is retained with the smoke
+artifacts. This fixture covers the public health/version endpoints only; it does
+not satisfy the separate policy-mixed or performance-qualification prerequisites.
+
 ## Load consumer inputs and reporting
 
 Public `smoke`, `discovery`, and `jwks` selections use the supplied transport target.

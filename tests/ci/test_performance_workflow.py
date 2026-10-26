@@ -4,6 +4,7 @@ from __future__ import annotations
 
 # ruff: noqa: PT009 - assertions must remain active under Python -O.
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -82,6 +83,53 @@ class PerformanceWorkflowTests(unittest.TestCase):
         consumer = (ROOT / "crates/loadtest/src/scenarios/mod.rs").read_text()
         self.assertNotIn("X-Forwarded-Proto", consumer)
         self.assertNotIn('header("Forwarded"', consumer)
+
+    def test_public_smoke_has_shared_stores_and_healthy_services(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
+        job = workflow["jobs"]["load-test"]
+        inventory = (
+            ROOT / "crates/server/src/config/runtime_boundary/shared_store/inventory.rs"
+        ).read_text()
+        names = set(re.findall(r'"(AEGAEON_[A-Z_]+_REDIS_URL)"', inventory))
+        self.assertEqual(len(names), 20)
+        self.assertEqual({key for key in job["env"] if key.endswith("_REDIS_URL")}, names)
+        for name in names:
+            self.assertEqual(job["env"][name], "redis://127.0.0.1:6379/0")
+        services = job["services"]
+        self.assertEqual(services["redis"]["image"], "redis:7-alpine")
+        self.assertEqual(services["redis"]["ports"], ["6379:6379"])
+        self.assertIn('--health-cmd "redis-cli ping"', services["redis"]["options"])
+        self.assertEqual(services["postgres"]["ports"], ["5432:5432"])
+        self.assertEqual(job["env"]["DATABASE_URL"], job["env"]["AEGAEON_DATABASE_URL"])
+
+    def test_public_smoke_prepares_active_runtime_before_load(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
+        job = workflow["jobs"]["load-test"]
+        names = [step.get("name") for step in job["steps"]]
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertLess(
+            names.index("Prepare public smoke runtime"), names.index("Run public smoke load test")
+        )
+        prepare = steps["Prepare public smoke runtime"]
+        self.assertNotIn("if", prepare)
+        command = prepare["run"]
+        self.assertIn("set -euo pipefail", command)
+        self.assertLess(command.index("atlas migrate apply"), command.index("cargo build"))
+        self.assertLess(
+            command.index("cargo build"),
+            command.index("./target/release/aegaeon-observability-seed"),
+        )
+        self.assertIn("--release --locked --bin aegaeon-observability-seed", command)
+        self.assertIn('echo "::add-mask::${api_key}"', command)
+        self.assertIn("runtime-seed.json", command)
+        self.assertNotIn("GITHUB_ENV", command)
+        smoke = steps["Run public smoke load test"]
+        self.assertEqual(
+            job["env"]["AEGAEON_RUNTIME_ISSUER_HOST"], smoke["env"]["AEGAEON_RUNTIME_ISSUER_HOST"]
+        )
+        self.assertEqual(smoke["env"]["PERF_APPLY_DATABASE_MIGRATIONS"], "0")
+        self.assertIn("--functional-only", smoke["run"])
+        self.assertIn("ci/validate_load_smoke.py", steps["Validate public functional smoke"]["run"])
 
     def test_policy_mixed_execution_and_acceptance_share_pending_prerequisite(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
