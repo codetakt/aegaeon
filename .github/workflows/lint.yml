@@ -170,11 +170,11 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run Ruff checks
-        run: nix develop .#ci --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py ci/validate_load_smoke.py
+        run: nix develop .#integrity --command ruff check scripts/validation scripts/ci/*.py tests/ci ci/validate_slos.py ci/validate_load_smoke.py
 
       - name: Run mypy checks
         run: |
-          nix develop .#ci --command \
+          nix develop .#integrity --command \
             mypy scripts/validation scripts/ci ci/validate_slos.py ci/validate_load_smoke.py
 
       - name: Observe remaining disk capacity
