@@ -986,6 +986,10 @@
         verifyFstar =
           pkgs.runCommand "verify-fstar"
             {
+              src = import ./nix/fstar-source.nix {
+                inherit lib;
+                source = src;
+              };
               nativeBuildInputs = [
                 verificationFstar
                 verificationZ3
@@ -1001,7 +1005,7 @@
             }
             ''
               export HOME="$TMPDIR"
-              cp -r ${src} source
+              cp -r "$src" source
               chmod -R u+w source
               cd source
               export HACL_FSTAR_PATH="${haclStar}/share/hacl-star/fstar"
