@@ -452,6 +452,9 @@ jobs:
       - name: Run JOSE JSON/TLV compatibility tests
         id: jose-compat
         run: |
+          JOSE_SERVER_TEST_PACKAGE=$(nix build .#jose-server-tests --no-link --print-out-paths)
+          test -n "$JOSE_SERVER_TEST_PACKAGE"
+          export JOSE_SERVER_TEST_PACKAGE
           nix develop .#verification --command bash -c "$(cat <<'BASH'
           set -euo pipefail
           mkdir -p artifacts/jose/tlv-parity
@@ -544,6 +547,9 @@ jobs:
       - name: Run strict claim-bearing profile tests
         id: jose-strict
         run: |
+          JOSE_SERVER_TEST_PACKAGE=$(nix build .#jose-server-strict-tests --no-link --print-out-paths)
+          test -n "$JOSE_SERVER_TEST_PACKAGE"
+          export JOSE_SERVER_TEST_PACKAGE
           nix develop .#verification --command bash -c "$(cat <<'BASH'
           set -euo pipefail
           mkdir -p artifacts/jose/tlv-parity

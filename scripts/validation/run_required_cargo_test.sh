@@ -5,8 +5,13 @@ set -euo pipefail
 log="$(mktemp)"
 trap 'rm -f -- "$log"' EXIT
 
-# Keep the original Cargo arguments, streaming output, and pipeline failure.
-if cargo test "$@" 2>&1 | tee "$log"; then
+# Only these two explicitly prepared server profiles reuse compilation. Keep
+# every invocation, runtime argument, output and failure; never reuse results.
+command=(cargo test "$@")
+if [[ -n ${JOSE_SERVER_TEST_PACKAGE:-} && ${1:-} == -p && ${2:-} == aegaeon-server && ${3:-} == --lib ]]; then
+	command=(python3 scripts/validation/jose_server_test_package.py run "$JOSE_SERVER_TEST_PACKAGE" "$@")
+fi
+if "${command[@]}" 2>&1 | tee "$log"; then
 	:
 else
 	exit "$?"
