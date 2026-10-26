@@ -45,6 +45,30 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
+      AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
+      AEGAEON_AUTH_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_AUTH_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_CLIENT_ASSERTION_REPLAY_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CODE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DEVICE_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_NONCE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_DPOP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_JWKS_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_AUTH_CSRF_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_LOCAL_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_LOGIN_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_MANAGEMENT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_OIDC_LOGOUT_SESSION_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_PAR_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_REQUEST_OBJECT_JTI_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_STEPUP_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_TOKEN_STORE_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_AUTH_REDIS_URL: "redis://127.0.0.1:6379/0"
+      AEGAEON_UPSTREAM_LOGOUT_RELAY_REDIS_URL: "redis://127.0.0.1:6379/0"
     services:
       postgres:
         image: postgres:18
@@ -59,6 +83,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -67,6 +100,33 @@ jobs:
         with:
           free-disk: "true"
           enable-flakehub-cache: "true"
+
+      - name: Prepare public smoke runtime
+        run: |
+          set -euo pipefail
+          source_root="$PWD"
+          preparation_root="$(mktemp -d)"
+          trap 'rmdir "$preparation_root"' EXIT
+          # Enter the shell outside Git so interactive hook setup cannot add
+          # untracked inputs before the load application's source admission.
+          (
+            cd "$preparation_root"
+            # The child shell expands its own positional source-root argument.
+            # shellcheck disable=SC2016
+            nix develop "$source_root#ci" --command bash -euo pipefail -c '
+              cd "$1"
+              atlas migrate apply --env local --revisions-schema public
+              cargo build --release --locked --bin aegaeon-observability-seed
+            ' bash "$source_root"
+          )
+          # The loopback OIDC-off fixture is sufficient for health/version smoke.
+          api_key="aeg_$(openssl rand -hex 32)"
+          echo "::add-mask::${api_key}"
+          mkdir -p artifacts/perf/ci-load-smoke
+          RUST_LOG=off AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
+            ./target/release/aegaeon-observability-seed \
+            > artifacts/perf/ci-load-smoke/runtime-seed.json
+          python3 -m json.tool artifacts/perf/ci-load-smoke/runtime-seed.json > /dev/null
 
       - name: Run public smoke load test
         env:
@@ -82,7 +142,7 @@ jobs:
           PERF_SERVER_PORT: "18095"
           AEGAEON_RUNTIME_ISSUER_HOST: "127.0.0.1:18095"
           AEGAEON_DATABASE_URL: "postgres://aegaeon:aegaeon@127.0.0.1:5432/aegaeon?sslmode=disable"
-          PERF_APPLY_DATABASE_MIGRATIONS: "1"
+          PERF_APPLY_DATABASE_MIGRATIONS: "0"
           ARTIFACT_DIR: artifacts/perf/ci-load-smoke
           REPORT_PATH: artifacts/perf/ci-load-smoke/report.json
           LEGACY_REPORT: artifacts/load-test-report.json
