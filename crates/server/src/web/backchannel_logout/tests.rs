@@ -34,6 +34,14 @@ fn config(signing_key: OidcSigningKey) -> OidcConfig {
 }
 
 fn verify_token(key: &OidcSigningKey, token: &str, typ: &str) -> TestResult<Value> {
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
+    verify_token_under_env_guard(key, token, typ)
+}
+
+// The caller holds RAW_JSON_ENV_GUARD for the complete verification lifetime.
+fn verify_token_under_env_guard(key: &OidcSigningKey, token: &str, typ: &str) -> TestResult<Value> {
     let encoded_header = token
         .split('.')
         .next()
@@ -44,9 +52,6 @@ fn verify_token(key: &OidcSigningKey, token: &str, typ: &str) -> TestResult<Valu
     let jwk = jwks.keys.first().ok_or_else(|| anyhow::anyhow!("JWK"))?;
     let modulus = URL_SAFE_NO_PAD.decode(jwk.n.as_deref().ok_or_else(|| anyhow::anyhow!("n"))?)?;
     let exponent = URL_SAFE_NO_PAD.decode(jwk.e.as_deref().ok_or_else(|| anyhow::anyhow!("e"))?)?;
-    let _guard = crate::util::RAW_JSON_ENV_GUARD
-        .lock()
-        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
     let payload = aegaeon_jose::verify_compact_with_context(
         token,
         aegaeon_jose::VerificationKey::RsaPkcs1Sha256 {
@@ -64,7 +69,20 @@ fn verify_logout(
     audience: &str,
     sub: Option<&str>,
 ) -> TestResult<Value> {
-    let claims = verify_token(key, token, "logout+jwt")?;
+    let _guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|_| anyhow::anyhow!("raw json env guard"))?;
+    verify_logout_under_env_guard(key, token, audience, sub)
+}
+
+// The caller holds RAW_JSON_ENV_GUARD, including when used by the HTTP fixture.
+fn verify_logout_under_env_guard(
+    key: &OidcSigningKey,
+    token: &str,
+    audience: &str,
+    sub: Option<&str>,
+) -> TestResult<Value> {
+    let claims = verify_token_under_env_guard(key, token, "logout+jwt")?;
     let iat = claims["iat"]
         .as_i64()
         .ok_or_else(|| anyhow::anyhow!("iat"))?;

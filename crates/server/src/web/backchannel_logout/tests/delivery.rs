@@ -23,14 +23,16 @@ async fn receive_logout(
     assert_eq!(form.len(), 1);
     let token = form.get("logout_token").expect("logout_token form field");
     // Validate signature, audience, type, event and expiry before acknowledging.
-    let decoded = verify_token(&recipient.key, token, "logout+jwt").expect("recipient signature");
+    let decoded = verify_token_under_env_guard(&recipient.key, token, "logout+jwt")
+        .expect("recipient signature");
     let audience = decoded["aud"].as_str().expect("audience");
     let sub = match audience {
         "with-sub" => Some("subject"),
         "sid-only" => None,
         _ => panic!("unexpected audience"),
     };
-    let claims = verify_logout(&recipient.key, token, audience, sub).expect("recipient claims");
+    let claims = verify_logout_under_env_guard(&recipient.key, token, audience, sub)
+        .expect("recipient claims");
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
@@ -91,6 +93,11 @@ fn logout_profile_http_recipient_accepts_sync_and_async_delivery() -> TestResult
     let _lock = crate::util::SERVER_TEST_ENV_GUARD
         .lock()
         .map_err(|err| anyhow::anyhow!("{err}"))?;
+    // Wait for environment-mutating tests before starting the HTTP deadline.
+    // Recipient verification uses this guard instead of acquiring it in a request.
+    let _raw_json_guard = crate::util::RAW_JSON_ENV_GUARD
+        .lock()
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
     let _flag = LoopbackFlag::enable();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -125,7 +132,7 @@ fn logout_profile_http_recipient_accepts_sync_and_async_delivery() -> TestResult
         let asynchronous = dispatch_backchannel_logout_async(&cfg, &clients, &event).await;
         for report in [synchronous, asynchronous] {
             assert_eq!(report.targeted_clients, 2);
-            assert_eq!(report.delivered, 2);
+            assert_eq!(report.delivered, 2, "{report:?}");
             assert!(!report.has_failures());
         }
         assert_eq!(accepted.load(Ordering::SeqCst), 4);
