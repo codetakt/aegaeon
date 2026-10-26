@@ -413,4 +413,5 @@ Audience: contributors, maintainers
 | `docs/development/database.md` | development | Database (PostgreSQL + Atlas + SQLx) | current implementation baseline | 2026-09-16 | Engineering | contributors, maintainers |
 | `docs/development/dependency-updates.md` | development | Reviewing Dependency Updates | current implementation baseline | 2026-10-10 | Engineering | contributors, maintainers |
 | `docs/development/merge-queue.md` | development | Merge queue operations | active plan | 2026-10-02 | Engineering | maintainers |
+| `docs/development/upstream-query-integration-handoff.md` | development | Upstream endpoint query integration: Task 3 handoff | historical record | 2026-10-27 | Engineering | maintainers and product-assurance reviewers |
 | `docs/development/validation-tools.md` | development | Validation Tools Documentation | current implementation baseline | 2026-07-07 | Engineering | contributors, maintainers |
