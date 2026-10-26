@@ -480,7 +480,7 @@ jobs:
             --features ffi_jose_header_tlv -- --test-threads=1 --nocapture \
             2>&1 | tee artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt
           sha256sum artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt > artifacts/jose/tlv-parity/ffi-jose-header-tlv.txt.sha256
-          run_test -p aegaeon-jose --lib -- tlv_utf8_values_match_json_header
+          run_test -p aegaeon-jose --test json_header_parity -- tlv_utf8_values_match_json_header
           run_test -p aegaeon-jose --lib \
             request_object_raw_parser_preserves_authorization_details -- --nocapture
           run_test -p aegaeon-jose --lib \

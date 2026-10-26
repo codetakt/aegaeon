@@ -81,10 +81,10 @@ class RequiredCargoExecutionTests(unittest.TestCase):
         )
         assert result.returncode != 0
 
-    def test_utf8_parity_selection_has_a_current_library_test(self):
+    def test_utf8_parity_selection_has_a_current_integration_test(self):
         workflow = (ROOT / ".github/workflows/verification.yml").read_text()
-        source = (ROOT / "crates/jose/src/tlv.rs").read_text()
-        assert "--lib -- tlv_utf8_values_match_json_header" in workflow
+        source = (ROOT / "crates/jose/tests/json_header_parity.rs").read_text()
+        assert "--test json_header_parity -- tlv_utf8_values_match_json_header" in workflow
         assert "fn tlv_utf8_values_match_json_header(" in source
 
     def test_workflow_selects_current_duplicate_rejection_tests(self):
