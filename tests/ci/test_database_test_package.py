@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -10,7 +11,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -257,8 +260,135 @@ class DatabaseTestPackageTests(unittest.TestCase):
             )
             assert result.returncode == expected, result.stderr
 
+    def namespace_driver(self, filename):
+        spec = importlib.util.spec_from_file_location(
+            filename.removesuffix(".py"), ROOT / "scripts/validation" / filename
+        )
+        assert spec
+        assert spec.loader
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        return driver
+
+    def namespace_main(self, filename, *, compiled=True, listing="selected: test\n", build_code=0):
+        driver = self.namespace_driver(filename)
+        package = self.root / "output"
+        binary = str(package / "libexec/aegaeon_server") if compiled else "/original/server-test"
+        arguments = [filename, "--sudo-netns"]
+        if compiled:
+            arguments += ["--compiled-package", str(package)]
+        listing_results = [listing]
+        if "fingerprint" in filename:
+            listing_results.insert(0, "Redis server v=7.2.0\n")
+        build_message = json.dumps(
+            {
+                "reason": "compiler-artifact",
+                "target": {"name": "aegaeon_server"},
+                "executable": binary,
+            }
+        )
+        with (
+            patch.object(sys, "argv", arguments),
+            patch.object(sys, "path", [str(ROOT / "scripts/validation"), *sys.path]),
+            patch.object(sys, "platform", "linux"),
+            patch.object(driver.shutil, "which", side_effect=lambda x: f"/tools/{x}"),
+            patch.object(driver.os, "getuid", return_value=1000),
+            patch.object(driver.os, "geteuid", return_value=1000),
+            patch.object(driver.os, "getgid", return_value=100),
+            patch.object(driver.os, "readlink", return_value="net:[parent]"),
+            patch.object(driver.subprocess, "check_output", side_effect=listing_results) as listed,
+            patch.object(driver.subprocess, "run") as run,
+        ):
+            launched = subprocess.CompletedProcess([], 37)
+            run.side_effect = (
+                [launched]
+                if compiled
+                else [subprocess.CompletedProcess([], build_code, build_message), launched]
+            )
+            result = driver.main()
+        return result, run.call_args_list, listed.call_args_list, binary
+
+    def test_namespace_package_preserves_selection_identity_and_failure(self):
+        assert self.install().returncode == 0
+        for filename in ("test_client_jwks_cache.py", "test_jwks_fingerprint_ledger.py"):
+            with self.subTest(driver=filename):
+                result, calls, listings, binary = self.namespace_main(filename)
+                assert result == 37
+                assert len(calls) == 1  # No Cargo compilation before the fresh namespace.
+                command = calls[0].args[0]
+                assert calls[0].kwargs == {"cwd": ROOT, "check": False}
+                assert command[0] == "/tools/sudo"
+                assert "/tools/unshare" in command
+                assert "--net" in command
+                start = command.index("--inside")
+                assert command[start + 1 : start + 3] == [binary, "net:[parent]"]
+                identity = "--run-as" if "fingerprint" in filename else "--drop-identity"
+                start = command.index(identity)
+                assert command[start + 1 : start + 3] == ["1000", "100"]
+                expected_filter = (
+                    "client_registry::jwks_runtime_state::redis_kid::"
+                    if "fingerprint" in filename
+                    else "client_registry::jwks_"
+                )
+                assert command[command.index("--filter") + 1] == expected_filter
+                expected = [binary, expected_filter]
+                if "fingerprint" not in filename:
+                    expected += [
+                        "--include-ignored",
+                        "--skip",
+                        "client_registry::jwks_runtime_state::redis_kid::",
+                    ]
+                assert listings[-1].args[0] == [*expected, "--list"]
+
+    def test_namespace_default_build_and_build_failure_are_retained(self):
+        for filename in ("test_client_jwks_cache.py", "test_jwks_fingerprint_ledger.py"):
+            for status in (0, 61):
+                with self.subTest(driver=filename, status=status):
+                    result, calls, listings, _ = self.namespace_main(
+                        filename, compiled=False, build_code=status
+                    )
+                    assert result == (37 if status == 0 else 61)
+                    assert len(calls) == (2 if status == 0 else 1)
+                    assert calls[0].args[0][1:] == [
+                        "test",
+                        "--locked",
+                        "-p",
+                        "aegaeon-server",
+                        "--lib",
+                        "--no-run",
+                        "--message-format=json",
+                    ]
+                    if status:
+                        assert len(listings) == int("fingerprint" in filename)
+
+    def test_namespace_rejects_modified_package_and_empty_selection(self):
+        for filename in ("test_client_jwks_cache.py", "test_jwks_fingerprint_ledger.py"):
+            with self.subTest(driver=filename):
+                assert self.install().returncode == 0
+                with pytest.raises(RuntimeError, match="selected no tests"):
+                    self.namespace_main(filename, listing="0 tests, 0 benchmarks\n")
+                (self.root / "output/libexec/aegaeon_server").write_text("changed")
+                with pytest.raises(ValueError, match="does not match"):
+                    self.namespace_main(filename)
+
 
 class DatabaseWorkflowTests(unittest.TestCase):
+    def test_namespace_steps_require_the_same_compiled_package(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        steps = workflow["jobs"]["db-integration"]["steps"]
+        build = next(s for s in steps if s["name"] == "Run DB-gated ignored integration tests")
+        assert build["id"] == "database-tests"
+        for script in ("test_client_jwks_cache.py", "test_jwks_fingerprint_ledger.py"):
+            step = next(s for s in steps if script in s.get("run", ""))
+            assert (
+                step["env"]["DATABASE_TEST_PACKAGE"]
+                == "${{ steps.database-tests.outputs.package }}"
+            )
+            assert 'test -n "$DATABASE_TEST_PACKAGE"' in step["run"]
+            assert '--sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"' in step["run"]
+            assert "if" not in step
+            assert not step.get("continue-on-error", False)
+
     def test_compilation_failure_or_empty_output_stops_before_live_tests(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         step = next(
@@ -301,6 +431,7 @@ class DatabaseWorkflowTests(unittest.TestCase):
                     PATH=f"{root}:{os.environ['PATH']}",
                     BUILD_OUTPUT=output,
                     BUILD_EXIT=code,
+                    GITHUB_OUTPUT=str(root / "step-output"),
                 )
                 for key in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS"):
                     env.pop(key, None)
@@ -318,6 +449,7 @@ class DatabaseWorkflowTests(unittest.TestCase):
                 assert len(calls) == count
                 assert calls[0] == ["build", ".#database-tests", "--no-link", "--print-out-paths"]
                 if count == 2:
+                    assert (root / "step-output").read_text() == "package=/fixture/package\n"
                     assert calls[1] == [
                         "develop",
                         ".#ci",
