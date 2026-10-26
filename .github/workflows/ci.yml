@@ -233,6 +233,7 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run DB-gated ignored integration tests
+        id: database-tests
         env:
           AEGAEON_SERVER_CONTAINER_DOWN: "1"
         run: |
@@ -241,15 +242,27 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
+          AEGAEON_DATABASE_TEST_PACKAGE=$(nix build .#database-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_DATABASE_TEST_PACKAGE"
+          printf 'package=%s\n' "$AEGAEON_DATABASE_TEST_PACKAGE" >> "$GITHUB_OUTPUT"
+          export AEGAEON_DATABASE_TEST_PACKAGE
           nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
 
       - name: Run client JWKS tests in an isolated network namespace
+        env:
+          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
         run: |
-          nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py --sudo-netns
+          test -n "$DATABASE_TEST_PACKAGE"
+          nix develop .#ci --command python3 scripts/validation/test_client_jwks_cache.py \
+            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
 
       - name: Run JWKS fingerprint tests in an isolated network namespace
+        env:
+          DATABASE_TEST_PACKAGE: ${{ steps.database-tests.outputs.package }}
         run: |
-          nix develop .#ci --command python3 scripts/validation/test_jwks_fingerprint_ledger.py --sudo-netns
+          test -n "$DATABASE_TEST_PACKAGE"
+          nix develop .#ci --command python3 scripts/validation/test_jwks_fingerprint_ledger.py \
+            --sudo-netns --compiled-package "$DATABASE_TEST_PACKAGE"
 
       - name: Compare Redis grant traces with F* fixtures
         run: |

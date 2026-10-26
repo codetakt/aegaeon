@@ -5,10 +5,12 @@ set -euo pipefail
 log="$(mktemp)"
 trap 'rm -f -- "$log"' EXIT
 
-# Only these two explicitly prepared server profiles reuse compilation. Keep
+# Only explicitly prepared test packages reuse compilation. Keep
 # every invocation, runtime argument, output and failure; never reuse results.
 command=(cargo test "$@")
-if [[ -n ${JOSE_SERVER_TEST_PACKAGE:-} && ${1:-} == -p && ${2:-} == aegaeon-server && ${3:-} == --lib ]]; then
+if [[ -n ${AEGAEON_DATABASE_TEST_PACKAGE:-} ]]; then
+	command=(python3 scripts/validation/database_test_package.py run "$AEGAEON_DATABASE_TEST_PACKAGE" "$@")
+elif [[ -n ${JOSE_SERVER_TEST_PACKAGE:-} && ${1:-} == -p && ${2:-} == aegaeon-server && ${3:-} == --lib ]]; then
 	command=(python3 scripts/validation/jose_server_test_package.py run "$JOSE_SERVER_TEST_PACKAGE" "$@")
 fi
 if "${command[@]}" 2>&1 | tee "$log"; then
