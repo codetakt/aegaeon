@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from jose_server_test_package import digest, valid_profile
 
@@ -37,6 +38,26 @@ def target_key(target: dict[str, object]) -> str:
     return kind + ":" + name
 
 
+def expected_inventory(metadata: dict[str, Any]) -> dict[str, list[str]]:
+    """Derive the selected targets from Cargo, independently of package receipts."""
+    groups = {}
+    for group in FEATURES:
+        manifest = Path(f"crates/{group}/Cargo.toml").resolve()
+        (package,) = [
+            p for p in metadata["packages"] if Path(p["manifest_path"]).resolve() == manifest
+        ]
+        targets = [
+            target_key(t)
+            for t in package["targets"]
+            if t["test"] is True
+            and (group == "server" or (t["kind"] == ["test"] and t["name"] == "rfc7520_vectors"))
+        ]
+        if not targets or len(targets) != len(set(targets)):
+            raise ValueError("empty or duplicate RFC Cargo target inventory")
+        groups[group] = sorted(targets, key=lambda k: (KINDS[k.split(":")[0]], k.split(":")[1]))
+    return groups
+
+
 def install(directory: Path, identity: Path, destination: Path) -> None:
     metadata = json.loads((directory / "metadata.json").read_text())
     # --list only enumerates doctests; no test outcomes are reused. A new
@@ -44,20 +65,10 @@ def install(directory: Path, identity: Path, destination: Path) -> None:
     if (directory / "doc-list.txt").read_text().strip() != "0 tests, 0 benchmarks":
         raise ValueError("matching RFC doctests require a fresh Cargo runtime path")
     groups = {}
+    expected_groups = expected_inventory(metadata)
     for group, features in FEATURES.items():
         manifest = Path(f"crates/{group}/Cargo.toml").resolve()
-        (package,) = [
-            p for p in metadata["packages"] if Path(p["manifest_path"]).resolve() == manifest
-        ]
-        expected = {
-            target_key(t)
-            for t in package["targets"]
-            if t["test"] is True
-            and t["kind"][0] in KINDS
-            and (group == "server" or (t["kind"] == ["test"] and t["name"] == "rfc7520_vectors"))
-        }
-        if not expected:
-            raise ValueError("empty RFC target inventory")
+        expected = set(expected_groups[group])
         rows = [
             json.loads(line) for line in (directory / f"{group}.jsonl").read_text().splitlines()
         ]
@@ -95,7 +106,7 @@ def install(directory: Path, identity: Path, destination: Path) -> None:
             }
         if set(binaries) != expected:
             raise ValueError("incomplete RFC executable inventory")
-        order = sorted(expected, key=lambda k: (KINDS[k.split(":")[0]], k.split(":")[1]))
+        order = expected_groups[group]
         groups[group] = {"order": order, "binaries": binaries}
     (destination / "build.json").write_text(
         json.dumps(
@@ -127,10 +138,16 @@ def run(package: Path, arguments: list[str]) -> int:
         or receipt["matching_doctests"] != 0
     ):
         raise ValueError("invalid RFC package receipt")
+    metadata = json.loads(
+        subprocess.check_output(
+            ["cargo", "metadata", "--locked", "--no-deps", "--format-version=1"], text=True
+        )
+    )
+    expected = expected_inventory(metadata)
     for name, features in FEATURES.items():
         entry = receipt["groups"][name]
         if (
-            not entry["order"]
+            entry["order"] != expected[name]
             or len(entry["order"]) != len(set(entry["order"]))
             or set(entry["order"]) != set(entry["binaries"])
         ):
@@ -172,7 +189,7 @@ def main() -> int:
             return run(Path(sys.argv[2]), sys.argv[3:])
         else:
             raise ValueError("expected install DIRECTORY IDENTITY OUT or run PACKAGE CARGO_ARGS...")
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print(f"RFC compiled test rejected: {error}", file=sys.stderr)
         return 1
     return 0

@@ -68,12 +68,22 @@ class RfcTestPackageTests(unittest.TestCase):
         (self.build / "metadata.json").write_text(json.dumps({"packages": packages}))
         (self.build / "doc-list.txt").write_text("0 tests, 0 benchmarks\n")
         (self.root / "identity").write_text('{"source":"owned-fixture"}')
+        self.tools = self.root / "tools"
+        self.tools.mkdir()
+        cargo = self.tools / "cargo"
+        cargo.write_text(
+            f"#!{sys.executable}\nimport os,pathlib,sys\n"
+            "assert sys.argv[1:] == ['metadata','--locked','--no-deps','--format-version=1']\n"
+            "if os.environ.get('METADATA_EXIT'): sys.exit(int(os.environ['METADATA_EXIT']))\n"
+            f"print(pathlib.Path({str(self.build / 'metadata.json')!r}).read_text())\n"
+        )
+        cargo.chmod(0o755)
 
     def command(self, *args, **environment):
         return subprocess.run(  # noqa: S603 - checked-in module and owned fixture
             [sys.executable, str(PACKAGER), *args],
             cwd=self.root,
-            env={**os.environ, **environment},
+            env={**os.environ, "PATH": f"{self.tools}:{os.environ['PATH']}", **environment},
             capture_output=True,
             text=True,
             check=False,
@@ -200,6 +210,43 @@ class RfcTestPackageTests(unittest.TestCase):
                 assert self.run_group("server").returncode != 0
                 assert not self.calls()
 
+    def test_consistently_removed_target_is_rejected_before_execution(self):
+        assert self.install().returncode == 0
+        receipt = self.root / "out/build.json"
+        data = json.loads(receipt.read_text())
+        target = "test:rfc_extra"
+        data["groups"]["server"]["order"].remove(target)
+        del data["groups"]["server"]["binaries"][target]
+        receipt.write_text(json.dumps(data))
+        (self.root / "out/libexec/server" / target).unlink()
+        result = self.run_group("server")
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert not self.calls()
+
+    def test_current_metadata_failure_added_target_and_order_change_are_rejected(self):
+        assert self.install().returncode == 0
+        result = self.run_group("server", METADATA_EXIT="31")
+        assert result.returncode != 0
+        assert not self.calls()
+        metadata = self.build / "metadata.json"
+        original = metadata.read_text()
+        for target in (
+            {"name": "new_rfc", "kind": ["test"], "test": True},
+            {"name": "new_example", "kind": ["example"], "test": True},
+        ):
+            data = json.loads(original)
+            data["packages"][0]["targets"].append(target)
+            metadata.write_text(json.dumps(data))
+            assert self.run_group("server").returncode != 0
+            assert not self.calls()
+        metadata.write_text(original)
+        receipt = self.root / "out/build.json"
+        data = json.loads(receipt.read_text())
+        data["groups"]["server"]["order"].reverse()
+        receipt.write_text(json.dumps(data))
+        assert self.run_group("server").returncode != 0
+        assert not self.calls()
+
     def test_unhandled_cargo_or_runtime_flags_do_not_execute(self):
         assert self.install().returncode == 0
         for args in (
@@ -241,6 +288,7 @@ class RfcTestPackageTests(unittest.TestCase):
                 cwd=self.root,
                 env={
                     **os.environ,
+                    "PATH": f"{self.tools}:{os.environ['PATH']}",
                     "AEGAEON_RFC_TEST_PACKAGE": str(self.root / "out"),
                     "RFC_OUTPUT": output,
                 },
