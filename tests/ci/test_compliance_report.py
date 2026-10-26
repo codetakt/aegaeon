@@ -34,6 +34,10 @@ class ComplianceReportTests(unittest.TestCase):
             "import json, os, pathlib, sys\n"
             "with pathlib.Path('calls.jsonl').open('a') as out:\n"
             "    out.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if sys.argv[1:2] == ['build']:\n"
+            "    print('/owned/rfc-tests' if not os.environ.get('EMPTY_PACKAGE') else '')\n"
+            "    sys.exit(int(os.environ.get('BUILD_EXIT', '0')))\n"
+            "assert os.environ.get('AEGAEON_RFC_TEST_PACKAGE') == '/owned/rfc-tests'\n"
             "print('original stdout')\n"
             "print('original stderr', file=sys.stderr)\n"
             "sys.exit(int(os.environ.get('TEST_EXIT', '0')))\n"
@@ -60,14 +64,15 @@ class ComplianceReportTests(unittest.TestCase):
         result = self.execute(self.run_step)
         assert result.returncode == 0, result.stderr
         assert self.calls() == [
-            ["develop", ".#ci", "--command", "./scripts/validation/test_rfc_compliance.sh"]
+            ["build", ".#rfc-tests", "--no-link", "--print-out-paths"],
+            ["develop", ".#ci", "--command", "./scripts/validation/test_rfc_compliance.sh"],
         ]
         log = (self.root / "rfc-compliance.log").read_text()
         assert "original stdout" in log
         assert "original stderr" in log
         result = self.execute(self.report_step, RFC_TEST_OUTCOME="success")
         assert result.returncode == 0, result.stderr
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
         assert log in (self.root / "compliance-report.md").read_text()
 
     def test_failure_is_retained_despite_successful_report(self) -> None:
@@ -75,7 +80,7 @@ class ComplianceReportTests(unittest.TestCase):
         assert result.returncode == 17
         report = self.execute(self.report_step, RFC_TEST_OUTCOME="failure")
         assert report.returncode == 0, report.stderr
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
         content = (self.root / "compliance-report.md").read_text()
         assert "Test step outcome: failure" in content
         assert "original stderr" in content
@@ -103,7 +108,7 @@ class ComplianceReportTests(unittest.TestCase):
         (self.root / "rfc-compliance.log").mkdir()
         result = self.execute(self.run_step)
         assert result.returncode != 0
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
 
     def test_workflow_keeps_required_status_and_retains_report_and_log(self) -> None:
         assert self.run_step["id"] == "rfc-tests"
@@ -117,3 +122,12 @@ class ComplianceReportTests(unittest.TestCase):
             "compliance-report.md",
             "rfc-compliance.log",
         }
+
+    def test_compile_failure_or_empty_package_stops_before_runtime(self) -> None:
+        for environment in ({"BUILD_EXIT": "37"}, {"EMPTY_PACKAGE": "1"}):
+            with self.subTest(environment=environment):
+                calls = self.root / "calls.jsonl"
+                calls.unlink(missing_ok=True)
+                result = self.execute(self.run_step, **environment)
+                assert result.returncode != 0
+                assert self.calls() == [["build", ".#rfc-tests", "--no-link", "--print-out-paths"]]

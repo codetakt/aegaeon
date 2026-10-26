@@ -253,6 +253,9 @@ jobs:
         run: |
           set -o pipefail
           chmod +x scripts/validation/test_rfc_compliance.sh
+          AEGAEON_RFC_TEST_PACKAGE=$(nix build .#rfc-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_RFC_TEST_PACKAGE"
+          export AEGAEON_RFC_TEST_PACKAGE
           nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee rfc-compliance.log
 
       - name: Generate compliance report

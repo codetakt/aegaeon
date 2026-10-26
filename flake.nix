@@ -853,6 +853,19 @@
             ;
         };
 
+        rfcTests = import ./nix/rfc-tests.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -1158,6 +1171,7 @@
             oidcKmsTest
             joseServerTests
             databaseTests
+            rfcTests
             ffiContractCheck
             assuranceStandards
             verifiedReqs
