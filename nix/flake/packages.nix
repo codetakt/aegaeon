@@ -3,6 +3,7 @@
   oidcKmsTest,
   joseServerTests,
   databaseTests,
+  rfcTests,
   ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
@@ -53,6 +54,7 @@ in
 
   oidc-kms-test = oidcKmsTest;
   database-tests = databaseTests;
+  rfc-tests = rfcTests;
   jose-server-tests = joseServerTests "default";
   jose-server-strict-tests = joseServerTests "strict";
 
