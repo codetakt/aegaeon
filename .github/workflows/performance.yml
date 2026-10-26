@@ -290,7 +290,12 @@ jobs:
             'atlas migrate apply --env local --revisions-schema public'
 
       - name: Build with telemetry
-        run: nix develop .#ci --command cargo build --release --features telemetry
+        run: |
+          set -euo pipefail
+          package=$(nix build .#server --no-link --print-out-paths)
+          test -x "$package/bin/aegaeon-server"
+          test -x "$package/bin/aegaeon-observability-seed"
+          echo "AEGAEON_TELEMETRY_PACKAGE=$package" >> "$GITHUB_ENV"
 
       - name: Seed observability runtime configuration
         run: |
@@ -299,7 +304,7 @@ jobs:
           echo "::add-mask::${api_key}"
           echo "AEGAEON_OBSERVABILITY_API_KEY=${api_key}" >> "${GITHUB_ENV}"
           AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
-            ./target/release/aegaeon-observability-seed
+            "${AEGAEON_TELEMETRY_PACKAGE}/bin/aegaeon-observability-seed"
 
       - name: Start server with telemetry
         run: |
@@ -307,7 +312,7 @@ jobs:
           env -u BASE_URL \
           RUST_LOG=info \
           OTEL_EXPORTER_JAEGER_ENDPOINT=http://localhost:14268/api/traces \
-          ./target/release/aegaeon-server &
+          "${AEGAEON_TELEMETRY_PACKAGE}/bin/aegaeon-server" &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> "${GITHUB_ENV}"
           ready=0
