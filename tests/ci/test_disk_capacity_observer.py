@@ -118,7 +118,7 @@ class DiskCapacityTests(unittest.TestCase):
         assert names.index("Start disk capacity observation") < names.index("Setup Nix CI")
         setup = steps[names.index("Setup Nix CI")]["with"]
         assert setup["free-disk"] == "true"
-        assert setup.get("minimum-free-gib", "0") == "0"
+        assert setup["minimum-free-gib"] == "${{ inputs.delegate-formal-checks && '80' || '0' }}"
         for name in (
             "Start disk capacity observation",
             "Stop disk capacity observation",
