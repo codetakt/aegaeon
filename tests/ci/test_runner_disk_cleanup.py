@@ -223,9 +223,16 @@ class RunnerDiskCleanupTests(unittest.TestCase):
                                 if row.get("name") == "Cleanup transient outputs"
                             )
                         else:
-                            assert inputs["minimum-free-gib"] == "80"
+                            expected = {
+                                (
+                                    "ci.yml",
+                                    "ci",
+                                ): "${{ inputs.delegate-formal-checks && '80' || '0' }}"
+                            }.get((path.name, job_name), "80")
+                            assert inputs["minimum-free-gib"] == expected
                             opted_in.append((path.name, job_name))
         assert sorted(opted_in) == [
+            ("ci.yml", "ci"),
             ("ci.yml", "dependency-audit"),
             ("lint.yml", "lint"),
             ("lint.yml", "python-lint"),
