@@ -1,5 +1,6 @@
 {
   openapiCheck,
+  oidcKmsTest,
   ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
@@ -47,6 +48,8 @@ in
   inherit cargoArtifacts;
 
   openapi-check = openapiCheck;
+
+  oidc-kms-test = oidcKmsTest;
 
   default = aegaeonWorkspace;
   server = aegaeonWorkspace;

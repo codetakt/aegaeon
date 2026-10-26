@@ -115,6 +115,22 @@ Missing, empty or changed output, unsuccessful producer steps and logging errors
 fail the report; they do not trigger a replacement test. Each of the five profile
 logs and the combined report remain available as artifacts.
 
+The Hosted KMS parity job uses `run_oidc_kms_parity.sh --nix` to build or fetch
+the current checkout's `oidc-kms-test` package. This package compiles the server
+library test with default features plus `kms-aws`, the test profile and pinned
+Rust/native tools. It retains the full verification source boundary. Cargo's
+artifact messages must identify exactly one matching executable; its bytes and
+build identity are recorded in a separate compilation receipt.
+
+Only compilation is cached. Every attempt still checks the LocalStack endpoint,
+executes the original exact test in the server package directory, and validates
+one completed, non-ignored test. The execution log and receipt are fresh; a cached
+binary is not a cached parity result. Missing or changed package bytes, build
+failure, service failure, failed execution or incomplete output fail the job.
+The original Cargo path remains available without `--nix`, including the real
+AWS entry point. LocalStack success does not establish real AWS parity. Initial
+cache population adds build/storage cost; no overall CI speedup is assumed.
+
 The complete helper suite is divided into four whole-module groups:
 `sanitizer`, `security-fuzz`, `dudect` and `other`. The new group contains
 `test_dudect*` modules, including the actual collector/ACK regressions with

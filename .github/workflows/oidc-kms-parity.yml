@@ -49,7 +49,7 @@ jobs:
 
       - name: Run OIDC AWS KMS parity lane
         run: |
-          nix develop .#ci --command bash scripts/validation/run_oidc_kms_parity.sh
+          nix develop .#ci --command bash scripts/validation/run_oidc_kms_parity.sh --nix
 
       - name: Upload OIDC KMS parity artifacts
         if: always()
