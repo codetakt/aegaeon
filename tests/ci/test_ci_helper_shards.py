@@ -83,6 +83,73 @@ class Cases(unittest.TestCase):
                 receipts.append(helpers.run_group(group))
         return receipts
 
+    def test_timing_diagnostics_cover_original_occurrences_without_affecting_admission(self):
+        receipts = self.receipts()
+        for row in receipts:
+            timing = row["timing"]
+            self.assertEqual(timing["scope"], "diagnostic-only")
+            self.assertEqual([entry["slot"] for entry in timing["cases"]], row["started_slots"])
+            self.assertTrue(all(entry["seconds"] >= 0 for entry in timing["cases"]))
+            self.assertGreaterEqual(timing["execution_seconds"], 0)
+            self.assertGreaterEqual(timing["preparation_seconds"], 0)
+            self.assertEqual(timing["unrecorded_started_slots"], [])
+            self.assertEqual(timing["invalid_duration_callbacks"], 0)
+        aggregate(receipts, BOUND, DEPENDENCIES)
+        for row in receipts:
+            # Prior receipts without diagnostics and damaged diagnostics have the
+            # same admission result; only existing execution accounting is authority.
+            row.pop("timing")
+        aggregate(receipts, BOUND, DEPENDENCIES)
+        receipts[0]["timing"] = {"scope": "invalid", "cases": []}
+        aggregate(receipts, BOUND, DEPENDENCIES)
+        receipts[0]["successful"] = False
+        with self.assertRaises(ValueError):
+            aggregate(receipts, BOUND, DEPENDENCIES)
+
+    def test_duration_callback_binds_duplicate_test_ids_to_original_slots(self):
+        case = unittest.FunctionTestCase(lambda: None)
+        result = helpers.RecordingResult(io.StringIO(), False, 0, [case, case], [4, 8])
+        for duration in (0.25, 0.75):
+            result.startTest(case)
+            result.addDuration(case, duration)
+            result.stopTest(case)
+        self.assertEqual(
+            result.case_durations, [{"slot": 4, "seconds": 0.25}, {"slot": 8, "seconds": 0.75}]
+        )
+        self.assertEqual(result.started_slots, [4, 8])
+        self.assertEqual(result.invalid_duration_callbacks, 0)
+
+    def test_invalid_duration_cannot_grant_execution_credit_or_corrupt_diagnostic(self):
+        case = unittest.FunctionTestCase(lambda: None)
+        foreign = unittest.FunctionTestCase(lambda: None)
+        result = helpers.RecordingResult(io.StringIO(), False, 0, [case], [4])
+        result.addDuration(case, 1.0)
+        self.assertEqual(result.started_slots, [])
+        result.startTest(case)
+        for duration in (-1.0, float("nan"), float("inf"), True):
+            result.addDuration(case, duration)
+        result.addDuration(foreign, 1.0)
+        result.addDuration(case, 0.25)
+        result.addDuration(case, 0.5)
+        result.stopTest(case)
+        self.assertEqual(result.case_durations, [{"slot": 4, "seconds": 0.25}])
+        self.assertEqual(result.invalid_duration_callbacks, 7)
+        self.assertEqual(result.started_slots, [4])
+
+    def test_decorated_skip_has_no_fabricated_duration(self):
+        self.write(
+            self.modules[2],
+            "import unittest\nclass Cases(unittest.TestCase):\n"
+            '    @unittest.skip("explicit skip")\n'
+            "    def test_skip(self): pass\n",
+        )
+        receipts = self.receipts()
+        row = next(item for item in receipts if item["group"] == "other")
+        self.assertEqual(row["timing"]["cases"], [])
+        self.assertEqual(row["timing"]["unrecorded_started_slots"], row["started_slots"])
+        self.assertEqual(row["skipped"], 1)
+        aggregate(receipts, BOUND, DEPENDENCIES)
+
     def test_original_discovery_complete_union_and_module_class_fixtures(self):
         receipts = self.receipts()
         aggregate(receipts, BOUND, DEPENDENCIES)

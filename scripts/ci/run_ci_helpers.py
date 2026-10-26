@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
 import sys
+import time
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -183,6 +185,9 @@ class RecordingResult(ResultBase):
         self.fixture_events: list[dict[str, Any]] = []
         self.pending_fixture: str | None = None
         self.active: unittest.TestCase | None = None
+        self.case_durations: list[dict[str, Any]] = []
+        self.invalid_duration_callbacks = 0
+        self.duration_slots: set[int] = set()
 
     def startTest(self, test: unittest.TestCase) -> None:  # noqa: N802
         require(
@@ -198,6 +203,23 @@ class RecordingResult(ResultBase):
     def stopTest(self, test: unittest.TestCase) -> None:  # noqa: N802
         super().stopTest(test)
         self.active = None
+
+    def addDuration(self, test: unittest.TestCase, elapsed: float) -> None:  # noqa: N802
+        """Retain unittest's own case timing without changing execution or outcomes."""
+        super().addDuration(test, elapsed)
+        if (
+            self.active is not None
+            and test is self.active
+            and type(elapsed) in (int, float)
+            and math.isfinite(elapsed)
+            and elapsed >= 0
+            and self.slots[self.cursor - 1] not in self.duration_slots
+        ):
+            self.duration_slots.add(self.slots[self.cursor - 1])
+            self.case_durations.append({"slot": self.slots[self.cursor - 1], "seconds": elapsed})
+        else:
+            # Timing is diagnostic. Invalid callbacks cannot grant execution credit.
+            self.invalid_duration_callbacks += 1
 
     def addSkip(self, test: unittest.TestCase, reason: str) -> None:  # noqa: N802
         require(
@@ -316,6 +338,7 @@ class ObservedSuite(unittest.TestSuite):
 
 def run_group(group: str) -> dict[str, Any]:
     bound = context()
+    prepared_at = time.perf_counter()
     loader = unittest.TestLoader()
     complete = loader.discover(start_dir="tests/ci", pattern=PATTERN)
     selected, full, mode = partition(
@@ -328,17 +351,33 @@ def run_group(group: str) -> dict[str, Any]:
         if mode == "full-fallback" or module_group(row["module"]) == group
     ]
     planned = Counter(case.id() for case in cases)
+    execution_at = time.perf_counter()
     result = unittest.TextTestRunner(
         verbosity=2,
         resultclass=lambda stream, descriptions, verbosity: RecordingResult(
             stream, descriptions, verbosity, cases, slots
         ),
     ).run(ObservedSuite(selected))
+    finished_at = time.perf_counter()
     if not isinstance(result, RecordingResult):
         raise TypeError("helper result recorder unavailable")
     require(context() == bound, "helper source/configuration changed during execution")
     return {
         "schema_version": 2,
+        "timing": {
+            "schema_version": 1,
+            "scope": "diagnostic-only",
+            "clock": "perf_counter",
+            "preparation_seconds": execution_at - prepared_at,
+            "execution_seconds": finished_at - execution_at,
+            "cases": result.case_durations,
+            "unrecorded_started_slots": sorted(
+                set(result.started_slots) - {row["slot"] for row in result.case_durations}
+            ),
+            "invalid_duration_callbacks": result.invalid_duration_callbacks,
+            "case_scope": "unittest case setup, method, teardown and cleanup",
+            "execution_scope": "cases, shared fixtures and runner overhead",
+        },
         "group": group,
         "mode": mode,
         "context": bound,
