@@ -2503,6 +2503,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_private_tree_does_not_execute_repo_hooks_or_external_diff(self) -> None:
+        self.write("tracked.txt", b"nonempty diff for external command isolation\n")
         sentinel = self.owner / "unexpected-hook"
         script = self.owner / "hook"
         script.write_text("#!/bin/sh\ntouch '" + str(sentinel) + "'\nexit 1\n")
@@ -2511,6 +2512,8 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         (self.owner / "post-index-change").symlink_to(script)
         self.git(self.root, "config", "diff.external", str(script))
         self.freeze()
+        manifest = json.loads((self.evidence / "SOURCE-MANIFEST.json").read_bytes())
+        self.assertNotEqual(manifest["patch_sha256"], hashlib.sha256(b"").hexdigest())
         self.assertFalse(sentinel.exists())
 
     def test_workflow_always_uploads_both_manifest_parent_directories(self) -> None:
