@@ -21,7 +21,8 @@ MANDATORY_STEPS = (
     "Run strict claim-bearing profile tests",
     "Run TLV parity tests",
 )
-FAKE_TOOL = """import json
+FAKE_TOOL = """import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -29,6 +30,39 @@ from pathlib import Path
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 if tool == "nix":
+    if args[:1] == ["build"]:
+        if os.environ["FAIL_NIX_BUILD"] == "1":
+            raise SystemExit(47)
+        if args[1:] not in (
+            [".#jose-server-tests", "--no-link", "--print-out-paths"],
+            [".#jose-server-strict-tests", "--no-link", "--print-out-paths"],
+        ):
+            raise SystemExit("unexpected compile-only package")
+        strict = args[1] == ".#jose-server-strict-tests"
+        package = Path(os.environ["TRACE_DIR"]) / ("strict" if strict else "default")
+        binary = package / "libexec/jose-server-test"
+        binary.parent.mkdir(parents=True)
+        # This owned executable routes through the same controlled live failure
+        # stream. Real package integrity and feature rejection have separate tests.
+        feature_args = ["--features", "verified-claim"] if strict else []
+        binary.write_text(
+            f"#!{sys.executable}\\nimport os,sys\\n"
+            "args=['cargo','test','-p','aegaeon-server','--lib',sys.argv[1]]+"
+            f"{feature_args!r}+['--']+sys.argv[2:]\\n"
+            "os.execvpe('cargo',args,os.environ)\\n"
+        )
+        binary.chmod(0o755)
+        (package / "build.json").write_text(json.dumps({
+            "schema_version": 1, "scope": "jose-server-compilation-v1",
+            "executable": "libexec/jose-server-test",
+            "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+            "features": ["default", "telemetry"] + (["verified-claim"] if strict else []),
+            "profile": {"test": True, "opt_level": "0", "debuginfo": 2,
+                        "debug_assertions": True, "overflow_checks": True},
+            "build": {"profile": "strict" if strict else "default"},
+        }))
+        print(package)
+        raise SystemExit(0)
     if args[:5] != ["develop", ".#verification", "--command", "bash", "-c"]:
         raise SystemExit("unexpected nix command")
     os.execvpe(args[3], args[3:], os.environ)
@@ -87,6 +121,14 @@ RETAINED_PROFILES = (
 
 
 @dataclass(frozen=True)
+class ToolFailures:
+    cargo: int = 0
+    tee: int = 0
+    cat: int = 0
+    build: bool = False
+
+
+@dataclass(frozen=True)
 class ReportInputs:
     retained: bool = True
     damage: tuple[str, str] | None = None
@@ -115,7 +157,8 @@ def prepare_reports(directory: Path, reports: ReportInputs):
             digest.write_text("invalid digest\n")
 
 
-def run_script(script, *, cargo_failure=0, tee_failure=0, cat_failure=0, reports=None):
+def run_script(script, *, failures=None, reports=None):
+    failures = failures or ToolFailures()
     reports = reports or ReportInputs()
     bash, tee, cat = shutil.which("bash"), shutil.which("tee"), shutil.which("cat")
     assert bash, "workflow fixtures require bash"
@@ -127,6 +170,12 @@ def run_script(script, *, cargo_failure=0, tee_failure=0, cat_failure=0, reports
         helper = directory / "scripts/validation/run_required_cargo_test.sh"
         helper.parent.mkdir(parents=True)
         shutil.copy2(ROOT / "scripts/validation/run_required_cargo_test.sh", helper)
+        shutil.copy2(
+            ROOT / "scripts/validation/jose_server_test_package.py",
+            helper.with_name("jose_server_test_package.py"),
+        )
+        (directory / "crates/server").mkdir(parents=True)
+        (directory / "crates/server/Cargo.toml").touch()
         (directory / "tmp").mkdir()
         binaries = directory / "bin"
         binaries.mkdir()
@@ -141,9 +190,10 @@ def run_script(script, *, cargo_failure=0, tee_failure=0, cat_failure=0, reports
             "TMPDIR": str(directory / "tmp"),
             "REAL_TEE": tee,
             "REAL_CAT": cat,
-            "FAIL_CARGO_AT": str(cargo_failure),
-            "FAIL_TEE_AT": str(tee_failure),
-            "FAIL_CAT_AT": str(cat_failure),
+            "FAIL_CARGO_AT": str(failures.cargo),
+            "FAIL_TEE_AT": str(failures.tee),
+            "FAIL_CAT_AT": str(failures.cat),
+            "FAIL_NIX_BUILD": "1" if failures.build else "0",
             "JOSE_COMPAT_OUTCOME": reports.outcomes[0],
             "JOSE_STRICT_OUTCOME": reports.outcomes[1],
         }
@@ -182,13 +232,34 @@ class JoseWorkflowTests(unittest.TestCase):
                 assert after_tee == before_tee
                 assert after_artifacts == before_artifacts
 
+    def test_compile_failure_stops_before_any_mandatory_runtime(self):
+        for name in MANDATORY_STEPS[:2]:
+            with self.subTest(step=name):
+                result, cargo, _, _ = run_script(
+                    self.scripts[name], failures=ToolFailures(build=True)
+                )
+                assert result.returncode == 47, result.stderr
+                assert cargo == []
+
+    def test_compiled_profiles_preserve_all_server_invocations(self):
+        counts = []
+        for name in MANDATORY_STEPS[:2]:
+            result, cargo, _, _ = run_script(self.scripts[name])
+            assert result.returncode == 0, result.stderr
+            calls = [
+                call for call in cargo if call[:4] == ["test", "-p", "aegaeon-server", "--lib"]
+            ]
+            counts.append(len(calls))
+            assert all(("verified-claim" in call) == (name == MANDATORY_STEPS[1]) for call in calls)
+        assert counts == [20, 21]
+
     def test_first_and_middle_cargo_failure_stop_each_mandatory_shell(self):
         for name, script in self.scripts.items():
             success, expected, _, _ = run_script(script)
             assert success.returncode == 0, success.stderr
             for position in sorted({1, max(1, len(expected) // 2)}):
                 with self.subTest(step=name, failing_invocation=position):
-                    result, cargo, _, _ = run_script(script, cargo_failure=position)
+                    result, cargo, _, _ = run_script(script, failures=ToolFailures(cargo=position))
                     assert result.returncode == 37, result.stderr
                     assert cargo == expected[:position]
 
@@ -199,7 +270,7 @@ class JoseWorkflowTests(unittest.TestCase):
         # Four profiles retain logs; only verified-claim adds a serial invocation.
         for position, calls in ((1, 0), (4, 1), (5, 1)):
             with self.subTest(failing_tee_invocation=position):
-                result, cargo, tee, _ = run_script(script, tee_failure=position)
+                result, cargo, tee, _ = run_script(script, failures=ToolFailures(tee=position))
                 assert result.returncode == 41, result.stderr
                 assert tee == expected_tee[:position]
                 assert cargo == expected_cargo[:calls]
@@ -208,7 +279,7 @@ class JoseWorkflowTests(unittest.TestCase):
         script = self.scripts["Run TLV parity tests"]
         success, expected, _, _ = run_script(script)
         assert success.returncode == 0, success.stderr
-        result, cargo, _, artifacts = run_script(script, cargo_failure=1)
+        result, cargo, _, artifacts = run_script(script, failures=ToolFailures(cargo=1))
         assert result.returncode == 37, result.stderr
         assert cargo == expected
         aggregate = artifacts["jose/tlv-parity/test-output.txt"]
@@ -220,7 +291,7 @@ class JoseWorkflowTests(unittest.TestCase):
         for position, cargo_failure in ((1, 0), (3, 0), (3, 1)):
             with self.subTest(failing_append=position, cargo_failure=cargo_failure):
                 result, cargo, _, _ = run_script(
-                    script, cat_failure=position, cargo_failure=cargo_failure
+                    script, failures=ToolFailures(cat=position, cargo=cargo_failure)
                 )
                 assert result.returncode == (37 if cargo_failure else 43), result.stderr
                 assert len(cargo) == (0 if position == 1 else 1)
@@ -291,7 +362,9 @@ class JoseWorkflowTests(unittest.TestCase):
         for position in positions:
             with self.subTest(position=position):
                 result, cargo, _, artifacts = run_script(
-                    script, reports=ReportInputs(retained=False), cargo_failure=position
+                    script,
+                    reports=ReportInputs(retained=False),
+                    failures=ToolFailures(cargo=position),
                 )
                 assert result.returncode == 37, result.stderr
                 assert cargo == expected[:position]
@@ -307,7 +380,9 @@ class JoseWorkflowTests(unittest.TestCase):
         for position in range(1, 5):
             with self.subTest(capture=position):
                 result, _, tee, _ = run_script(
-                    script, reports=ReportInputs(retained=False), tee_failure=position
+                    script,
+                    reports=ReportInputs(retained=False),
+                    failures=ToolFailures(tee=position),
                 )
                 assert result.returncode == 41, result.stderr
                 assert len(tee) == position

@@ -1,6 +1,7 @@
 {
   openapiCheck,
   oidcKmsTest,
+  joseServerTests,
   ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
@@ -50,6 +51,8 @@ in
   openapi-check = openapiCheck;
 
   oidc-kms-test = oidcKmsTest;
+  jose-server-tests = joseServerTests "default";
+  jose-server-strict-tests = joseServerTests "strict";
 
   default = aegaeonWorkspace;
   server = aegaeonWorkspace;

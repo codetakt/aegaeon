@@ -824,6 +824,22 @@
             ;
         };
 
+        joseServerTests =
+          profile:
+          import ./nix/jose-server-tests.nix {
+            inherit
+              pkgs
+              craneLib
+              stdenv
+              src
+              rustToolchain
+              llvmPackages
+              karamel
+              evercryptDist
+              profile
+              ;
+          };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -1127,6 +1143,7 @@
           inherit
             openapiCheck
             oidcKmsTest
+            joseServerTests
             ffiContractCheck
             assuranceStandards
             verifiedReqs
