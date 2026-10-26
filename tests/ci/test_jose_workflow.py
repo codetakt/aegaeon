@@ -35,6 +35,11 @@ if tool == "nix":
 if tool == "cat" and not args:
     os.execv(os.environ["REAL_CAT"], ["cat"])
 
+# The helper owns a separate temporary capture; workflow logging faults
+# below still target the original artifact-writing tee invocations.
+if tool == "tee" and len(args) == 1 and Path(args[0]).parent == Path(os.environ["TMPDIR"]):
+    os.execv(os.environ["REAL_TEE"], ["tee", *args])
+
 trace = Path(os.environ["TRACE_DIR"]) / (tool + ".jsonl")
 with trace.open("a") as stream:
     stream.write(json.dumps(args) + "\\n")
@@ -45,6 +50,8 @@ if tool == "cargo":
     if failed:
         output = f"test synthetic_failure_{invocation} ... FAILED"
     print(output, flush=True)
+    if not failed:
+        print("test result: ok. 1 passed; 0 failed; 0 ignored;", flush=True)
     raise SystemExit(37 if failed else 0)
 if tool == "tee":
     if invocation == int(os.environ["FAIL_TEE_AT"]):
@@ -117,6 +124,10 @@ def run_script(script, *, cargo_failure=0, tee_failure=0, cat_failure=0, reports
     with tempfile.TemporaryDirectory() as temporary:
         directory = Path(temporary)
         prepare_reports(directory, reports)
+        helper = directory / "scripts/validation/run_required_cargo_test.sh"
+        helper.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / "scripts/validation/run_required_cargo_test.sh", helper)
+        (directory / "tmp").mkdir()
         binaries = directory / "bin"
         binaries.mkdir()
         for tool in ("nix", "cargo", "tee", "cat"):
@@ -127,6 +138,7 @@ def run_script(script, *, cargo_failure=0, tee_failure=0, cat_failure=0, reports
             **os.environ,
             "PATH": f"{binaries}{os.pathsep}{os.environ['PATH']}",
             "TRACE_DIR": str(directory),
+            "TMPDIR": str(directory / "tmp"),
             "REAL_TEE": tee,
             "REAL_CAT": cat,
             "FAIL_CARGO_AT": str(cargo_failure),
