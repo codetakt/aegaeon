@@ -1,6 +1,6 @@
 # CI execution efficiency
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -137,6 +137,19 @@ The complete helper suite is divided into four whole-module groups:
 synthetic native inputs. It changes neither the samples in those fixtures nor
 the complete discovery inventory. Fixture boundaries, fallback behavior and
 occurrence-level receipt reconciliation remain in place.
+
+Performance source-manifest controls use a compact temporary Git baseline for
+most fixture mutations. Every mandatory source file, executable mode and internal
+symlink remains in that baseline. The complete projection control and independent
+Git patch/archive comparison still use the real repository commit, and explicitly
+check that ancestry. Staged additions/deletions and all rejection assertions stay
+in the original test inventory. No production producer or supplier logic changes.
+
+This avoids generating thousands of unrelated repository deletions whenever an
+inert fixture is frozen or admitted. A local full-module comparison retained all
+95 previous tests and added one baseline-integrity control: 268.0 seconds before,
+239.3 seconds after. This is a local observation, not an overall Hosted latency
+claim; execution and accounting of the full helper suite remain mandatory.
 
 The sanitizer supervisor uses `os.scandir` paths directly when inspecting Linux
 process groups, avoiding repeated `Path` construction for each `/proc` entry.

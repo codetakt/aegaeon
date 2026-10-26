@@ -45,13 +45,17 @@ class PerfSourceManifestTests(unittest.TestCase):
         self.environment.pop("AEG_LOADTEST_SOURCE_SHA256", None)
         self.environment.pop("CARGO_TARGET_DIR", None)
         self.environment["TMPDIR"] = str(self.private)
-        baseline = self.git(SOURCE, "rev-parse", "HEAD^{commit}").decode().strip()
         objects = self.git(SOURCE, "rev-parse", "--git-path", "objects").decode().strip()
         if not pathlib.Path(objects).is_absolute():
             objects = str(SOURCE / objects)
         self.git(self.root, "init", "--quiet")
         (self.root / ".git/objects/info/alternates").write_text(objects + "\n")
-        self.git(self.root, "update-ref", "HEAD", baseline)
+        self.git(
+            self.root,
+            "update-ref",
+            "HEAD",
+            self.git(SOURCE, "rev-parse", "HEAD^{commit}").decode().strip(),
+        )
         for name in PRODUCER.MANDATORY | {
             "scripts/perf/loadtest_supplier.py",
             "nix/build-source.nix",
@@ -72,9 +76,50 @@ class PerfSourceManifestTests(unittest.TestCase):
         # Internal links resolve to bytes in the complete tracked source domain.
         (self.root / "literal").symlink_to("tracked.txt")
         self.git(self.root, "add", "--all")
+        self.use_fixture_baseline()
         self.evidence = self.root / "artifacts/perf/control/source"
         self.original_index = (self.root / ".git/index").read_bytes()
         self.original_head = self.git(self.root, "rev-parse", "HEAD")
+
+    def use_fixture_baseline(self) -> None:
+        # Keep real-repository ancestry in the complete projection/independent
+        # patch controls. Other controls need only this fixture's source domain;
+        # diffing it against the entire repository repeats thousands of unrelated
+        # deletions on every freeze and supplier admission.
+        if self._testMethodName not in {
+            "test_complete_dirty_git_tree_raw_digest_private_retention_and_no_source_writes",
+            "test_batched_blobs_preserve_independent_tree_patch_archive_and_source",
+        }:
+            tree = self.git(self.root, "write-tree").decode().strip()
+            # This is inert test data in the temporary object store, not a
+            # contributor commit or source-publication history.
+            raw = (
+                f"tree {tree}\n"
+                "author Fixture <fixture@example.test> 0 +0000\n"
+                "committer Fixture <fixture@example.test> 0 +0000\n\n"
+                "Inert performance source fixture\n"
+            ).encode()
+            baseline = (
+                subprocess.run(  # noqa: S603 - owned temporary Git object data
+                    [
+                        str(shutil.which("git")),
+                        "-C",
+                        str(self.root),
+                        "hash-object",
+                        "-t",
+                        "commit",
+                        "-w",
+                        "--stdin",
+                    ],
+                    input=raw,
+                    env=PRODUCER.environment(),
+                    check=True,
+                    capture_output=True,
+                )
+                .stdout.decode()
+                .strip()
+            )
+            self.git(self.root, "update-ref", "HEAD", baseline)
 
     def restore_runner_mode(self) -> None:
         self.write(
@@ -156,9 +201,21 @@ class PerfSourceManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip()
 
+    def test_compact_baseline_retains_every_fixture_path_and_mode(self) -> None:
+        self.assertEqual(
+            self.git(self.root, "rev-parse", "HEAD^{tree}"),
+            self.git(self.root, "write-tree"),
+        )
+        self.assertEqual(self.git(self.root, "diff", "--cached", "--name-only"), b"")
+        domain = PRODUCER.git_domain(self.root)
+        self.assertTrue(domain["index"].keys() >= PRODUCER.MANDATORY)
+        self.assertEqual(domain["index"]["literal"]["git_mode"], "120000")
+        self.assertEqual(domain["index"]["scripts/perf/run_load_tests.sh"]["git_mode"], "100755")
+
     def test_complete_dirty_git_tree_raw_digest_private_retention_and_no_source_writes(
         self,
     ) -> None:
+        self.assertEqual(self.original_head, self.git(SOURCE, "rev-parse", "HEAD"))
         self.write("tracked.txt", b"actual dirty bytes\n")
         sha = self.freeze()
         raw = (self.evidence / "SOURCE-MANIFEST.json").read_bytes()
@@ -2553,6 +2610,7 @@ raise SystemExit(17 if mode=="workload-failure" else 0)
         return raw_archive.getvalue()
 
     def test_batched_blobs_preserve_independent_tree_patch_archive_and_source(self) -> None:
+        self.assertEqual(self.original_head, self.git(SOURCE, "rev-parse", "HEAD"))
         for number in range(259):
             self.write(f"batch/member{number:03d}", f"member {number}\n".encode())
         self.write("batch/executable", b"executable bytes\0\n", 0o755)
