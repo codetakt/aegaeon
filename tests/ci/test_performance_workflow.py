@@ -64,6 +64,72 @@ class PerformanceWorkflowTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0, "missing LCOV must fail")
 
+    def test_coverage_cache_never_substitutes_execution_or_cleaning(self):
+        job = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())["jobs"][
+            "coverage"
+        ]
+        steps = {step.get("name"): step for step in job["steps"]}
+        run = steps["Run tests with coverage"]
+        self.assertNotIn("if", run)
+        self.assertNotIn("continue-on-error", run)
+        self.assertIn("cargo llvm-cov --workspace --lcov", run["run"])
+        self.assertNotIn("--no-clean", run["run"])
+        self.assertNotIn("--no-run", run["run"])
+        cache = steps["Restore coverage dependencies"]
+        self.assertNotIn("restore-keys", cache["with"])
+        self.assertEqual(cache["with"]["path"], "target/coverage")
+        names = list(steps)
+        self.assertLess(
+            names.index("Restore coverage dependencies"), names.index("Run tests with coverage")
+        )
+        self.assertLess(
+            names.index("Check coverage threshold"),
+            names.index("Prepare dependency-only coverage cache"),
+        )
+
+    def test_coverage_cache_refuses_retained_profiles_and_cleanup_failure(self):
+        job = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())["jobs"][
+            "coverage"
+        ]
+        step = next(
+            row
+            for row in job["steps"]
+            if row.get("name") == "Prepare dependency-only coverage cache"
+        )
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools, target = root / "bin", root / "coverage"
+            tools.mkdir()
+            target.mkdir()
+            (tools / "nix").write_text(f'#!{bash}\nexit "${{CLEANUP_EXIT:-0}}"\n')
+            (tools / "nix").chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+                "CARGO_TARGET_DIR": str(target),
+            }
+            for name, status, success in [
+                ("dep.rlib", "0", True),
+                ("old.profraw", "0", False),
+                ("old.profdata", "0", False),
+                ("old.lcov", "0", False),
+                ("dep.rlib", "17", False),
+            ]:
+                with self.subTest(name=name, cleanup_status=status):
+                    path = target / name
+                    path.write_bytes(b"retained")
+                    result = subprocess.run(  # noqa: S603 - actual workflow with controlled cleanup
+                        [bash, "-euo", "pipefail", "-c", step["run"]],
+                        env=env | {"CLEANUP_EXIT": status},
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+                    path.unlink()
+
     def test_direct_http_policy_is_scoped_to_public_smoke(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/performance.yml").read_text())
         flags = {"AEGAEON_POLICY_REQUIRE_TRUSTED_PROXY", "AEGAEON_REQUIRE_TLS_PROXY"}
