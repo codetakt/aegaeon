@@ -33,6 +33,12 @@ with or without a logout hint. Local logout can complete at `/auth/login`, clear
 session and avoid creating an incident or relay. Valid vendor queries remain intact.
 The required formatter also fixes the reported test formatting issue.
 
+Authorization-query rejection is also exercised through the transaction-storage entry
+point. Direct conflicts, encoded aliases, duplicate names and `prompt` conflicts under
+`ForcePromptLogin` leave the store unchanged and issue no cookie. A pre-existing valid
+transaction remains consumable. The store inspection is test-only and process-local;
+it does not establish deployed shared-store behavior.
+
 Main's Basic credential encoding, original refresh-authentication context, configuration
 identity, refresh clock checks, and JWKS coordination/admission remain in force.
 The JWKS regression uses the current header/candidate-admission path and checks fresh
@@ -40,7 +46,7 @@ HTTP targets, exact query cache keys and the absence of another request on a cac
 
 ## Validation record
 
-The integrated candidate passes 294 upstream tests with fresh, dedicated PostgreSQL and
+The initial integrated candidate passed 294 upstream tests with fresh, dedicated PostgreSQL and
 Redis fixtures: 294 expected names, each executed once, no failures or ignored tests.
 This includes the actual local logout handler, relay incident creation ordering, encoded
 query aliases, no-hint fallback refusal, HTTP code/refresh requests, JWKS query/cache
@@ -51,6 +57,11 @@ The test executable was newly built by `nix build .#database-tests` and checked 
 its package/source identity before direct serial execution of
 `upstream --include-ignored --test-threads=1`. Executable SHA256:
 `bb754ab864a711110e6da00a91d7daee3fe0dc387caad5c085c6d2c888817361`.
+
+The authorization-storage regression adds one test with eight rejection conditions.
+The follow-up package passes all 295 upstream tests, with the same fresh fixture setup
+and exact expected-name accounting. This includes preservation and subsequent consumption
+of the valid transaction after the rejected requests.
 
 Supplemental all-targets Clippy, server development inventory Clippy, formatting,
 runtime-manifest checking and strict verified-reference checking pass. The original
