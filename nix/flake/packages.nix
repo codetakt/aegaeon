@@ -2,6 +2,7 @@
   openapiCheck,
   oidcKmsTest,
   joseServerTests,
+  databaseTests,
   ffiContractCheck,
   assuranceStandards,
   verifiedReqs,
@@ -51,6 +52,7 @@ in
   openapi-check = openapiCheck;
 
   oidc-kms-test = oidcKmsTest;
+  database-tests = databaseTests;
   jose-server-tests = joseServerTests "default";
   jose-server-strict-tests = joseServerTests "strict";
 

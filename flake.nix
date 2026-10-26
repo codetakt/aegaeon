@@ -840,6 +840,19 @@
               ;
           };
 
+        databaseTests = import ./nix/database-tests.nix {
+          inherit
+            pkgs
+            craneLib
+            stdenv
+            src
+            rustToolchain
+            llvmPackages
+            karamel
+            evercryptDist
+            ;
+        };
+
         perfLoadSupplier = import ./nix/flake/perf-load-supplier.nix {
           inherit
             lib
@@ -1144,6 +1157,7 @@
             openapiCheck
             oidcKmsTest
             joseServerTests
+            databaseTests
             ffiContractCheck
             assuranceStandards
             verifiedReqs

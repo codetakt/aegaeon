@@ -241,6 +241,9 @@ jobs:
           else
             rm -rf /homeless-shelter || true
           fi
+          AEGAEON_DATABASE_TEST_PACKAGE=$(nix build .#database-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_DATABASE_TEST_PACKAGE"
+          export AEGAEON_DATABASE_TEST_PACKAGE
           nix develop .#ci --command ./scripts/tests/run_server_container_integration.sh all
 
       - name: Run client JWKS tests in an isolated network namespace
