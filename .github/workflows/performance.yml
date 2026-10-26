@@ -104,16 +104,29 @@ jobs:
       - name: Prepare public smoke runtime
         run: |
           set -euo pipefail
-          nix develop .#ci --command bash -c \
-            'atlas migrate apply --env local --revisions-schema public'
-          nix develop .#ci --command cargo build --release --locked --bin aegaeon-observability-seed
+          source_root="$PWD"
+          preparation_root="$(mktemp -d)"
+          trap 'rmdir "$preparation_root"' EXIT
+          # Enter the shell outside Git so interactive hook setup cannot add
+          # untracked inputs before the load application's source admission.
+          (
+            cd "$preparation_root"
+            # The child shell expands its own positional source-root argument.
+            # shellcheck disable=SC2016
+            nix develop "$source_root#ci" --command bash -euo pipefail -c '
+              cd "$1"
+              atlas migrate apply --env local --revisions-schema public
+              cargo build --release --locked --bin aegaeon-observability-seed
+            ' bash "$source_root"
+          )
           # The loopback OIDC-off fixture is sufficient for health/version smoke.
           api_key="aeg_$(openssl rand -hex 32)"
           echo "::add-mask::${api_key}"
           mkdir -p artifacts/perf/ci-load-smoke
-          AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
+          RUST_LOG=off AEGAEON_OBSERVABILITY_API_KEY="${api_key}" \
             ./target/release/aegaeon-observability-seed \
             > artifacts/perf/ci-load-smoke/runtime-seed.json
+          python3 -m json.tool artifacts/perf/ci-load-smoke/runtime-seed.json > /dev/null
 
       - name: Run public smoke load test
         env:
