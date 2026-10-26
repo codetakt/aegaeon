@@ -36,6 +36,10 @@ class JoseReportTests(unittest.TestCase):
             "import json, os, pathlib, sys\n"
             "with pathlib.Path('calls.jsonl').open('a') as out:\n"
             "    out.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if sys.argv[1:2] == ['build']:\n"
+            "    print('/owned/rfc-tests' if not os.environ.get('EMPTY_PACKAGE') else '')\n"
+            "    sys.exit(int(os.environ.get('BUILD_EXIT', '0')))\n"
+            "assert os.environ.get('AEGAEON_RFC_TEST_PACKAGE') == '/owned/rfc-tests'\n"
             "print('original JOSE stdout')\n"
             "print('original JOSE stderr', file=sys.stderr)\n"
             "sys.exit(int(os.environ.get('TEST_EXIT', '0')))\n"
@@ -91,15 +95,17 @@ class JoseReportTests(unittest.TestCase):
             "develop",
             ".#ci",
             "--command",
-            "cargo",
-            "test",
+            "bash",
+            "scripts/validation/run_required_cargo_test.sh",
             "--package",
             "aegaeon-jose",
             "--test",
             "rfc7520_vectors",
-            "--verbose",
         ]
-        assert self.calls() == [expected]
+        assert self.calls() == [
+            ["build", ".#rfc-tests", "--no-link", "--print-out-paths"],
+            expected,
+        ]
         log = (self.root / "rfc7520.log").read_bytes()
         assert b"original JOSE stdout" in log
         assert b"original JOSE stderr" in log
@@ -107,7 +113,10 @@ class JoseReportTests(unittest.TestCase):
         assert report["log_sha256"] == hashlib.sha256(log).hexdigest()
         assert report["log_bytes"] == len(log)
         assert "✅ Pass" in self.summary("success")
-        assert self.calls() == [expected]
+        assert self.calls() == [
+            ["build", ".#rfc-tests", "--no-link", "--print-out-paths"],
+            expected,
+        ]
 
     def test_test_failure_is_not_replaced_by_successful_reporting(self) -> None:
         result = self.execute(self.run_step, TEST_EXIT="17")
@@ -115,7 +124,7 @@ class JoseReportTests(unittest.TestCase):
         assert self.report("failure")["test_step_outcome"] == "failure"
         assert "Failed or incomplete" in self.summary("failure")
         assert "Failed or incomplete" in self.summary("success")
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
 
     def test_reporting_never_restarts_failed_cancelled_or_skipped_tests(self) -> None:
         (self.root / "rfc7520.log").write_text("partial output\n")
@@ -155,7 +164,7 @@ class JoseReportTests(unittest.TestCase):
                 assert "Failed or incomplete" in self.summary("success")
         path.unlink()
         assert "Failed or incomplete" in self.summary("success")
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
 
     def test_changed_retained_log_is_not_reported_as_pass(self) -> None:
         assert self.execute(self.run_step).returncode == 0
@@ -173,10 +182,10 @@ class JoseReportTests(unittest.TestCase):
     def test_log_write_failure_fails_the_required_step(self) -> None:
         (self.root / "rfc7520.log").mkdir()
         assert self.execute(self.run_step).returncode != 0
-        assert len(self.calls()) == 1
+        assert len(self.calls()) == 2
 
     def test_workflow_retains_required_outcome_scope_and_uploads(self) -> None:
-        assert self.job["needs"] == "build"
+        assert "needs" not in self.job
         assert (
             self.job["if"]
             == "${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}"
@@ -194,3 +203,19 @@ class JoseReportTests(unittest.TestCase):
             "rfc7520-results.json",
             "rfc7520.log",
         }
+
+    def test_compile_failure_or_empty_package_prevents_test_execution(self) -> None:
+        for environment in ({"BUILD_EXIT": "37"}, {"EMPTY_PACKAGE": "1"}):
+            with self.subTest(environment=environment):
+                (self.root / "calls.jsonl").unlink(missing_ok=True)
+                result = self.execute(self.run_step, **environment)
+                assert result.returncode != 0
+                assert self.calls() == [["build", ".#rfc-tests", "--no-link", "--print-out-paths"]]
+
+    def test_vectors_do_not_wait_for_an_unused_release_binary(self) -> None:
+        assert "needs" not in self.job
+        assert "continue-on-error" not in self.run_step
+        assert self.job["if"] == (
+            "${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}"
+        )
+        assert not any("download-artifact@" in step.get("uses", "") for step in self.job["steps"])

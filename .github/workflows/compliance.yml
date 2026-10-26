@@ -64,7 +64,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    needs: build
     name: RFC 7520 JOSE Test Vectors
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
@@ -83,7 +82,11 @@ jobs:
         id: jose-tests
         run: |
           set -o pipefail
-          nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose 2>&1 | tee rfc7520.log
+          AEGAEON_RFC_TEST_PACKAGE=$(nix build .#rfc-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_RFC_TEST_PACKAGE"
+          export AEGAEON_RFC_TEST_PACKAGE
+          nix develop .#ci --command bash scripts/validation/run_required_cargo_test.sh \
+            --package aegaeon-jose --test rfc7520_vectors 2>&1 | tee rfc7520.log
 
       - name: Generate test report
         if: always()
