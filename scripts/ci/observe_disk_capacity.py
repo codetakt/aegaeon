@@ -50,8 +50,11 @@ def monitor(directory: Path, paths: list[str], interval: float, duration: float)
             (directory / "ready").touch(exist_ok=True)
             if stopped or expired:
                 break
-            time.sleep(min(interval, max(0, duration - elapsed)))
-    (directory / "completion.json").write_text(
+            next_sample = min(started + duration, time.monotonic() + interval)
+            while not (directory / "stop").exists() and time.monotonic() < next_sample:
+                time.sleep(min(0.1, max(0, next_sample - time.monotonic())))
+    temporary = directory / "completion.json.tmp"
+    temporary.write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -69,6 +72,7 @@ def monitor(directory: Path, paths: list[str], interval: float, duration: float)
         + "\n",
         encoding="utf-8",
     )
+    temporary.replace(directory / "completion.json")
 
 
 def stop(directory: Path) -> int:

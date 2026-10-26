@@ -44,6 +44,7 @@ jobs:
           fetch-depth: 0
 
       - name: Start disk capacity observation
+        continue-on-error: true
         run: |
           python3 scripts/ci/observe_disk_capacity.py start "$RUNNER_TEMP/core-disk-capacity" \
             --paths "$GITHUB_WORKSPACE" "$RUNNER_TEMP" /nix
@@ -189,10 +190,12 @@ jobs:
           path: artifacts/server
 
       - name: Stop disk capacity observation
+        continue-on-error: true
         if: always()
         run: python3 scripts/ci/observe_disk_capacity.py stop "$RUNNER_TEMP/core-disk-capacity"
 
       - name: Preserve disk capacity samples
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

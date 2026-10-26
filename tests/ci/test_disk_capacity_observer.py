@@ -50,6 +50,20 @@ class DiskCapacityTests(unittest.TestCase):
             assert receipt["samples"] == len(rows)
             assert rows[-1]["elapsed_seconds"] >= 0.03
 
+    def test_completion_is_not_visible_until_complete_json_is_written(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            original = Path.replace
+
+            def publish(path, destination):
+                assert not destination.exists()
+                assert json.loads(path.read_text())["reason"] == "deadline"
+                return original(path, destination)
+
+            with patch.object(Path, "replace", publish):
+                observer.monitor(directory, [temp], 0.01, 0.01)
+            assert json.loads((directory / "completion.json").read_text())["samples"] >= 2
+
     def test_actual_background_start_and_stop(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp) / "samples"
@@ -62,9 +76,9 @@ class DiskCapacityTests(unittest.TestCase):
                     "--paths",
                     temp,
                     "--interval",
-                    "0.01",
+                    "60",
                     "--duration",
-                    "2",
+                    "60",
                 ],
                 check=True,
                 timeout=5,
@@ -104,6 +118,13 @@ class DiskCapacityTests(unittest.TestCase):
         setup = steps[names.index("Setup Nix CI")]["with"]
         assert setup["free-disk"] == "true"
         assert setup.get("minimum-free-gib", "0") == "0"
+        for name in (
+            "Start disk capacity observation",
+            "Stop disk capacity observation",
+            "Preserve disk capacity samples",
+        ):
+            assert steps[names.index(name)]["continue-on-error"] is True
+        assert not steps[names.index("Setup Nix CI")].get("continue-on-error", False)
         for name in ("Stop disk capacity observation", "Preserve disk capacity samples"):
             assert steps[names.index(name)]["if"] == "always()"
         assert names.index("Stop disk capacity observation") > names.index("Upload server artifact")
