@@ -163,6 +163,7 @@ class Cases(unittest.TestCase):
             "test_dudect_moved_fixture": "other",
             "test_perf_moved_fixture": "dudect",
             "test_sanitizer_moved_fixture": "security-fuzz",
+            "test_sanitizer_runner_moved_fixture": "dudect",
         }
         for name in moved:
             self.write(
@@ -184,7 +185,7 @@ class Cases(unittest.TestCase):
             receipts = self.receipts()
             aggregate(receipts, BOUND, DEPENDENCIES)
         self.assertEqual({row["mode"] for row in receipts}, {"normal"})
-        self.assertEqual(sum(row["tests_run"] for row in receipts), 10)
+        self.assertEqual(sum(row["tests_run"] for row in receipts), 12)
         for name, group in moved.items():
             owners = {
                 row["group"]

@@ -237,6 +237,25 @@ complete input and evidence contracts. They are not enabled by the Tamarin
 boundary. External Dudect/performance qualification and release admission remain
 governed by the [CI execution boundary](../development/ci-execution-boundary.md).
 
+## Further helper balancing
+
+The four helper workers retain complete modules, fixture lifecycles, discovery
+order and exact-once accounting. `test_sanitizers` moves from the sanitizer
+worker to the Dudect worker; these names identify execution partitions, not
+verification scopes. The worker count and deadlines remain unchanged, and new
+modules retain the existing prefix classification.
+
+In [run 40416417430](https://github.com/codetakt/aegaeon/actions/runs/40416417430),
+`test_sanitizers` accounted for about 274 seconds of test-body time, compared with
+about 701 seconds for `test_sanitizer_dispatch` in the same worker. Moving the
+complete module to the less-loaded worker gives an estimated longest test step
+of about 854 seconds instead of 1,069 seconds, using the recorded step durations
+and transferring that 274-second body cost. This is a placement estimate, not a
+measured CI speedup: fixture costs are not transferred by that calculation, and
+setup, machine contention and runner allocation can differ. The same run had
+430 seconds between creation and start of the Kani Pure job. This change does
+not increase runner or merge-queue concurrency or claim to eliminate that wait.
+
 ## Follow-up work
 
 The integrated helper, Nix, OpenAPI and reporting improvements do not close the

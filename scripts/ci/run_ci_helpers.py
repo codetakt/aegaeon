@@ -36,6 +36,7 @@ MODULE_GROUP_OVERRIDES = {
     "test_dudect_runner": "other",
     "test_perf_source_manifest": "dudect",
     "test_sanitizer_boundaries": "security-fuzz",
+    "test_sanitizers": "dudect",
 }
 ROOT = Path(__file__).resolve().parents[2]
 PATTERN = "test_*.py"
