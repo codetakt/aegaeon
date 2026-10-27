@@ -161,7 +161,7 @@
       "critical": false
     },
     "crates/server/src/client_registry.rs": {
-      "sha256": "8c1e6ac5639f7be75e2811ef1927ed7b5b5e567e5fcf5d31b3fd7a237d7c2fa2",
+      "sha256": "1ef03aaa015bcee5148056e1f1da75608b52da2d4275891a3ff81aeed0398d89",
       "entries": [
         "6749-001",
         "7521-202",
@@ -273,8 +273,7 @@
       "sha256": "4d6328846f99db4e19260a3a6b162566261415bc9b0da00b7abc42ff0e50d841",
       "entries": [
         "OIDC-3-001",
-        "OIDC-3-002",
-        "OIDC-3-004"
+        "OIDC-3-002"
       ],
       "critical": false
     },

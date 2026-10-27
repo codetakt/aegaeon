@@ -18,6 +18,9 @@ pub(super) struct Session {
     pub(super) clients: HashSet<String>,
     pub(super) logout_jti: Option<String>,
     pub(super) logged_out_at_epoch_secs: Option<u64>,
+    pub(super) delivery_version: Option<String>,
+    pub(super) delivery_deadline: Option<u64>,
+    pub(super) deliveries: HashMap<String, String>,
 }
 
 impl Store {
@@ -174,6 +177,8 @@ pub(super) fn logout_by_sid_at(
         if session.logout_jti.is_none() {
             session.logout_jti = Some(uuid::Uuid::new_v4().to_string());
             session.logged_out_at_epoch_secs = Some(now);
+            session.delivery_version = Some(crate::oidc::session::delivery::VERSION.to_string());
+            session.delivery_deadline = now.checked_add(ttl);
         }
 
         let user_id = session.user_id.clone();
