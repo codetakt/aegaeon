@@ -62,7 +62,9 @@ pub(super) async fn token_resolve_policy(
             }
         };
     record_downstream_profile_usage(&profile, "token");
-    if grant_type == "password" {
+    // Wire grant identifiers are case-sensitive and are not configuration values.
+    // Authentication and profile lookup above retain their existing precedence.
+    if !crate::policy::SUPPORTED_GRANT_TYPES.contains(&grant_type) {
         record_downstream_profile_rejection("grant_type_not_allowed", "token");
         return Err(token_error_response(
             StatusCode::BAD_REQUEST,

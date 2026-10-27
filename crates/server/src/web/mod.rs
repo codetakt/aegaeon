@@ -185,4 +185,7 @@ mod oauth_conformance_tests;
 mod assertion_client_tests;
 
 #[cfg(test)]
+mod grant_error_tests;
+
+#[cfg(test)]
 pub(crate) use upstream_metadata::admit_upstream_federation_metadata;

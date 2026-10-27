@@ -1,8 +1,8 @@
 # SDK Standards and Output Baseline
 
-Last updated: 2026-10-11
+Last updated: 2026-10-13
 
-Document revision: **2026-10-11-r1**.
+Document revision: **2026-10-13-r1**.
 
 Status: current implementation baseline
 
@@ -110,6 +110,22 @@ These algorithm names do not establish verification or standards conformance.
 The register mirrors the current selector inventory to detect silent scope drift.
 The complete direction/token-class/provider list is still a release obligation.
 No arbitrary provider-interoperability claim follows from first-party RS256 tests.
+
+## Account-link binding metadata snapshot
+
+The 2026-10-13 management OpenAPI snapshot adds required `bindingProvenance` and
+`bindingRevision` fields to account-link summaries. Provenance distinguishes
+`legacy_unreviewed`, `jit_v2` and `administrator_confirmed`; revision is a positive
+signed 64-bit value. Management owner changes advance the revision atomically;
+reads, previews, no-ops and callback touches do not re-attest existing links.
+The `jit_v2` label describes binding policy, not subject syntax. These fields
+record a local authority source and do not prove historical account ownership.
+
+This revision updates the interface pin and records its consumer-visible change.
+Previous pins and interface bytes remain in Git history. SDK implementation and
+declaration correspondence still require independent review; no distributed
+artifact or output profile is attested. Contract guarantees, adoption state,
+external specification pins and existing reconciliation obligations are unchanged.
 
 ## Maintenance and handoff
 
