@@ -221,7 +221,8 @@ async fn bindings(state: &AppState, sid: &str) -> TestResult {
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pkce_admission_http_plain_par_signed_and_optional_retained_binding() -> TestResult {
+async fn shared_redis_pkce_admission_http_plain_par_signed_and_optional_retained_binding(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
