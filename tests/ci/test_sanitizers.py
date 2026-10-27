@@ -1573,6 +1573,41 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                         real_signal(sig, handler)
                     signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
 
+    def test_interrupt_at_deferral_exit_is_not_lost(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        defer = namespace["Supervisor"].command.__globals__["defer_interrupts_until_owned"]
+        globals_ = defer.__wrapped__.__globals__
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        previous = {sig: signal.getsignal(sig) for sig in signals}
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        for first in (None, *signals):
+            for last in signals:
+                with self.subTest(first=first, last=last):
+
+                    class ExitSignals(list):
+                        def pop(self, index=-1, last=last):
+                            os.kill(os.getpid(), last)
+                            return super().pop(index)
+
+                    buffers = ExitSignals()
+                    try:
+                        for sig in signals:
+                            signal.signal(sig, namespace["interrupted"])
+                        with (
+                            patch.dict(globals_, _INTERRUPT_DEFERRALS=buffers),
+                            self.assertRaises(namespace["Interrupted"]) as caught,  # noqa: PT027
+                            defer(),
+                        ):
+                            if first is not None:
+                                os.kill(os.getpid(), first)
+                        self.assertEqual(caught.exception.status, 128 + (first or last))  # noqa: PT009
+                        self.assertEqual(buffers, [])  # noqa: PT009
+                        self.assert_restored_interrupts(namespace, signals, original_mask)
+                    finally:
+                        for sig, handler in previous.items():
+                            signal.signal(sig, handler)
+                        signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
     def assert_restored_interrupts(self, namespace, signals, original_mask):
         for sig in signals:
             self.assertIs(signal.getsignal(sig), namespace["interrupted"])  # noqa: PT009

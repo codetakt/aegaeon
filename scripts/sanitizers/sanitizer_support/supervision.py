@@ -129,10 +129,14 @@ def defer_interrupts_until_owned():
                     signal.signal(signum, handler)
             # Restored supervisor handlers still share this non-raising buffer
             # while all queued signals are delivered on unmasking.
+    finally:
+        # No signal may append between the final check and detaching its buffer.
+        # On unmasking, an existing Interrupted remains authoritative; otherwise
+        # a newly queued interruption is raised by the restored handler.
+        with block_interrupt_transition():
+            _INTERRUPT_DEFERRALS.pop()
             if pending:
                 raise Interrupted(pending[0])
-    finally:
-        _INTERRUPT_DEFERRALS.pop()
 
 
 class CommandSupervisor:
