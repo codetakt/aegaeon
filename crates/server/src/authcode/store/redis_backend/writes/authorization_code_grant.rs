@@ -1,18 +1,19 @@
 use super::super::super::redis_support::{
     access_token_expires_at, encode_redis_json, system_time_epoch_secs,
 };
+use super::super::refresh_grants::GrantCommit;
 use super::super::scripts::{
     invoke_authorization_code_grant_commit, AuthorizationCodeGrantCommitArgs,
     AuthorizationCodeGrantCommitKeys,
 };
-use super::super::RedisTokenStoreBackend;
+use super::super::{IssuedGrantRecords, RedisTokenStoreBackend};
 use crate::authcode::code_store::AuthCodeRedisCommitContext;
 use crate::authcode::store::TokenStoreStorageError;
-use crate::authcode::types::{AccessToken, BearerTokenMeta, RefreshToken};
 use crate::config::redis_store_urls_reference_same_endpoint;
 use crate::oidc::RedisOidcSessionGrantCommit;
 
 pub(super) struct AuthorizationCodeGrantCommitPlan {
+    grant: GrantCommit,
     keys: AuthorizationCodeGrantCommitKeyPlan,
     args: AuthorizationCodeGrantCommitArgPlan,
 }
@@ -67,68 +68,23 @@ impl AuthorizationCodeGrantCommitPlan {
         backend: &RedisTokenStoreBackend,
         auth_code: &AuthCodeRedisCommitContext,
         expected_auth_code_payload: &str,
-        access_token: &AccessToken,
-        refresh_token: Option<&RefreshToken>,
-        meta: &BearerTokenMeta,
+        records: IssuedGrantRecords<'_>,
         oidc_session: Option<&RedisOidcSessionGrantCommit>,
     ) -> Result<Self, TokenStoreStorageError> {
         validate_shared_redis_url(backend, auth_code, oidc_session)?;
+        let IssuedGrantRecords {
+            access_token,
+            refresh_token,
+            meta,
+            grant_record,
+        } = records;
 
-        let access_token_payload = encode_redis_json(access_token)?;
-        let refresh_token_payload = refresh_token
-            .map(encode_redis_json)
-            .transpose()?
-            .unwrap_or_default();
-        let bearer_payload = encode_redis_json(meta)?;
-
-        let token_version = backend.keyspace.version_key();
-        let absent_refresh_key = token_version.clone();
-        let absent_oidc_key = token_version.clone();
+        let (access_token_payload, refresh_token_payload, bearer_payload) =
+            serialize_records(records)?;
 
         Ok(Self {
-            keys: AuthorizationCodeGrantCommitKeyPlan {
-                auth_code: auth_code.code_key.clone(),
-                auth_code_version: auth_code.version_key.clone(),
-                token_version: token_version.clone(),
-                access: backend.keyspace.access_key(&access_token.token),
-                subject_access: backend.keyspace.subject_access_key(&access_token.user_id),
-                access_expiry: backend.keyspace.expiry_access_key(),
-                refresh: refresh_token.map_or_else(
-                    || absent_refresh_key.clone(),
-                    |token| backend.keyspace.refresh_key(&token.token),
-                ),
-                subject_refresh: refresh_token.map_or_else(
-                    || absent_refresh_key.clone(),
-                    |token| backend.keyspace.subject_refresh_key(&token.user_id),
-                ),
-                refresh_expiry: backend.keyspace.expiry_refresh_key(),
-                refresh_children: refresh_token.map_or_else(
-                    || absent_refresh_key.clone(),
-                    |token| backend.keyspace.refresh_children_key(&token.token),
-                ),
-                bearer: backend.keyspace.bearer_key(&meta.token_id),
-                subject_bearer: backend.keyspace.subject_bearer_key(&meta.user_id),
-                bearer_expiry: backend.keyspace.expiry_bearer_key(),
-                oidc_auth_session: oidc_session.map_or_else(
-                    || absent_oidc_key.clone(),
-                    |session| session.auth_session_key.clone(),
-                ),
-                oidc_session: oidc_session.map_or_else(
-                    || absent_oidc_key.clone(),
-                    |session| session.session_key.clone(),
-                ),
-                oidc_logged_out_expiries: oidc_session.map_or_else(
-                    || absent_oidc_key.clone(),
-                    |session| session.logged_out_expiries_key.clone(),
-                ),
-                oidc_user_sessions: oidc_session.map_or_else(
-                    || absent_oidc_key.clone(),
-                    |session| session.user_sessions_key.clone(),
-                ),
-                oidc_clients: oidc_session
-                    .map(|session| session.clients_key.clone())
-                    .unwrap_or(absent_oidc_key),
-            },
+            grant: GrantCommit::initial(backend, grant_record)?,
+            keys: grant_commit_keys(backend, auth_code, records, oidc_session),
             args: AuthorizationCodeGrantCommitArgPlan {
                 access_payload: access_token_payload,
                 refresh_payload: refresh_token_payload,
@@ -181,6 +137,7 @@ impl AuthorizationCodeGrantCommitPlan {
     ) -> Result<String, TokenStoreStorageError> {
         invoke_authorization_code_grant_commit(
             conn,
+            &self.grant,
             AuthorizationCodeGrantCommitKeys {
                 auth_code: self.keys.auth_code.as_str(),
                 auth_code_version: self.keys.auth_code_version.as_str(),
@@ -251,4 +208,79 @@ fn validate_shared_redis_url(
         }
     }
     Ok(())
+}
+
+fn serialize_records(
+    records: IssuedGrantRecords<'_>,
+) -> Result<(String, String, String), TokenStoreStorageError> {
+    let refresh_payload = match records.refresh_token {
+        Some(token) => encode_redis_json(token)?,
+        None => String::new(),
+    };
+    Ok((
+        encode_redis_json(records.access_token)?,
+        refresh_payload,
+        encode_redis_json(records.meta)?,
+    ))
+}
+
+fn grant_commit_keys(
+    backend: &RedisTokenStoreBackend,
+    auth_code: &AuthCodeRedisCommitContext,
+    records: IssuedGrantRecords<'_>,
+    oidc_session: Option<&RedisOidcSessionGrantCommit>,
+) -> AuthorizationCodeGrantCommitKeyPlan {
+    let IssuedGrantRecords {
+        access_token,
+        refresh_token,
+        meta,
+        ..
+    } = records;
+    let token_version = backend.keyspace.version_key();
+    let absent_refresh_key = token_version.clone();
+    let absent_oidc_key = token_version.clone();
+
+    AuthorizationCodeGrantCommitKeyPlan {
+        auth_code: auth_code.code_key.clone(),
+        auth_code_version: auth_code.version_key.clone(),
+        token_version: token_version.clone(),
+        access: backend.keyspace.access_key(&access_token.token),
+        subject_access: backend.keyspace.subject_access_key(&access_token.user_id),
+        access_expiry: backend.keyspace.expiry_access_key(),
+        refresh: refresh_token.map_or_else(
+            || absent_refresh_key.clone(),
+            |token| backend.keyspace.refresh_key(&token.token),
+        ),
+        subject_refresh: refresh_token.map_or_else(
+            || absent_refresh_key.clone(),
+            |token| backend.keyspace.subject_refresh_key(&token.user_id),
+        ),
+        refresh_expiry: backend.keyspace.expiry_refresh_key(),
+        refresh_children: refresh_token.map_or_else(
+            || absent_refresh_key.clone(),
+            |token| backend.keyspace.refresh_children_key(&token.token),
+        ),
+        bearer: backend.keyspace.bearer_key(&meta.token_id),
+        subject_bearer: backend.keyspace.subject_bearer_key(&meta.user_id),
+        bearer_expiry: backend.keyspace.expiry_bearer_key(),
+        oidc_auth_session: oidc_session.map_or_else(
+            || absent_oidc_key.clone(),
+            |session| session.auth_session_key.clone(),
+        ),
+        oidc_session: oidc_session.map_or_else(
+            || absent_oidc_key.clone(),
+            |session| session.session_key.clone(),
+        ),
+        oidc_logged_out_expiries: oidc_session.map_or_else(
+            || absent_oidc_key.clone(),
+            |session| session.logged_out_expiries_key.clone(),
+        ),
+        oidc_user_sessions: oidc_session.map_or_else(
+            || absent_oidc_key.clone(),
+            |session| session.user_sessions_key.clone(),
+        ),
+        oidc_clients: oidc_session
+            .map(|session| session.clients_key.clone())
+            .unwrap_or(absent_oidc_key),
+    }
 }

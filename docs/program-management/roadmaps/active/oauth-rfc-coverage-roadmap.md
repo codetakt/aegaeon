@@ -1,6 +1,6 @@
 # OAuth RFC Coverage Roadmap (AS/OP + OAuth Client)
 
-Last updated: 2026-09-07
+Last updated: 2026-10-01
 
 Status: active plan
 
@@ -270,8 +270,17 @@ Implementation:
     unforgeability, audience/issuer binding, no token swap, jti replay prevention, cross-tenant
     isolation).
   - `spec/compliance-matrix.yaml`: `rfc_9701` rows with `status: verified`.
-- **RFC 9728**: `/.well-known/oauth-protected-resource` endpoint for Aegaeon-managed RS components
-  (scopes, methods, authorization server linkage, sender-constraint expectations).
+- **RFC 9728**: `GET /.well-known/oauth-protected-resource/resource` publishes
+  metadata for Aegaeon's `/resource` (scopes, methods, authorization server linkage,
+  sender-constraint expectations). The resource identifier is the configured issuer
+  origin followed by `/resource`, independent of request headers. Managed issuers
+  are origin-only; deployment beneath an issuer path is not supported.
+  The former `/.well-known/oauth-protected-resource` URL returns a 308 redirect
+  to the fixed relative location `/.well-known/oauth-protected-resource/resource`.
+  Existing clients must follow that redirect or update their URL. HEAD is supported
+  without a response body; POST returns 405. Other resource suffixes and trailing
+  slash variants return 404. These routes retain transport and runtime admission
+  checks. No configuration, audience or database migration changes are required.
   - `crates/server/src/metadata.rs`: Protected Resource Metadata endpoint.
   - `fstar/resource/ProtectedResourceMetadata.fst`: F\* specification with 5 lemmas.
   - `spec/compliance-matrix.yaml`: `rfc_9728` rows with `status: verified`.

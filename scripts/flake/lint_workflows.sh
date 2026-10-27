@@ -7,7 +7,7 @@ mapfile -t workflows < <(
 
 if [ "${#workflows[@]}" -eq 0 ]; then
 	echo "No workflow files found under .github/workflows" >&2
-	exit 0
+	exit 1
 fi
 
 actionlint "${workflows[@]}"

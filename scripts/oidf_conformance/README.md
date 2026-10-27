@@ -2,6 +2,14 @@
 
 This directory contains helper scripts and a Docker Compose template to run the OpenID Foundation conformance-suite behind an HTTPS reverse proxy, together with `aegaeon-server`.
 
+## Java toolchains
+
+The suite image builds with Maven on Java 21 LTS and runs on Eclipse Temurin
+25 LTS. Both versions are maintained [LTS releases](https://adoptium.net/support/).
+Validate build-toolchain upgrades separately with an actual suite image build:
+upstream uses `-Werror`, so new compiler diagnostics can fail compilation even
+when the bytecode target remains Java 21.
+
 ## Why this exists
 
 Recent upstream suite plans for OP/AS enforce **HTTPS** URLs (e.g., discovery URL must be `https://...` and all `*_endpoint` fields must use `https`). A simple `X-Forwarded-Proto` header is not sufficient for OP test plans because the suite validates URL strings and performs HTTPS calls.

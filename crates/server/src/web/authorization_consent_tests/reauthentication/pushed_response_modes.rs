@@ -116,8 +116,15 @@ async fn complete_login(state: &AppState, browser: &mut Browser, page: Page) -> 
             ]),
         )
         .await?;
-    assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
-    page.location.ok_or("resume location".into())
+    assert_eq!(page.status, StatusCode::OK, "{}", page.body);
+    assert!(
+        page.location.is_none(),
+        "login POST must end the redirect chain"
+    );
+    no_cache(&page);
+    let resume = continuation_destination(&page.body)?;
+    assert_eq!(resume, return_to, "the selected continuation remains exact");
+    Ok(resume)
 }
 async fn redeem_response(
     state: &AppState,
@@ -184,7 +191,7 @@ async fn success(
     let mut page = browser.request(state, &uri, None).await?;
     if !existing || prompt.is_some_and(|p| p.contains("login")) {
         resume = complete_login(state, &mut browser, page).await?;
-        assert!(resume.contains("aeg_par_continue="));
+        assert!(resume.starts_with("/authorize?aeg_login_continue="));
         let before = state.tokens.issuer.code_store.snapshot().codes.len();
         for extra in ["&response_mode=query", "&prompt=none"] {
             let refused = browser
@@ -199,7 +206,7 @@ async fn success(
         }
         let mut wrong = query(&resume)?;
         for (k, v) in &mut wrong {
-            if k == "aeg_par_continue" {
+            if k == "aeg_login_continue" {
                 *v = "wrong".into();
             }
         }
@@ -238,7 +245,8 @@ async fn success(
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_response_modes_survive_real_shared_grant_login_and_consent() -> TestResult {
+async fn shared_redis_pushed_response_modes_survive_real_shared_grant_login_and_consent(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;

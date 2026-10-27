@@ -12,16 +12,17 @@ pub(in crate::web::management) async fn store_refreshed_federation_entity_cache_
     environment_id: Uuid,
     jws: &str,
     parsed_statement: serde_json::Value,
-    ttl_secs: i64,
+    expires_at: i64,
     request_id: &str,
 ) -> Result<FederationEntityCacheEntry, Response> {
+    let expiration = expiration_timestamp(expires_at, request_id)?;
     let refreshed_row = sqlx::query(
         r#"
 UPDATE aegaeon.federation_entity_cache
 SET entity_configuration_jws = $1,
     parsed_statement = $2,
     fetched_at = NOW(),
-    expires_at = NOW() + ($3 * INTERVAL '1 second')
+    expires_at = $3::text::timestamptz
 WHERE id = $4
   AND environment_id = $5
 RETURNING
@@ -36,7 +37,7 @@ RETURNING
     )
     .bind(jws)
     .bind(parsed_statement)
-    .bind(ttl_secs)
+    .bind(expiration)
     .bind(entity_cache_id)
     .bind(environment_id)
     .fetch_one(&mut **tx)
@@ -49,4 +50,26 @@ RETURNING
     })?;
 
     federation_entity_cache_entry_from_row_result(&refreshed_row, request_id)
+}
+
+// Avoid floating-point epoch conversion and database-clock extension of signed exp.
+fn expiration_timestamp(expires_at: i64, request_id: &str) -> Result<String, Response> {
+    let timestamp = time::OffsetDateTime::from_unix_timestamp(expires_at)
+        .ok()
+        .filter(|timestamp| (1..=9999).contains(&timestamp.year()))
+        .ok_or_else(|| {
+            management_internal_error(
+                request_id,
+                "Federation cache expiration is outside the supported range",
+            )
+        })?;
+    Ok(format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}+00:00",
+        timestamp.year(),
+        timestamp.month() as u8,
+        timestamp.day(),
+        timestamp.hour(),
+        timestamp.minute(),
+        timestamp.second()
+    ))
 }

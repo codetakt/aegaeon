@@ -29,6 +29,9 @@
 
 /* HACL* verified crypto (pre-extracted C from hacl-star dist) */
 #include "Hacl_Hash_SHA2.h"
+#ifndef __wasm__
+#include "crypto_init.h"
+#endif
 #ifndef AEG_VERIFIED_CORE_WASM_MINIMAL
 #include "Hacl_HMAC.h"
 #endif
@@ -113,6 +116,9 @@ int32_t Verified_Crypto_Bridge_sha512_max_input = INT32_MAX;
 FStar_Bytes_bytes
 Verified_Crypto_Bridge_sha256_hash(FStar_Bytes_bytes input) {
     uint8_t output[32];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_Hash_SHA2_hash_256(output, (uint8_t *)input.data, input.length);
     return make_bytes(output, 32);
 }
@@ -120,6 +126,9 @@ Verified_Crypto_Bridge_sha256_hash(FStar_Bytes_bytes input) {
 FStar_Bytes_bytes
 Verified_Crypto_Bridge_sha384_hash(FStar_Bytes_bytes input) {
     uint8_t output[48];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_Hash_SHA2_hash_384(output, (uint8_t *)input.data, input.length);
     return make_bytes(output, 48);
 }
@@ -127,6 +136,9 @@ Verified_Crypto_Bridge_sha384_hash(FStar_Bytes_bytes input) {
 FStar_Bytes_bytes
 Verified_Crypto_Bridge_sha512_hash(FStar_Bytes_bytes input) {
     uint8_t output[64];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_Hash_SHA2_hash_512(output, (uint8_t *)input.data, input.length);
     return make_bytes(output, 64);
 }
@@ -138,6 +150,9 @@ FStar_Bytes_bytes
 Verified_Crypto_Bridge_hmac_sha256(FStar_Bytes_bytes key,
                                     FStar_Bytes_bytes data) {
     uint8_t output[32];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_HMAC_compute_sha2_256(output,
                                 (uint8_t *)key.data, key.length,
                                 (uint8_t *)data.data, data.length);
@@ -148,6 +163,9 @@ FStar_Bytes_bytes
 Verified_Crypto_Bridge_hmac_sha384(FStar_Bytes_bytes key,
                                     FStar_Bytes_bytes data) {
     uint8_t output[48];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_HMAC_compute_sha2_384(output,
                                 (uint8_t *)key.data, key.length,
                                 (uint8_t *)data.data, data.length);
@@ -158,6 +176,9 @@ FStar_Bytes_bytes
 Verified_Crypto_Bridge_hmac_sha512(FStar_Bytes_bytes key,
                                     FStar_Bytes_bytes data) {
     uint8_t output[64];
+#ifndef __wasm__
+    aegaeon_crypto_init();
+#endif
     Hacl_HMAC_compute_sha2_512(output,
                                 (uint8_t *)key.data, key.length,
                                 (uint8_t *)data.data, data.length);

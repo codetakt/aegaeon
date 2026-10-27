@@ -1,5 +1,15 @@
 use super::*;
 
+fn signed_request_claims(claims: &Value) -> TestResult<String> {
+    let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
+    header.typ = Some("oauth-authz-req+jwt".into());
+    Ok(jsonwebtoken::encode(
+        &header,
+        claims,
+        &jsonwebtoken::EncodingKey::from_rsa_pem(PEM)?,
+    )?)
+}
+
 async fn refused(state: &AppState, encoded: &str, auth: Option<&str>) -> TestResult {
     let before = par_count(state)?;
     let (status, body) = send_raw(state, "/par", encoded, auth).await?;
@@ -17,7 +27,8 @@ async fn refused(state: &AppState, encoded: &str, auth: Option<&str>) -> TestRes
 }
 #[tokio::test]
 #[ignore = "requires PostgreSQL and Redis"]
-async fn pushed_response_modes_reject_invalid_effective_inputs_before_storage() -> TestResult {
+async fn shared_redis_pushed_response_modes_reject_invalid_effective_inputs_before_storage(
+) -> TestResult {
     let pool = test_pg_pool()
         .await?
         .ok_or("AEGAEON_DATABASE_URL required")?;
@@ -75,10 +86,13 @@ async fn pushed_response_modes_reject_invalid_effective_inputs_before_storage() 
             use base64::engine::general_purpose::URL_SAFE_NO_PAD;
             let mut claims: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload)?)?;
             claims["response_mode"] = json!(mode);
-            let request = sign(&claims)?;
+            let request = signed_request_claims(&claims)?;
             refused(
                 &state,
-                &serde_urlencoded::to_string([("request", request.as_str())])?,
+                &serde_urlencoded::to_string([
+                    ("client_id", BASIC),
+                    ("request", request.as_str()),
+                ])?,
                 Some(&auth),
             )
             .await?;
@@ -87,12 +101,75 @@ async fn pushed_response_modes_reject_invalid_effective_inputs_before_storage() 
         refused(
             &state,
             &serde_urlencoded::to_string([
+                ("client_id", BASIC),
                 ("request", request.as_str()),
                 ("response_mode", "form_post"),
             ])?,
             Some(&auth),
         )
         .await?;
+        Ok(())
+    }
+    .await;
+    finish_test(result, cleanup_test_environment(&pool, &env).await)
+}
+
+#[tokio::test]
+#[ignore = "requires PostgreSQL and Redis"]
+async fn shared_redis_pushed_request_object_uri_claim_is_rejected_before_storage() -> TestResult {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let pool = test_pg_pool()
+        .await?
+        .ok_or("AEGAEON_DATABASE_URL required")?;
+    let env = setup_test_environment(&pool).await?;
+    let result = async {
+        let state = fixture(&pool, &env).await?;
+        let auth = basic();
+        for value in [
+            json!("urn:ietf:params:oauth:request_uri:old"),
+            json!(""),
+            Value::Null,
+            json!(false),
+            json!(1),
+            json!([]),
+            json!({"uri":"urn:example:old"}),
+        ] {
+            let request = par::request_object(&state, BASIC)?;
+            let payload = request.split('.').nth(1).ok_or("JWT")?;
+            let mut claims: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload)?)?;
+            claims["request_uri"] = value;
+            let request = signed_request_claims(&claims)?;
+            let before = par_count(&state)?;
+            let (status, body) = send(
+                &state,
+                "/par",
+                &[("client_id", BASIC), ("request", &request)],
+                Some(&auth),
+            )
+            .await?;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body["error"], "invalid_request");
+            assert_eq!(
+                body["error_description"],
+                "request_uri must not be supplied in a PAR Request Object"
+            );
+            assert!(body.get("request_uri").is_none());
+            assert_eq!(par_count(&state)?, before);
+        }
+        // A fresh signed request without the prohibited claim still reaches
+        // storage. Earlier request-object replay consumption remains unchanged.
+        let request = par::request_object(&state, BASIC)?;
+        let before = par_count(&state)?;
+        let (status, body) = send(
+            &state,
+            "/par",
+            &[("client_id", BASIC), ("request", &request)],
+            Some(&auth),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert!(body["request_uri"].is_string());
+        assert_eq!(par_count(&state)?, before + 1);
         Ok(())
     }
     .await;

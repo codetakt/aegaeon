@@ -100,24 +100,22 @@ Symptom: Low*/EverParse extraction may fail because `EverCrypt.Helpers` cannot b
 
 If it happens again:
 
-1. Re-enter the devShell (stabilises include paths):
-   ```bash
-   nix develop .#default --command true
-   ```
-2. Clear caches:
+1. Clear caches:
    ```bash
    rm -rf fstar/.cache fstar/.hints generated/lowstar/oidc
    ```
-3. Run a trace build and keep the logs:
+2. Run the Low* gate and keep its log at `artifacts/lowstar/run.log`:
    ```bash
-   nix run .#verify-lowstar -- --trace_error
+   nix run .#verify-lowstar
    ```
-4. Verify include/KaRaMeL flags with a dry run:
+3. Rerun JOSE extraction in the pinned verification shell to inspect the
+   include and KaRaMeL output:
    ```bash
-   scripts/extraction/run_jose_lowstar.sh --dry-run
+   nix develop .#verification --command bash scripts/extraction/run_jose_lowstar.sh
    ```
 
-If it still does not resolve, file a ticket with `fstar.log` + KaRaMeL logs as an EverCrypt include-layout issue.
+If it still does not resolve, file a ticket with `artifacts/lowstar/run.log`
+and the KaRaMeL logs as an EverCrypt include-layout issue.
 
 ## 7) Long-lived process segfaults (`fstar.exe` crash after large batch)
 

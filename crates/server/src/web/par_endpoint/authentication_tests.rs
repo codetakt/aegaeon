@@ -15,6 +15,8 @@ use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod dummy_verification;
+
 const SECRET: &str = "par-storage-sentinel-secret";
 const METHODS: [&str; 4] = [
     "none",

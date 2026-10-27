@@ -1,7 +1,7 @@
 // ── CachedFederationFetcher ─────────────────────────────────────
 
 #[test]
-fn cached_fetcher_returns_cached_entity_config() {
+fn cached_fetcher_returns_signed_entity_config_despite_forged_parsed_json() {
     let _guard = raw_json_env_guard();
     let now = current_epoch_secs();
     let env_id = Uuid::new_v4();
@@ -17,24 +17,25 @@ fn cached_fetcher_returns_cached_entity_config() {
     let mut stmt = sample_entity_config("https://rp.example.com", now);
     stmt.jwks = Some(federation_jwks_value(&key_manager));
     let entity_configuration_jws = sign_entity_statement_for_test(&key_manager, &stmt);
-    let parsed = must_ok(serde_json::to_value(&stmt));
+    let mut parsed = must_ok(serde_json::to_value(&stmt));
+    parsed["metadata"] = json!({"openid_relying_party": {"forged": true}});
     must_ok(cache.upsert(
         env_id,
         "https://rp.example.com",
         &entity_configuration_jws,
         &parsed,
-        stmt.exp
+        stmt.exp,
     ));
 
     // Inner fetcher should NOT be called (entity not added)
     let inner = MockFetcher::new();
     let fetcher = CachedFederationFetcher::new(inner, Box::new(cache), env_id, &config);
 
-    let result = block_on_test_future(
-        fetcher.fetch_entity_configuration("https://rp.example.com"),
-    );
+    let result = block_on_test_future(fetcher.fetch_entity_configuration("https://rp.example.com"));
     assert!(result.is_ok());
-    assert_eq!(must_ok(result).iss, "https://rp.example.com");
+    let verified = must_ok(result);
+    assert_eq!(verified.iss, "https://rp.example.com");
+    assert_eq!(verified.metadata, stmt.metadata);
 }
 
 #[test]
@@ -52,15 +53,13 @@ fn cached_fetcher_does_not_trust_parsed_statement_without_valid_jws() {
         "https://rp.example.com",
         "not-a-compact-jws",
         &parsed,
-        stmt.exp
+        stmt.exp,
     ));
 
     let inner = MockFetcher::new();
     let fetcher = CachedFederationFetcher::new(inner, Box::new(cache), env_id, &config);
 
-    let result = block_on_test_future(
-        fetcher.fetch_entity_configuration("https://rp.example.com"),
-    );
+    let result = block_on_test_future(fetcher.fetch_entity_configuration("https://rp.example.com"));
     assert!(
         result.is_err(),
         "parsed cached JSON must not be trusted when the compact JWS is invalid"
@@ -69,7 +68,7 @@ fn cached_fetcher_does_not_trust_parsed_statement_without_valid_jws() {
 
 #[tokio::test]
 async fn cached_fetcher_delegates_on_miss() {
-    let now = 1_700_000_000_i64;
+    let now = current_epoch_secs();
     let env_id = Uuid::new_v4();
     let config = FederationCacheConfig {
         entity_cache_ttl: Duration::from_secs(1800),
@@ -95,7 +94,7 @@ async fn cached_fetcher_delegates_on_miss() {
 
 #[test]
 fn cached_fetcher_delegates_subordinate_statements() {
-    let now = 1_700_000_000_i64;
+    let now = current_epoch_secs();
     let env_id = Uuid::new_v4();
     let config = FederationCacheConfig::default();
 

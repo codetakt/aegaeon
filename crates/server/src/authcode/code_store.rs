@@ -25,7 +25,10 @@ const AUTH_CODE_EXCHANGE_LOCK_RETRY_DELAY_MS: u64 = 20;
 #[derive(Clone, Debug, Default)]
 pub struct AuthCodeSnapshot {
     pub codes: HashMap<String, AuthorizationCode>,
+    /// Distinct state values retained since their most recent successful issuance.
+    /// The historical field name is preserved; membership does not reject issuance.
     pub used_states: HashSet<String>,
+    /// Distinct nonce observations, not transactions or prevented replay attacks.
     pub used_nonces: HashSet<String>,
     pub version: u64,
 }
@@ -48,12 +51,6 @@ pub(in crate::authcode) enum AuthCodeStorageError {
 
 #[derive(Debug, Error)]
 pub(in crate::authcode) enum StoreCodeError {
-    #[error("State already used")]
-    StateUsed,
-
-    #[error("Nonce already used")]
-    NonceUsed,
-
     #[error("Authorization code already exists")]
     CodeCollision,
 
@@ -277,7 +274,7 @@ fn auth_code_key_digest(value: &str) -> String {
 mod tests {
     use super::*;
 
-    fn sample_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {
+    pub(super) fn sample_code(state: Option<&str>, nonce: Option<&str>) -> AuthorizationCode {
         AuthorizationCode::new(AuthorizationCodeInput {
             scope: Some("openid".to_string()),
             state: state.map(str::to_string),
@@ -335,66 +332,52 @@ mod tests {
 
     #[test]
     #[ignore = "requires AEGAEON_TEST_REDIS_URL"]
-    fn redis_auth_code_backend_enforces_state_nonce_and_code_single_use() -> Result<(), String> {
-        let redis_url_env = ["AEGAEON", "TEST_REDIS_URL"].join("_");
-        let Ok(url) = std::env::var(redis_url_env) else {
-            return Ok(());
-        };
-        let backend = RedisAuthCodeBackend::new_for_tests(url.trim(), Duration::from_secs(60))
-            .map_err(|err| format!("redis auth code backend: {err}"))?;
-        let mut code = sample_code(Some("state-redis"), Some("nonce-redis"));
-        code.code = format!("code-{}", aegaeon_crypto::rand::random_base64url(16));
-        code.state = Some(format!(
-            "state-{}",
-            aegaeon_crypto::rand::random_base64url(16)
-        ));
-        code.nonce = Some(format!(
-            "nonce-{}",
-            aegaeon_crypto::rand::random_base64url(16)
-        ));
-
-        let code_str = backend
-            .store_code(code.clone())
-            .map_err(|err| format!("store code: {err}"))?;
-        assert!(backend
-            .get_code(&code_str)
-            .map_err(|err| format!("get code: {err}"))?
-            .is_some());
-
-        let duplicate_state = AuthorizationCode {
-            code: format!("code-{}", aegaeon_crypto::rand::random_base64url(16)),
-            nonce: Some(format!(
-                "nonce-{}",
-                aegaeon_crypto::rand::random_base64url(16)
-            )),
-            ..code.clone()
-        };
-        assert!(matches!(
-            backend.store_code(duplicate_state),
-            Err(StoreCodeError::StateUsed)
-        ));
-
-        let duplicate_nonce = AuthorizationCode {
-            code: format!("code-{}", aegaeon_crypto::rand::random_base64url(16)),
-            state: Some(format!(
-                "state-{}",
-                aegaeon_crypto::rand::random_base64url(16)
-            )),
-            ..code.clone()
-        };
-        assert!(matches!(
-            backend.store_code(duplicate_nonce),
-            Err(StoreCodeError::NonceUsed)
-        ));
-
-        assert!(backend
-            .use_code(&code_str)
-            .map_err(|err| format!("consume code: {err}"))?
-            .is_some());
-        assert!(backend
-            .use_code(&code_str)
-            .map_err(|err| format!("consume code again: {err}"))?
-            .is_none());
+    fn redis_auth_code_backend_accepts_repeated_rp_values_with_distinct_codes() -> Result<(), String>
+    {
+        let url = std::env::var("AEGAEON_TEST_REDIS_URL").map_err(|e| e.to_string())?;
+        let namespace =
+            crate::config::RuntimeStateNamespace::from_environment_id(uuid::Uuid::new_v4());
+        let backend = RedisAuthCodeBackend::new(&url, Duration::from_secs(60), &namespace)
+            .map_err(|e| e.to_string())?;
+        for (state, nonce) in [
+            (Some("same state +&値"), None),
+            (None, Some("same nonce +&値")),
+            (Some("same state +&値"), Some("same nonce +&値")),
+        ] {
+            let mut codes = Vec::new();
+            for client in ["first", "first", "second", "second"] {
+                let mut code = sample_code(state, nonce);
+                code.client_id = client.to_string();
+                let id = backend
+                    .store_code(code.clone())
+                    .map_err(|e| e.to_string())?;
+                assert!(matches!(
+                    backend.store_code(code),
+                    Err(StoreCodeError::CodeCollision)
+                ));
+                let stored = backend
+                    .get_code(&id)
+                    .map_err(|e| e.to_string())?
+                    .ok_or("missing code")?;
+                assert_eq!(stored.state.as_deref(), state);
+                assert_eq!(stored.nonce.as_deref(), nonce);
+                assert_eq!(stored.client_id, client);
+                assert!(!codes.contains(&id));
+                codes.push(id);
+            }
+            for code in codes {
+                assert!(backend
+                    .use_code(&code)
+                    .map_err(|e| e.to_string())?
+                    .is_some());
+                assert!(backend
+                    .use_code(&code)
+                    .map_err(|e| e.to_string())?
+                    .is_none());
+            }
+        }
+        assert_eq!(backend.state_count().map_err(|e| e.to_string())?, 1);
+        assert_eq!(backend.nonce_count().map_err(|e| e.to_string())?, 1);
         Ok(())
     }
 }

@@ -272,3 +272,28 @@ fn validate_connection_input_normalizes_oauth_profile_id() {
     assert!(validate_connection_input(&mut input, "req-1").is_ok());
     assert_eq!(input.oauth_profile_id, None);
 }
+
+#[test]
+fn validate_connection_input_preserves_exact_upstream_issuer() {
+    for issuer in [
+        "https://issuer.example",
+        "https://issuer.example/",
+        "HTTPS://Issuer.Example:443/path/%61",
+        "https://issuer.example/path//",
+        " https://issuer.example",
+        "https://issuer.example ",
+        "https://issuer.example\\path",
+        "https://issuer.example/\tpath",
+        "https:///issuer.example",
+        "https://@issuer.example",
+    ] {
+        let mut input = valid_connection_input();
+        input.issuer_url = issuer.to_string();
+        assert_eq!(
+            validate_connection_input(&mut input, "req-1").is_ok(),
+            crate::web::validate_upstream_issuer(issuer).is_some(),
+            "{issuer:?}"
+        );
+        assert_eq!(input.issuer_url, issuer);
+    }
+}

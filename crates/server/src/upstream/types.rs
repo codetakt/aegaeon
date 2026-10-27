@@ -242,6 +242,8 @@ impl UpstreamConnectionContext {
 
 #[derive(Debug, Clone)]
 pub struct UpstreamAuthRequest {
+    /// SHA-256 of the independent browser cookie secret; absent legacy records are rejected.
+    pub browser_binding_digest: Option<String>,
     pub state: String,
     pub nonce: String,
     pub code_verifier: Option<String>,

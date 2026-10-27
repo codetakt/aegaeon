@@ -23,6 +23,8 @@ mod client_scope_ceiling;
 mod form_parameters;
 mod legacy_commit;
 mod legacy_request;
+mod omission_parameters;
+mod organization_parameters;
 mod projection_pool;
 mod uri_target;
 
@@ -323,17 +325,60 @@ async fn scenarios(state: &AppState) -> TestResult {
     assert!(output["exp"].as_u64() <= claims["exp"].as_u64());
     assert!(first.get("refresh_token").is_none());
     let token = first["access_token"].as_str().ok_or("missing output")?;
+    let (status, empty_scope) = exchange(
+        state,
+        source,
+        &[("audience", "internal-api"), ("scope", "")],
+        true,
+    )
+    .await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "empty scope is omitted: {empty_scope}"
+    );
+    assert_eq!(empty_scope["scope"], "api.read");
+    let empty_claims = jwt(&empty_scope)?;
+    assert_eq!(empty_claims["scope"], "api.read");
+    assert_eq!(empty_claims["aud"], "internal-api");
+    assert_eq!(empty_claims["sub"], claims["sub"]);
+    assert!(
+        empty_claims["exp"].as_u64().ok_or("empty-scope expiry")?
+            <= claims["exp"].as_u64().ok_or("source expiry")?
+    );
+    assert!(empty_scope.get("refresh_token").is_none());
     for selectors in [
         vec![],
         vec![("audience", "unknown")],
         vec![("audience", "internal-api"), ("audience", "unknown")],
         vec![("resource", "https://api.example/resource#f")],
         vec![("audience", "internal-api"), ("scope", "api.admin")],
-        vec![("audience", "internal-api"), ("scope", "")],
     ] {
         let (status, body) = exchange(state, source, &selectors, true).await?;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{selectors:?}: {body}");
         assert!(body.get("access_token").is_none());
+    }
+    // RFC 6749 omission: empty scope must use the same bounded default as absence.
+    for selectors in [
+        vec![("audience", "internal-api")],
+        vec![("audience", "internal-api"), ("scope", "")],
+    ] {
+        let (status, body) = exchange(state, source, &selectors, true).await?;
+        assert_eq!(status, StatusCode::OK, "{selectors:?}: {body}");
+        assert_eq!(body["scope"], "api.read");
+        let claims = jwt(&body)?;
+        assert_eq!(claims["aud"], "internal-api");
+        assert_eq!(claims["scope"], "api.read");
+        let token = body["access_token"]
+            .as_str()
+            .ok_or("default-scope output")?;
+        let meta = state
+            .tokens
+            .store
+            .try_get_bearer_meta(token)?
+            .ok_or("metadata")?;
+        assert_eq!(meta.audience, "internal-api");
+        assert_eq!(meta.granted_scopes, vec!["api.read"]);
     }
     let (status, body) = exchange(state, source, &[("audience", "internal-api")], false).await?;
     assert_eq!(

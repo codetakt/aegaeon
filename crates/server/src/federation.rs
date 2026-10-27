@@ -5,7 +5,7 @@
 // - Entity Statement / Entity Configuration types (§3)
 // - Subordinate Statement verification (§3.1)
 // - Trust chain resolution from leaf to trust anchor (§4)
-// - Metadata policy resolution with basic operators (§5)
+// - Metadata policy validation, hierarchical merge and application (§6.1)
 // - .well-known/openid-federation endpoint URL construction (§6)
 //
 // Security properties verified by Tamarin model (proofs/tamarin/federation/trust_chain.spthy):
@@ -37,22 +37,33 @@ use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
 
+mod admission;
 mod fetcher;
+mod headers;
 mod keys;
 mod metadata_policy;
+mod naming_constraints;
+mod profile;
 mod raw_payload;
 mod repositories;
 mod trust_chain;
 mod trust_marks;
 mod types;
 
+pub(crate) use admission::admit_entity_configuration;
 pub use fetcher::{
     entity_configuration_url, normalize_federation_outbound_allowed_domains,
     subordinate_statement_url, validate_entity_url, FederationFetchFuture, FederationFetcher,
     FetchedEntityConfiguration, FetchedSubordinateStatement, HttpFederationFetcher,
 };
 pub use keys::{decode_jwk_material, verification_key_for_alg, DecodedKeyMaterial};
-pub use metadata_policy::apply_metadata_policy;
+pub(crate) use metadata_policy::validate_metadata_policy_pin;
+pub use metadata_policy::{apply_metadata_policy, apply_metadata_policy_for_entity_type};
+#[cfg(test)]
+pub(crate) use profile::validate_federation_jwks;
+pub(crate) use profile::validate_oidc_upstream_chain;
+#[cfg(test)]
+pub(crate) use repositories::resolve_trust_chain_artifacts_cached_with;
 pub use repositories::{
     resolve_trust_chain_cached, resolve_trust_chain_cached_with,
     resolve_trust_chain_jwts_cached_with, spawn_cache_cleanup, valid_federation_cache_max_entries,
@@ -67,13 +78,14 @@ pub use repositories::{
 pub(crate) use repositories::{
     InMemoryEntityCacheRepo, InMemoryTrustAnchorRepo, InMemoryTrustChainCacheRepo,
 };
+pub(crate) use trust_chain::verify_signed_path;
 pub use trust_chain::{resolve_trust_chain, resolve_trust_chain_with_jwts};
 #[cfg(test)]
 use trust_marks::validate_trust_mark_claims;
 pub use trust_marks::verify_trust_mark;
 pub use types::{
-    Constraints, EntityStatement, ResolvedTrustChain, TrustAnchor, TrustChain, TrustMark,
-    TrustMarkClaims,
+    Constraints, EntityStatement, NamingConstraints, ResolvedTrustChain, TrustAnchor, TrustChain,
+    TrustMark, TrustMarkClaims,
 };
 
 /// Maximum trust chain depth to prevent infinite loops.
@@ -166,58 +178,27 @@ pub fn parse_entity_statement_unverified(
 ///
 /// Used for subordinate statements (verify against the issuer's known JWKS).
 ///
-/// Enforces Tamarin property `subordinate_statement_authenticity`:
-/// the JWS signature must be verifiable with a key from the provided JWKS.
+/// Checks the signature and common statement claim profile. Expected identity,
+/// current time, configured trust and complete-chain admission remain contextual.
 ///
 /// # Errors
 ///
 /// Returns [`FederationError`] when no suitable key is available, signature verification fails, or
-/// the payload cannot be parsed as an entity statement.
+/// the protected header lacks the Entity Statement purpose or a nonempty key ID, or the
+/// supplied JWKS contains duplicate key IDs, or the payload cannot be parsed as an entity statement.
 pub fn verify_entity_statement(
     jws_compact: &str,
     issuer_jwks: &JwkSet,
 ) -> Result<EntityStatement, FederationError> {
     let parsed = Jws::from_compact(jws_compact)?;
-    let alg = &parsed.header.alg;
+    headers::validate_entity_statement_headers(jws_compact)?;
+    let key =
+        keys::select_federation_signing_key(issuer_jwks, &parsed.header, "entity-statement+jwt")?;
+    let decoded = decode_jwk_material(key)?;
+    let verification_key = verification_key_for_alg(key, &decoded, &parsed.header.alg)?;
     let ctx = JoseContext::default();
-
-    let mut last_err = None;
-    for key in issuer_jwks.signature_keys() {
-        // If JWS header specifies kid, only try matching keys
-        if let Some(ref header_kid) = parsed.header.kid {
-            if key.kid.as_deref() != Some(header_kid.as_str()) {
-                continue;
-            }
-        }
-
-        let decoded = match decode_jwk_material(key) {
-            Ok(d) => d,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        let vk = match verification_key_for_alg(key, &decoded, alg) {
-            Ok(vk) => vk,
-            Err(e) => {
-                last_err = Some(e);
-                continue;
-            }
-        };
-
-        match jws::verify_compact_with_context(jws_compact, vk, &ctx) {
-            Ok(payload_bytes) => {
-                let stmt = raw_payload::parse_entity_statement_payload(&payload_bytes)?;
-                return Ok(stmt);
-            }
-            Err(e) => {
-                last_err = Some(FederationError::Jws(e));
-            }
-        }
-    }
-
-    Err(last_err.unwrap_or(FederationError::NoSuitableKey))
+    let payload_bytes = jws::verify_compact_with_context(jws_compact, verification_key, &ctx)?;
+    profile::validate_verified_payload(&payload_bytes)
 }
 
 /// Verify a self-signed Entity Configuration.
@@ -291,6 +272,9 @@ pub fn validate_temporal(
 /// # Errors
 ///
 /// Returns [`FederationError`] when required claims are missing or temporal validation fails.
+/// This typed gate checks representable claims only; it cannot recover discarded
+/// unknown claims or distinguish absent fields from raw null. Signed admission
+/// additionally applies the raw profile gate in [`verify_entity_statement`].
 pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(), FederationError> {
     if stmt.iss.is_empty() {
         return Err(FederationError::MissingField("iss"));
@@ -298,10 +282,7 @@ pub fn validate_entity_statement(stmt: &EntityStatement, now: i64) -> Result<(),
     if stmt.sub.is_empty() {
         return Err(FederationError::MissingField("sub"));
     }
-    // Self-signed entity configurations must include JWKS
-    if stmt.is_self_signed() && stmt.jwks.is_none() {
-        return Err(FederationError::MissingField("jwks"));
-    }
+    profile::validate_typed(stmt)?;
     validate_temporal(stmt, now, DEFAULT_CLOCK_SKEW_SECS)
 }
 

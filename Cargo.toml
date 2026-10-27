@@ -24,3 +24,6 @@ repository = "https://github.com/codetakt/aegaeon"
 readme = "README.md"
 keywords = ["oauth", "oidc", "identity", "security", "formal-verification"]
 categories = ["authentication", "cryptography", "network-programming"]
+
+[profile.test.package.argon2]
+opt-level = 3

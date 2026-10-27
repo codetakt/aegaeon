@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: compliance-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: compliance-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -31,9 +31,11 @@ jobs:
       id-token: write
     name: Build Release Binary
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -52,7 +54,7 @@ jobs:
           test -s "$RELEASE_BINARY"
 
       - name: Upload release binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-binary
           path: ${{ env.RELEASE_BINARY }}
@@ -62,12 +64,13 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    needs: build
     name: RFC 7520 JOSE Test Vectors
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -76,19 +79,48 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run RFC 7520 Test Vectors
-        run: nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors --verbose
+        id: jose-tests
+        run: |
+          set -o pipefail
+          AEGAEON_RFC_TEST_PACKAGE=$(nix build .#rfc-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_RFC_TEST_PACKAGE"
+          export AEGAEON_RFC_TEST_PACKAGE
+          nix develop .#ci --command bash scripts/validation/run_required_cargo_test.sh \
+            --package aegaeon-jose --test rfc7520_vectors 2>&1 | tee rfc7520.log
 
       - name: Generate test report
         if: always()
+        env:
+          JOSE_TEST_OUTCOME: ${{ steps.jose-tests.outcome }}
         run: |
-          nix develop .#ci --command cargo test --package aegaeon-jose --test rfc7520_vectors -- --format=json > rfc7520-results.json || true
+          python3 -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          log = Path("rfc7520.log")
+          content = log.read_bytes() if log.is_file() else None
+          result = {
+              "schema_version": 1,
+              "suite": "rfc7520_vectors",
+              "test_step_outcome": os.environ.get("JOSE_TEST_OUTCOME") or "unavailable",
+              "log_file": log.name,
+              "log_bytes": len(content) if content is not None else None,
+              "log_sha256": hashlib.sha256(content).hexdigest() if content is not None else None,
+          }
+          Path("rfc7520-results.json").write_text(json.dumps(result, indent=2) + "\n")
+          PY
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rfc7520-test-results
-          path: rfc7520-results.json
+          path: |
+            rfc7520-results.json
+            rfc7520.log
+          if-no-files-found: error
 
   security-audit:
     permissions:
@@ -96,9 +128,11 @@ jobs:
       id-token: write
     name: Security Audit
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -112,7 +146,7 @@ jobs:
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: security-audit-report
           path: audit-report.json
@@ -130,13 +164,15 @@ jobs:
     needs: build
     name: SBOM Generation
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     permissions:
       id-token: write
       contents: read
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -145,7 +181,7 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Download release binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-binary
           path: target/release/
@@ -182,14 +218,17 @@ jobs:
       # Attestation is only available for public repositories
       # For private repos, we skip attestation but still generate and validate SBOM
       - name: Generate SBOM attestation
-        if: github.event.repository.private == false
+        if: >-
+          github.event.repository.private == false && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+           github.event_name == 'schedule')
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ env.RELEASE_BINARY }}
           sbom-path: artifacts/sbom/aegaeon-sbom.json
           
       - name: Upload SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: artifacts/sbom/
@@ -203,6 +242,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -211,31 +252,48 @@ jobs:
           enable-flakehub-cache: "true"
 
       - name: Run RFC compliance tests
+        id: rfc-tests
         run: |
+          set -o pipefail
           chmod +x scripts/validation/test_rfc_compliance.sh
-          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh
+          AEGAEON_RFC_TEST_PACKAGE=$(nix build .#rfc-tests --no-link --print-out-paths)
+          test -n "$AEGAEON_RFC_TEST_PACKAGE"
+          export AEGAEON_RFC_TEST_PACKAGE
+          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee rfc-compliance.log
 
       - name: Generate compliance report
         if: always()
+        env:
+          RFC_TEST_OUTCOME: ${{ steps.rfc-tests.outcome }}
         run: |
-          echo "# RFC Compliance Report" > compliance-report.md
-          echo "Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> compliance-report.md
-          echo "" >> compliance-report.md
-          nix develop .#ci --command ./scripts/validation/test_rfc_compliance.sh 2>&1 | tee -a compliance-report.md || true
+          {
+            printf '# RFC Compliance Report\n\n'
+            printf 'Date: %s\n' "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            printf 'Test step outcome: %s\n\n' "${RFC_TEST_OUTCOME:-unavailable}"
+            printf '```text\n'
+            if [ -f rfc-compliance.log ]; then
+              cat rfc-compliance.log
+            else
+              printf 'No test log was produced; the tests may not have started.\n'
+            fi
+            printf '\n```\n'
+          } > compliance-report.md
 
       - name: Upload compliance report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rfc-compliance-report
-          path: compliance-report.md
+          path: |
+            compliance-report.md
+            rfc-compliance.log
 
   oauth2-conformance:
     permissions: {}
     needs: build
     name: OAuth 2.0 Conformance (local only)
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     steps:
       - name: Disabled in CI (run locally)
         run: |
@@ -253,6 +311,8 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       
       - name: Check for RFC updates
         id: check-rfc
@@ -284,6 +344,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Nix CI
         uses: ./.github/actions/setup-nix-ci
@@ -307,7 +369,7 @@ jobs:
           
       - name: Upload Trivy results to GitHub Security
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           sarif_file: trivy-results.sarif
           
@@ -332,9 +394,11 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Download release binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-binary
           path: target/release/
@@ -363,7 +427,7 @@ jobs:
             --predicate-type https://slsa.dev/provenance/v1
 
       - name: Upload provenance
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: slsa-provenance
           path: ${{ steps.provenance.outputs.bundle-path }}
@@ -373,7 +437,7 @@ jobs:
     permissions: {}
     name: OpenID Foundation Conformance (local only)
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     steps:
       - name: Disabled in CI (run locally)
         run: |
@@ -383,7 +447,7 @@ jobs:
   conformance-summary:
     name: Conformance Summary
     runs-on: ubuntu-latest
-    if: ${{ always() && github.event_name != 'pull_request' }}
+    if: ${{ always() && github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
     permissions:
       contents: read
       issues: write
@@ -391,9 +455,11 @@ jobs:
     needs: [rfc7520-vectors, security-audit, sbom-generation, oauth2-conformance, oidf-conformance]
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         
       - name: Generate summary report
+        env:
+          JOSE_JOB_RESULT: ${{ needs.rfc7520-vectors.result }}
         run: |
           {
             echo "# Conformance Test Summary"
@@ -405,10 +471,20 @@ jobs:
             echo "| Test Suite | Status |"
             echo "|------------|--------|"
 
-            if [ -f rfc7520-test-results/rfc7520-results.json ]; then
+            if [ "$JOSE_JOB_RESULT" = "success" ] &&
+               [ -s rfc7520-test-results/rfc7520.log ] &&
+               jq -e '.schema_version == 1 and .suite == "rfc7520_vectors" and
+                 .test_step_outcome == "success" and .log_file == "rfc7520.log" and
+                 (.log_bytes | type == "number" and . > 0) and
+                 (.log_sha256 | type == "string" and test("^[0-9a-f]{64}$"))' \
+                 rfc7520-test-results/rfc7520-results.json >/dev/null 2>&1 &&
+               [ "$(jq -r '.log_bytes' rfc7520-test-results/rfc7520-results.json)" = \
+                 "$(wc -c < rfc7520-test-results/rfc7520.log | tr -d '[:space:]')" ] &&
+               [ "$(jq -r '.log_sha256' rfc7520-test-results/rfc7520-results.json)" = \
+                 "$(sha256sum rfc7520-test-results/rfc7520.log | cut -d ' ' -f 1)" ]; then
               echo "| RFC 7520 JOSE Vectors | ✅ Pass |"
             else
-              echo "| RFC 7520 JOSE Vectors | ❌ Fail |"
+              echo "| RFC 7520 JOSE Vectors | ❌ Failed or incomplete (${JOSE_JOB_RESULT:-unavailable}) |"
             fi
 
             if [ -f security-audit-report/audit-report.json ]; then
@@ -447,7 +523,7 @@ jobs:
       - name: Comment on PR
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
