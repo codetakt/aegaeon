@@ -1,6 +1,6 @@
 # Authorization-code and refresh state transitions
 
-Last updated: 2026-10-02
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -43,15 +43,25 @@ request. Login, reauthentication and consent continuations retain that selection
 A `form_post` grant returns the code, state and issuer in an HTML POST form to
 the registered redirect URI, rather than a code-bearing redirect query.
 
-The outer `client_id` on authorization and its continuations must exactly match
+Fresh pushed authorization requires an outer `client_id` that exactly matches
 the issued identifier and the client that pushed the request (RFC 6749 sections
 1.9, 2.2 and 4.1.1; RFC 9126 section 4). Leading or trailing whitespace, including
 percent-encoded whitespace, is not removed. Unknown or mismatched selectors are
-refused without reserving or consuming the pushed request or its continuation.
-Clients relying on earlier whitespace tolerance must correct the identifier and
-restart authorization; expired requests require a new push. No data migration
-or new configuration setting is needed. Empty values still follow the common
-omission rule, and duplicate nonempty values are rejected.
+refused without reserving or consuming the pushed request. The same exact binding
+is checked when the server reconstructs the retained request for login or consent.
+
+The public login return URI is token-only:
+`/authorize?aeg_login_continue=<opaque>`. Preserve it exactly; adding any
+`client_id`, including the matching identifier, returns HTTP 400. The server
+recovers the client binding from the stored request. Consent uses its bound form
+and transaction; callers must preserve the supplied form rather than construct a
+new outer client selector.
+
+Clients relying on earlier whitespace tolerance must correct the fresh request
+and restart authorization; expired requests require a new push. No data migration
+or new configuration setting is needed. Empty values in ordinary authorization
+forms still follow the common omission rule, and duplicate nonempty values are
+rejected; this does not permit extra fields on the token-only login return.
 
 PAR request and reservation keys now use namespace `par/v2` and its versioned
 request-URI digest. They retain the authorization-code-grant Redis hash tag for
@@ -206,10 +216,10 @@ Older readers cannot reconstruct the request from the opaque return URI or
 canonical locator and cannot match the new snapshot. Rollback also requires
 restarting pending interactions. Do not reset or rewrite completed records.
 
-Direct requests and signed Request Objects retain their selected response mode
-through login and consent. Plain PAR response-mode persistence remains a separate
-limitation of the current PAR record format; authorization POST does not change
-that format. Validate composed PAR behavior when deploying its successor.
+Direct requests, signed Request Objects and plain PAR retain their selected
+response mode through login and consent. PAR uses the v2 reader/writer cutover
+and drain requirements described above; authorization transaction storage has its
+own coordinated upgrade requirements.
 
 ## Authorization transaction limits and retention
 
