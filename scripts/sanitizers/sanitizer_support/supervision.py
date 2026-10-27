@@ -80,6 +80,19 @@ def interrupted(signum: int, _frame: object) -> None:
 
 
 @contextlib.contextmanager
+def block_interrupt_transition():
+    # Only handler installation/restoration is masked. Popen and the child run
+    # after the exact caller mask has been restored.
+    previous = signal.pthread_sigmask(
+        signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+    )
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+@contextlib.contextmanager
 def defer_interrupts_until_owned():
     # A child can execute before Popen returns. Raising during that interval
     # loses its handle, so cleanup cannot stop its separate process group.
@@ -94,12 +107,20 @@ def defer_interrupts_until_owned():
             pending = signum
 
     try:
-        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-            handlers[signum] = signal.signal(signum, defer_interrupt)
+        with block_interrupt_transition():
+            for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                handlers[signum] = signal.signal(signum, defer_interrupt)
         yield
     finally:
-        for signum, handler in handlers.items():
-            signal.signal(signum, handler)
+        try:
+            with block_interrupt_transition():
+                for signum, handler in handlers.items():
+                    signal.signal(signum, handler)
+        except Interrupted as caught:
+            # A pending OS signal can run immediately when the mask is restored.
+            # All handlers are already restored; keep an earlier interruption.
+            if pending is None:
+                pending = caught.status - 128
         if pending is not None:
             raise Interrupted(pending)
 

@@ -1522,6 +1522,54 @@ class SanitizerTests(SanitizerFixture, unittest.TestCase):
                     signal.signal(signum, previous)
                     self.stop_spawn_fixture(owned)
 
+    def test_interrupt_during_handler_restoration_preserves_first_and_restores_all(self):
+        namespace = runpy.run_path(str(ROOT / "scripts/sanitizers/sanitizer_runner.py"))
+        defer = namespace["Supervisor"].command.__globals__["defer_interrupts_until_owned"]
+        signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+        real_signal = signal.signal
+        previous = {sig: signal.getsignal(sig) for sig in signals}
+        original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        for first in (None, signal.SIGINT):
+            with self.subTest(first=first):
+                restored = []
+
+                def restore(sig, handler, restored=restored):
+                    result = real_signal(sig, handler)
+                    if handler is namespace["interrupted"]:
+                        restored.append(sig)
+                        if sig == signal.SIGTERM:
+                            os.kill(os.getpid(), sig)
+                    return result
+
+                try:
+                    for sig in signals:
+                        real_signal(sig, namespace["interrupted"])
+                    with (
+                        patch.object(signal, "signal", side_effect=restore),
+                        self.assertRaises(namespace["Interrupted"]) as caught,  # noqa: PT027
+                        defer(),
+                    ):
+                        self.assertEqual(  # noqa: PT009 - child's inherited mask
+                            signal.pthread_sigmask(signal.SIG_BLOCK, []), original_mask
+                        )
+                        if first is not None:
+                            os.kill(os.getpid(), first)
+                    self.assertEqual(caught.exception.status, 128 + (first or signal.SIGTERM))  # noqa: PT009
+                    self.assertEqual(restored, list(signals))  # noqa: PT009
+                    self.assert_restored_interrupts(namespace, signals, original_mask)
+                finally:
+                    for sig, handler in previous.items():
+                        real_signal(sig, handler)
+                    signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+    def assert_restored_interrupts(self, namespace, signals, original_mask):
+        for sig in signals:
+            self.assertIs(signal.getsignal(sig), namespace["interrupted"])  # noqa: PT009
+            with self.assertRaises(namespace["Interrupted"]) as later:  # noqa: PT027
+                os.kill(os.getpid(), sig)
+            self.assertEqual(later.exception.status, 128 + sig)  # noqa: PT009
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, []), original_mask)  # noqa: PT009
+
     @staticmethod
     def stop_spawn_fixture(owned):
         for process in owned:
