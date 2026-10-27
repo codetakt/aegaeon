@@ -370,7 +370,7 @@ Audience: contributors, maintainers
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-10-11 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
-| `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |
+| `docs/operations/jwks-operations.md` | runbook | JWKS Operations | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/jwt-bearer.md` | runbook | JWT Bearer Grant Operations (RFC 7523) | current implementation baseline | 2026-07-07 | Operations | operators, maintainers |
 | `docs/operations/kms-hsm-deployment-classification.md` | runbook | KMS/HSM Deployment Classification | current implementation baseline | 2026-06-25 | Operations | operators, maintainers |
 | `docs/operations/management-initialization.md` | runbook | Initialize the management plane | current implementation baseline | 2026-09-10 | Operations | operators, maintainers |

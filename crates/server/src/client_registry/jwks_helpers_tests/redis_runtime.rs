@@ -130,3 +130,72 @@ fn jwks_redis_shared_runtime_state_unavailable_fails_closed() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL-backed Redis integration test"]
+fn jwk_mixed_redis_guard_includes_rejected_original_members() -> TestResult {
+    let redis_url = test_jwks_redis_url().ok_or("isolated Redis required")?;
+    let uri = unique_jwks_uri("mixed-original-members");
+    let state_a = redis_jwks_runtime_state(&redis_url)?;
+    let state_b = redis_jwks_runtime_state(&redis_url)?;
+    let (key, _) = crate::test_utils::jwk_usage::material(jsonwebtoken::Algorithm::RS256);
+    let mut original = serde_json::json!({"keys":[key,{"kty":"oct","kid":"ignored","n":"AA"}]});
+    let first: FetchedJwks =
+        serde_json::from_value(original.clone()).expect("valid first public fixture");
+    original["keys"][1]["n"] = serde_json::json!("AQ");
+    let second: FetchedJwks =
+        serde_json::from_value(original).expect("valid second public fixture");
+    assert_eq!(first.keys().len(), 1);
+    assert_eq!(second.keys().len(), 1);
+    let policy = JwksRuntimePolicy::default();
+    assert!(!shared_kid_reuse_changed_with_state(
+        &state_a,
+        &policy,
+        &uri,
+        &super::super::jwks_validation::build_kid_fingerprints(&first)
+    )
+    .expect("shared guard result"));
+    assert!(shared_kid_reuse_changed_with_state(
+        &state_b,
+        &policy,
+        &uri,
+        &super::super::jwks_validation::build_kid_fingerprints(&second)
+    )
+    .expect("shared guard result"));
+    clear_jwks_redis_keys(&redis_url, &uri)?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires AEGAEON_TEST_REDIS_URL-backed Redis integration test"]
+fn jwk_mixed_redis_guard_tracks_admitted_material_with_unrelated_extras() -> TestResult {
+    let redis_url = test_jwks_redis_url().ok_or("isolated Redis required")?;
+    for algorithm in [
+        jsonwebtoken::Algorithm::RS256,
+        jsonwebtoken::Algorithm::ES256,
+        jsonwebtoken::Algorithm::ES384,
+    ] {
+        let uri = unique_jwks_uri("mixed-admitted-extras");
+        let state_a = redis_jwks_runtime_state(&redis_url)?;
+        let state_b = redis_jwks_runtime_state(&redis_url)?;
+        let (first, replacement) =
+            super::usage_metadata::mixed_sets::guard_admission::guarded_pair(algorithm);
+        let second: FetchedJwks =
+            serde_json::from_value(replacement).map_err(|error| error.to_string())?;
+        let policy = JwksRuntimePolicy::default();
+        let first = super::super::jwks_validation::build_kid_fingerprints(&first);
+        let second = super::super::jwks_validation::build_kid_fingerprints(&second);
+        assert_eq!(first.len(), 1);
+        assert_eq!(second.len(), 1);
+        assert!(
+            !shared_kid_reuse_changed_with_state(&state_a, &policy, &uri, &first)
+                .map_err(|error| error.to_string())?
+        );
+        assert!(
+            shared_kid_reuse_changed_with_state(&state_b, &policy, &uri, &second)
+                .map_err(|error| error.to_string())?
+        );
+        clear_jwks_redis_keys(&redis_url, &uri)?;
+    }
+    Ok(())
+}

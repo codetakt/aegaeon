@@ -47,7 +47,7 @@
       "critical": false
     },
     "crates/jose/src/jwk.rs": {
-      "sha256": "5e6f61867860bdb781ceaa7a85b7dd1555594dc5a53fff0f1c550c4c08811d35",
+      "sha256": "a35485e857ecb95b5b46682bb12840d4a0623a550b9ccb92ae2d148984f37da4",
       "entries": [
         "7517-001",
         "7517-003",
@@ -436,7 +436,7 @@
       "critical": true
     },
     "crates/crypto/src/lib.rs": {
-      "sha256": "a01309e0b81c89e5b4b25e717820f18ea723dcea903750f46570d1d81f0ce33c",
+      "sha256": "bbe465e1cb26b6a4fd12f1894d9895da7df860aba22acf5e9ee92c38448e7700",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
@@ -444,6 +444,13 @@
     },
     "crates/crypto/src/mac.rs": {
       "sha256": "f8e2d13e69c71de2f99c641407ea47518ffd24aa891c1137b1a64482895ac44c",
+      "sources": [
+        "monitored:crates/crypto/src/**/*.rs"
+      ],
+      "critical": true
+    },
+    "crates/crypto/src/public_key.rs": {
+      "sha256": "0f850515306f7bf2868ee868e61f00f162eb8aa1ad93a8f7678d876435262057",
       "sources": [
         "monitored:crates/crypto/src/**/*.rs"
       ],
