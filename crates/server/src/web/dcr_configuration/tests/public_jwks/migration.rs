@@ -29,14 +29,9 @@ async fn counts(pool: &PgPool) -> TestResult<(i64, i64, usize)> {
     ))
 }
 async fn apply(pool: &PgPool) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    match sqlx::raw_sql(UPGRADE).execute(&mut *tx).await {
-        Ok(_) => tx.commit().await,
-        Err(error) => {
-            tx.rollback().await?;
-            Err(error)
-        }
-    }
+    // No outer transaction: the full migration must be one atomic SQL statement,
+    // including malformed-row refusal, row projection and constraint installation.
+    sqlx::query(UPGRADE).execute(pool).await.map(|_| ())
 }
 fn projection(state: &mut Value) {
     for row in state["registrations"].as_array_mut().unwrap() {

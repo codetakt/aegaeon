@@ -1,9 +1,10 @@
--- Atlas applies this file transactionally. Block concurrent writers throughout
--- preflight, exact projection and constraint installation; do not suppress triggers.
+-- Keep replay and Atlas apply atomic, including when no outer transaction exists.
+-- Block concurrent writers through preflight, projection and constraint installation.
+-- Preserve triggers and every row that does not contain private JWK members.
+DO $migration$
+BEGIN
 LOCK TABLE aegaeon.dynamic_client_registrations IN SHARE ROW EXCLUSIVE MODE;
 
-DO $$
-BEGIN
     IF EXISTS (
         SELECT 1 FROM aegaeon.dynamic_client_registrations
         WHERE jwks IS NOT NULL AND (
@@ -20,8 +21,6 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'public client JWKS upgrade blocked by malformed stored envelope or key member';
     END IF;
-END;
-$$;
 
 -- Public-client ownership only; this is not a cryptographic JWK validator.
 CREATE FUNCTION aegaeon.client_jwks_are_public(value jsonb) RETURNS boolean
@@ -61,3 +60,6 @@ WHERE NOT aegaeon.client_jwks_are_public(registration.jwks);
 ALTER TABLE aegaeon.dynamic_client_registrations
     ADD CONSTRAINT dynamic_client_registrations_public_jwks
     CHECK (aegaeon.client_jwks_are_public(jwks));
+
+END;
+$migration$;
