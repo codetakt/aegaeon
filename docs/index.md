@@ -367,6 +367,7 @@ Audience: contributors, maintainers
 | `docs/operations/aws-hosted-staging.md` | runbook | AWS Hosted Staging Runbook | current implementation baseline | 2026-06-18 | Operations | operators, maintainers |
 | `docs/operations/backchannel-logout.md` | runbook | Back-Channel Logout Tokens and delivery | current implementation baseline | 2026-10-27 | Operations | operators, maintainers, relying party implementers |
 | `docs/operations/configuration-membership-recovery.md` | runbook | Recover configuration memberships after an incomplete activation | current implementation baseline | 2026-09-12 | Operations | operators, maintainers |
+| `docs/operations/device-authorization.md` | runbook | Device Authorization Confirmation | current implementation baseline | 2026-10-27 | Operations | operators, maintainers |
 | `docs/operations/dpop-replay-store.md` | runbook | DPoP Replay Store Operations Guide | current implementation baseline | 2026-10-11 | Operations | operators, maintainers |
 | `docs/operations/hardened-reference-deployment.md` | runbook | Hardened Reference Deployment Guide | current implementation baseline | 2026-05-19 | Operations | operators, maintainers |
 | `docs/operations/jwks-fingerprint-state.md` | runbook | Shared Client JWKS Fingerprint State | current implementation baseline | 2026-10-01 | Operations | operators, maintainers |

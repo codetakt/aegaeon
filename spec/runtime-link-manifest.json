@@ -196,7 +196,7 @@
       "critical": false
     },
     "crates/server/src/device_authz.rs": {
-      "sha256": "0b1398656d1007de3b0ae4eecf5f0617e457cc7ce8c9f5af908c3bc3f1e9bfd1",
+      "sha256": "e978cd7b44703b65729e1ae01be77a67ba9551bb143a74c846893d0db6c1de1f",
       "entries": [
         "8628-101",
         "8628-102",

@@ -244,9 +244,12 @@ async fn device_verification_confirmation_response(state: &AppState, user_code: 
             Ok(token) => token,
             Err(response) => return response,
         };
+        let canonical_code = crate::device_authz::format_user_code(
+            &crate::device_authz::normalize_user_code(user_code),
+        );
         let html = crate::device_authz::render_confirm_page(
             &csrf_token,
-            user_code,
+            &canonical_code,
             &lookup.client_id,
             lookup.scope.as_deref(),
             lookup.resource.as_deref(),
