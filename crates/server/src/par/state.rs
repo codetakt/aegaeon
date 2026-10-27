@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use thiserror::Error;
 
@@ -8,7 +8,7 @@ pub enum ParStateError {
     LockPoisoned(&'static str),
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub(super) fn try_read_lock<'a, T>(
     lock: &'a RwLock<T>,
     name: &'static str,
@@ -19,7 +19,7 @@ pub(super) fn try_read_lock<'a, T>(
     })
 }
 
-#[cfg(test)]
+#[cfg(any(test, fuzzing))]
 pub(super) fn try_write_lock<'a, T>(
     lock: &'a RwLock<T>,
     name: &'static str,

@@ -12,7 +12,7 @@ pub(in crate::web::management) fn connection_input_from_create(
             .connection_type
             .clone()
             .unwrap_or_else(|| "OIDC".to_string()),
-        issuer_url: req.issuer_url.trim().to_string(),
+        issuer_url: req.issuer_url.clone(),
         client_id: req.client_id.trim().to_string(),
         client_auth_method: req
             .client_auth_method
@@ -48,7 +48,7 @@ pub(in crate::web::management) fn connection_input_from_update(
         issuer_url: req
             .issuer_url
             .as_deref()
-            .map_or_else(|| existing.issuer_url.clone(), normalize_text),
+            .map_or_else(|| existing.issuer_url.clone(), str::to_string),
         client_id: req
             .client_id
             .as_deref()

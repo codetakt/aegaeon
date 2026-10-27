@@ -113,41 +113,92 @@ fn upstream_jwks_refresh_pg_rotation_preserves_original_context() -> ResultTest 
 fn upstream_jwks_refresh_pg_known_bad_tokens_never_force_retrieval() -> ResultTest {
     run(false, |rt, f| {
         rt.block_on(async {
-        original(f).await?;let flow=Flow::new(f).await?;let claims=f.claims()?;
-        let stored=f.stored().await?;
-        let raw=|header:Value|format!("{}.e30.invalid",URL_SAFE_NO_PAD.encode(header.to_string()));
-        let duplicate=format!("{}.e30.invalid",URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","alg":"RS256","kid":"new-key"}"#));
-        let mut wrong_claims=claims.clone();wrong_claims["aud"]=json!("different-client");
-        let mut tokens = vec![sign_as(&flow,&claims,Some(f.signing_key.kid()))?,sign_as(&flow,&claims,None)?,sign_as(&flow,&claims,Some(""))?,raw(json!({"alg":"HS256","kid":"new-key"})),raw(json!({"alg":"RS512","kid":"new-key"})),raw(json!({"alg":"RS256","kid":"new-key","padding":"x".repeat(flow.state.cfg.jose_header_max_len+1)})),duplicate,"not-a-jwt".into(),f.signed(&wrong_claims)?];
-        let unfamiliar = URL_SAFE_NO_PAD.encode(json!({"alg":"RS256","kid":"new-key"}).to_string());
-        for (payload, signature) in [("e30", ""), ("", "c2ln"), ("e30", "YR"), ("e31", "c2ln"), ("e30", "YQ=="), ("e30", "Y+"), ("e30", "a"), ("e30", "Y/")] {
-            tokens.push(format!("{unfamiliar}.{payload}.{signature}"));
-        }
-        let expected_exchanges = (tokens.len() + 4) * 2;
-        for token in tokens {
-            flow.token(token);
-            assert_eq!(flow.callback().await?.status(),StatusCode::BAD_GATEWAY);
-            assert_eq!(flow.refresh(f).await.expect_err("invalid token").status(),StatusCode::BAD_GATEWAY);
-            assert_eq!(flow.keys.hits(),0);
-            flow.assert_no_effects(f,&stored,0).await?;
-        }
-        for mutation in ["usage","algorithm","type","ambiguous"] {
-            let mut keys=combined(f,&flow)?;
-            match mutation {
-                "usage"=>keys["keys"][0]["use"]=json!("enc"),
-                "algorithm"=>keys["keys"][0]["alg"]=json!("PS256"),
-                "type"=>keys["keys"][0]=json!({"kty":"EC","kid":f.signing_key.kid(),"crv":"P-256","x":"AA","y":"AA"}),
-                _=>(),
+            original(f).await?;
+            let flow = Flow::new(f).await?;
+            let claims = f.claims()?;
+            let stored = f.stored().await?;
+            let raw = |header: Value| {
+                format!("{}.e30.invalid", URL_SAFE_NO_PAD.encode(header.to_string()))
+            };
+            let duplicate = format!(
+                "{}.e30.invalid",
+                URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256","alg":"RS256","kid":"new-key"}"#)
+            );
+            let mut wrong_claims = claims.clone();
+            wrong_claims["aud"] = json!("different-client");
+            let mut tokens = vec![
+                sign_as(&flow, &claims, Some(f.signing_key.kid()))?,
+                sign_as(&flow, &claims, None)?,
+                sign_as(&flow, &claims, Some(""))?,
+                raw(json!({"alg":"HS256","kid":"new-key"})),
+                raw(json!({"alg":"RS512","kid":"new-key"})),
+                raw(json!({
+                    "alg": "RS256",
+                    "kid": "new-key",
+                    "padding": "x".repeat(flow.state.cfg.jose_header_max_len + 1),
+                })),
+                duplicate,
+                "not-a-jwt".into(),
+                f.signed(&wrong_claims)?,
+            ];
+            let unfamiliar =
+                URL_SAFE_NO_PAD.encode(json!({"alg":"RS256","kid":"new-key"}).to_string());
+            for (payload, signature) in [
+                ("e30", ""),
+                ("", "c2ln"),
+                ("e30", "YR"),
+                ("e31", "c2ln"),
+                ("e30", "YQ=="),
+                ("e30", "Y+"),
+                ("e30", "a"),
+                ("e30", "Y/"),
+            ] {
+                tokens.push(format!("{unfamiliar}.{payload}.{signature}"));
             }
-            flow.cache_keys(keys)?;
-            flow.token(if mutation=="ambiguous" {sign_as(&flow,&claims,None)?}else{f.signed(&claims)?});
-            assert_eq!(flow.callback().await?.status(),StatusCode::BAD_GATEWAY);
-            assert_eq!(flow.refresh(f).await.expect_err("unusable known key").status(),StatusCode::BAD_GATEWAY);
-            assert_eq!(flow.keys.hits(),0);flow.assert_no_effects(f,&stored,0).await?;
-        }
-        assert_eq!(flow.tokens.hits(), expected_exchanges);
-        Ok(())
-    })
+            let expected_exchanges = (tokens.len() + 4) * 2;
+            for token in tokens {
+                flow.token(token);
+                assert_eq!(flow.callback().await?.status(), StatusCode::BAD_GATEWAY);
+                assert_eq!(
+                    flow.refresh(f).await.expect_err("invalid token").status(),
+                    StatusCode::BAD_GATEWAY
+                );
+                assert_eq!(flow.keys.hits(), 0);
+                flow.assert_no_effects(f, &stored, 0).await?;
+            }
+            for mutation in ["usage", "algorithm", "type", "ambiguous"] {
+                let mut keys = combined(f, &flow)?;
+                match mutation {
+                    "usage" => keys["keys"][0]["use"] = json!("enc"),
+                    "algorithm" => keys["keys"][0]["alg"] = json!("PS256"),
+                    "type" => {
+                        keys["keys"][0] = json!({
+                            "kty": "EC", "kid": f.signing_key.kid(),
+                            "crv": "P-256", "x": "AA", "y": "AA",
+                        });
+                    }
+                    _ => (),
+                }
+                flow.cache_keys(keys)?;
+                flow.token(if mutation == "ambiguous" {
+                    sign_as(&flow, &claims, None)?
+                } else {
+                    f.signed(&claims)?
+                });
+                assert_eq!(flow.callback().await?.status(), StatusCode::BAD_GATEWAY);
+                assert_eq!(
+                    flow.refresh(f)
+                        .await
+                        .expect_err("unusable known key")
+                        .status(),
+                    StatusCode::BAD_GATEWAY
+                );
+                assert_eq!(flow.keys.hits(), 0);
+                flow.assert_no_effects(f, &stored, 0).await?;
+            }
+            assert_eq!(flow.tokens.hits(), expected_exchanges);
+            Ok(())
+        })
     })
 }
 
@@ -226,27 +277,116 @@ fn upstream_jwks_refresh_pg_final_set_requires_federation_endorsement() -> Resul
             let callback = flow.callback().await?;
             assert_eq!(callback.status(), StatusCode::BAD_GATEWAY);
             let body = axum::body::to_bytes(callback.into_body(), 16384).await?;
-            assert!(std::str::from_utf8(&body)?
-                .contains("upstream JWKS does not match federation metadata"));
+            let body = std::str::from_utf8(&body)?;
+            assert!(
+                body.contains("upstream JWKS does not match federation metadata"),
+                "{body}"
+            );
             assert_eq!(flow.keys.hits(), 1);
             flow.assert_no_effects(f, &stored, 0).await?;
-            flow.cache_keys(serde_json::to_value(f.signing_key.jwks())?)?;
+            let retained = flow
+                .state
+                .upstream
+                .jwks_cache
+                .try_get(&flow.discovery.jwks_uri)?
+                .ok_or("previous keys displaced")?;
+            assert!(retained
+                .keys()
+                .iter()
+                .any(|key| key.kid.as_deref() == Some(f.signing_key.kid())));
+            assert!(!retained
+                .keys()
+                .iter()
+                .any(|key| key.kid.as_deref() == Some(flow.new_key.kid())));
             flow.clock.advance(30_000);
             let refresh = flow.refresh(f).await.expect_err("unendorsed refreshed key");
             assert_eq!(refresh.status(), StatusCode::BAD_GATEWAY);
             let body = axum::body::to_bytes(refresh.into_body(), 16384).await?;
-            assert!(std::str::from_utf8(&body)?
-                .contains("upstream JWKS does not match federation metadata"));
+            let body = std::str::from_utf8(&body)?;
+            assert!(
+                body.contains("upstream JWKS does not match federation metadata"),
+                "{body}"
+            );
             assert_eq!(flow.keys.hits(), 2);
             flow.assert_no_effects(f, &stored, 0).await?;
-            federation::bind(&flow, f, serde_json::to_value(flow.new_key.jwks())?).await?;
+            // Rejected replacements must not break a valid token using the endorsed old key.
+            flow.token(f.signed(&f.claims()?)?);
             assert_eq!(
                 flow.refresh(f).await.map_err(error)?.status(),
                 StatusCode::OK
             );
             assert_eq!(flow.keys.hits(), 2);
-            assert_eq!(flow.tokens.hits(), 3);
+            flow.token(flow.signed(&f.claims()?)?);
+            federation::bind(&flow, f, serde_json::to_value(flow.new_key.jwks())?).await?;
+            assert_eq!(
+                flow.refresh(f)
+                    .await
+                    .expect_err("candidate not cached")
+                    .status(),
+                StatusCode::BAD_GATEWAY
+            );
+            assert_eq!(flow.keys.hits(), 2);
+            flow.clock.advance(30_000);
+            assert_eq!(
+                flow.refresh(f).await.map_err(error)?.status(),
+                StatusCode::OK
+            );
+            assert_eq!(flow.keys.hits(), 3);
+            assert_eq!(flow.tokens.hits(), 5);
             Ok(())
         })
     })
+}
+
+#[test]
+#[ignore = "requires isolated PostgreSQL with repository migrations"]
+fn upstream_jwks_refresh_pg_connection_change_during_key_fetch_rejects_publication() -> ResultTest {
+    for rotate in [false, true] {
+        run(false, |rt, f| {
+            rt.block_on(async {
+                original(f).await?;
+                let flow = Flow::new(f).await?;
+                let stored = f.stored().await?;
+                flow.keys
+                    .state
+                    .hold
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                flow.tokens.respond(
+                    StatusCode::OK,
+                    json!({
+                        "id_token": flow.signed(&f.claims()?)?,
+                        "access_token": "private-access-token",
+                        "token_type": "Bearer",
+                        "expires_in": 3600,
+                        "refresh_token": rotate.then_some("private-refresh-rotated"),
+                    })
+                    .to_string(),
+                );
+                let change_connection = async {
+                    flow.keys.wait_hits(1).await?;
+                    let changed = sqlx::query(
+                        "UPDATE aegaeon.connections SET client_id='changed-client' \
+                         WHERE environment_id=$1 AND connection_identifier='refresh-test'",
+                    )
+                    .bind(f.env.environment_id)
+                    .execute(&f.pool)
+                    .await;
+                    flow.keys.state.release.add_permits(1);
+                    assert_eq!(changed?.rows_affected(), 1);
+                    Ok::<(), Box<dyn Error>>(())
+                };
+                let (response, changed) = tokio::join!(flow.refresh(f), change_connection);
+                changed?;
+                let response = response.expect_err("connection changed during key retrieval");
+                let status = response.status();
+                let body = axum::body::to_bytes(response.into_body(), 16384).await?;
+                let body = std::str::from_utf8(&body)?;
+                assert_eq!(status, StatusCode::CONFLICT, "{body}");
+                assert!(!body.contains("private-"));
+                assert_eq!((flow.keys.hits(), flow.tokens.hits()), (1, 1));
+                flow.assert_no_effects(f, &stored, 0).await
+            })
+        })?;
+    }
+    Ok(())
 }

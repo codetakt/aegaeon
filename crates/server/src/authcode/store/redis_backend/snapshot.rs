@@ -1,11 +1,11 @@
 use super::super::redis_support::decode_redis_json;
 #[cfg(test)]
 use super::super::redis_support::encode_redis_json;
-use super::super::redis_support::RedisTokenStoreKeyspace;
 #[cfg(test)]
 use super::super::redis_support::{
     RedisRefreshChildrenRecord, RedisRefreshSuccessorRecord, RedisRevokedTokenRecord,
 };
+use super::super::redis_support::{RedisTokenMutation, RedisTokenStoreKeyspace};
 use super::RedisTokenStoreBackend;
 #[cfg(test)]
 use crate::authcode::store::TokenStoreState;
@@ -74,6 +74,29 @@ impl RedisTokenStoreBackend {
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?
             .map(|payload| decode_redis_json::<T>(&payload))
             .transpose()
+    }
+
+    pub(super) fn get_observed_json<T: serde::de::DeserializeOwned>(
+        conn: &mut redis::Connection,
+        key: String,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<T>, TokenStoreStorageError> {
+        Self::get_observed_raw(conn, key, mutation)?
+            .map(|payload| decode_redis_json(&payload))
+            .transpose()
+    }
+
+    pub(super) fn get_observed_raw(
+        conn: &mut redis::Connection,
+        key: String,
+        mutation: &mut RedisTokenMutation,
+    ) -> Result<Option<String>, TokenStoreStorageError> {
+        let raw = redis::cmd("GET")
+            .arg(&key)
+            .query::<Option<String>>(conn)
+            .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))?;
+        mutation.observe_record(key, raw.clone())?;
+        Ok(raw)
     }
 
     pub(super) fn increment_version(
@@ -151,6 +174,16 @@ impl RedisTokenStoreBackend {
             &mut state,
         )?;
 
+        self.load_json_map::<crate::authcode::types::RefreshGrantRecord>(
+            conn,
+            &self.keyspace.pattern("refresh-grant:v1"),
+            |state, record| {
+                state
+                    .refresh_grants
+                    .insert(record.reference.id.clone(), record);
+            },
+            &mut state,
+        )?;
         Ok(state)
     }
 
@@ -161,7 +194,18 @@ impl RedisTokenStoreBackend {
         state: &TokenStoreState,
     ) -> Result<(), TokenStoreStorageError> {
         let mut keys = Self::scan_keys(conn, &self.keyspace.all_pattern())?;
-        keys.retain(|key| key != &self.keyspace.lock_key());
+        // Snapshot replacement cannot create, resurrect, delete or shorten the
+        // independent grant decision, even after this caller loses its lease.
+        let grant_prefix = self
+            .keyspace
+            .pattern("refresh-grant:v1")
+            .trim_end_matches('*')
+            .to_string();
+        keys.retain(|key| {
+            key != &self.keyspace.lock_key()
+                && !key.starts_with(&grant_prefix)
+                && key != &self.keyspace.expiry_refresh_grant_key()
+        });
 
         let mut pipe = redis::pipe();
         pipe.atomic();
@@ -177,18 +221,21 @@ impl RedisTokenStoreBackend {
                 .arg(self.keyspace.access_key(&token.token))
                 .arg(encode_redis_json(token)?)
                 .ignore();
+            self.index_access_cmd(&mut pipe, token);
         }
         for token in state.refresh_tokens.values() {
             pipe.cmd("SET")
                 .arg(self.keyspace.refresh_key(&token.token))
                 .arg(encode_redis_json(token)?)
                 .ignore();
+            self.index_refresh_cmd(&mut pipe, token);
         }
         for meta in state.bearer_meta.values() {
             pipe.cmd("SET")
                 .arg(self.keyspace.bearer_key(&meta.token_id))
                 .arg(encode_redis_json(meta)?)
                 .ignore();
+            self.index_bearer_cmd(&mut pipe, meta);
         }
         for (token, expires_at) in &state.revoked_tokens {
             let record = RedisRevokedTokenRecord {
@@ -220,6 +267,7 @@ impl RedisTokenStoreBackend {
                 .arg(encode_redis_json(&record)?)
                 .ignore();
         }
+        self.snapshot_pause_for_tests();
         pipe.query::<()>(conn)
             .map_err(|err| TokenStoreStorageError::BackendUnavailable(err.to_string()))
     }

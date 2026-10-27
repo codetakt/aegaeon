@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+output="$(mktemp)"
+trap 'rm -f -- "$output"' EXIT
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -15,7 +18,7 @@ echo ""
 
 # Run all RFC tests and capture output
 echo "Running RFC compliance tests..."
-if cargo test --package aegaeon-server rfc_tests --no-fail-fast 2>&1 | tee /tmp/rfc_test_output.txt; then
+if bash scripts/validation/run_required_cargo_test.sh --package aegaeon-server rfc_tests --no-fail-fast 2>&1 | tee "$output"; then
 	TEST_EXIT=0
 else
 	TEST_EXIT=$?
@@ -25,7 +28,7 @@ echo ""
 
 # Also run JOSE RFC 7520 test vectors
 echo "Running RFC 7520 JOSE test vectors..."
-if cargo test --package aegaeon-jose --test rfc7520_vectors 2>&1 | tee -a /tmp/rfc_test_output.txt; then
+if bash scripts/validation/run_required_cargo_test.sh --package aegaeon-jose --test rfc7520_vectors 2>&1 | tee -a "$output"; then
 	JOSE_EXIT=0
 else
 	JOSE_EXIT=$?
@@ -34,7 +37,7 @@ fi
 echo ""
 
 # Parse results
-if grep -q "test result: ok" /tmp/rfc_test_output.txt; then
+if grep -q "test result: ok" "$output"; then
 	# Extract counts from all test runs
 	TOTAL_PASSED=0
 	TOTAL_FAILED=0
@@ -46,7 +49,7 @@ if grep -q "test result: ok" /tmp/rfc_test_output.txt; then
 		if [[ $line =~ ([0-9]+)\ failed ]]; then
 			TOTAL_FAILED=$((TOTAL_FAILED + ${BASH_REMATCH[1]}))
 		fi
-	done </tmp/rfc_test_output.txt
+	done <"$output"
 
 	TOTAL_TESTS=$((TOTAL_PASSED + TOTAL_FAILED))
 

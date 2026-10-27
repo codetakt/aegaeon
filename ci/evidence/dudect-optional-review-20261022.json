@@ -1,0 +1,414 @@
+{
+  "schema": "dudect-optional-review-followup/1",
+  "date": "2026-10-22",
+  "adopted_contract_sha256": "2999e871d26e428eab39ec95837dfc32a9f6cd1313f5f3c27b2391e1eb87a52f",
+  "adoption_receipt_sha256": "18d4e9059f8df890c951b445a23ee1d07e6f9a3fe21fcad3e8ab0f3cf5e6261f",
+  "adopted_contract_and_measured_sources_unchanged": true,
+  "implementation": {
+    "scripts/validation/dudect_replay_report.py": "922792c68f1de591b62ca1212d877d3fdcb71b2b010a370eafe3b0529fb35ad3",
+    "scripts/validation/run_dudect_operations_tests.py": "774c73185ce64f85f80c0cfc28dd129ef8ba984abae6df313742655efae45afe",
+    "tests/dudect_adoption/test_optional_reporting.py": "683d3b4dc9c8f893d74ae4142a1f94fac6d1519ada26d586d235343087874073",
+    "tests/dudect_adoption/test_replay_report_connection.py": "782eee47942601adc75c7c81ba231ffbdba75392b8db5b94fa78b54070463f3a",
+    "tests/dudect_adoption/test_schedule_connection.py": "818588807a7adeaeed8e14d7f8f498d1d0d3d2639ae439a8ff3544c19ab6c73c"
+  },
+  "functional_tests": {
+    "new_regressions": 24,
+    "including_existing_adoption_checks": 31,
+    "normal_and_optimized_pass": true,
+    "operation_suite": 55,
+    "relocated_pinned_age_suite": 55,
+    "real_replay_cli_controls": 3,
+    "wrong_planned_digest_cli_rejected": true
+  },
+  "retained_I21_replay": {
+    "processes": 44,
+    "cases": 84,
+    "looks": 672,
+    "assessment_mismatches": 0,
+    "qualified_cases": 84,
+    "original_detected_statistic_looks": 22350,
+    "original_only_crop_detections": 0,
+    "seconds": 252.11378333799075,
+    "reports": [
+      {
+        "unit": "cycle1-gcc-legacy-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "bb3e8230e7a174aa7c4b7b0cad9fbae1a1e434507b7f8b411ca06e3c7e4c26bd",
+        "original_detections": 1244,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-compare",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "cd10131d82a2568f16e587df386216db6980c34b7c78080c15f31a9427297a6e",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-hmac",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "6a363792baf7d24214e365cb7d7c4ef00fda3ab54e393dfb8c0c31779e74fba3",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-ed25519",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "8b7328ec7e573541758ca0a0a1e104168d81d9c97b103d7d6ab119ad9db6e650",
+        "original_detections": 790,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-rsa",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "f0f1f49a0fa57db2a5eed1eda02b103c67513204d14c7d562a120a0263b9e16e",
+        "original_detections": 724,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-jwe",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "b74c316653be62b906cffa5ece9e42184801d55abaa71b03a98e0b477e5c6b1d",
+        "original_detections": 720,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-compare_product_32",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "70fe1d793c8933b4969b545b80d80f24d30d99e76a9a3d8021ee3d9e1e80aeba",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-hmac_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "31aea0a716a8ca6e5cf05757f5551d308f9768297977f3d31f86989a724dce4f",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-legacy-jwe_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "0f3aee89777565329369d0981995e1cd739edc6fb0781ab30b9af2f07074a9b4",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-nix-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "44ed39577ad95d78a526685594e2425fa4ae823e54ff944b29fbc6f9b26e7123",
+        "original_detections": 1259,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-gcc-nix-dudect_harness",
+        "cases": 7,
+        "qualified": true,
+        "report_sha256": "89dbf843b0c3afbec89068ead5d859536587f481d3b633185eecc1ac1c970ced",
+        "original_detections": 496,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "3ded460b1cab7c5b7c687fb0aff8dadf671092f48a9e14d93622082a3fd61105",
+        "original_detections": 1445,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-compare",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "004ac5a1c62b068e89b04205f763e2d10d5e683e72bf70503361b6e8481a1a5d",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-hmac",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "0d38f2908231a8c49911b3706d6a951209ab5789ab95dad538ffc1b728e32d21",
+        "original_detections": 711,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-ed25519",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "ad398e58dfd4f701674d6385b9b3413ec11c4893f894abf535e06a3f09c9e7c7",
+        "original_detections": 792,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-rsa",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "a9f886badc2008b51286a55f7303e02ca1f7555c6e800c0d63a060d6a68b7c70",
+        "original_detections": 722,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-jwe",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "d0569b8509418b4f3f3fd9bda4529a35766a1ba9e60864dcb2339702a8b659a9",
+        "original_detections": 721,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-compare_product_32",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "4e8449b8890e3bc81d8689d59e124b4140d09df06c84018649b8fecd12055def",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-hmac_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "0e208a92e00594c06c60235ea916b627d243ed0046a71f5478f41212b65a966c",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-legacy-jwe_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "ccb77e6a66484197e48220dca4f60d68531b7878434bfdb6091ade9d3423e6ec",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-nix-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "cc5aae546e784d07bc230f4eb8df7a86c830d8a15b441bba4b3298df39baa4e0",
+        "original_detections": 938,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle1-clang-nix-dudect_harness",
+        "cases": 7,
+        "qualified": true,
+        "report_sha256": "239392316fcf8112dc84e5b68b091641f9d897212aadcb7c919d4949344f7aa5",
+        "original_detections": 761,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "6977825bf76aabd2996862f4b685473098137090a8e2ff694742f89a5c9bd162",
+        "original_detections": 1384,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-compare",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "f52fc59d821ed6c0ff5af4101b1a4e27951d2761d886fe46778360c65f830c9f",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-hmac",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "68dddc46d3604bf7a57710c7118135cab33d12a7c47742a781516407c86ffcec",
+        "original_detections": 736,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-ed25519",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "cdab24730fb6f02b931240e15b7a10de36271502e43ee17d189fe04b1a34c7b5",
+        "original_detections": 792,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-rsa",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "db6cb7f3b15bb678719cd45a1b06c1c3a7d455c10c459e0844417aa82902fdf1",
+        "original_detections": 721,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-jwe",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "8abf4e0f1a72a78e3e94dcf5f0de64ccc24b75e10c5a2fbfafb14fb3ae44f994",
+        "original_detections": 719,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-compare_product_32",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "040563103c6940264548b1e0774cdc3f33d8469483d10a867796981190370ed7",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-hmac_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "7d3eed7ae6ba09c1798bbb061eef8dbf2598c443780334cf5b2b2185906dac8e",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-legacy-jwe_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "c00378c7400359760f356670dd89eb9d6193d358ebde6ff25e24d7d140aa9226",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-nix-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "7abeca16b8b7bc05ef2b3ab590d13db772bd82c8ccc65f0b715d860098c19b22",
+        "original_detections": 1067,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-clang-nix-dudect_harness",
+        "cases": 7,
+        "qualified": true,
+        "report_sha256": "4f0de075a2836e5863b3ba52d04472b01ebd2f2a0db13142292927820558dc1d",
+        "original_detections": 396,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "de8ba2c145d298e85adc9b9ec4afd2d6e6227b86e30c1255a430428474bb0614",
+        "original_detections": 1234,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-compare",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "8be83947f598599086ddbd79a3de493c3fb739481044e8643f74ec8a3640b44c",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-hmac",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "84cb8d32e6c84a5a6b9a01f12b1f2bd9859f0b562d4e74ac1c38ee62fcd2ba70",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-ed25519",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "e2ba84e624115e05fdc04987c3377ba5d63c62a4b50c8181f62fda9027de5040",
+        "original_detections": 793,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-rsa",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "f9cd8e7c6693d3656bb7424a1fbeadbde178eec4c07637698a189fdfbff2d786",
+        "original_detections": 718,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-jwe",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "6e14b98ed7be2e801fd7c8c56358f018290716c660affc4955359cb1c78544a5",
+        "original_detections": 719,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-compare_product_32",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "806f780de6c2eac502256b9167d5cbe87943b0c9421849e7f857414d75ec394d",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-hmac_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "86bf4b65dd6ba6b913bf64aa22ac6fe593b6e16d9ca47c161eab7ff3fda8826f",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-legacy-jwe_key_reject",
+        "cases": 1,
+        "qualified": true,
+        "report_sha256": "1829d49b8d8565448a038c338ac477502f7714b3e3eea8f9ff8aac02f7a43146",
+        "original_detections": 0,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-nix-dudect_controls",
+        "cases": 3,
+        "qualified": true,
+        "report_sha256": "27181adba8aa8f7b9278f1ecae5d6fad96c08ca1fa9f2ffe1391418528bfbd25",
+        "original_detections": 1231,
+        "original_only_crops": 0
+      },
+      {
+        "unit": "cycle2-gcc-nix-dudect_harness",
+        "cases": 7,
+        "qualified": true,
+        "report_sha256": "ba0ce1704c8117663a3cc8cc436c7dedf8fb9af01f613a585ac6053f59b3b371",
+        "original_detections": 517,
+        "original_only_crops": 0
+      }
+    ],
+    "limitation": "existing measured data and original verifier; not independent physical observations or a new independent numerical algorithm"
+  },
+  "reporting": [
+    "replay_receipt_digest_in_additional_expected_identity",
+    "original_assessments_retained",
+    "raw_floor_in_budget_nondetection_display",
+    "original_only_crop_axis_by_role",
+    "legacy_execution_flag_basis_explicit"
+  ],
+  "runtime_support": [
+    "schedule_context_before_live_context",
+    "ACK_refusal_for_insufficient_next_case_budget",
+    "restoration_on_success_and_exception"
+  ],
+  "compatibility": {
+    "frozen_schema_names": "retained with explicit scope interpretation",
+    "historical_test_age_path": "unchanged; portable test entry injects hash-checked dependency",
+    "legacy_True_flags": "unchanged after original checks; not claimed as independent lifecycle proof"
+  },
+  "ci_admission": false,
+  "producer_authentication_performed": false,
+  "new_physical_trials": 0,
+  "remaining": [
+    "authenticated producer/verifier and protected CI request",
+    "external stop/recovery lifecycle connection",
+    "single-use request and Required checks connection",
+    "separate environment and operating-rate claims"
+  ]
+}

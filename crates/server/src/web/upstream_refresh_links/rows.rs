@@ -78,6 +78,9 @@ pub(super) fn read_upstream_client_from_row(
     issuer_base: &str,
 ) -> Result<UpstreamClient, Response> {
     Ok(UpstreamClient {
+        configuration_version_id: row
+            .try_get("configuration_version_id")
+            .map_err(|_| corrupted_upstream_client_row_error(issuer_base))?,
         connection_id: row
             .try_get("connection_id")
             .map_err(|_| corrupted_upstream_client_row_error(issuer_base))?,
@@ -125,4 +128,12 @@ pub(super) fn open_optional_upstream_client_secret(
             "upstream connection client_secret is unavailable",
         )
     })
+}
+
+pub(super) fn read_encrypted_client_secret(
+    row: &PgRow,
+    issuer_base: &str,
+) -> Result<Option<Vec<u8>>, Response> {
+    row.try_get("client_secret_encrypted")
+        .map_err(|_| corrupted_upstream_client_row_error(issuer_base))
 }

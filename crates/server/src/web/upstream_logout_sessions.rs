@@ -74,9 +74,6 @@ fn upstream_logout_endpoint_url(
     let endpoint = session.end_session_endpoint.as_ref()?;
     validate_upstream_metadata_endpoint(endpoint, "end_session_endpoint", allowed_domains).ok()?;
     let url = Url::parse(endpoint).ok()?;
-    if url.query().is_some() || url.fragment().is_some() {
-        return None;
-    }
     Some(url)
 }
 
@@ -85,10 +82,20 @@ pub(super) fn build_upstream_logout_redirect_target(
     allowed_domains: &[String],
 ) -> Option<String> {
     let mut url = upstream_logout_endpoint_url(session, allowed_domains)?;
-    if let Some(session_hint_value) = session.session_hint_value.as_ref() {
-        url.query_pairs_mut()
-            .append_pair("logout_hint", session_hint_value);
-    }
+    let parameters: Vec<_> = session
+        .session_hint_value
+        .as_deref()
+        .map(|hint| ("logout_hint", hint))
+        .into_iter()
+        .collect();
+    // A non-relay redirect cannot validate relay state or a callback URI. In
+    // particular, do not re-emit a rejected relay query through a fallback.
+    super::upstream_endpoint_query::append_endpoint_parameters(
+        &mut url,
+        &parameters,
+        &["state", "post_logout_redirect_uri"],
+    )
+    .ok()?;
     Some(url.into())
 }
 
@@ -124,6 +131,18 @@ pub(super) async fn build_upstream_logout_redirect_target_with_relay(
     };
     let callback_uri = build_upstream_logout_callback_uri(state.base_url.as_str());
     let relay_token = random_token(24);
+    let mut parameters = vec![
+        ("post_logout_redirect_uri", callback_uri.as_str()),
+        ("state", relay_token.as_str()),
+    ];
+    if let Some(hint) = session.session_hint_value.as_deref() {
+        parameters.push(("logout_hint", hint));
+    }
+    if super::upstream_endpoint_query::append_endpoint_parameters(&mut url, &parameters, &[])
+        .is_err()
+    {
+        return Ok(None);
+    }
     let incident_id = create_upstream_logout_incident(
         &state.db_pool,
         UpstreamLogoutIncidentRequest {
@@ -138,14 +157,6 @@ pub(super) async fn build_upstream_logout_redirect_target_with_relay(
         },
     )
     .await;
-    {
-        let mut query = url.query_pairs_mut();
-        if let Some(session_hint_value) = session.session_hint_value.as_ref() {
-            query.append_pair("logout_hint", session_hint_value);
-        }
-        query.append_pair("post_logout_redirect_uri", &callback_uri);
-        query.append_pair("state", &relay_token);
-    }
     state
         .upstream
         .logout_relay_store
@@ -163,3 +174,6 @@ pub(super) async fn build_upstream_logout_redirect_target_with_relay(
         })?;
     Ok(Some(url.into()))
 }
+
+#[cfg(test)]
+mod query_tests;

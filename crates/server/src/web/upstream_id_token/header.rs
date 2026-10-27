@@ -49,7 +49,7 @@ pub(in crate::web) fn admit_upstream_id_token_header(
     if !discovery
         .id_token_signing_alg_values_supported
         .iter()
-        .any(|value| value.eq_ignore_ascii_case(alg_name))
+        .any(|value| value == alg_name)
     {
         return Err(UpstreamIdTokenSignatureError::AlgNotSupported);
     }
@@ -77,6 +77,40 @@ fn admit_compact_body(token: &str) -> Result<(), UpstreamIdTokenSignatureError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upstream_metadata_algorithm_identifiers_require_exact_matching() {
+        use jsonwebtoken::Algorithm::{ES256, ES384, PS256, PS384, PS512, RS256, RS384, RS512};
+        let mut discovery = crate::web::upstream_tests::base_discovery("https://issuer.example")
+            .expect("discovery");
+        for algorithm in [RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384] {
+            let name = jwt_alg_name(algorithm).expect("supported algorithm");
+            let header = URL_SAFE_NO_PAD
+                .encode(serde_json::json!({"alg":name,"kid":"unfamiliar"}).to_string());
+            let token = format!("{header}.e30.c2ln");
+            for variant in [
+                name.to_ascii_lowercase(),
+                format!(" {name}"),
+                format!("{name} "),
+                format!("{name}\t"),
+            ] {
+                discovery.id_token_signing_alg_values_supported = vec![variant.clone()];
+                assert!(
+                    matches!(
+                        admit_upstream_id_token_header(&token, &discovery, 4096),
+                        Err(UpstreamIdTokenSignatureError::AlgNotSupported)
+                    ),
+                    "nonexact algorithm accepted: {variant:?}"
+                );
+            }
+            discovery.id_token_signing_alg_values_supported = vec![name.into()];
+            assert!(admit_upstream_id_token_header(&token, &discovery, 4096).is_ok());
+            discovery
+                .id_token_signing_alg_values_supported
+                .insert(0, name.to_ascii_lowercase());
+            assert!(admit_upstream_id_token_header(&token, &discovery, 4096).is_ok());
+        }
+    }
 
     #[test]
     fn upstream_jwks_refresh_compact_segment_chunks_match_strict_base64() {

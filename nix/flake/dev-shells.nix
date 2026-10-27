@@ -1,5 +1,6 @@
 {
   pkgs,
+  nodejsRuntime,
   lib,
   cargoArtifacts,
   devTools,
@@ -28,8 +29,22 @@ let
   '';
 in
 {
+  typescript = pkgs.mkShellNoCC {
+    packages = [ nodejsRuntime ];
+  };
+
   docs = pkgs.mkShellNoCC {
     packages = [
+      # Expose the pinned compiler without its setup hook changing the compiler
+      # environment used by unrelated CI helper fixtures.
+      (pkgs.runCommand "ci-helper-native-tools" { } ''
+        mkdir -p "$out/bin"
+        ln -s ${pkgs.stdenv.cc}/bin/cc "$out/bin/cc"
+        ln -s ${pkgs.stdenv.cc}/bin/gcc "$out/bin/gcc"
+        ln -s ${llvmPackages.clang}/bin/clang "$out/bin/clang"
+        ln -s ${pkgs.stdenv.cc}/bin/c++ "$out/bin/c++"
+        ln -s ${pkgs.stdenv.cc.bintools}/bin/ar "$out/bin/ar"
+      '')
       (pkgs.python3.withPackages (pythonPackages: [
         pythonPackages.pyyaml
         pythonPackages.jsonschema
@@ -38,6 +53,7 @@ in
       pkgs.markdownlint-cli2
       pkgs.commitlint
       pkgs.gitMinimal
+      pkgs.gnupg
       pkgs.bash
       pkgs.jq
       pkgs.ripgrep
@@ -57,6 +73,41 @@ in
       pkgs.jq
       pkgs.ripgrep
     ];
+  };
+
+  ci-tools = pkgs.mkShellNoCC {
+    # Core's direct commands inspect source/metadata. Compilation and proofs
+    # run in their own derivations; do not import cargoArtifacts or shell hooks
+    # that also pull extraction, Kani and the interactive development tools.
+    packages = lib.unique (
+      pre-commit-check.enabledPackages
+      ++ (with pkgs; [
+        pre-commit
+        nodejsRuntime
+        gitMinimal
+        bash
+        coreutils
+        gnused
+        gnugrep
+        findutils
+        diffutils
+        jq
+        nixfmt-tree
+        statix
+        deadnix
+        actionlint
+        shellcheck
+        markdownlint-cli2
+        commitlint
+      ])
+    );
+    shellHook = guardedPreCommitShellHook {
+      repoNames = [
+        "aegaeon"
+        "aegaeon-server-ci"
+      ];
+      marker = "Cargo.toml";
+    } pre-commit-check.shellHook;
   };
 
   ci = pkgs.mkShell {
@@ -161,6 +212,9 @@ in
     packages = lib.unique (
       verificationTools
       ++ [
+        pkgs.openssl
+        pkgs.mbedtls
+        pkgs.pkg-config
         rustToolchain
         haclStar
         karamel

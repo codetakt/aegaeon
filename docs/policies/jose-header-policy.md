@@ -173,8 +173,12 @@ available for backward compatibility but are deprecated. They internally use
 Protocol consumers admit the complete protected JSON object before projecting
 fields, selecting a key, retrieving an unknown key, checking a signature, or
 using claims. Decoded top-level names must be unique, including escaped aliases
-of names that the consumer otherwise ignores. Malformed JSON and trailing input
-are rejected. `alg`, `typ`, `kid`, and `cty` must be strings whenever present;
+of names that the consumer otherwise ignores. Malformed JSON and trailing
+non-whitespace input are rejected. Leading and trailing JSON whitespace (space,
+tab, CR and LF) is accepted as specified by
+[RFC 8259 section 2](https://www.rfc-editor.org/rfc/rfc8259.html#section-2),
+and remains part of the original signed bytes. `alg`, `typ`, `kid`, and `cty`
+must be strings whenever present;
 JWE also consumes a string `enc`. JSON null is not absence. Required fields,
 algorithm allowlists, token purposes, key restrictions and claims remain the
 responsibility of each verifier.

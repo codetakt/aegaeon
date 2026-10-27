@@ -28,10 +28,30 @@ fn require_err<T, E>(
     }
 }
 
-fn success_access_token(response: TokenResponse) -> std::result::Result<String, io::Error> {
+fn success_tokens(response: TokenResponse) -> TestResult<(String, Option<String>)> {
     match response {
-        TokenResponse::Success { access_token, .. } => Ok(access_token),
-        TokenResponse::Error { .. } => Err(io::Error::other("expected success token response")),
+        TokenResponse::Success {
+            access_token,
+            id_token,
+            ..
+        } => {
+            let subject = id_token
+                .map(|token| -> TestResult<String> {
+                    let jwks = enabled_oidc_config()?.signing_key.jwks();
+                    let key = jwks.keys.first().ok_or("signing key")?;
+                    let claims = crate::oidc::required_rs256::verify_required_id_token_claims(
+                        &token,
+                        key.n.as_deref().ok_or("RSA modulus")?,
+                        key.e.as_deref().ok_or("RSA exponent")?,
+                    )?;
+                    Ok(claims.sub)
+                })
+                .transpose()?;
+            Ok((access_token, subject))
+        }
+        TokenResponse::Error { .. } => {
+            Err(io::Error::other("expected success token response").into())
+        }
     }
 }
 
@@ -142,7 +162,10 @@ fn enabled_oidc_config() -> TestResult<OidcConfig> {
     })
 }
 
-fn issue_tokens(scopes: &str, with_oidc: bool) -> TestResult<(UserinfoEndpoint, String)> {
+fn issue_tokens(
+    scopes: &str,
+    with_oidc: bool,
+) -> TestResult<(UserinfoEndpoint, String, Option<String>)> {
     let key_manager = Arc::new(InMemoryKeyManager::new());
     let issuer = if with_oidc {
         TokenIssuer::new_process_local_for_tests(key_manager.clone())
@@ -195,7 +218,8 @@ fn issue_tokens(scopes: &str, with_oidc: bool) -> TestResult<(UserinfoEndpoint, 
         request_object_claims: None,
     };
 
-    let access_token = success_access_token(issuer.exchange_code_for_tokens(token_req, None)?)?;
+    let (access_token, id_token_subject) =
+        success_tokens(issuer.exchange_code_for_tokens(token_req, None)?)?;
 
     let policy = SecurityPolicy::default().with_sender_binding_enforcement(false);
     let validator = TokenValidator::with_policy(issuer.token_store.clone(), key_manager, policy);
@@ -210,20 +234,21 @@ fn issue_tokens(scopes: &str, with_oidc: bool) -> TestResult<(UserinfoEndpoint, 
     validator.validate_bearer_token_with_meta(&header)?;
     let endpoint = UserinfoEndpoint::with_user_provider_for_tests(validator, provider);
 
-    Ok((endpoint, header))
+    Ok((endpoint, header, id_token_subject))
 }
 
 #[tokio::test]
 async fn test_fetch_userinfo_with_openid_scope() -> TestResult {
-    let (endpoint, header) = issue_tokens("openid profile", true)?;
+    let (endpoint, header, id_token_subject) = issue_tokens("openid profile", true)?;
     let result = endpoint.fetch_userinfo(&header, None, None).await?;
     assert_eq!(result.sub, "user123");
+    assert_eq!(Some(result.sub), id_token_subject);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_fetch_userinfo_requires_openid_scope() -> TestResult {
-    let (endpoint, header) = issue_tokens("profile email", false)?;
+    let (endpoint, header, _) = issue_tokens("profile email", false)?;
     let err = require_err(
         endpoint.fetch_userinfo(&header, None, None).await,
         "userinfo without openid scope must fail",
@@ -312,5 +337,29 @@ async fn test_fetch_userinfo_applies_claim_release_policy_to_custom_claims() -> 
     );
     assert!(!result.custom_claims.contains_key("organization"));
     assert!(!result.custom_claims.contains_key(authority_claim));
+    Ok(())
+}
+
+#[tokio::test]
+async fn oidc_subject_format_userinfo_provider_cannot_replace_identity() -> TestResult {
+    struct WrongSubject;
+    impl UserProvider for WrongSubject {
+        fn get_user_info(&self, _: &str, _: &[String]) -> Result<Userinfo> {
+            Ok(Userinfo {
+                sub: "another-valid-subject".into(),
+                ..Default::default()
+            })
+        }
+    }
+    let (mut endpoint, header, _) = issue_tokens("openid profile", true)?;
+    endpoint.source = UserinfoSource::UserProvider(Arc::new(WrongSubject));
+    assert!(matches!(
+        endpoint.fetch_userinfo(&header, None, None).await,
+        Err(Error::ServerError(_))
+    ));
+    assert!(matches!(
+        endpoint.handle(&header, None, None).await,
+        Err(Error::ServerError(_))
+    ));
     Ok(())
 }

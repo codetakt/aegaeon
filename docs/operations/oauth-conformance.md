@@ -1,6 +1,6 @@
 # OAuth sender binding and unsupported authorization details
 
-Last updated: 2026-09-11
+Last updated: 2026-10-12
 
 Status: current implementation baseline
 
@@ -88,9 +88,9 @@ resource authorization. A type name alone cannot enable these semantics.
 Activation and startup reject nonempty `authorizationDetailsTypesSupported`.
 The token endpoint rejects nonempty `authorization_details` with 400
 `invalid_authorization_details` before consuming a code, rotating a refresh
-token or publishing access tokens. Duplicates return `invalid_request`, even
-if both values are empty. A single empty form value is omitted per RFC 6749
-§3.2; unknown unrelated OAuth extensions remain ignored.
+token or publishing access tokens. Duplicate nonempty token form parameters
+return `invalid_request`. Empty values are omitted before duplicate checks per
+RFC 6749 §3.2; unknown unrelated OAuth extensions remain ignored.
 
 Stored RAR-bearing codes and refresh grants are rejected with `invalid_grant`
 before consumption or rotation. Exchange refuses such subjects with
@@ -119,7 +119,7 @@ Missing Origin does not assert that a stored transaction is expired or already u
 Each consent submission receives a server-generated `x-request-id`; structured warning events carry
 that identifier and a stable reason for Origin, session, snapshot, or transaction admission failures.
 Storage failures remain `503 temporarily_unavailable`. Authorization-code refusals log a stable
-reason including `state_reused` or `nonce_reused` with the authorization request identifier.
+reason with the authorization request identifier.
 Events do not include raw state, nonce, code, consent token, Request Object, or database payloads.
 The public OAuth error categories and redirect validation remain unchanged.
 
@@ -156,8 +156,10 @@ exchange, introspection and local resources recheck current authority.
 Changing or disabling a projection invalidates old grants; adding permissions never
 upgrades an old token or refresh family. Obtain new interactive authorization.
 For token exchange, `organization_id` selects exactly one existing membership and
-removes SUPER_ADMIN. Selection is required when the parent has organization claims.
-A subsequent exchange cannot switch organizations, widen scope or add audiences.
+removes SUPER_ADMIN. A parent with organization claims that has not yet selected
+an organization requires a canonical selector. An already-selected parent retains
+that organization when the selector is omitted; an explicit different organization
+is rejected. A subsequent exchange cannot widen scope or add audiences.
 This application contract is configured explicitly by the relying application:
 use `GET /application/authorization` at the configured issuer and the documented
 `organization_id` request parameter. OIDC discovery does not advertise this
@@ -165,6 +167,30 @@ application-specific contract. The two earlier experimental application
 metadata keys have been removed; consumers of that candidate must use explicit
 configuration. Any future discovery extension requires an `aeg_*` name and an
 explicit, default-off policy toggle; none is introduced by this change.
+
+The token endpoint ignores unknown request names, including `organizationId`;
+it is not an alias for `organization_id`. Repeated unknown fields remain ignored.
+This follows RFC 6749 §3.2 without discarding a recognized authorization
+restriction: nonempty canonical `organization_id` is supported only by token
+exchange and returns `400 invalid_request` on other grants. Parameter names are
+case-sensitive. Empty or valueless canonical fields are omitted before applicability
+and duplicate checks; one nonempty plus empty fields is one selector, while two
+nonempty canonical fields are rejected, even when equal or percent-encoded to
+the same name. Empty `scope` therefore preserves the grant-specific omission
+behavior, including the original refresh grant scope. Empty
+`authorization_details` is absent; any nonempty value remains unsupported and
+is rejected before a code is consumed or a refresh token is rotated.
+
+Consumers requiring organization selection must send the canonical name.
+Ignoring `organizationId` means the request behaves as if that field were absent;
+it does not mean the caller's intended restriction was applied. Canonical A plus
+an unknown camelCase B still selects A. A camelCase-only request cannot select
+an unselected organization-bearing parent, cannot switch a preselected parent,
+and can retain existing global-only roles on an otherwise valid exchange just
+as an omitted selector can. A request cannot invent application authority or
+membership. This compatibility correction preserves the known grant restriction,
+existing authority/currentness checks and grant consumption rules.
+
 The context endpoint uses the original UserInfo token and sender proof, returning
 issuer/subject/client ID with authoritative application claims. This does not let
 an OAuth client infer privileges by decoding an unverified access token.
@@ -177,6 +203,15 @@ claims are omitted, so later projection changes still invalidate online use.
 UserInfo and ordinary resource responses do not copy application projection claims.
 
 Organization memberships also require a configured, live membership authority.
+The [machine-readable reader contract](../../spec/application-membership-reader-contract.json)
+records the three required relations and columns, compatible join operations,
+exact issuer/subject matching, role/status values and NULL behavior. It specifies
+the existing read interface, not an external production schema or migration.
+The PostgreSQL token-route fixture consumes it to construct an owned schema;
+its bigint, UUID and timestamp types are finite test witnesses, not mandated
+external storage types. Reader relations resolve through the dedicated connection's
+trusted search path. Matching binding rows contribute their union; the reader
+does not detect ambiguous mappings or enforce external uniqueness constraints.
 Configure `AEGAEON_INORII_AUTHORITY_DATABASE_URL` with separate SELECT-only credentials
 for `authorization_subject_bindings`, `organization_users` and `organizations`.
 The adapter requires an exact HTTPS issuer/subject mapping to the authority's
@@ -229,7 +264,91 @@ Unit, PostgreSQL/Redis and HTTP evidence establish only their executed cases.
 They do not establish a proof of the adapter's production behavior or its
 composition with the authority database and token store.
 
-### Encrypted Request Object headers
+## OAuth Basic credential encoding
+
+RFC 6749 section 2.3.1 and Appendix B require each logical client ID and secret
+to be independently encoded with `application/x-www-form-urlencoded` before
+joining them with a colon and applying Basic base64 encoding. A space becomes
+`+`; a literal plus becomes `%2B`, a colon `%3A`, and a percent sign `%25`.
+UTF-8 bytes use percent encoding. For example, client ID `client+id` and secret
+`s: %` produce the pre-base64 value `client%2Bid:s%3A+%25`.
+
+Aegaeon's Basic authentication consumers split the decoded Basic payload at its
+first literal colon and decode each component exactly once. Malformed percent
+escapes and invalid UTF-8 fail authentication. Neither a decoding failure nor an
+authentication failure triggers a retry using raw credentials. Registrations
+continue to store logical credentials; do not rename clients or rewrite stored
+secrets to their encoded wire representation.
+
+Clients that previously sent raw reserved characters must switch to this RFC
+encoding. Ordinary generated credentials using ASCII letters, digits, hyphens
+and underscores continue to work unchanged. Aegaeon also encodes its configured
+logical credentials for Basic authentication on both upstream authorization-code
+and refresh-token requests. `client_secret_post` continues to use the request's
+normal form serialization. No storage migration or new configuration is needed.
+
+## PAR authentication and stored credentials
+
+Under RFC 9126 section 2.1, clients registered with `client_secret_basic`,
+`client_secret_post`, or `private_key_jwt` must authenticate at `/par` with their
+registered method. Disabling `requireClientAuthPar` or `requireClientAuthToken`
+does not waive that requirement. A client registered with `none` can push a
+request only when the PAR policy and downstream profile allow unauthenticated
+clients. Unknown clients and incorrect or multiple authentication methods fail
+before a request URI is stored.
+
+New PAR records contain the validated authorization request and the internal
+authentication outcome, without the plaintext `client_secret`. Later
+reservation and login continuation use this outcome without carrying a password
+forward; authorization still applies current client policy. This credential
+minimization does not redefine signed Request Object contents.
+
+Upgrade all PAR writers together. Older writers can still put plaintext secrets
+in Redis during a mixed-version rollout. Readers accept legacy records but
+discard their `client_secret`; reads and reservations do not scrub the existing
+Redis bytes. Existing records expire within their original configured
+`policy.parExpiresInSeconds` lifetime (default 90 seconds, maximum 600 seconds),
+measured from the last old-writer insertion. This change does not establish that
+an existing deployment has purged old secrets. Include retained Redis backups
+and snapshots in the deployment's credential-retention review. No key rotation,
+configuration change, or persistent schema migration is required by the format
+change itself.
+
+## RP state and nonce observations
+
+Distinct authorization transactions may carry the same admissible RP-supplied
+`state` or `nonce`, including requests from the same client. Aegaeon preserves
+both decoded values in their own authorization-code context, echoes `state` in
+the authorization response, and includes `nonce` in the ID Token. This removes an unnecessary AS-wide uniqueness restriction; RFC 6749
+sections 4.1.1, 4.1.2 and 10.12 and OpenID Connect Core sections 3.1.2.1 and
+3.1.3.7 leave the RP responsible for its state/nonce validation and
+unpredictability obligations. Existing required-presence, encoding, length and
+profile checks still apply.
+
+Redis and the process-local test backend retain distinct recently observed
+state/nonce markers. Successful repeated values refresh the existing marker's
+last-observation TTL and Redis sorted-index expiry. The TTL continues to derive
+from `policy.authorizationCodeTimeToLiveSeconds`. `try_state_count`,
+`try_nonce_count` and the historical `AuthCodeSnapshot.used_states`/`used_nonces`
+fields describe retained observations, not transaction totals, accepted code
+counts or prevented attacks. Membership never authorizes or rejects issuance.
+The public `AuthorizationCodeIssueError::StateUsed` and `NonceUsed` variants
+remain for source compatibility; normal issuance no longer emits them.
+
+Authorization codes remain distinct and single-use, bound to their original
+client, redirect URI and PKCE verifier. Repeating state/nonce does not permit
+reuse of a PAR handle or a signed Request Object's `jti`. The existing Redis
+code/PAR/JTI commit preflights version-counter and index errors before mutation.
+No extra replay store or configuration variable is introduced.
+
+Stored codes and the Redis keyspace remain readable without a flush, backfill
+or identifier change. Update every authorization-serving instance for consistent
+repeat acceptance: older instances still reject repeated values. Finite router
+and Redis regressions cover repeated values and transaction isolation; older
+proof-model assumptions of globally unique RP values are not evidence for this
+behavior and require separate reassessment.
+
+## Encrypted Request Object headers
 
 When Request Object encryption is configured, `/authorize` and `/par` accept a
 single RSA-OAEP/A256GCM compact JWE containing a signed compact Request Object.
@@ -244,3 +363,78 @@ signed/encrypted valid request. Editing a protected header invalidates its
 authentication tag. This correction requires no database or key migration.
 See the [JOSE header policy](../policies/jose-header-policy.md#jwe-and-encrypted-request-objects)
 for library compatibility and generic non-JWT JWE behavior.
+
+## RP-initiated logout confirmation
+
+Aegaeon policy always requests explicit browser confirmation for both GET and
+`application/x-www-form-urlencoded` POST requests at `/logout`.
+[RP-Initiated Logout 1.0 section 2](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout)
+requires asking when no hint is provided or when the hint does not belong to the
+current OP/RP session and/or current End-User, and generally recommends asking.
+The unconditional confirmation policy also covers a matching hint.
+
+POST parameters belong exclusively in the body; a nonempty query on POST is rejected. Input is strictly decoded and bounded
+before use, including malformed encoding and duplicate singleton rejection.
+`id_token_hint` retains the current signature, own-issuer and time checks.
+If `client_id` is also supplied, it must match the client identified by the hint.
+A registered `client_id` alone can identify an exact registered
+`post_logout_redirect_uri`. A redirect without any client identity is rejected.
+
+A valid initial request responds with a 303 to `/logout/confirm`. It does not
+end sessions, create an upstream relay, send logout notifications or redirect to
+the RP. This extra top-level GET permits a browser returning from a cross-site
+POST to send its ordinary SameSite session cookie. A single fixed-name
+`__Host-aegaeon-logout` cookie is Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain.
+The transaction and cookie secrets are independent 32-byte random values; only
+their digests are stored. The continuation expires after five minutes. Each accepted start replaces the
+cookie secret; only the transaction matching the browser's current cookie can
+proceed. Older tabs must restart. Concurrent responses can replace or clear the
+cookie and require a fresh request, but cannot approve a different transaction.
+This bounds confirmation-cookie storage to one slot. The page uses neutral
+requester wording: a public `client_id`, or possession of an ID Token hint,
+does not authenticate the party that initiated the browser request.
+
+The confirmation page binds its first display to the current browser session
+and subject, or explicitly to no active session. A changed session requires a
+fresh logout request. Confirm and Cancel require the same browser binding and
+an exact same-origin POST, and only one decision can consume the transaction.
+The form uses `Referrer-Policy: same-origin` so browser POSTs retain their
+Origin while cross-origin referrers remain suppressed. Missing, null, foreign
+and duplicate Origin headers are rejected.
+Cancel leaves the sessions unchanged and returns a local cancellation page.
+Confirm ends only the presented browser session and its associated OIDC session
+and RP set. A hint for another subject cannot select that subject's sessions.
+No current session means an idempotent no-op; it never triggers user-wide logout.
+HEAD does not end a session or create a new confirmation transaction.
+
+The server revalidates current policy, registration, redirect and any supplied
+hint before consuming the decision. After confirmation, return-target and
+upstream-relay preparation precede OIDC session termination and browser-session
+deletion. Existing backchannel dispatch remains best-effort before the success
+redirect. These stores and remote recipients do not share a transaction: a
+backend error after approval returns unavailable, and some local steps may have
+completed. Start a fresh logout request after recovery; the consumed decision
+cannot be replayed. This flow does not promise atomic remote logout or delivery
+retries. Only the relevant browser and confirmation cookies are cleared.
+
+Apply `20261012000000_logout_confirmations.sql` before running the updated
+server. Existing direct logout callers will now encounter confirmation. Replace
+all serving instances that can handle logout together: old instances retain
+the previous behavior, so the migration alone does not make a mixed deployment
+safe. No client or session identifiers are renamed.
+
+The new PostgreSQL table uses the existing per-environment, per-table
+`AEGAEON_AUTHORIZATION_TRANSACTION_CAPACITY` and
+`AEGAEON_AUTHORIZATION_TRANSACTIONS_PER_MINUTE` limits. Completed decisions remain
+counted until expiry. Admission and bounded expiry pruning use the same
+transaction/advisory-lock pattern as login and consent; background cleanup also
+prunes expired logout confirmations in batches of 512. Initial logout requests
+share `AEGAEON_AUTHORIZATION_REQUESTS_PER_SOURCE_MINUTE` with authorization
+requests using the transport-validated source and shared Redis bucket. There is
+no new environment setting.
+
+Expiry cleanup for login, consent and logout materializes each batch of at most
+512 candidate IDs before deletion. Without that fixed candidate set, PostgreSQL
+can rescan a locking subquery in a nested-loop plan and delete more rows than
+its `LIMIT` specifies. Cleanup continues to skip rows locked by other requests
+and preserves live records and other environments.

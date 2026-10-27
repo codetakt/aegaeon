@@ -202,6 +202,29 @@ rfc_6749:
   runtime_link: crates/server/src/authcode/token.rs
   notes:
   - Token exchange surfaces RFC 6749 token error codes (invalid_request/invalid_client/invalid_grant).
+- id: 6749-019
+  section: '1.9, 3.2; RFC 8693 sections 2.1, 2.2'
+  requirement: MUST
+  description: Ignore unknown token request names while preserving the recognized grant-limited organization restriction and effective singleton semantics.
+  module: crates/server/src/web/token_form.rs
+  proof: []
+  tests:
+  - crates/server/src/web/token_form/tests.rs
+  - crates/server/src/web/oauth_conformance_tests.rs
+  - crates/server/src/web/token_refresh/tests.rs
+  - crates/server/src/web/token_exchange/tests/omission_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters.rs
+  - crates/server/src/web/token_exchange/tests/organization_parameters/membership.rs
+  - crates/server/src/web/token_client_credentials/tests/unknown_parameters.rs
+  status: implemented
+  ci_check: token-unknown-parameter-handling
+  runtime_link: crates/server/src/web/application_authorization.rs
+  notes:
+  - The normative unknown-name and no-value rules ignore organizationId without adding an alias. Canonical organization_id is a recognized local restriction; its nonexchange refusal is implementation policy, not a newly asserted RFC MUST.
+  - Empty canonical fields are omitted before applicability and multiplicity checks. Duplicate nonempty canonical fields reject; duplicate unknown fields remain ignored. Raw transport limits are unchanged.
+  - Canonical exchange selection preserves existing membership, target, scope and currentness boundaries; selected parents retain selection when omitted and cannot switch organizations. Unknown fields do not supply a missing selection or remove global roles.
+  - Finite native parser and PostgreSQL HTTP tests include actual membership SQL on isolated test-owned tables, projection currentness, output claims and code/refresh nonconsumption controls. Fixture join-key types do not adopt an external production schema or writer contract. No full protocol, deployment or product assurance claim.
+
 - id: 6749-010
   section: '10.3'
   requirement: MUST
@@ -294,6 +317,44 @@ rfc_6749:
     rule and the current client registration; openid is rejected. The cited Tamarin lemma
     establishes its modeled authentication property, not correspondence for target selection,
     stable registration identity, configuration coherence, snapshot markers, or online currentness.
+- id: 6749-017
+  section: '2.3.1 and Appendix B'
+  requirement: MUST
+  description: OAuth Basic credentials MUST form-encode client ID and password independently before Basic serialization.
+  module: crates/server/src/oauth_basic.rs
+  tests:
+  - crates/server/src/oauth_basic.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/registry_core/basic_auth.rs
+  - crates/server/src/web/token_lifecycle/basic_auth_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/basic_auth_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/basic_auth_tests.rs
+  ci_check: client-auth-verification
+  status: implemented
+  runtime_link: crates/server/src/client_registry/registry_store/authentication.rs
+  notes:
+  - "Previously 6749-015 in PR #77; renumbered to distinguish Basic credential encoding from form parameter admission."
+  - The AS decodes each credential exactly once after splitting the base64-decoded payload at the first literal colon; malformed percent escapes and invalid UTF-8 reject without raw fallback.
+  - Both upstream authorization-code and refresh Basic request builders form-encode each logical credential before reqwest Basic serialization.
+  - Finite registry, HTTP introspection and built-request header regressions cover reserved characters, UTF-8, once-only decoding and authentication-method separation; they do not establish formal proof discharge.
+- id: 6749-016
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: As an upstream OAuth client, retain existing endpoint query components when adding request parameters.
+  module: crates/server/src/web/upstream_endpoint_query.rs
+  proof: []
+  tests:
+  - crates/server/src/web/upstream_endpoint_query/tests.rs
+  - crates/server/src/web/upstream_authorize/flow/query_tests.rs
+  - crates/server/src/web/upstream_callback_exchange/query_tests.rs
+  - crates/server/src/web/upstream_refresh/exchange/query_tests.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/upstream_endpoint_query.rs
+  notes:
+  - "Previously 6749-015 in PR #88; renumbered to distinguish endpoint query preservation from form parameter admission."
+  - "Finite upstream authorization/logout builder and local HTTP token/refresh/JWKS tests; no formal proof or deployed-product closure is asserted."
+  - "Encoded vendor query bytes are retained. Exact generated-field equality and duplicate/conflict rejection are local ambiguity policy; token body field names and unprocessed authorization request/request_uri names cannot be injected through endpoint queries."
+  - "Issuer syntax, exact metadata/Federation agreement, cache identity and SSRF/allowlist/transport checks remain separate requirements."
 rfc_6750:
 - id: 6750-001
   section: '2.1'
@@ -652,12 +713,20 @@ rfc_7009:
     file: fstar/revocation/Revocation.fst
     invariant: cascade_revoke
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
+  - crates/server/src/authcode/store/tests/refresh_grant_family.rs
+  - crates/server/src/authcode/store/redis_backend/refresh_grants/reuse_tests.rs
+  - crates/server/src/authcode/store/tests/redis_publication_failure.rs
+  - crates/server/src/web/token_lifecycle/tests/grant_family.rs
   ci_check: revocation-cascade
   status: verified
   runtime_link: crates/server/src/web/token_lifecycle.rs
   notes:
   - Revoking a refresh token deactivates the associated access token (revocation_introspection_http_test).
+  - "Runtime refresh grants now share independently retained versioned authority. Revocation/reuse denies every generation regardless of retainRefreshChain; optional parent policy can additionally reject rotated or missing parents. Atomic publication extends exact retention; reuse binds exact refresh/grant observations to denial in one Redis operation before bounded cleanup, including when its cleanup lock is unavailable. Legacy dependent records require reauthorization. The cited cascade model does not establish this storage schema, retention, failure or concurrency implementation; finite tests are not a formal discharge of those obligations."
+  - "Direct issuance and sender-binding updates defer authority publication until after fallible preparation. Optional Redis ACL checks avoid denied-command residue; older engines retain final-publication ordering and indexed cleanup. These finite failure and cleanup tests do not establish whole-store rollback or adjacent publication-path failure atomicity."
 rfc_7662:
 - id: 7662-001
   section: '2'
@@ -733,6 +802,8 @@ rfc_7662:
     file: proofs/tamarin/introspection/introspection_security.spthy
     lemma: introspection_inactive_claim_sound
   tests:
+  - crates/server/src/web/token_lifecycle/tests/cases.rs
+  - crates/server/src/web/token_lifecycle/tests/failures.rs
   - crates/server/src/web/token_lifecycle/introspection.rs
   ci_check: introspection-response-active
   status: verified
@@ -744,6 +815,8 @@ rfc_7662:
     test: crates/server/tests/introspection_schema_test.rs
   notes:
   - Active tokens return RFC 7662 fields (client_id, token_type, exp).
+  - "HTTP introspection establishes caller visibility before independent refresh-grant authority and optional retainRefreshChain parent checks. Denied or missing authority yields inactive JSON or signed JWT inner bodies; authorized caller storage failures return no-cache 503. Disabling retention skips only the optional parent check; rootless independent access requires consistent metadata."
+  - "Redis/PostgreSQL lifecycle tests exercise actual regular grant commits and rotations; signed introspection fixtures verify the configured Ed25519 signature. Final response metrics distinguish inactive application currentness from active responses and exclude backend/signing errors. These finite tests do not prove all active criteria or formally discharge the durable grant revocation, retention or concurrency obligations."
   - The cited models describe their abstract response and issuance/revocation facts;
     they do not establish the new client-credentials authority or currentness decision.
     Runtime inactive responses also cover unauthorized disclosure and absent or stale authority.
@@ -1074,6 +1147,23 @@ rfc_7517:
   notes:
   - "signature_capability_requires_sig_use \u304C use=enc \u3092\u62D2\u5426\u3057\
     \u3001DCR \u30C6\u30B9\u30C8\u304C\u7F72\u540D\u7528\u30AD\u30FC\u3092\u8981\u6C42"
+- id: 7517-004
+  section: '4.2, 4.3, 6'
+  requirement: MUST
+  description: Preserve case-sensitive JWK usage strings, reject duplicate operations and inconsistent known use/key_ops pairs
+  module: crates/jose/src/jwk/usage.rs
+  tests:
+  - crates/jose/tests/jwk_usage.rs
+  - crates/server/src/client_registry/jwks_helpers_tests/usage_metadata.rs
+  - crates/server/src/web/upstream_metadata/jwks/tests/usage_metadata.rs
+  - crates/server/src/federation/tests/key_admission.rs
+  ci_check: cargo test -p aegaeon-jose --test jwk_usage && cargo test -p aegaeon-server --lib jwk_usage
+  status: partial
+  runtime_link: crates/jose/src/jwk.rs
+  notes:
+  - "Verification requires absent/exact sig use and absent key_ops or a duplicate-free sign/verify subset containing verify. Restricting unrelated or unknown combinations is consumer policy, not a universal RFC MUST."
+  - "Present null and invalid types are rejected before remote DTO projection. Real RSA/EC finite tests compare identical signed bytes/material through inline and fetched/reloaded client keys (RSA assertions, EC Request Objects), upstream cached selection, and Federation Entity Statements and Trust Marks. Self-signed Entity Configurations and stored trust anchors also enforce usage admission."
+  - "No proof-status upgrade or all-domain claim. Mixed-set quarantine, material/curve validation, generic kid/alg null typing, and private registration input ownership remain separate work."
 - id: 7517-003
   section: '5.5'
   requirement: MUST
@@ -1478,7 +1568,7 @@ rfc_9126:
 - id: 9126-002
   section: '2.1'
   requirement: MUST
-  description: Clients MUST authenticate at PAR endpoint
+  description: Confidential clients MUST authenticate at PAR endpoint
   module: fstar/par/Client_auth.fst
   proof:
   - type: fstar
@@ -1486,11 +1576,15 @@ rfc_9126:
     invariant: handle_par_request
   tests:
   - crates/server/src/par/tests/client_auth.rs
+  - crates/server/src/web/par_endpoint/authentication_tests.rs
+  - crates/server/src/par/storage/redis_store.rs
   ci_check: par-client-auth
   status: partial
   runtime_link: crates/server/src/client_registry.rs
   notes:
-  - Covered by par_http_test (auth failure/success cases).
+  - Registered authentication methods are enforced independently of global authentication flags; public clients require policy/profile permission.
+  - HTTP and Redis regressions in crates/server/src/web/par_endpoint/authentication_tests.rs cover missing, wrong and successful authentication and secret-free storage.
+  - Legacy PAR secrets are discarded on read; existing Redis bytes expire under their original TTL. See docs/operations/oauth-conformance.md.
 - id: 9126-003
   section: '2.2'
   requirement: MUST
@@ -1596,6 +1690,7 @@ rfc_9449:
     rule: verify_dpop_compact_jwt
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_header_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-jwt-format
   status: verified
@@ -1603,6 +1698,10 @@ rfc_9449:
   trace:
     kind: exempt
     note: "Tamarin protocol-level property (dpop_authentication); JWT well-formedness has no single F* function counterpart."
+  notes:
+  - "The production Rust verifier rejects private OKP d members, all present crit and b64 parameters, and duplicate protected-header/JWK names (RFC 9449 sections 4.2-4.3, RFC 7515 sections 4/4.1.11). Unknown noncritical fields remain permitted."
+  - "RFC 7797 section 6 requires crit whenever b64 is present, including true; Aegaeon's DPoP profile supports no critical extensions. Boolean true with the required declaration is allowed by that RFC but outside this implementation profile; section 7 forbids false for JWTs."
+  - "Real Ed25519 signed regressions exercise both public FFI entry points. These runtime tests do not extend the cited protocol model or establish new formal discharge."
 - id: 9449-002
   section: '4.2'
   requirement: MUST
@@ -1672,6 +1771,7 @@ rfc_9449:
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
   - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/web/oauth_conformance_tests/request_method.rs
   ci_check: dpop-htm-match
   status: verified
   runtime_link: crates/server/src/middleware/dpop.rs
@@ -1680,6 +1780,9 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Htm_validation.fst#validate_htm
     rust: crates/ffi/src/lib.rs#validate_dpop_htm_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "Runtime handlers forward the actual GET or HEAD method for resource/UserInfo and delegated application authorization; middleware preserves method-token case (RFC 9449 section 4.3 item 8; RFC 9110 section 9.1)."
+  - "The cited oracle covers the equality predicate, not router method extraction. HTTP regressions use the claims-only DPoP test double; real-signature FFI regressions remain separate. No new formal discharge is asserted."
 - id: 9449-006
   section: '4.3'
   requirement: MUST
@@ -1691,15 +1794,19 @@ rfc_9449:
     invariant: validate_htu
   tests:
   - crates/ffi/tests/dpop_proof_test.rs
+  - crates/ffi/tests/dpop_uri_test.rs
   - crates/server/src/middleware/dpop/tests.rs
   ci_check: dpop-htu-match
   status: verified
-  runtime_link: crates/server/src/middleware/dpop.rs
+  runtime_link: crates/ffi/src/dpop_uri.rs
   trace:
     kind: oracle
     fstar: fstar/dpop/Dpop.Htu_validation.fst#validate_htu
     rust: crates/ffi/src/lib.rs#validate_dpop_htu_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
+  notes:
+  - "The cited F* predicate and Rust spec oracle retain exact-string equality semantics. They do not prove HTTP URI parsing, RFC 3986 normalization, or its composition with production signature verification."
+  - "Both production FFI verification APIs compare validated HTTP(S) URI components using RFC 9449 section 4.3 and RFC 3986 sections 5.2.4, 6.2.2 and 6.2.3. Runtime normalization and its composition remain distinct assurance obligations; signed Ed25519 fixtures exercise finite positive and rejection cases. Server claims-only tests are separate evidence."
 - id: 9449-007
   section: '4.3'
   requirement: MUST
@@ -1746,9 +1853,9 @@ rfc_9449:
     rust: crates/server/src/middleware/dpop.rs#validate_dpop_ath_for_spec_oracle
     test: crates/server/tests/spec_oracle_test.rs
 - id: 9449-009
-  section: '5'
+  section: '4.3, 11.1'
   requirement: MUST
-  description: Server MUST reject DPoP proof with duplicate jti
+  description: (Aegaeon profile) Server MUST reject DPoP proof with duplicate jti
   module: fstar/dpop/Dpop.Replay.fst
   proof:
   - type: fstar
@@ -1759,7 +1866,8 @@ rfc_9449:
   tests:
   - tests/fstar/property/TestDpopJtiReuse.fst
   - crates/server/src/middleware/dpop/tests.rs
-  - crates/server/src/middleware/dpop/tests.rs
+  - crates/server/src/middleware/dpop/retention_tests.rs
+  - crates/ffi/tests/dpop_proof_test.rs
   ci_check: dpop-replay-prevention
   status: verified
   runtime_link: crates/server/src/middleware/replay_store.rs
@@ -1768,6 +1876,11 @@ rfc_9449:
     fstar: fstar/dpop/Dpop.Replay.fst#make_ticket
     rust: crates/server/src/middleware/replay_store.rs#check_and_store
     test: crates/server/src/middleware/dpop/tests.rs
+  notes:
+  - "This row records Aegaeon's selected single-use policy; RFC 9449 sections 4.3/11.1 do not impose an unconditional replay-store MUST on every deployment."
+  - "Runtime retention covers twice the maximum supported iat window plus one second (currently 601), the direct middleware window bound, and any longer requested TTL. Nonce enforcement does not shorten retention."
+  - "Admission rechecks authenticated iat before and after atomic replay storage, rejecting in-flight expiry or clock failure without deleting an inserted record."
+  - "Controlled-time middleware tests use a claims-only double; separate FFI tests exercise real signatures and inclusive freshness. These finite tests do not re-attest the formal proof blocks or establish trusted-clock/shared-store premises."
 - id: 9449-010
   section: '6'
   requirement: MUST
@@ -2070,6 +2183,25 @@ rfc_9700:
     test: crates/server/src/web/token_exchange_tests/resource_request.rs
   notes:
   - "Requests with mismatched audience are rejected with invalid_audience; regression suite exercises policy_enforces_scope_and_audience, and Tamarin verifies cross-audience replay is infeasible."
+- id: 9700-011
+  section: '2.1, 4.7.1'
+  requirement: MUST
+  description: OAuth clients MUST prevent CSRF at the redirection endpoint and bind transaction-specific state to the initiating user agent.
+  module: crates/server/src/web/upstream_callback_state.rs
+  applicability: client_only
+  tests:
+  - crates/server/src/web/upstream_authorize/flow_tests.rs
+  - crates/server/src/web/upstream_tests/browser_binding.rs
+  - crates/server/src/upstream/tests/redis_store.rs
+  - crates/server/src/upstream/auth_store.rs
+  ci_check: cargo test -p aegaeon-server upstream_browser_binding
+  status: implemented
+  runtime_link: crates/server/src/upstream/auth_store.rs
+  notes:
+  - "Applies to Aegaeon's upstream OAuth client role: per-transaction Secure/HttpOnly host cookies bind both success and error callbacks to the initiating browser, saved state, callback route and deadline."
+  - "Rust validates the record before Redis atomically consumes the unchanged snapshot; wrong bindings and routes preserve the transaction, while matching consumption is single-use."
+  - "DB/Redis-gated tests also run in the container integration lane. Scoped Tamarin/F* callback models and direct-production Kani deadline harnesses are described in docs/specs/oidc-rp-brokering-spec.md; their assumptions and implementation correspondence remain explicit. This row remains implemented, not verified. Neither finite tests nor these narrow checks establish a complete provider exchange/session round trip, timing or deployed-system assurance."
+  - "The upstream-auth:v2 rollout requires coordinated writers and consumers; legacy unbound flows restart. The runtime-link manifest only hashes verified rows, so this implemented row does not add a formal drift claim."
 rfc_6755:
 - id: 6755-001
   requirement: TRACKING
@@ -2103,6 +2235,7 @@ rfc_7521:
   - client
   notes:
   - "Assertion-based client authentication is implemented for JWT assertions via RFC 7523 (private_key_jwt)."
+  - "RFC 7521 section 4.2 permits omitted outer client_id for assertion-authenticated token requests; RFC 8628 section 3.1 permits omission at authenticated device authorization. Aegaeon also supports assertion-subject identification at introspection and revocation. Every PAR request independently requires a nonempty outer client_id (RFC 9126 section 2.1; RFC 9101 sections 5 and 6.3); signed Request Object PAR binds its verified client_id to that outer value and the authenticated client."
   - "Assertion authorization grants are supported for JWT bearer (RFC 7523) when the management policy `allowedGrantTypes` includes `urn:ietf:params:oauth:grant-type:jwt-bearer`; other assertion types are not supported."
   - "Client-side assertion usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
@@ -2138,6 +2271,7 @@ rfc_7521:
     invariant: pkjwt_subject_is_client_id
   tests:
   - crates/server/src/client_registry/jwks_helpers_tests/registry_core.rs
+  - crates/server/src/web/assertion_client/tests/mod.rs
   status: verified
   runtime_link: crates/server/src/client_registry.rs
   trace:
@@ -2145,6 +2279,8 @@ rfc_7521:
     fstar: fstar/auth/Pkjwt.fst#pkjwt_subject_is_client_id
     rust: crates/server/src/client_registry/assertions/private_key_jwt.rs#private_key_jwt_subject_policy_matches
     test: crates/jose/tests/jwt_validate.rs
+  notes:
+  - "Router tests cover exact outer/subject matching and omitted outer identification; the unverified subject is a bounded lookup hint only. This finite runtime coverage does not extend the existing model proof domain."
   applies_to:
   - as
 
@@ -2217,7 +2353,7 @@ rfc_7523:
     kind: exempt
     note: "Tamarin protocol-level property (pkjwt_client_auth_integrity); request-parameter multiplicity is enforced at request admission, with no F* function-level counterpart."
   notes:
-  - "Token endpoint parses application/x-www-form-urlencoded as a list of key/value pairs to fail closed on duplicate client_assertion/client_assertion_type keys."
+  - "Token endpoint parses application/x-www-form-urlencoded as a list of key/value pairs, omits empty values, and rejects duplicate nonempty client_assertion/client_assertion_type parameters."
 
 - id: 7523-111
   section: '2.1'
@@ -3861,6 +3997,22 @@ rfc_9068:
   - "Default remains opaque tokens + introspection (safe default)."
   - "When enabled with an ACTIVE JWT_ACCESS_TOKEN_SIGNING runtime key, metadata includes access_token_signing_alg_values_supported: [EdDSA]."
   - "Opaque-vs-JWT switching verified in jwt_access_token_test.rs."
+- id: 9068-005
+  section: '3'
+  requirement: MUST
+  description: JWT issuance uses an explicit or approved default resource audience and rejects an undefined default.
+  module: crates/server/src/authcode/token.rs
+  proof: []
+  status: implemented
+  runtime_link: crates/server/src/authcode/token.rs
+  applies_to:
+  - as
+  notes:
+  - "Resource selection is shared by JWT-bearer, authorization-code, refresh and device-code issuance; it does not infer a JWT resource from client_id."
+  - "OpenID JWT grants use the UserInfo resource default only while UserInfo is enabled; client_credentials uses its consumed authorization permit. JWT-bearer currently has no configured default and requires resource."
+  - "Legacy opaque code and refresh defaults cannot be promoted to JWT resource authority. Missing-resource refusals precede code consumption or refresh rotation."
+  - "Approved device codes are retained on undefined JWT resource defaults. Both store backends admit the same strict scope/resource policy before consumption; Redis compares the admitted snapshot atomically."
+  - "Scoped issuer and store regressions are in crates/server/src/authcode/token/tests/jwt_resource_defaults.rs; no formal discharge is asserted."
 
 draft_oauth_browser_based_apps:
 - id: browser-apps-001
@@ -3963,7 +4115,7 @@ rfc_9396:
   - client
   notes:
   - "Structural parsing and persistence slices exist. No runtime RAR type has semantic validation and attenuation; nonempty authorizationDetailsTypesSupported is rejected at activation and startup."
-  - "Authorize, PAR and all token grants reject nonempty unsupported authorization_details. Token admission rejects duplicates and preserves code/refresh usability on refusal. Empty form values are omitted."
+  - "Authorize, PAR and all token grants reject nonempty unsupported authorization_details. Token admission omits empty form values before rejecting duplicate nonempty parameters and preserves code/refresh usability on refusal."
   - "Client-side usage is tracked in the OAuth client/RP roadmap (outside this repo)."
 
 - id: 9396-101
@@ -4354,11 +4506,11 @@ rfc_9728:
   applies_to:
   - rs
   notes:
-  - "Phase 6 implementation complete. /.well-known/oauth-protected-resource endpoint and ProtectedResourceMetadata struct."
+  - "The /resource metadata locator is /.well-known/oauth-protected-resource/resource; the former host-root locator redirects with 308. ProtectedResourceMetadata fields are unchanged."
 - id: 9728-101
   section: '3'
   requirement: MUST
-  description: Protected resource MUST publish metadata at /.well-known/oauth-protected-resource including resource identifier
+  description: Protected resource MUST publish metadata at the RFC 9728 resource-derived well-known URI including its resource identifier
   module: crates/server/src/metadata.rs
   proof:
   - type: fstar
@@ -4368,6 +4520,7 @@ rfc_9728:
     detail: ProtectedResourceMetadata::for_issuer populates resource, authorization_servers, scopes_supported, bearer_methods_supported
   tests:
   - crates/server/src/metadata.rs
+  - crates/server/src/web/metadata/tests.rs
   ci_check: resource-metadata-endpoint
   status: verified
   runtime_link: crates/server/src/metadata.rs
@@ -4378,6 +4531,8 @@ rfc_9728:
     test: crates/server/src/metadata/tests/resource.rs
   notes:
   - "ProtectedResourceMetadata struct with resource, authorization_servers, scopes_supported, bearer_methods_supported, dpop_signing_alg_values_supported."
+  - "For the configured issuer origin plus /resource, the router serves /.well-known/oauth-protected-resource/resource; the host-root locator returns a fixed relative 308 redirect. Router regression cases are in crates/server/src/web/metadata/tests.rs."
+  - "The cited F* lemma checks a nonempty modeled resource only; it does not prove HTTP locator derivation or router correspondence. Route tests provide bounded implementation evidence, without a proof-status upgrade."
 
 rfc_9901:
 - id: 9901-001
@@ -4602,6 +4757,8 @@ draft_oauth_v2_1:
   notes:
   - PostgreSQL-backed management policy projects requireStateParameter into ServerConfig.require_state.
   - validate_authorize_request rejects missing state whenever the active runtime policy or OAuth profile requires it.
+  - RP state/nonce values may repeat across distinct transactions, including one client; the runtime preserves each original value and keeps code/PAR/JTI single-use controls. Observation markers and counts do not reject issuance.
+  - Existing proof models that assume globally unique RP state values do not establish correspondence for repeat acceptance; their assumptions require separate reassessment. This runtime change does not expand proof scope or discharge.
   - PKCE also provides CSRF protection per OAuth 2.1 §2.3.3.
 - id: v21-011
   section: '2.3.5'
@@ -5116,15 +5273,17 @@ draft_oauth_v2_1:
   section: '3.2'
   requirement: MUST
   description: Token endpoint MUST ignore unrecognized request parameters and reject duplicate parameters
-  module: crates/server/src/web/mod.rs
+  module: crates/server/src/web/token_form.rs
   tests:
-  - crates/server/src/web/request_admission.rs
+  - crates/server/src/web/token_form/tests.rs
+  - crates/server/src/web/token_exchange/tests/omission_parameters.rs
+  - crates/server/src/web/token_client_credentials/tests/unknown_parameters.rs
   ci_check: oauth21-token-param-handling
   status: implemented
   notes:
-  - Token endpoint deserializes known fields only; unknown fields are ignored.
-  - take_param() detects and rejects duplicate parameters with invalid_request.
-  - Parameters without values treated as omitted.
+  - Token endpoint retains decoded form pairs and reads recognized names only; unknown fields are ignored.
+  - Empty values are omitted before token_param() rejects duplicate nonempty singleton parameters with invalid_request.
+  - RFC 8693 audience/resource extension parameters retain their permitted multiplicity and target checks.
 - id: v21-042
   section: '2.4.1'
   requirement: MUST
@@ -5138,6 +5297,264 @@ draft_oauth_v2_1:
   notes:
   - Token endpoint accepts client_id + client_secret as form parameters (client_secret_post method).
   - Token endpoint client-auth parsing and client registry validation enforce client_secret_post admission.
+
+openid_federation_rp:
+- id: fed-rp-021
+  section: '3.2, 4, 10.2'
+  requirement: MUST
+  description: Trust-chain signatures MUST verify with issuer-configuration keys and superior-endorsed keys up to the configured trust anchor
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/endorsed_keys.rs
+  - crates/server/src/federation/tests/repositories/resolve_cached.rs
+  - crates/server/src/federation/tests/pg_repositories.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, sections 3.2, 4, and 10.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths reconstruct retained compact JWS
+    and verify each subordinate with its issuer configuration and the keys endorsed by its superior.
+    Leaf self-signatures and current configured anchor keys remain required; overlapping key sets
+    are allowed without complete JWKS equality.
+  - Signed finite ES256 and PostgreSQL regressions cover endorsement, rollover, tampering,
+    backtracking, detached metadata, and current anchor-key replacement. These tests do not
+    establish live federation HTTP transport, formal proof, or complete protocol conformance.
+  - Header, statement-profile, metadata-policy, and constraint requirements remain separately
+    tracked; this row records only the signing-key endorsement boundary.
+
+- id: fed-rp-022
+  section: '3, 3.1.1, 3.2, 7, 7.3'
+  requirement: MUST
+  description: Federation JWT verification MUST enforce its configured purpose and exact header key identification and reject duplicate named key IDs before key selection
+  module: crates/server/src/federation/keys.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/purpose.rs
+  - crates/server/src/federation/tests/key_admission.rs
+  - crates/server/src/federation/tests/pg_repositories.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/keys.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, sections 3, 3.1.1, 3.2, 7, and 7.3; no new edition adoption.
+  - Entity Statements require entity-statement+jwt and a nonempty exact header kid.
+    Trust Marks require the configured trust-mark+jwt purpose and retain the same
+    nonempty header-kid product admission policy; no alternative media-type profile is configured.
+  - Parsed and directly supplied Federation key sets reject duplicate named IDs across
+    the whole set before signature-key filtering. IDs preserve case and whitespace.
+    Generic JOSE parsing, optional key kid, and empty key-array parsing remain unchanged.
+  - Signed finite tests cover public consumers, raw parse entries, fresh resolution,
+    cache fallback, callback admission, and existing algorithm/use/key_ops restrictions.
+    These tests do not establish formal proof, complete all-key mandatory-kid profile
+    conformance, Trust Mark issuer accreditation, or delegation validation.
+
+- id: fed-rp-001
+  section: '3.2'
+  requirement: MUST
+  description: Each subordinate statement issuer MUST match an authority_hints entry in its subject Entity Configuration
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/signed_parent.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - OpenID Federation 1.0, 2026-02-17 edition, section 3.2; no new edition adoption.
+  - Fresh resolution, custom resolver callbacks, and cached paths use signed configuration bytes with exact string matching.
+  - Signed regression fixtures cover each subject position, invalid hints, detached hints, and cache fallback; this is not formal proof evidence or full statement-profile conformance.
+
+- id: fed-rp-002
+  section: '3.1, 3.2'
+  requirement: MUST
+  description: Verified Entity Statements MUST enforce common claim kind, presence, shape, and original-member key identification
+  module: crates/server/src/federation/profile/mod.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/federation/tests/statement_profile.rs
+  status: implemented
+  runtime_link: crates/server/src/federation.rs
+  notes:
+  - Exact signature-verified bytes retain structural-backend and duplicate/trailing admission before raw-aware checks and typed correspondence.
+  - Includes HTTPS identifier syntax, required C/S JWKS and all-original-key unique string kid, optional claim shapes, immediate metadata null refusal, Trust Mark envelope/type equality, and unsupported critical claim refusal.
+  - Entity Statement trust_chain and peer_trust_chain protected headers are explicitly prohibited independently of generic unknown-header handling.
+  - Strict existing JWK material handling remains; no complete mixed-key admission, Trust Mark accreditation, full critical/constraints policy, NumericDate, or edition conformance claim.
+  - Unverified parsing remains structural; typed validation cannot recover discarded unknown claims or raw presence.
+- id: fed-rp-003
+  section: '5.1.1, 8.1, 8.2'
+  requirement: MUST
+  description: Known superior entities MUST advertise their fetch and list endpoints in their own signed configurations
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/federation/fetcher/url_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - Common canonical validation applies to fresh, custom, and cached paths; detached or subordinate metadata cannot supply missing superior endpoints.
+  - Fetch URL construction requires an advertised endpoint, preserves query/sub encoding and retrieval protection, and has no inferred fallback.
+  - Seven known federation endpoint values receive syntax checks; no endpoint availability or new producer operation is established.
+  - First/terminal path positions do not assert global leaf/rootless roles. Signed tests use in-process fetchers and repositories.
+- id: fed-rp-004
+  section: '3.2'
+  requirement: MUST
+  description: Ordinary upstream OIDC Federation consumption MUST reject aud and trust_anchor claims and require signed provider-role metadata
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/statement_profile.rs
+  - crates/server/src/web/upstream_tests/federation_signing.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - OIDC restrictions common to Federation 1.0 and Federation Connect 1.1 section 3.2; no new edition or Explicit Registration profile adopted.
+  - Raw claim presence including null is rejected at every selected-chain position on fresh and cached use; signed first configuration must contain object openid_provider metadata.
+  - Generic Federation core may accept those ordinary extension claims and cache such a chain; cache storage does not constitute OIDC authorization.
+  - Existing resolved discovery issuer/endpoint/JWKS matching remains required; repository and web admission tests are not live HTTP or browser evidence.
+
+- id: fed-rp-005
+  section: '3.2, 8.1, 9, 10.2, 10.4, 11.1, 16'
+  requirement: MUST
+  description: Individual Entity Statements MUST match their requested identities and current temporal context
+  module: crates/server/src/federation/admission.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/admission.rs
+  - crates/server/src/federation/tests/repositories/individual_admission.rs
+  - crates/server/src/web/management/federation_entity_cache_handlers/refresh/workflow/tests.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/admission.rs
+  notes:
+  - HTTP C/S, exported individual cache acceptance, and management entity refresh reconstruct signed raw, compare exact decoded identities, and use current temporal checks with existing skew policy.
+  - Authority discovery configurations are checked before and after subordinate acquisition; separately supplied issuer keys remain independent of self-published discovery keys.
+  - Cache hits check environment/key/expiry, fresh callbacks require raw, and stored lifetimes are capped by canonical signed exp. Awaited operations resample the clock; no stale-success fallback.
+  - PostgreSQL tests exercise the actual management workflow with only acquisition/clock injection, including role/environment gates and update/audit rollback; they require the isolated ignored-test lane.
+  - A forward migration removes only the individual cache expiry-after-fetch CHECK so skew-admitted administrative rows preserve signed exp and accurate fetched_at. Predecessor rejection, unchanged existing rows, desired-schema parity, expired-read refusal and cleanup are tested.
+  - Generic signature/profile verifiers and explicit-now complete-chain APIs retain their limited contracts. This is finite implementation coverage, not full NumericDate, trust-chain, edition or product assurance.
+
+- id: fed-rp-006
+  section: '3.1.1, 6.1'
+  requirement: MUST
+  description: Metadata resolution MUST merge standard policies before applying immediate-superior metadata and the resolved policy
+  module: crates/server/src/federation/metadata_policy.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/policy_resolution.rs
+  - crates/server/src/federation/tests/policy_resolution/scope.rs
+  - crates/server/src/federation/tests/metadata_policy.rs
+  - crates/server/src/federation/tests/trust_chain/metadata.rs
+  - crates/server/src/federation/tests/endorsed_keys.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Common Federation 1.0 and 1.1 rules; no new edition or actor adoption.
+  - Validates every supplied policy and intermediate merge, applies the immediate superior overlay only to declared types, and applies the merged policy once.
+  - Covers standard operator order, types, conflicts, scoped client scope representation, optional object/number support and the local intersect compatibility alias.
+  - Scope without recognized operators is preserved; a valid value operator replaces or removes scope before decoding any prior value. Operand and null-metadata admission remain enforced.
+  - Incompatible nonempty set operand types fail before metadata application, including unused entity types and cross-ancestor combinations; empty operands remain type-neutral.
+  - Original scope/alias operands are checked before intersection can discard invalid inputs. Ancestor subset intersections may be empty; one_of retains its scalar metadata contract.
+  - Existing Jose.Federation policy models are simplified historical algebra; they do not prove this resolver or its scope conversion.
+  - Typed-helper specification example and signed direct/multi-edge in-process controls are distinct finite tests; original signed claims are preserved.
+  - Raw critical declarations remain refused. Original numeric precision, local anchor pinning, chain/cache admission timing and authoritative live OIDC consumption remain separate obligations.
+
+- id: fed-rp-007
+  section: '3.1.3, 6.1.4, 10.2'
+  requirement: MUST
+  description: Complete-chain admission MUST reject metadata policy errors before return or successful cache refresh
+  module: crates/server/src/federation/trust_chain/verification.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/chain_policy_admission.rs
+  - crates/server/src/federation/tests/trust_chain/anchor_policy.rs
+  - crates/server/src/web/management/tests/initialization/federation_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/trust_chain/verification.rs
+  notes:
+  - Common Federation 1.0 and 1.1 policy admission; no new edition or actor adoption.
+  - Signed candidate failure uses existing bounded backtracking. Cached and custom raw paths are reverified before return or upsert; original signed evidence is preserved.
+  - Optional local pin absence permits otherwise valid chains; supplied valid pins retain exact structural equality and all supplied pins require policy grammar. Administrators using absence to disable anchors must remove them before upgrade.
+  - Management pin CRUD uses real router and PostgreSQL controls. Refresh uses the common PostgreSQL workflow with only signed raw acquisition supplied; remote HTTP and SSRF transport are inherited, not newly executed.
+  - Management refresh targets the cached anchor and revalidates current keys, pin and time under anchor row locks before renewal and success audit; regression controls change or remove the anchor during acquisition.
+  - Live OIDC authority, complete critical/constraint processing, original numeric precision and full-chain cache temporal domains remain separate obligations; no formal proof or product assurance is claimed.
+
+- id: fed-rp-008
+  section: '5.1.3 (Federation 1.0), 5.1.2 (Connect 1.1), 6.1.4, 10.2'
+  requirement: MUST
+  description: Upstream OIDC operations consume resolved OP metadata before credentials and retain one metadata context through token verification
+  module: crates/server/src/web/upstream_metadata/federation.rs
+  proof: []
+  tests:
+  - crates/server/src/web/management/tests/upstream_metadata/authorize.rs
+  - crates/server/src/web/management/tests/upstream_metadata/callback.rs
+  - crates/server/src/web/management/tests/upstream_metadata/refresh.rs
+  - crates/server/src/web/management/tests/upstream_metadata/inline_jwks.rs
+  - crates/server/src/web/management/tests/upstream_metadata/algorithms.rs
+  status: implemented
+  runtime_link: crates/server/src/web/upstream_metadata/federation.rs
+  notes:
+  - Current configured anchors never downgrade after errors. Derived metadata does not replace raw evidence or ordinary Discovery cache entries.
+  - Exact required issuer/endpoint agreement with independent Discovery and the retained refresh code/provider guard are local Aegaeon restrictions.
+  - Tests use signed direct and multiple-superior acquisition plus cache paths and real loopback token calls; acquisition seams retain raw signature/policy admission. DB lifecycle, external HTTPS transport and sibling composition are not newly executed by these tests.
+  - Inline JWKS schema, unique present kid values, signature-key availability and canonical public-key encodings are checked before credentials; the selected key identities constrain later fetched keys, including unfamiliar-kid refresh.
+  - Captured callback requirements are preserved; no fresh local-profile query, atomic revocation, granted-scope lineage, new OP key-source feature, full Federation conformance or formal proof claim.
+
+
+- id: fed-rp-009
+  section: '3.1.3, 3.2, 6.2, 6.2.3'
+  requirement: MUST
+  description: Apply every standard entity type constraint between superior metadata overlay and policy application
+  module: crates/server/src/federation/types.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/entity_type_constraints.rs
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/web/management/tests/upstream_metadata/entity_types.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Retain federation_entity; intersect all present allowed_entity_types lists without rewriting signed statements. Invalid or removed-type policies cannot be hidden by filtering.
+  - The distinct local allowed_leaf_entity_types predicate still checks original leaf types. Rust struct literals require the new field or Constraints default; missing serialized fields remain compatible.
+  - Signed fresh/custom/cache controls and direct upstream workflows use loopback token calls. Existing management common-gate correspondence is source-inspected, not newly executed through PostgreSQL or router tests.
+  - Naming constraints are recorded separately in fed-rp-011. Unsupported payload extensions, full numerical domains, sibling integration and whole-product assurance remain separate obligations.
+
+- id: fed-rp-010
+  section: '3.1.3, 6.1.3.2, 6.1.4.1'
+  requirement: MUST
+  description: Admit supported critical metadata policy operators across the complete signed chain
+  module: crates/server/src/federation/types.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/federation/tests/critical_policy.rs
+  - crates/server/src/web/management/tests/upstream_metadata/critical_policy.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/types.rs
+  notes:
+  - Collect all Subordinate Statement metadata_policy_crit declarations before processing policies. The existing local intersect alias is supported; standard names, malformed lists and unsupported additional names are refused, including unused declarations.
+  - Validate every policy before metadata absence or type filtering. Preserve original signed bytes, duplicate declaration names, unknown noncritical ignore behavior and exact optional anchor pins.
+  - Rust EntityStatement literals require metadata_policy_crit initialization; omitted serialized fields remain compatible. Payload crit remains unsupported and JOSE critical headers retain their separate rules.
+  - Signed fresh/custom/cache tests and live operation fixtures are finite implementation evidence. Management common-gate correspondence is source-inspected; no new PostgreSQL/router or external HTTPS execution, full conformance or formal discharge is claimed.
+
+
+- id: fed-rp-011
+  section: '3.1.3, 3.2, 6.2, 6.2.2'
+  requirement: MUST
+  description: Enforce each superior naming constraint on all subordinate Entity Identifier hosts
+  module: crates/server/src/federation/naming_constraints.rs
+  proof: []
+  tests:
+  - crates/server/src/federation/tests/naming_constraints.rs
+  - crates/server/src/federation/tests/naming_constraints_cache.rs
+  - crates/server/src/federation/tests/profile.rs
+  - crates/server/src/web/management/tests/upstream_metadata/naming_constraints.rs
+  status: implemented
+  runtime_link: crates/server/src/federation/naming_constraints.rs
+  notes:
+  - Preserve signed permitted/excluded lists and reject malformed recognized syntax. Every lower entity is constrained; the issuer is exempt. Exclusions override permissions and all ancestors apply independently.
+  - Exact hosts and leading-dot subtrees use DNS label boundaries. Empty-set, ASCII/A-label, case, root-dot and single-label choices are documented implementation contracts; original identifier equality is unchanged.
+  - Shared canonical admission covers signed fresh/custom/cache paths and rejects before metadata shortcuts or writes. Pure resolved_metadata does not authenticate signatures or time. Public Constraints literals require naming_constraints initialization or default.
+  - Finite signed-path and loopback upstream operation tests plus management raw refresh admission do not establish PostgreSQL/router, external HTTPS, sibling composition, full numerical domains, conformance or formal proof.
 
 openid_federation_op:
 - id: fed-op-001
@@ -5506,8 +5923,11 @@ openid_core:
     invariant: oidc_token_prop
   tests:
   - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/oidc/id_token/tests/audience.rs
+  - crates/server/src/web/upstream_tests/id_token/audience.rs
+  - crates/server/src/web/upstream_refresh/tests/cases.rs
   ci_check: verify-fstar
-  status: verified
+  status: partial
   runtime_link: crates/server/src/authcode/token/tests/oidc_id_token.rs
   trace:
     kind: guard
@@ -5517,6 +5937,8 @@ openid_core:
   notes:
   - F* verification includes `IdToken.fst` (which includes `IdToken.Spec`) via `nix build .#verify-fstar`.
   - Runtime behaviour is exercised by OIDC E2E tests (issuer/audience/nonce validation paths).
+  - "OIDC Core 1.0 errata set 2 (2023-12-15), sections 2 and 3.1.3.7: string and one-element array audiences are equivalent; untrusted additional audiences must reject. Aegaeon currently trusts only the expected client ID, including self-only duplicates. A supplied azp must match exactly as local policy; missing azp is allowed. Core azp guidance is extension-dependent, not a universal multiple-audience presence rule."
+  - "The cited F* model retains its older audience-membership and multiple-array azp predicates. Those predicates do not establish this runtime trust policy or representation equivalence. Public validators, signed upstream decode/validation tests and PostgreSQL callback-storage/refresh tests are finite implementation evidence; model correspondence remains open, so this requirement is partial until the required invariants and implementation linkage are established."
 - id: OIDC-1-003
   section: Hash claims
   requirement: MUST
@@ -5541,6 +5963,9 @@ openid_core:
     test: crates/server/tests/oidc_hash_vectors.rs
   notes:
   - See `crates/server/src/authcode/token/tests/oidc_id_token.rs::test_hash_computation` for known OIDC vectors (RS256 / SHA-256 / left-most 128 bits).
+  - "For already admitted PS256/384/512 signatures, the server adapter selects the existing SHA-256/384/512 hash operation without changing the verified signature algorithm."
+  - "The extracted dispatcher and public FFI accepted-name domain remain unchanged. The PSS digest-selector mapping is covered by finite Rust/Low* runtime and real signed-token tests, not by an expanded formal proof claim."
+  - "See crates/server/src/web/upstream_tests/id_token/tests/pss_hash.rs and crates/server/src/oidc/id_token/tests/pss_hash.rs; supplied hash claims require source material and omitted code-flow claims remain optional."
 - id: OIDC-1-004
   section: max_age / auth_time
   requirement: MUST
@@ -5633,11 +6058,18 @@ openid_core:
   - tests/constant_time/ed25519_timing_test.c
   - tests/constant_time/rsa_timing_test.c
   - tests/constant_time/jwe_timing_test.c
+  - tests/constant_time/compare_product_timing_test.c
+  - tests/constant_time/hmac_key_reject_timing_test.c
+  - tests/constant_time/jwe_key_reject_timing_test.c
+  - tests/constant_time/calibration_timing_test.c
+  - tests/constant_time/run_contract.py
+  - c/dudect_harness.c
   ci_check: verify-dudect
   status: implemented
   notes:
-  - The OIDC server claim relies on the project-wide dudect suite for comparison, HMAC, Ed25519, RSA, and JWE timing posture.
-  - The promoted `RS256 Required Slice`, `RS256 Interop Slice`, and JWKS overlap invariants do not add new secret-dependent primitives beyond the existing dudect coverage.
+  - Version5 binds per-case fixture observations to sources, native artifacts, controls and complete profiles; historical detected differences remain visible.
+  - Protected-input nondetection is bounded empirical evidence. Public/authentication fixture characterization does not establish secret independence or authorize production timing declassification.
+  - Full secret domains, valid-result strata, caller composition and product assurance remain separate obligations; see docs/verification/dudect-case-contract.md.
 - id: OIDC-1-009
   section: OIDC RP upstream token refresh
   requirement: SHOULD
@@ -5679,6 +6111,8 @@ openid_core:
   - "Comprehensive error handling: 401 (invalid bearer), 404 (no link/token), 502 (upstream failures), and 503 for transient PostgreSQL-backed repository/service unavailability after mandatory startup preflight succeeds."
   - "OIDC Core 1.0 errata set 2, section 12.2: refreshed upstream ID Tokens retain exact original issuer/subject and semantic audience members. Present auth_time/nonce must match captured original values; absent originals cannot corroborate newly supplied values and are refused by local fail-closed policy. Absent refreshed ID Tokens preserve context. Existing signature and claim checks remain conjunctive."
   - "Original authentication context is encrypted with the refresh token in a version 3 envelope and retained through generation-CAS rotations. Legacy version 2 requires reauthentication before exchange. The cited F* model does not establish encrypted storage, original-authentication continuity, database concurrency, RNG/AEAD or complete callback/refresh composition; finite signed/PG tests are separate implementation evidence."
+  - "Post-exchange persistence holds shared active-runtime and connection locks through generation-CAS commit; client/issuer/identifier/auth-method, encrypted credentials, effective explicit/default profile or lifecycle/configuration mismatches reject both rotation and last-use updates before token response publication. Current-state equality is not historical revision/ABA detection."
+  - "Local RP freshness policy requires nonnegative refreshed iat at or after HTTP request-start minus configured leeway, alongside existing future/expiry validation. This supports the OP issuance-time requirement; it does not prove replay-freedom within clock skew. The direct production lower-bound helper has a separately registered full numeric-domain Kani harness; actual SQL and clock/HTTP integration remain outside that harness."
   - "OIDC Core 1.0 errata set 2 section 10.1.1 describes re-retrieval for unfamiliar kid. Shared strict header admission permits one configured-URL retrieval for an absent nonempty kid; known-key signature/claim failures never trigger a forced retry. The provider SHOULD retain recently decommissioned keys; that is separate from consumer retrieval."
   - "All upstream key retrievals share a bounded per-process coordinator with one in-flight request per exact URL and a 30-second monotonic attempt-start cooldown, including failure/cancellation. Protected slots cannot be evicted for new URLs. Successful fetches replace sets; failed fetches do not renew old TTL. Upstream RSA n/e and EC x/y require nonempty canonical unpadded base64url before replacement, without changing generic key-size, curve or algorithm policy. Current endpoint policy and final-set Federation checks remain mandatory."
   - "Real HTTP, signed token/Federation, PostgreSQL callback/rotation and injected-clock concurrency tests are finite runtime observations. They do not prove scheduler fairness, fleet-wide rate limits, cryptographic assumptions, database isolation, supply or complete deployment composition; the existing F* model does not cover this coordinator."
@@ -5725,6 +6159,7 @@ openid_core:
     rust: crates/server/src/oidc/required_rs256/verification.rs#verify_required_id_token_claims
     test: crates/server/src/oidc/required_rs256/tests.rs
   notes:
+  - "The IdToken.Spec oidc_token_prop citation describes model semantics only; it does not establish the RP audience/azp admission policy. That model-to-runtime obligation is tracked as partial in OIDC-1-002."
   - "The Kani citation covers six fixed Rust canonicalization inputs only and is continuously selected by spec/kani-evidence.json. It does not prove arbitrary-input safety, native parsing, RS256 cryptography or end-to-end closure; OIDC-1-007 remains partial. This legacy verified evidence inventory row does not activate the assurance contract."
   - "The general verified allowlist remains modern-only (`HS*`, `EdDSA`). This row records a promoted OIDC-specific exception rather than a reclassification of broad RSA."
   - "Runtime carve-out is centralized in `crates/server/src/oidc/required_rs256.rs` and wired into OP issuance plus shared upstream/brokering validation helpers."
@@ -5749,6 +6184,45 @@ openid_core:
   - "Plain authorization, PAR, JAR and PAR with JAR use the same parser before session reuse or consent. Rejection routing preserves state and the selected response mode and uses only registered redirect URIs."
   - "A supplied Request Object prompt must be a JSON string. Null and other non-string values are rejected with invalid_request; omitting the claim requests no prompt action."
   - "Runtime regression coverage only; no formal proof or complete OpenID certification is claimed."
+- id: OIDC-1-025
+  section: '2 (sub), 5.7, 8'
+  requirement: MUST
+  description: OIDC End-User subject producers and ID Token/UserInfo boundaries enforce nonempty ASCII values of at most 255 characters without output normalization
+  module: crates/server/src/oidc/subject.rs
+  tests:
+  - crates/server/src/oidc/required_rs256/tests.rs
+  - crates/server/src/oidc/userinfo/tests.rs
+  - crates/server/src/authcode/token/tests/oidc_id_token.rs
+  - crates/server/src/web/management/tests/policy_and_runtime/subject_format.rs
+  - crates/server/src/web/upstream_callback_users/jit/subject_tests.rs
+  - crates/server/src/web/upstream_tests/id_token/validation.rs
+  - crates/server/src/web/oauth_conformance_tests/sender_contract.rs
+  ci_check: cargo-test
+  status: implemented
+  runtime_link: crates/server/src/oidc/subject.rs
+  notes:
+  - "Management writers retain surrounding trim; stored/output checks preserve exact bytes and case. New JIT subjects use opaque UUIDv4 values; collisions refuse instead of adopting an existing user."
+  - "Existing linked identities and explicit email reuse are preserved. Read-only legacy inventory and upgrade limits are documented in docs/operations/oidc-subject-format.md."
+  - "This bounded format row does not establish permanent issuer-scoped non-reassignment across deletion or rename history; that obligation and legacy-history reconciliation remain open."
+- id: OIDC-1-012
+  section: '3.1.2.1, 13.1, 13.2 (Core errata set 2)'
+  requirement: MUST
+  description: The authorization endpoint accepts GET query and POST form requests and preserves admitted requests through local interaction
+  module: crates/server/src/web/authorize_input.rs
+  proof: []
+  tests:
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post/lifecycle.rs
+  - crates/server/src/web/authorization_consent_tests/reauthentication/authorization_post/snapshots.rs
+  ci_check: server-container-integration
+  status: partial
+  runtime_link: crates/server/src/web/authorize_input.rs
+  notes:
+  - "GET and implicit HEAD use query input; POST uses a bounded strict application/x-www-form-urlencoded body and rejects a nonempty URI query. Response mode is independent of the incoming method. Cross-origin OAuth client POST is accepted."
+  - "Version-2 server-side login and consent snapshots retain admitted input, resolved request, prompt, response mode and authoritative PAR continuation. Opaque login returns carry no authorization parameters. Current client/session policy and exact snapshots are checked before one-shot transitions."
+  - "Actual router, PostgreSQL and Redis regression fixtures cover plain, signed and encrypted requests, local login, consent, step-up transfer, replay/binding rejection and code redemption. These finite runtime checks are not a formal proof or complete OpenID certification."
+  - "Existing JSONB columns need no new migration, but coordinated readers/writers or a five-minute interaction drain are required. Old/malformed envelopes and rollback-pending interactions require restart."
+  - "Plain PAR form_post persistence is a separate PAR-format limitation; this change retains the existing supported PAR modes. Composition with subsequent PAR/input changes remains required."
 openid_discovery:
 - id: OIDC-2-001
   section: .well-known/openid-configuration
@@ -5830,7 +6304,7 @@ openid_jwks:
   - "OIDC Core errata 2 recommends internal retention of decommissioned encryption keys coordinated with cache duration; this row covers use of already eligible managed keys, not adequacy of that duration or the complete cache/rotation contract."
   - "Local selection requires a nonempty protected kid, exact unique matching and deadline greater than current time, without fallback. An ACTIVE key enables the capability; retiring keys alone do not reactivate it. The explicit-single-key library API preserves caller-owned selection."
   - "Sync/async constructors load live retiring private material with public/private correspondence checks. Authorize and PAR share admitted-header selection and retain authenticated original AAD plus signed-inner validation. Only active encryption material is published."
-  - "request_object_keyring_rotation_expiry_through_authorize_and_par and request_object_keyring_rotation_revocation_through_authorize_and_par use actual PostgreSQL management transitions, runtime loading and public routes; stale snapshots return 503 and request restart. Runtime reconstruction in tests is not a process-restart or uninterrupted-availability guarantee."
+  - "shared_redis_request_object_keyring_rotation_expiry_through_authorize_and_par and shared_redis_request_object_keyring_rotation_revocation_through_authorize_and_par use actual PostgreSQL management transitions, runtime loading and public routes; stale snapshots return 503 and request restart. Runtime reconstruction in tests is not a process-restart or uninterrupted-availability guarantee."
   - "No new retention/cache formula, external cache purge, key rollback, formal proof or full rotation assurance is established."
 
 openid_logout:
@@ -5881,8 +6355,8 @@ openid_logout:
   section: Back-Channel Logout
   requirement: MUST
   description: Logout Token must include required claims (iss, sub or sid, aud, iat,
-    events)
-  module: docs/program-management/historical/roadmaps/oidc-execution-plan.md
+    exp, jti, events)
+  module: crates/server/src/web/backchannel_logout.rs
   proof:
   - type: fstar
     file: fstar/oidc/Logout.Spec.fst
@@ -5891,16 +6365,23 @@ openid_logout:
     document: docs/program-management/historical/roadmaps/oidc-execution-plan.md
   tests:
   - crates/server/src/oidc/session/tests.rs
+  - crates/server/src/web/backchannel_logout/tests/profile.rs
+  - crates/server/src/web/backchannel_logout/tests/delivery.rs
+  - crates/server/src/web/backchannel_logout/tests/kms.rs
   ci_check: oidc-backchannel-logout-claims
-  status: verified
-  runtime_link: crates/server/src/oidc/session/tests.rs
+  status: partial
+  runtime_link: crates/server/src/web/backchannel_logout.rs
   trace:
     kind: guard
     fstar: fstar/oidc/Logout.Spec.fst#build_backchannel_logout_token_claims
     rust: crates/server/src/web/backchannel_logout.rs#build_backchannel_logout_claims
-    test: crates/server/src/web/upstream_tests/oauth_forms_logout.rs
+    test: crates/server/src/web/backchannel_logout/tests/profile.rs
   notes:
-  - Verified by `crates/server/src/oidc/session/tests.rs` (iss/aud/iat/events + sub/sid policy).
+  - OpenID Connect Back-Channel Logout 1.0 errata set 1 (2023-12-15), sections 2.4 and 2.6, requires exp and jti. The runtime uses checked exp=iat+300 and preserves the existing event jti, sid and conditional sub, without nonce.
+  - Explicit typ logout+jwt is recommended by sections 2.4 and 4.1 and adopted as local policy; generic ID Tokens retain typ JWT. Five minutes is local policy, not a mandated lifetime.
+  - The id_token_hint consumer rejects logout+jwt and application/logout+jwt case-insensitively and rejects the exact back-channel logout event key after signature verification and duplicate-safe typed decoding, including JWT and untyped legacy tokens. Signed finite tests isolate each guard and preserve ordinary ID Token compatibility.
+  - Finite tests cover local RSA signatures, synchronous and asynchronous issuance, time boundaries, HTTP recipient validation, and actual SDK Sign requests to a local KMS fixture. The fixture does not establish real AWS service or supplier cryptographic assurance.
+  - Historical F* references remain scoped model evidence and do not establish the expanded exp/type runtime contract. Status is partial pending full composition and assurance review; delivery, retry and jti ownership obligations remain separate.
 - id: OIDC-3-004
   section: Back-Channel Logout
   requirement: MUST
@@ -5948,6 +6429,27 @@ openid_logout:
   notes:
   - "The three cited Kani harnesses run fixed sequential traces against the cfg(kani) `BoundedKaniSessionStore` model (crates/server/src/oidc/session/kani.rs; 4 sessions / 4 clients), not the production session store, and none quantifies over adversarial inputs with kani::any(); correspondence to the runtime store is not proved."
   - "They are executed as blocking model regressions in the required group `server-regressions` of spec/kani-evidence.json (`nix build .#verify-kani`); required execution is not a claim grade, so this row stays partial until a production-correspondence argument exists."
+- id: OIDC-3-006
+  section: RP-Initiated Logout 1.0 section 2
+  requirement: MUST
+  description: The OP MUST ask the End-User whether to log out when no id_token_hint is supplied, or when the supplied ID Token does not belong to the current OP session with the RP and/or the currently logged-in End-User.
+  module: crates/server/src/web/logout_confirmation/mod.rs
+  tests:
+  - crates/server/src/web/logout_confirmation/tests.rs
+  - crates/server/src/web/logout_confirmation/tests/browser.rs
+  - crates/server/src/web/logout_confirmation/tests/cookie_slot.rs
+  - crates/server/src/web/logout_confirmation/tests/rejection.rs
+  - crates/server/src/web/logout_confirmation/tests/retention.rs
+  ci_check: oidc-rp-logout
+  status: implemented
+  runtime_link: crates/server/src/web/logout_confirmation/mod.rs
+  notes:
+  - Aegaeon product policy always requests explicit confirmation, including a hint matching the current session; this is stronger than the specification's conditional MUST and follows its general SHOULD ask recommendation.
+  - Existing OIDC-3-001 and OIDC-3-002 cover hint checks and exact registered redirects; this row records the confirmation boundary and does not upgrade their proof scope.
+  - GET and bounded form POST start a five-minute PostgreSQL confirmation; an independent browser cookie and first-presented auth-session digest and subject bind the one-use same-origin decision.
+  - A single fixed-name browser cookie bounds storage; each start rotates its secret and older forms require a fresh request. The confirmation page does not attribute requests to an unauthenticated client_id or hint holder.
+  - Explicit client_id must match a supplied signed hint. A foreign hint never selects another session or user-wide logout. Client-only exact registered redirects require confirmation too.
+  - Finite PostgreSQL/Redis router cases cover session scope, input/binding rejection, retention limits and current-policy checks; no formal discharge or atomic remote delivery is claimed. Existing expired-hint behavior is unchanged.
 oauth_form_post:
 - id: OIDC-4-001
   section: Form Post Response Mode
@@ -5995,6 +6497,7 @@ oauth_form_post:
     test: crates/server/src/form_post.rs
   notes:
   - Verified by CSP unit tests and `crates/server/src/form_post.rs` (nonce-bound CSP + auto-submit script nonce match).
+
 openid_jar:
 - id: OIDC-5-001
   section: Request Object (JAR) Encryption

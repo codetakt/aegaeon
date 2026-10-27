@@ -11,7 +11,7 @@ pub(crate) fn validate_exchange_subject(
     access: &AccessToken,
     meta: &BearerTokenMeta,
 ) -> Result<(), &'static str> {
-    bearer_metadata_matches_access_token(access, meta)?;
+    super::refresh_grants::access_reference(access, meta)?;
     if access
         .created_at
         .checked_add(Duration::from_secs(access.expires_in))
@@ -67,6 +67,11 @@ pub(super) fn validate_exchange_commit(
     now: SystemTime,
 ) -> Result<(), &'static str> {
     bearer_metadata_matches_access_token(access, output)?;
+    if output.refresh_grant != subject.refresh_grant
+        || parent.is_some_and(|parent| parent.refresh_grant != subject.refresh_grant)
+    {
+        return Err("exchange refresh grant references disagree");
+    }
     if now >= subject.expires_at
         || output.expires_at > subject.expires_at
         || now >= output.expires_at
@@ -235,11 +240,19 @@ impl TokenStore {
                     .ok_or("missing subject token")?;
                 validate_exchange_subject(subject_access, subject)
                     .map_err(ExchangeCommitError::from)?;
-                if subject_access.is_expired()
+                if !Self::access_grant_active_locked(&state, subject_access, now)
+                    || subject_access.is_expired()
                     || serde_json::to_value(subject).map_err(|e| e.to_string())?
                         != serde_json::to_value(&expected_subject).map_err(|e| e.to_string())?
                 {
                     return Err("exchange subject has changed".into());
+                }
+                if parent
+                    .is_some_and(|parent| !Self::refresh_grant_active_locked(&state, parent, now))
+                {
+                    return Err(
+                        "exchange parent grant is inactive or retention is inconsistent".into(),
+                    );
                 }
                 validate_exchange_commit(&access, &output, subject, parent, now)
                     .map_err(ExchangeCommitError::from)?;
@@ -250,6 +263,8 @@ impl TokenStore {
                         "exchange token collision".into(),
                     ));
                 }
+                Self::extend_refresh_grant_locked(&mut state, &access, &output, None, now)
+                    .map_err(ExchangeCommitError::from)?;
                 if let Some(parent_id) = output.refresh_parent.as_ref() {
                     state
                         .refresh_children

@@ -77,39 +77,39 @@ Every demo should include:
 
 Say:
 
-- `Aegaeon は、既存サービスやエンタープライズ基盤に組み込める OAuth/OIDC 基盤です。`
+- `Aegaeon is an OAuth/OIDC platform that can be embedded in existing services and enterprise infrastructure.`
 
 #### Step 2: Why it matters
 
 Say:
 
-- `OAuth/OIDC は実装できても、運用で崩れやすい領域があります。Aegaeon はそこを含めて整備することを重視しています。`
+- `Even after OAuth/OIDC is implemented, some areas remain fragile in operation. Aegaeon emphasizes addressing those areas as well.`
 
 #### Step 3: Three pillars
 
 Point to the visual and say:
 
-- `考え方は3つで、Secure Defaults、Verified Core、Operational Controls です。`
+- `There are three guiding ideas: Secure Defaults, Verified Core, and Operational Controls.`
 
 #### Step 4: One concrete screen
 
 Show one Admin Console screen and say:
 
-- `単なる規格対応だけでなく、設定変更や監査、鍵運用まで control-plane として扱えるようにしています。`
+- `Alongside standards support, we enable configuration changes, audits, and key operations to be handled through the control plane.`
 
 #### Step 5: Close
 
 Say:
 
-- `もしご関心があれば、ホワイトペーパーか PoC 相談にすぐつなげられます。`
+- `If you are interested, we can point you straight to the whitepaper or a PoC discussion.`
 
 ### Success signal
 
 The visitor asks one of:
 
-- `どこまで対象ですか`
-- `何が他と違うのですか`
-- `導入するとしたらどう始めますか`
+- `What is covered?`
+- `What makes it different?`
+- `How would we get started with adoption?`
 
 ## Mode B: 5-minute qualified demo
 
@@ -123,13 +123,13 @@ The visitor asks one of:
 
 Say:
 
-- `認証認可の問題は、実装した時点では終わらず、例外設定、鍵運用、変更管理、監査のところで運用負債が出やすいです。`
+- `Authentication and authorization problems do not end at implementation. Operational debt often arises around exception settings, key operations, change management, and audits.`
 
 #### Step 2: Product definition
 
 Say:
 
-- `Aegaeon は、サーバ側の高保証コア、Secure Defaults、運用統制を一体で整備した OAuth/OIDC 基盤です。`
+- `Aegaeon is an OAuth/OIDC platform that brings together a high-assurance server-side core, Secure Defaults, and operational controls.`
 
 #### Step 3: Architecture view
 
@@ -141,7 +141,7 @@ Show the architecture diagram and explain:
 
 Say:
 
-- `主張の中心はサーバ側です。Admin Console は control-plane UI ですが、UI 自体を形式検証済みとは表現していません。`
+- `The claim centers on the server side. Admin Console is a control-plane UI, but we do not describe the UI itself as formally verified.`
 
 #### Step 4: Product screen walkthrough
 
@@ -166,13 +166,13 @@ Only if the visitor asks, show:
 
 Say:
 
-- `現時点の対外表現は、サーバ側の security-critical な OAuth/OIDC コアに関するものです。`
+- `Our current public wording concerns the security-critical server-side OAuth/OIDC core.`
 
 #### Step 6: Close
 
 Ask:
 
-- `評価として資料確認から始めますか、それとも PoC 前提の相談に進めますか。`
+- `Would you like to start your evaluation by reviewing the materials, or proceed to a discussion about a PoC?`
 
 ## Recommended demo stories by visitor type
 

@@ -120,6 +120,8 @@ force-single-line = false
 known-first-party = ["aegaeon"]
 
 [tool.ruff.lint.per-file-ignores]
+# Fixed helpers load under source-specific package names; imports stay within that package.
+"scripts/perf/perf_source/*.py" = ["TID252"]
 "tests/**/*.py" = [
   "S101",     # assert — needed in tests
   "ANN",      # annotations — relaxed in tests
@@ -196,9 +198,10 @@ known-first-party = ["aegaeon"]
 # ---------------------------------------------------------------------------
 
 [tool.mypy]
+mypy_path = ["tests/constant_time"]
 python_version = "3.13"
 strict = true
-files = ["scripts/validation", "scripts/ci", "ci/validate_slos.py"]
+files = ["scripts/validation", "scripts/ci", "ci/validate_slos.py", "ci/validate_load_smoke.py"]
 warn_return_any = true
 warn_unused_configs = true
 warn_unreachable = true

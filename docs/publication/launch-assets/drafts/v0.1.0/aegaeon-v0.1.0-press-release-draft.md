@@ -15,73 +15,74 @@ Use `docs/product-positioning.md` as the boundary authority before publication.
 
 ## Headline
 
-Aegaeon、既存サービスに組み込める OAuth/OIDC 基盤「Aegaeon v0.1.0」を公開
+Aegaeon Releases Aegaeon v0.1.0, an OAuth/OIDC Platform for Embedding in Existing Services
 
 ## Subheadline
 
-サーバ側の高保証コアと運用統制により、認証認可の実装・運用リスクの低減を支援
+A high-assurance server-side core and operational controls help reduce implementation and operational risks in authentication and authorization
 
 ## Lead
 
-Aegaeon は、既存サービスやエンタープライズ基盤に組み込んで利用できる
-OAuth 2.0 / OpenID Connect 対応プラットフォーム「Aegaeon v0.1.0」を公開しました。
-サーバ側のセキュリティ上重要なコア領域に高保証アプローチを適用するとともに、
-自社提供の Aegaeon Admin Console により、設定変更、監査、鍵運用を一元的に扱える
-運用基盤を提供します。これにより、例外設定の固定化、鍵運用の属人化、設定変更時の
-事故、監査不備といった運用起因のリスクの低減を支援します。
+Aegaeon has released Aegaeon v0.1.0, an OAuth 2.0 / OpenID Connect platform
+that can be embedded in existing services and enterprise infrastructure.
+It applies a high-assurance approach to security-critical server-side core areas
+and provides an operational foundation for centrally handling configuration changes, audits,
+and key operations through its first-party Aegaeon Admin Console. This helps reduce operational
+risks such as permanent exception settings, key operations dependent on individuals, incidents
+during configuration changes, and audit gaps.
 
 ## Body
 
-Aegaeon は、OAuth/OIDC を導入するためのソフトウェアにとどまらず、
-安全に運用し続けるための基盤として提供します。主な特長は以下の通りです。
+Aegaeon is offered as both software for adopting OAuth/OIDC and a foundation
+for continuing to operate it safely. Its main features are as follows.
 
 ### 1. Secure Defaults
 
-危険な構成を避ける既定値を採用し、例外設定も統制の下で管理できるようにします。
+Defaults avoid dangerous configurations and enable exception settings to be managed under control.
 
 ### 2. Verified Core
 
-PKCE、DPoP、JOSE など、サーバ側のセキュリティ上重要な OAuth/OIDC 領域に
-高保証アプローチを適用します。
+We apply a high-assurance approach to security-critical server-side OAuth/OIDC areas
+such as PKCE, DPoP, and JOSE.
 
 ### 3. Operational Controls
 
-自社提供の Aegaeon Admin Console を通じて、変更管理トランザクション、監査、
-RBAC、鍵・秘密情報のライフサイクル管理を一貫して扱えるようにします。
+Our first-party Aegaeon Admin Console enables consistent handling of change-management
+transactions, audits, RBAC, and key / secret lifecycle management.
 
-### 4. 想定ユースケース
+### 4. Intended use cases
 
-既存製品への認証基盤の組み込みや、エンタープライズにおける共通認証・API 保護基盤
-としての導入を想定しています。
+Intended use cases include embedding an authentication foundation into existing products
+and deploying a shared authentication and API protection foundation within enterprises.
 
 ## Quote template
 
-「認証認可の課題は、実装時だけでなく運用段階でも生まれます。Aegaeon は、
-サーバ側の中核部分と運用統制を切り分けて整備することで、導入時の実装リスクだけで
-なく、運用のなかで起きる事故や負債の抑制も支援します。」
+"Authentication and authorization challenges arise during both implementation and operations.
+By developing the server-side core and operational controls as distinct areas, Aegaeon helps
+reduce implementation risks during adoption as well as incidents and debt that arise in operation."
 
-— `[代表者名・役職]`
+— `[representative name and title]`
 
 ## Availability block
 
-- 提供形態: `OSS / Self-hosted`
-- 評価: `PoC 相談受付開始`
-- 資料: `ホワイトペーパー`, `Spec Sheet`
+- Delivery model: `OSS / Self-hosted`
+- Evaluation: `PoC consultations now open`
+- Materials: `Whitepaper`, `Spec Sheet`
 
 ## CTA
 
-ホワイトペーパーと Spec Sheet は公開ページから入手できます。
-評価・導入相談を受け付けています。
+The whitepaper and Spec Sheet are available on the public page.
+We welcome evaluation and adoption inquiries.
 
 ## Boilerplate placeholders
 
-- 会社概要
-- 代表者名
-- 問い合わせ先
-- 会社URL
+- Company overview
+- Representative name
+- Contact details
+- Company URL
 
 ## Publication guardrails
 
-- `Verified Core` はサーバ側の security-critical な OAuth/OIDC コアを指す
-- `Aegaeon Admin Console` を形式検証済み UI と表現しない
-- SDK / WASM / released client claim を本稿に混在させない
+- `Verified Core` refers to the security-critical server-side OAuth/OIDC core
+- Do not describe `Aegaeon Admin Console` as a formally verified UI
+- Do not mix SDK / WASM / released client claims into this draft

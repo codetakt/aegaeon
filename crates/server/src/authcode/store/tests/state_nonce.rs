@@ -1,14 +1,13 @@
 #[test]
-fn state_rejected_within_ttl() {
+fn repeated_state_is_preserved_within_ttl() {
     let store = AuthCodeStore::new_process_local_with_ttl_for_tests(Duration::from_secs(10));
     let code1 = make_test_code(Some("state-1"), None);
     assert!(store.store_code(code1).is_ok());
 
-    // Same state should be rejected
     let code2 = make_test_code(Some("state-1"), None);
-    let err = store.store_code(code2);
-    assert!(err.is_err());
-    assert!(matches!(err.as_ref(), Err(message) if message == "State already used"));
+    let id = store.store_code(code2).expect("repeated state is an RP value");
+    assert_eq!(store.try_get_code(&id).expect("lookup").expect("stored code").state.as_deref(), Some("state-1"));
+    assert_eq!(store.state_count(), 1);
 }
 
 #[test]
@@ -26,16 +25,15 @@ fn state_allowed_after_ttl_expires() {
 }
 
 #[test]
-fn nonce_rejected_within_ttl() {
+fn repeated_nonce_is_preserved_within_ttl() {
     let store = AuthCodeStore::new_process_local_with_ttl_for_tests(Duration::from_secs(10));
     let code1 = make_test_code(None, Some("nonce-1"));
     assert!(store.store_code(code1).is_ok());
 
-    // Same nonce should be rejected
     let code2 = make_test_code(None, Some("nonce-1"));
-    let err = store.store_code(code2);
-    assert!(err.is_err());
-    assert!(matches!(err.as_ref(), Err(message) if message == "Nonce already used"));
+    let id = store.store_code(code2).expect("repeated nonce is an RP value");
+    assert_eq!(store.try_get_code(&id).expect("lookup").expect("stored code").nonce.as_deref(), Some("nonce-1"));
+    assert_eq!(store.nonce_count(), 1);
 }
 
 #[test]

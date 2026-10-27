@@ -2,8 +2,6 @@ use super::token_consistency::{
     bearer_metadata_matches_access_token, refresh_token_matches_issued_grant,
 };
 #[cfg(test)]
-use super::token_consistency::{meta_scope_set, scope_set, sender_bindings_match};
-#[cfg(test)]
 use super::write_lock;
 use super::{token_storage_error_message, TokenStore, TokenStoreBackend};
 use crate::authcode::store::AuthCodeStore;
@@ -58,19 +56,18 @@ impl TokenStore {
     ///
     /// Returns an error if the supplied metadata is not bound to the access token or refresh
     /// parent being committed.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::needless_pass_by_value,
-            reason = "owned tokens make the atomic grant commit boundary explicit"
-        )
-    )]
     pub fn store_issued_grant(
         &self,
-        access_token: AccessToken,
-        refresh_token: Option<RefreshToken>,
-        meta: BearerTokenMeta,
+        mut access_token: AccessToken,
+        mut refresh_token: Option<RefreshToken>,
+        mut meta: BearerTokenMeta,
     ) -> Result<(String, Option<String>), String> {
+        let grant_record = super::refresh_grants::prepare_initial(
+            &mut access_token,
+            refresh_token.as_mut(),
+            &mut meta,
+        )
+        .map_err(str::to_string)?;
         bearer_metadata_matches_access_token(&access_token, &meta).map_err(str::to_string)?;
         let access_token_str = access_token.token.clone();
         let refresh_token_str = refresh_token.as_ref().map(|token| token.token.clone());
@@ -86,6 +83,12 @@ impl TokenStore {
             #[cfg(test)]
             TokenStoreBackend::InMemory(state) => {
                 let mut state = write_lock(state, "store_issued_grant")?;
+                if grant_record
+                    .as_ref()
+                    .is_some_and(|record| state.refresh_grants.contains_key(&record.reference.id))
+                {
+                    return Err("refresh grant identity collision".to_string());
+                }
                 if state.access_tokens.contains_key(&access_token_str)
                     || state.bearer_meta.contains_key(&meta.token_id)
                     || refresh_token.as_ref().is_some_and(|refresh| {
@@ -97,6 +100,11 @@ impl TokenStore {
                         "token store invariant violation: issued grant token key collision"
                             .to_string(),
                     );
+                }
+                if let Some(record) = grant_record {
+                    state
+                        .refresh_grants
+                        .insert(record.reference.id.clone(), record);
                 }
                 state
                     .access_tokens
@@ -114,7 +122,12 @@ impl TokenStore {
                 state.version = state.version.saturating_add(1);
             }
             TokenStoreBackend::Redis(backend) => backend
-                .store_issued_grant(&access_token, refresh_token.as_ref(), &meta)
+                .store_issued_grant(
+                    &access_token,
+                    refresh_token.as_ref(),
+                    &meta,
+                    grant_record.as_ref(),
+                )
                 .map_err(|error| token_storage_error_message(&error, "store_issued_grant"))?,
         }
         if let Some(refresh) = refresh_token_str.as_deref() {
@@ -159,11 +172,17 @@ impl TokenStore {
             code_store,
             code,
             expected_authorization_code_payload,
-            access_token,
-            refresh_token,
-            meta,
+            mut access_token,
+            mut refresh_token,
+            mut meta,
             oidc_session,
         } = commit;
+        let grant_record = super::refresh_grants::prepare_initial(
+            &mut access_token,
+            refresh_token.as_mut(),
+            &mut meta,
+        )
+        .map_err(str::to_string)?;
         bearer_metadata_matches_access_token(&access_token, &meta).map_err(str::to_string)?;
         let access_token_str = access_token.token.clone();
         let refresh_token_str = refresh_token.as_ref().map(|token| token.token.clone());
@@ -195,9 +214,12 @@ impl TokenStore {
                     .store_issued_grant_after_consuming_authorization_code(
                         &auth_code,
                         &expected_authorization_code_payload,
-                        &access_token,
-                        refresh_token.as_ref(),
-                        &meta,
+                        super::redis_backend::IssuedGrantRecords {
+                            access_token: &access_token,
+                            refresh_token: refresh_token.as_ref(),
+                            meta: &meta,
+                            grant_record: grant_record.as_ref(),
+                        },
                         oidc_session.as_ref(),
                     )
                     .map_err(|error| {
@@ -234,6 +256,8 @@ impl TokenStore {
 
     /// Atomically store an access token whose lifetime is governed by an existing refresh parent.
     ///
+    /// This copies an existing parent grant; it cannot introduce new exchange authority.
+    /// Target-changing exchanges use the separately validated exchange commit.
     /// This is used when a grant-derived access token is re-minted without issuing a new refresh
     /// token. The access token must remain a child of the active refresh token so family revocation
     /// and refresh-reuse detection continue to invalidate the whole chain.
@@ -270,32 +294,26 @@ impl TokenStore {
                 let Some(parent) = state.refresh_tokens.get(&refresh_parent_for_store) else {
                     return Err("refresh_parent must be active".to_string());
                 };
-                if parent.rotated || now >= parent.expires_at {
-                    return Err("refresh_parent must be active".to_string());
+                super::token_consistency::refresh_parent_matches_remint(
+                    parent,
+                    &access_token_for_store,
+                    &meta_for_store,
+                    now,
+                )
+                .map_err(str::to_string)?;
+                if !Self::refresh_grant_active_locked(&state, parent, now) {
+                    return Err("refresh_parent must be active".into());
                 }
-                if parent.client_id != access_token_for_store.client_id
-                    || parent.user_id != access_token_for_store.user_id
+                if parent
+                    .exchange_grant
+                    .as_ref()
+                    .and_then(|grant| grant.root())
+                    .is_some_and(|root| {
+                        now >= root.expires_at || Self::is_revoked_locked(&state, &root.id, now)
+                    })
                 {
-                    return Err("refresh_parent owner must match the access token".to_string());
-                }
-                let parent_audience = super::token_consistency::refresh_parent_audience(parent);
-                if meta_for_store.audience != parent_audience {
                     return Err(
-                        "bearer metadata audience must match refresh_parent resource".to_string(),
-                    );
-                }
-                if !meta_scope_set(&meta_for_store).is_subset(&scope_set(parent.scope.as_deref())) {
-                    return Err(
-                        "bearer metadata scope must be a subset of refresh_parent scope"
-                            .to_string(),
-                    );
-                }
-                if !sender_bindings_match(
-                    parent.sender_binding.as_ref(),
-                    meta_for_store.sender_binding.as_ref(),
-                ) {
-                    return Err(
-                        "bearer metadata sender_binding must match refresh_parent".to_string()
+                        "refresh_parent exchange authority must remain active and unchanged".into(),
                     );
                 }
                 if state.access_tokens.contains_key(&access_token_key)
@@ -307,6 +325,14 @@ impl TokenStore {
                     );
                 }
 
+                Self::extend_refresh_grant_locked(
+                    &mut state,
+                    &access_token_for_store,
+                    &meta_for_store,
+                    None,
+                    now,
+                )
+                .map_err(str::to_string)?;
                 state
                     .access_tokens
                     .insert(access_token_key.clone(), access_token_for_store);
