@@ -282,8 +282,10 @@ New authorization also requires compatibility with the client's ordinary code
 request. Both independently fetched/cached Discovery and the final resolved OP
 object are checked for `require_pushed_authorization_requests` and
 `require_signed_request_object`. Either `true` returns HTTP 502 `server_error`,
-invalidates ordinary Discovery cache and prevents transaction storage and the
-authorization redirect. The ordinary check precedes chain resolution: policy
+prevents transaction storage and the authorization redirect, and retains the
+existing ordinary Discovery cache and expiry. A retry can therefore keep using
+cached requirement flags after the upstream configuration changes. Invalid
+resolved metadata still invalidates the cache. The ordinary check precedes chain resolution: policy
 removal or `false` cannot override an independently advertised `true`; a policy
 introducing `true` is also refused. Raw signed statements and policy semantics
 are preserved. Missing/false flags and optional support-only metadata remain

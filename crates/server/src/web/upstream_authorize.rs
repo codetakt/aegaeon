@@ -123,3 +123,6 @@ mod flow_tests;
 
 #[cfg(test)]
 mod issuer_tests;
+
+#[cfg(test)]
+mod jit_policy_tests;
