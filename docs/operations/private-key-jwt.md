@@ -1,6 +1,6 @@
 # private_key_jwt Operations (jwks_uri / RSA n,e)
 
-Last updated: 2026-10-12
+Last updated: 2026-10-27
 
 Status: current implementation baseline
 
@@ -44,8 +44,10 @@ this outer parameter must add it. The outer value, authenticated client, and
 verified Request Object `client_id` must match. Missing or empty outer identification is
 rejected before assertion or Request Object replay state is consumed.
 
-Do not combine authentication methods. Empty, incomplete, malformed, or
-unsupported assertion credentials are rejected even when endpoint policy permits
+Do not combine authentication methods. Zero-length form values are omitted;
+if both assertion fields are empty, no assertion method is supplied. Nonempty
+incomplete, malformed, whitespace, or unsupported assertion credentials are
+rejected even when endpoint policy permits
 public clients. Unauthenticated token, device, revocation and PAR requests still
 need their own client identification. Use a new assertion `jti` for each request.
 The existing endpoint-specific assertion audience checks remain in effect.

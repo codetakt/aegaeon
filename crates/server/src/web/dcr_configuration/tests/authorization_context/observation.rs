@@ -79,7 +79,7 @@ fn signed_pairs_with_key(
         .as_secs();
     let claims = json!({"iss":env.issuer_url,"aud":env.issuer_url,"exp":now+45,"jti":"observed-jti",
         "client_id":client.client_id,"redirect_uri":client.redirect_uris[0],"response_type":"code","scope":"openid",
-        "state":"signed-state","nonce":"signed-nonce","code_challenge":"signed-challenge","code_challenge_method":"S256"});
+        "state":"signed-state","nonce":"signed-nonce","code_challenge":"signed-challenge-AAAAAAAAAAAAAAAAAAAAAAAAAA","code_challenge_method":"S256"});
     let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
     header.kid = Some(kid.into());
     let signed = jsonwebtoken::encode(
@@ -359,7 +359,7 @@ async fn source_scenario(pool: &PgPool, env: &TestDcrEnvironment) -> TestResult 
         iss: Some(env.issuer_url.clone()),
         resource: None,
         state: Some("pushed".into()),
-        code_challenge: Some("challenge".into()),
+        code_challenge: Some("challenge-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into()),
         code_challenge_method: Some("S256".into()),
         scope: Some("openid".into()),
         nonce: None,

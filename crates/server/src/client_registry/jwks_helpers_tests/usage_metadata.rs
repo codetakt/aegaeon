@@ -261,3 +261,5 @@ fn jwk_usage_remote_fetch_rejects_malformed_usage_even_with_an_eligible_key() {
             .contains_key(&uri));
     }
 }
+
+mod algorithm_binding;

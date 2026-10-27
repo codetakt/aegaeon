@@ -167,21 +167,26 @@ async fn empty_outer_identity(state: &AppState) -> TestResult {
     let (status, body) = send(state, "/device_authorization", &[("client_id", "")], None).await?;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_eq!(body["error"], "invalid_request");
-    // Only /token omits empty fields before singleton checks. Other endpoints
-    // retain their raw duplicate policy. All reject duplicate nonempty IDs.
+    // Every form endpoint omits empty fields before singleton checks.
+    // A second nonempty ID must still reject, even when both IDs match.
     for path in PATHS {
         let jwt = sign(&claims(state, path)?)?;
         let mut pairs = fields(path, &jwt);
         pairs.retain(|(key, _)| *key != "client_id");
         pairs.extend([("client_id", ""), ("client_id", CLIENT)]);
+        if path == "/par" {
+            pairs.push(("iss", state.issuer.as_str()));
+        }
         let (status, body) = send(state, path, &pairs, None).await?;
-        if path == "/token" {
+        if path == "/par" {
+            assert_eq!(status, StatusCode::CREATED, "{path}: {body}");
+            assert!(body["request_uri"].is_string());
+        } else {
             assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        }
+        if path == "/token" {
             assert!(body["access_token"].is_string());
             assert_eq!(body["scope"], "api.read");
-        } else {
-            assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
-            assert_eq!(body["error"], "invalid_request");
         }
         pairs.push(("client_id", CLIENT));
         let (status, body) = send(state, path, &pairs, None).await?;

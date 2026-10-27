@@ -131,7 +131,7 @@
       "critical": false
     },
     "crates/server/src/authcode/token.rs": {
-      "sha256": "709786f17e73b263693de12d3fb6a8f83631c4292ebed9675f46f3a25acd9558",
+      "sha256": "4f813c03d71de069604f20bf755cdb03d4cbc1c028c0f7139e25e3f924a318f7",
       "entries": [
         "6749-008",
         "7636-006",
@@ -206,7 +206,7 @@
       "critical": false
     },
     "crates/server/src/form_post.rs": {
-      "sha256": "607cd18db6a33bb84485ee81e20123a8ce5b8e7a0d062975ce1c99b290ab16cb",
+      "sha256": "7bc1c8613e823d4e9493c978d2477a5c6b0efeacd87bd720bc18f18cf7c0d33f",
       "entries": [
         "OIDC-4-001",
         "OIDC-4-002"
@@ -308,7 +308,7 @@
       "critical": false
     },
     "crates/server/src/web/authorize_validation.rs": {
-      "sha256": "398187288c9257700c5b3d480d997ca4263bdff460c065ddff016df2f9aa93d3",
+      "sha256": "a01146ec0834246c53383ea4970fc8ca367a395455d653f260fa7f40a749654c",
       "entries": [
         "v21-010"
       ],
